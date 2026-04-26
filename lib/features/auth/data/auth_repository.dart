@@ -42,6 +42,47 @@ class AuthRepository {
     );
   }
 
+  /// 通过 Discuz 网页表单登录，并在成功后立即校验会话是否生效。
+  Future<ApiResult<SessionInfo>> login({
+    required String username,
+    required String password,
+    String questionId = '0',
+    String answer = '',
+  }) async {
+    final loginResult = await _apiClient.loginWithWebCredentials(
+      username: username,
+      password: password,
+      questionId: questionId,
+      answer: answer,
+    );
+
+    if (loginResult.isFailure) {
+      return ApiFailure(loginResult.errorOrNull!);
+    }
+
+    final sessionResult = await refreshSession();
+    return sessionResult.when(
+      success: (session) {
+        if (session.isLoggedIn) {
+          return ApiSuccess(session);
+        }
+
+        return ApiFailure(
+          ApiError(
+            type: ApiErrorType.unauthorized,
+            message: '登录请求已发送，但会话未生效',
+            raw: {
+              'uid': session.uid,
+              'username': session.username,
+              'formhash': session.formhash,
+            },
+          ),
+        );
+      },
+      failure: ApiFailure.new,
+    );
+  }
+
   Future<void> logout() {
     return _apiClient.clearSession();
   }
