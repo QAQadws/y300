@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:y300/features/forum/presentation/forum_home_page.dart';
 import 'package:y300/shared/widgets/app_skeleton.dart';
 
-/// MVP 启动页：承担品牌展示和冷启动过渡。
+/// MVP 启动页：承担品牌展示和冷启动过渡
 class StartupPage extends StatefulWidget {
   const StartupPage({super.key, this.onCompleted});
 

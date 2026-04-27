@@ -8,7 +8,7 @@ final forumHomeControllerProvider =
       ForumHomeController.new,
     );
 
-/// 论坛首页状态控制器：负责拉取数据和映射为 UI 模型。
+/// 论坛首页状态控制器：负责拉取数据和映射为 UI 模型
 class ForumHomeController extends AsyncNotifier<ForumHomeViewData> {
   @override
   Future<ForumHomeViewData> build() async {
@@ -37,7 +37,7 @@ class ForumHomeController extends AsyncNotifier<ForumHomeViewData> {
 
     final sections = <ForumSection>[];
 
-    // Discuz 的 catlist 中 forums 字段是 fid 列表，这里做一次稳定映射。
+    // Discuz 的 catlist 中 forums 字段是 fid 列表，这里做一次稳定映射
     for (final category in data.categories) {
       final items = <ForumItem>[];
       for (final fid in category.forums) {
@@ -52,7 +52,7 @@ class ForumHomeController extends AsyncNotifier<ForumHomeViewData> {
       }
     }
 
-    // 后端若给出未分组 forum，这里归并到“未分类”防止数据丢失。
+    // 后端若给出未分组 forum，这里归并到“未分类”防止数据丢失
     final categorizedFids = sections
         .expand((section) => section.items)
         .map((item) => item.fid)

@@ -1,6 +1,6 @@
 # MVP 页面实现 Review 打勾版模板
 
-> 用途：审查“第 1 批（MVP）”中的两个模块：启动页/骨架页、论坛首页（板块+列表）。
+> 用途：审查“第 1 批（MVP）”中新实现的 `forumdisplay`、`viewthread`、`登录页`。
 > 使用方式：逐项打勾，最后填写结论。每一项都带判定说明，便于统一标准。
 
 ---
@@ -16,32 +16,47 @@
 
 ## 2. 文件范围确认
 
-### 2.1 应用入口与页面
+### 2.1 应用入口与共享组件
 
 - [ ] 已审查 `lib/main.dart`
 - [ ] 已审查 `lib/app/y300_app.dart`
-- [ ] 已审查 `lib/features/startup/presentation/startup_page.dart`
-- [ ] 已审查 `lib/features/forum/presentation/forum_home_page.dart`
-- [ ] 已审查 `lib/features/forum/presentation/forum_home_controller.dart`
-- [ ] 已审查 `lib/features/forum/presentation/forum_home_state.dart`
 - [ ] 已审查 `lib/shared/widgets/app_skeleton.dart`
 
-### 2.2 数据层与依赖注入
+### 2.2 forumdisplay 页面
 
-- [x] 已审查 `lib/features/forum/data/forum_repository.dart`
-- [x] 已确认 `forumRepositoryProvider` 暴露的是抽象接口而非具体实现
+- [ ] 已审查 `lib/features/forum/data/forum_display_repository.dart`
+- [ ] 已审查 `lib/features/forum/data/models/forum_display_models.dart`
+- [ ] 已审查 `lib/features/forum/presentation/forum_display_state.dart`
+- [ ] 已审查 `lib/features/forum/presentation/forum_display_controller.dart`
+- [ ] 已审查 `lib/features/forum/presentation/forum_display_page.dart`
 
-### 2.3 测试与文档
+### 2.3 viewthread 页面
 
-- [ ] 已审查 `test/features/startup/presentation/startup_page_test.dart`
-- [ ] 已审查 `test/features/forum/presentation/forum_home_page_test.dart`
-- [ ] 已审查 `test/widget_test.dart`
+- [ ] 已审查 `lib/features/thread/data/thread_repository.dart`
+- [ ] 已审查 `lib/features/thread/data/models/thread_detail_models.dart`
+- [ ] 已审查 `lib/features/thread/presentation/thread_detail_state.dart`
+- [ ] 已审查 `lib/features/thread/presentation/thread_detail_controller.dart`
+- [ ] 已审查 `lib/features/thread/presentation/thread_detail_page.dart`
+
+### 2.4 登录页
+
+- [ ] 已审查 `lib/features/auth/data/auth_repository.dart`
+- [ ] 已审查 `lib/features/auth/presentation/login_state.dart`
+- [ ] 已审查 `lib/features/auth/presentation/login_controller.dart`
+- [ ] 已审查 `lib/features/auth/presentation/login_page.dart`
+
+### 2.5 测试与文档
+
+- [ ] 已审查 `test/features/forum/presentation/forum_display_page_test.dart`
+- [ ] 已审查 `test/features/thread/presentation/thread_detail_page_test.dart`
+- [ ] 已审查 `test/features/auth/presentation/login_page_test.dart`
+- [ ] 已审查 `test/features/auth/auth_repository_test.dart`
 - [ ] 已审查 `docs/开发文档.md`
 
 判定说明：
 
 1. 缺少任一核心文件审查记录，判定为 P2。
-2. 发现关键文件未提交或未纳入审查，判定为 P1。
+2. 关键文件未提交或未纳入审查，判定为 P1。
 
 ---
 
@@ -49,9 +64,10 @@
 
 - [ ] 页面层未直接依赖 Dio 或网络细节
 - [ ] 控制器负责状态与映射，页面只负责渲染
-- [ ] 骨架组件可复用（非页面内硬编码）
+- [ ] 分页逻辑集中在控制器，不散落在 Widget 内
 - [ ] 仓库已抽象为接口，便于测试替身注入
 - [ ] Provider 注入路径清晰，无循环依赖
+- [ ] 关键流程已写明注释，便于后续维护
 
 判定说明：
 
@@ -61,66 +77,103 @@
 
 ---
 
-## 4. 启动页/骨架页检查
+## 4. forumdisplay 页面检查
 
-- [ ] 启动页可稳定展示品牌与骨架，不出现白屏
-- [ ] 启动完成后可进入论坛首页
-- [ ] 启动逻辑对测试可注入（如回调或可替换行为）
-- [ ] 骨架组件样式统一，未重复实现
-- [ ] 关键代码已添加必要注释，便于后续维护
-
-判定说明：
-
-1. 启动页不可用或卡死，判定为 P0。
-2. 启动流程偶发跳转失败，判定为 P1。
-3. 仅注释不足或样式不统一，判定为 P2。
-
----
-
-## 5. 论坛首页（板块+列表）检查
-
+- [ ] 首屏可加载帖子列表
 - [ ] 加载态显示骨架
-- [ ] 成功态展示分组与版块列表
+- [ ] 下拉刷新可重新拉取数据
+- [ ] 加载更多可获取下一页帖子
+- [ ] 点击帖子可进入 viewthread 页
 - [ ] 失败态可展示错误并支持重试
-- [ ] 下拉刷新可触发重新加载
-- [ ] 分类映射逻辑对异常数据有兜底（如未分类）
-- [ ] 页面层不直接处理原始后端字段
+- [ ] 分页参数 `fid/page` 传递正确
 
 判定说明：
 
-1. 首页主流程不可用（无法加载/无法渲染），判定为 P0。
-2. 错误态或重试不可用，判定为 P1。
-3. 展示文案或样式细节问题，判定为 P2。
+1. 主流程不可用（无法加载/无法渲染），判定为 P0。
+2. 分页/跳转/错误态异常，判定为 P1。
+3. 仅展示文案或样式细节问题，判定为 P2。
 
 ---
 
-## 6. 自动化测试检查
+## 5. viewthread 页面检查
 
-### 6.1 执行记录
+- [ ] 首屏可展示楼层内容
+- [ ] 加载态显示骨架
+- [ ] 加载更多可获取下一页回复
+- [ ] 页面内对简单 HTML 做轻量清洗后再展示
+- [ ] 失败态可展示错误并支持重试
+- [ ] `tid/page` 参数传递正确
 
-- [ ] 已执行 `flutter test test/features/startup/presentation/startup_page_test.dart`
-- [ ] 已执行 `flutter test test/features/forum/presentation/forum_home_page_test.dart`
+判定说明：
+
+1. 帖子详情主流程不可用，判定为 P0。
+2. 分页或错误态异常，判定为 P1。
+3. 仅文本清洗或样式细节问题，判定为 P2。
+
+---
+
+## 6. 登录页检查
+
+- [ ] 表单输入与提交状态正确
+- [ ] 空用户名或密码时可阻止提交
+- [ ] 登录成功显示成功反馈
+- [ ] 登录失败显示错误文案
+- [ ] 成功后实际走 `AuthRepository.login`
+- [ ] 登录逻辑包含网页登录 + profile 二次校验
+
+判定说明：
+
+1. 登录不可用或成功态不可验证，判定为 P0。
+2. 只显示 UI 但不走真实登录链路，判定为 P1。
+3. 仅提示文案或按钮样式问题，判定为 P2。
+
+---
+
+## 7. 接口映射检查
+
+- [ ] `forumdisplay` 使用 `module=forumdisplay`
+- [ ] `forumdisplay` 列表字段兼容 `forum_threadlist/threadlist`
+- [ ] `forumdisplay` 分页字段兼容 `tpp/perpage`
+- [ ] `viewthread` 使用 `module=viewthread`
+- [ ] 登录页复用网页登录桥接流程（member.php 登录 + profile 校验）
+
+判定说明：
+
+1. 页面使用了错误接口模块，判定为 P0。
+2. 接口参数不完整导致行为异常，判定为 P1。
+
+---
+
+## 8. 自动化测试检查
+
+### 8.1 执行记录
+
+- [ ] 已执行 `flutter test test/features/forum/data/models/forum_display_models_test.dart`
+- [ ] 已执行 `flutter test test/features/forum/presentation/forum_display_page_test.dart`
+- [ ] 已执行 `flutter test test/features/thread/presentation/thread_detail_page_test.dart`
+- [ ] 已执行 `flutter test test/features/auth/presentation/login_page_test.dart`
 - [ ] 已执行 `flutter test`
 - [ ] 已执行 `flutter analyze`
 
-### 6.2 结果记录
+### 8.2 结果记录
 
-- [ ] 启动页测试通过
-- [ ] 论坛首页测试通过
+- [ ] `forumdisplay` 页面测试通过
+- [ ] `viewthread` 页面测试通过
+- [ ] 登录页测试通过
 - [ ] 全量测试通过
 - [ ] 静态检查无错误
 
 判定说明：
 
 1. 关键测试缺失或无法运行，判定为 P1。
-2. 编译/分析报错，判定为 P0。
+2. 编译或分析报错，判定为 P0。
 
 ---
 
-## 7. 手工验证检查（可选但建议）
+## 9. 手工验证（可选）
 
-- [ ] 冷启动可见启动骨架
-- [ ] 启动后进入论坛首页
+- [ ] forumdisplay 页面可进入 viewthread 页面
+- [ ] 登录成功后可回到已登录使用路径
 - [ ] 弱网下可看到加载态，不会崩溃
 - [ ] 异常情况下可触发重试恢复
 
@@ -131,15 +184,15 @@
 
 ---
 
-## 8. 问题分级标准
+## 10. 问题分级标准
 
 - P0：崩溃、核心流程不可用、测试或分析无法通过
 - P1：功能可用但行为不正确、关键路径缺测试
-- P2：可维护性/可读性问题，不影响当前主流程
+- P2：可维护性或可读性问题，不影响当前主流程
 
 ---
 
-## 9. 发现记录（填写）
+## 11. 发现记录（填写）
 
 | 编号 | 等级 | 文件 | 问题描述 | 复现步骤 | 建议修复 |
 |---|---|---|---|---|---|
@@ -149,7 +202,7 @@
 
 ---
 
-## 10. 最终结论（填写）
+## 12. 最终结论（填写）
 
 - [ ] 通过
 - [ ] 有条件通过

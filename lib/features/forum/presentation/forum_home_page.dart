@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
+import 'package:y300/features/forum/presentation/forum_display_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
 import 'package:y300/shared/widgets/app_skeleton.dart';
 
@@ -15,6 +17,17 @@ class ForumHomePage extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('论坛首页'),
+        actions: [
+          TextButton(
+            key: const Key('forum-home-login-button'),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const LoginPage()),
+              );
+            },
+            child: const Text('登录'),
+          ),
+        ],
       ),
       body: state.when(
         loading: () => const ForumHomeSkeleton(key: Key('forum-home-skeleton')),
@@ -53,7 +66,19 @@ class _ForumHomeContent extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             for (final forum in section.items) ...[
-              _ForumCard(item: forum),
+              _ForumCard(
+                item: forum,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ForumDisplayPage(//TODO  ForumDisplayPage入口
+                        fid: forum.fid,
+                        title: forum.name,
+                      ),
+                    ),
+                  );
+                },
+              ),
               const SizedBox(height: 10),
             ],
             const SizedBox(height: 8),
@@ -65,42 +90,47 @@ class _ForumHomeContent extends ConsumerWidget {
 }
 
 class _ForumCard extends StatelessWidget {
-  const _ForumCard({required this.item});
+  const _ForumCard({required this.item, required this.onTap});
 
   final ForumItem item;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final description = item.description.trim();
 
-    return Container(
+    return InkWell(
       key: Key('forum-card-${item.fid}'),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            item.name,
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
-          if (description.isNotEmpty) ...[
-            const SizedBox(height: 6),
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             Text(
-              description,
+              item.name,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            if (description.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                description,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+            const SizedBox(height: 8),
+            Text(
+              '主题 ${item.threads}  帖子 ${item.posts}  今日 ${item.todayPosts}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
-          const SizedBox(height: 8),
-          Text(
-            '主题 ${item.threads}  帖子 ${item.posts}  今日 ${item.todayPosts}',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
+        ),
       ),
     );
   }

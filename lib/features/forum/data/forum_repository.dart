@@ -8,7 +8,7 @@ abstract class ForumRepository {
   Future<ApiResult<ForumIndexData>> getForumIndex();
 }
 
-/// Discuz 论坛数据仓库实现。
+/// Discuz 论坛数据仓库实现
 class DiscuzForumRepository implements ForumRepository {
   DiscuzForumRepository(this._apiClient);
 
