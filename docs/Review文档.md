@@ -24,6 +24,10 @@
 
 ### 2.2 forumdisplay 页面
 
+- [ ] 已审查 `lib/features/forum/data/forum_home_repository.dart`
+- [ ] 已审查 `lib/features/forum/presentation/forum_home_state.dart`
+- [ ] 已审查 `lib/features/forum/presentation/forum_home_controller.dart`
+- [ ] 已审查 `lib/features/forum/presentation/forum_home_page.dart`
 - [ ] 已审查 `lib/features/forum/data/forum_display_repository.dart`
 - [ ] 已审查 `lib/features/forum/data/models/forum_display_models.dart`
 - [ ] 已审查 `lib/features/forum/presentation/forum_display_state.dart`
@@ -79,6 +83,21 @@
 
 ## 4. forumdisplay 页面检查
 
+- [ ] 未登录时首页仅展示 forumindex 分组
+- [ ] 已登录时首页优先展示“我收藏的版块”
+- [ ] “我收藏的版块”使用与普通分组一致的 `_ForumCard` 组件
+- [ ] myfavforum 失败时首页可降级展示 forumindex，不阻塞主流程
+- [ ] 收藏区为空时首页展示空态提示，不出现崩溃
+
+判定说明：
+
+1. 首页登录态顺序错误（收藏区未置顶），判定为 P1。
+2. myfavforum 失败导致首页不可用，判定为 P0。
+
+---
+
+## 5. forumdisplay 页面检查
+
 - [ ] 首屏可加载帖子列表
 - [ ] 加载态显示骨架
 - [ ] 下拉刷新可重新拉取数据
@@ -95,7 +114,7 @@
 
 ---
 
-## 5. viewthread 页面检查
+## 6. viewthread 页面检查
 
 - [ ] 首屏可展示楼层内容
 - [ ] 加载态显示骨架
@@ -112,7 +131,7 @@
 
 ---
 
-## 6. 登录页检查
+## 7. 登录页检查
 
 - [ ] 表单输入与提交状态正确
 - [ ] 空用户名或密码时可阻止提交
@@ -129,8 +148,11 @@
 
 ---
 
-## 7. 接口映射检查
+## 8. 接口映射检查
 
+- [ ] 首页聚合已使用 `module=forumindex`
+- [ ] 首页聚合已使用 `module=profile` 判定登录态
+- [ ] 首页聚合已使用 `module=myfavforum` 拉取收藏版块
 - [ ] `forumdisplay` 使用 `module=forumdisplay`
 - [ ] `forumdisplay` 列表字段兼容 `forum_threadlist/threadlist`
 - [ ] `forumdisplay` 分页字段兼容 `tpp/perpage`
@@ -144,11 +166,13 @@
 
 ---
 
-## 8. 自动化测试检查
+## 9. 自动化测试检查
 
 ### 8.1 执行记录
 
 - [ ] 已执行 `flutter test test/features/forum/data/models/forum_display_models_test.dart`
+- [ ] 已执行 `flutter test test/features/forum/data/forum_home_repository_test.dart`
+- [ ] 已执行 `flutter test test/features/forum/presentation/forum_home_page_test.dart`
 - [ ] 已执行 `flutter test test/features/forum/presentation/forum_display_page_test.dart`
 - [ ] 已执行 `flutter test test/features/thread/presentation/thread_detail_page_test.dart`
 - [ ] 已执行 `flutter test test/features/auth/presentation/login_page_test.dart`
@@ -158,6 +182,8 @@
 ### 8.2 结果记录
 
 - [ ] `forumdisplay` 页面测试通过
+- [ ] 论坛首页（登录态 + 收藏区排序）测试通过
+- [ ] 首页聚合仓库（降级策略）测试通过
 - [ ] `viewthread` 页面测试通过
 - [ ] 登录页测试通过
 - [ ] 全量测试通过
@@ -170,9 +196,10 @@
 
 ---
 
-## 9. 手工验证（可选）
+## 10. 手工验证（可选）
 
 - [ ] forumdisplay 页面可进入 viewthread 页面
+- [ ] 登录后首页可见“我收藏的版块”并位于普通分组前
 - [ ] 登录成功后可回到已登录使用路径
 - [ ] 弱网下可看到加载态，不会崩溃
 - [ ] 异常情况下可触发重试恢复
@@ -184,7 +211,7 @@
 
 ---
 
-## 10. 问题分级标准
+## 11. 问题分级标准
 
 - P0：崩溃、核心流程不可用、测试或分析无法通过
 - P1：功能可用但行为不正确、关键路径缺测试
@@ -192,7 +219,7 @@
 
 ---
 
-## 11. 发现记录（填写）
+## 12. 发现记录（填写）
 
 | 编号 | 等级 | 文件 | 问题描述 | 复现步骤 | 建议修复 |
 |---|---|---|---|---|---|
@@ -202,7 +229,7 @@
 
 ---
 
-## 12. 最终结论（填写）
+## 13. 最终结论（填写）
 
 - [ ] 通过
 - [ ] 有条件通过

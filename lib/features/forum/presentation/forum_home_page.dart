@@ -33,7 +33,8 @@ class ForumHomePage extends ConsumerWidget {
         loading: () => const ForumHomeSkeleton(key: Key('forum-home-skeleton')),
         error: (error, _) => _ForumHomeErrorView(
           message: error.toString(),
-          onRetry: () => ref.read(forumHomeControllerProvider.notifier).refresh(),
+          onRetry: () =>
+              ref.read(forumHomeControllerProvider.notifier).refresh(),
         ),
         data: (data) => _ForumHomeContent(data: data),
       ),
@@ -62,24 +63,34 @@ class _ForumHomeContent extends ConsumerWidget {
           for (final section in data.sections) ...[
             Text(
               section.title,
+              key: Key('forum-section-title-${section.title}'),
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
-            for (final forum in section.items) ...[
-              _ForumCard(
-                item: forum,
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => ForumDisplayPage(//TODO  ForumDisplayPage入口
-                        fid: forum.fid,
-                        title: forum.name,
-                      ),
-                    ),
-                  );
-                },
+            if (section.items.isEmpty && section.isFavorite) ...[
+              Text(
+                '暂无收藏版块',
+                key: const Key('forum-favorite-empty-text'),
+                style: Theme.of(context).textTheme.bodySmall,
               ),
-              const SizedBox(height: 10),
+            ] else ...[
+              for (final forum in section.items) ...[
+                _ForumCard(
+                  item: forum,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => ForumDisplayPage(
+                          //TODO  ForumDisplayPage入口
+                          fid: forum.fid,
+                          title: forum.name,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 10),
+              ],
             ],
             const SizedBox(height: 8),
           ],
@@ -108,21 +119,17 @@ class _ForumCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              item.name,
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
+            Text(item.name, style: Theme.of(context).textTheme.titleSmall),
             if (description.isNotEmpty) ...[
               const SizedBox(height: 6),
-              Text(
-                description,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+              Text(description, style: Theme.of(context).textTheme.bodySmall),
             ],
             const SizedBox(height: 8),
             Text(

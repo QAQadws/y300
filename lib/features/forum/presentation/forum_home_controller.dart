@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/forum/data/forum_repository.dart';
+import 'package:y300/features/favorites/data/models/favorite_models.dart';
+import 'package:y300/features/forum/data/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
 
@@ -21,16 +22,35 @@ class ForumHomeController extends AsyncNotifier<ForumHomeViewData> {
   }
 
   Future<ForumHomeViewData> _fetchForumHome() async {
-    final repository = ref.read(forumRepositoryProvider);
-    final result = await repository.getForumIndex();
+    final repository = ref.read(forumHomeRepositoryProvider);
+    final result = await repository.getForumHomePayload();
 
     return result.when(
-      success: (data) => ForumHomeViewData(sections: _mapSections(data)),
+      success: (payload) => ForumHomeViewData(
+        sections: _mapSections(payload),
+        isLoggedIn: payload.isLoggedIn,
+      ),
       failure: (error) => throw ForumHomeException(error.message),
     );
   }
 
-  List<ForumSection> _mapSections(ForumIndexData data) {
+  List<ForumSection> _mapSections(ForumHomePayload payload) {
+    final regularSections = _mapRegularSections(payload.forumIndex);
+    if (!payload.isLoggedIn) {
+      return regularSections;
+    }
+
+    return [
+      ForumSection(
+        title: '我收藏的版块',
+        items: _mapFavoriteForums(payload.favoriteForums),
+        type: ForumSectionType.favorite,
+      ),
+      ...regularSections,
+    ];
+  }
+
+  List<ForumSection> _mapRegularSections(ForumIndexData data) {
     final forumByFid = <String, ForumItem>{
       for (final item in data.forums) item.fid: item,
     };
@@ -48,7 +68,13 @@ class ForumHomeController extends AsyncNotifier<ForumHomeViewData> {
       }
 
       if (items.isNotEmpty) {
-        sections.add(ForumSection(title: category.name, items: items));
+        sections.add(
+          ForumSection(
+            title: category.name,
+            items: items,
+            type: ForumSectionType.regular,
+          ),
+        );
       }
     }
 
@@ -63,10 +89,33 @@ class ForumHomeController extends AsyncNotifier<ForumHomeViewData> {
         .toList();
 
     if (uncategorized.isNotEmpty) {
-      sections.add(ForumSection(title: '未分类', items: uncategorized));
+      sections.add(
+        ForumSection(
+          title: '未分类',
+          items: uncategorized,
+          type: ForumSectionType.regular,
+        ),
+      );
     }
 
     return sections;
+  }
+
+  List<ForumItem> _mapFavoriteForums(List<FavoriteForum> favoriteForums) {
+    return favoriteForums
+        .map(
+          (item) => ForumItem(
+            fid: item.fid,
+            name: item.title,
+            threads: item.threads,
+            posts: item.posts,
+            todayPosts: item.todayPosts,
+            description: item.description,
+            icon: '',
+            subForums: const [],
+          ),
+        )
+        .toList();
   }
 }
 
