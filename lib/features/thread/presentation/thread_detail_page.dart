@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/shared/widgets/app_skeleton.dart';
+import 'package:flutter_html/flutter_html.dart';
 
 class ThreadDetailPage extends ConsumerWidget {
   const ThreadDetailPage({super.key, required this.tid, this.subject = ''});
@@ -51,10 +52,10 @@ class ThreadDetailPage extends ConsumerWidget {
                           children: [
                             Text('${post.number}楼 · ${post.author} · ${post.dateline}'),
                             const SizedBox(height: 8),
-                            Text(
-                              _stripSimpleHtml(post.message),
+                            Html(
+                              data: post.message,
                               key: Key('thread-post-${post.pid}'),
-                            ),
+                            )
                           ],
                         ),
                       ),
@@ -62,10 +63,6 @@ class ThreadDetailPage extends ConsumerWidget {
                   },
                 ),
     );
-  }
-
-  String _stripSimpleHtml(String text) {
-    return text.replaceAll(RegExp(r'<[^>]*>'), '').trim();
   }
 }
 
