@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_html/flutter_html.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/shared/widgets/app_skeleton.dart';
@@ -42,6 +43,7 @@ class ThreadDetailPage extends ConsumerWidget {
                     }
 
                     final post = state.posts[index];
+                    final content = post.buildContent();
                     return Card(
                       margin: const EdgeInsets.only(bottom: 10),
                       child: Padding(
@@ -51,10 +53,12 @@ class ThreadDetailPage extends ConsumerWidget {
                           children: [
                             Text('${post.number}楼 · ${post.author} · ${post.dateline}'),
                             const SizedBox(height: 8),
-                            Text(
-                              _stripSimpleHtml(post.message),
-                              key: Key('thread-post-${post.pid}'),
-                            ),
+                            Html(data: content.html),
+                            if (content.trailingImageUrls.isNotEmpty)
+                              _ThreadImageGallery(
+                                key: Key('thread-post-${post.pid}-images'),
+                                imageUrls: content.trailingImageUrls,
+                              ),
                           ],
                         ),
                       ),
@@ -63,9 +67,29 @@ class ThreadDetailPage extends ConsumerWidget {
                 ),
     );
   }
+}
 
-  String _stripSimpleHtml(String text) {
-    return text.replaceAll(RegExp(r'<[^>]*>'), '').trim();
+class _ThreadImageGallery extends StatelessWidget {
+  const _ThreadImageGallery({super.key, required this.imageUrls});
+
+  final List<String> imageUrls;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: imageUrls
+            .map(
+              (url) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Image.network(url),
+              ),
+            )
+            .toList(growable: false),
+      ),
+    );
   }
 }
 

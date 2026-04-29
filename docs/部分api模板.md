@@ -1,3 +1,6 @@
+
+<i class="pstatus"> 本帖最后由 vtlemon 于 2025-4-15 13:04 编辑 </i><br /> <br /> 最近楼主在使用某度时突然弹出了一个百合和蕾丝区别的搜索，于是好奇性的点了看看然后大有体会～<br /> 其中提到了与蕾丝不同百合更注重的是情感和精神层面的交流而非像蕾丝以性别为前提再做交流。<br /> <br /> 楼主作为一个自认为相对健全的中轻度扭曲爱好者，感觉就百合是情感精神方面交流大有所感，扭起来也比其他向作品更美味一些并且不会给人一种矫揉造作的感觉。<br /> 想来看看大家在看百合作品时喜欢哪种方面或者更在意的是哪方面呢？
+
 <strong>module网址参数例表：</strong><br />
 <table cellspacing="0" class="t_table" style="width:98%"><tr><td><strong>module网址参数</strong></td><td><strong>请求示例和对应网址</strong></td></tr><tr><td> guide<br />
 导读页请求方式</td><td> source/plugin/pn_app_api/mobile.php?module=guide&amp;view=newthread&amp;page=2&amp;version=5<br />

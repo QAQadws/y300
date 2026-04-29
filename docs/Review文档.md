@@ -53,6 +53,7 @@
 
 - [ ] 已审查 `test/features/forum/presentation/forum_display_page_test.dart`
 - [ ] 已审查 `test/features/thread/presentation/thread_detail_page_test.dart`
+- [ ] 已审查 `test/features/thread/data/models/thread_detail_models_test.dart`
 - [ ] 已审查 `test/features/auth/presentation/login_page_test.dart`
 - [ ] 已审查 `test/features/auth/auth_repository_test.dart`
 - [ ] 已审查 `docs/开发文档.md`
@@ -119,7 +120,8 @@
 - [ ] 首屏可展示楼层内容
 - [ ] 加载态显示骨架
 - [ ] 加载更多可获取下一页回复
-- [ ] 页面内对简单 HTML 做轻量清洗后再展示
+- [ ] 页面内使用 Html 组件展示富文本
+- [ ] `[attach]aid[/attach]` 占位能替换为图片，未命中的图片追加到末尾
 - [ ] 失败态可展示错误并支持重试
 - [ ] `tid/page` 参数传递正确
 
@@ -175,6 +177,7 @@
 - [ ] 已执行 `flutter test test/features/forum/presentation/forum_home_page_test.dart`
 - [ ] 已执行 `flutter test test/features/forum/presentation/forum_display_page_test.dart`
 - [ ] 已执行 `flutter test test/features/thread/presentation/thread_detail_page_test.dart`
+- [ ] 已执行 `flutter test test/features/thread/data/models/thread_detail_models_test.dart`
 - [ ] 已执行 `flutter test test/features/auth/presentation/login_page_test.dart`
 - [ ] 已执行 `flutter test`
 - [ ] 已执行 `flutter analyze`
