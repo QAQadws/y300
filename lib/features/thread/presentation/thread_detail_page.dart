@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_html/flutter_html.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/shared/widgets/app_skeleton.dart';
+import 'package:flutter_html/flutter_html.dart';
 
 class ThreadDetailPage extends ConsumerWidget {
   const ThreadDetailPage({super.key, required this.tid, this.subject = ''});
@@ -17,80 +17,60 @@ class ThreadDetailPage extends ConsumerWidget {
     final asyncState = ref.watch(threadDetailControllerProvider(args));
     final controller = ref.read(threadDetailControllerProvider(args).notifier);
 
-    final state = asyncState.value ??
+    final state =
+        asyncState.value ??
         ThreadDetailPageState.initial(tid: tid, subject: subject);
 
     return Scaffold(
-      appBar: AppBar(title: Text(state.subject.isNotEmpty ? state.subject : '帖子详情')),
+      appBar: AppBar(
+        title: Text(state.subject.isNotEmpty ? state.subject : '帖子详情'),
+      ),
       body: (asyncState.isLoading && state.posts.isEmpty)
           ? const ForumHomeSkeleton(key: Key('thread-detail-skeleton'))
           : state.errorMessage != null && state.posts.isEmpty
-              ? _ThreadErrorView(
-                  message: state.errorMessage!,
-                  onRetry: controller.refresh,
-                )
-              : ListView.builder(
-                  key: const Key('thread-detail-list'),
-                  padding: const EdgeInsets.all(16),
-                  itemCount: state.posts.length + 1,
-                  itemBuilder: (context, index) {
-                    if (index == state.posts.length) {
-                      return _ThreadLoadMoreSection(
-                        hasMore: state.hasMore,
-                        isLoadingMore: state.isLoadingMore,
-                        onLoadMore: controller.loadMore,
-                      );
-                    }
-
-                    final post = state.posts[index];
-                    final content = post.buildContent();
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('${post.number}楼 · ${post.author} · ${post.dateline}'),
-                            const SizedBox(height: 8),
-                            Html(data: content.html),
-                            if (content.trailingImageUrls.isNotEmpty)
-                              _ThreadImageGallery(
-                                key: Key('thread-post-${post.pid}-images'),
-                                imageUrls: content.trailingImageUrls,
-                              ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-    );
-  }
-}
-
-class _ThreadImageGallery extends StatelessWidget {
-  const _ThreadImageGallery({super.key, required this.imageUrls});
-
-  final List<String> imageUrls;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: imageUrls
-            .map(
-              (url) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Image.network(url),
-              ),
+          ? _ThreadErrorView(
+              message: state.errorMessage!,
+              onRetry: controller.refresh,
             )
-            .toList(growable: false),
-      ),
+          : ListView.builder(
+              key: const Key('thread-detail-list'),
+              padding: const EdgeInsets.all(16),
+              itemCount: state.posts.length + 1,
+              itemBuilder: (context, index) {
+                if (index == state.posts.length) {
+                  return _ThreadLoadMoreSection(
+                    hasMore: state.hasMore,
+                    isLoadingMore: state.isLoadingMore,
+                    onLoadMore: controller.loadMore,
+                  );
+                }
+
+                final post = state.posts[index];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${post.number}楼 · ${post.author} · ${post.dateline}',
+                        ),
+                        const SizedBox(height: 8),
+                        Html(
+                          data: post.message,
+                          key: Key('thread-post-${post.pid}'),
+                        )
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
+
+
 }
 
 class _ThreadLoadMoreSection extends StatelessWidget {
