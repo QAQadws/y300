@@ -4,6 +4,8 @@ import 'package:y300/features/forum/presentation/forum_home_state.dart';
 
 void main() {
   test('ForumHomeViewData should count sections and forums', () {
+    // 测试说明：检查 ForumHomeViewData 对 sections 和 forum item 的计数是否正确
+    // 场景：一个分组包含一个版块，期望 sectionCount=1, forumCount=1
     final viewData = ForumHomeViewData(
       sections: [
         ForumSection(
@@ -22,6 +24,7 @@ void main() {
           ],
         ),
       ],
+      isLoggedIn: false,
     );
 
     expect(viewData.sectionCount, 1);

@@ -81,7 +81,6 @@ class _ForumHomeContent extends ConsumerWidget {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => ForumDisplayPage(
-                          //TODO  ForumDisplayPage入口
                           fid: forum.fid,
                           title: forum.name,
                         ),
