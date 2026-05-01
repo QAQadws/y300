@@ -49,3 +49,6 @@ ios/
 android/
 macos/
 linux/
+mangayomi_lib/
+information/
+.codex/

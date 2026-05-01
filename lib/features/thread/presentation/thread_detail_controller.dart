@@ -1,6 +1,11 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/comic/data/comic_providers.dart';
+import 'package:y300/features/comic/data/comic_repository.dart';
+import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
@@ -83,41 +88,135 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     );
   }
 
+  Future<void> addToShelf() async {
+    final current = state.value;
+    if (current == null || current.isComicActionLoading || !current.comicCandidateInfo.isCandidate) {
+      return;
+    }
+
+    state = AsyncData(current.copyWith(isComicActionLoading: true, clearError: true));
+    final comicId = _buildComicId(tid: _args.tid);
+
+    try {
+      await _readComicRepository().addToShelf(
+        comicId: comicId,
+        tid: _args.tid,
+        fid: _extractFid(current.posts),
+        title: current.subject,
+        parsedPost: current.parsedComicPost,
+      );
+
+      final updated = state.value ?? current;
+      state = AsyncData(
+        updated.copyWith(
+          isComicActionLoading: false,
+          isInShelf: true,
+        ),
+      );
+    } catch (error) {
+      final updated = state.value ?? current;
+      state = AsyncData(
+        updated.copyWith(
+          isComicActionLoading: false,
+          errorMessage: '加入书架失败：$error',
+        ),
+      );
+    }
+  }
+
   Future<ThreadDetailPageState> _loadPage({
     required int page,
     required List<ThreadPost> previous,
   }) async {
     final result = await _readRepository().getThreadDetail(tid: _args.tid, page: page);
 
-    return result.when(
-      success: (data) {
-        final merged = page == 1 ? data.posts : <ThreadPost>[...previous, ...data.posts];
-        return ThreadDetailPageState(
-          tid: _args.tid,
-          subject: data.subject.isNotEmpty ? data.subject : _args.subject,
-          currentPage: data.currentPage,
-          hasMore: data.hasMore,
-          isLoadingInitial: false,
-          isLoadingMore: false,
-          posts: merged,
-        );
-      },
-      failure: (error) {
-        return ThreadDetailPageState(
-          tid: _args.tid,
-          subject: _args.subject,
-          currentPage: page == 1 ? 0 : page,
-          hasMore: false,
-          isLoadingInitial: false,
-          isLoadingMore: false,
-          posts: previous,
-          errorMessage: error.message,
-        );
-      },
+    if (result case ApiSuccess<ThreadDetailData>(:final data)) {
+      final merged = page == 1 ? data.posts : <ThreadPost>[...previous, ...data.posts];
+      final firstPost = _findFirstPost(merged);
+      final comicMeta = _detectAndParseComic(
+        fid: data.fid,
+        subject: data.subject.isNotEmpty ? data.subject : _args.subject,
+        message: firstPost?.message ?? '',
+      );
+      final comicId = _buildComicId(tid: _args.tid);
+      final isInShelf = await _readComicRepository().isInShelf(comicId: comicId);
+
+      return ThreadDetailPageState(
+        tid: _args.tid,
+        subject: data.subject.isNotEmpty ? data.subject : _args.subject,
+        currentPage: data.currentPage,
+        hasMore: data.hasMore,
+        isLoadingInitial: false,
+        isLoadingMore: false,
+        posts: merged,
+        comicCandidateInfo: comicMeta.$1,
+        parsedComicPost: comicMeta.$2,
+        isInShelf: isInShelf,
+        isComicActionLoading: false,
+      );
+    }
+
+    final error = (result as ApiFailure<ThreadDetailData>).error;
+    return ThreadDetailPageState(
+      tid: _args.tid,
+      subject: _args.subject,
+      currentPage: page == 1 ? 0 : page,
+      hasMore: false,
+      isLoadingInitial: false,
+      isLoadingMore: false,
+      posts: previous,
+      comicCandidateInfo: ComicCandidateInfo.notCandidate,
+      parsedComicPost: ParsedComicPost.empty,
+      isInShelf: false,
+      isComicActionLoading: false,
+      errorMessage: error.message,
     );
   }
 
   ThreadRepository _readRepository() {
     return ref.read(threadRepositoryProvider);
+  }
+
+  ComicRepository _readComicRepository() {
+    return ref.read(comicRepositoryProvider);
+  }
+
+  (ComicCandidateInfo, ParsedComicPost) _detectAndParseComic({
+    required String fid,
+    required String subject,
+    required String message,
+  }) {
+    if (message.isEmpty) {
+      return (ComicCandidateInfo.notCandidate, ParsedComicPost.empty);
+    }
+
+    final detector = ref.read(comicDetectorProvider);
+    final parser = ref.read(comicParserServiceProvider);
+    final candidate = detector.detect(fid: fid, subject: subject, message: message);
+
+    if (!candidate.isCandidate) {
+      return (candidate, ParsedComicPost.empty);
+    }
+
+    final parsed = parser.parse(message: message);
+    return (candidate, parsed);
+  }
+
+  String _buildComicId({required String tid}) {
+    return 'yamibo:$tid';
+  }
+
+  ThreadPost? _findFirstPost(List<ThreadPost> posts) {
+    for (final post in posts) {
+      if (post.isFirst) {
+        return post;
+      }
+    }
+    return null;
+  }
+
+  String _extractFid(List<ThreadPost> posts) {
+    // 阶段1仅用于假仓库存储，后续会用真实详情字段。
+    return posts.isEmpty ? '' : 'unknown';
   }
 }

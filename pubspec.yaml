@@ -40,6 +40,11 @@ dependencies:
   shared_preferences: ^2.5.5
   logger: ^2.7.0
   flutter_html: ^3.0.0
+  html: ^0.15.6
+  archive: ^4.0.9
+  path: ^1.9.1
+  path_provider: ^2.1.5
+  file_picker: ^11.0.2
 
 dev_dependencies:
   flutter_test:

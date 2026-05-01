@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -78,6 +78,47 @@ void main() {
       expect(find.text('第一条回复'), findsOneWidget);
       expect(find.text('第二条回复'), findsOneWidget);
       expect(callCount, 2);
+    });
+
+    testWidgets('shows comic add-to-shelf button for comic candidate post', (tester) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '30',
+            subject: '【测试汉化组】第1话',
+            author: 'alice',
+            replies: 0,
+            views: 12,
+            currentPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message:
+                    '<img src="https://img.test/1.jpg"/><img src="https://img.test/2.jpg"/><a href="thread-100-1-1.html">1</a><a href="thread-101-1-1.html">2</a>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(find.byKey(const Key('comic-add-to-shelf-button')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('comic-add-to-shelf-button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(find.byKey(const Key('comic-in-shelf-button')), findsOneWidget);
+      expect(find.textContaining('漫画候选（评分'), findsOneWidget);
     });
   });
 }

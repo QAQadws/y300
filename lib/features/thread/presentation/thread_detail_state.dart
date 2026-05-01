@@ -1,4 +1,5 @@
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/comic/domain/models/comic_models.dart';
 
 class ThreadDetailPageState {
   const ThreadDetailPageState({
@@ -9,6 +10,10 @@ class ThreadDetailPageState {
     required this.isLoadingInitial,
     required this.isLoadingMore,
     required this.posts,
+    required this.comicCandidateInfo,
+    required this.parsedComicPost,
+    required this.isInShelf,
+    required this.isComicActionLoading,
     this.errorMessage,
   });
 
@@ -19,6 +24,10 @@ class ThreadDetailPageState {
   final bool isLoadingInitial;
   final bool isLoadingMore;
   final List<ThreadPost> posts;
+  final ComicCandidateInfo comicCandidateInfo;
+  final ParsedComicPost parsedComicPost;
+  final bool isInShelf;
+  final bool isComicActionLoading;
   final String? errorMessage;
 
   factory ThreadDetailPageState.initial({
@@ -33,6 +42,10 @@ class ThreadDetailPageState {
       isLoadingInitial: true,
       isLoadingMore: false,
       posts: const <ThreadPost>[],
+      comicCandidateInfo: ComicCandidateInfo.notCandidate,
+      parsedComicPost: ParsedComicPost.empty,
+      isInShelf: false,
+      isComicActionLoading: false,
       errorMessage: null,
     );
   }
@@ -45,6 +58,10 @@ class ThreadDetailPageState {
     bool? isLoadingInitial,
     bool? isLoadingMore,
     List<ThreadPost>? posts,
+    ComicCandidateInfo? comicCandidateInfo,
+    ParsedComicPost? parsedComicPost,
+    bool? isInShelf,
+    bool? isComicActionLoading,
     String? errorMessage,
     bool clearError = false,
   }) {
@@ -56,6 +73,10 @@ class ThreadDetailPageState {
       isLoadingInitial: isLoadingInitial ?? this.isLoadingInitial,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       posts: posts ?? this.posts,
+      comicCandidateInfo: comicCandidateInfo ?? this.comicCandidateInfo,
+      parsedComicPost: parsedComicPost ?? this.parsedComicPost,
+      isInShelf: isInShelf ?? this.isInShelf,
+      isComicActionLoading: isComicActionLoading ?? this.isComicActionLoading,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );
   }
