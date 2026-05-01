@@ -68,5 +68,87 @@ void main() {
       final items = await repository.getShelfItems();
       expect(items.length, 1);
     });
+
+    test('can create category and move comic across categories', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:100',
+        tid: '100',
+        fid: '30',
+        title: '测试漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>['https://img.test/cover.jpg'],
+          episodeLinks: <ComicEpisodeLink>[],
+          plainTextSummary: '摘要',
+        ),
+      );
+
+      final categoryId = await repository.createCategory(name: '追更');
+      await repository.moveComicToCategory(
+        comicId: 'yamibo:100',
+        fromCategoryId: 'default',
+        toCategoryId: categoryId,
+      );
+
+      final defaultItems = await repository.getShelfItems(categoryId: 'default');
+      final customItems = await repository.getShelfItems(categoryId: categoryId);
+
+      expect(defaultItems, isEmpty);
+      expect(customItems.length, 1);
+      expect(customItems.first.comicId, 'yamibo:100');
+    });
+
+    test('deleting category moves comics back to default', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:100',
+        tid: '100',
+        fid: '30',
+        title: '测试漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>['https://img.test/cover.jpg'],
+          episodeLinks: <ComicEpisodeLink>[],
+          plainTextSummary: '摘要',
+        ),
+      );
+
+      final categoryId = await repository.createCategory(name: '归档');
+      await repository.moveComicToCategory(
+        comicId: 'yamibo:100',
+        fromCategoryId: 'default',
+        toCategoryId: categoryId,
+      );
+      await repository.deleteCategory(categoryId: categoryId);
+
+      final defaultItems = await repository.getShelfItems(categoryId: 'default');
+      expect(defaultItems.length, 1);
+      expect(defaultItems.first.comicId, 'yamibo:100');
+    });
+
+    test('can update custom cover and display settings', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:100',
+        tid: '100',
+        fid: '30',
+        title: '测试漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>['https://img.test/original.jpg'],
+          episodeLinks: <ComicEpisodeLink>[],
+          plainTextSummary: '摘要',
+        ),
+      );
+
+      await repository.updateCustomCover(
+        comicId: 'yamibo:100',
+        customCoverImageUrl: 'https://img.test/custom.jpg',
+      );
+
+      await repository.updateGridColumnCount(columnCount: 4);
+
+      final items = await repository.getShelfItems();
+      final settings = await repository.getDisplaySettings();
+
+      expect(items.first.coverImageUrl, 'https://img.test/custom.jpg');
+      expect(settings.gridColumnCount, 4);
+    });
   });
 }
+

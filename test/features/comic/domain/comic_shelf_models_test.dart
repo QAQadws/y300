@@ -19,4 +19,20 @@ void main() {
     expect(item.categoryId, 'default');
     expect(item.addedAt, DateTime(2026, 1, 1));
   });
+
+  test('ComicShelfCategory can mark default category', () {
+    final category = ComicShelfCategory(
+      categoryId: 'default',
+      name: '默认',
+      sortOrder: 0,
+      createdAt: DateTime(2026, 1, 1),
+    );
+
+    expect(category.isDefault, isTrue);
+  });
+
+  test('ComicShelfDisplaySettings keeps grid column count', () {
+    const settings = ComicShelfDisplaySettings(gridColumnCount: 4);
+    expect(settings.gridColumnCount, 4);
+  });
 }

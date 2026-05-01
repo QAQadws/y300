@@ -3,6 +3,32 @@ import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 
 /// 漫画仓库：封装书架数据访问，屏蔽具体存储实现。
 abstract class ComicRepository {
+  Future<List<ComicShelfCategory>> getCategories();
+
+  Future<String> createCategory({required String name});
+
+  Future<void> renameCategory({
+    required String categoryId,
+    required String newName,
+  });
+
+  Future<void> deleteCategory({required String categoryId});
+
+  Future<void> moveComicToCategory({
+    required String comicId,
+    required String fromCategoryId,
+    required String toCategoryId,
+  });
+
+  Future<ComicShelfDisplaySettings> getDisplaySettings();
+
+  Future<void> updateGridColumnCount({required int columnCount});
+
+  Future<void> updateCustomCover({
+    required String comicId,
+    required String? customCoverImageUrl,
+  });
+
   Future<bool> isInShelf({required String comicId});
 
   Future<void> addToShelf({

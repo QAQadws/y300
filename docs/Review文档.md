@@ -384,3 +384,47 @@
 
 1. 如后端出现“forumindex.auth 延迟生效”，可考虑短轮询重试 1-2 次再判失败。
 2. 登录超时阈值目前固定 18 秒，后续可通过配置化按网络环境调优。
+
+---
+
+## 漫画模块阶段3 Review 补充清单（书架完整 UI 与分类系统）
+
+### 一、数据层与迁移
+- [ ] `ComicRepository` 阶段3接口完整：分类管理、封面替换、网格设置、分类迁移。
+- [ ] `ComicLocalDb` 版本升级到 `v2`，包含 `settings` 表迁移逻辑。
+- [ ] 老数据库升级后默认写入 `grid_column_count=3`。
+
+### 二、分类系统行为
+- [ ] 可创建自定义分类。
+- [ ] 可重命名自定义分类。
+- [ ] 可删除自定义分类。
+- [ ] 删除分类后漫画自动回落默认分类。
+- [ ] 默认分类不可重命名、不可删除。
+
+### 三、书架 UI 行为
+- [ ] AppBar 包含：标题、搜索按钮、菜单按钮。
+- [ ] 分类横向条可切换分类并刷新网格。
+- [ ] 网格支持 2/3/4 列切换并稳定渲染。
+- [ ] 漫画卡片长按可打开操作面板。
+
+### 四、封面与移动
+- [ ] 支持输入封面 URL 替换封面。
+- [ ] 支持恢复默认封面。
+- [ ] 支持将漫画移动到其他分类。
+
+### 五、解耦与可维护性
+- [ ] UI 页面未直接访问 SQL。
+- [ ] 控制器仅负责编排状态，不承载数据库细节。
+- [ ] 仓储实现保持幂等与事务一致性。
+
+### 六、测试清单（阶段3新增/更新）
+- [ ] `test/features/comic/data/local_comic_repository_test.dart`
+- [ ] `test/features/comic/presentation/comic_shelf_page_test.dart`
+- [ ] `test/features/comic/domain/comic_shelf_models_test.dart`
+- [ ] `test/features/startup/presentation/main_shell_page_test.dart`
+- [ ] `test/features/thread/presentation/thread_detail_page_test.dart`
+
+### 七、执行说明
+本轮未执行自动化命令，请本地执行并回传结果：
+1. `flutter test`
+2. `flutter analyze`

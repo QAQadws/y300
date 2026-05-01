@@ -21,6 +21,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('书架还是空的，去帖子详情把喜欢的漫画加入书架吧'), findsOneWidget);
+    expect(find.byKey(const Key('comic-category-bar')), findsOneWidget);
   });
 
   testWidgets('ComicShelfPage title overlay uses custom two-line ellipsis', (tester) async {
@@ -52,7 +53,48 @@ void main() {
   });
 }
 
-class _EmptyComicRepository implements ComicRepository {
+abstract class _BaseComicRepository implements ComicRepository {
+  @override
+  Future<String> createCategory({required String name}) async => 'new';
+
+  @override
+  Future<void> deleteCategory({required String categoryId}) async {}
+
+  @override
+  Future<ComicShelfDisplaySettings> getDisplaySettings() async {
+    return const ComicShelfDisplaySettings(gridColumnCount: 3);
+  }
+
+  @override
+  Future<List<ComicShelfCategory>> getCategories() async {
+    return <ComicShelfCategory>[
+      ComicShelfCategory(
+        categoryId: 'default',
+        name: '默认',
+        sortOrder: 0,
+        createdAt: DateTime(2026, 1, 1),
+      ),
+    ];
+  }
+
+  @override
+  Future<void> moveComicToCategory({
+    required String comicId,
+    required String fromCategoryId,
+    required String toCategoryId,
+  }) async {}
+
+  @override
+  Future<void> renameCategory({required String categoryId, required String newName}) async {}
+
+  @override
+  Future<void> updateCustomCover({required String comicId, required String? customCoverImageUrl}) async {}
+
+  @override
+  Future<void> updateGridColumnCount({required int columnCount}) async {}
+}
+
+class _EmptyComicRepository extends _BaseComicRepository {
   @override
   Future<void> addToShelf({
     required String comicId,
@@ -73,7 +115,7 @@ class _EmptyComicRepository implements ComicRepository {
   }
 }
 
-class _DataComicRepository implements ComicRepository {
+class _DataComicRepository extends _BaseComicRepository {
   _DataComicRepository(this.item);
 
   final ComicShelfItem item;
@@ -97,3 +139,4 @@ class _DataComicRepository implements ComicRepository {
     return comicId == item.comicId;
   }
 }
+

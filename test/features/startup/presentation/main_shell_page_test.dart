@@ -23,7 +23,7 @@ void main() {
     await tester.tap(find.text('漫画'));
     await tester.pumpAndSettle();
 
-    expect(find.text('漫画书架'), findsOneWidget);
+    expect(find.text('书架'), findsOneWidget);
   });
 }
 
@@ -38,6 +38,29 @@ class _FakeComicRepository implements ComicRepository {
   }) async {}
 
   @override
+  Future<String> createCategory({required String name}) async => 'mock-category';
+
+  @override
+  Future<void> deleteCategory({required String categoryId}) async {}
+
+  @override
+  Future<ComicShelfDisplaySettings> getDisplaySettings() async {
+    return const ComicShelfDisplaySettings(gridColumnCount: 3);
+  }
+
+  @override
+  Future<List<ComicShelfCategory>> getCategories() async {
+    return <ComicShelfCategory>[
+      ComicShelfCategory(
+        categoryId: 'default',
+        name: '默认',
+        sortOrder: 0,
+        createdAt: DateTime(2026, 1, 1),
+      ),
+    ];
+  }
+
+  @override
   Future<List<ComicShelfItem>> getShelfItems({String categoryId = 'default'}) async {
     return const <ComicShelfItem>[];
   }
@@ -46,4 +69,21 @@ class _FakeComicRepository implements ComicRepository {
   Future<bool> isInShelf({required String comicId}) async {
     return false;
   }
+
+  @override
+  Future<void> moveComicToCategory({
+    required String comicId,
+    required String fromCategoryId,
+    required String toCategoryId,
+  }) async {}
+
+  @override
+  Future<void> renameCategory({required String categoryId, required String newName}) async {}
+
+  @override
+  Future<void> updateCustomCover({required String comicId, required String? customCoverImageUrl}) async {}
+
+  @override
+  Future<void> updateGridColumnCount({required int columnCount}) async {}
 }
+

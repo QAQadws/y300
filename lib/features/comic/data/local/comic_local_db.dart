@@ -5,13 +5,14 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 1;
+  static const int dbVersion = 2;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
   static const String episodeImagesTable = 'episode_images';
   static const String categoriesTable = 'categories';
   static const String shelfItemsTable = 'shelf_items';
+  static const String settingsTable = 'settings';
 
   static Future<Database> open() {
     return openDatabase(
@@ -19,6 +20,12 @@ class ComicLocalDb {
       version: dbVersion,
       onCreate: (db, version) async {
         await _createTables(db);
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await _createSettingsTable(db);
+          await _seedDefaultSettings(db);
+        }
       },
     );
   }
@@ -101,6 +108,29 @@ class ComicLocalDb {
     );
     await db.execute(
       'CREATE INDEX idx_shelf_items_category_sort ON $shelfItemsTable(category_id, sort_order)',
+    );
+
+    await _createSettingsTable(db);
+    await _seedDefaultSettings(db);
+  }
+
+  static Future<void> _createSettingsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $settingsTable (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
+  }
+
+  static Future<void> _seedDefaultSettings(Database db) async {
+    await db.insert(
+      settingsTable,
+      <String, Object?>{
+        'key': 'grid_column_count',
+        'value': '3',
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
     );
   }
 }
