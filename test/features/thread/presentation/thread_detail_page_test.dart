@@ -2,6 +2,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/comic/data/comic_providers.dart';
+import 'package:y300/features/comic/data/comic_repository.dart';
+import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
@@ -125,7 +129,10 @@ void main() {
 
 Widget _buildTestApp(ThreadRepository repository) {
   return ProviderScope(
-    overrides: [threadRepositoryProvider.overrideWithValue(repository)],
+    overrides: [
+      threadRepositoryProvider.overrideWithValue(repository),
+      comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+    ],
     child: const MaterialApp(
       home: ThreadDetailPage(tid: '100', subject: '测试主题'),
     ),
@@ -140,5 +147,30 @@ class _FakeThreadRepository implements ThreadRepository {
   @override
   Future<ApiResult<ThreadDetailData>> getThreadDetail({required String tid, int page = 1}) {
     return _loader(tid, page);
+  }
+}
+
+class _FakeComicRepository implements ComicRepository {
+  final Set<String> _ids = <String>{};
+
+  @override
+  Future<void> addToShelf({
+    required String comicId,
+    required String tid,
+    required String fid,
+    required String title,
+    required ParsedComicPost parsedPost,
+  }) async {
+    _ids.add(comicId);
+  }
+
+  @override
+  Future<List<ComicShelfItem>> getShelfItems({String categoryId = 'default'}) async {
+    return const <ComicShelfItem>[];
+  }
+
+  @override
+  Future<bool> isInShelf({required String comicId}) async {
+    return _ids.contains(comicId);
   }
 }

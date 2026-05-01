@@ -1,6 +1,7 @@
 ﻿import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 
-/// 阶段1使用的临时仓库接口，后续阶段可替换为本地数据库实现。
+/// 漫画仓库：封装书架数据访问，屏蔽具体存储实现。
 abstract class ComicRepository {
   Future<bool> isInShelf({required String comicId});
 
@@ -11,24 +12,8 @@ abstract class ComicRepository {
     required String title,
     required ParsedComicPost parsedPost,
   });
-}
 
-class InMemoryComicRepository implements ComicRepository {
-  final Set<String> _comicIds = <String>{};
-
-  @override
-  Future<bool> isInShelf({required String comicId}) async {
-    return _comicIds.contains(comicId);
-  }
-
-  @override
-  Future<void> addToShelf({
-    required String comicId,
-    required String tid,
-    required String fid,
-    required String title,
-    required ParsedComicPost parsedPost,
-  }) async {
-    _comicIds.add(comicId);
-  }
+  Future<List<ComicShelfItem>> getShelfItems({
+    String categoryId = 'default',
+  });
 }

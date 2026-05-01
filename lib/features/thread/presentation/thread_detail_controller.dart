@@ -101,7 +101,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       await _readComicRepository().addToShelf(
         comicId: comicId,
         tid: _args.tid,
-        fid: _extractFid(current.posts),
+        fid: current.fid,
         title: current.subject,
         parsedPost: current.parsedComicPost,
       );
@@ -143,6 +143,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
       return ThreadDetailPageState(
         tid: _args.tid,
+        fid: data.fid,
         subject: data.subject.isNotEmpty ? data.subject : _args.subject,
         currentPage: data.currentPage,
         hasMore: data.hasMore,
@@ -159,6 +160,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     final error = (result as ApiFailure<ThreadDetailData>).error;
     return ThreadDetailPageState(
       tid: _args.tid,
+      fid: '',
       subject: _args.subject,
       currentPage: page == 1 ? 0 : page,
       hasMore: false,
@@ -215,8 +217,4 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     return null;
   }
 
-  String _extractFid(List<ThreadPost> posts) {
-    // 阶段1仅用于假仓库存储，后续会用真实详情字段。
-    return posts.isEmpty ? '' : 'unknown';
-  }
 }

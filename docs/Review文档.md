@@ -283,3 +283,47 @@
 1. 书架存储为内存仓库，仅用于阶段1联调。
 2. 尚未接入本地数据库持久化（属于阶段2范围）。
 3. “已在书架”按钮暂未跳转漫画书架页。
+
+---
+
+## 漫画模块阶段2 Review 清单补充
+
+### 一、存储层检查
+
+- [ ] 已引入本地数据库并完成建表：`comics/episodes/episode_images/categories/shelf_items`
+- [ ] 默认分类 `default` 初始化成功
+- [ ] `shelf_items` 唯一约束生效（重复加入不产生脏数据）
+- [ ] 关键查询已建立索引（章节、图片、书架）
+
+### 二、仓库实现检查
+
+- [ ] `ComicRepository` 接口维持稳定，业务层不直接依赖 SQL
+- [ ] `LocalComicRepository.addToShelf` 使用事务，失败可回滚
+- [ ] `isInShelf/getShelfItems` 查询结果正确
+- [ ] `addToShelf` 具备幂等性
+
+### 三、功能闭环检查
+
+- [ ] 帖子详情点击“加入书架”后，漫画 Tab 书架可见
+- [ ] 重启 App 后书架数据仍保留
+- [ ] 非漫画帖不会污染书架数据
+
+### 四、导航与页面检查
+
+- [ ] 启动后进入 `MainShellPage`
+- [ ] 可在“论坛/漫画”Tab间切换
+- [ ] 漫画书架空态、错误态与基础网格显示正常
+
+### 五、测试检查（阶段2新增）
+
+- [ ] `local_comic_repository_test.dart` 通过
+- [ ] `comic_shelf_models_test.dart` 通过
+- [ ] `main_shell_page_test.dart` 通过
+- [ ] `comic_shelf_page_test.dart` 通过
+- [ ] `startup_page_test.dart` 新增断言通过
+
+### 六、已知限制（阶段边界）
+
+1. 阶段2书架仅最小可用，分类管理 UI 未实现（属于阶段3）。
+2. 漫画详情/阅读页未实现（属于阶段4/5）。
+3. 书架封面渲染暂为基础网络图加载，缓存策略后续增强。

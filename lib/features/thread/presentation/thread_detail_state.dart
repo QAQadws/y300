@@ -4,6 +4,7 @@ import 'package:y300/features/comic/domain/models/comic_models.dart';
 class ThreadDetailPageState {
   const ThreadDetailPageState({
     required this.tid,
+    required this.fid,
     required this.subject,
     required this.currentPage,
     required this.hasMore,
@@ -18,6 +19,7 @@ class ThreadDetailPageState {
   });
 
   final String tid;
+  final String fid;
   final String subject;
   final int currentPage;
   final bool hasMore;
@@ -36,6 +38,7 @@ class ThreadDetailPageState {
   }) {
     return ThreadDetailPageState(
       tid: tid,
+      fid: '',
       subject: subject,
       currentPage: 0,
       hasMore: true,
@@ -52,6 +55,7 @@ class ThreadDetailPageState {
 
   ThreadDetailPageState copyWith({
     String? tid,
+    String? fid,
     String? subject,
     int? currentPage,
     bool? hasMore,
@@ -67,6 +71,7 @@ class ThreadDetailPageState {
   }) {
     return ThreadDetailPageState(
       tid: tid ?? this.tid,
+      fid: fid ?? this.fid,
       subject: subject ?? this.subject,
       currentPage: currentPage ?? this.currentPage,
       hasMore: hasMore ?? this.hasMore,
