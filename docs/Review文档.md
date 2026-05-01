@@ -544,3 +544,53 @@
 本轮改动未执行自动化命令，请本地执行并回传结果：
 1. `flutter test`
 2. `flutter analyze`
+
+---
+
+## 漫画阅读迁移阶段0 Review补充清单
+
+### 一、阶段目标对齐
+- [ ] 已新增阅读器偏好模型：`ReaderPreferences`
+- [ ] 已新增阅读器偏好持久化抽象：`ReaderPreferencesRepository`
+- [ ] 已新增 shared_preferences 落地实现且未向上层泄漏存储细节
+- [ ] 阅读页已拆分为三层容器（内容/顶部/底部）
+- [ ] 阅读控制器已补充 `jumpToImageIndex` / `goToPreviousEpisode` / `goToNextEpisode`
+
+### 二、解耦与可维护性
+- [ ] 模型、存储、状态、页面层职责边界清晰
+- [ ] 页面不直接读写 shared_preferences
+- [ ] 控制器通用接口可复用于后续进度条/章节切换
+- [ ] 关键预埋点具备注释说明，便于后续阶段扩展
+
+### 三、回归约束（阶段0必须不破坏现有行为）
+- [ ] 阅读页图片流渲染行为与改造前一致
+- [ ] 缓存按钮行为与改造前一致
+- [ ] 上一话/下一话返回约定（`previous`/`next`）保持不变
+
+### 四、阶段0新增测试检查
+- [ ] `test/features/comic/presentation/models/reader_preferences_test.dart`
+- [ ] `test/features/comic/presentation/providers/reader_preferences_provider_test.dart`
+- [ ] `test/features/comic/presentation/controllers/comic_reader_controller_test.dart`
+- [ ] `test/features/comic/presentation/comic_reader_page_test.dart`（新增三层容器断言）
+
+### 五、执行说明
+本轮按约定未执行：
+1. `flutter test`
+2. `flutter analyze`
+
+请在本地执行后回传结果，再进行下一轮修复或进入阶段1。
+
+### 阶段0修订 Review补充（生命周期与菜单交互）
+
+- [ ] `ComicReaderController` 依赖不再通过异步续体直接 `ref.read`，而是在 `build()` 缓存后使用
+- [ ] 控制器关键异步路径在 `await` 后有 `ref.mounted` 防护
+- [ ] 阅读页菜单默认隐藏
+- [ ] 仅点击中部区域触发菜单显隐
+- [ ] 菜单显隐存在上下滑入动效
+- [ ] `上一话/下一话` 仅在菜单显示时出现（非固定常驻）
+- [ ] `comic_reader_page_test.dart` 已覆盖中部点击触发菜单出现断言
+
+执行说明：
+本轮仍未执行：
+1. `flutter test`
+2. `flutter analyze`

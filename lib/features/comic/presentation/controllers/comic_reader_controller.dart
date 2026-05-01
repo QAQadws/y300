@@ -114,12 +114,15 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   ComicReaderController(this._args);
 
   final ComicReaderArgs _args;
-
-  ComicRepository get _repository => ref.read(comicRepositoryProvider);
-  ComicReaderService get _readerService => ref.read(comicReaderServiceProvider);
+  late final ComicRepository _repository;
+  late final ComicReaderService _readerService;
 
   @override
   FutureOr<ComicReaderViewState> build() async {
+    // Read dependencies once during build to avoid accessing `ref` from
+    // async continuations after provider disposal.
+    _repository = ref.read(comicRepositoryProvider);
+    _readerService = ref.read(comicReaderServiceProvider);
     return _loadState();
   }
 
@@ -138,6 +141,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     state = AsyncData(current.copyWith(images: updatedImages, clearHint: true));
 
     final done = await _readerService.cacheImage(imageUrl: imageUrl);
+    if (!ref.mounted) {
+      return;
+    }
     await _repository.updateEpisodeImageCacheStatus(
       episodeId: _args.episodeId,
       imageUrl: imageUrl,
@@ -151,9 +157,10 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       cacheStatus: done ? 'done' : 'failed',
       cacheLocalPath: done ? imageUrl : null,
     );
-    state = AsyncData(
-      current.copyWith(images: refreshed, hint: done ? '图片重试成功' : '图片重试失败'),
-    );
+    if (!ref.mounted) {
+      return;
+    }
+    state = AsyncData(current.copyWith(images: refreshed, hint: done ? '图片重试成功' : '图片重试失败'));
   }
 
   Future<void> cacheCurrentEpisode() async {
@@ -168,6 +175,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         cacheStatus: 'downloading',
       );
       final done = await _readerService.cacheImage(imageUrl: image.imageUrl);
+      if (!ref.mounted) {
+        return;
+      }
       await _repository.updateEpisodeImageCacheStatus(
         episodeId: _args.episodeId,
         imageUrl: image.imageUrl,
@@ -175,7 +185,11 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         cacheLocalPath: done ? image.imageUrl : null,
       );
     }
-    state = AsyncData((await _loadState()).copyWith(hint: '本话缓存完成'));
+    final nextState = await _loadState();
+    if (!ref.mounted) {
+      return;
+    }
+    state = AsyncData(nextState.copyWith(hint: '本话缓存完成'));
   }
 
   Future<void> cacheAllUnread() async {
@@ -187,6 +201,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     final unread = episodes.skip(currentIndex).toList(growable: false);
     for (final episode in unread) {
       final images = await _ensureEpisodeImages(episode);
+      if (!ref.mounted) {
+        return;
+      }
       for (final image in images) {
         await _repository.updateEpisodeImageCacheStatus(
           episodeId: episode.episodeId,
@@ -194,6 +211,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
           cacheStatus: 'downloading',
         );
         final done = await _readerService.cacheImage(imageUrl: image.imageUrl);
+        if (!ref.mounted) {
+          return;
+        }
         await _repository.updateEpisodeImageCacheStatus(
           episodeId: episode.episodeId,
           imageUrl: image.imageUrl,
@@ -202,7 +222,11 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         );
       }
     }
-    state = AsyncData((await _loadState()).copyWith(hint: '未读章节缓存完成'));
+    final nextState = await _loadState();
+    if (!ref.mounted) {
+      return;
+    }
+    state = AsyncData(nextState.copyWith(hint: '未读章节缓存完成'));
   }
 
   Future<void> onScrollProgress({
@@ -227,6 +251,57 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     );
   }
 
+  /// Phase-0 generic API for explicit index jump.
+  ///
+  /// UI is responsible for the actual scroll/page movement.
+  /// Controller only persists and mirrors logical progress state.
+  Future<void> jumpToImageIndex(int index, {double? scrollOffset}) async {
+    final current = state.value;
+    if (current == null || current.images.isEmpty) {
+      return;
+    }
+    final clampedIndex = index.clamp(0, current.images.length - 1);
+    final nextOffset = scrollOffset ?? current.lastScrollOffset;
+    await _repository.updateLastReadProgress(
+      comicId: _args.comicId,
+      episodeId: _args.episodeId,
+      imageIndex: clampedIndex,
+      scrollOffset: nextOffset,
+    );
+    state = AsyncData(
+      current.copyWith(
+        currentImageIndex: clampedIndex,
+        lastScrollOffset: nextOffset,
+      ),
+    );
+  }
+
+  /// Returns previous episode id if available.
+  Future<String?> goToPreviousEpisode() async {
+    final episodes = await _repository.getComicEpisodes(
+      comicId: _args.comicId,
+      descending: false,
+    );
+    final currentIndex = episodes.indexWhere((e) => e.episodeId == _args.episodeId);
+    if (currentIndex <= 0) {
+      return null;
+    }
+    return episodes[currentIndex - 1].episodeId;
+  }
+
+  /// Returns next episode id if available.
+  Future<String?> goToNextEpisode() async {
+    final episodes = await _repository.getComicEpisodes(
+      comicId: _args.comicId,
+      descending: false,
+    );
+    final currentIndex = episodes.indexWhere((e) => e.episodeId == _args.episodeId);
+    if (currentIndex < 0 || currentIndex + 1 >= episodes.length) {
+      return null;
+    }
+    return episodes[currentIndex + 1].episodeId;
+  }
+
   Future<ComicReaderViewState> _loadState() async {
     final episodes = await _repository.getComicEpisodes(comicId: _args.comicId, descending: false);
     final episodeIndex = episodes.indexWhere((e) => e.episodeId == _args.episodeId);
@@ -235,6 +310,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     }
     final episode = episodes[episodeIndex];
     final images = await _ensureEpisodeImages(episode);
+    if (!ref.mounted) {
+      throw StateError('阅读器已销毁');
+    }
     final progress = await _repository.getLastReadProgress(comicId: _args.comicId);
     final currentImageIndex = progress != null && progress.episodeId == _args.episodeId
         ? progress.imageIndex
@@ -272,6 +350,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       return images;
     }
     final fetched = await _readerService.fetchEpisodeImagesByTid(episode.sourceTid);
+    if (!ref.mounted) {
+      return const <ComicEpisodeImageItem>[];
+    }
     if (fetched.isEmpty) {
       return const <ComicEpisodeImageItem>[];
     }

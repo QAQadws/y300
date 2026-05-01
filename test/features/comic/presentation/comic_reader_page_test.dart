@@ -26,8 +26,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('comic-reader-image-list')), findsOneWidget);
+    expect(find.byKey(const Key('comic-reader-center-tap-zone')), findsOneWidget);
+    expect(find.byKey(const Key('comic-reader-top-overlay')), findsOneWidget);
+    expect(find.byKey(const Key('comic-reader-bottom-overlay')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('comic-reader-center-tap-zone')));
+    await tester.pumpAndSettle();
+
     expect(find.byKey(const Key('comic-reader-cache-episode')), findsOneWidget);
     expect(find.byKey(const Key('comic-reader-cache-unread')), findsOneWidget);
+    expect(find.byKey(const Key('comic-reader-prev-episode-button')), findsOneWidget);
+    expect(find.byKey(const Key('comic-reader-next-episode-button')), findsOneWidget);
   });
 }
 
