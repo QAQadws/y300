@@ -5,6 +5,7 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/comic/domain/services/comic_post_aggregation_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
@@ -132,11 +133,12 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
     if (result case ApiSuccess<ThreadDetailData>(:final data)) {
       final merged = page == 1 ? data.posts : <ThreadPost>[...previous, ...data.posts];
-      final firstPost = _findFirstPost(merged);
+      final aggregation = ref.read(comicPostAggregationServiceProvider).build(merged);
       final comicMeta = _detectAndParseComic(
         fid: data.fid,
         subject: data.subject.isNotEmpty ? data.subject : _args.subject,
-        message: firstPost?.message ?? '',
+        message: aggregation.detectionMessage,
+        parseMessage: aggregation.parseMessage,
       );
       final comicId = _buildComicId(tid: _args.tid);
       final isInShelf = await _readComicRepository().isInShelf(comicId: comicId);
@@ -187,6 +189,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     required String fid,
     required String subject,
     required String message,
+    required String parseMessage,
   }) {
     if (message.isEmpty) {
       return (ComicCandidateInfo.notCandidate, ParsedComicPost.empty);
@@ -200,21 +203,12 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       return (candidate, ParsedComicPost.empty);
     }
 
-    final parsed = parser.parse(message: message);
+    final parsed = parser.parse(message: parseMessage);
     return (candidate, parsed);
   }
 
   String _buildComicId({required String tid}) {
     return 'yamibo:$tid';
-  }
-
-  ThreadPost? _findFirstPost(List<ThreadPost> posts) {
-    for (final post in posts) {
-      if (post.isFirst) {
-        return post;
-      }
-    }
-    return null;
   }
 
 }

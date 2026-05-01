@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -7,21 +7,28 @@ import 'package:y300/features/auth/presentation/login_page.dart';
 
 void main() {
   group('LoginPage', () {
-    testWidgets('shows success message after successful login', (tester) async {
+    testWidgets('pops page after successful login', (tester) async {
       final repository = _FakeAuthRepository(
         shouldSucceed: true,
         username: 'tester',
       );
 
-      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpWidget(_buildPushFlowTestApp(repository));
+
+      await tester.tap(find.byKey(const Key('open-login-page-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(LoginPage), findsOneWidget);
 
       await tester.enterText(find.byKey(const Key('login-username-field')), 'tester');
       await tester.enterText(find.byKey(const Key('login-password-field')), '123456');
       await tester.tap(find.byKey(const Key('login-submit-button')));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('login-success-text')), findsOneWidget);
-      expect(find.textContaining('欢迎回来'), findsOneWidget);
+      // 登录成功后应回退到上一页。
+      expect(find.byType(LoginPage), findsNothing);
+      expect(find.byKey(const Key('login-result-text')), findsOneWidget);
+      expect(find.text('result=true'), findsOneWidget);
     });
 
     testWidgets('shows error message after failed login', (tester) async {
@@ -48,6 +55,52 @@ Widget _buildTestApp(AuthRepository repository) {
     overrides: [authRepositoryProvider.overrideWithValue(repository)],
     child: const MaterialApp(home: LoginPage()),
   );
+}
+
+Widget _buildPushFlowTestApp(AuthRepository repository) {
+  return ProviderScope(
+    overrides: [authRepositoryProvider.overrideWithValue(repository)],
+    child: const MaterialApp(home: _LoginHostPage()),
+  );
+}
+
+class _LoginHostPage extends StatefulWidget {
+  const _LoginHostPage();
+
+  @override
+  State<_LoginHostPage> createState() => _LoginHostPageState();
+}
+
+class _LoginHostPageState extends State<_LoginHostPage> {
+  bool? _result;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FilledButton(
+              key: const Key('open-login-page-button'),
+              onPressed: () async {
+                final result = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute<bool>(
+                    builder: (_) => const LoginPage(),
+                  ),
+                );
+                setState(() {
+                  _result = result;
+                });
+              },
+              child: const Text('open login'),
+            ),
+            Text('result=$_result', key: const Key('login-result-text')),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _FakeAuthRepository implements AuthRepository {
@@ -92,5 +145,10 @@ class _FakeAuthRepository implements AuthRepository {
         isLoggedIn: true,
       ),
     );
+  }
+
+  @override
+  Future<ApiResult<bool>> verifyAuthByForumIndex() async {
+    return const ApiSuccess(true);
   }
 }

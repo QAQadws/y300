@@ -42,6 +42,20 @@ class AuthRepository {
     );
   }
 
+  /// 通过 forumindex 校验 cookie 中 auth 是否已经生效。
+  /// Discuz 在未登录时通常返回 `auth: null`。
+  Future<ApiResult<bool>> verifyAuthByForumIndex() async {
+    final result = await _apiClient.getDiscuz(module: 'forumindex');
+    return result.when(
+      success: (response) {
+        final auth = response.variables['auth'];
+        final authText = ParseUtils.asString(auth);
+        return ApiSuccess<bool>(authText.isNotEmpty);
+      },
+      failure: ApiFailure.new,
+    );
+  }
+
   /// 通过 Discuz 网页表单登录，并在成功后立即校验会话是否生效。
   Future<ApiResult<SessionInfo>> login({
     required String username,
@@ -58,6 +72,21 @@ class AuthRepository {
 
     if (loginResult.isFailure) {
       return ApiFailure(loginResult.errorOrNull!);
+    }
+
+    // 登录后优先通过 forumindex 的 auth 字段校验会话是否真正生效。
+    final authResult = await verifyAuthByForumIndex();
+    final authValid = authResult.when(
+      success: (ok) => ok,
+      failure: (_) => false,
+    );
+    if (!authValid) {
+      return ApiFailure(
+        ApiError(
+          type: ApiErrorType.unauthorized,
+          message: '登录请求已发送，但 forumindex.auth 仍为空',
+        ),
+      );
     }
 
     final sessionResult = await refreshSession();

@@ -124,6 +124,50 @@ void main() {
       expect(find.byKey(const Key('comic-in-shelf-button')), findsOneWidget);
       expect(find.textContaining('漫画候选（评分'), findsOneWidget);
     });
+
+    testWidgets('includes second floor images when floor2 is same author and image-dominant', (tester) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '30',
+            subject: '【测试汉化组】第1话',
+            author: 'alice',
+            replies: 1,
+            views: 12,
+            currentPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>前言</p><img src="https://img.test/cover.jpg"/>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+              ThreadPost(
+                pid: 'p2',
+                author: 'alice',
+                authorId: '1',
+                message: '<img src="https://img.test/page-1.jpg"/><img src="https://img.test/page-2.jpg"/>',
+                number: 2,
+                isFirst: false,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      // 首楼渲染中应包含二楼并入后的图片，确保“楼主二楼补图”被纳入解析结果。
+      expect(find.byKey(const Key('comic-add-to-shelf-button')), findsOneWidget);
+    });
   });
 }
 

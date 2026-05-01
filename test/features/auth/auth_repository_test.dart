@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -19,6 +19,7 @@ void main() {
     test('login success: should persist cookie and return logged-in session', () async {
       final adapter = _DiscuzTestAdapter(
         loginSucceeds: true,
+        forumIndexAuth: 'token123',
         profileUid: '123',
         profileUsername: 'tester',
       );
@@ -36,13 +37,13 @@ void main() {
       expect(session.uid, '123');
       expect(session.username, 'tester');
 
-      // 断言 profile 请求携带了网页登录后下发的 Cookie。
       expect(adapter.lastProfileCookieHeader, contains('auth=token123'));
     });
 
     test('login failed on web form: should return business error', () async {
       final adapter = _DiscuzTestAdapter(
         loginSucceeds: false,
+        forumIndexAuth: null,
         profileUid: '0',
         profileUsername: '',
       );
@@ -60,11 +61,12 @@ void main() {
       expect(error.message, contains('密码错误'));
     });
 
-    test('web login success but profile uid is 0: should be unauthorized', () async {
+    test('web login success but forumindex auth is null: should be unauthorized', () async {
       final adapter = _DiscuzTestAdapter(
         loginSucceeds: true,
-        profileUid: '0',
-        profileUsername: '',
+        forumIndexAuth: null,
+        profileUid: '123',
+        profileUsername: 'tester',
       );
       final authRepository = _buildAuthRepository(adapter);
 
@@ -77,12 +79,13 @@ void main() {
       final error = result.errorOrNull;
       expect(error, isNotNull);
       expect(error!.type, ApiErrorType.unauthorized);
-      expect(error.message, contains('会话未生效'));
+      expect(error.message, contains('forumindex.auth'));
     });
 
     test('logout should clear persisted cookies', () async {
       final adapter = _DiscuzTestAdapter(
         loginSucceeds: true,
+        forumIndexAuth: 'token123',
         profileUid: '123',
         profileUsername: 'tester',
       );
@@ -104,7 +107,6 @@ void main() {
       );
       expect(afterLogout, isNull);
 
-      // 确保额外构建的 ApiClient 不影响共享存储行为。
       expect(apiClient, isNotNull);
     });
   });
@@ -136,11 +138,13 @@ ApiClient _buildApiClient(HttpClientAdapter adapter) {
 class _DiscuzTestAdapter implements HttpClientAdapter {
   _DiscuzTestAdapter({
     required this.loginSucceeds,
+    required this.forumIndexAuth,
     required this.profileUid,
     required this.profileUsername,
   });
 
   final bool loginSucceeds;
+  final String? forumIndexAuth;
   final String profileUid;
   final String profileUsername;
 
@@ -186,6 +190,25 @@ class _DiscuzTestAdapter implements HttpClientAdapter {
         headers: <String, List<String>>{
           if (loginSucceeds) 'set-cookie': <String>['auth=token123; Path=/; HttpOnly'],
         },
+      );
+    }
+
+    if (options.method == 'GET' &&
+        uri.path.endsWith('/api/mobile/index.php') &&
+        uri.queryParameters['module'] == 'forumindex') {
+      final forumIndexResponse = <String, dynamic>{
+        'Version': '4',
+        'Charset': 'utf-8',
+        'Variables': <String, dynamic>{
+          'auth': forumIndexAuth,
+          'member_uid': forumIndexAuth == null ? '0' : '123',
+        },
+      };
+
+      return ResponseBody.fromString(
+        jsonEncode(forumIndexResponse),
+        200,
+        headers: <String, List<String>>{},
       );
     }
 

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/auth/data/auth_repository.dart';
 import 'package:y300/features/auth/presentation/login_state.dart';
 
@@ -9,6 +10,8 @@ final loginControllerProvider =
 
 /// 登录页状态控制器：负责表单状态与登录提交流程。
 class LoginController extends AsyncNotifier<LoginPageState> {
+  static const Duration _submitTimeout = Duration(seconds: 18);
+
   AuthRepository get _repository => ref.read(authRepositoryProvider);
 
   @override
@@ -16,7 +19,8 @@ class LoginController extends AsyncNotifier<LoginPageState> {
     return LoginPageState.initial();
   }
 
-  LoginPageState get _current => state.value ?? LoginPageState.initial();
+  /// 避免在 AsyncLoading 等状态直接访问 value 导致空值分支不清晰。
+  LoginPageState get _current => state.asData?.value ?? LoginPageState.initial();
 
   void updateUsername(String value) {
     state = AsyncData(
@@ -31,6 +35,10 @@ class LoginController extends AsyncNotifier<LoginPageState> {
   }
 
   Future<bool> submit() async {
+    if (_current.isSubmitting) {
+      return false;
+    }
+
     final username = _current.username.trim();
     final password = _current.password;
 
@@ -52,7 +60,17 @@ class LoginController extends AsyncNotifier<LoginPageState> {
       ),
     );
 
-    final result = await _repository.login(username: username, password: password);
+    final result = await _repository
+        .login(username: username, password: password)
+        .timeout(
+          _submitTimeout,
+          onTimeout: () => const ApiFailure(
+            ApiError(
+              type: ApiErrorType.timeout,
+              message: '登录超时，请检查网络后重试',
+            ),
+          ),
+        );
 
     return result.when(
       success: (session) {
