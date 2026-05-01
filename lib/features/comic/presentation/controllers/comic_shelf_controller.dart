@@ -13,33 +13,47 @@ class ComicShelfViewState {
   const ComicShelfViewState({
     required this.categories,
     required this.selectedCategoryId,
-    required this.items,
+    required this.itemsByCategory,
     required this.gridColumnCount,
   });
 
   final List<ComicShelfCategory> categories;
   final String selectedCategoryId;
-  final List<ComicShelfItem> items;
+  final Map<String, List<ComicShelfItem>> itemsByCategory;
   final int gridColumnCount;
 
-  bool get hasData => items.isNotEmpty;
+  int get selectedIndex {
+    final index = categories.indexWhere((category) => category.categoryId == selectedCategoryId);
+    return index < 0 ? 0 : index;
+  }
+
+  List<ComicShelfItem> itemsOf(String categoryId) {
+    return itemsByCategory[categoryId] ?? const <ComicShelfItem>[];
+  }
+
+  ComicShelfCategory? get selectedCategory {
+    if (categories.isEmpty) {
+      return null;
+    }
+    return categories[selectedIndex];
+  }
 
   ComicShelfViewState copyWith({
     List<ComicShelfCategory>? categories,
     String? selectedCategoryId,
-    List<ComicShelfItem>? items,
+    Map<String, List<ComicShelfItem>>? itemsByCategory,
     int? gridColumnCount,
   }) {
     return ComicShelfViewState(
       categories: categories ?? this.categories,
       selectedCategoryId: selectedCategoryId ?? this.selectedCategoryId,
-      items: items ?? this.items,
+      itemsByCategory: itemsByCategory ?? this.itemsByCategory,
       gridColumnCount: gridColumnCount ?? this.gridColumnCount,
     );
   }
 }
 
-/// 书架控制器：聚合分类、展示配置与当前分类下漫画列表。
+/// 书架控制器：管理分类、各分类书架数据与展示配置。
 class ComicShelfController extends AsyncNotifier<ComicShelfViewState> {
   @override
   FutureOr<ComicShelfViewState> build() {
@@ -57,8 +71,7 @@ class ComicShelfController extends AsyncNotifier<ComicShelfViewState> {
       return;
     }
 
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(() => _load(selectedCategoryId: categoryId));
+    state = AsyncData(current.copyWith(selectedCategoryId: categoryId));
   }
 
   Future<void> updateGridColumnCount(int columnCount) async {
@@ -127,14 +140,23 @@ class ComicShelfController extends AsyncNotifier<ComicShelfViewState> {
         ? preferredCategory
         : (categories.isEmpty ? 'default' : categories.first.categoryId);
 
-    final items = await repository.getShelfItems(categoryId: resolvedCategoryId);
+    // 预先加载所有分类数据，支持 PageView 左右滑动时相邻分类即时可见。
+    final entries = await Future.wait(
+      categories.map((category) async {
+        final items = await repository.getShelfItems(categoryId: category.categoryId);
+        return MapEntry(category.categoryId, items);
+      }),
+    );
+
+    final itemsByCategory = <String, List<ComicShelfItem>>{
+      for (final entry in entries) entry.key: entry.value,
+    };
 
     return ComicShelfViewState(
       categories: categories,
       selectedCategoryId: resolvedCategoryId,
-      items: items,
+      itemsByCategory: itemsByCategory,
       gridColumnCount: settings.gridColumnCount,
     );
   }
 }
-
