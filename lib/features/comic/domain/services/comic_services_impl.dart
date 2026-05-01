@@ -3,6 +3,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/comic/data/comic_parser_service.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_detector.dart';
+import 'package:y300/features/thread/data/thread_repository.dart';
 
 final comicDetectorProvider = Provider<ComicDetector>((ref) {
   return RuleBasedComicDetector();
@@ -10,6 +11,45 @@ final comicDetectorProvider = Provider<ComicDetector>((ref) {
 
 final comicParserServiceProvider = Provider<ComicParserService>((ref) {
   return HtmlComicParserService();
+});
+
+/// 章节刷新接口：便于在控制器与测试中替换实现。
+abstract class ComicEpisodeRefreshService {
+  Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid);
+}
+
+class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
+  NetworkComicEpisodeRefreshService({
+    required ThreadRepository threadRepository,
+    required ComicParserService parserService,
+  })  : _threadRepository = threadRepository,
+        _parserService = parserService;
+
+  final ThreadRepository _threadRepository;
+  final ComicParserService _parserService;
+
+  @override
+  Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
+    final result = await _threadRepository.getThreadDetail(tid: tid, page: 1);
+    return result.when(
+      success: (data) {
+        final firstPost = data.posts.where((post) => post.isFirst).firstOrNull;
+        if (firstPost == null) {
+          return const <ComicEpisodeLink>[];
+        }
+        final parsed = _parserService.parse(message: firstPost.message);
+        return parsed.episodeLinks;
+      },
+      failure: (_) => const <ComicEpisodeLink>[],
+    );
+  }
+}
+
+final comicEpisodeRefreshServiceProvider = Provider<ComicEpisodeRefreshService>((ref) {
+  return NetworkComicEpisodeRefreshService(
+    threadRepository: ref.read(threadRepositoryProvider),
+    parserService: ref.read(comicParserServiceProvider),
+  );
 });
 
 class RuleBasedComicDetector implements ComicDetector {
@@ -179,4 +219,8 @@ class HtmlComicParserService implements ComicParserService {
     final authorMatch = RegExp(r'(作者|汉化|翻译)[：:]\s*([^\s，。；;]+)').firstMatch(plainText);
     return authorMatch?.group(2);
   }
+}
+
+extension _FirstOrNullExt<E> on Iterable<E> {
+  E? get firstOrNull => isEmpty ? null : first;
 }

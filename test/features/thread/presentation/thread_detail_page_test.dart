@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
+import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
@@ -214,6 +215,14 @@ class _FakeComicRepository implements ComicRepository {
   Future<void> deleteCategory({required String categoryId}) async {}
 
   @override
+  Future<ComicDetail?> getComicDetail({required String comicId}) async => null;
+
+  @override
+  Future<List<ComicEpisodeItem>> getComicEpisodes({required String comicId, bool descending = true}) async {
+    return const <ComicEpisodeItem>[];
+  }
+
+  @override
   Future<ComicShelfDisplaySettings> getDisplaySettings() async {
     return const ComicShelfDisplaySettings(gridColumnCount: 3);
   }
@@ -241,6 +250,15 @@ class _FakeComicRepository implements ComicRepository {
   }
 
   @override
+  Future<ComicEpisodeRefreshResult> mergeEpisodesFromLinks({
+    required String comicId,
+    required List<ComicEpisodeLink> episodeLinks,
+    required String fallbackSourceTid,
+  }) async {
+    return const ComicEpisodeRefreshResult(insertedCount: 0, updatedCount: 0, totalCount: 0);
+  }
+
+  @override
   Future<void> moveComicToCategory({
     required String comicId,
     required String fromCategoryId,
@@ -256,4 +274,3 @@ class _FakeComicRepository implements ComicRepository {
   @override
   Future<void> updateGridColumnCount({required int columnCount}) async {}
 }
-

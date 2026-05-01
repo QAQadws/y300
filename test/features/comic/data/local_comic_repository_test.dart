@@ -149,6 +149,62 @@ void main() {
       expect(items.first.coverImageUrl, 'https://img.test/custom.jpg');
       expect(settings.gridColumnCount, 4);
     });
+
+    test('can query comic detail and episodes descending', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:100',
+        tid: '100',
+        fid: '30',
+        title: '测试漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>['https://img.test/cover.jpg'],
+          episodeLinks: <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: '1', episodeTitle: '第1话'),
+            ComicEpisodeLink(url: 'thread-102-1-1.html', rawText: '2', episodeTitle: '第2话'),
+          ],
+          plainTextSummary: '摘要',
+          inferredAuthor: '作者A',
+        ),
+      );
+
+      final detail = await repository.getComicDetail(comicId: 'yamibo:100');
+      final episodes = await repository.getComicEpisodes(comicId: 'yamibo:100', descending: true);
+
+      expect(detail, isNotNull);
+      expect(detail!.title, '测试漫画');
+      expect(detail.episodeCount, greaterThanOrEqualTo(2));
+      expect(episodes.first.episodeTitle, contains('2'));
+    });
+
+    test('mergeEpisodesFromLinks can insert and update episodes', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:100',
+        tid: '100',
+        fid: '30',
+        title: '测试漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>['https://img.test/cover.jpg'],
+          episodeLinks: <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: '1', episodeTitle: '1'),
+          ],
+          plainTextSummary: '摘要',
+        ),
+      );
+
+      final result = await repository.mergeEpisodesFromLinks(
+        comicId: 'yamibo:100',
+        fallbackSourceTid: '100',
+        episodeLinks: const <ComicEpisodeLink>[
+          ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: '1', episodeTitle: '第1话-修订'),
+          ComicEpisodeLink(url: 'thread-102-1-1.html', rawText: '2', episodeTitle: '第2话'),
+        ],
+      );
+
+      final episodes = await repository.getComicEpisodes(comicId: 'yamibo:100', descending: false);
+      expect(result.insertedCount, 1);
+      expect(result.updatedCount, 1);
+      expect(result.totalCount, episodes.length);
+      expect(episodes.any((e) => e.episodeTitle == '第1话-修订'), isTrue);
+    });
   });
 }
-

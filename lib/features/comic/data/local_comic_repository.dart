@@ -4,6 +4,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/local/comic_local_models.dart';
+import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 
@@ -388,6 +389,137 @@ class LocalComicRepository implements ComicRepository {
           ),
         )
         .toList(growable: false);
+  }
+
+  @override
+  Future<ComicDetail?> getComicDetail({required String comicId}) async {
+    final db = await _dbFuture;
+    final rows = await db.rawQuery('''
+      SELECT
+        c.comic_id,
+        c.source_tid,
+        c.source_fid,
+        c.title,
+        c.author,
+        COALESCE(c.custom_cover_image_url, c.cover_image_url) AS cover_image_url,
+        c.updated_at,
+        COUNT(e.episode_id) AS episode_count
+      FROM ${ComicLocalDb.comicsTable} c
+      LEFT JOIN ${ComicLocalDb.episodesTable} e
+        ON c.comic_id = e.comic_id
+      WHERE c.comic_id = ?
+      GROUP BY c.comic_id
+      LIMIT 1
+    ''', <Object>[comicId]);
+
+    if (rows.isEmpty) {
+      return null;
+    }
+
+    final row = rows.first;
+    return ComicDetail(
+      comicId: row['comic_id'] as String,
+      sourceTid: row['source_tid'] as String,
+      sourceFid: row['source_fid'] as String,
+      title: row['title'] as String,
+      author: row['author'] as String?,
+      coverImageUrl: row['cover_image_url'] as String?,
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(row['updated_at'] as int),
+      episodeCount: row['episode_count'] as int? ?? 0,
+    );
+  }
+
+  @override
+  Future<List<ComicEpisodeItem>> getComicEpisodes({
+    required String comicId,
+    bool descending = true,
+  }) async {
+    final db = await _dbFuture;
+    final rows = await db.query(
+      ComicLocalDb.episodesTable,
+      where: 'comic_id = ?',
+      whereArgs: <Object>[comicId],
+      orderBy: 'order_index ${descending ? 'DESC' : 'ASC'}',
+    );
+
+    return rows
+        .map(
+          (row) => ComicEpisodeItem(
+            episodeId: row['episode_id'] as String,
+            comicId: row['comic_id'] as String,
+            episodeTitle: row['episode_title'] as String?,
+            sourceTid: row['source_tid'] as String,
+            sourceUrl: row['source_url'] as String,
+            orderIndex: row['order_index'] as int,
+            publishTimeText: row['publish_time_text'] as String?,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Future<ComicEpisodeRefreshResult> mergeEpisodesFromLinks({
+    required String comicId,
+    required List<ComicEpisodeLink> episodeLinks,
+    required String fallbackSourceTid,
+  }) async {
+    final db = await _dbFuture;
+    var inserted = 0;
+    var updated = 0;
+
+    await db.transaction((txn) async {
+      for (var index = 0; index < episodeLinks.length; index++) {
+        final link = episodeLinks[index];
+        final sourceTid = _extractTid(link.url) ?? fallbackSourceTid;
+        final episodeId = '$comicId:$sourceTid';
+
+        final existing = await txn.query(
+          ComicLocalDb.episodesTable,
+          columns: <String>['episode_id'],
+          where: 'episode_id = ?',
+          whereArgs: <Object>[episodeId],
+          limit: 1,
+        );
+
+        final record = EpisodeRecord(
+          episodeId: episodeId,
+          comicId: comicId,
+          episodeTitle: link.episodeTitle ?? link.rawText,
+          sourceTid: sourceTid,
+          sourceUrl: link.url,
+          orderIndex: index,
+          publishTimeText: null,
+        );
+
+        await txn.insert(
+          ComicLocalDb.episodesTable,
+          record.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+
+        if (existing.isEmpty) {
+          inserted++;
+        } else {
+          updated++;
+        }
+      }
+
+      await txn.update(
+        ComicLocalDb.comicsTable,
+        <String, Object?>{
+          'updated_at': DateTime.now().millisecondsSinceEpoch,
+        },
+        where: 'comic_id = ?',
+        whereArgs: <Object>[comicId],
+      );
+    });
+
+    final totalEpisodes = await getComicEpisodes(comicId: comicId, descending: false);
+    return ComicEpisodeRefreshResult(
+      insertedCount: inserted,
+      updatedCount: updated,
+      totalCount: totalEpisodes.length,
+    );
   }
 
   Future<int> _nextSortOrder(Transaction txn, {required String categoryId}) async {

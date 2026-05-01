@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
+import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/comic/presentation/comic_shelf_page.dart';
@@ -130,6 +131,14 @@ abstract class _BaseComicRepository implements ComicRepository {
   Future<void> deleteCategory({required String categoryId}) async {}
 
   @override
+  Future<ComicDetail?> getComicDetail({required String comicId}) async => null;
+
+  @override
+  Future<List<ComicEpisodeItem>> getComicEpisodes({required String comicId, bool descending = true}) async {
+    return const <ComicEpisodeItem>[];
+  }
+
+  @override
   Future<ComicShelfDisplaySettings> getDisplaySettings() async {
     return const ComicShelfDisplaySettings(gridColumnCount: 3);
   }
@@ -153,6 +162,15 @@ abstract class _BaseComicRepository implements ComicRepository {
   @override
   Future<bool> isInShelf({required String comicId}) async {
     return false;
+  }
+
+  @override
+  Future<ComicEpisodeRefreshResult> mergeEpisodesFromLinks({
+    required String comicId,
+    required List<ComicEpisodeLink> episodeLinks,
+    required String fallbackSourceTid,
+  }) async {
+    return const ComicEpisodeRefreshResult(insertedCount: 0, updatedCount: 0, totalCount: 0);
   }
 }
 

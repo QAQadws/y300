@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
+import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/startup/presentation/main_shell_page.dart';
@@ -44,8 +45,11 @@ class _FakeComicRepository implements ComicRepository {
   Future<void> deleteCategory({required String categoryId}) async {}
 
   @override
-  Future<ComicShelfDisplaySettings> getDisplaySettings() async {
-    return const ComicShelfDisplaySettings(gridColumnCount: 3);
+  Future<ComicDetail?> getComicDetail({required String comicId}) async => null;
+
+  @override
+  Future<List<ComicEpisodeItem>> getComicEpisodes({required String comicId, bool descending = true}) async {
+    return const <ComicEpisodeItem>[];
   }
 
   @override
@@ -61,6 +65,11 @@ class _FakeComicRepository implements ComicRepository {
   }
 
   @override
+  Future<ComicShelfDisplaySettings> getDisplaySettings() async {
+    return const ComicShelfDisplaySettings(gridColumnCount: 3);
+  }
+
+  @override
   Future<List<ComicShelfItem>> getShelfItems({String categoryId = 'default'}) async {
     return const <ComicShelfItem>[];
   }
@@ -68,6 +77,15 @@ class _FakeComicRepository implements ComicRepository {
   @override
   Future<bool> isInShelf({required String comicId}) async {
     return false;
+  }
+
+  @override
+  Future<ComicEpisodeRefreshResult> mergeEpisodesFromLinks({
+    required String comicId,
+    required List<ComicEpisodeLink> episodeLinks,
+    required String fallbackSourceTid,
+  }) async {
+    return const ComicEpisodeRefreshResult(insertedCount: 0, updatedCount: 0, totalCount: 0);
   }
 
   @override
@@ -86,4 +104,3 @@ class _FakeComicRepository implements ComicRepository {
   @override
   Future<void> updateGridColumnCount({required int columnCount}) async {}
 }
-

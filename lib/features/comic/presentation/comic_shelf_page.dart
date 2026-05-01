@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/presentation/comic_detail_page.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_shelf_controller.dart';
 
 class ComicShelfPage extends ConsumerStatefulWidget {
@@ -525,6 +526,13 @@ class _ComicGridTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => ComicDetailPage(comicId: item.comicId),
+          ),
+        );
+      },
       onLongPress: () async {
         await showModalBottomSheet<void>(
           context: context,
@@ -715,3 +723,5 @@ class _TwoLineEllipsisText extends StatelessWidget {
     return best.isEmpty ? '···' : best;
   }
 }
+
+

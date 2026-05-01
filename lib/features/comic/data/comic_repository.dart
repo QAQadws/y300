@@ -1,4 +1,5 @@
-﻿import 'package:y300/features/comic/domain/models/comic_models.dart';
+﻿import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
+import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 
 /// 漫画仓库：封装书架数据访问，屏蔽具体存储实现。
@@ -41,5 +42,18 @@ abstract class ComicRepository {
 
   Future<List<ComicShelfItem>> getShelfItems({
     String categoryId = 'default',
+  });
+
+  Future<ComicDetail?> getComicDetail({required String comicId});
+
+  Future<List<ComicEpisodeItem>> getComicEpisodes({
+    required String comicId,
+    bool descending = true,
+  });
+
+  Future<ComicEpisodeRefreshResult> mergeEpisodesFromLinks({
+    required String comicId,
+    required List<ComicEpisodeLink> episodeLinks,
+    required String fallbackSourceTid,
   });
 }
