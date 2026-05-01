@@ -206,5 +206,53 @@ void main() {
       expect(result.totalCount, episodes.length);
       expect(episodes.any((e) => e.episodeTitle == '第1话-修订'), isTrue);
     });
+
+    test('can persist reading progress and image cache status', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:100',
+        tid: '100',
+        fid: '30',
+        title: '测试漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>['https://img.test/1.jpg'],
+          episodeLinks: <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: '1', episodeTitle: '第1话'),
+          ],
+          plainTextSummary: '摘要',
+        ),
+      );
+
+      const episodeId = 'yamibo:100:101';
+      await repository.saveEpisodeImages(
+        episodeId: episodeId,
+        imageUrls: const <String>[
+          'https://img.test/101-1.jpg',
+          'https://img.test/101-2.jpg',
+        ],
+      );
+      await repository.updateEpisodeImageCacheStatus(
+        episodeId: episodeId,
+        imageUrl: 'https://img.test/101-1.jpg',
+        cacheStatus: 'done',
+        cacheLocalPath: '/tmp/101-1.jpg',
+      );
+      await repository.updateLastReadProgress(
+        comicId: 'yamibo:100',
+        episodeId: episodeId,
+        imageIndex: 1,
+        scrollOffset: 222.5,
+      );
+
+      final images = await repository.getEpisodeImages(episodeId: episodeId);
+      final progress = await repository.getLastReadProgress(comicId: 'yamibo:100');
+
+      expect(images.length, 2);
+      expect(images.first.cacheStatus, 'done');
+      expect(images.first.cacheLocalPath, '/tmp/101-1.jpg');
+      expect(progress, isNotNull);
+      expect(progress!.episodeId, episodeId);
+      expect(progress.imageIndex, 1);
+      expect(progress.scrollOffset, 222.5);
+    });
   });
 }

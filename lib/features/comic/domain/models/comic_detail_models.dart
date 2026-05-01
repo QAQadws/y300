@@ -51,3 +51,35 @@ class ComicEpisodeRefreshResult {
   final int updatedCount;
   final int totalCount;
 }
+
+class ComicEpisodeImageItem {
+  const ComicEpisodeImageItem({
+    required this.episodeId,
+    required this.imageUrl,
+    required this.imageIndex,
+    required this.cacheStatus,
+    this.cacheLocalPath,
+  });
+
+  final String episodeId;
+  final String imageUrl;
+  final int imageIndex;
+  final String cacheStatus;
+  final String? cacheLocalPath;
+}
+
+class ComicReadingProgress {
+  const ComicReadingProgress({
+    required this.comicId,
+    required this.episodeId,
+    required this.imageIndex,
+    required this.scrollOffset,
+    required this.updatedAt,
+  });
+
+  final String comicId;
+  final String episodeId;
+  final int imageIndex;
+  final double scrollOffset;
+  final DateTime updatedAt;
+}

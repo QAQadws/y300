@@ -1,6 +1,8 @@
-﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+﻿import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/comic/data/comic_parser_service.dart';
+import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_detector.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
@@ -49,6 +51,60 @@ final comicEpisodeRefreshServiceProvider = Provider<ComicEpisodeRefreshService>(
   return NetworkComicEpisodeRefreshService(
     threadRepository: ref.read(threadRepositoryProvider),
     parserService: ref.read(comicParserServiceProvider),
+  );
+});
+
+/// 阅读器接口：负责章节图抓取与图片缓存。
+abstract class ComicReaderService {
+  Future<List<String>> fetchEpisodeImagesByTid(String tid);
+
+  Future<bool> cacheImage({required String imageUrl});
+}
+
+class NetworkComicReaderService implements ComicReaderService {
+  NetworkComicReaderService({
+    required ThreadRepository threadRepository,
+    required ComicParserService parserService,
+    BaseCacheManager? cacheManager,
+  })  : _threadRepository = threadRepository,
+        _parserService = parserService,
+        _cacheManager = cacheManager ?? DefaultCacheManager();
+
+  final ThreadRepository _threadRepository;
+  final ComicParserService _parserService;
+  final BaseCacheManager _cacheManager;
+
+  @override
+  Future<List<String>> fetchEpisodeImagesByTid(String tid) async {
+    final result = await _threadRepository.getThreadDetail(tid: tid, page: 1);
+    return result.when(
+      success: (data) {
+        final firstPost = data.posts.where((post) => post.isFirst).firstOrNull;
+        if (firstPost == null) {
+          return const <String>[];
+        }
+        return _parserService.parse(message: firstPost.message).imageUrls;
+      },
+      failure: (_) => const <String>[],
+    );
+  }
+
+  @override
+  Future<bool> cacheImage({required String imageUrl}) async {
+    try {
+      await _cacheManager.downloadFile(imageUrl, key: imageUrl);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
+final comicReaderServiceProvider = Provider<ComicReaderService>((ref) {
+  return NetworkComicReaderService(
+    threadRepository: ref.read(threadRepositoryProvider),
+    parserService: ref.read(comicParserServiceProvider),
+    cacheManager: ref.read(comicCacheManagerProvider),
   );
 });
 

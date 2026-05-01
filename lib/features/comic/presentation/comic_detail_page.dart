@@ -1,5 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
+import 'package:y300/features/comic/presentation/comic_reader_page.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_detail_controller.dart';
 
 class ComicDetailPage extends ConsumerWidget {
@@ -120,16 +122,7 @@ class ComicDetailPage extends ConsumerWidget {
                                 : '章节 ${episode.sourceTid}'),
                             subtitle: Text('Tid: ${episode.sourceTid}'),
                             trailing: const Icon(Icons.chevron_right),
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => _ComicReaderPlaceholderPage(
-                                    comicId: comicId,
-                                    episodeId: episode.episodeId,
-                                  ),
-                                ),
-                              );
-                            },
+                            onTap: () => _openReader(context, viewState.episodes, index),
                           );
                         },
                       ),
@@ -145,24 +138,35 @@ class ComicDetailPage extends ConsumerWidget {
       ),
     );
   }
-}
 
-class _ComicReaderPlaceholderPage extends StatelessWidget {
-  const _ComicReaderPlaceholderPage({
-    required this.comicId,
-    required this.episodeId,
-  });
-
-  final String comicId;
-  final String episodeId;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('漫画阅读')),
-      body: Center(
-        child: Text('阶段5实现阅读器\ncomicId=$comicId\nepisodeId=$episodeId', textAlign: TextAlign.center),
+  Future<void> _openReader(
+    BuildContext context,
+    List<ComicEpisodeItem> episodes,
+    int index,
+  ) async {
+    if (index < 0 || index >= episodes.length) {
+      return;
+    }
+    final episode = episodes[index];
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute<Object?>(
+        builder: (_) => ComicReaderPage(comicId: comicId, episodeId: episode.episodeId),
       ),
     );
+
+    if (!context.mounted) {
+      return;
+    }
+    if (result is! String) {
+      return;
+    }
+
+    if (result == 'next') {
+      await _openReader(context, episodes, index - 1);
+      return;
+    }
+    if (result == 'previous') {
+      await _openReader(context, episodes, index + 1);
+    }
   }
 }

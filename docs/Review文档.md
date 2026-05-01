@@ -504,3 +504,43 @@
 本轮未执行自动化命令，请本地执行并回传：
 1. `flutter test`
 2. `flutter analyze`
+
+---
+
+## 漫画模块阶段5 Review 补充清单（阅读器与缓存优化）
+
+### 一、阅读器主流程
+- [ ] 章节点击进入 `ComicReaderPage`（不再是占位页）
+- [ ] 长图纵向滚动阅读稳定
+- [ ] 图片加载中有占位提示
+- [ ] 图片加载失败可点击“重试”
+
+### 二、缓存能力
+- [ ] 右上角存在“缓存本话”操作
+- [ ] 右上角存在“缓存全部未读”操作
+- [ ] 缓存结果可回写缓存状态（done/failed）
+
+### 三、阅读进度
+- [ ] 滚动阅读后可持久化最后阅读位置（章节+图片索引+偏移）
+- [ ] 重新进入阅读器可恢复上次滚动位置
+- [ ] `comics.last_read_episode_id` 与 `reading_progress` 数据一致
+
+### 四、数据层与解耦
+- [ ] `ComicRepository` 已扩展阅读器接口，页面未直接依赖存储实现
+- [ ] 阅读抓图与缓存逻辑集中在 `ComicReaderService`
+- [ ] 控制器仅做状态编排，不混入 SQL 细节
+
+### 五、回归关注点
+- [ ] 漫画详情页刷新章节能力不受影响
+- [ ] 书架页加载与分类切换不受影响
+- [ ] 线程详情“加入书架”链路不受影响
+
+### 六、测试清单（阶段5新增/更新）
+- [ ] `test/features/comic/presentation/comic_reader_page_test.dart`
+- [ ] `test/features/comic/data/local_comic_repository_test.dart`（阅读进度与缓存状态）
+- [ ] 受 `ComicRepository` 接口变更影响的页面测试全部通过
+
+### 七、执行说明
+本轮改动未执行自动化命令，请本地执行并回传结果：
+1. `flutter test`
+2. `flutter analyze`

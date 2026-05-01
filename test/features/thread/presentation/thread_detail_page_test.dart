@@ -223,6 +223,11 @@ class _FakeComicRepository implements ComicRepository {
   }
 
   @override
+  Future<List<ComicEpisodeImageItem>> getEpisodeImages({required String episodeId}) async {
+    return const <ComicEpisodeImageItem>[];
+  }
+
+  @override
   Future<ComicShelfDisplaySettings> getDisplaySettings() async {
     return const ComicShelfDisplaySettings(gridColumnCount: 3);
   }
@@ -250,6 +255,9 @@ class _FakeComicRepository implements ComicRepository {
   }
 
   @override
+  Future<ComicReadingProgress?> getLastReadProgress({required String comicId}) async => null;
+
+  @override
   Future<ComicEpisodeRefreshResult> mergeEpisodesFromLinks({
     required String comicId,
     required List<ComicEpisodeLink> episodeLinks,
@@ -273,4 +281,23 @@ class _FakeComicRepository implements ComicRepository {
 
   @override
   Future<void> updateGridColumnCount({required int columnCount}) async {}
+
+  @override
+  Future<void> saveEpisodeImages({required String episodeId, required List<String> imageUrls}) async {}
+
+  @override
+  Future<void> updateEpisodeImageCacheStatus({
+    required String episodeId,
+    required String imageUrl,
+    required String cacheStatus,
+    String? cacheLocalPath,
+  }) async {}
+
+  @override
+  Future<void> updateLastReadProgress({
+    required String comicId,
+    required String episodeId,
+    required int imageIndex,
+    required double scrollOffset,
+  }) async {}
 }

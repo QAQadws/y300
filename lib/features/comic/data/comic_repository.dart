@@ -51,6 +51,33 @@ abstract class ComicRepository {
     bool descending = true,
   });
 
+  Future<List<ComicEpisodeImageItem>> getEpisodeImages({
+    required String episodeId,
+  });
+
+  Future<void> saveEpisodeImages({
+    required String episodeId,
+    required List<String> imageUrls,
+  });
+
+  Future<void> updateEpisodeImageCacheStatus({
+    required String episodeId,
+    required String imageUrl,
+    required String cacheStatus,
+    String? cacheLocalPath,
+  });
+
+  Future<void> updateLastReadProgress({
+    required String comicId,
+    required String episodeId,
+    required int imageIndex,
+    required double scrollOffset,
+  });
+
+  Future<ComicReadingProgress?> getLastReadProgress({
+    required String comicId,
+  });
+
   Future<ComicEpisodeRefreshResult> mergeEpisodesFromLinks({
     required String comicId,
     required List<ComicEpisodeLink> episodeLinks,

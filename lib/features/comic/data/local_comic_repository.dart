@@ -458,6 +458,133 @@ class LocalComicRepository implements ComicRepository {
   }
 
   @override
+  Future<List<ComicEpisodeImageItem>> getEpisodeImages({
+    required String episodeId,
+  }) async {
+    final db = await _dbFuture;
+    final rows = await db.query(
+      ComicLocalDb.episodeImagesTable,
+      where: 'episode_id = ?',
+      whereArgs: <Object>[episodeId],
+      orderBy: 'image_index ASC',
+    );
+
+    return rows
+        .map(
+          (row) => ComicEpisodeImageItem(
+            episodeId: row['episode_id'] as String,
+            imageUrl: row['image_url'] as String,
+            imageIndex: row['image_index'] as int,
+            cacheStatus: row['cache_status'] as String,
+            cacheLocalPath: row['cache_local_path'] as String?,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Future<void> saveEpisodeImages({
+    required String episodeId,
+    required List<String> imageUrls,
+  }) async {
+    final db = await _dbFuture;
+    await db.transaction((txn) async {
+      await txn.delete(
+        ComicLocalDb.episodeImagesTable,
+        where: 'episode_id = ?',
+        whereArgs: <Object>[episodeId],
+      );
+      for (var index = 0; index < imageUrls.length; index++) {
+        await txn.insert(
+          ComicLocalDb.episodeImagesTable,
+          EpisodeImageRecord(
+            episodeId: episodeId,
+            imageUrl: imageUrls[index],
+            imageIndex: index,
+          ).toMap(),
+        );
+      }
+    });
+  }
+
+  @override
+  Future<void> updateEpisodeImageCacheStatus({
+    required String episodeId,
+    required String imageUrl,
+    required String cacheStatus,
+    String? cacheLocalPath,
+  }) async {
+    final db = await _dbFuture;
+    await db.update(
+      ComicLocalDb.episodeImagesTable,
+      <String, Object?>{
+        'cache_status': cacheStatus,
+        'cache_local_path': cacheLocalPath,
+      },
+      where: 'episode_id = ? AND image_url = ?',
+      whereArgs: <Object>[episodeId, imageUrl],
+    );
+  }
+
+  @override
+  Future<void> updateLastReadProgress({
+    required String comicId,
+    required String episodeId,
+    required int imageIndex,
+    required double scrollOffset,
+  }) async {
+    final db = await _dbFuture;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction((txn) async {
+      await txn.insert(
+        ComicLocalDb.readingProgressTable,
+        <String, Object?>{
+          'comic_id': comicId,
+          'episode_id': episodeId,
+          'image_index': imageIndex,
+          'scroll_offset': scrollOffset,
+          'updated_at': now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      await txn.update(
+        ComicLocalDb.comicsTable,
+        <String, Object?>{
+          'last_read_episode_id': episodeId,
+          'updated_at': now,
+        },
+        where: 'comic_id = ?',
+        whereArgs: <Object>[comicId],
+      );
+    });
+  }
+
+  @override
+  Future<ComicReadingProgress?> getLastReadProgress({
+    required String comicId,
+  }) async {
+    final db = await _dbFuture;
+    final rows = await db.query(
+      ComicLocalDb.readingProgressTable,
+      where: 'comic_id = ?',
+      whereArgs: <Object>[comicId],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      return null;
+    }
+
+    final row = rows.first;
+    return ComicReadingProgress(
+      comicId: row['comic_id'] as String,
+      episodeId: row['episode_id'] as String,
+      imageIndex: row['image_index'] as int,
+      scrollOffset: (row['scroll_offset'] as num).toDouble(),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(row['updated_at'] as int),
+    );
+  }
+
+  @override
   Future<ComicEpisodeRefreshResult> mergeEpisodesFromLinks({
     required String comicId,
     required List<ComicEpisodeLink> episodeLinks,

@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 2;
+  static const int dbVersion = 3;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -13,6 +13,7 @@ class ComicLocalDb {
   static const String categoriesTable = 'categories';
   static const String shelfItemsTable = 'shelf_items';
   static const String settingsTable = 'settings';
+  static const String readingProgressTable = 'reading_progress';
 
   static Future<Database> open() {
     return openDatabase(
@@ -25,6 +26,9 @@ class ComicLocalDb {
         if (oldVersion < 2) {
           await _createSettingsTable(db);
           await _seedDefaultSettings(db);
+        }
+        if (oldVersion < 3) {
+          await _createReadingProgressTable(db);
         }
       },
     );
@@ -112,6 +116,7 @@ class ComicLocalDb {
 
     await _createSettingsTable(db);
     await _seedDefaultSettings(db);
+    await _createReadingProgressTable(db);
   }
 
   static Future<void> _createSettingsTable(Database db) async {
@@ -132,5 +137,18 @@ class ComicLocalDb {
       },
       conflictAlgorithm: ConflictAlgorithm.ignore,
     );
+  }
+
+  static Future<void> _createReadingProgressTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $readingProgressTable (
+        comic_id TEXT PRIMARY KEY,
+        episode_id TEXT NOT NULL,
+        image_index INTEGER NOT NULL,
+        scroll_offset REAL NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (comic_id) REFERENCES $comicsTable(comic_id) ON DELETE CASCADE
+      )
+    ''');
   }
 }
