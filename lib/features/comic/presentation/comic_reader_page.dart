@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/comic/presentation/providers/reader_preferences_provider.dart';
+import 'package:y300/features/comic/presentation/widgets/reader_bottom_panel.dart';
+import 'package:y300/features/comic/presentation/widgets/reader_tap_zones.dart';
+import 'package:y300/features/comic/presentation/widgets/reader_top_bar.dart';
 
 class ComicReaderPage extends ConsumerStatefulWidget {
   const ComicReaderPage({
@@ -23,12 +26,13 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
   late final ScrollController _scrollController;
   int _lastKnownIndex = 0;
 
-  // Reader menu visibility is independent from image rendering.
-  // This separation keeps gesture interaction decoupled from content logic.
   bool _isMenuVisible = false;
   late final AnimationController _menuAnimationController;
   late final Animation<Offset> _topMenuSlideAnimation;
   late final Animation<Offset> _bottomMenuSlideAnimation;
+
+  ComicReaderArgs get _readerArgs =>
+      ComicReaderArgs(comicId: widget.comicId, episodeId: widget.episodeId);
 
   @override
   void initState() {
@@ -41,11 +45,21 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     _topMenuSlideAnimation = Tween<Offset>(
       begin: const Offset(0, -1),
       end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _menuAnimationController, curve: Curves.easeOutCubic));
+    ).animate(
+      CurvedAnimation(
+        parent: _menuAnimationController,
+        curve: Curves.easeOutCubic,
+      ),
+    );
     _bottomMenuSlideAnimation = Tween<Offset>(
       begin: const Offset(0, 1),
       end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _menuAnimationController, curve: Curves.easeOutCubic));
+    ).animate(
+      CurvedAnimation(
+        parent: _menuAnimationController,
+        curve: Curves.easeOutCubic,
+      ),
+    );
   }
 
   @override
@@ -59,14 +73,10 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
 
   @override
   Widget build(BuildContext context) {
-    // Phase-0 preload: preferences are introduced now and will be consumed
-    // by phase-2/3 UI features without changing this page's external contract.
     ref.watch(readerPreferencesControllerProvider);
 
     final state = ref.watch(
-      comicReaderControllerProvider(
-        ComicReaderArgs(comicId: widget.comicId, episodeId: widget.episodeId),
-      ),
+      comicReaderControllerProvider(_readerArgs),
     );
 
     return Scaffold(
@@ -78,16 +88,12 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
             return const Center(child: Text('当前章节没有可阅读图片'));
           }
 
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (_scrollController.hasClients && _scrollController.offset == 0 && viewState.lastScrollOffset > 0) {
-              _scrollController.jumpTo(viewState.lastScrollOffset);
-            }
-          });
+          _restoreScrollOffsetIfNeeded(viewState.lastScrollOffset);
 
           return Stack(
             children: [
               _buildReaderContentLayer(viewState),
-              _buildCenterTapOverlay(),
+              ReaderTapZones(onCenterTap: _toggleReaderMenu),
               _buildReaderTopOverlayLayer(viewState),
               _buildReaderBottomOverlayLayer(viewState),
             ],
@@ -95,6 +101,21 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
         },
       ),
     );
+  }
+
+  void _restoreScrollOffsetIfNeeded(double offset) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) {
+        return;
+      }
+      if (_scrollController.offset == 0 && offset > 0) {
+        _scrollController.jumpTo(offset);
+      }
+    });
+  }
+
+  ComicReaderController _controller() {
+    return ref.read(comicReaderControllerProvider(_readerArgs).notifier);
   }
 
   void _onScroll() {
@@ -106,11 +127,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
       return;
     }
     final ratio = (position.pixels / position.maxScrollExtent).clamp(0.0, 1.0);
-    final state = ref.read(
-      comicReaderControllerProvider(
-        ComicReaderArgs(comicId: widget.comicId, episodeId: widget.episodeId),
-      ),
-    );
+    final state = ref.read(comicReaderControllerProvider(_readerArgs));
     final total = state.value?.images.length ?? 0;
     if (total == 0) {
       return;
@@ -118,13 +135,10 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     final index = ((total - 1) * ratio).round();
     if (index != _lastKnownIndex) {
       _lastKnownIndex = index;
-      ref
-          .read(
-            comicReaderControllerProvider(
-              ComicReaderArgs(comicId: widget.comicId, episodeId: widget.episodeId),
-            ).notifier,
-          )
-          .onScrollProgress(currentIndex: index, scrollOffset: position.pixels);
+      _controller().onScrollProgress(
+        currentIndex: index,
+        scrollOffset: position.pixels,
+      );
     }
   }
 
@@ -136,7 +150,10 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
             width: double.infinity,
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Text(viewState.hint!, style: Theme.of(context).textTheme.bodySmall),
+            child: Text(
+              viewState.hint!,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ),
         Expanded(
           child: ListView.builder(
@@ -166,18 +183,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
                             const SizedBox(height: 8),
                             OutlinedButton(
                               key: ValueKey<String>('comic-reader-retry-${image.imageUrl}'),
-                              onPressed: () {
-                                ref
-                                    .read(
-                                      comicReaderControllerProvider(
-                                        ComicReaderArgs(
-                                          comicId: widget.comicId,
-                                          episodeId: widget.episodeId,
-                                        ),
-                                      ).notifier,
-                                    )
-                                    .retryImage(image.imageUrl);
-                              },
+                              onPressed: () => _controller().retryImage(image.imageUrl),
                               child: const Text('重试'),
                             ),
                           ],
@@ -195,28 +201,6 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     );
   }
 
-  Widget _buildCenterTapOverlay() {
-    // Only center area toggles menus, matching the expected reader behavior.
-    // We intentionally keep side areas non-intercepting for future page-turn
-    // gesture zoning in phase-2.
-    return Positioned.fill(
-      child: Row(
-        children: [
-          const Expanded(child: SizedBox.shrink()),
-          Expanded(
-            child: GestureDetector(
-              key: const Key('comic-reader-center-tap-zone'),
-              behavior: HitTestBehavior.translucent,
-              onTap: _toggleReaderMenu,
-              child: const SizedBox.expand(),
-            ),
-          ),
-          const Expanded(child: SizedBox.shrink()),
-        ],
-      ),
-    );
-  }
-
   Widget _buildReaderTopOverlayLayer(ComicReaderViewState viewState) {
     return Positioned(
       key: const Key('comic-reader-top-overlay'),
@@ -227,60 +211,11 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
         ignoring: !_isMenuVisible,
         child: SlideTransition(
           position: _topMenuSlideAnimation,
-          child: Material(
-            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.96),
-            child: SafeArea(
-              bottom: false,
-              child: SizedBox(
-                height: 56,
-                child: Row(
-                  children: [
-                    IconButton(
-                      key: const Key('comic-reader-top-back-button'),
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.arrow_back),
-                    ),
-                    Expanded(
-                      child: Text(
-                        viewState.episodeTitle,
-                        key: const Key('comic-reader-top-episode-title'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                    ),
-                    IconButton(
-                      key: const Key('comic-reader-cache-episode'),
-                      tooltip: '缓存本话',
-                      onPressed: () {
-                        ref
-                            .read(
-                              comicReaderControllerProvider(
-                                ComicReaderArgs(comicId: widget.comicId, episodeId: widget.episodeId),
-                              ).notifier,
-                            )
-                            .cacheCurrentEpisode();
-                      },
-                      icon: const Icon(Icons.download_for_offline_outlined),
-                    ),
-                    IconButton(
-                      key: const Key('comic-reader-cache-unread'),
-                      tooltip: '缓存全部未读',
-                      onPressed: () {
-                        ref
-                            .read(
-                              comicReaderControllerProvider(
-                                ComicReaderArgs(comicId: widget.comicId, episodeId: widget.episodeId),
-                              ).notifier,
-                            )
-                            .cacheAllUnread();
-                      },
-                      icon: const Icon(Icons.download_done_outlined),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          child: ReaderTopBar(
+            episodeTitle: viewState.episodeTitle,
+            onBack: () => Navigator.of(context).pop(),
+            onCacheEpisode: () => _controller().cacheCurrentEpisode(),
+            onCacheUnread: () => _controller().cacheAllUnread(),
           ),
         ),
       ),
@@ -297,39 +232,11 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
         ignoring: !_isMenuVisible,
         child: SlideTransition(
           position: _bottomMenuSlideAnimation,
-          child: Material(
-            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.96),
-            child: SafeArea(
-              top: false,
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        key: const Key('comic-reader-prev-episode-button'),
-                        onPressed: viewState.hasPreviousEpisode
-                            ? () => Navigator.of(context).pop('previous')
-                            : null,
-                        icon: const Icon(Icons.chevron_left),
-                        label: const Text('上一话'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton.icon(
-                        key: const Key('comic-reader-next-episode-button'),
-                        onPressed: viewState.hasNextEpisode
-                            ? () => Navigator.of(context).pop('next')
-                            : null,
-                        icon: const Icon(Icons.chevron_right),
-                        label: const Text('下一话'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          child: ReaderBottomPanel(
+            hasPreviousEpisode: viewState.hasPreviousEpisode,
+            hasNextEpisode: viewState.hasNextEpisode,
+            onPreviousEpisode: () => Navigator.of(context).pop('previous'),
+            onNextEpisode: () => Navigator.of(context).pop('next'),
           ),
         ),
       ),
