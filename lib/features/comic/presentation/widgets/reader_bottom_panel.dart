@@ -1,23 +1,32 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:y300/features/comic/presentation/models/reader_preferences.dart';
+import 'package:y300/features/comic/presentation/widgets/reader_progress_bar.dart';
 
 class ReaderBottomPanel extends StatelessWidget {
   const ReaderBottomPanel({
     super.key,
     required this.currentMode,
     required this.onModeChanged,
+    required this.currentPage,
+    required this.totalPages,
     required this.hasPreviousEpisode,
     required this.hasNextEpisode,
     required this.onPreviousEpisode,
     required this.onNextEpisode,
+    required this.onProgressChanged,
+    required this.onProgressChangeEnd,
   });
 
   final ReaderModePreference currentMode;
   final ValueChanged<ReaderModePreference> onModeChanged;
+  final int currentPage;
+  final int totalPages;
   final bool hasPreviousEpisode;
   final bool hasNextEpisode;
   final VoidCallback onPreviousEpisode;
   final VoidCallback onNextEpisode;
+  final ValueChanged<double> onProgressChanged;
+  final ValueChanged<double> onProgressChangeEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -30,6 +39,17 @@ class ReaderBottomPanel extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              ReaderProgressBar(
+                currentPage: currentPage,
+                totalPages: totalPages,
+                hasPreviousEpisode: hasPreviousEpisode,
+                hasNextEpisode: hasNextEpisode,
+                onPreviousEpisode: onPreviousEpisode,
+                onNextEpisode: onNextEpisode,
+                onChanged: onProgressChanged,
+                onChangeEnd: onProgressChangeEnd,
+              ),
+              const SizedBox(height: 10),
               SegmentedButton<ReaderModePreference>(
                 key: const Key('comic-reader-mode-switch'),
                 showSelectedIcon: false,
@@ -56,28 +76,6 @@ class ReaderBottomPanel extends StatelessWidget {
                     onModeChanged(selection.first);
                   }
                 },
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      key: const Key('comic-reader-prev-episode-button'),
-                      onPressed: hasPreviousEpisode ? onPreviousEpisode : null,
-                      icon: const Icon(Icons.chevron_left),
-                      label: const Text('上一话'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton.icon(
-                      key: const Key('comic-reader-next-episode-button'),
-                      onPressed: hasNextEpisode ? onNextEpisode : null,
-                      icon: const Icon(Icons.chevron_right),
-                      label: const Text('下一话'),
-                    ),
-                  ),
-                ],
               ),
             ],
           ),

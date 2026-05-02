@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -43,6 +43,9 @@ void main() {
     expect(find.byKey(const Key('comic-reader-prev-episode-button')), findsOneWidget);
     expect(find.byKey(const Key('comic-reader-next-episode-button')), findsOneWidget);
     expect(find.byKey(const Key('comic-reader-mode-switch')), findsOneWidget);
+    expect(find.byKey(const Key('comic-reader-progress-slider')), findsOneWidget);
+    expect(find.byKey(const Key('comic-reader-current-page-label')), findsOneWidget);
+    expect(find.byKey(const Key('comic-reader-total-page-label')), findsOneWidget);
   });
 
   testWidgets('ComicReaderPage uses paged renderer when persisted mode is ltr', (tester) async {
@@ -90,6 +93,36 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('comic-reader-page-view')), findsOneWidget);
+  });
+
+  testWidgets('ComicReaderPage updates progress labels after slider interaction', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+          comicReaderServiceProvider.overrideWithValue(_ReaderFakeService()),
+        ],
+        child: const MaterialApp(
+          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('comic-reader-center-tap-zone')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('comic-reader-current-page-label')), findsOneWidget);
+    expect(find.byKey(const Key('comic-reader-total-page-label')), findsOneWidget);
+
+    await tester.drag(
+      find.byKey(const Key('comic-reader-progress-slider')),
+      const Offset(300, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('comic-reader-current-page-label')), findsOneWidget);
+    expect(find.byKey(const Key('comic-reader-total-page-label')), findsOneWidget);
   });
 }
 

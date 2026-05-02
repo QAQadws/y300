@@ -28,6 +28,9 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
   PageController? _pageController;
   int _lastKnownIndex = 0;
 
+  // Preview index used while dragging slider thumb.
+  int? _sliderPreviewIndex;
+
   bool _isMenuVisible = false;
   late final AnimationController _menuAnimationController;
   late final Animation<Offset> _topMenuSlideAnimation;
@@ -134,9 +137,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
       maxLength: viewState.images.length,
     );
 
-    await ref
-        .read(readerPreferencesControllerProvider.notifier)
-        .setReaderMode(nextMode);
+    await ref.read(readerPreferencesControllerProvider.notifier).setReaderMode(nextMode);
 
     if (!mounted) {
       return;
@@ -272,6 +273,51 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
     );
+  }
+
+  void _onProgressChanged(double sliderValue, int maxLength) {
+    final index = sliderValue.round().clamp(0, maxLength - 1);
+    setState(() {
+      _sliderPreviewIndex = index;
+    });
+  }
+
+  Future<void> _onProgressChangeEnd({
+    required double sliderValue,
+    required ReaderModePreference mode,
+    required ComicReaderViewState viewState,
+  }) async {
+    final targetIndex = sliderValue.round().clamp(0, viewState.images.length - 1);
+
+    setState(() {
+      _sliderPreviewIndex = null;
+      _lastKnownIndex = targetIndex;
+    });
+
+    if (mode == ReaderModePreference.vertical) {
+      _jumpVerticalToIndex(targetIndex, viewState.images.length);
+      await _controller().jumpToImageIndex(targetIndex, scrollOffset: _scrollController.offset);
+      return;
+    }
+
+    final pageController = _pageController;
+    if (pageController != null && pageController.hasClients) {
+      pageController.jumpToPage(targetIndex);
+    }
+    await _controller().jumpToImageIndex(targetIndex, scrollOffset: 0);
+  }
+
+  void _jumpVerticalToIndex(int targetIndex, int totalImages) {
+    if (!_scrollController.hasClients || totalImages <= 1) {
+      return;
+    }
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    if (maxScroll <= 0) {
+      return;
+    }
+    final ratio = targetIndex / (totalImages - 1);
+    final offset = (maxScroll * ratio).clamp(0.0, maxScroll);
+    _scrollController.jumpTo(offset);
   }
 
   Widget _buildReaderContentLayer({
@@ -431,6 +477,9 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     ComicReaderViewState viewState,
     ReaderModePreference mode,
   ) {
+    final currentIndex = _sliderPreviewIndex ?? viewState.currentImageIndex;
+    final total = viewState.images.length;
+
     return Positioned(
       key: const Key('comic-reader-bottom-overlay'),
       left: 0,
@@ -443,10 +492,18 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
           child: ReaderBottomPanel(
             currentMode: mode,
             onModeChanged: (nextMode) => _onReaderModeChanged(nextMode, viewState),
+            currentPage: currentIndex + 1,
+            totalPages: total,
             hasPreviousEpisode: viewState.hasPreviousEpisode,
             hasNextEpisode: viewState.hasNextEpisode,
             onPreviousEpisode: () => Navigator.of(context).pop('previous'),
             onNextEpisode: () => Navigator.of(context).pop('next'),
+            onProgressChanged: (value) => _onProgressChanged(value, total),
+            onProgressChangeEnd: (value) => _onProgressChangeEnd(
+              sliderValue: value,
+              mode: mode,
+              viewState: viewState,
+            ),
           ),
         ),
       ),
