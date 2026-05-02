@@ -5,6 +5,7 @@ import 'package:y300/features/comic/data/comic_parser_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_detector.dart';
+import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
 
 final comicDetectorProvider = Provider<ComicDetector>((ref) {
@@ -13,6 +14,10 @@ final comicDetectorProvider = Provider<ComicDetector>((ref) {
 
 final comicParserServiceProvider = Provider<ComicParserService>((ref) {
   return HtmlComicParserService();
+});
+
+final comicSubjectParserProvider = Provider<ComicSubjectParser>((ref) {
+  return const RuleBasedComicSubjectParser();
 });
 
 /// 章节刷新接口：便于在控制器与测试中替换实现。

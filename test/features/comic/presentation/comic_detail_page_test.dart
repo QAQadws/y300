@@ -24,6 +24,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('测试漫画'), findsOneWidget);
+    expect(find.text('汉化组：测试汉化组'), findsOneWidget);
     expect(find.byKey(const Key('comic-detail-episode-list')), findsOneWidget);
     expect(find.text('第2话'), findsOneWidget);
     expect(find.text('第1话'), findsOneWidget);
@@ -100,6 +101,7 @@ class _ComicDetailFakeRepository implements ComicRepository {
       sourceFid: '30',
       title: '测试漫画',
       author: '作者A',
+      translationGroup: '测试汉化组',
       coverImageUrl: null,
       updatedAt: DateTime(2026, 1, 1),
       episodeCount: _episodes.length,

@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 3;
+  static const int dbVersion = 4;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -30,6 +30,9 @@ class ComicLocalDb {
         if (oldVersion < 3) {
           await _createReadingProgressTable(db);
         }
+        if (oldVersion < 4) {
+          await _migrateComicSubjectMetadataColumns(db);
+        }
       },
     );
   }
@@ -44,6 +47,7 @@ class ComicLocalDb {
         author TEXT,
         cover_image_url TEXT,
         custom_cover_image_url TEXT,
+        translation_group TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         last_read_episode_id TEXT
@@ -150,5 +154,11 @@ class ComicLocalDb {
         FOREIGN KEY (comic_id) REFERENCES $comicsTable(comic_id) ON DELETE CASCADE
       )
     ''');
+  }
+
+  static Future<void> _migrateComicSubjectMetadataColumns(Database db) async {
+    await db.execute(
+      'ALTER TABLE $comicsTable ADD COLUMN translation_group TEXT',
+    );
   }
 }

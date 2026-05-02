@@ -5,6 +5,7 @@
     required this.sourceFid,
     required this.title,
     required this.author,
+    required this.translationGroup,
     required this.coverImageUrl,
     required this.updatedAt,
     required this.episodeCount,
@@ -15,6 +16,7 @@
   final String sourceFid;
   final String title;
   final String? author;
+  final String? translationGroup;
   final String? coverImageUrl;
   final DateTime updatedAt;
   final int episodeCount;

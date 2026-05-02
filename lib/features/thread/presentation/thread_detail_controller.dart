@@ -197,13 +197,16 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
     final detector = ref.read(comicDetectorProvider);
     final parser = ref.read(comicParserServiceProvider);
+    final subjectParser = ref.read(comicSubjectParserProvider);
     final candidate = detector.detect(fid: fid, subject: subject, message: message);
 
     if (!candidate.isCandidate) {
       return (candidate, ParsedComicPost.empty);
     }
 
-    final parsed = parser.parse(message: parseMessage);
+    final parsed = parser.parse(message: parseMessage).copyWith(
+          subjectMetadata: subjectParser.parse(subject),
+        );
     return (candidate, parsed);
   }
 

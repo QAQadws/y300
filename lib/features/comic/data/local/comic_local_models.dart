@@ -5,6 +5,7 @@
     required this.sourceFid,
     required this.title,
     required this.author,
+    required this.translationGroup,
     required this.coverImageUrl,
     required this.customCoverImageUrl,
     required this.createdAt,
@@ -17,6 +18,7 @@
   final String sourceFid;
   final String title;
   final String? author;
+  final String? translationGroup;
   final String? coverImageUrl;
   final String? customCoverImageUrl;
   final int createdAt;
@@ -30,6 +32,7 @@
       'source_fid': sourceFid,
       'title': title,
       'author': author,
+      'translation_group': translationGroup,
       'cover_image_url': coverImageUrl,
       'custom_cover_image_url': customCoverImageUrl,
       'created_at': createdAt,
@@ -45,6 +48,7 @@
       sourceFid: map['source_fid'] as String,
       title: map['title'] as String,
       author: map['author'] as String?,
+      translationGroup: map['translation_group'] as String?,
       coverImageUrl: map['cover_image_url'] as String?,
       customCoverImageUrl: map['custom_cover_image_url'] as String?,
       createdAt: map['created_at'] as int,

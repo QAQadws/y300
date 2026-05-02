@@ -84,6 +84,11 @@ class ComicDetailPage extends ConsumerWidget {
                           ),
                           const SizedBox(height: 8),
                           Text('作者：${detail.author ?? '未知'}'),
+                          if (detail.translationGroup != null &&
+                              detail.translationGroup!.trim().isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text('汉化组：${detail.translationGroup}'),
+                          ],
                           const SizedBox(height: 4),
                           Text('章节数：${detail.episodeCount}'),
                           const SizedBox(height: 4),

@@ -35,6 +35,7 @@ class ParsedComicPost {
     required this.plainTextSummary,
     this.catalogUrl,
     this.inferredAuthor,
+    this.subjectMetadata,
   });
 
   final List<String> imageUrls;
@@ -42,10 +43,43 @@ class ParsedComicPost {
   final String plainTextSummary;
   final String? catalogUrl;
   final String? inferredAuthor;
+  final ComicSubjectMetadata? subjectMetadata;
+
+  ParsedComicPost copyWith({
+    List<String>? imageUrls,
+    List<ComicEpisodeLink>? episodeLinks,
+    String? plainTextSummary,
+    String? catalogUrl,
+    String? inferredAuthor,
+    ComicSubjectMetadata? subjectMetadata,
+  }) {
+    return ParsedComicPost(
+      imageUrls: imageUrls ?? this.imageUrls,
+      episodeLinks: episodeLinks ?? this.episodeLinks,
+      plainTextSummary: plainTextSummary ?? this.plainTextSummary,
+      catalogUrl: catalogUrl ?? this.catalogUrl,
+      inferredAuthor: inferredAuthor ?? this.inferredAuthor,
+      subjectMetadata: subjectMetadata ?? this.subjectMetadata,
+    );
+  }
 
   static const ParsedComicPost empty = ParsedComicPost(
     imageUrls: <String>[],
     episodeLinks: <ComicEpisodeLink>[],
     plainTextSummary: '',
   );
+}
+
+class ComicSubjectMetadata {
+  const ComicSubjectMetadata({
+    required this.normalizedTitle,
+    this.translationGroup,
+    this.inferredAuthor,
+    this.episodeLabel,
+  });
+
+  final String normalizedTitle;
+  final String? translationGroup;
+  final String? inferredAuthor;
+  final String? episodeLabel;
 }

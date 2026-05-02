@@ -269,8 +269,9 @@ class LocalComicRepository implements ComicRepository {
         comicId: comicId,
         sourceTid: tid,
         sourceFid: fid,
-        title: title,
-        author: parsedPost.inferredAuthor,
+        title: _resolveComicTitle(rawTitle: title, parsedPost: parsedPost),
+        author: _resolveComicAuthor(parsedPost),
+        translationGroup: parsedPost.subjectMetadata?.translationGroup,
         coverImageUrl: parsedPost.imageUrls.isEmpty ? null : parsedPost.imageUrls.first,
         customCoverImageUrl: null,
         createdAt: now,
@@ -401,6 +402,7 @@ class LocalComicRepository implements ComicRepository {
         c.source_fid,
         c.title,
         c.author,
+        c.translation_group,
         COALESCE(c.custom_cover_image_url, c.cover_image_url) AS cover_image_url,
         c.updated_at,
         COUNT(e.episode_id) AS episode_count
@@ -423,6 +425,7 @@ class LocalComicRepository implements ComicRepository {
       sourceFid: row['source_fid'] as String,
       title: row['title'] as String,
       author: row['author'] as String?,
+      translationGroup: row['translation_group'] as String?,
       coverImageUrl: row['cover_image_url'] as String?,
       updatedAt: DateTime.fromMillisecondsSinceEpoch(row['updated_at'] as int),
       episodeCount: row['episode_count'] as int? ?? 0,
@@ -670,6 +673,30 @@ class LocalComicRepository implements ComicRepository {
   String? _extractTid(String url) {
     final match = RegExp(r'thread-(\d+)-\d+-\d+\.html', caseSensitive: false).firstMatch(url);
     return match?.group(1);
+  }
+
+  String _resolveComicTitle({
+    required String rawTitle,
+    required ParsedComicPost parsedPost,
+  }) {
+    final normalized = parsedPost.subjectMetadata?.normalizedTitle.trim();
+    if (normalized != null && normalized.isNotEmpty) {
+      return normalized;
+    }
+    final fallback = rawTitle.trim();
+    return fallback.isEmpty ? '未命名漫画' : fallback;
+  }
+
+  String? _resolveComicAuthor(ParsedComicPost parsedPost) {
+    final fromSubject = parsedPost.subjectMetadata?.inferredAuthor?.trim();
+    if (fromSubject != null && fromSubject.isNotEmpty) {
+      return fromSubject;
+    }
+    final fromContent = parsedPost.inferredAuthor?.trim();
+    if (fromContent != null && fromContent.isNotEmpty) {
+      return fromContent;
+    }
+    return null;
   }
 }
 

@@ -69,6 +69,33 @@ void main() {
       expect(items.length, 1);
     });
 
+    test('addToShelf prefers normalized title and subject-derived author metadata', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:200',
+        tid: '200',
+        fid: '30',
+        title: '【某汉化组】[作者X]作品名 12',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>['https://img.test/cover-2.jpg'],
+          episodeLinks: <ComicEpisodeLink>[],
+          plainTextSummary: '摘要',
+          inferredAuthor: '内容作者Y',
+          subjectMetadata: ComicSubjectMetadata(
+            normalizedTitle: '作品名',
+            translationGroup: '某汉化组',
+            inferredAuthor: '作者X',
+            episodeLabel: '12',
+          ),
+        ),
+      );
+
+      final detail = await repository.getComicDetail(comicId: 'yamibo:200');
+      expect(detail, isNotNull);
+      expect(detail!.title, '作品名');
+      expect(detail.author, '作者X');
+      expect(detail.translationGroup, '某汉化组');
+    });
+
     test('can create category and move comic across categories', () async {
       await repository.addToShelf(
         comicId: 'yamibo:100',
@@ -155,7 +182,7 @@ void main() {
         comicId: 'yamibo:100',
         tid: '100',
         fid: '30',
-        title: '测试漫画',
+        title: '【测试汉化组】[作者A]测试漫画 第1话',
         parsedPost: const ParsedComicPost(
           imageUrls: <String>['https://img.test/cover.jpg'],
           episodeLinks: <ComicEpisodeLink>[
@@ -164,6 +191,12 @@ void main() {
           ],
           plainTextSummary: '摘要',
           inferredAuthor: '作者A',
+          subjectMetadata: ComicSubjectMetadata(
+            normalizedTitle: '测试漫画',
+            translationGroup: '测试汉化组',
+            inferredAuthor: '作者A',
+            episodeLabel: '第1话',
+          ),
         ),
       );
 
@@ -172,6 +205,8 @@ void main() {
 
       expect(detail, isNotNull);
       expect(detail!.title, '测试漫画');
+      expect(detail.translationGroup, '测试汉化组');
+      expect(detail.author, '作者A');
       expect(detail.episodeCount, greaterThanOrEqualTo(2));
       expect(episodes.first.episodeTitle, contains('2'));
     });

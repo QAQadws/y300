@@ -880,3 +880,31 @@
 本轮按约定未执行自动化命令，请你本地执行并回传结果：
 1. `flutter test`
 2. `flutter analyze`
+
+---
+
+## subject结构化解析 Review补充清单（fid=30）
+### 一、解析能力
+- [ ] `subject` 解析已独立为 `ComicSubjectParser` 抽象，不耦合页面层
+- [ ] 规则可提取：汉化组、作者候选、话数标签、净化标题
+- [ ] 规则未命中时有稳定回退（保留原始标题，不阻断主流程）
+
+### 二、入库与展示一致性
+- [ ] 书架标题优先使用净化后的漫画名（不包含汉化组/话数噪声）
+- [ ] 作者优先使用 `subject` 解析结果，再回退正文解析结果
+- [ ] 汉化组信息已持久化并可在详情页展示
+
+### 三、数据演进与兼容
+- [ ] `comics` 表已新增 `translation_group` 字段
+- [ ] 数据库升级迁移可兼容旧版本库
+- [ ] 旧数据读取流程不因新增字段中断
+
+### 四、测试覆盖
+- [ ] `comic_subject_parser_test.dart` 覆盖核心解析规则
+- [ ] `local_comic_repository_test.dart` 覆盖标题/作者/汉化组入库优先级
+- [ ] `comic_detail_page_test.dart` 覆盖详情页汉化组展示
+
+### 五、执行说明
+本轮按约定未执行自动化命令，请你本地执行并回传结果：
+1. `flutter test`
+2. `flutter analyze`
