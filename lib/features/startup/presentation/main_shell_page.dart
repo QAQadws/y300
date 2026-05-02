@@ -1,8 +1,9 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:y300/features/comic/presentation/comic_tab_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_page.dart';
+import 'package:y300/features/more/presentation/more_page.dart';
 
-/// 应用主壳：承载论坛与漫画双 Tab，避免业务页面相互耦合。
+/// 应用主壳：承载论坛、漫画、更多三栏 Tab，避免业务页面相互耦合。
 class MainShellPage extends StatefulWidget {
   const MainShellPage({super.key});
 
@@ -16,6 +17,7 @@ class _MainShellPageState extends State<MainShellPage> {
   final _pages = const <Widget>[
     ForumHomePage(),
     ComicTabPage(),
+    MorePage(),
   ];
 
   @override
@@ -42,6 +44,11 @@ class _MainShellPageState extends State<MainShellPage> {
             icon: Icon(Icons.collections_bookmark_outlined),
             selectedIcon: Icon(Icons.collections_bookmark),
             label: '漫画',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.more_horiz_outlined),
+            selectedIcon: Icon(Icons.more_horiz),
+            label: '更多',
           ),
         ],
       ),

@@ -594,3 +594,33 @@
 本轮仍未执行：
 1. `flutter test`
 2. `flutter analyze`
+
+---
+
+## 漫画阅读迁移阶段1续做 Review 补充（2026-05-01）
+
+### 一、更多页信息架构
+- [ ] “更多”页包含：登录、缓存目录、阅读设置占位、关于占位
+- [ ] 登录入口仅在“更多”页可见，论坛页不再提供登录按钮
+
+### 二、缓存目录设置页
+- [ ] 默认目录与当前生效目录可见
+- [ ] 选择自定义目录后，自定义目录与生效目录同步更新
+- [ ] 恢复默认后，自定义目录清空，生效目录回到默认目录
+- [ ] 操作后提示文案清晰（已更新/已恢复等）
+
+### 三、工程化与解耦
+- [ ] `MorePage` 仅负责入口与导航，不承载缓存存储逻辑
+- [ ] `CacheSettingsPage` 仅消费状态并触发动作
+- [ ] `CacheSettingsController` 负责编排流程
+- [ ] `MoreSettingsRepository` 负责平台/插件调用（目录与持久化）
+
+### 四、测试覆盖补充
+- [ ] `test/features/more/presentation/cache_settings_page_test.dart` 已覆盖三条主链路
+- [ ] `test/features/forum/presentation/forum_home_login_entry_migration_test.dart` 已覆盖登录入口迁移回归
+- [ ] `test/features/more/presentation/more_page_test.dart` 包含入口与文案断言
+
+### 五、执行说明
+本轮未执行自动化命令，请本地执行并回传结果：
+1. `flutter test`
+2. `flutter analyze`

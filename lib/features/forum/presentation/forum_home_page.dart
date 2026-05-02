@@ -1,6 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
@@ -17,24 +16,12 @@ class ForumHomePage extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('论坛首页'),
-        actions: [
-          TextButton(
-            key: const Key('forum-home-login-button'),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const LoginPage()),
-              );
-            },
-            child: const Text('登录'),
-          ),
-        ],
       ),
       body: state.when(
         loading: () => const ForumHomeSkeleton(key: Key('forum-home-skeleton')),
         error: (error, _) => _ForumHomeErrorView(
           message: error.toString(),
-          onRetry: () =>
-              ref.read(forumHomeControllerProvider.notifier).refresh(),
+          onRetry: () => ref.read(forumHomeControllerProvider.notifier).refresh(),
         ),
         data: (data) => _ForumHomeContent(data: data),
       ),
@@ -56,7 +43,7 @@ class _ForumHomeContent extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            '共 ${data.sectionCount} 个分组，${data.forumCount} 个版块',
+            '共${data.sectionCount} 个分组，${data.forumCount} 个版块',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 12),

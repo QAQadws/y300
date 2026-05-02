@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,27 +27,21 @@ void main() {
       expect(find.text('公告区'), findsOneWidget);
     });
 
-    testWidgets('renders grouped forum data after successful load', (
-      tester,
-    ) async {
-      final repository = _FakeForumHomeRepository(
-        () async => ApiSuccess(_loggedOutPayload()),
-      );
+    testWidgets('renders grouped forum data after successful load', (tester) async {
+      final repository = _FakeForumHomeRepository(() async => ApiSuccess(_loggedOutPayload()));
 
       await tester.pumpWidget(_buildTestApp(repository));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
-      expect(find.text('共 1 个分组，1 个版块'), findsOneWidget);
+      expect(find.text('共1 个分组，1 个版块'), findsOneWidget);
       expect(find.text('综合区'), findsOneWidget);
       expect(find.text('公告区'), findsOneWidget);
       expect(find.byKey(const Key('forum-card-2')), findsOneWidget);
     });
 
     testWidgets('shows favorite section first when logged in', (tester) async {
-      final repository = _FakeForumHomeRepository(
-        () async => ApiSuccess(_loggedInPayloadWithFavorites()),
-      );
+      final repository = _FakeForumHomeRepository(() async => ApiSuccess(_loggedInPayloadWithFavorites()));
 
       await tester.pumpWidget(_buildTestApp(repository));
       await tester.pumpAndSettle();
@@ -115,7 +109,7 @@ ForumHomePayload _loggedInPayloadWithFavorites() {
       FavoriteForum(
         favid: '1792542',
         fid: '55',
-        title: '轻小说/译文区',
+        title: '轻小说译文区',
         description: '',
         threads: 1279,
         posts: 145828,

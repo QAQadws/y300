@@ -9,7 +9,7 @@ import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/startup/presentation/main_shell_page.dart';
 
 void main() {
-  testWidgets('MainShellPage can switch between forum and comic tabs', (tester) async {
+  testWidgets('MainShellPage can switch between forum/comic/more tabs', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -25,6 +25,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('书架'), findsOneWidget);
+
+    await tester.tap(find.text('更多'));
+    await tester.pumpAndSettle();
+    expect(find.text('更多'), findsWidgets);
+    expect(find.byKey(const Key('more-login-entry')), findsOneWidget);
   });
 }
 
