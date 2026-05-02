@@ -124,7 +124,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     // Read dependencies once during build to avoid accessing `ref` from
     // async continuations after provider disposal.
     _repository = ref.read(comicRepositoryProvider);
-    _readerService = ref.read(comicReaderServiceProvider);
+    _readerService = await ref.read(comicReaderServiceProvider.future);
     ref.onDispose(() {
       _progressPersistDebounceTimer?.cancel();
     });
@@ -145,7 +145,8 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     updatedImages[idx] = updatedImages[idx].copyWith(failed: false, cacheStatus: 'downloading');
     state = AsyncData(current.copyWith(images: updatedImages, clearHint: true));
 
-    final done = await _readerService.cacheImage(imageUrl: imageUrl);
+    final cacheResult = await _readerService.cacheImage(imageUrl: imageUrl);
+    final done = cacheResult.success;
     if (!ref.mounted) {
       return;
     }
@@ -153,14 +154,14 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       episodeId: _args.episodeId,
       imageUrl: imageUrl,
       cacheStatus: done ? 'done' : 'failed',
-      cacheLocalPath: done ? imageUrl : null,
+      cacheLocalPath: done ? cacheResult.localPath : null,
     );
 
     final refreshed = [...updatedImages];
     refreshed[idx] = refreshed[idx].copyWith(
       failed: !done,
       cacheStatus: done ? 'done' : 'failed',
-      cacheLocalPath: done ? imageUrl : null,
+      cacheLocalPath: done ? cacheResult.localPath : null,
     );
     if (!ref.mounted) {
       return;
@@ -179,7 +180,8 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         imageUrl: image.imageUrl,
         cacheStatus: 'downloading',
       );
-      final done = await _readerService.cacheImage(imageUrl: image.imageUrl);
+      final cacheResult = await _readerService.cacheImage(imageUrl: image.imageUrl);
+      final done = cacheResult.success;
       if (!ref.mounted) {
         return;
       }
@@ -187,7 +189,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         episodeId: _args.episodeId,
         imageUrl: image.imageUrl,
         cacheStatus: done ? 'done' : 'failed',
-        cacheLocalPath: done ? image.imageUrl : null,
+        cacheLocalPath: done ? cacheResult.localPath : null,
       );
     }
     final nextState = await _loadState();
@@ -215,7 +217,8 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
           imageUrl: image.imageUrl,
           cacheStatus: 'downloading',
         );
-        final done = await _readerService.cacheImage(imageUrl: image.imageUrl);
+        final cacheResult = await _readerService.cacheImage(imageUrl: image.imageUrl);
+        final done = cacheResult.success;
         if (!ref.mounted) {
           return;
         }
@@ -223,7 +226,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
           episodeId: episode.episodeId,
           imageUrl: image.imageUrl,
           cacheStatus: done ? 'done' : 'failed',
-          cacheLocalPath: done ? image.imageUrl : null,
+          cacheLocalPath: done ? cacheResult.localPath : null,
         );
       }
     }

@@ -852,3 +852,31 @@
 本轮按约定未执行自动化命令，请你本地执行并回传结果：
 1. `flutter test`
 2. `flutter analyze`
+
+---
+
+## 漫画阅读迁移阶段6 Review补充清单（缓存目录打通）
+### 一、缓存目录生效链路
+- [ ] “更多 > 缓存目录设置”与漫画缓存模块使用同一存储键（无重复定义）
+- [ ] 自定义目录配置后，漫画缓存写入落在自定义目录下
+- [ ] 恢复默认后，缓存写入回到默认目录策略
+
+### 二、缓存实现解耦
+- [ ] 缓存目录解析逻辑独立（不耦合页面/控制器）
+- [ ] 自定义 `CacheManager` 构建逻辑独立（factory + file system）
+- [ ] comic provider 仅做装配，不混入目录计算细节
+
+### 三、缓存语义正确性
+- [ ] `cacheCurrentEpisode` / `cacheAllUnread` / `prefetch` 共用同一 cache manager 实例来源
+- [ ] `cacheLocalPath` 写入真实本地文件路径（非 URL）
+- [ ] 缓存失败时状态与路径写入行为一致且可追踪
+
+### 四、测试覆盖
+- [ ] `test/features/comic/data/comic_cache_directory_resolver_test.dart` 覆盖自定义目录解析
+- [ ] `test/features/comic/presentation/controllers/comic_reader_controller_test.dart` 覆盖本地路径落库
+- [ ] 受接口升级影响的 reader 相关测试 fake/override 已全部适配
+
+### 五、执行说明
+本轮按约定未执行自动化命令，请你本地执行并回传结果：
+1. `flutter test`
+2. `flutter analyze`

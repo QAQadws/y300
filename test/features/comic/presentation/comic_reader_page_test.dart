@@ -31,7 +31,7 @@ void main() {
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
-          comicReaderServiceProvider.overrideWithValue(_ReaderFakeService()),
+          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
         ],
         child: const MaterialApp(
           home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
@@ -69,7 +69,7 @@ void main() {
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
-          comicReaderServiceProvider.overrideWithValue(_ReaderFakeService()),
+          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
         ],
         child: const MaterialApp(
           home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
@@ -89,7 +89,7 @@ void main() {
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
-          comicReaderServiceProvider.overrideWithValue(_ReaderFakeService()),
+          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
         ],
         child: const MaterialApp(
           home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
@@ -115,7 +115,7 @@ void main() {
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
-          comicReaderServiceProvider.overrideWithValue(_ReaderFakeService()),
+          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
         ],
         child: const MaterialApp(
           home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
@@ -147,7 +147,7 @@ void main() {
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
-          comicReaderServiceProvider.overrideWithValue(_ReaderFakeService()),
+          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
         ],
         child: const MaterialApp(
           home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
@@ -166,7 +166,7 @@ void main() {
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
-          comicReaderServiceProvider.overrideWithValue(_ReaderFakeService()),
+          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
         ],
         child: const MaterialApp(
           home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
@@ -194,7 +194,9 @@ void main() {
 
 class _ReaderFakeService implements ComicReaderService {
   @override
-  Future<bool> cacheImage({required String imageUrl}) async => true;
+  Future<ComicImageCacheResult> cacheImage({required String imageUrl}) async {
+    return const ComicImageCacheResult(success: true, localPath: '/cache/mock.jpg');
+  }
 
   @override
   Future<List<String>> fetchEpisodeImagesByTid(String tid) async {

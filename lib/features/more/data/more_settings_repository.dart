@@ -1,6 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/core/config/app_storage_keys.dart';
 
 /// Data access abstraction for "More > Cache settings".
 ///
@@ -17,8 +18,6 @@ abstract class MoreSettingsRepository {
 }
 
 class MoreSettingsRepositoryImpl implements MoreSettingsRepository {
-  static const String _customCacheDirectoryKey = 'comic_cache_dir';
-
   @override
   Future<String> getDefaultCacheDirectory() async {
     final directory = await getTemporaryDirectory();
@@ -28,7 +27,7 @@ class MoreSettingsRepositoryImpl implements MoreSettingsRepository {
   @override
   Future<String?> getCustomCacheDirectory() async {
     final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getString(_customCacheDirectoryKey)?.trim();
+    final value = prefs.getString(AppStorageKeys.comicCacheDirectory)?.trim();
     if (value == null || value.isEmpty) {
       return null;
     }
@@ -40,10 +39,10 @@ class MoreSettingsRepositoryImpl implements MoreSettingsRepository {
     final prefs = await SharedPreferences.getInstance();
     final normalized = path?.trim();
     if (normalized == null || normalized.isEmpty) {
-      await prefs.remove(_customCacheDirectoryKey);
+      await prefs.remove(AppStorageKeys.comicCacheDirectory);
       return;
     }
-    await prefs.setString(_customCacheDirectoryKey, normalized);
+    await prefs.setString(AppStorageKeys.comicCacheDirectory, normalized);
   }
 
   @override
@@ -51,4 +50,3 @@ class MoreSettingsRepositoryImpl implements MoreSettingsRepository {
     return FilePicker.getDirectoryPath();
   }
 }
-

@@ -31,7 +31,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         comicRepositoryProvider.overrideWithValue(repository),
-        comicReaderServiceProvider.overrideWithValue(service),
+        comicReaderServiceProvider.overrideWith((ref) async => service),
       ],
     );
     addTearDown(container.dispose);
@@ -53,7 +53,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         comicRepositoryProvider.overrideWithValue(repository),
-        comicReaderServiceProvider.overrideWithValue(service),
+        comicReaderServiceProvider.overrideWith((ref) async => service),
       ],
     );
     addTearDown(container.dispose);
@@ -79,13 +79,38 @@ void main() {
     expect(repository.progressWrites.last.imageIndex, 3);
     expect(repository.progressWrites.last.scrollOffset, 90);
   });
+
+  test('cacheCurrentEpisode persists local file path from cache service', () async {
+    final repository = _ReaderRepoForControllerTest();
+    final service = _ReaderServiceSpy();
+    final container = ProviderContainer(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(repository),
+        comicReaderServiceProvider.overrideWith((ref) async => service),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final args = const ComicReaderArgs(comicId: 'yamibo:100', episodeId: 'yamibo:100:101');
+    await container.read(comicReaderControllerProvider(args).future);
+
+    await container.read(comicReaderControllerProvider(args).notifier).cacheCurrentEpisode();
+
+    expect(repository.cacheStatusWrites, isNotEmpty);
+    final doneWrite = repository.cacheStatusWrites.firstWhere(
+      (item) => item.cacheStatus == 'done',
+    );
+    expect(doneWrite.cacheLocalPath, '/cache/mock.jpg');
+  });
 }
 
 class _ReaderServiceSpy implements ComicReaderService {
   final List<List<String>> prefetchedBatches = <List<String>>[];
 
   @override
-  Future<bool> cacheImage({required String imageUrl}) async => true;
+  Future<ComicImageCacheResult> cacheImage({required String imageUrl}) async {
+    return const ComicImageCacheResult(success: true, localPath: '/cache/mock.jpg');
+  }
 
   @override
   Future<List<String>> fetchEpisodeImagesByTid(String tid) async {
@@ -108,9 +133,24 @@ class _ProgressWrite {
   final double scrollOffset;
 }
 
+class _CacheStatusWrite {
+  const _CacheStatusWrite({
+    required this.episodeId,
+    required this.imageUrl,
+    required this.cacheStatus,
+    this.cacheLocalPath,
+  });
+
+  final String episodeId;
+  final String imageUrl;
+  final String cacheStatus;
+  final String? cacheLocalPath;
+}
+
 /// Lightweight fake to document expected episode ordering in controller tests.
 class _ReaderRepoForControllerTest implements ComicRepository {
   final List<_ProgressWrite> progressWrites = <_ProgressWrite>[];
+  final List<_CacheStatusWrite> cacheStatusWrites = <_CacheStatusWrite>[];
 
   @override
   Future<void> addToShelf({
@@ -251,7 +291,16 @@ class _ReaderRepoForControllerTest implements ComicRepository {
     required String imageUrl,
     required String cacheStatus,
     String? cacheLocalPath,
-  }) async {}
+  }) async {
+    cacheStatusWrites.add(
+      _CacheStatusWrite(
+        episodeId: episodeId,
+        imageUrl: imageUrl,
+        cacheStatus: cacheStatus,
+        cacheLocalPath: cacheLocalPath,
+      ),
+    );
+  }
 
   @override
   Future<void> updateGridColumnCount({required int columnCount}) async {}

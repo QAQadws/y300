@@ -58,7 +58,7 @@ final comicEpisodeRefreshServiceProvider = Provider<ComicEpisodeRefreshService>(
 abstract class ComicReaderService {
   Future<List<String>> fetchEpisodeImagesByTid(String tid);
 
-  Future<bool> cacheImage({required String imageUrl});
+  Future<ComicImageCacheResult> cacheImage({required String imageUrl});
 
   /// Warm up a batch of images to reduce visible loading delay around jumps.
   ///
@@ -69,6 +69,16 @@ abstract class ComicReaderService {
       await cacheImage(imageUrl: imageUrl);
     }
   }
+}
+
+class ComicImageCacheResult {
+  const ComicImageCacheResult({
+    required this.success,
+    this.localPath,
+  });
+
+  final bool success;
+  final String? localPath;
 }
 
 class NetworkComicReaderService implements ComicReaderService {
@@ -100,12 +110,15 @@ class NetworkComicReaderService implements ComicReaderService {
   }
 
   @override
-  Future<bool> cacheImage({required String imageUrl}) async {
+  Future<ComicImageCacheResult> cacheImage({required String imageUrl}) async {
     try {
-      await _cacheManager.downloadFile(imageUrl, key: imageUrl);
-      return true;
+      final fileInfo = await _cacheManager.downloadFile(imageUrl, key: imageUrl);
+      return ComicImageCacheResult(
+        success: true,
+        localPath: fileInfo.file.path,
+      );
     } catch (_) {
-      return false;
+      return const ComicImageCacheResult(success: false);
     }
   }
 
@@ -117,11 +130,11 @@ class NetworkComicReaderService implements ComicReaderService {
   }
 }
 
-final comicReaderServiceProvider = Provider<ComicReaderService>((ref) {
+final comicReaderServiceProvider = FutureProvider<ComicReaderService>((ref) async {
   return NetworkComicReaderService(
     threadRepository: ref.read(threadRepositoryProvider),
     parserService: ref.read(comicParserServiceProvider),
-    cacheManager: ref.read(comicCacheManagerProvider),
+    cacheManager: await ref.read(comicCacheManagerProvider.future),
   );
 });
 
