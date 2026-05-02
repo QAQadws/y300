@@ -824,3 +824,31 @@
 - [ ] è¿›åº¦æ¡ç¨³å®šæ€§æµ‹è¯•ä¸å†å‡ºç° pending timer
 - [ ] `comic_reader_page.dart` æ—  `_isSliderSessionActive` æœªä½¿ç”¨å‘Šè­¦
 - [ ] `flutter analyze` æ— æ–°å¢ warning/error
+
+---
+
+## Âş»­ÔÄ¶ÁÇ¨ÒÆ½×¶Î5 Review²¹³äÇåµ¥£¨Ëõ·ÅÄÜÁ¦£©
+### Ò»¡¢Ëõ·ÅÖ÷Á´Â·
+- [ ] ÈıÖÖÄ£Ê½£¨vertical/ltr/rtl£©ÏÂÍ¼Æ¬¿ÉË«Ö¸Ëõ·Å
+- [ ] Ë«»÷¿É´¥·¢ 1x/2x ÇĞ»»
+- [ ] Ë«»÷Ëõ·Åºó¿ÉÔÙ´ÎË«»÷»Ö¸´µ½ 1x
+
+### ¶ş¡¢ÊÖÊÆ³åÍ»¿ØÖÆ
+- [ ] Í¼Æ¬´¦ÓÚ·Å´óÌ¬Ê±£¬·ÖÒ³»¬¶¯ÊÖÊÆ±»½ûÓÃ£¨±ÜÃâÎó·­Ò³£©
+- [ ] Í¼Æ¬´¦ÓÚ·Å´óÌ¬Ê±£¬µã»÷·ÖÇø£¨×ó/ÖĞ/ÓÒ£©²»´¥·¢·­Ò³»ò²Ëµ¥ÇĞ»»
+- [ ] Í¼Æ¬»Ö¸´ 1x ºó£¬·ÖÒ³»¬¶¯Óëµã»÷·ÖÇø×Ô¶¯»Ö¸´
+
+### Èı¡¢¹¤³Ì»¯½âñî
+- [ ] Ëõ·ÅÄÜÁ¦·â×°ÔÚ¶ÀÁ¢×é¼ş `ReaderZoomableImage`
+- [ ] `ComicReaderPage` ½ö¸ºÔğ×´Ì¬±àÅÅÓë³åÍ»Ğ­µ÷
+- [ ] `ReaderTapZones` ½öÀ©Õ¹ÊäÈë¿ª¹Ø£¨`enabled`£©£¬²»³ĞÔØÒµÎñ²ßÂÔ
+
+### ËÄ¡¢²âÊÔ¸²¸Ç
+- [ ] `test/features/comic/presentation/widgets/reader_zoomable_image_test.dart` ¸²¸ÇË«»÷Ëõ·Å×´Ì¬ÇĞ»»
+- [ ] `test/features/comic/presentation/comic_reader_page_test.dart` ¸²¸ÇÔÄ¶ÁÒ³Ëõ·Å×é¼ş¹ÒÔØ
+- [ ] `test/features/comic/presentation/widgets/reader_tap_zones_test.dart` ¸²¸Ç½ûÓÃÌ¬µã»÷ÎŞĞ§
+
+### Îå¡¢Ö´ĞĞËµÃ÷
+±¾ÂÖ°´Ô¼¶¨Î´Ö´ĞĞ×Ô¶¯»¯ÃüÁî£¬ÇëÄã±¾µØÖ´ĞĞ²¢»Ø´«½á¹û£º
+1. `flutter test`
+2. `flutter analyze`

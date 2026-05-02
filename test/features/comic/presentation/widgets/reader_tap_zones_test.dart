@@ -31,4 +31,36 @@ void main() {
     expect(leftTapped, 0);
     expect(rightTapped, 0);
   });
+
+  testWidgets('tap zones ignore all taps when disabled', (tester) async {
+    var centerTapped = 0;
+    var leftTapped = 0;
+    var rightTapped = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Stack(
+            children: [
+              ReaderTapZones(
+                enabled: false,
+                onCenterTap: () => centerTapped++,
+                onLeftTap: () => leftTapped++,
+                onRightTap: () => rightTapped++,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('comic-reader-left-tap-zone')));
+    await tester.tap(find.byKey(const Key('comic-reader-center-tap-zone')));
+    await tester.tap(find.byKey(const Key('comic-reader-right-tap-zone')));
+    await tester.pump();
+
+    expect(centerTapped, 0);
+    expect(leftTapped, 0);
+    expect(rightTapped, 0);
+  });
 }

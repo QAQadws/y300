@@ -9,13 +9,24 @@ import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/comic_reader_page.dart';
+import 'package:y300/features/comic/presentation/widgets/reader_zoomable_image.dart';
 
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
+  Future<void> prepareLargeViewport(WidgetTester tester) async {
+    // Keep a very tall viewport to make bottom reader controls consistently
+    // hittable across different test environments and frame timings.
+    tester.view.physicalSize = const Size(1200, 3200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+  }
+
   testWidgets('ComicReaderPage renders images and cache actions', (tester) async {
+    await prepareLargeViewport(tester);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -49,6 +60,7 @@ void main() {
   });
 
   testWidgets('ComicReaderPage uses paged renderer when persisted mode is ltr', (tester) async {
+    await prepareLargeViewport(tester);
     SharedPreferences.setMockInitialValues(const <String, Object>{
       'reader_pref_mode': 'ltr',
     });
@@ -72,6 +84,7 @@ void main() {
   });
 
   testWidgets('ComicReaderPage switches from vertical to rtl mode via bottom switch', (tester) async {
+    await prepareLargeViewport(tester);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -89,6 +102,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('comic-reader-center-tap-zone')));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('右到左'));
     await tester.tap(find.text('右到左'));
     await tester.pumpAndSettle();
 
@@ -96,6 +110,7 @@ void main() {
   });
 
   testWidgets('ComicReaderPage updates progress labels after slider interaction', (tester) async {
+    await prepareLargeViewport(tester);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -115,6 +130,7 @@ void main() {
     expect(find.byKey(const Key('comic-reader-current-page-label')), findsOneWidget);
     expect(find.byKey(const Key('comic-reader-total-page-label')), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(const Key('comic-reader-progress-slider')));
     await tester.drag(
       find.byKey(const Key('comic-reader-progress-slider')),
       const Offset(300, 0),
@@ -125,7 +141,27 @@ void main() {
     expect(find.byKey(const Key('comic-reader-total-page-label')), findsOneWidget);
   });
 
+  testWidgets('ComicReaderPage renders zoomable image wrapper in reader content', (tester) async {
+    await prepareLargeViewport(tester);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+          comicReaderServiceProvider.overrideWithValue(_ReaderFakeService()),
+        ],
+        child: const MaterialApp(
+          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ReaderZoomableImage), findsWidgets);
+  });
+
   testWidgets('ComicReaderPage keeps slider stable during jump commit', (tester) async {
+    await prepareLargeViewport(tester);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -145,6 +181,7 @@ void main() {
     final sliderFinder = find.byKey(const Key('comic-reader-progress-slider'));
     expect(sliderFinder, findsOneWidget);
 
+    await tester.ensureVisible(sliderFinder);
     await tester.drag(sliderFinder, const Offset(280, 0));
     await tester.pump();
 

@@ -7,6 +7,7 @@ import 'package:y300/features/comic/presentation/providers/reader_preferences_pr
 import 'package:y300/features/comic/presentation/widgets/reader_bottom_panel.dart';
 import 'package:y300/features/comic/presentation/widgets/reader_tap_zones.dart';
 import 'package:y300/features/comic/presentation/widgets/reader_top_bar.dart';
+import 'package:y300/features/comic/presentation/widgets/reader_zoomable_image.dart';
 
 class ComicReaderPage extends ConsumerStatefulWidget {
   const ComicReaderPage({
@@ -41,6 +42,9 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
   late final AnimationController _menuAnimationController;
   late final Animation<Offset> _topMenuSlideAnimation;
   late final Animation<Offset> _bottomMenuSlideAnimation;
+  // Keep per-image zoom flags so page-level gestures can be coordinated
+  // without coupling gesture logic into image rendering code.
+  final Map<int, bool> _zoomedStateByIndex = <int, bool>{};
 
   ComicReaderArgs get _readerArgs =>
       ComicReaderArgs(comicId: widget.comicId, episodeId: widget.episodeId);
@@ -113,6 +117,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
                 onRightTap: mode == ReaderModePreference.vertical
                     ? null
                     : () => _turnPageByTap(mode: mode, viewState: viewState, isLeftTap: false),
+                enabled: !_isAnyImageZoomed,
               ),
               _buildReaderTopOverlayLayer(viewState),
               _buildReaderBottomOverlayLayer(viewState, mode),
@@ -264,6 +269,9 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     required ComicReaderViewState viewState,
     required bool isLeftTap,
   }) {
+    if (_isAnyImageZoomed) {
+      return;
+    }
     final pageController = _pageController;
     if (pageController == null || !pageController.hasClients) {
       return;
@@ -417,6 +425,9 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     return PageView.builder(
       key: const Key('comic-reader-page-view'),
       controller: _pageController,
+      physics: _isAnyImageZoomed
+          ? const NeverScrollableScrollPhysics()
+          : const PageScrollPhysics(),
       reverse: mode == ReaderModePreference.rtl,
       onPageChanged: _onPageChanged,
       itemCount: viewState.images.length,
@@ -438,69 +449,85 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     required int index,
     bool paged = false,
   }) {
+    final imageWidget = ReaderZoomableImage(
+      onZoomStateChanged: (isZoomed) => _onImageZoomStateChanged(index, isZoomed),
+      child: CachedNetworkImage(
+        imageUrl: imageUrl,
+        fit: paged ? BoxFit.contain : BoxFit.fitWidth,
+        width: paged ? null : double.infinity,
+        placeholder: (context, placeholderUrl) => paged
+            ? Center(
+                child: Text('加载中 ${index + 1}/${viewState.images.length}'),
+              )
+            : AspectRatio(
+                aspectRatio: 3 / 4,
+                child: Center(
+                  child: Text('加载中 ${index + 1}/${viewState.images.length}'),
+                ),
+              ),
+        errorWidget: (context, errorUrl, error) {
+          return paged
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('图片加载失败'),
+                      const SizedBox(height: 8),
+                      OutlinedButton(
+                        key: ValueKey<String>('comic-reader-retry-$imageUrl'),
+                        onPressed: () => _controller().retryImage(imageUrl),
+                        child: const Text('重试'),
+                      ),
+                    ],
+                  ),
+                )
+              : Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Column(
+                    children: [
+                      const Text('图片加载失败'),
+                      const SizedBox(height: 8),
+                      OutlinedButton(
+                        key: ValueKey<String>('comic-reader-retry-$imageUrl'),
+                        onPressed: () => _controller().retryImage(imageUrl),
+                        child: const Text('重试'),
+                      ),
+                    ],
+                  ),
+                );
+        },
+      ),
+    );
+
     if (paged) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-        child: SizedBox.expand(
-          child: CachedNetworkImage(
-            imageUrl: imageUrl,
-            fit: BoxFit.contain,
-            placeholder: (context, placeholderUrl) => Center(
-              child: Text('加载中 ${index + 1}/${viewState.images.length}'),
-            ),
-            errorWidget: (context, errorUrl, error) {
-              return Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('图片加载失败'),
-                    const SizedBox(height: 8),
-                    OutlinedButton(
-                      key: ValueKey<String>('comic-reader-retry-$imageUrl'),
-                      onPressed: () => _controller().retryImage(imageUrl),
-                      child: const Text('重试'),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
+        child: SizedBox.expand(child: imageWidget),
       );
     }
 
     return Column(
       children: [
-        CachedNetworkImage(
-          imageUrl: imageUrl,
-          fit: BoxFit.fitWidth,
-          width: double.infinity,
-          placeholder: (context, placeholderUrl) => AspectRatio(
-            aspectRatio: 3 / 4,
-            child: Center(
-              child: Text('加载中 ${index + 1}/${viewState.images.length}'),
-            ),
-          ),
-          errorWidget: (context, errorUrl, error) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Column(
-                children: [
-                  const Text('图片加载失败'),
-                  const SizedBox(height: 8),
-                  OutlinedButton(
-                    key: ValueKey<String>('comic-reader-retry-$imageUrl'),
-                    onPressed: () => _controller().retryImage(imageUrl),
-                    child: const Text('重试'),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
+        imageWidget,
         const SizedBox(height: 8),
       ],
     );
+  }
+
+  bool get _isAnyImageZoomed => _zoomedStateByIndex.values.any((isZoomed) => isZoomed);
+
+  void _onImageZoomStateChanged(int imageIndex, bool isZoomed) {
+    final current = _zoomedStateByIndex[imageIndex] ?? false;
+    if (current == isZoomed) {
+      return;
+    }
+    setState(() {
+      if (isZoomed) {
+        _zoomedStateByIndex[imageIndex] = true;
+      } else {
+        _zoomedStateByIndex.remove(imageIndex);
+      }
+    });
   }
 
   Widget _buildReaderTopOverlayLayer(ComicReaderViewState viewState) {

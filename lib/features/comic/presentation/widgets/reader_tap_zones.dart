@@ -10,11 +10,13 @@ class ReaderTapZones extends StatelessWidget {
     required this.onCenterTap,
     this.onLeftTap,
     this.onRightTap,
+    this.enabled = true,
   });
 
   final VoidCallback onCenterTap;
   final VoidCallback? onLeftTap;
   final VoidCallback? onRightTap;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +27,7 @@ class ReaderTapZones extends StatelessWidget {
             child: GestureDetector(
               key: const Key('comic-reader-left-tap-zone'),
               behavior: HitTestBehavior.translucent,
-              onTap: onLeftTap,
+              onTap: enabled ? onLeftTap : null,
               child: const SizedBox.expand(),
             ),
           ),
@@ -33,7 +35,7 @@ class ReaderTapZones extends StatelessWidget {
             child: GestureDetector(
               key: const Key('comic-reader-center-tap-zone'),
               behavior: HitTestBehavior.translucent,
-              onTap: onCenterTap,
+              onTap: enabled ? onCenterTap : null,
               child: const SizedBox.expand(),
             ),
           ),
@@ -41,7 +43,7 @@ class ReaderTapZones extends StatelessWidget {
             child: GestureDetector(
               key: const Key('comic-reader-right-tap-zone'),
               behavior: HitTestBehavior.translucent,
-              onTap: onRightTap,
+              onTap: enabled ? onRightTap : null,
               child: const SizedBox.expand(),
             ),
           ),
