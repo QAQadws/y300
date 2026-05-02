@@ -16,6 +16,8 @@ class ReaderProgressBar extends StatelessWidget {
     required this.onNextEpisode,
     required this.onChanged,
     required this.onChangeEnd,
+    this.onChangeStart,
+    this.interactionLocked = false,
   });
 
   final int currentPage;
@@ -26,6 +28,8 @@ class ReaderProgressBar extends StatelessWidget {
   final VoidCallback onNextEpisode;
   final ValueChanged<double> onChanged;
   final ValueChanged<double> onChangeEnd;
+  final ValueChanged<double>? onChangeStart;
+  final bool interactionLocked;
 
   @override
   Widget build(BuildContext context) {
@@ -66,8 +70,9 @@ class ReaderProgressBar extends StatelessWidget {
                     min: 0,
                     max: maxValue,
                     divisions: safeTotal > 1 ? safeTotal - 1 : null,
-                    onChanged: onChanged,
-                    onChangeEnd: onChangeEnd,
+                    onChangeStart: interactionLocked ? null : onChangeStart,
+                    onChanged: interactionLocked ? null : onChanged,
+                    onChangeEnd: interactionLocked ? null : onChangeEnd,
                   ),
                 ),
                 SizedBox(

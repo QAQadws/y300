@@ -15,6 +15,8 @@ class ReaderBottomPanel extends StatelessWidget {
     required this.onNextEpisode,
     required this.onProgressChanged,
     required this.onProgressChangeEnd,
+    this.onProgressChangeStart,
+    this.isProgressInteractionLocked = false,
   });
 
   final ReaderModePreference currentMode;
@@ -27,6 +29,8 @@ class ReaderBottomPanel extends StatelessWidget {
   final VoidCallback onNextEpisode;
   final ValueChanged<double> onProgressChanged;
   final ValueChanged<double> onProgressChangeEnd;
+  final ValueChanged<double>? onProgressChangeStart;
+  final bool isProgressInteractionLocked;
 
   @override
   Widget build(BuildContext context) {
@@ -46,8 +50,10 @@ class ReaderBottomPanel extends StatelessWidget {
                 hasNextEpisode: hasNextEpisode,
                 onPreviousEpisode: onPreviousEpisode,
                 onNextEpisode: onNextEpisode,
+                onChangeStart: onProgressChangeStart,
                 onChanged: onProgressChanged,
                 onChangeEnd: onProgressChangeEnd,
+                interactionLocked: isProgressInteractionLocked,
               ),
               const SizedBox(height: 10),
               SegmentedButton<ReaderModePreference>(

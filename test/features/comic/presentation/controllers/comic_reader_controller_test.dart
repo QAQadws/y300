@@ -1,9 +1,13 @@
+﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 
 void main() {
   setUp(() {
@@ -20,13 +24,94 @@ void main() {
     expect(episodes.first.episodeId, 'yamibo:100:101');
     expect(episodes.last.episodeId, 'yamibo:100:103');
   });
+
+  test('jumpToImageIndex prefetches around target index', () async {
+    final repository = _ReaderRepoForControllerTest();
+    final service = _ReaderServiceSpy();
+    final container = ProviderContainer(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(repository),
+        comicReaderServiceProvider.overrideWithValue(service),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final args = const ComicReaderArgs(comicId: 'yamibo:100', episodeId: 'yamibo:100:101');
+    await container.read(comicReaderControllerProvider(args).future);
+
+    await container
+        .read(comicReaderControllerProvider(args).notifier)
+        .jumpToImageIndex(3, scrollOffset: 120);
+
+    expect(service.prefetchedBatches, isNotEmpty);
+    expect(service.prefetchedBatches.last.length, greaterThanOrEqualTo(3));
+  });
+
+  test('onScrollProgress persists with debounce', () async {
+    final repository = _ReaderRepoForControllerTest();
+    final service = _ReaderServiceSpy();
+    final container = ProviderContainer(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(repository),
+        comicReaderServiceProvider.overrideWithValue(service),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final args = const ComicReaderArgs(comicId: 'yamibo:100', episodeId: 'yamibo:100:101');
+    final subscription = container.listen<AsyncValue<ComicReaderViewState>>(
+      comicReaderControllerProvider(args),
+      (previous, next) {},
+      fireImmediately: true,
+    );
+    addTearDown(subscription.close);
+    await container.read(comicReaderControllerProvider(args).future);
+
+    final notifier = container.read(comicReaderControllerProvider(args).notifier);
+    await notifier.onScrollProgress(currentIndex: 1, scrollOffset: 30);
+    await notifier.onScrollProgress(currentIndex: 2, scrollOffset: 60);
+    await notifier.onScrollProgress(currentIndex: 3, scrollOffset: 90);
+
+    // Allow debounce timer callback to run.
+    await Future<void>.delayed(const Duration(milliseconds: 260));
+
+    expect(repository.progressWrites, isNotEmpty);
+    expect(repository.progressWrites.last.imageIndex, 3);
+    expect(repository.progressWrites.last.scrollOffset, 90);
+  });
+}
+
+class _ReaderServiceSpy implements ComicReaderService {
+  final List<List<String>> prefetchedBatches = <List<String>>[];
+
+  @override
+  Future<bool> cacheImage({required String imageUrl}) async => true;
+
+  @override
+  Future<List<String>> fetchEpisodeImagesByTid(String tid) async {
+    return const <String>[];
+  }
+
+  @override
+  Future<void> prefetchImages({required List<String> imageUrls}) async {
+    prefetchedBatches.add(imageUrls);
+  }
+}
+
+class _ProgressWrite {
+  const _ProgressWrite({
+    required this.imageIndex,
+    required this.scrollOffset,
+  });
+
+  final int imageIndex;
+  final double scrollOffset;
 }
 
 /// Lightweight fake to document expected episode ordering in controller tests.
-///
-/// Full AsyncNotifier wiring is covered by widget tests; this fake focuses on
-/// phase-0 API assumptions for readable review.
 class _ReaderRepoForControllerTest implements ComicRepository {
+  final List<_ProgressWrite> progressWrites = <_ProgressWrite>[];
+
   @override
   Future<void> addToShelf({
     required String comicId,
@@ -82,7 +167,38 @@ class _ReaderRepoForControllerTest implements ComicRepository {
 
   @override
   Future<List<ComicEpisodeImageItem>> getEpisodeImages({required String episodeId}) async {
-    return const <ComicEpisodeImageItem>[];
+    return const <ComicEpisodeImageItem>[
+      ComicEpisodeImageItem(
+        episodeId: 'yamibo:100:101',
+        imageUrl: 'https://img.test/101-1.jpg',
+        imageIndex: 0,
+        cacheStatus: 'none',
+      ),
+      ComicEpisodeImageItem(
+        episodeId: 'yamibo:100:101',
+        imageUrl: 'https://img.test/101-2.jpg',
+        imageIndex: 1,
+        cacheStatus: 'none',
+      ),
+      ComicEpisodeImageItem(
+        episodeId: 'yamibo:100:101',
+        imageUrl: 'https://img.test/101-3.jpg',
+        imageIndex: 2,
+        cacheStatus: 'none',
+      ),
+      ComicEpisodeImageItem(
+        episodeId: 'yamibo:100:101',
+        imageUrl: 'https://img.test/101-4.jpg',
+        imageIndex: 3,
+        cacheStatus: 'none',
+      ),
+      ComicEpisodeImageItem(
+        episodeId: 'yamibo:100:101',
+        imageUrl: 'https://img.test/101-5.jpg',
+        imageIndex: 4,
+        cacheStatus: 'none',
+      ),
+    ];
   }
 
   @override
@@ -94,7 +210,9 @@ class _ReaderRepoForControllerTest implements ComicRepository {
   }
 
   @override
-  Future<ComicReadingProgress?> getLastReadProgress({required String comicId}) async => null;
+  Future<ComicReadingProgress?> getLastReadProgress({required String comicId}) async {
+    return null;
+  }
 
   @override
   Future<List<ComicShelfItem>> getShelfItems({String categoryId = 'default'}) async => const <ComicShelfItem>[];
@@ -144,5 +262,7 @@ class _ReaderRepoForControllerTest implements ComicRepository {
     required String episodeId,
     required int imageIndex,
     required double scrollOffset,
-  }) async {}
+  }) async {
+    progressWrites.add(_ProgressWrite(imageIndex: imageIndex, scrollOffset: scrollOffset));
+  }
 }

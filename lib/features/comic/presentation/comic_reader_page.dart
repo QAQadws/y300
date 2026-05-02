@@ -28,8 +28,14 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
   PageController? _pageController;
   int _lastKnownIndex = 0;
 
-  // Preview index used while dragging slider thumb.
+  // Slider session and commit state machine:
+  // 1) drag session preview
+  // 2) commit lock while applying jump
+  // 3) unlock after target sync
   int? _sliderPreviewIndex;
+  DateTime? _lastSliderCommitAt;
+  bool _isSliderCommitInFlight = false;
+  int? _pendingCommittedIndex;
 
   bool _isMenuVisible = false;
   late final AnimationController _menuAnimationController;
@@ -192,8 +198,12 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     ReaderModePreference mode,
     ComicReaderViewState viewState,
   ) {
+    if (_isSliderCommitInFlight) {
+      return;
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
+      if (!mounted || _isSliderCommitInFlight) {
         return;
       }
       if (mode == ReaderModePreference.vertical) {
@@ -217,7 +227,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
   }
 
   void _onVerticalScroll() {
-    if (!_scrollController.hasClients) {
+    if (!_scrollController.hasClients || _isSliderCommitInFlight) {
       return;
     }
     final position = _scrollController.position;
@@ -246,6 +256,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     }
     _lastKnownIndex = pageIndex;
     await _controller().jumpToImageIndex(pageIndex, scrollOffset: 0);
+    _tryReleaseSliderCommitLock(pageIndex);
   }
 
   void _turnPageByTap({
@@ -275,6 +286,13 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     );
   }
 
+  void _onProgressChangeStart(double sliderValue, int maxLength) {
+    final index = sliderValue.round().clamp(0, maxLength - 1);
+    setState(() {
+      _sliderPreviewIndex = index;
+    });
+  }
+
   void _onProgressChanged(double sliderValue, int maxLength) {
     final index = sliderValue.round().clamp(0, maxLength - 1);
     setState(() {
@@ -287,16 +305,29 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     required ReaderModePreference mode,
     required ComicReaderViewState viewState,
   }) async {
+    final now = DateTime.now();
+    if (_lastSliderCommitAt != null &&
+        now.difference(_lastSliderCommitAt!) < const Duration(milliseconds: 120)) {
+      return;
+    }
+    _lastSliderCommitAt = now;
+
     final targetIndex = sliderValue.round().clamp(0, viewState.images.length - 1);
 
     setState(() {
-      _sliderPreviewIndex = null;
+      _isSliderCommitInFlight = true;
+      _pendingCommittedIndex = targetIndex;
+      _sliderPreviewIndex = targetIndex;
       _lastKnownIndex = targetIndex;
     });
 
     if (mode == ReaderModePreference.vertical) {
-      _jumpVerticalToIndex(targetIndex, viewState.images.length);
-      await _controller().jumpToImageIndex(targetIndex, scrollOffset: _scrollController.offset);
+      await _jumpVerticalToIndex(targetIndex, viewState.images.length);
+      await _controller().jumpToImageIndex(
+        targetIndex,
+        scrollOffset: _scrollController.hasClients ? _scrollController.offset : 0,
+      );
+      _tryReleaseSliderCommitLock(targetIndex);
       return;
     }
 
@@ -305,9 +336,21 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
       pageController.jumpToPage(targetIndex);
     }
     await _controller().jumpToImageIndex(targetIndex, scrollOffset: 0);
+    _tryReleaseSliderCommitLock(targetIndex);
   }
 
-  void _jumpVerticalToIndex(int targetIndex, int totalImages) {
+  void _tryReleaseSliderCommitLock(int reachedIndex) {
+    if (!_isSliderCommitInFlight || _pendingCommittedIndex != reachedIndex || !mounted) {
+      return;
+    }
+    setState(() {
+      _isSliderCommitInFlight = false;
+      _pendingCommittedIndex = null;
+      _sliderPreviewIndex = null;
+    });
+  }
+
+  Future<void> _jumpVerticalToIndex(int targetIndex, int totalImages) async {
     if (!_scrollController.hasClients || totalImages <= 1) {
       return;
     }
@@ -318,6 +361,16 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     final ratio = targetIndex / (totalImages - 1);
     final offset = (maxScroll * ratio).clamp(0.0, maxScroll);
     _scrollController.jumpTo(offset);
+    // Wait for next frame without creating an extra timer in tests.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!_scrollController.hasClients) {
+      return;
+    }
+    final latestMax = _scrollController.position.maxScrollExtent;
+    final correctedOffset = (latestMax * ratio).clamp(0.0, latestMax);
+    if ((_scrollController.offset - correctedOffset).abs() > 1.5) {
+      _scrollController.jumpTo(correctedOffset);
+    }
   }
 
   Widget _buildReaderContentLayer({
@@ -386,8 +439,6 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     bool paged = false,
   }) {
     if (paged) {
-      // In paged mode each page has strict viewport constraints.
-      // Use contain-fit image inside the page box to prevent RenderFlex overflow.
       return Padding(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
         child: SizedBox.expand(
@@ -498,12 +549,14 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
             hasNextEpisode: viewState.hasNextEpisode,
             onPreviousEpisode: () => Navigator.of(context).pop('previous'),
             onNextEpisode: () => Navigator.of(context).pop('next'),
+            onProgressChangeStart: (value) => _onProgressChangeStart(value, total),
             onProgressChanged: (value) => _onProgressChanged(value, total),
             onProgressChangeEnd: (value) => _onProgressChangeEnd(
               sliderValue: value,
               mode: mode,
               viewState: viewState,
             ),
+            isProgressInteractionLocked: _isSliderCommitInFlight,
           ),
         ),
       ),

@@ -59,6 +59,16 @@ abstract class ComicReaderService {
   Future<List<String>> fetchEpisodeImagesByTid(String tid);
 
   Future<bool> cacheImage({required String imageUrl});
+
+  /// Warm up a batch of images to reduce visible loading delay around jumps.
+  ///
+  /// Default implementation keeps backward compatibility for tests/fakes by
+  /// reusing `cacheImage`.
+  Future<void> prefetchImages({required List<String> imageUrls}) async {
+    for (final imageUrl in imageUrls) {
+      await cacheImage(imageUrl: imageUrl);
+    }
+  }
 }
 
 class NetworkComicReaderService implements ComicReaderService {
@@ -96,6 +106,13 @@ class NetworkComicReaderService implements ComicReaderService {
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+  @override
+  Future<void> prefetchImages({required List<String> imageUrls}) async {
+    for (final imageUrl in imageUrls) {
+      await cacheImage(imageUrl: imageUrl);
     }
   }
 }

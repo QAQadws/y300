@@ -116,6 +116,8 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   final ComicReaderArgs _args;
   late final ComicRepository _repository;
   late final ComicReaderService _readerService;
+  Timer? _progressPersistDebounceTimer;
+  int _persistVersion = 0;
 
   @override
   FutureOr<ComicReaderViewState> build() async {
@@ -123,6 +125,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     // async continuations after provider disposal.
     _repository = ref.read(comicRepositoryProvider);
     _readerService = ref.read(comicReaderServiceProvider);
+    ref.onDispose(() {
+      _progressPersistDebounceTimer?.cancel();
+    });
     return _loadState();
   }
 
@@ -237,10 +242,8 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (current == null) {
       return;
     }
-    await _repository.updateLastReadProgress(
-      comicId: _args.comicId,
-      episodeId: _args.episodeId,
-      imageIndex: currentIndex,
+    _scheduleProgressPersistence(
+      currentIndex: currentIndex,
       scrollOffset: scrollOffset,
     );
     state = AsyncData(
@@ -274,6 +277,46 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         lastScrollOffset: nextOffset,
       ),
     );
+    // Warm up images around the jump target to improve immediate readability.
+    unawaited(_prefetchAroundIndex(clampedIndex));
+  }
+
+  void _scheduleProgressPersistence({
+    required int currentIndex,
+    required double scrollOffset,
+  }) {
+    _progressPersistDebounceTimer?.cancel();
+    final version = ++_persistVersion;
+    _progressPersistDebounceTimer = Timer(
+      const Duration(milliseconds: 180),
+      () async {
+        await _repository.updateLastReadProgress(
+          comicId: _args.comicId,
+          episodeId: _args.episodeId,
+          imageIndex: currentIndex,
+          scrollOffset: scrollOffset,
+        );
+        if (!ref.mounted || version != _persistVersion) {
+          return;
+        }
+      },
+    );
+  }
+
+  Future<void> _prefetchAroundIndex(int centerIndex) async {
+    final current = state.value;
+    if (current == null || current.images.isEmpty) {
+      return;
+    }
+
+    const radius = 2;
+    final start = (centerIndex - radius).clamp(0, current.images.length - 1);
+    final end = (centerIndex + radius).clamp(0, current.images.length - 1);
+    final urls = <String>[];
+    for (var i = start; i <= end; i++) {
+      urls.add(current.images[i].imageUrl);
+    }
+    await _readerService.prefetchImages(imageUrls: urls);
   }
 
   /// Returns previous episode id if available.

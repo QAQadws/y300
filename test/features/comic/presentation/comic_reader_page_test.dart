@@ -124,6 +124,35 @@ void main() {
     expect(find.byKey(const Key('comic-reader-current-page-label')), findsOneWidget);
     expect(find.byKey(const Key('comic-reader-total-page-label')), findsOneWidget);
   });
+
+  testWidgets('ComicReaderPage keeps slider stable during jump commit', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+          comicReaderServiceProvider.overrideWithValue(_ReaderFakeService()),
+        ],
+        child: const MaterialApp(
+          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('comic-reader-center-tap-zone')));
+    await tester.pumpAndSettle();
+
+    final sliderFinder = find.byKey(const Key('comic-reader-progress-slider'));
+    expect(sliderFinder, findsOneWidget);
+
+    await tester.drag(sliderFinder, const Offset(280, 0));
+    await tester.pump();
+
+    // During commit phase, slider and labels should remain stable and visible.
+    expect(find.byKey(const Key('comic-reader-progress-slider')), findsOneWidget);
+    expect(find.byKey(const Key('comic-reader-current-page-label')), findsOneWidget);
+    expect(find.byKey(const Key('comic-reader-total-page-label')), findsOneWidget);
+  });
 }
 
 class _ReaderFakeService implements ComicReaderService {
@@ -137,6 +166,9 @@ class _ReaderFakeService implements ComicReaderService {
       'https://img.test/101-2.jpg',
     ];
   }
+
+  @override
+  Future<void> prefetchImages({required List<String> imageUrls}) async {}
 }
 
 class _ReaderFakeRepository implements ComicRepository {

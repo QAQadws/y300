@@ -19,6 +19,7 @@ void main() {
             hasNextEpisode: true,
             onPreviousEpisode: () {},
             onNextEpisode: () {},
+            onProgressChangeStart: (_) {},
             onProgressChanged: (_) {},
             onProgressChangeEnd: (_) {},
           ),

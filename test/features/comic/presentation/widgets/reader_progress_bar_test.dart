@@ -45,4 +45,34 @@ void main() {
     expect(changed, isTrue);
     expect(ended, isTrue);
   });
+
+  testWidgets('progress bar disables slider interaction when locked', (tester) async {
+    var changed = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ReaderProgressBar(
+            currentPage: 2,
+            totalPages: 8,
+            hasPreviousEpisode: true,
+            hasNextEpisode: true,
+            onPreviousEpisode: () {},
+            onNextEpisode: () {},
+            onChanged: (_) => changed = true,
+            onChangeEnd: (_) {},
+            interactionLocked: true,
+          ),
+        ),
+      ),
+    );
+
+    await tester.drag(
+      find.byKey(const Key('comic-reader-progress-slider')),
+      const Offset(180, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(changed, isFalse);
+  });
 }

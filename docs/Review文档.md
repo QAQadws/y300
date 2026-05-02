@@ -740,3 +740,87 @@
 本轮按约定未执行自动化命令，请本地运行并回传结果：
 1. `flutter test`
 2. `flutter analyze`
+
+---
+
+## 跳转性能优化 Review补充清单（进度条卡顿/偶发不跳）
+
+### 一、跳转命中率
+- [ ] 进度条快速拖动释放后能稳定跳转到目标页
+- [ ] 连续多次短间隔释放不出现“偶发不跳”
+- [ ] 垂直模式在图片尚未完全布局时仍可纠偏到目标区域
+
+### 二、性能体验
+- [ ] 高频滚动时无明显主线程卡顿
+- [ ] 拖动进度条过程中 UI 反馈平滑
+- [ ] 跳页后目标页及相邻页加载感知改善（近邻预加载生效）
+
+### 三、数据一致性
+- [ ] 进度落库最终值与最后停留页一致
+- [ ] 防抖后无异常进度回退/跳动
+- [ ] 模式切换后进度持久化逻辑不回归
+
+### 四、工程化与解耦
+- [ ] 预加载能力通过 `ComicReaderService.prefetchImages` 抽象，不侵入页面层
+- [ ] 控制器负责防抖与预加载编排，页面仅触发行为
+- [ ] 垂直跳转纠偏逻辑集中在 `_jumpVerticalToIndex`，便于后续调参
+
+### 五、测试覆盖
+- [ ] `comic_reader_controller_test.dart` 覆盖预加载窗口触发
+- [ ] `comic_reader_controller_test.dart` 覆盖滚动进度防抖落库
+
+### 六、执行说明
+本轮按约定未执行自动化命令，请本地运行并回传结果：
+1. `flutter test`
+2. `flutter analyze`
+
+### 编译修复检查项（prefetchImages 接口）
+
+- [ ] `NetworkComicReaderService` 已显式实现 `prefetchImages`
+- [ ] `ComicReaderPage` 相关 fake service 已显式实现 `prefetchImages`
+- [ ] 不再出现 `non_abstract_class_inherits_abstract_member` 编译错误
+
+回归命令（由你本地执行）：
+1. `flutter test`
+2. `flutter analyze`
+
+### 测试生命周期检查项（autoDispose + debounce）
+
+- [ ] `onScrollProgress persists with debounce` 用例中已保持 provider 订阅存活
+- [ ] 定时器窗口内 provider 不被 autoDispose 回收
+- [ ] 断言落库记录非空且最终值正确
+
+---
+
+## 进度条防抽搐 Review补充清单
+
+### 一、交互稳定性
+- [ ] 进度条首次点击/拖动释放可稳定触发跳转
+- [ ] 不再出现“来回抽搐后回原位”现象
+- [ ] 提交过程中滑块不会被旧状态反向拉回
+
+### 二、状态机验证
+- [ ] 拖动开始进入 session 态
+- [ ] 提交后进入 commit-in-flight 态并锁定交互
+- [ ] 到达目标页后自动解锁并清理 pending 状态
+
+### 三、组件解耦
+- [ ] `ReaderProgressBar` 仅处理输入与锁定渲染，不承载业务逻辑
+- [ ] `ReaderBottomPanel` 仅透传进度回调与锁定参数
+- [ ] `ComicReaderPage` 集中维护提交状态机与模式分发
+
+### 四、测试覆盖
+- [ ] `reader_progress_bar_test.dart` 覆盖锁定态不可交互
+- [ ] `comic_reader_page_test.dart` 覆盖提交期间关键节点稳定性
+- [ ] `reader_bottom_panel_test.dart` 适配新增参数
+
+### 五、执行说明
+请本地执行并回传：
+1. `flutter test`
+2. `flutter analyze`
+
+### 回归补充检查项（pending timer + warning）
+
+- [ ] 进度条稳定性测试不再出现 pending timer
+- [ ] `comic_reader_page.dart` 无 `_isSliderSessionActive` 未使用告警
+- [ ] `flutter analyze` 无新增 warning/error
