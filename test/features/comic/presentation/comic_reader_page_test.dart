@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
@@ -10,6 +11,10 @@ import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/comic_reader_page.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+  });
+
   testWidgets('ComicReaderPage renders images and cache actions', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -37,6 +42,54 @@ void main() {
     expect(find.byKey(const Key('comic-reader-cache-unread')), findsOneWidget);
     expect(find.byKey(const Key('comic-reader-prev-episode-button')), findsOneWidget);
     expect(find.byKey(const Key('comic-reader-next-episode-button')), findsOneWidget);
+    expect(find.byKey(const Key('comic-reader-mode-switch')), findsOneWidget);
+  });
+
+  testWidgets('ComicReaderPage uses paged renderer when persisted mode is ltr', (tester) async {
+    SharedPreferences.setMockInitialValues(const <String, Object>{
+      'reader_pref_mode': 'ltr',
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+          comicReaderServiceProvider.overrideWithValue(_ReaderFakeService()),
+        ],
+        child: const MaterialApp(
+          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('comic-reader-page-view')), findsOneWidget);
+    expect(find.byKey(const Key('comic-reader-image-list')), findsNothing);
+  });
+
+  testWidgets('ComicReaderPage switches from vertical to rtl mode via bottom switch', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+          comicReaderServiceProvider.overrideWithValue(_ReaderFakeService()),
+        ],
+        child: const MaterialApp(
+          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('comic-reader-image-list')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('comic-reader-center-tap-zone')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('右到左'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('comic-reader-page-view')), findsOneWidget);
   });
 }
 

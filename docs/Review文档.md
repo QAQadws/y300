@@ -659,3 +659,49 @@
 本轮按约定未执行自动化命令，请本地运行并回传结果：
 1. `flutter test`
 2. `flutter analyze`
+
+---
+
+## 漫画阅读迁移阶段3 Review补充清单（阅读模式切换）
+
+### 一、阅读模式主链路
+- [ ] 底部菜单存在阅读模式切换控件（垂直/左到右/右到左）
+- [ ] 三种模式切换可即时生效
+- [ ] `vertical` 使用 `ListView` 轨道
+- [ ] `ltr/rtl` 使用 `PageView` 轨道
+
+### 二、模式映射正确性
+- [ ] `ltr` 对应 `PageView(reverse: false)`
+- [ ] `rtl` 对应 `PageView(reverse: true)`
+- [ ] 分页模式左右点击分区翻页方向符合模式语义
+
+### 三、进度对齐与持久化
+- [ ] 模式切换以逻辑 index 对齐，不丢页
+- [ ] 切换后调用偏好持久化，重进阅读页可恢复上次模式
+- [ ] 页面初始化时按 `reader_preferences` 选择渲染轨道
+
+### 四、工程化解耦检查
+- [ ] `ReaderBottomPanel` 仅负责 UI 与回调，不包含业务状态编排
+- [ ] `ComicReaderPage` 负责流程编排与状态同步
+- [ ] 内容渲染按垂直/分页拆分独立方法，避免单函数过度膨胀
+
+### 五、测试覆盖
+- [ ] `comic_reader_page_test.dart` 覆盖三模式核心路径（默认、持久化恢复、切换生效）
+- [ ] `reader_bottom_panel_test.dart` 覆盖模式切换回调
+
+### 六、执行说明
+本轮按约定未执行自动化命令，请本地运行并回传结果：
+1. `flutter test`
+2. `flutter analyze`
+
+### 阶段3回归修复检查项（分页模式溢出）
+
+- [ ] `ltr` 模式下阅读页无 `RenderFlex overflow` 报错
+- [ ] `rtl` 模式下阅读页无 `RenderFlex overflow` 报错
+- [ ] 分页模式单页图片在视口内完整显示（`BoxFit.contain`）
+- [ ] 分页模式图片加载失败态不触发溢出
+- [ ] 纵向模式渲染行为未回退（仍为宽度铺满连续流）
+
+回归命令（由你本地执行）：
+1. `flutter test`
+2. `flutter analyze`
