@@ -4,6 +4,7 @@ import 'package:y300/features/forum/data/models/forum_index_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
+import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/shared/widgets/app_skeleton.dart';
 
 class ForumHomePage extends ConsumerWidget {
@@ -16,6 +17,20 @@ class ForumHomePage extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('论坛首页'),
+        actions: [
+          IconButton(
+            key: const Key('forum-home-search-button'),
+            tooltip: '搜索漫画区',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const ForumSearchPage(srhfid: '30'),
+                ),
+              );
+            },
+            icon: const Icon(Icons.search),
+          ),
+        ],
       ),
       body: state.when(
         loading: () => const ForumHomeSkeleton(key: Key('forum-home-skeleton')),

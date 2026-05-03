@@ -108,12 +108,29 @@ class ComicEpisodeDiscoveryService {
   final EpisodeDiscoveryConfig _config;
 
   Future<EpisodeDiscoveryResult> discoverFromTid(String tid) async {
+    return discoverFromTidWithPreference(tid: tid, preferCatalogFirst: false);
+  }
+
+  Future<EpisodeDiscoveryResult> discoverFromTidWithPreference({
+    required String tid,
+    required bool preferCatalogFirst,
+  }) async {
     final root = await _fetchAndParse(tid);
     if (root == null) {
       return const EpisodeDiscoveryResult(
         strategy: EpisodeDiscoveryStrategy.direct,
         episodeLinks: <ComicEpisodeLink>[],
       );
+    }
+
+    if (preferCatalogFirst && root.parsed.catalogUrl != null) {
+      final catalogLinks = await _discoverFromCatalog(root.parsed.catalogUrl);
+      if (catalogLinks.isNotEmpty) {
+        return EpisodeDiscoveryResult(
+          strategy: EpisodeDiscoveryStrategy.catalog,
+          episodeLinks: catalogLinks,
+        );
+      }
     }
 
     if (_isDirectEnough(root.parsed.episodeLinks)) {

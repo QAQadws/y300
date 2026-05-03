@@ -10,6 +10,8 @@ import 'package:y300/features/comic/domain/services/comic_episode_discovery_serv
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
 import 'package:y300/features/comic/domain/services/comic_detector.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
+import 'package:y300/features/search/data/models/discuz_search_models.dart';
+import 'package:y300/features/search/data/discuz_search_service.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
 
 final comicDetectorProvider = Provider<ComicDetector>((ref) {
@@ -31,15 +33,102 @@ abstract class ComicEpisodeRefreshService {
 class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   NetworkComicEpisodeRefreshService({
     required ComicEpisodeDiscoveryService discoveryService,
-  }) : _discoveryService = discoveryService;
+    required ForumSearchService searchService,
+    required ComicSubjectParser subjectParser,
+    ThreadSeedFetcher? threadSeedFetcher,
+  }) : _discoveryService = discoveryService,
+       _searchService = searchService,
+       _subjectParser = subjectParser,
+       _threadSeedFetcher = threadSeedFetcher;
 
   final ComicEpisodeDiscoveryService _discoveryService;
+  final ForumSearchService _searchService;
+  final ComicSubjectParser _subjectParser;
+  final ThreadSeedFetcher? _threadSeedFetcher;
 
   @override
   Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
-    final result = await _discoveryService.discoverFromTid(tid);
-    return result.episodeLinks;
+    final preferred = await _discoveryService.discoverFromTidWithPreference(
+      tid: tid,
+      preferCatalogFirst: true,
+    );
+    if (preferred.episodeLinks.isNotEmpty) {
+      return preferred.episodeLinks;
+    }
+
+    final fallback = await _discoveryService.discoverFromTid(tid);
+    if (fallback.episodeLinks.isNotEmpty) {
+      return fallback.episodeLinks;
+    }
+
+    return _searchFallbackFromCurrentTid(tid);
   }
+
+  Future<List<ComicEpisodeLink>> _searchFallbackFromCurrentTid(String tid) async {
+    final thread = await _fetchThreadDetail(tid);
+    if (thread == null) {
+      return const <ComicEpisodeLink>[];
+    }
+    final keyword = _subjectParser.parse(thread.subject).normalizedTitle.trim();
+    if (keyword.isEmpty) {
+      return const <ComicEpisodeLink>[];
+    }
+
+    final search = await _searchService.searchForum(
+      keyword: keyword,
+      srhfid: '30',
+      enforceRateLimit: true,
+    );
+    if (search.rateLimited || search.items.isEmpty) {
+      return const <ComicEpisodeLink>[];
+    }
+
+    final currentScore = _scoreTitleSimilarity(thread.subject, keyword);
+    final candidates = search.items
+        .map(
+          (item) => _ScoredSearchItem(
+            item: item,
+            score: _scoreTitleSimilarity(item.title, keyword),
+          ),
+        )
+        .where((item) => item.score >= currentScore - 0.25)
+        .toList()
+      ..sort((a, b) => b.score.compareTo(a.score));
+
+    const topK = 3;
+    for (final candidate in candidates.take(topK)) {
+      final result = await _discoveryService.discoverFromTidWithPreference(
+        tid: candidate.item.tid,
+        preferCatalogFirst: true,
+      );
+      if (result.episodeLinks.isNotEmpty) {
+        return result.episodeLinks;
+      }
+    }
+    return const <ComicEpisodeLink>[];
+  }
+
+  Future<ThreadSeed?> _fetchThreadDetail(String tid) async {
+    final fetcher = _threadSeedFetcher;
+    if (fetcher != null) {
+      return fetcher(tid);
+    }
+    return null;
+  }
+
+  double _scoreTitleSimilarity(String title, String keyword) {
+    final normalizedTitle = title.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+    final normalizedKeyword = keyword.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+    if (normalizedTitle.isEmpty || normalizedKeyword.isEmpty) {
+      return 0;
+    }
+    if (normalizedTitle.contains(normalizedKeyword)) {
+      return 1;
+    }
+    final overlap = normalizedKeyword.split('').where(normalizedTitle.contains).length;
+    return overlap / normalizedKeyword.length;
+  }
+
 }
 
 final comicEpisodeDiscoveryServiceProvider = Provider<ComicEpisodeDiscoveryService>((ref) {
@@ -55,8 +144,35 @@ final comicEpisodeDiscoveryServiceProvider = Provider<ComicEpisodeDiscoveryServi
 final comicEpisodeRefreshServiceProvider = Provider<ComicEpisodeRefreshService>((ref) {
   return NetworkComicEpisodeRefreshService(
     discoveryService: ref.read(comicEpisodeDiscoveryServiceProvider),
+    searchService: ref.read(discuzSearchServiceProvider),
+    subjectParser: ref.read(comicSubjectParserProvider),
+    threadSeedFetcher: (tid) async {
+      final result = await ref.read(threadRepositoryProvider).getThreadDetail(tid: tid, page: 1);
+      return result.when(
+        success: (data) => ThreadSeed(subject: data.subject),
+        failure: (_) => null,
+      );
+    },
   );
 });
+
+class _ScoredSearchItem {
+  const _ScoredSearchItem({
+    required this.item,
+    required this.score,
+  });
+
+  final DiscuzSearchResultItem item;
+  final double score;
+}
+
+class ThreadSeed {
+  const ThreadSeed({required this.subject});
+
+  final String subject;
+}
+
+typedef ThreadSeedFetcher = Future<ThreadSeed?> Function(String tid);
 
 abstract class ComicReaderService {
   Future<List<String>> fetchEpisodeImagesByTid(String tid);

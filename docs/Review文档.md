@@ -1030,3 +1030,43 @@
 本轮按约定未执行自动化命令，请本地验证：
 1. `flutter test`
 2. `flutter analyze`
+
+---
+
+## 搜索收藏联动 Phase 3 Review 清单（2026-05-03，搜索服务与限流）
+
+### 一、搜索服务主流程
+- [ ] `DiscuzSearchService` 已实现 `formhash -> POST -> 302 -> 结果页解析` 链路
+- [ ] 搜索结果可稳定提取 `tid/fid/title/url`
+- [ ] 结果过滤仅保留 `fid=30`
+- [ ] `formhash` 为空时返回明确异常信息
+
+### 二、限流能力
+- [ ] 已实现 10 秒 1 次触发规则
+- [ ] 命中限流时返回剩余冷却时间
+- [ ] 最近触发时间已持久化（重启后仍生效）
+- [ ] 限流命中时搜索请求短路，不发网络请求
+
+### 三、刷新链路联动
+- [ ] 漫画刷新在 `direct/recursive/catalog` 均无结果时触发搜索后备
+- [ ] 关键词来源于 `ComicSubjectParser.normalizedTitle`
+- [ ] 搜索结果使用标题相似度评分并按 Top-K 验证
+- [ ] 搜索后备通过注入 `ThreadSeedFetcher` 获取标题种子，不与仓储硬耦合
+
+### 四、页面入口与交互
+- [ ] `ForumHomePage` AppBar 存在搜索入口
+- [ ] 点击后可进入 `ForumSearchPage`
+- [ ] 搜索页能展示“冷却剩余秒数”提示
+- [ ] 搜索页能展示结果列表并可进入帖子详情
+
+### 五、测试覆盖
+- [ ] `test/features/search/data/search_rate_limiter_test.dart`
+- [ ] `test/features/search/data/discuz_search_service_test.dart`
+- [ ] `test/features/search/presentation/forum_search_page_test.dart`
+- [ ] `test/features/comic/domain/services/network_comic_episode_refresh_service_test.dart`
+- [ ] 现有 `discuz_search_html_parser_test.dart` 继续通过
+
+### 六、执行说明
+本轮按协作约定未执行自动化命令，请本地验证：
+1. `flutter test`
+2. `flutter analyze`
