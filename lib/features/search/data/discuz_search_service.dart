@@ -22,18 +22,25 @@ class DiscuzSearchResponse {
     required this.items,
     required this.rateLimited,
     this.retryAfter = Duration.zero,
+    this.nextPageUrl,
   });
 
   final List<DiscuzSearchResultItem> items;
   final bool rateLimited;
   final Duration retryAfter;
+  final String? nextPageUrl;
 }
 
 abstract class ForumSearchService {
   Future<DiscuzSearchResponse> searchForum({
     required String keyword,
-    String srhfid = '30',
+    DiscuzSearchContext context = const DiscuzSearchContext.forum(),
     bool enforceRateLimit = true,
+  });
+
+  Future<DiscuzSearchResponse> fetchNextPage({
+    required String nextPageUrl,
+    DiscuzSearchContext context = const DiscuzSearchContext.forum(),
   });
 }
 
@@ -85,7 +92,7 @@ class DiscuzSearchService implements ForumSearchService {
   @override
   Future<DiscuzSearchResponse> searchForum({
     required String keyword,
-    String srhfid = '30',
+    DiscuzSearchContext context = const DiscuzSearchContext.forum(),
     bool enforceRateLimit = true,
   }) async {
     final trimmed = keyword.trim();
@@ -105,22 +112,20 @@ class DiscuzSearchService implements ForumSearchService {
     }
 
     final formhash = await _loadFormhash();
-    final url = '${AppConfig.siteBaseUrl}/search.php?mod=forum&searchsubmit=yes&mobile=2';
+    final submitUrl = '${AppConfig.siteBaseUrl}/${_buildSubmitPath(context)}';
+    final referer = _buildEntryUrl(context);
     final postResponse = await _guardedRequest(
       () => _dio.post<String>(
-        url,
+        submitUrl,
         data: <String, String>{
           'srchtxt': trimmed,
           'formhash': formhash,
-          'srhfid': srhfid,
+          if ((context.srhfid ?? '').isNotEmpty) 'srhfid': context.srhfid!,
         },
         options: Options(
           contentType: Headers.formUrlEncodedContentType,
           responseType: ResponseType.plain,
-          headers: const <String, String>{
-            // 保持与网页登录来源一致，降低服务端风控误判概率。
-            'referer': '${AppConfig.siteBaseUrl}/search.php?mod=forum&mobile=2',
-          },
+          headers: <String, String>{'referer': referer},
         ),
       ),
       action: '提交搜索请求',
@@ -140,23 +145,47 @@ class DiscuzSearchService implements ForumSearchService {
         searchResultUrl,
         options: Options(
           responseType: ResponseType.plain,
-          headers: const <String, String>{
-            'referer': '${AppConfig.siteBaseUrl}/search.php?mod=forum&mobile=2',
-          },
+          headers: <String, String>{'referer': referer},
         ),
       ),
       action: '获取搜索结果',
     );
-    final html = resultResponse.data ?? '';
-    final parsed = _htmlParser.parse(html);
 
+    final parsed = _htmlParser.parse(resultResponse.data ?? '');
     if (enforceRateLimit) {
       await _rateLimiter.markTriggered();
     }
-
     return DiscuzSearchResponse(
-      items: parsed.items.where((item) => item.fid == srhfid).toList(growable: false),
+      items: _filterItemsByContext(parsed.items, context),
       rateLimited: false,
+      nextPageUrl: parsed.nextPageUrl,
+    );
+  }
+
+  @override
+  Future<DiscuzSearchResponse> fetchNextPage({
+    required String nextPageUrl,
+    DiscuzSearchContext context = const DiscuzSearchContext.forum(),
+  }) async {
+    final trimmed = nextPageUrl.trim();
+    if (trimmed.isEmpty) {
+      return const DiscuzSearchResponse(items: <DiscuzSearchResultItem>[], rateLimited: false);
+    }
+    final response = await _guardedRequest(
+      () => _dio.get<String>(
+        trimmed,
+        options: Options(
+          responseType: ResponseType.plain,
+          headers: <String, String>{'referer': _buildEntryUrl(context)},
+        ),
+      ),
+      action: '获取搜索下一页',
+    );
+    final parsed = _htmlParser.parse(response.data ?? '');
+    return DiscuzSearchResponse(
+      items: _filterItemsByContext(parsed.items, context),
+      rateLimited: false,
+      nextPageUrl: parsed.nextPageUrl,
     );
   }
 
@@ -169,9 +198,7 @@ class DiscuzSearchService implements ForumSearchService {
     } on DioException catch (error) {
       final statusCode = error.response?.statusCode;
       if (statusCode == 503) {
-        throw const DiscuzSearchServiceException(
-          '搜索服务暂时不可用（HTTP 503），请稍后重试',
-        );
+        throw const DiscuzSearchServiceException('搜索服务暂时不可用（HTTP 503），请稍后重试');
       }
       throw DiscuzSearchServiceException('$action失败：${error.message}');
     }
@@ -205,6 +232,37 @@ class DiscuzSearchService implements ForumSearchService {
       }
     }
     return fallbackRequestUri.toString();
+  }
+
+  String _buildSubmitPath(DiscuzSearchContext context) {
+    switch (context.scope) {
+      case DiscuzSearchScope.forum:
+        return 'search.php?mod=forum&searchsubmit=yes&mobile=2';
+      case DiscuzSearchScope.curForum:
+        final fid = context.srhfid ?? '';
+        return 'search.php?mod=curforum&srhfid=$fid&searchsubmit=yes&mobile=2';
+    }
+  }
+
+  String _buildEntryUrl(DiscuzSearchContext context) {
+    switch (context.scope) {
+      case DiscuzSearchScope.forum:
+        return '${AppConfig.siteBaseUrl}/search.php?mod=forum&mobile=2';
+      case DiscuzSearchScope.curForum:
+        final fid = context.srhfid ?? '';
+        return '${AppConfig.siteBaseUrl}/search.php?mod=curforum&srhfid=$fid&mobile=2';
+    }
+  }
+
+  List<DiscuzSearchResultItem> _filterItemsByContext(
+    List<DiscuzSearchResultItem> items,
+    DiscuzSearchContext context,
+  ) {
+    final fid = context.srhfid?.trim();
+    if (fid == null || fid.isEmpty) {
+      return items;
+    }
+    return items.where((item) => item.fid == fid).toList(growable: false);
   }
 }
 

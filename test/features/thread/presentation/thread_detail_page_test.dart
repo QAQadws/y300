@@ -168,6 +168,39 @@ void main() {
 
       expect(find.byKey(const Key('comic-add-to-shelf-button')), findsOneWidget);
     });
+
+    testWidgets('shows search-in-forum action when thread fid is 30', (tester) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '30',
+            subject: '测试主题',
+            author: 'alice',
+            replies: 0,
+            views: 1,
+            currentPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('thread-detail-search-button')), findsOneWidget);
+    });
   });
 }
 

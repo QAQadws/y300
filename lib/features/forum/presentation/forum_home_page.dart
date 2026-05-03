@@ -20,11 +20,11 @@ class ForumHomePage extends ConsumerWidget {
         actions: [
           IconButton(
             key: const Key('forum-home-search-button'),
-            tooltip: '搜索漫画区',
+            tooltip: '搜索论坛',
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => const ForumSearchPage(srhfid: '30'),
+                  builder: (_) => const ForumSearchPage(),
                 ),
               );
             },

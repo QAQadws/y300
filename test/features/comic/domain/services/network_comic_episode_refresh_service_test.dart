@@ -156,10 +156,21 @@ class _FakeDiscuzSearchService implements ForumSearchService {
   @override
   Future<DiscuzSearchResponse> searchForum({
     required String keyword,
-    String srhfid = '30',
+    DiscuzSearchContext context = const DiscuzSearchContext.forum(),
     bool enforceRateLimit = true,
   }) async {
     calledKeywords.add(keyword);
     return _response;
+  }
+
+  @override
+  Future<DiscuzSearchResponse> fetchNextPage({
+    required String nextPageUrl,
+    DiscuzSearchContext context = const DiscuzSearchContext.forum(),
+  }) async {
+    return const DiscuzSearchResponse(
+      items: <DiscuzSearchResultItem>[],
+      rateLimited: false,
+    );
   }
 }

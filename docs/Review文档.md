@@ -1070,3 +1070,40 @@
 本轮按协作约定未执行自动化命令，请本地验证：
 1. `flutter test`
 2. `flutter analyze`
+
+## 搜索分页与场景路由改造 Review（2026-05-03）
+
+### 变更概览
+1. 搜索结果增加分页游标（`nextPageUrl`）并提供下一页加载接口。
+2. 搜索上下文从 `srhfid` 扁平参数升级为 `DiscuzSearchContext`（`forum/curForum`）。
+3. 页面入口场景化：论坛首页走 `forum`，`fid=30` 版块/帖子与漫画更新走 `curForum(30)`。
+
+### 重点代码落点
+1. `lib/features/search/data/models/discuz_search_models.dart`
+   - 新增 `DiscuzSearchContext` / `DiscuzSearchScope`
+   - `DiscuzSearchResult` 新增 `nextPageUrl`
+2. `lib/features/search/data/discuz_search_html_parser.dart`
+   - 新增 `.pg a.nxt` 下一页解析
+3. `lib/features/search/data/discuz_search_service.dart`
+   - 新增 `fetchNextPage`
+   - `searchForum` 按 context 构建 URL / referer
+4. `lib/features/search/presentation/forum_search_page.dart`
+   - 新增“查看更多”交互
+5. `lib/features/forum/presentation/forum_home_page.dart`
+   - 搜索入口调整为全站
+6. `lib/features/forum/presentation/forum_display_page.dart`
+   - `fid=30` 增加“搜索本版”入口
+7. `lib/features/thread/presentation/thread_detail_page.dart`
+   - `fid=30` 增加“搜索本版”入口
+8. `lib/features/comic/domain/services/comic_services_impl.dart`
+   - 漫画更新搜索切到 `curForum(30)`
+
+### 设计审查结论
+1. 解耦性：通过 `DiscuzSearchContext` 把“搜索场景决策”从 UI 与业务逻辑中抽离，符合可维护目标。
+2. 可扩展性：后续支持其他版块只需传 `DiscuzSearchContext.curForum(srhfid: 'xx')`。
+3. 风险点：依赖 Discuz `.pg a.nxt` 结构；若站点模板变更，需要补兜底 selector。
+4. 回归范围：搜索数据层、搜索页面、forum/thread 顶栏入口、漫画刷新搜索后备路径。
+
+### 测试审查
+1. 已新增/更新单测覆盖上述关键路径。
+2. 本轮未执行测试命令，待本地验证。

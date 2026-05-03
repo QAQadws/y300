@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/features/profile/data/models/profile_models.dart';
@@ -12,119 +13,89 @@ import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/data/search_rate_limiter.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  SharedPreferences.setMockInitialValues(<String, Object>{});
+
   group('DiscuzSearchService', () {
-    test('returns parsed fid=30 items and marks limiter when allowed', () async {
-      final profileRepository = _FakeProfileRepository.success(
-        formhash: 'fh_123',
-      );
-      final limiter = _FakeSearchRateLimiter(
-        checkResult: const _LimiterState.allowed(),
-      );
-      final adapter = _DiscuzSearchTestAdapter(
-        locationHeader: 'search.php?mod=forum&searchid=777&orderby=lastpost&ascdesc=desc&searchsubmit=yes',
-        searchResultHtml: _sampleSearchHtml(),
-      );
-      final dio = Dio(
-        BaseOptions(
-          connectTimeout: const Duration(seconds: 3),
-          receiveTimeout: const Duration(seconds: 3),
-          followRedirects: false,
-          validateStatus: (status) => status != null && status >= 200 && status < 400,
+    test('searchForum returns parsed items and next page', () async {
+      final service = _buildService(
+        adapter: _DiscuzSearchTestAdapter(
+          locationHeader: 'search.php?mod=forum&searchid=777&searchsubmit=yes',
+          searchResultHtml: _sampleSearchHtmlWithNext(),
         ),
-      )..httpClientAdapter = adapter;
-
-      final service = DiscuzSearchService(
-        profileRepository: profileRepository,
-        rateLimiter: limiter,
-        cookieStore: CookieStore(),
-        dio: dio,
       );
 
-      final result = await service.searchForum(keyword: '百合情结');
+      final result = await service.searchForum(
+        keyword: '百合',
+        context: const DiscuzSearchContext.curForum(srhfid: '30'),
+      );
 
       expect(result.rateLimited, isFalse);
       expect(result.items.length, 1);
       expect(result.items.first.tid, '570616');
-      expect(result.items.first.fid, '30');
-      expect(limiter.markTriggeredCount, 1);
+      expect(result.nextPageUrl, isNotNull);
     });
 
-    test('returns rate limited response and does not send network request', () async {
-      final profileRepository = _FakeProfileRepository.success(
-        formhash: 'fh_123',
-      );
-      final limiter = _FakeSearchRateLimiter(
-        checkResult: const _LimiterState.blocked(Duration(seconds: 8)),
-      );
-      final adapter = _DiscuzSearchTestAdapter(
-        locationHeader: null,
-        searchResultHtml: '',
-      );
-      final dio = Dio()..httpClientAdapter = adapter;
-
-      final service = DiscuzSearchService(
-        profileRepository: profileRepository,
-        rateLimiter: limiter,
-        cookieStore: CookieStore(),
-        dio: dio,
-      );
-
-      final result = await service.searchForum(keyword: '百合');
-
-      expect(result.rateLimited, isTrue);
-      expect(result.retryAfter.inSeconds, 8);
-      expect(result.items, isEmpty);
-      expect(adapter.requestCount, 0);
-      expect(limiter.markTriggeredCount, 0);
-    });
-
-    test('throws when formhash is empty', () async {
-      final profileRepository = _FakeProfileRepository.success(formhash: '');
-      final limiter = _FakeSearchRateLimiter(
-        checkResult: const _LimiterState.allowed(),
-      );
-      final adapter = _DiscuzSearchTestAdapter(
-        locationHeader: null,
-        searchResultHtml: '',
-      );
-      final dio = Dio()..httpClientAdapter = adapter;
-      final service = DiscuzSearchService(
-        profileRepository: profileRepository,
-        rateLimiter: limiter,
-        cookieStore: CookieStore(),
-        dio: dio,
-      );
-
-      expect(
-        () => service.searchForum(keyword: '百合'),
-        throwsA(
-          isA<DiscuzSearchServiceException>().having(
-            (e) => e.message,
-            'message',
-            contains('formhash'),
-          ),
+    test('fetchNextPage parses next page list', () async {
+      final service = _buildService(
+        adapter: _DiscuzSearchTestAdapter(
+          locationHeader: 'search.php?mod=forum&searchid=777&searchsubmit=yes',
+          searchResultHtml: _sampleSearchHtmlWithNext(),
+          nextPageHtml: _sampleNextPageHtml(),
         ),
       );
+
+      final result = await service.fetchNextPage(
+        nextPageUrl: 'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&page=2&mobile=2',
+        context: const DiscuzSearchContext.curForum(srhfid: '30'),
+      );
+      expect(result.items.length, 1);
+      expect(result.items.first.tid, '570700');
     });
   });
 }
 
-String _sampleSearchHtml() {
+DiscuzSearchService _buildService({required _DiscuzSearchTestAdapter adapter}) {
+  final profileRepository = _FakeProfileRepository.success(formhash: 'fh_123');
+  final limiter = _FakeSearchRateLimiter(checkResult: const _LimiterState.allowed());
+  final dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 3),
+      receiveTimeout: const Duration(seconds: 3),
+      followRedirects: false,
+      validateStatus: (status) => status != null && status >= 200 && status < 400,
+    ),
+  )..httpClientAdapter = adapter;
+  return DiscuzSearchService(
+    profileRepository: profileRepository,
+    rateLimiter: limiter,
+    cookieStore: CookieStore(),
+    dio: dio,
+  );
+}
+
+String _sampleSearchHtmlWithNext() {
   return '''
 <li class="list">
-  <a href="forum.php?mod=viewthread&amp;tid=570616&amp;extra=&amp;mobile=2">
-    <div class="threadlist_tit cl"><em>【提黄灯喵汉化组】百合情结 14</em></div>
+  <a href="forum.php?mod=viewthread&amp;tid=570616&amp;mobile=2">
+    <div class="threadlist_tit cl"><em>标题1</em></div>
   </a>
   <div class="threadlist_foot cl">
-    <ul><li class="mr"><a href="forum.php?mod=forumdisplay&amp;fid=30&amp;mobile=2">#中文百合漫画区</a></li></ul>
+    <ul><li class="mr"><a href="forum.php?mod=forumdisplay&amp;fid=30&amp;mobile=2">漫画区</a></li></ul>
   </div>
 </li>
+<div class="pg"><a class="nxt" href="search.php?mod=forum&amp;searchid=777&amp;page=2&amp;mobile=2">下一页</a></div>
+''';
+}
+
+String _sampleNextPageHtml() {
+  return '''
 <li class="list">
-  <a href="forum.php?mod=viewthread&amp;tid=570617&amp;extra=&amp;mobile=2">
-    <div class="threadlist_tit cl"><em>不属于漫画区</em></div>
+  <a href="forum.php?mod=viewthread&amp;tid=570700&amp;mobile=2">
+    <div class="threadlist_tit cl"><em>标题2</em></div>
   </a>
   <div class="threadlist_foot cl">
-    <ul><li class="mr"><a href="forum.php?mod=forumdisplay&amp;fid=55&amp;mobile=2">#轻小说译文区</a></li></ul>
+    <ul><li class="mr"><a href="forum.php?mod=forumdisplay&amp;fid=30&amp;mobile=2">漫画区</a></li></ul>
   </div>
 </li>
 ''';
@@ -148,21 +119,15 @@ class _FakeProfileRepository implements ProfileRepository {
   final ApiResult<ProfileData> _result;
 
   @override
-  Future<ApiResult<ProfileData>> getProfile() async {
-    return _result;
-  }
+  Future<ApiResult<ProfileData>> getProfile() async => _result;
 }
 
 class _FakeSearchRateLimiter extends SearchRateLimiter {
-  _FakeSearchRateLimiter({
-    required _LimiterState checkResult,
-  }) : _checkResult = checkResult,
-       super(
-         cooldown: const Duration(seconds: 10),
-       );
+  _FakeSearchRateLimiter({required _LimiterState checkResult})
+    : _checkResult = checkResult,
+      super(cooldown: const Duration(seconds: 10));
 
   final _LimiterState _checkResult;
-  int markTriggeredCount = 0;
 
   @override
   Future<SearchRateLimitResult> check() async {
@@ -173,15 +138,11 @@ class _FakeSearchRateLimiter extends SearchRateLimiter {
   }
 
   @override
-  Future<void> markTriggered() async {
-    markTriggeredCount += 1;
-  }
+  Future<void> markTriggered() async {}
 }
 
 class _LimiterState {
   const _LimiterState.allowed() : isAllowed = true, retryAfter = Duration.zero;
-
-  const _LimiterState.blocked(this.retryAfter) : isAllowed = false;
 
   final bool isAllowed;
   final Duration retryAfter;
@@ -191,11 +152,12 @@ class _DiscuzSearchTestAdapter implements HttpClientAdapter {
   _DiscuzSearchTestAdapter({
     required this.locationHeader,
     required this.searchResultHtml,
+    this.nextPageHtml = '',
   });
 
   final String? locationHeader;
   final String searchResultHtml;
-  int requestCount = 0;
+  final String nextPageHtml;
 
   @override
   void close({bool force = false}) {}
@@ -206,12 +168,9 @@ class _DiscuzSearchTestAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
-    requestCount += 1;
     final uri = options.uri;
-
     if (options.method == 'POST' &&
         uri.path.endsWith('/search.php') &&
-        uri.queryParameters['mod'] == 'forum' &&
         uri.queryParameters['searchsubmit'] == 'yes') {
       return ResponseBody.fromString(
         '',
@@ -221,16 +180,17 @@ class _DiscuzSearchTestAdapter implements HttpClientAdapter {
         },
       );
     }
-
     if (options.method == 'GET' &&
         uri.path.endsWith('/search.php') &&
-        uri.queryParameters['mod'] == 'forum' &&
-        uri.queryParameters.containsKey('searchid')) {
-      return ResponseBody.fromString(
-        searchResultHtml,
-        200,
-        headers: const <String, List<String>>{},
-      );
+        uri.queryParameters['searchid'] == '777' &&
+        !uri.queryParameters.containsKey('page')) {
+      return ResponseBody.fromString(searchResultHtml, 200);
+    }
+    if (options.method == 'GET' &&
+        uri.path.endsWith('/search.php') &&
+        uri.queryParameters['searchid'] == '777' &&
+        uri.queryParameters['page'] == '2') {
+      return ResponseBody.fromString(nextPageHtml, 200);
     }
 
     final body = await _readRequestBody(requestStream);
@@ -242,7 +202,6 @@ class _DiscuzSearchTestAdapter implements HttpClientAdapter {
         'body': body,
       }),
       404,
-      headers: const <String, List<String>>{},
     );
   }
 

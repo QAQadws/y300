@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/forum/presentation/forum_display_controller.dart';
 import 'package:y300/features/forum/presentation/forum_display_state.dart';
+import 'package:y300/features/search/data/models/discuz_search_models.dart';
+import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/shared/widgets/app_skeleton.dart';
 
@@ -16,53 +18,70 @@ class ForumDisplayPage extends ConsumerWidget {
     final args = ForumDisplayArgs(fid: fid, title: title);
     final asyncState = ref.watch(forumDisplayControllerProvider(args));
     final controller = ref.read(forumDisplayControllerProvider(args).notifier);
-
-    final state = asyncState.value ??
-        ForumDisplayPageState.initial(fid: fid, title: title);
+    final state = asyncState.value ?? ForumDisplayPageState.initial(fid: fid, title: title);
 
     return Scaffold(
-      appBar: AppBar(title: Text(state.title.isNotEmpty ? state.title : '帖子列表')),
+      appBar: AppBar(
+        title: Text(state.title.isNotEmpty ? state.title : '帖子列表'),
+        actions: [
+          if (fid == '30')
+            IconButton(
+              key: const Key('forum-display-search-button'),
+              tooltip: '搜索本版',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ForumSearchPage(
+                      context: DiscuzSearchContext.curForum(srhfid: '30'),
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.search),
+            ),
+        ],
+      ),
       body: (asyncState.isLoading && state.threads.isEmpty)
           ? const ForumHomeSkeleton(key: Key('forum-display-skeleton'))
           : state.errorMessage != null && state.threads.isEmpty
-              ? _ForumDisplayErrorView(
-                  message: state.errorMessage!,
-                  onRetry: controller.refresh,
-                )
-              : RefreshIndicator(
-                  onRefresh: controller.refresh,
-                  child: ListView.builder(
-                    key: const Key('forum-display-list'),
-                    padding: const EdgeInsets.all(16),
-                    itemCount: state.threads.length + 1,
-                    itemBuilder: (context, index) {
-                      if (index == state.threads.length) {
-                        return _LoadMoreSection(
-                          hasMore: state.hasMore,
-                          isLoadingMore: state.isLoadingMore,
-                          onLoadMore: controller.loadMore,
-                        );
-                      }
+          ? _ForumDisplayErrorView(
+              message: state.errorMessage!,
+              onRetry: controller.refresh,
+            )
+          : RefreshIndicator(
+              onRefresh: controller.refresh,
+              child: ListView.builder(
+                key: const Key('forum-display-list'),
+                padding: const EdgeInsets.all(16),
+                itemCount: state.threads.length + 1,
+                itemBuilder: (context, index) {
+                  if (index == state.threads.length) {
+                    return _LoadMoreSection(
+                      hasMore: state.hasMore,
+                      isLoadingMore: state.isLoadingMore,
+                      onLoadMore: controller.loadMore,
+                    );
+                  }
 
-                      final thread = state.threads[index];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        child: ListTile(
-                          key: Key('forum-thread-${thread.tid}'),
-                          title: Text(thread.subject),
-                          subtitle: Text('${thread.author} · 回复 ${thread.replies} · 浏览 ${thread.views}'),
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => ThreadDetailPage(tid: thread.tid, subject: thread.subject),
-                              ),
-                            );
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                ),
+                  final thread = state.threads[index];
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: ListTile(
+                      key: Key('forum-thread-${thread.tid}'),
+                      title: Text(thread.subject),
+                      subtitle: Text('${thread.author} · 回复 ${thread.replies} · 浏览 ${thread.views}'),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => ThreadDetailPage(tid: thread.tid, subject: thread.subject),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
     );
   }
 }

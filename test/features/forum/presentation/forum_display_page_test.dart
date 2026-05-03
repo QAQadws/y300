@@ -97,6 +97,32 @@ void main() {
       expect(find.text('帖子B'), findsOneWidget);
       expect(callCount, 2);
     });
+
+    testWidgets('shows search-in-forum action when fid is 30', (tester) async {
+      final repository = _FakeForumDisplayRepository((fid, page) async {
+        return ApiSuccess(
+          _displayData(
+            page: 1,
+            total: 1,
+            threads: const <ForumThreadSummary>[],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            forumDisplayRepositoryProvider.overrideWithValue(repository),
+          ],
+          child: const MaterialApp(
+            home: ForumDisplayPage(fid: '30', title: '漫画区'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('forum-display-search-button')), findsOneWidget);
+    });
   });
 }
 

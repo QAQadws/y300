@@ -54,7 +54,10 @@ class DiscuzSearchHtmlParser {
       );
     }
 
-    return DiscuzSearchResult(items: items);
+    return DiscuzSearchResult(
+      items: items,
+      nextPageUrl: _extractNextPageUrl(document),
+    );
   }
 
   String? _normalizeUrl(String href) {
@@ -89,5 +92,10 @@ class DiscuzSearchHtmlParser {
     final match = _fidPattern.firstMatch(decoded);
     return match?.group(1);
   }
-}
 
+  String? _extractNextPageUrl(dynamic document) {
+    final nextAnchor = document.querySelector('.pg a.nxt');
+    final href = (nextAnchor?.attributes['href'] ?? '').trim();
+    return _normalizeUrl(href);
+  }
+}

@@ -7,10 +7,10 @@ import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 class ForumSearchPage extends ConsumerStatefulWidget {
   const ForumSearchPage({
     super.key,
-    this.srhfid = '30',
+    this.context = const DiscuzSearchContext.forum(),
   });
 
-  final String srhfid;
+  final DiscuzSearchContext context;
 
   @override
   ConsumerState<ForumSearchPage> createState() => _ForumSearchPageState();
@@ -19,7 +19,9 @@ class ForumSearchPage extends ConsumerStatefulWidget {
 class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
   final TextEditingController _controller = TextEditingController();
   bool _loading = false;
+  bool _loadingMore = false;
   String? _hint;
+  String? _nextPageUrl;
   List<DiscuzSearchResultItem> _items = const <DiscuzSearchResultItem>[];
 
   @override
@@ -41,7 +43,7 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
       final service = ref.read(discuzSearchServiceProvider);
       final result = await service.searchForum(
         keyword: keyword,
-        srhfid: widget.srhfid,
+        context: widget.context,
         enforceRateLimit: true,
       );
       if (!mounted) {
@@ -53,9 +55,11 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
           final seconds = result.retryAfter.inSeconds <= 0 ? 1 : result.retryAfter.inSeconds;
           _hint = '请 $seconds 秒后重试';
           _items = const <DiscuzSearchResultItem>[];
+          _nextPageUrl = null;
         } else {
           _hint = result.items.isEmpty ? '未找到结果' : null;
           _items = result.items;
+          _nextPageUrl = result.nextPageUrl;
         }
       });
     } catch (error) {
@@ -66,6 +70,41 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
         _loading = false;
         _hint = '搜索失败：$error';
         _items = const <DiscuzSearchResultItem>[];
+        _nextPageUrl = null;
+      });
+    }
+  }
+
+  Future<void> _loadMore() async {
+    final nextPageUrl = _nextPageUrl;
+    if (_loading || _loadingMore || nextPageUrl == null || nextPageUrl.trim().isEmpty) {
+      return;
+    }
+    setState(() {
+      _loadingMore = true;
+      _hint = null;
+    });
+    try {
+      final service = ref.read(discuzSearchServiceProvider);
+      final result = await service.fetchNextPage(
+        nextPageUrl: nextPageUrl,
+        context: widget.context,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _loadingMore = false;
+        _items = <DiscuzSearchResultItem>[..._items, ...result.items];
+        _nextPageUrl = result.nextPageUrl;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _loadingMore = false;
+        _hint = '加载更多失败：$error';
       });
     }
   }
@@ -94,7 +133,7 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
               onSubmitted: (_) => _search(),
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
-                hintText: '输入关键词（仅搜索漫画区）',
+                hintText: '输入关键词',
               ),
             ),
           ),
@@ -108,27 +147,41 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
               ),
             ),
           Expanded(
-            child: ListView.separated(
+            child: ListView(
               key: const Key('forum-search-result-list'),
-              itemCount: _items.length,
-              separatorBuilder: (context, index) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final item = _items[index];
-                return ListTile(
-                  title: Text(item.title),
-                  subtitle: Text('Tid: ${item.tid}'),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => ThreadDetailPage(
-                          tid: item.tid,
-                          subject: item.title,
+              children: [
+                for (final item in _items) ...[
+                  ListTile(
+                    title: Text(item.title),
+                    subtitle: Text('Tid: ${item.tid}'),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => ThreadDetailPage(
+                            tid: item.tid,
+                            subject: item.title,
+                          ),
                         ),
-                      ),
-                    );
-                  },
-                );
-              },
+                      );
+                    },
+                  ),
+                  const Divider(height: 1),
+                ],
+                if (_loadingMore)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                if (!_loadingMore && (_nextPageUrl?.isNotEmpty ?? false))
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: OutlinedButton(
+                      key: const Key('forum-search-load-more-button'),
+                      onPressed: _loadMore,
+                      child: const Text('查看更多'),
+                    ),
+                  ),
+              ],
             ),
           ),
         ],

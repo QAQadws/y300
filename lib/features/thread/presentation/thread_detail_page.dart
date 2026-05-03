@@ -1,7 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/comic/presentation/widgets/add_to_shelf_button.dart';
+import 'package:y300/features/search/data/models/discuz_search_models.dart';
+import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/shared/widgets/app_skeleton.dart';
@@ -17,73 +19,89 @@ class ThreadDetailPage extends ConsumerWidget {
     final args = ThreadDetailArgs(tid: tid, subject: subject);
     final asyncState = ref.watch(threadDetailControllerProvider(args));
     final controller = ref.read(threadDetailControllerProvider(args).notifier);
-
     final state = asyncState.value ?? ThreadDetailPageState.initial(tid: tid, subject: subject);
 
     return Scaffold(
       appBar: AppBar(
         title: Text(state.subject.isNotEmpty ? state.subject : '帖子详情'),
+        actions: [
+          if (state.fid == '30')
+            IconButton(
+              key: const Key('thread-detail-search-button'),
+              tooltip: '搜索本版',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ForumSearchPage(
+                      context: DiscuzSearchContext.curForum(srhfid: '30'),
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.search),
+            ),
+        ],
       ),
       body: (asyncState.isLoading && state.posts.isEmpty)
           ? const ForumHomeSkeleton(key: Key('thread-detail-skeleton'))
           : state.errorMessage != null && state.posts.isEmpty
-              ? _ThreadErrorView(
-                  message: state.errorMessage!,
-                  onRetry: controller.refresh,
-                )
-              : ListView.builder(
-                  key: const Key('thread-detail-list'),
-                  padding: const EdgeInsets.all(16),
-                  itemCount: state.posts.length + 1,
-                  itemBuilder: (context, index) {
-                    if (index == state.posts.length) {
-                      return _ThreadLoadMoreSection(
-                        hasMore: state.hasMore,
-                        isLoadingMore: state.isLoadingMore,
-                        onLoadMore: controller.loadMore,
-                      );
-                    }
+          ? _ThreadErrorView(
+              message: state.errorMessage!,
+              onRetry: controller.refresh,
+            )
+          : ListView.builder(
+              key: const Key('thread-detail-list'),
+              padding: const EdgeInsets.all(16),
+              itemCount: state.posts.length + 1,
+              itemBuilder: (context, index) {
+                if (index == state.posts.length) {
+                  return _ThreadLoadMoreSection(
+                    hasMore: state.hasMore,
+                    isLoadingMore: state.isLoadingMore,
+                    onLoadMore: controller.loadMore,
+                  );
+                }
 
-                    final post = state.posts[index];
-                    final showComicEntry = post.isFirst && state.comicCandidateInfo.isCandidate;
+                final post = state.posts[index];
+                final showComicEntry = post.isFirst && state.comicCandidateInfo.isCandidate;
 
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('${post.number}楼 · ${post.author} · ${post.dateline}'),
-                            if (showComicEntry) ...[
-                              const SizedBox(height: 8),
-                              // 阶段1先在首楼展示入口，后续再接真实书架页跳转。
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      '漫画候选（评分 ${state.comicCandidateInfo.score}）',
-                                      style: Theme.of(context).textTheme.bodySmall,
-                                    ),
-                                  ),
-                                  AddToShelfButton(
-                                    inShelf: state.isInShelf,
-                                    onPressed: state.isComicActionLoading ? null : controller.addToShelf,
-                                  ),
-                                ],
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${post.number}楼 · ${post.author} · ${post.dateline}'),
+                        if (showComicEntry) ...[
+                          const SizedBox(height: 8),
+                          // Phase-1 shows entry in first floor only, then we can extend routing later.
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '漫画候选（评分 ${state.comicCandidateInfo.score}）',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                              AddToShelfButton(
+                                inShelf: state.isInShelf,
+                                onPressed: state.isComicActionLoading ? null : controller.addToShelf,
                               ),
                             ],
-                            const SizedBox(height: 8),
-                            Html(
-                              data: post.message,
-                              key: Key('thread-post-${post.pid}'),
-                            ),
-                          ],
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        Html(
+                          data: post.message,
+                          key: Key('thread-post-${post.pid}'),
                         ),
-                      ),
-                    );
-                  },
-                ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
 }

@@ -76,7 +76,7 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
 
     final search = await _searchService.searchForum(
       keyword: keyword,
-      srhfid: '30',
+      context: const DiscuzSearchContext.curForum(srhfid: '30'),
       enforceRateLimit: true,
     );
     if (search.rateLimited || search.items.isEmpty) {
