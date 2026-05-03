@@ -5,6 +5,7 @@ import 'package:y300/features/comic/data/comic_parser_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_parsing_debug_models.dart';
+import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
 import 'package:y300/features/comic/domain/services/comic_detector.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
@@ -203,24 +204,19 @@ class RuleBasedComicDetector implements ComicDetector {
 }
 
 class HtmlComicParserService implements ComicParserService {
-  static const String _yamiboOrigin = 'https://bbs.yamibo.com/';
-
   static final RegExp _emojiLikeImage = RegExp(
     r'(smilies|static/image|emotion|avatar)',
     caseSensitive: false,
   );
 
-  static final RegExp _threadIdPattern = RegExp(r'thread-(\d+)-\d+-\d+\.html', caseSensitive: false);
-  static final RegExp _forumViewThreadPattern = RegExp(
-    r'forum\.php\?[^#]*\bmod=viewthread\b[^#]*\btid=\d+',
-    caseSensitive: false,
-  );
-  static final RegExp _damagedTidPattern = RegExp(r'(^|[?&;])tid=(\d+)(?:[&#]|$)', caseSensitive: false);
-  static final RegExp _fromUidPattern = RegExp(r'(^|[?&;])fromuid=([^&#]+)(?:[&#]|$)', caseSensitive: false);
-
   static final RegExp _episodeTextPattern = RegExp(
     r'^(\d+(\.\d+)?|\u7b2c\s*.+\s*\u8bdd|.*\u7279\u5178.*)$',
   );
+  final ComicPostParsingEngine _engine;
+
+  HtmlComicParserService({
+    ComicPostParsingEngine? engine,
+  }) : _engine = engine ?? ComicPostParsingEngine();
 
   @override
   ParsedComicPost parse({required String message}) {
@@ -243,54 +239,24 @@ class HtmlComicParserService implements ComicParserService {
     }
     signals.add(ComicParsingSignal(stage: 'image', message: 'accepted images=${imageUrls.length}'));
 
-    final episodeLinks = <ComicEpisodeLink>[];
-    final seenLinks = <String>{};
-    String? catalogUrl;
-
-    final anchors = document.querySelectorAll('a');
-    signals.add(ComicParsingSignal(stage: 'anchor', message: 'raw anchors=${anchors.length}'));
-
-    for (final node in anchors) {
-      final href = (node.attributes['href'] ?? '').trim();
-      if (href.isEmpty) {
-        continue;
-      }
-
-      final decodedHref = _decodeHtmlAmp(href);
-      final normalizedUrl = _normalizeUrl(decodedHref);
-      if (normalizedUrl == null) {
-        signals.add(ComicParsingSignal(stage: 'anchor', message: 'reject href=$href'));
-        continue;
-      }
-
-      final text = node.text.trim();
-      final isCatalog = text.contains('\u76ee\u5f55');
-      if (isCatalog && catalogUrl == null) {
-        catalogUrl = normalizedUrl;
-        signals.add(ComicParsingSignal(stage: 'rule', message: 'catalog hit text=$text url=$normalizedUrl'));
-      }
-
-      if (_isEpisodeThreadLink(normalizedUrl) && seenLinks.add(normalizedUrl)) {
-        final episodeTitle = _extractEpisodeTitle(text);
-        episodeLinks.add(
-          ComicEpisodeLink(
-            url: normalizedUrl,
-            rawText: text,
-            episodeTitle: episodeTitle,
+    final parsedByEngine = _engine.parse(messageHtml: message);
+    final episodeLinks = parsedByEngine.episodes
+        .map(
+          (episode) => ComicEpisodeLink(
+            url: episode.url,
+            rawText: episode.titleRaw,
+            episodeTitle: _extractEpisodeTitle(episode.titleRaw),
           ),
-        );
-        signals.add(ComicParsingSignal(
-          stage: 'rule',
-          message: 'episode hit text=$text url=$normalizedUrl title=${episodeTitle ?? 'null'}',
-        ));
-      }
-    }
+        )
+        .toList(growable: false);
+    final catalogUrl = parsedByEngine.catalogLinks.isEmpty ? null : parsedByEngine.catalogLinks.first;
+    signals.addAll(parsedByEngine.debugSignals);
 
     final plainText = (document.text ?? '').replaceAll(RegExp(r'\s+'), ' ').trim();
 
     final debugInfo = ComicParsingDebugInfo(
       signals: signals,
-      totalAnchors: anchors.length,
+      totalAnchors: document.querySelectorAll('a').length,
       totalEpisodeLinks: episodeLinks.length,
       catalogUrl: catalogUrl,
     );
@@ -303,94 +269,6 @@ class HtmlComicParserService implements ComicParserService {
       inferredAuthor: _inferAuthor(plainText),
       parsingDebug: debugInfo,
     );
-  }
-
-  String? _normalizeUrl(String href) {
-    final trimmed = href.trim();
-    if (trimmed.isEmpty) {
-      return null;
-    }
-
-    // Only treat obviously damaged hrefs as tid-only fallback.
-    // Example: ";tid=537155&highlight=..." (missing full forum.php path).
-    if (trimmed.startsWith(';tid=') || trimmed.startsWith('tid=')) {
-      final damagedTid = _extractTidFromDamagedHref(trimmed);
-      if (damagedTid != null) {
-        return 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=$damagedTid';
-      }
-    }
-
-    final uri = Uri.tryParse(trimmed);
-    if (uri == null) {
-      return null;
-    }
-
-    final effectiveUri = uri.hasScheme ? uri : Uri.parse(_yamiboOrigin).resolveUri(uri);
-
-    final isThreadHtml = _threadIdPattern.hasMatch(effectiveUri.path);
-    final isForumViewThread = effectiveUri.path.toLowerCase().endsWith('forum.php') &&
-        effectiveUri.queryParameters['mod']?.toLowerCase() == 'viewthread' &&
-        (effectiveUri.queryParameters['tid']?.isNotEmpty ?? false);
-
-    String? normalizedQuery;
-    if (isForumViewThread) {
-      final mod = effectiveUri.queryParameters['mod'];
-      final tid = effectiveUri.queryParameters['tid'];
-      final fromuid = effectiveUri.queryParameters['fromuid'] ?? _extractFromUid(trimmed);
-      final queryPairs = <String>[
-        if (mod != null) 'mod=$mod',
-        if (tid != null) 'tid=$tid',
-        if (fromuid != null && fromuid.isNotEmpty) 'fromuid=$fromuid',
-      ];
-      normalizedQuery = queryPairs.isEmpty ? null : queryPairs.join('&');
-    } else if (isThreadHtml) {
-      normalizedQuery = null;
-    } else {
-      normalizedQuery = effectiveUri.hasQuery ? effectiveUri.query : null;
-    }
-
-    final cleaned = Uri(
-      scheme: effectiveUri.scheme,
-      userInfo: effectiveUri.userInfo,
-      host: effectiveUri.host,
-      port: effectiveUri.hasPort ? effectiveUri.port : null,
-      path: effectiveUri.path,
-      query: normalizedQuery,
-    );
-    final normalized = cleaned.toString();
-
-    // Fallback for malformed hrefs that still contain tid but failed to form
-    // a recognizable viewthread/thread URL after normalization.
-    if (!_isEpisodeThreadLink(normalized)) {
-      final damagedTid = _extractTidFromDamagedHref(trimmed);
-      if (damagedTid != null) {
-        return 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=$damagedTid';
-      }
-    }
-
-    return normalized;
-  }
-
-  String? _extractTidFromDamagedHref(String href) {
-    final match = _damagedTidPattern.firstMatch(href);
-    return match?.group(2);
-  }
-
-  String? _extractFromUid(String href) {
-    final match = _fromUidPattern.firstMatch(href);
-    return match?.group(2);
-  }
-
-  bool _isEpisodeThreadLink(String normalizedUrl) {
-    return _threadIdPattern.hasMatch(normalizedUrl) || _forumViewThreadPattern.hasMatch(normalizedUrl);
-  }
-
-  String _decodeHtmlAmp(String href) {
-    var result = href;
-    while (result.contains('&amp;')) {
-      result = result.replaceAll('&amp;', '&');
-    }
-    return result;
   }
 
   String? _extractEpisodeTitle(String text) {

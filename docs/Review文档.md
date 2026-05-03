@@ -856,3 +856,88 @@
 本轮按约定未执行自动化命令，请你本地执行并回传结果：
 1. `flutter test`
 2. `flutter analyze`
+---
+
+## 搜索收藏联动 Phase 1 Review 补充清单（2026-05-03）
+
+### 一、解析引擎化与解耦
+- [ ] 新增 `comic_post_parsing_models.dart`，解析上下文/锚点/候选模型职责清晰
+- [ ] `ComicPostParsingEngine` 通过规则列表驱动，非单体 if/else 膨胀
+- [ ] 规则拆分为 `CatalogRule` / `EpisodeStrongRule` / `EpisodeClusterRule` / `RejectRule`
+- [ ] 引擎输出 `EpisodeExtractionResult`，包含 episodes/catalog/debug signals
+
+### 二、链接解析能力
+- [ ] 支持 `thread-xxx-1-1.html` 解析 tid
+- [ ] 支持 `forum.php?mod=viewthread&tid=xxx` 解析 tid
+- [ ] 支持残缺 `;tid=xxx` 链接修复
+- [ ] 章节候选按 tid 去重，保留高置信度结果
+
+### 三、连续楼主楼层解析
+- [ ] 新增 `ComicConsecutiveOpPostParser`
+- [ ] 从 1 楼开始合并连续楼主楼层
+- [ ] 遇到首个非楼主楼层立即停止
+- [ ] 合并结果保持 `ParsedComicPost` 向后兼容
+
+### 四、兼容接入
+- [ ] `HtmlComicParserService` 已通过适配层接入引擎
+- [ ] `ComicParserService` 对外接口未变
+- [ ] 既有调用方无需改动即可使用新能力
+
+### 五、测试覆盖
+- [ ] `comic_post_parsing_engine_test.dart` 覆盖 thread/viewthread/;tid= 三类链接
+- [ ] `comic_post_parsing_engine_test.dart` 覆盖目录识别与连续簇识别
+- [ ] `comic_consecutive_op_post_parser_test.dart` 覆盖连续楼主合并与停止规则
+
+### 六、执行说明
+本轮按约定未执行自动化命令，请本地执行并回传结果：
+1. `flutter test`
+2. `flutter analyze`
+
+---
+
+## 搜索收藏联动 Phase 1 回归修复 Review 清单（2026-05-03，viewthread tid 与顺序）
+
+### 一、01~07 漏解析修复
+- [ ] `LocalComicRepository._extractTid` 已支持 `forum.php?mod=viewthread&tid=xxx`
+- [ ] `LocalComicRepository._extractTid` 已支持 `;tid=xxx` 残缺链接
+- [ ] `mergeEpisodesFromLinks` 不再把多个 viewthread 链接回退到同一 fallbackTid
+
+### 二、章节顺序一致性
+- [ ] `order_index` 仍按 message 中解析顺序写入
+- [ ] `descending=true` 时详情页展示顺序为 message 顺序倒序
+- [ ] 特典位置与 message 序列一致（不再意外置顶）
+
+### 三、测试覆盖
+- [ ] `local_comic_repository_test.dart` 覆盖 viewthread tid 提取回归
+- [ ] `local_comic_repository_test.dart` 覆盖倒序展示顺序回归
+
+### 四、执行说明
+本轮按约定未执行自动化命令，请本地执行并回传结果：
+1. `flutter test`
+2. `flutter analyze`
+
+---
+
+## 搜索收藏联动 Phase 1 顺序修复 Review 清单（2026-05-03，特典穿插）
+
+### 一、顺序真值定义
+- [ ] 章节顺序以 message 中链接出现顺序为唯一真值
+- [ ] 去重后不再引入 groupId 排序扰动
+
+### 二、去重与排序行为
+- [ ] 同 tid 冲突时保留最早出现位置
+- [ ] 最终输出严格按 `position` 升序
+- [ ] 详情页倒序时可得到“message顺序倒序”
+
+### 三、特典穿插回归
+- [ ] 第一卷/第二卷/第三卷特典在章节序列中保持原始穿插位置
+- [ ] 不再出现特典集中到列表最上方的异常
+
+### 四、测试覆盖
+- [ ] `comic_post_parsing_engine_test.dart` 覆盖特典穿插顺序
+- [ ] `local_comic_repository_test.dart` 覆盖详情页倒序穿插顺序
+
+### 五、执行说明
+本轮按约定未执行自动化命令，请本地执行并回传结果：
+1. `flutter test`
+2. `flutter analyze`

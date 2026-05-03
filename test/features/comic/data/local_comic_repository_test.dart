@@ -289,5 +289,121 @@ void main() {
       expect(progress.imageIndex, 1);
       expect(progress.scrollOffset, 222.5);
     });
+
+    test('mergeEpisodesFromLinks extracts tid from viewthread links and keeps unique episodes', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:300',
+        tid: '300',
+        fid: '30',
+        title: '测试漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>[],
+          episodeLinks: <ComicEpisodeLink>[],
+          plainTextSummary: '摘要',
+        ),
+      );
+
+      await repository.mergeEpisodesFromLinks(
+        comicId: 'yamibo:300',
+        fallbackSourceTid: '300',
+        episodeLinks: const <ComicEpisodeLink>[
+          ComicEpisodeLink(
+            url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=530646&highlight=a',
+            rawText: '01',
+            episodeTitle: '01',
+          ),
+          ComicEpisodeLink(
+            url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=533029&highlight=a',
+            rawText: '02',
+            episodeTitle: '02',
+          ),
+          ComicEpisodeLink(
+            url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=533956&highlight=a',
+            rawText: '03',
+            episodeTitle: '03',
+          ),
+        ],
+      );
+
+      final episodes = await repository.getComicEpisodes(
+        comicId: 'yamibo:300',
+        descending: false,
+      );
+
+      expect(episodes.length, 3);
+      expect(episodes.map((e) => e.sourceTid).toList(), <String>['530646', '533029', '533956']);
+    });
+
+    test('detail order uses reverse of message order when reading with descending=true', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:400',
+        tid: '400',
+        fid: '30',
+        title: '测试漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>[],
+          episodeLinks: <ComicEpisodeLink>[],
+          plainTextSummary: '摘要',
+        ),
+      );
+
+      await repository.mergeEpisodesFromLinks(
+        comicId: 'yamibo:400',
+        fallbackSourceTid: '400',
+        episodeLinks: const <ComicEpisodeLink>[
+          ComicEpisodeLink(url: 'thread-4001-1-1.html', rawText: '01', episodeTitle: '01'),
+          ComicEpisodeLink(url: 'thread-4002-1-1.html', rawText: '02', episodeTitle: '02'),
+          ComicEpisodeLink(url: 'thread-4003-1-1.html', rawText: '特典', episodeTitle: '特典'),
+          ComicEpisodeLink(url: 'thread-4004-1-1.html', rawText: '03', episodeTitle: '03'),
+        ],
+      );
+
+      final episodes = await repository.getComicEpisodes(
+        comicId: 'yamibo:400',
+        descending: true,
+      );
+
+      expect(
+        episodes.map((e) => e.episodeTitle).toList(),
+        <String?>['03', '特典', '02', '01'],
+      );
+    });
+
+    test('detail descending order keeps specials interleaved by message order', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:500',
+        tid: '500',
+        fid: '30',
+        title: '测试漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>[],
+          episodeLinks: <ComicEpisodeLink>[],
+          plainTextSummary: '摘要',
+        ),
+      );
+
+      await repository.mergeEpisodesFromLinks(
+        comicId: 'yamibo:500',
+        fallbackSourceTid: '500',
+        episodeLinks: const <ComicEpisodeLink>[
+          ComicEpisodeLink(url: 'thread-5001-1-1.html', rawText: '09', episodeTitle: '09'),
+          ComicEpisodeLink(url: 'thread-5002-1-1.html', rawText: '第一卷特典', episodeTitle: '第一卷特典'),
+          ComicEpisodeLink(url: 'thread-5003-1-1.html', rawText: '10', episodeTitle: '10'),
+          ComicEpisodeLink(url: 'thread-5004-1-1.html', rawText: '11', episodeTitle: '11'),
+          ComicEpisodeLink(url: 'thread-5005-1-1.html', rawText: '第二卷特典', episodeTitle: '第二卷特典'),
+          ComicEpisodeLink(url: 'thread-5006-1-1.html', rawText: '12', episodeTitle: '12'),
+        ],
+      );
+
+      final episodes = await repository.getComicEpisodes(
+        comicId: 'yamibo:500',
+        descending: true,
+      );
+
+      expect(
+        episodes.map((e) => e.episodeTitle).toList(),
+        <String?>['12', '第二卷特典', '11', '10', '第一卷特典', '09'],
+      );
+    });
   });
 }

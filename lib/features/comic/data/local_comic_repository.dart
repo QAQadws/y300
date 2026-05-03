@@ -671,8 +671,21 @@ class LocalComicRepository implements ComicRepository {
   }
 
   String? _extractTid(String url) {
-    final match = RegExp(r'thread-(\d+)-\d+-\d+\.html', caseSensitive: false).firstMatch(url);
-    return match?.group(1);
+    final threadMatch = RegExp(r'thread-(\d+)-\d+-\d+\.html', caseSensitive: false).firstMatch(url);
+    if (threadMatch != null) {
+      return threadMatch.group(1);
+    }
+
+    final viewthreadMatch = RegExp(
+      r'forum\.php\?[^#]*\bmod=viewthread\b[^#]*\btid=(\d+)',
+      caseSensitive: false,
+    ).firstMatch(url);
+    if (viewthreadMatch != null) {
+      return viewthreadMatch.group(1);
+    }
+
+    final damagedTidMatch = RegExp(r'(^|[?&;])tid=(\d+)(?:[&#]|$)', caseSensitive: false).firstMatch(url);
+    return damagedTidMatch?.group(2);
   }
 
   String _resolveComicTitle({
