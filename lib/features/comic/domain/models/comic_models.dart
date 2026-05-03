@@ -1,4 +1,6 @@
-﻿class ComicCandidateInfo {
+import 'package:y300/features/comic/domain/models/comic_parsing_debug_models.dart';
+
+class ComicCandidateInfo {
   const ComicCandidateInfo({
     required this.isCandidate,
     required this.score,
@@ -36,6 +38,7 @@ class ParsedComicPost {
     this.catalogUrl,
     this.inferredAuthor,
     this.subjectMetadata,
+    this.parsingDebug,
   });
 
   final List<String> imageUrls;
@@ -44,6 +47,7 @@ class ParsedComicPost {
   final String? catalogUrl;
   final String? inferredAuthor;
   final ComicSubjectMetadata? subjectMetadata;
+  final ComicParsingDebugInfo? parsingDebug;
 
   ParsedComicPost copyWith({
     List<String>? imageUrls,
@@ -52,6 +56,7 @@ class ParsedComicPost {
     String? catalogUrl,
     String? inferredAuthor,
     ComicSubjectMetadata? subjectMetadata,
+    ComicParsingDebugInfo? parsingDebug,
   }) {
     return ParsedComicPost(
       imageUrls: imageUrls ?? this.imageUrls,
@@ -60,6 +65,7 @@ class ParsedComicPost {
       catalogUrl: catalogUrl ?? this.catalogUrl,
       inferredAuthor: inferredAuthor ?? this.inferredAuthor,
       subjectMetadata: subjectMetadata ?? this.subjectMetadata,
+      parsingDebug: parsingDebug ?? this.parsingDebug,
     );
   }
 
