@@ -17,6 +17,7 @@ class ComicDetailPage extends ConsumerWidget {
     final state = ref.watch(
       comicDetailControllerProvider(ComicDetailArgs(comicId: comicId)),
     );
+    final currentViewState = state.asData?.value;
 
     return Scaffold(
       appBar: AppBar(
@@ -31,6 +32,20 @@ class ComicDetailPage extends ConsumerWidget {
                   .refreshEpisodes();
             },
             icon: const Icon(Icons.refresh),
+          ),
+          IconButton(
+            key: const Key('comic-detail-sort-button'),
+            tooltip: '切换排序',
+            onPressed: () {
+              ref
+                  .read(comicDetailControllerProvider(ComicDetailArgs(comicId: comicId)).notifier)
+                  .toggleSortOrder();
+            },
+            icon: Icon(
+              currentViewState?.sortDescending != false
+                  ? Icons.arrow_downward
+                  : Icons.arrow_upward,
+            ),
           ),
         ],
       ),
@@ -111,6 +126,17 @@ class ComicDetailPage extends ConsumerWidget {
                     ),
                   ),
                 ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    viewState.sortDescending ? '排序：Tid 降序' : '排序：Tid 升序',
+                    key: const Key('comic-detail-sort-hint'),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ),
               const Divider(height: 1),
               Expanded(
                 child: viewState.episodes.isEmpty

@@ -1107,3 +1107,39 @@
 ### 测试审查
 1. 已新增/更新单测覆盖上述关键路径。
 2. 本轮未执行测试命令，待本地验证。
+
+## 目录与章节排序改造 Review（2026-05-03）
+
+### 变更结论
+1. 目录抓取链路已覆盖 `mod=tag` 的标准化（`type=thread&page=1`），符合“目录应取 thread 列表页”的要求。
+2. 目录分页识别能力从“仅 next 链接”增强为“next + 总页数推断补全”，对多页目录的末页命中率更高。
+3. 漫画详情页章节排序从固定顺序升级为用户可切换升降序，且排序依据明确为 `sourceTid` 数值。
+
+### 主要代码变更
+1. `catalog_thread_html_parser.dart`
+- `CatalogThreadParseResult` 新增 `currentPage/totalPages`
+- 解析 `.pg` 分页信息
+
+2. `comic_episode_discovery_service.dart`
+- 目录入口 URL 规范化（补 `type=thread&page=1`）
+- 目录抓取循环支持总页数推断并补齐后续页
+
+3. `comic_detail_controller.dart`
+- 状态新增 `sortDescending`
+- 新增 `toggleSortOrder()`
+- 统一按 `sourceTid` 数值排序（含 tie-breaker）
+
+4. `comic_detail_page.dart`
+- 新增排序切换按钮与提示
+- 默认 Tid 降序
+
+### 工程性评估
+1. 解耦：目录规则在 discovery 层，HTML 细节在 parser 层；UI 仅调用控制器接口。
+2. 可维护：分页信息结构化后便于扩展到“跳页抓取策略”或“最大页上限策略调优”。
+3. 风险：个别 tag 页面若不存在 `共 N 页` 文案，仍依赖 `nextPageUrl`，当前逻辑已有兼容。
+
+### 测试评估
+1. 新增目录分页解析单测。
+2. 新增目录多页抓取单测。
+3. 新增详情页排序切换单测。
+4. 本轮未执行测试，待本地回归验证。

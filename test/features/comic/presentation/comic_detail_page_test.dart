@@ -28,6 +28,8 @@ void main() {
     expect(find.byKey(const Key('comic-detail-episode-list')), findsOneWidget);
     expect(find.text('第2话'), findsOneWidget);
     expect(find.text('第1话'), findsOneWidget);
+    expect(find.byKey(const Key('comic-detail-sort-button')), findsOneWidget);
+    expect(find.byKey(const Key('comic-detail-sort-hint')), findsOneWidget);
   });
 
   testWidgets('ComicDetailPage supports refresh action', (tester) async {
@@ -51,6 +53,36 @@ void main() {
 
     expect(repository.mergeCalled, isTrue);
     expect(find.byKey(const Key('comic-detail-refresh-hint')), findsOneWidget);
+  });
+
+  testWidgets('ComicDetailPage toggles episode sort order by tid', (tester) async {
+    final repository = _ComicDetailFakeRepository();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(repository),
+          comicEpisodeRefreshServiceProvider.overrideWithValue(_FakeRefreshService()),
+        ],
+        child: const MaterialApp(home: ComicDetailPage(comicId: 'yamibo:100')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('排序：Tid 降序'), findsOneWidget);
+
+    // Default descending: tid=102 appears before tid=101.
+    final tid102 = find.text('Tid: 102');
+    final tid101 = find.text('Tid: 101');
+    expect(tid102, findsOneWidget);
+    expect(tid101, findsOneWidget);
+    expect(tester.getTopLeft(tid102).dy, lessThan(tester.getTopLeft(tid101).dy));
+
+    await tester.tap(find.byKey(const Key('comic-detail-sort-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('排序：Tid 升序'), findsOneWidget);
+    expect(tester.getTopLeft(tid101).dy, lessThan(tester.getTopLeft(tid102).dy));
   });
 }
 

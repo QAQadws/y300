@@ -16,10 +16,14 @@ class CatalogThreadParseResult {
   const CatalogThreadParseResult({
     required this.entries,
     this.nextPageUrl,
+    this.currentPage,
+    this.totalPages,
   });
 
   final List<CatalogThreadEntry> entries;
   final String? nextPageUrl;
+  final int? currentPage;
+  final int? totalPages;
 }
 
 /// Parse Discuz tag catalog HTML pages and extract thread entries.
@@ -81,7 +85,13 @@ class CatalogThreadHtmlParser {
         .toList(growable: false);
 
     final nextPageUrl = _extractNextPageUrl(document, pageUrl);
-    return CatalogThreadParseResult(entries: entries, nextPageUrl: nextPageUrl);
+    final paginationInfo = _extractPaginationInfo(document);
+    return CatalogThreadParseResult(
+      entries: entries,
+      nextPageUrl: nextPageUrl,
+      currentPage: paginationInfo.currentPage,
+      totalPages: paginationInfo.totalPages,
+    );
   }
 
   int _scoreAnchor({
@@ -126,6 +136,23 @@ class CatalogThreadHtmlParser {
     return null;
   }
 
+  _PaginationInfo _extractPaginationInfo(dynamic document) {
+    final currentText = document.querySelector('.pg strong')?.text.trim();
+    final currentPage = int.tryParse(currentText ?? '');
+
+    int? totalPages;
+    final totalSpan = document.querySelector('.pg label span')?.text ?? '';
+    final title = document.querySelector('.pg label span')?.attributes['title'] ?? '';
+    final byVisibleText = RegExp(r'/\s*(\d+)\s*页').firstMatch(totalSpan)?.group(1);
+    final byTitleText = RegExp(r'共\s*(\d+)\s*页').firstMatch(title)?.group(1);
+    totalPages = int.tryParse(byVisibleText ?? byTitleText ?? '');
+
+    return _PaginationInfo(
+      currentPage: currentPage,
+      totalPages: totalPages,
+    );
+  }
+
   String? _normalizeUrlWithBase(String href, String baseUrl) {
     var decoded = href.trim();
     while (decoded.contains('&amp;')) {
@@ -159,3 +186,12 @@ class _EntryCandidate {
   final int score;
 }
 
+class _PaginationInfo {
+  const _PaginationInfo({
+    required this.currentPage,
+    required this.totalPages,
+  });
+
+  final int? currentPage;
+  final int? totalPages;
+}

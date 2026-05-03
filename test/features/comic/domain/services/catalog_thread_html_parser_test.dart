@@ -45,6 +45,29 @@ void main() {
         'https://bbs.yamibo.com/misc.php?mod=tag&id=20452&type=thread&page=2',
       );
     });
+
+    test('extracts current and total pages from pagination block', () {
+      final parser = CatalogThreadHtmlParser();
+      final result = parser.parse(
+        pageUrl: 'https://bbs.yamibo.com/misc.php?mod=tag&id=21146&type=thread&page=1',
+        html: '''
+<div class="pgs mtm cl"><div class="pg">
+<strong>1</strong>
+<a href="misc.php?mod=tag&id=21146&type=thread&amp;page=2">2</a>
+<a href="misc.php?mod=tag&id=21146&type=thread&amp;page=3">3</a>
+<label><input type="text" name="custompage" class="px" size="2" value="1" />
+<span title="共 3 页"> / 3 页</span></label>
+<a href="misc.php?mod=tag&id=21146&type=thread&amp;page=2" class="nxt">下一页</a>
+</div></div>
+''',
+      );
+
+      expect(result.currentPage, 1);
+      expect(result.totalPages, 3);
+      expect(
+        result.nextPageUrl,
+        'https://bbs.yamibo.com/misc.php?mod=tag&id=21146&type=thread&page=2',
+      );
+    });
   });
 }
-

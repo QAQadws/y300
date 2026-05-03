@@ -77,7 +77,7 @@ void main() {
         ),
         opPostParser: ComicConsecutiveOpPostParser(engine: ComicPostParsingEngine()),
         catalogHtmlFetcher: _FakeCatalogHtmlFetcher({
-          'https://bbs.yamibo.com/misc.php?mod=tag&id=21137': '''
+          'https://bbs.yamibo.com/misc.php?mod=tag&id=21137&type=thread&page=1': '''
 <html><body>
 <table><tr><th><a href="thread-600-1-1.html">第1话</a></th></tr>
 <tr><th><a href="thread-601-1-1.html">第2话</a></th></tr></table>
@@ -90,6 +90,45 @@ void main() {
 
       expect(result.strategy, EpisodeDiscoveryStrategy.catalog);
       expect(result.episodeLinks.length, 2);
+    });
+
+    test('catalog strategy follows type=thread pages until total pages', () async {
+      final service = ComicEpisodeDiscoveryService(
+        fetchThreadDetail: _fakeThreadFetcher(
+          detailsByTid: {
+            '700': _thread(
+              tid: '700',
+              subject: '测试漫画 第10话',
+              message: '<a href="https://bbs.yamibo.com/misc.php?mod=tag&id=21661">目录</a>',
+            ),
+          },
+        ),
+        opPostParser: ComicConsecutiveOpPostParser(engine: ComicPostParsingEngine()),
+        catalogHtmlFetcher: _FakeCatalogHtmlFetcher({
+          'https://bbs.yamibo.com/misc.php?mod=tag&id=21661&type=thread&page=1': '''
+<div class="pg"><strong>1</strong>
+<label><span title="共 3 页"> / 3 页</span></label>
+<a class="nxt" href="misc.php?mod=tag&id=21661&type=thread&page=2">下一页</a></div>
+<table><tr><th><a href="thread-800-1-1.html">第1话</a></th></tr></table>
+''',
+          'https://bbs.yamibo.com/misc.php?mod=tag&id=21661&type=thread&page=2': '''
+<div class="pg"><strong>2</strong>
+<label><span title="共 3 页"> / 3 页</span></label>
+<a class="nxt" href="misc.php?mod=tag&id=21661&type=thread&page=3">下一页</a></div>
+<table><tr><th><a href="thread-801-1-1.html">第2话</a></th></tr></table>
+''',
+          'https://bbs.yamibo.com/misc.php?mod=tag&id=21661&type=thread&page=3': '''
+<div class="pg"><strong>3</strong>
+<label><span title="共 3 页"> / 3 页</span></label></div>
+<table><tr><th><a href="thread-802-1-1.html">第3话</a></th></tr></table>
+''',
+        }),
+      );
+
+      final result = await service.discoverFromTid('700');
+      expect(result.strategy, EpisodeDiscoveryStrategy.catalog);
+      expect(result.episodeLinks.length, 3);
+      expect(result.episodeLinks.any((e) => e.url.contains('thread-802-1-1.html')), isTrue);
     });
   });
 }

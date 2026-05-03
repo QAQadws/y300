@@ -260,7 +260,8 @@ class ComicEpisodeDiscoveryService {
     final queue = Queue<String>();
     final visitedPages = <String>{};
     final links = <String, ComicEpisodeLink>{};
-    queue.add(catalogUrl);
+    final normalizedEntry = _normalizeCatalogEntryUrl(catalogUrl);
+    queue.add(normalizedEntry);
 
     while (queue.isNotEmpty && visitedPages.length < _config.maxCatalogPages) {
       final pageUrl = queue.removeFirst();
@@ -293,9 +294,46 @@ class ComicEpisodeDiscoveryService {
       if (nextPage != null && !visitedPages.contains(nextPage)) {
         queue.add(nextPage);
       }
+
+      // When parser can infer total pages, eagerly enqueue remaining pages to avoid missing tails.
+      final basePageUri = Uri.tryParse(pageUrl);
+      final currentPage = parsedCatalog.currentPage ?? int.tryParse(basePageUri?.queryParameters['page'] ?? '') ?? 1;
+      final totalPages = parsedCatalog.totalPages;
+      if (basePageUri != null && totalPages != null && totalPages > currentPage) {
+        for (var page = currentPage + 1; page <= totalPages; page++) {
+          final candidate = _withPage(basePageUri, page).toString();
+          if (!visitedPages.contains(candidate)) {
+            queue.add(candidate);
+          }
+        }
+      }
     }
 
     return links.values.toList(growable: false);
+  }
+
+  String _normalizeCatalogEntryUrl(String rawUrl) {
+    final parsed = Uri.tryParse(rawUrl.trim());
+    if (parsed == null) {
+      return rawUrl;
+    }
+    final resolved = parsed.hasScheme ? parsed : Uri.parse('${AppConfig.siteBaseUrl}/').resolveUri(parsed);
+    final params = Map<String, String>.from(resolved.queryParameters);
+    if ((params['mod'] ?? '').toLowerCase() == 'tag') {
+      params['type'] = 'thread';
+      params['page'] = params['page']?.trim().isNotEmpty == true ? params['page']! : '1';
+      return resolved.replace(queryParameters: params).toString();
+    }
+    return resolved.toString();
+  }
+
+  Uri _withPage(Uri uri, int page) {
+    final params = Map<String, String>.from(uri.queryParameters);
+    params['page'] = page.toString();
+    if ((params['mod'] ?? '').toLowerCase() == 'tag') {
+      params['type'] = 'thread';
+    }
+    return uri.replace(queryParameters: params);
   }
 
   Future<_ParsedThreadRoot?> _fetchAndParse(String tid) async {

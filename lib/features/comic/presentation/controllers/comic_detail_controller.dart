@@ -27,18 +27,21 @@ class ComicDetailViewState {
     required this.detail,
     required this.episodes,
     required this.isRefreshing,
+    required this.sortDescending,
     this.refreshHint,
   });
 
   final ComicDetail detail;
   final List<ComicEpisodeItem> episodes;
   final bool isRefreshing;
+  final bool sortDescending;
   final String? refreshHint;
 
   ComicDetailViewState copyWith({
     ComicDetail? detail,
     List<ComicEpisodeItem>? episodes,
     bool? isRefreshing,
+    bool? sortDescending,
     String? refreshHint,
     bool clearHint = false,
   }) {
@@ -46,6 +49,7 @@ class ComicDetailViewState {
       detail: detail ?? this.detail,
       episodes: episodes ?? this.episodes,
       isRefreshing: isRefreshing ?? this.isRefreshing,
+      sortDescending: sortDescending ?? this.sortDescending,
       refreshHint: clearHint ? null : (refreshHint ?? this.refreshHint),
     );
   }
@@ -63,7 +67,28 @@ class ComicDetailController extends AsyncNotifier<ComicDetailViewState> {
 
   @override
   FutureOr<ComicDetailViewState> build() async {
-    return _load(_args.comicId);
+    return _load(_args.comicId, sortDescending: true);
+  }
+
+  Future<void> toggleSortOrder() async {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    final nextDescending = !current.sortDescending;
+    state = AsyncData(current.copyWith(sortDescending: nextDescending));
+    final repository = ref.read(comicRepositoryProvider);
+    final episodes = await repository.getComicEpisodes(
+      comicId: current.detail.comicId,
+      descending: false,
+    );
+    final sorted = _sortEpisodesByTid(episodes: episodes, descending: nextDescending);
+    state = AsyncData(
+      (state.value ?? current).copyWith(
+        episodes: sorted,
+        sortDescending: nextDescending,
+      ),
+    );
   }
 
   Future<void> refreshEpisodes() async {
@@ -95,7 +120,10 @@ class ComicDetailController extends AsyncNotifier<ComicDetailViewState> {
         fallbackSourceTid: current.detail.sourceTid,
       );
 
-      final refreshed = await _load(current.detail.comicId);
+      final refreshed = await _load(
+        current.detail.comicId,
+        sortDescending: current.sortDescending,
+      );
       state = AsyncData(
         refreshed.copyWith(
           isRefreshing: false,
@@ -112,7 +140,10 @@ class ComicDetailController extends AsyncNotifier<ComicDetailViewState> {
     }
   }
 
-  Future<ComicDetailViewState> _load(String comicId) async {
+  Future<ComicDetailViewState> _load(
+    String comicId, {
+    required bool sortDescending,
+  }) async {
     final repository = ref.read(comicRepositoryProvider);
     final detail = await repository.getComicDetail(comicId: comicId);
     if (detail == null) {
@@ -121,14 +152,34 @@ class ComicDetailController extends AsyncNotifier<ComicDetailViewState> {
 
     final episodes = await repository.getComicEpisodes(
       comicId: comicId,
-      descending: true,
+      descending: false,
     );
+    final sorted = _sortEpisodesByTid(episodes: episodes, descending: sortDescending);
 
     return ComicDetailViewState(
       detail: detail,
-      episodes: episodes,
+      episodes: sorted,
       isRefreshing: false,
+      sortDescending: sortDescending,
       refreshHint: null,
     );
+  }
+
+  List<ComicEpisodeItem> _sortEpisodesByTid({
+    required List<ComicEpisodeItem> episodes,
+    required bool descending,
+  }) {
+    final copy = List<ComicEpisodeItem>.from(episodes);
+    copy.sort((a, b) {
+      final leftTid = int.tryParse(a.sourceTid) ?? -1;
+      final rightTid = int.tryParse(b.sourceTid) ?? -1;
+      final tidCmp = leftTid.compareTo(rightTid);
+      if (tidCmp != 0) {
+        return descending ? -tidCmp : tidCmp;
+      }
+      final orderCmp = a.orderIndex.compareTo(b.orderIndex);
+      return descending ? -orderCmp : orderCmp;
+    });
+    return copy;
   }
 }
