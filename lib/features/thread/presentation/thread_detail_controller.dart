@@ -7,6 +7,8 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_post_aggregation_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/reply/data/reply_providers.dart';
+import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
@@ -125,6 +127,79 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     }
   }
 
+  void updateReplyText(String value) {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    state = AsyncData(
+      current.copyWith(
+        replyText: value,
+        clearReplyHint: true,
+      ),
+    );
+  }
+
+  Future<void> submitReply() async {
+    final current = state.value;
+    if (current == null || current.isReplySubmitting) {
+      return;
+    }
+    final message = current.replyText.trim();
+    if (message.isEmpty) {
+      state = AsyncData(
+        current.copyWith(replyHint: '请输入回复内容'),
+      );
+      return;
+    }
+
+    state = AsyncData(
+      current.copyWith(
+        isReplySubmitting: true,
+        clearReplyHint: true,
+      ),
+    );
+
+    final result = await ref.read(replyRepositoryProvider).sendReply(
+          draft: ReplyDraft(
+            fid: current.fid,
+            tid: current.tid,
+            message: message,
+          ),
+        );
+
+    final afterSubmit = state.value ?? current;
+    state = result.when(
+      success: (data) => AsyncData(
+        afterSubmit.copyWith(
+          isReplySubmitting: false,
+          replyText: '',
+          replyHint: data.message.isEmpty ? '回复成功' : data.message,
+        ),
+      ),
+      failure: (error) => AsyncData(
+        afterSubmit.copyWith(
+          isReplySubmitting: false,
+          replyHint: error.message,
+        ),
+      ),
+    );
+
+    if (result.isSuccess) {
+      final latest = state.value;
+      if (latest == null) {
+        return;
+      }
+      final reloaded = await _loadPage(page: 1, previous: const <ThreadPost>[]);
+      state = AsyncData(
+        reloaded.copyWith(
+          replyHint: latest.replyHint,
+          replyText: latest.replyText,
+        ),
+      );
+    }
+  }
+
   Future<ThreadDetailPageState> _loadPage({
     required int page,
     required List<ThreadPost> previous,
@@ -156,6 +231,9 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         parsedComicPost: comicMeta.$2,
         isInShelf: isInShelf,
         isComicActionLoading: false,
+        replyText: '',
+        isReplySubmitting: false,
+        replyHint: null,
       );
     }
 
@@ -173,6 +251,9 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       parsedComicPost: ParsedComicPost.empty,
       isInShelf: false,
       isComicActionLoading: false,
+      replyText: '',
+      isReplySubmitting: false,
+      replyHint: null,
       errorMessage: error.message,
     );
   }

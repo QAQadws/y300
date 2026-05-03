@@ -42,66 +42,155 @@ class ThreadDetailPage extends ConsumerWidget {
             ),
         ],
       ),
-      body: (asyncState.isLoading && state.posts.isEmpty)
-          ? const ForumHomeSkeleton(key: Key('thread-detail-skeleton'))
-          : state.errorMessage != null && state.posts.isEmpty
-          ? _ThreadErrorView(
-              message: state.errorMessage!,
-              onRetry: controller.refresh,
-            )
-          : ListView.builder(
-              key: const Key('thread-detail-list'),
-              padding: const EdgeInsets.all(16),
-              itemCount: state.posts.length + 1,
-              itemBuilder: (context, index) {
-                if (index == state.posts.length) {
-                  return _ThreadLoadMoreSection(
-                    hasMore: state.hasMore,
-                    isLoadingMore: state.isLoadingMore,
-                    onLoadMore: controller.loadMore,
-                  );
-                }
+      body: Column(
+        children: [
+          Expanded(
+            child: (asyncState.isLoading && state.posts.isEmpty)
+                ? const ForumHomeSkeleton(key: Key('thread-detail-skeleton'))
+                : state.errorMessage != null && state.posts.isEmpty
+                ? _ThreadErrorView(
+                    message: state.errorMessage!,
+                    onRetry: controller.refresh,
+                  )
+                : ListView.builder(
+                    key: const Key('thread-detail-list'),
+                    padding: const EdgeInsets.all(16),
+                    itemCount: state.posts.length + 1,
+                    itemBuilder: (context, index) {
+                      if (index == state.posts.length) {
+                        return _ThreadLoadMoreSection(
+                          hasMore: state.hasMore,
+                          isLoadingMore: state.isLoadingMore,
+                          onLoadMore: controller.loadMore,
+                        );
+                      }
 
-                final post = state.posts[index];
-                final showComicEntry = post.isFirst && state.comicCandidateInfo.isCandidate;
+                      final post = state.posts[index];
+                      final showComicEntry = post.isFirst && state.comicCandidateInfo.isCandidate;
 
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('${post.number}楼 · ${post.author} · ${post.dateline}'),
-                        if (showComicEntry) ...[
-                          const SizedBox(height: 8),
-                          // Phase-1 shows entry in first floor only, then we can extend routing later.
-                          Row(
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Expanded(
-                                child: Text(
-                                  '漫画候选（评分 ${state.comicCandidateInfo.score}）',
-                                  style: Theme.of(context).textTheme.bodySmall,
+                              Text('${post.number}楼 · ${post.author} · ${post.dateline}'),
+                              if (showComicEntry) ...[
+                                const SizedBox(height: 8),
+                                // Keep shelf entry logic close to top post and avoid coupling with reply UI.
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '漫画候选（评分 ${state.comicCandidateInfo.score}）',
+                                        style: Theme.of(context).textTheme.bodySmall,
+                                      ),
+                                    ),
+                                    AddToShelfButton(
+                                      inShelf: state.isInShelf,
+                                      onPressed: state.isComicActionLoading ? null : controller.addToShelf,
+                                    ),
+                                  ],
                                 ),
-                              ),
-                              AddToShelfButton(
-                                inShelf: state.isInShelf,
-                                onPressed: state.isComicActionLoading ? null : controller.addToShelf,
+                              ],
+                              const SizedBox(height: 8),
+                              Html(
+                                data: post.message,
+                                key: Key('thread-post-${post.pid}'),
                               ),
                             ],
                           ),
-                        ],
-                        const SizedBox(height: 8),
-                        Html(
-                          data: post.message,
-                          key: Key('thread-post-${post.pid}'),
                         ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
-                );
-              },
+          ),
+          _ReplyComposer(
+            replyText: state.replyText,
+            isSubmitting: state.isReplySubmitting,
+            hint: state.replyHint,
+            onChanged: controller.updateReplyText,
+            onSubmit: controller.submitReply,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReplyComposer extends StatelessWidget {
+  const _ReplyComposer({
+    required this.replyText,
+    required this.isSubmitting,
+    required this.hint,
+    required this.onChanged,
+    required this.onSubmit,
+  });
+
+  final String replyText;
+  final bool isSubmitting;
+  final String? hint;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (hint != null && hint!.trim().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  hint!,
+                  key: const Key('thread-reply-hint'),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
             ),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  key: const Key('thread-reply-input'),
+                  initialValue: replyText,
+                  enabled: !isSubmitting,
+                  onChanged: onChanged,
+                  minLines: 1,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    hintText: '输入回复内容',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                key: const Key('thread-reply-submit-button'),
+                onPressed: isSubmitting ? null : onSubmit,
+                child: isSubmitting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('发送'),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

@@ -15,6 +15,9 @@ class ThreadDetailPageState {
     required this.parsedComicPost,
     required this.isInShelf,
     required this.isComicActionLoading,
+    required this.replyText,
+    required this.isReplySubmitting,
+    required this.replyHint,
     this.errorMessage,
   });
 
@@ -30,6 +33,9 @@ class ThreadDetailPageState {
   final ParsedComicPost parsedComicPost;
   final bool isInShelf;
   final bool isComicActionLoading;
+  final String replyText;
+  final bool isReplySubmitting;
+  final String? replyHint;
   final String? errorMessage;
 
   factory ThreadDetailPageState.initial({
@@ -49,6 +55,9 @@ class ThreadDetailPageState {
       parsedComicPost: ParsedComicPost.empty,
       isInShelf: false,
       isComicActionLoading: false,
+      replyText: '',
+      isReplySubmitting: false,
+      replyHint: null,
       errorMessage: null,
     );
   }
@@ -66,7 +75,11 @@ class ThreadDetailPageState {
     ParsedComicPost? parsedComicPost,
     bool? isInShelf,
     bool? isComicActionLoading,
+    String? replyText,
+    bool? isReplySubmitting,
+    String? replyHint,
     String? errorMessage,
+    bool clearReplyHint = false,
     bool clearError = false,
   }) {
     return ThreadDetailPageState(
@@ -82,6 +95,9 @@ class ThreadDetailPageState {
       parsedComicPost: parsedComicPost ?? this.parsedComicPost,
       isInShelf: isInShelf ?? this.isInShelf,
       isComicActionLoading: isComicActionLoading ?? this.isComicActionLoading,
+      replyText: replyText ?? this.replyText,
+      isReplySubmitting: isReplySubmitting ?? this.isReplySubmitting,
+      replyHint: clearReplyHint ? null : (replyHint ?? this.replyHint),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );
   }

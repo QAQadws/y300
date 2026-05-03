@@ -1143,3 +1143,35 @@
 2. 新增目录多页抓取单测。
 3. 新增详情页排序切换单测。
 4. 本轮未执行测试，待本地回归验证。
+
+## 回复功能 Phase 1 Review（仅 API 回复，2026-05-03）
+
+### 变更结论
+1. 已完成 `sendreply API` 的最小可用回复链路。
+2. 本轮严格未引入 Web 回退实现，符合“仅 API 回复”的阶段要求。
+3. 回复功能以独立 `features/reply` 模块落地，Thread 页面通过抽象仓储调用，耦合可控。
+
+### 关键落点
+1. `lib/features/reply/domain/models/reply_models.dart`
+2. `lib/features/reply/data/reply_repository.dart`
+3. `lib/features/reply/data/discuz_reply_api_repository.dart`
+4. `lib/features/thread/presentation/thread_detail_state.dart`
+5. `lib/features/thread/presentation/thread_detail_controller.dart`
+6. `lib/features/thread/presentation/thread_detail_page.dart`
+
+### 设计审查
+1. 解耦性
+- UI/Controller 不直接依赖 Dio 与接口细节。
+- API 调用细节封装在 `DiscuzReplyApiRepository`，后续接入 Web 回退不破坏上层接口。
+
+2. 可维护性
+- 回复请求模型结构化（`ReplyDraft`），后续扩展引用回复/附件参数只需增模型与仓储映射。
+- 状态字段按职责拆分，避免复用 `errorMessage` 承载回复提示。
+
+3. 风险与后续
+- 当前成功判定依赖 `Message.messageval/messagestr` 关键字，仍建议后续通过真实抓包样本补强断言规则。
+- 发送成功后刷新策略为“重载第一页”，逻辑正确但性能可继续优化（可改增量插入）。
+
+### 测试审查
+1. 已新增 API 层单测与页面交互测试。
+2. 本轮未执行测试命令，待本地回归验证结果。

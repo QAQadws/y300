@@ -7,6 +7,9 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/reply/data/reply_providers.dart';
+import 'package:y300/features/reply/data/reply_repository.dart';
+import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
@@ -201,19 +204,80 @@ void main() {
 
       expect(find.byKey(const Key('thread-detail-search-button')), findsOneWidget);
     });
+
+    testWidgets('can input and submit reply via api repository abstraction', (tester) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            subject: '测试主题',
+            author: 'alice',
+            replies: 0,
+            views: 1,
+            currentPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+      final replyRepo = _FakeReplyRepository();
+
+      await tester.pumpWidget(_buildTestApp(repository, replyRepository: replyRepo));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byKey(const Key('thread-reply-input')), '这是测试回复');
+      await tester.tap(find.byKey(const Key('thread-reply-submit-button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(replyRepo.called, isTrue);
+      expect(replyRepo.lastDraft?.message, '这是测试回复');
+      expect(find.byKey(const Key('thread-reply-hint')), findsOneWidget);
+    });
   });
 }
 
-Widget _buildTestApp(ThreadRepository repository) {
+Widget _buildTestApp(
+  ThreadRepository repository, {
+  ReplyRepository? replyRepository,
+}) {
   return ProviderScope(
     overrides: [
       threadRepositoryProvider.overrideWithValue(repository),
       comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+      replyRepositoryProvider.overrideWithValue(replyRepository ?? _FakeReplyRepository()),
     ],
     child: const MaterialApp(
       home: ThreadDetailPage(tid: '100', subject: '测试主题'),
     ),
   );
+}
+
+class _FakeReplyRepository implements ReplyRepository {
+  bool called = false;
+  ReplyDraft? lastDraft;
+
+  @override
+  Future<ApiResult<ReplySubmissionResult>> sendReply({
+    required ReplyDraft draft,
+  }) async {
+    called = true;
+    lastDraft = draft;
+    return const ApiSuccess<ReplySubmissionResult>(
+      ReplySubmissionResult(message: '回复发布成功'),
+    );
+  }
 }
 
 class _FakeThreadRepository implements ThreadRepository {
