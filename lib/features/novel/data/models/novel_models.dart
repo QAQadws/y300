@@ -1,5 +1,4 @@
-﻿/// 小说书架条目（阶段0基础模型）。
-class NovelItem {
+﻿class NovelItem {
   const NovelItem({
     required this.novelId,
     required this.sourceTid,
@@ -21,7 +20,6 @@ class NovelItem {
   final int episodeCount;
 }
 
-/// 小说章节条目（阶段0基础模型）。
 class NovelEpisodeItem {
   const NovelEpisodeItem({
     required this.episodeId,
@@ -44,7 +42,6 @@ class NovelEpisodeItem {
   final String? datelineText;
 }
 
-/// 小说章节正文（阶段0基础模型）。
 class NovelChapterContent {
   const NovelChapterContent({
     required this.episodeId,
@@ -59,7 +56,6 @@ class NovelChapterContent {
   final List<String> paragraphs;
 }
 
-/// 小说阅读器偏好（阶段0基础模型）。
 class NovelReaderPreferences {
   const NovelReaderPreferences({
     required this.fontSize,
@@ -70,10 +66,75 @@ class NovelReaderPreferences {
     required this.fontFamily,
   });
 
+  factory NovelReaderPreferences.defaults() {
+    return const NovelReaderPreferences(
+      fontSize: 18,
+      lineHeight: 1.8,
+      paragraphSpacing: 10,
+      pagePadding: 16,
+      themeMode: 'light',
+      fontFamily: 'system',
+    );
+  }
+
   final double fontSize;
   final double lineHeight;
   final double paragraphSpacing;
   final double pagePadding;
   final String themeMode;
   final String fontFamily;
+
+  NovelReaderPreferences copyWith({
+    double? fontSize,
+    double? lineHeight,
+    double? paragraphSpacing,
+    double? pagePadding,
+    String? themeMode,
+    String? fontFamily,
+  }) {
+    return NovelReaderPreferences(
+      fontSize: fontSize ?? this.fontSize,
+      lineHeight: lineHeight ?? this.lineHeight,
+      paragraphSpacing: paragraphSpacing ?? this.paragraphSpacing,
+      pagePadding: pagePadding ?? this.pagePadding,
+      themeMode: themeMode ?? this.themeMode,
+      fontFamily: fontFamily ?? this.fontFamily,
+    );
+  }
+}
+
+class NovelReadingProgress {
+  const NovelReadingProgress({
+    required this.novelId,
+    required this.episodeId,
+    required this.scrollOffset,
+    required this.updatedAt,
+  });
+
+  final String novelId;
+  final String episodeId;
+  final double scrollOffset;
+  final DateTime updatedAt;
+}
+
+class NovelEpisodeRefreshResult {
+  const NovelEpisodeRefreshResult({
+    required this.insertedCount,
+    required this.updatedCount,
+    required this.totalCount,
+  });
+
+  final int insertedCount;
+  final int updatedCount;
+  final int totalCount;
+}
+
+class NovelRefreshSeed {
+  const NovelRefreshSeed({
+    required this.fid,
+    required this.tid,
+  });
+
+  final String fid;
+  final String tid;
 }

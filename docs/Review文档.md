@@ -1205,3 +1205,73 @@
 本轮按约定未执行自动化命令，请本地执行并回传：
 1. `flutter test`
 2. `flutter analyze`
+
+---
+
+## 小说模块 Phase 1 Review 补充清单（2026-05-03）
+
+### 一、分层与解耦
+- [ ] `NovelRepository` 已作为唯一小说数据门面，页面不直接依赖 SQL。
+- [ ] 线程拉取通过 `NovelThreadGateway` 抽象，仓储不硬耦合 `ThreadRepository`。
+- [ ] 章节发现逻辑集中在 `NovelEpisodeDiscoveryService`，控制器仅做编排。
+
+### 二、最小闭环能力
+- [ ] 小说 Tab 可进入书架页并展示网格卡片。
+- [ ] 支持手动输入 `fid + tid` 入库，并自动触发首轮章节刷新。
+- [ ] 小说详情页可展示章节列表，支持刷新与排序切换。
+- [ ] 阅读器可正常渲染文本段落并切换章节。
+
+### 三、阅读体验与持久化
+- [ ] 阅读器支持字号、行距、段距、主题调整。
+- [ ] 阅读样式设置可持久化恢复。
+- [ ] 阅读滚动进度可持久化并恢复。
+- [ ] 已新增 `novel_reading_progress` 专用表，未污染章节内容表。
+
+### 四、规则与数据质量（Phase 1）
+- [ ] 章节发现仅保留楼主楼层。
+- [ ] 标题优先提取“第x章/话/节”，未命中时有兜底标题。
+- [ ] 章节结构包含 `pid/page/tid`，便于 Phase 2/3 继续增强。
+
+### 五、测试覆盖（已编写，未执行）
+- [ ] `test/features/novel/data/local_novel_repository_test.dart`
+- [ ] `test/features/novel/domain/services/novel_episode_discovery_service_test.dart`
+- [ ] `test/features/novel/presentation/novel_shelf_page_test.dart`
+- [ ] `test/features/novel/presentation/novel_detail_page_test.dart`
+- [ ] `test/features/novel/presentation/novel_reader_page_test.dart`
+- [ ] `test/features/novel/data/novel_phase0_db_migration_test.dart`（含进度表断言）
+
+### 六、执行说明
+本轮按约定未执行自动化命令，请本地执行并回传：
+1. `flutter test`
+2. `flutter analyze`
+
+---
+
+## 小说模块 Phase 1.1 Review 补充清单（2026-05-03）
+
+### 一、稳定性修复
+- [ ] `ComicLocalDb.open` 支持测试隔离库名，避免并发锁库。
+- [ ] 小说数据层测试使用独立 test db，不再争用 `comic_shelf.db`。
+- [ ] `MainShellPage` 测试已覆盖小说 provider fake，避免落到真实依赖。
+
+### 二、与漫画入口策略对齐
+- [ ] `ThreadDetailPage` 在 `fid=49/55` 首楼显示“小说候选”入口。
+- [ ] 小说入口交互复用 `AddToShelfButton`，视觉与漫画入口一致。
+- [ ] 点击入口后执行 `upsertNovelBySeed + refreshEpisodes` 闭环。
+- [ ] 入库成功后按钮状态切为“已在书架”。
+
+### 三、状态与解耦
+- [ ] 小说候选状态收敛在 `ThreadDetailState`，UI 不包含业务判定逻辑。
+- [ ] `ThreadDetailController` 负责流程编排，仓储细节不泄露给页面。
+- [ ] 候选判定规则函数独立（`_isNovelCandidateFid`），便于后续策略演进。
+
+### 四、测试覆盖（已编写，未执行）
+- [ ] `test/features/startup/presentation/main_shell_page_test.dart`
+- [ ] `test/features/thread/presentation/thread_detail_page_test.dart`（新增小说入口场景）
+- [ ] `test/features/novel/data/novel_phase0_db_migration_test.dart`
+- [ ] `test/features/novel/data/local_novel_repository_test.dart`
+
+### 五、执行说明
+本轮按约定未执行自动化命令，请本地执行并回传：
+1. `flutter test`
+2. `flutter analyze`

@@ -1,10 +1,8 @@
 ﻿import 'package:y300/features/novel/data/models/novel_models.dart';
 
-/// 小说仓储抽象。
-///
-/// 阶段0只定义接口，后续阶段再接入真实网络解析与本地持久化实现。
+/// 小说仓储：封装小说书架、章节、正文、阅读偏好与阅读进度。
 abstract class NovelRepository {
-  Future<List<NovelItem>> getShelfItems();
+  Future<List<NovelItem>> getShelfItems({String? sourceFid});
 
   Future<NovelItem?> getDetail({required String novelId});
 
@@ -17,5 +15,17 @@ abstract class NovelRepository {
 
   Future<void> upsertReaderPreferences(NovelReaderPreferences preferences);
 
-  Future<NovelReaderPreferences?> getReaderPreferences();
+  Future<NovelReaderPreferences> getReaderPreferences();
+
+  Future<void> upsertNovelBySeed({required NovelRefreshSeed seed});
+
+  Future<NovelEpisodeRefreshResult> refreshEpisodes({required String novelId});
+
+  Future<void> saveReadingProgress({
+    required String novelId,
+    required String episodeId,
+    required double scrollOffset,
+  });
+
+  Future<NovelReadingProgress?> getReadingProgress({required String novelId});
 }

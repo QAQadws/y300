@@ -7,6 +7,8 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_post_aggregation_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
@@ -127,6 +129,48 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     }
   }
 
+  Future<void> addNovelToShelf() async {
+    final current = state.value;
+    if (current == null || current.isNovelActionLoading || !current.isNovelCandidate) {
+      return;
+    }
+
+    state = AsyncData(
+      current.copyWith(
+        isNovelActionLoading: true,
+        clearError: true,
+      ),
+    );
+
+    try {
+      final fid = current.fid.trim();
+      final tid = current.tid.trim();
+      final repository = ref.read(novelRepositoryProvider);
+      final novelId = 'novel:$fid:$tid';
+
+      await repository.upsertNovelBySeed(
+        seed: NovelRefreshSeed(fid: fid, tid: tid),
+      );
+      await repository.refreshEpisodes(novelId: novelId);
+
+      final updated = state.value ?? current;
+      state = AsyncData(
+        updated.copyWith(
+          isNovelActionLoading: false,
+          isNovelInShelf: true,
+        ),
+      );
+    } catch (error) {
+      final updated = state.value ?? current;
+      state = AsyncData(
+        updated.copyWith(
+          isNovelActionLoading: false,
+          errorMessage: '加入小说书架失败：$error',
+        ),
+      );
+    }
+  }
+
   void updateReplyText(String value) {
     final current = state.value;
     if (current == null) {
@@ -217,6 +261,14 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       );
       final comicId = _buildComicId(tid: _args.tid);
       final isInShelf = await _readComicRepository().isInShelf(comicId: comicId);
+      // 对齐漫画入口策略：在帖子详情阶段先做“是否候选”与“是否已入书架”判定，
+      // 页面层只消费状态并渲染按钮，避免把规则散落到 UI。
+      final novelCandidate = _isNovelCandidateFid(data.fid);
+      var isNovelInShelf = false;
+      if (novelCandidate) {
+        final novelId = 'novel:${data.fid}:${_args.tid}';
+        isNovelInShelf = await ref.read(novelRepositoryProvider).getDetail(novelId: novelId) != null;
+      }
 
       return ThreadDetailPageState(
         tid: _args.tid,
@@ -231,6 +283,9 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         parsedComicPost: comicMeta.$2,
         isInShelf: isInShelf,
         isComicActionLoading: false,
+        isNovelCandidate: novelCandidate,
+        isNovelInShelf: isNovelInShelf,
+        isNovelActionLoading: false,
         replyText: '',
         isReplySubmitting: false,
         replyHint: null,
@@ -251,6 +306,9 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       parsedComicPost: ParsedComicPost.empty,
       isInShelf: false,
       isComicActionLoading: false,
+      isNovelCandidate: false,
+      isNovelInShelf: false,
+      isNovelActionLoading: false,
       replyText: '',
       isReplySubmitting: false,
       replyHint: null,
@@ -293,6 +351,10 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
   String _buildComicId({required String tid}) {
     return 'yamibo:$tid';
+  }
+
+  bool _isNovelCandidateFid(String fid) {
+    return fid == '49' || fid == '55';
   }
 
 }

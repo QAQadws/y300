@@ -6,6 +6,9 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/data/novel_providers.dart';
+import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/startup/presentation/main_shell_page.dart';
 
 void main() {
@@ -14,6 +17,7 @@ void main() {
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+          novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
@@ -27,7 +31,7 @@ void main() {
 
     await tester.tap(find.text('小说'));
     await tester.pumpAndSettle();
-    expect(find.text('小说模块建设中'), findsOneWidget);
+    expect(find.text('小说书架'), findsOneWidget);
 
     await tester.tap(find.text('更多'));
     await tester.pumpAndSettle();
@@ -40,6 +44,7 @@ void main() {
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+          novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
@@ -158,4 +163,48 @@ class _FakeComicRepository implements ComicRepository {
     required int imageIndex,
     required double scrollOffset,
   }) async {}
+}
+
+class _FakeNovelRepository implements NovelRepository {
+  @override
+  Future<NovelItem?> getDetail({required String novelId}) async => null;
+
+  @override
+  Future<NovelChapterContent?> getChapterContent({required String episodeId}) async => null;
+
+  @override
+  Future<List<NovelEpisodeItem>> getEpisodes({required String novelId, bool descending = false}) async {
+    return const <NovelEpisodeItem>[];
+  }
+
+  @override
+  Future<NovelReaderPreferences> getReaderPreferences() async {
+    return NovelReaderPreferences.defaults();
+  }
+
+  @override
+  Future<List<NovelItem>> getShelfItems({String? sourceFid}) async {
+    return const <NovelItem>[];
+  }
+
+  @override
+  Future<NovelReadingProgress?> getReadingProgress({required String novelId}) async => null;
+
+  @override
+  Future<NovelEpisodeRefreshResult> refreshEpisodes({required String novelId}) async {
+    return const NovelEpisodeRefreshResult(insertedCount: 0, updatedCount: 0, totalCount: 0);
+  }
+
+  @override
+  Future<void> saveReadingProgress({
+    required String novelId,
+    required String episodeId,
+    required double scrollOffset,
+  }) async {}
+
+  @override
+  Future<void> upsertNovelBySeed({required NovelRefreshSeed seed}) async {}
+
+  @override
+  Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {}
 }

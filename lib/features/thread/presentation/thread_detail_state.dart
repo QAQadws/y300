@@ -15,6 +15,9 @@ class ThreadDetailPageState {
     required this.parsedComicPost,
     required this.isInShelf,
     required this.isComicActionLoading,
+    required this.isNovelCandidate,
+    required this.isNovelInShelf,
+    required this.isNovelActionLoading,
     required this.replyText,
     required this.isReplySubmitting,
     required this.replyHint,
@@ -33,6 +36,9 @@ class ThreadDetailPageState {
   final ParsedComicPost parsedComicPost;
   final bool isInShelf;
   final bool isComicActionLoading;
+  final bool isNovelCandidate;
+  final bool isNovelInShelf;
+  final bool isNovelActionLoading;
   final String replyText;
   final bool isReplySubmitting;
   final String? replyHint;
@@ -55,6 +61,9 @@ class ThreadDetailPageState {
       parsedComicPost: ParsedComicPost.empty,
       isInShelf: false,
       isComicActionLoading: false,
+      isNovelCandidate: false,
+      isNovelInShelf: false,
+      isNovelActionLoading: false,
       replyText: '',
       isReplySubmitting: false,
       replyHint: null,
@@ -75,6 +84,9 @@ class ThreadDetailPageState {
     ParsedComicPost? parsedComicPost,
     bool? isInShelf,
     bool? isComicActionLoading,
+    bool? isNovelCandidate,
+    bool? isNovelInShelf,
+    bool? isNovelActionLoading,
     String? replyText,
     bool? isReplySubmitting,
     String? replyHint,
@@ -95,6 +107,9 @@ class ThreadDetailPageState {
       parsedComicPost: parsedComicPost ?? this.parsedComicPost,
       isInShelf: isInShelf ?? this.isInShelf,
       isComicActionLoading: isComicActionLoading ?? this.isComicActionLoading,
+      isNovelCandidate: isNovelCandidate ?? this.isNovelCandidate,
+      isNovelInShelf: isNovelInShelf ?? this.isNovelInShelf,
+      isNovelActionLoading: isNovelActionLoading ?? this.isNovelActionLoading,
       replyText: replyText ?? this.replyText,
       isReplySubmitting: isReplySubmitting ?? this.isReplySubmitting,
       replyHint: clearReplyHint ? null : (replyHint ?? this.replyHint),

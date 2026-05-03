@@ -94,6 +94,23 @@ class ThreadDetailPage extends ConsumerWidget {
                                   ],
                                 ),
                               ],
+                              if (post.isFirst && state.isNovelCandidate) ...[
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '小说候选（fid=${state.fid}）',
+                                        style: Theme.of(context).textTheme.bodySmall,
+                                      ),
+                                    ),
+                                    AddToShelfButton(
+                                      inShelf: state.isNovelInShelf,
+                                      onPressed: state.isNovelActionLoading ? null : controller.addNovelToShelf,
+                                    ),
+                                  ],
+                                ),
+                              ],
                               const SizedBox(height: 8),
                               Html(
                                 data: post.message,

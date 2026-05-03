@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 5;
+  static const int dbVersion = 6;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -18,10 +18,12 @@ class ComicLocalDb {
   static const String workEpisodesTable = 'work_episodes';
   static const String novelEpisodeContentTable = 'novel_episode_content';
   static const String readerPreferencesTable = 'reader_preferences';
+  static const String novelReadingProgressTable = 'novel_reading_progress';
 
-  static Future<Database> open() {
+  static Future<Database> open({String? databaseName}) {
+    final targetDbName = databaseName ?? dbName;
     return openDatabase(
-      dbName,
+      targetDbName,
       version: dbVersion,
       onCreate: (db, version) async {
         await _createTables(db);
@@ -39,6 +41,9 @@ class ComicLocalDb {
         }
         if (oldVersion < 5) {
           await _createNovelTables(db);
+        }
+        if (oldVersion < 6) {
+          await _createNovelReadingProgressTable(db);
         }
       },
     );
@@ -129,6 +134,7 @@ class ComicLocalDb {
     await _seedDefaultSettings(db);
     await _createReadingProgressTable(db);
     await _createNovelTables(db);
+    await _createNovelReadingProgressTable(db);
   }
 
   static Future<void> _createSettingsTable(Database db) async {
@@ -235,5 +241,16 @@ class ComicLocalDb {
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_episode_tid_pid ON $workEpisodesTable(source_tid, source_pid)',
     );
+  }
+
+  static Future<void> _createNovelReadingProgressTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $novelReadingProgressTable (
+        novel_id TEXT PRIMARY KEY,
+        episode_id TEXT NOT NULL,
+        scroll_offset REAL NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
   }
 }

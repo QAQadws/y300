@@ -1,17 +1,12 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:y300/features/novel/presentation/novel_shelf_page.dart';
 
-/// 小说模块入口页。
-///
-/// Phase 0 仅提供基础占位与结构，后续阶段再接入真实数据流与交互。
+/// 小说 Tab 容器。
 class NovelTabPage extends StatelessWidget {
   const NovelTabPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Text('小说模块建设中'),
-      ),
-    );
+    return const NovelShelfPage();
   }
 }

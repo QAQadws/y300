@@ -7,6 +7,9 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/data/novel_providers.dart';
+import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
@@ -127,6 +130,51 @@ void main() {
 
       expect(find.byKey(const Key('comic-in-shelf-button')), findsOneWidget);
       expect(find.textContaining('漫画候选（评分'), findsOneWidget);
+    });
+
+    testWidgets('shows novel add-to-shelf button for fid 49 first post', (tester) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '49',
+            subject: '测试小说帖',
+            author: 'alice',
+            replies: 0,
+            views: 12,
+            currentPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>第1章 开始</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      final novelRepository = _FakeNovelRepository();
+
+      await tester.pumpWidget(_buildTestApp(repository, novelRepository: novelRepository));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(find.textContaining('小说候选（fid=49）'), findsOneWidget);
+      expect(find.byKey(const Key('comic-add-to-shelf-button')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('comic-add-to-shelf-button')).last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(find.byKey(const Key('comic-in-shelf-button')), findsOneWidget);
+      expect(novelRepository.upsertCalled, isTrue);
+      expect(novelRepository.refreshCalled, isTrue);
     });
 
     testWidgets('includes second floor images when floor2 is same author and image-dominant', (tester) async {
@@ -251,11 +299,13 @@ void main() {
 Widget _buildTestApp(
   ThreadRepository repository, {
   ReplyRepository? replyRepository,
+  NovelRepository? novelRepository,
 }) {
   return ProviderScope(
     overrides: [
       threadRepositoryProvider.overrideWithValue(repository),
       comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+      novelRepositoryProvider.overrideWithValue(novelRepository ?? _FakeNovelRepository()),
       replyRepositoryProvider.overrideWithValue(replyRepository ?? _FakeReplyRepository()),
     ],
     child: const MaterialApp(
@@ -397,4 +447,66 @@ class _FakeComicRepository implements ComicRepository {
     required int imageIndex,
     required double scrollOffset,
   }) async {}
+}
+
+class _FakeNovelRepository implements NovelRepository {
+  bool upsertCalled = false;
+  bool refreshCalled = false;
+  final Set<String> _ids = <String>{};
+
+  @override
+  Future<NovelItem?> getDetail({required String novelId}) async {
+    if (!_ids.contains(novelId)) {
+      return null;
+    }
+    return NovelItem(
+      novelId: novelId,
+      sourceTid: '100',
+      sourceFid: '49',
+      title: '测试小说',
+      author: '作者A',
+      coverImageUrl: null,
+      updatedAt: DateTime(2026, 5, 3),
+      episodeCount: 1,
+    );
+  }
+
+  @override
+  Future<NovelChapterContent?> getChapterContent({required String episodeId}) async => null;
+
+  @override
+  Future<List<NovelEpisodeItem>> getEpisodes({required String novelId, bool descending = false}) async {
+    return const <NovelEpisodeItem>[];
+  }
+
+  @override
+  Future<NovelReaderPreferences> getReaderPreferences() async => NovelReaderPreferences.defaults();
+
+  @override
+  Future<List<NovelItem>> getShelfItems({String? sourceFid}) async => const <NovelItem>[];
+
+  @override
+  Future<NovelReadingProgress?> getReadingProgress({required String novelId}) async => null;
+
+  @override
+  Future<NovelEpisodeRefreshResult> refreshEpisodes({required String novelId}) async {
+    refreshCalled = true;
+    return const NovelEpisodeRefreshResult(insertedCount: 1, updatedCount: 0, totalCount: 1);
+  }
+
+  @override
+  Future<void> saveReadingProgress({
+    required String novelId,
+    required String episodeId,
+    required double scrollOffset,
+  }) async {}
+
+  @override
+  Future<void> upsertNovelBySeed({required NovelRefreshSeed seed}) async {
+    upsertCalled = true;
+    _ids.add('novel:${seed.fid}:${seed.tid}');
+  }
+
+  @override
+  Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {}
 }

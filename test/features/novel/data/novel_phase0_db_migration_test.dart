@@ -7,8 +7,9 @@ void main() {
   databaseFactory = databaseFactoryFfi;
 
   test('ComicLocalDb phase0 migration creates novel infrastructure tables', () async {
-    await deleteDatabase(ComicLocalDb.dbName);
-    final db = await ComicLocalDb.open();
+    const dbName = 'comic_shelf_test_phase0.db';
+    await deleteDatabase(dbName);
+    final db = await ComicLocalDb.open(databaseName: dbName);
 
     final tableRows = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
     final tableNames = tableRows
@@ -19,6 +20,7 @@ void main() {
     expect(tableNames.contains(ComicLocalDb.workEpisodesTable), isTrue);
     expect(tableNames.contains(ComicLocalDb.novelEpisodeContentTable), isTrue);
     expect(tableNames.contains(ComicLocalDb.readerPreferencesTable), isTrue);
+    expect(tableNames.contains(ComicLocalDb.novelReadingProgressTable), isTrue);
 
     final indexRows = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='index'");
     final indexNames = indexRows
@@ -30,5 +32,6 @@ void main() {
     expect(indexNames.contains('idx_episode_tid_pid'), isTrue);
 
     await db.close();
+    await deleteDatabase(dbName);
   });
 }
