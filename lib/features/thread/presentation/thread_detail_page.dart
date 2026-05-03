@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/comic/presentation/widgets/add_to_shelf_button.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
+import 'package:y300/shared/widgets/shelf/candidate_shelf_action_row.dart';
 import 'package:y300/shared/widgets/app_skeleton.dart';
 
 class ThreadDetailPage extends ConsumerWidget {
@@ -78,37 +78,20 @@ class ThreadDetailPage extends ConsumerWidget {
                               Text('${post.number}楼 · ${post.author} · ${post.dateline}'),
                               if (showComicEntry) ...[
                                 const SizedBox(height: 8),
-                                // Keep shelf entry logic close to top post and avoid coupling with reply UI.
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        '漫画候选（评分 ${state.comicCandidateInfo.score}）',
-                                        style: Theme.of(context).textTheme.bodySmall,
-                                      ),
-                                    ),
-                                    AddToShelfButton(
-                                      inShelf: state.isInShelf,
-                                      onPressed: state.isComicActionLoading ? null : controller.addToShelf,
-                                    ),
-                                  ],
+                                CandidateShelfActionRow(
+                                  label: '漫画候选（评分 ${state.comicCandidateInfo.score}）',
+                                  inShelf: state.isInShelf,
+                                  isLoading: state.isComicActionLoading,
+                                  onPressed: controller.addToShelf,
                                 ),
                               ],
                               if (post.isFirst && state.isNovelCandidate) ...[
                                 const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        '小说候选（fid=${state.fid}）',
-                                        style: Theme.of(context).textTheme.bodySmall,
-                                      ),
-                                    ),
-                                    AddToShelfButton(
-                                      inShelf: state.isNovelInShelf,
-                                      onPressed: state.isNovelActionLoading ? null : controller.addNovelToShelf,
-                                    ),
-                                  ],
+                                CandidateShelfActionRow(
+                                  label: '小说候选（fid=${state.fid}）',
+                                  inShelf: state.isNovelInShelf,
+                                  isLoading: state.isNovelActionLoading,
+                                  onPressed: controller.addNovelToShelf,
                                 ),
                               ],
                               const SizedBox(height: 8),

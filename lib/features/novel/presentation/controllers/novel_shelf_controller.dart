@@ -6,24 +6,44 @@ import 'package:y300/features/novel/data/novel_providers.dart';
 
 class NovelShelfViewState {
   const NovelShelfViewState({
-    required this.selectedFid,
-    required this.items,
+    required this.categories,
+    required this.selectedCategoryId,
+    required this.itemsByCategory,
     this.hint,
   });
 
-  final String selectedFid;
-  final List<NovelItem> items;
+  final List<NovelShelfCategory> categories;
+  final String selectedCategoryId;
+  final Map<String, List<NovelItem>> itemsByCategory;
   final String? hint;
 
+  int get selectedIndex {
+    final index = categories.indexWhere((category) => category.categoryId == selectedCategoryId);
+    return index < 0 ? 0 : index;
+  }
+
+  NovelShelfCategory? get selectedCategory {
+    if (categories.isEmpty) {
+      return null;
+    }
+    return categories[selectedIndex];
+  }
+
+  List<NovelItem> itemsOf(String categoryId) {
+    return itemsByCategory[categoryId] ?? const <NovelItem>[];
+  }
+
   NovelShelfViewState copyWith({
-    String? selectedFid,
-    List<NovelItem>? items,
+    List<NovelShelfCategory>? categories,
+    String? selectedCategoryId,
+    Map<String, List<NovelItem>>? itemsByCategory,
     String? hint,
     bool clearHint = false,
   }) {
     return NovelShelfViewState(
-      selectedFid: selectedFid ?? this.selectedFid,
-      items: items ?? this.items,
+      categories: categories ?? this.categories,
+      selectedCategoryId: selectedCategoryId ?? this.selectedCategoryId,
+      itemsByCategory: itemsByCategory ?? this.itemsByCategory,
       hint: clearHint ? null : (hint ?? this.hint),
     );
   }
@@ -35,31 +55,66 @@ final novelShelfControllerProvider =
 );
 
 class NovelShelfController extends AsyncNotifier<NovelShelfViewState> {
-  static const String fidAll = 'all';
-  static const String fidLiterature = '49';
-  static const String fidLightNovel = '55';
+  static const String defaultCategoryId = 'default';
 
   @override
   FutureOr<NovelShelfViewState> build() async {
-    return _load(selectedFid: fidAll);
+    return _load(selectedCategoryId: defaultCategoryId);
   }
 
-  Future<void> selectFid(String fid) async {
+  Future<void> selectCategory(String categoryId) async {
     final current = state.value;
-    if (current == null || current.selectedFid == fid) {
+    if (current == null || current.selectedCategoryId == categoryId) {
       return;
     }
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(() => _load(selectedFid: fid));
+    state = AsyncData(current.copyWith(selectedCategoryId: categoryId));
   }
 
   Future<void> refresh() async {
     final current = state.value;
-    final selected = current?.selectedFid ?? fidAll;
-    state = await AsyncValue.guard(() => _load(selectedFid: selected));
+    final selected = current?.selectedCategoryId ?? defaultCategoryId;
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() => _load(selectedCategoryId: selected));
   }
 
-  Future<String> addByTid({
+  Future<void> createCategory(String name) async {
+    final repository = ref.read(novelRepositoryProvider);
+    final newCategoryId = await repository.createCategory(name: name);
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() => _load(selectedCategoryId: newCategoryId));
+  }
+
+  Future<void> renameCategory({
+    required String categoryId,
+    required String newName,
+  }) async {
+    final repository = ref.read(novelRepositoryProvider);
+    await repository.renameCategory(categoryId: categoryId, newName: newName);
+    await refresh();
+  }
+
+  Future<void> deleteCategory(String categoryId) async {
+    final repository = ref.read(novelRepositoryProvider);
+    await repository.deleteCategory(categoryId: categoryId);
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() => _load(selectedCategoryId: defaultCategoryId));
+  }
+
+  Future<void> moveNovelToCategory({
+    required String novelId,
+    required String fromCategoryId,
+    required String toCategoryId,
+  }) async {
+    final repository = ref.read(novelRepositoryProvider);
+    await repository.moveNovelToCategory(
+      novelId: novelId,
+      fromCategoryId: fromCategoryId,
+      toCategoryId: toCategoryId,
+    );
+    await refresh();
+  }
+
+  Future<String> addByForumThread({
     required String fid,
     required String tid,
   }) async {
@@ -73,19 +128,37 @@ class NovelShelfController extends AsyncNotifier<NovelShelfViewState> {
     );
     await repository.refreshEpisodes(novelId: novelId);
 
-    final reloaded = await _load(selectedFid: state.value?.selectedFid ?? fidAll);
+    final reloaded = await _load(
+      selectedCategoryId: state.value?.selectedCategoryId ?? defaultCategoryId,
+    );
     state = AsyncData(reloaded.copyWith(hint: '已加入小说书架并完成首轮章节刷新'));
     return novelId;
   }
 
-  Future<NovelShelfViewState> _load({required String selectedFid}) async {
+  Future<NovelShelfViewState> _load({required String selectedCategoryId}) async {
     final repository = ref.read(novelRepositoryProvider);
-    final items = await repository.getShelfItems(
-      sourceFid: selectedFid == fidAll ? null : selectedFid,
+    final categories = await repository.getCategories();
+
+    final exists = categories.any((category) => category.categoryId == selectedCategoryId);
+    final resolvedCategoryId = exists
+        ? selectedCategoryId
+        : (categories.isEmpty ? defaultCategoryId : categories.first.categoryId);
+
+    final entries = await Future.wait(
+      categories.map((category) async {
+        final items = await repository.getShelfItems(categoryId: category.categoryId);
+        return MapEntry(category.categoryId, items);
+      }),
     );
+
+    final itemsByCategory = <String, List<NovelItem>>{
+      for (final entry in entries) entry.key: entry.value,
+    };
+
     return NovelShelfViewState(
-      selectedFid: selectedFid,
-      items: items,
+      categories: categories,
+      selectedCategoryId: resolvedCategoryId,
+      itemsByCategory: itemsByCategory,
       hint: null,
     );
   }

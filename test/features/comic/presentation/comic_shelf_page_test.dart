@@ -7,6 +7,8 @@ import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/comic/presentation/comic_shelf_page.dart';
+import 'package:y300/shared/widgets/shelf/fixed_slot_pager_header.dart';
+import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
 
 void main() {
   testWidgets('ComicShelfPage shows empty text when shelf has no data', (tester) async {
@@ -24,6 +26,7 @@ void main() {
     expect(find.text('书架还是空的，去帖子详情把喜欢的漫画加入书架吧'), findsOneWidget);
     expect(find.byKey(const Key('comic-category-header')), findsOneWidget);
     expect(find.byKey(const Key('comic-category-page-view')), findsOneWidget);
+    expect(find.byType(FixedSlotPagerHeader), findsOneWidget);
     expect(find.byKey(const Key('comic-category-indicator')), findsOneWidget);
   });
 
@@ -40,6 +43,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey<String>('comic-shelf-grid-default')), findsOneWidget);
+    expect(find.byType(ShelfCoverCard), findsOneWidget);
     expect(find.textContaining('···'), findsOneWidget);
   });
 

@@ -8,6 +8,7 @@
     this.coverImageUrl,
     required this.updatedAt,
     required this.episodeCount,
+    this.categoryId = 'default',
   });
 
   final String novelId;
@@ -18,6 +19,7 @@
   final String? coverImageUrl;
   final DateTime updatedAt;
   final int episodeCount;
+  final String categoryId;
 }
 
 class NovelEpisodeItem {
@@ -137,4 +139,20 @@ class NovelRefreshSeed {
 
   final String fid;
   final String tid;
+}
+
+class NovelShelfCategory {
+  const NovelShelfCategory({
+    required this.categoryId,
+    required this.name,
+    required this.sortOrder,
+    required this.createdAt,
+  });
+
+  final String categoryId;
+  final String name;
+  final int sortOrder;
+  final DateTime createdAt;
+
+  bool get isDefault => categoryId == 'default';
 }

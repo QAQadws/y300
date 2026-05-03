@@ -98,30 +98,35 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     if (current == null || current.isComicActionLoading || !current.comicCandidateInfo.isCandidate) {
       return;
     }
+    final snapshot = current;
 
-    state = AsyncData(current.copyWith(isComicActionLoading: true, clearError: true));
-    final comicId = _buildComicId(tid: _args.tid);
+    state = AsyncData(snapshot.copyWith(isComicActionLoading: true, clearError: true));
+    final comicId = _buildComicId(tid: snapshot.tid);
 
     try {
       await _readComicRepository().addToShelf(
         comicId: comicId,
-        tid: _args.tid,
-        fid: current.fid,
-        title: current.subject,
-        parsedPost: current.parsedComicPost,
+        tid: snapshot.tid,
+        fid: snapshot.fid,
+        title: snapshot.subject,
+        parsedPost: snapshot.parsedComicPost,
       );
 
-      final updated = state.value ?? current;
+      if (!ref.mounted) {
+        return;
+      }
       state = AsyncData(
-        updated.copyWith(
+        snapshot.copyWith(
           isComicActionLoading: false,
           isInShelf: true,
         ),
       );
     } catch (error) {
-      final updated = state.value ?? current;
+      if (!ref.mounted) {
+        return;
+      }
       state = AsyncData(
-        updated.copyWith(
+        snapshot.copyWith(
           isComicActionLoading: false,
           errorMessage: '加入书架失败：$error',
         ),
@@ -134,9 +139,10 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     if (current == null || current.isNovelActionLoading || !current.isNovelCandidate) {
       return;
     }
+    final snapshot = current;
 
     state = AsyncData(
-      current.copyWith(
+      snapshot.copyWith(
         isNovelActionLoading: true,
         clearError: true,
       ),
@@ -153,17 +159,21 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       );
       await repository.refreshEpisodes(novelId: novelId);
 
-      final updated = state.value ?? current;
+      if (!ref.mounted) {
+        return;
+      }
       state = AsyncData(
-        updated.copyWith(
+        snapshot.copyWith(
           isNovelActionLoading: false,
           isNovelInShelf: true,
         ),
       );
     } catch (error) {
-      final updated = state.value ?? current;
+      if (!ref.mounted) {
+        return;
+      }
       state = AsyncData(
-        updated.copyWith(
+        snapshot.copyWith(
           isNovelActionLoading: false,
           errorMessage: '加入小说书架失败：$error',
         ),

@@ -455,6 +455,24 @@ class _FakeNovelRepository implements NovelRepository {
   final Set<String> _ids = <String>{};
 
   @override
+  Future<String> createCategory({required String name}) async => 'default';
+
+  @override
+  Future<void> deleteCategory({required String categoryId}) async {}
+
+  @override
+  Future<List<NovelShelfCategory>> getCategories() async {
+    return <NovelShelfCategory>[
+      NovelShelfCategory(
+        categoryId: 'default',
+        name: '默认',
+        sortOrder: 0,
+        createdAt: DateTime(2026, 1, 1),
+      ),
+    ];
+  }
+
+  @override
   Future<NovelItem?> getDetail({required String novelId}) async {
     if (!_ids.contains(novelId)) {
       return null;
@@ -483,7 +501,14 @@ class _FakeNovelRepository implements NovelRepository {
   Future<NovelReaderPreferences> getReaderPreferences() async => NovelReaderPreferences.defaults();
 
   @override
-  Future<List<NovelItem>> getShelfItems({String? sourceFid}) async => const <NovelItem>[];
+  Future<List<NovelItem>> getShelfItems({String categoryId = 'default'}) async => const <NovelItem>[];
+
+  @override
+  Future<void> moveNovelToCategory({
+    required String novelId,
+    required String fromCategoryId,
+    required String toCategoryId,
+  }) async {}
 
   @override
   Future<NovelReadingProgress?> getReadingProgress({required String novelId}) async => null;
@@ -493,6 +518,9 @@ class _FakeNovelRepository implements NovelRepository {
     refreshCalled = true;
     return const NovelEpisodeRefreshResult(insertedCount: 1, updatedCount: 0, totalCount: 1);
   }
+
+  @override
+  Future<void> renameCategory({required String categoryId, required String newName}) async {}
 
   @override
   Future<void> saveReadingProgress({
@@ -510,3 +538,4 @@ class _FakeNovelRepository implements NovelRepository {
   @override
   Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {}
 }
+

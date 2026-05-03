@@ -39,6 +39,7 @@ void main() {
       expect(result.totalCount, greaterThan(0));
       expect(shelf.length, 1);
       expect(shelf.first.sourceFid, '49');
+      expect(shelf.first.categoryId, 'default');
       expect(episodes.length, greaterThan(0));
       expect(content, isNotNull);
       expect(content!.paragraphs, isNotEmpty);
@@ -135,3 +136,4 @@ class _FakeGateway implements NovelThreadGateway {
     );
   }
 }
+

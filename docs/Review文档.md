@@ -1275,3 +1275,98 @@
 本轮按约定未执行自动化命令，请本地执行并回传：
 1. `flutter test`
 2. `flutter analyze`
+
+---
+
+## 书架框架抽象 Review 补充清单（2026-05-03）
+
+### 一、抽象组件设计
+- [ ] `ShelfCoverCard` 已落在 `shared/widgets/shelf`，不绑定漫画/小说模型。
+- [ ] `ShelfCoverCard` 支持可插拔：封面、兜底、角标、标题策略、交互回调。
+- [ ] `CandidateShelfActionRow` 已独立为通用候选入架行组件。
+
+### 二、模块接入一致性
+- [ ] 漫画书架网格卡片已使用 `ShelfCoverCard`。
+- [ ] 小说书架卡片已使用 `ShelfCoverCard`。
+- [ ] 帖子详情中漫画/小说候选入口均复用 `CandidateShelfActionRow`。
+
+### 三、可维护性检查
+- [ ] 共用组件位于 `shared`，业务模块仅保留差异化配置。
+- [ ] 视觉骨架不再重复定义在 comic/novel 各模块内。
+- [ ] long-press 等业务行为仍在模块层注入，未反向耦合 shared。
+
+### 四、测试覆盖（已编写，未执行）
+- [ ] `test/shared/widgets/shelf/shelf_cover_card_test.dart`
+- [ ] `test/shared/widgets/shelf/candidate_shelf_action_row_test.dart`
+- [ ] `test/features/novel/presentation/novel_shelf_page_test.dart`（共用组件断言）
+
+### 五、执行说明
+本轮按约定未执行自动化命令，请本地执行并回传：
+1. `flutter test`
+2. `flutter analyze`
+---
+
+## 小说入书架状态修复 + 书架分页策略共享化 Review（2026-05-03）
+
+### 一、线程详情入架状态稳定性
+- [ ] `ThreadDetailController.addNovelToShelf` 不再依赖异步后的 `state.value ?? current` 回退写法  
+- [ ] `ThreadDetailController.addToShelf` 同步采用快照写回模式，避免竞态覆盖  
+- [ ] 异步回写前已增加 `ref.mounted` 守卫  
+- [ ] 入架成功/失败均可回写明确状态（loading 关闭 + 成功标记或错误提示）  
+
+### 二、shared 分页策略抽象
+- [ ] 已新增 `lib/shared/widgets/shelf/shelf_pager_strategy.dart`  
+- [ ] `ShelfPagerStrategy.buildTabs()` 可复用分类到头部 tab 的映射逻辑  
+- [ ] `ShelfPagerStrategy.resolveSelectedIndex()` 具备安全兜底策略  
+
+### 三、漫画/小说接入一致性
+- [ ] `ComicShelfPage` 分类头通过 shared 策略生成 tab  
+- [ ] `NovelShelfPage` 筛选头通过 shared 策略生成 tab  
+- [ ] comic tab key 保持稳定且包含分类 id（`comic-category-tab-$id`）  
+- [ ] 两端仍基于 `FixedSlotPagerHeader + PageView` 统一分页交互  
+
+### 四、测试覆盖（仅编写，未执行）
+- [ ] `test/shared/widgets/shelf/shelf_pager_strategy_test.dart` 已覆盖映射与索引兜底  
+- [ ] 相关页面既有测试可继续验证回归（comic/novel/thread）  
+
+### 五、执行说明
+本轮按约定未执行自动化命令，请本地验证：  
+1. `flutter test`  
+2. `flutter analyze`
+
+---
+
+## 书架框架进一步统一 Review（2026-05-03）
+
+### 一、AppBar 共享化
+- [ ] `ShelfAppBar` 已抽象到 `shared/widgets/shelf`。
+- [ ] `ComicShelfPage` 已接入 `ShelfAppBar`。
+- [ ] `NovelShelfPage` 已接入 `ShelfAppBar`。
+- [ ] 搜索与菜单行为通过回调注入，未反向耦合业务层。
+
+### 二、小说入口策略对齐
+- [ ] 小说书架页已移除“手动添加小说”入口。
+- [ ] 搜索提示引导为“去论坛帖子加入书架”。
+- [ ] 小说书架数据入口仍由帖子详情 `addNovelToShelf` 驱动。
+
+### 三、小说分类体系对齐漫画
+- [ ] 数据库版本已升级，新增 `novel_categories / novel_shelf_items`。
+- [ ] 小说默认分类 `default` 自动创建。
+- [ ] NovelRepository 已提供分类管理接口（增删改/移动）。
+- [ ] 默认分类不可重命名、不可删除。
+
+### 四、分类分页稳定性
+- [ ] 小说书架分页头使用分类 ID 驱动（非 fid 过滤态）。
+- [ ] 刷新后保持当前分类（分类仍存在时）。
+- [ ] 分类被删除时才回退默认分类。
+- [ ] 不应再出现“切到目标分类后自动回全部”的回跳。
+
+### 五、测试覆盖（仅编写，未执行）
+- [ ] `test/shared/widgets/shelf/shelf_app_bar_test.dart`
+- [ ] `test/features/novel/presentation/novel_shelf_page_test.dart`
+- [ ] NovelRepository 新接口 fake 适配已覆盖 startup/thread/novel 测试文件
+
+### 六、执行说明
+本轮按约定未执行自动化命令，请本地验证：  
+1. `flutter test`  
+2. `flutter analyze`

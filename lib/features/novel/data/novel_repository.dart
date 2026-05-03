@@ -2,7 +2,24 @@
 
 /// 小说仓储：封装小说书架、章节、正文、阅读偏好与阅读进度。
 abstract class NovelRepository {
-  Future<List<NovelItem>> getShelfItems({String? sourceFid});
+  Future<List<NovelShelfCategory>> getCategories();
+
+  Future<String> createCategory({required String name});
+
+  Future<void> renameCategory({
+    required String categoryId,
+    required String newName,
+  });
+
+  Future<void> deleteCategory({required String categoryId});
+
+  Future<void> moveNovelToCategory({
+    required String novelId,
+    required String fromCategoryId,
+    required String toCategoryId,
+  });
+
+  Future<List<NovelItem>> getShelfItems({String categoryId = 'default'});
 
   Future<NovelItem?> getDetail({required String novelId});
 

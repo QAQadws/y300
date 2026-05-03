@@ -3,6 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/comic/presentation/comic_detail_page.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_shelf_controller.dart';
+import 'package:y300/shared/widgets/shelf/shelf_app_bar.dart';
+import 'package:y300/shared/widgets/shelf/fixed_slot_pager_header.dart';
+import 'package:y300/shared/widgets/shelf/shelf_pager_strategy.dart';
+import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
 
 class ComicShelfPage extends ConsumerStatefulWidget {
   const ComicShelfPage({super.key});
@@ -31,48 +35,39 @@ class _ComicShelfPageState extends ConsumerState<ComicShelfPage> {
     final state = ref.watch(comicShelfControllerProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('书架'),
-        actions: [
-          IconButton(
-            tooltip: '搜索',
-            icon: const Icon(Icons.search),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('阶段3暂未接入搜索能力')),
-              );
-            },
+      appBar: ShelfAppBar(
+        title: '书架',
+        onSearchTap: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('阶段3暂未接入搜索能力')),
+          );
+        },
+        onMenuSelected: (value) => _handleMenuAction(context, value),
+        menuItems: const [
+          PopupMenuItem<String>(
+            value: 'add-category',
+            child: Text('新建分类'),
           ),
-          PopupMenuButton<String>(
-            tooltip: '菜单',
-            onSelected: (value) => _handleMenuAction(context, value),
-            itemBuilder: (context) => const [
-              PopupMenuItem<String>(
-                value: 'add-category',
-                child: Text('新建分类'),
-              ),
-              PopupMenuItem<String>(
-                value: 'rename-category',
-                child: Text('重命名当前分类'),
-              ),
-              PopupMenuItem<String>(
-                value: 'delete-category',
-                child: Text('删除当前分类'),
-              ),
-              PopupMenuDivider(),
-              PopupMenuItem<String>(
-                value: 'grid-2',
-                child: Text('每行 2 列'),
-              ),
-              PopupMenuItem<String>(
-                value: 'grid-3',
-                child: Text('每行 3 列'),
-              ),
-              PopupMenuItem<String>(
-                value: 'grid-4',
-                child: Text('每行 4 列'),
-              ),
-            ],
+          PopupMenuItem<String>(
+            value: 'rename-category',
+            child: Text('重命名当前分类'),
+          ),
+          PopupMenuItem<String>(
+            value: 'delete-category',
+            child: Text('删除当前分类'),
+          ),
+          PopupMenuDivider(),
+          PopupMenuItem<String>(
+            value: 'grid-2',
+            child: Text('每行 2 列'),
+          ),
+          PopupMenuItem<String>(
+            value: 'grid-3',
+            child: Text('每行 3 列'),
+          ),
+          PopupMenuItem<String>(
+            value: 'grid-4',
+            child: Text('每行 4 列'),
           ),
         ],
       ),
@@ -262,197 +257,28 @@ class _CategoryPagerHeader extends StatelessWidget {
     required this.selectedIndex,
     required this.onCategoryTap,
   });
+  static const ShelfPagerStrategy<ComicShelfCategory> _pagerStrategy = ShelfPagerStrategy<ComicShelfCategory>(
+    idOf: _categoryIdOf,
+    labelOf: _categoryLabelOf,
+  );
+
+  static String _categoryIdOf(ComicShelfCategory category) => category.categoryId;
+  static String _categoryLabelOf(ComicShelfCategory category) => category.name;
 
   final PageController pageController;
   final List<ComicShelfCategory> categories;
   final int selectedIndex;
   final ValueChanged<int> onCategoryTap;
-
   @override
   Widget build(BuildContext context) {
-    if (categories.isEmpty) {
-      return const SizedBox(height: 56);
-    }
-
-    return _FixedSlotCategoryHeader(
+    final tabs = _pagerStrategy.buildTabs(categories);
+    return FixedSlotPagerHeader(
       pageController: pageController,
-      categories: categories,
+      tabs: tabs,
       selectedIndex: selectedIndex,
-      onCategoryTap: onCategoryTap,
-    );
-  }
-}
-
-/// 固定4槽位分类头：每个分类始终占据 1/4 宽度，超出后横向滚动。
-class _FixedSlotCategoryHeader extends StatefulWidget {
-  const _FixedSlotCategoryHeader({
-    required this.pageController,
-    required this.categories,
-    required this.selectedIndex,
-    required this.onCategoryTap,
-  });
-
-  final PageController pageController;
-  final List<ComicShelfCategory> categories;
-  final int selectedIndex;
-  final ValueChanged<int> onCategoryTap;
-
-  @override
-  State<_FixedSlotCategoryHeader> createState() => _FixedSlotCategoryHeaderState();
-}
-
-class _FixedSlotCategoryHeaderState extends State<_FixedSlotCategoryHeader> {
-  late final ScrollController _scrollController;
-
-  @override
-  void initState() {
-    super.initState();
-    _scrollController = ScrollController();
-  }
-
-  @override
-  void didUpdateWidget(covariant _FixedSlotCategoryHeader oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.selectedIndex != widget.selectedIndex) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _ensureSelectedVisible());
-    }
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 56,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final slotWidth = constraints.maxWidth / 4;
-          final useScrollable = widget.categories.length > 4;
-
-          return Stack(
-            children: [
-              if (useScrollable)
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  controller: _scrollController,
-                  child: Row(
-                    children: List.generate(
-                      widget.categories.length,
-                      (index) {
-                        final category = widget.categories[index];
-                        return SizedBox(
-                          width: slotWidth,
-                          child: InkWell(
-                            key: ValueKey<String>('comic-category-tab-${category.categoryId}'),
-                            onTap: () => widget.onCategoryTap(index),
-                            child: Center(
-                              child: Text(
-                                category.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              if (!useScrollable)
-                Row(
-                  children: List.generate(4, (slotIndex) {
-                    final hasCategory = slotIndex < widget.categories.length;
-                    if (!hasCategory) {
-                      return SizedBox(width: slotWidth);
-                    }
-
-                    final category = widget.categories[slotIndex];
-                    return SizedBox(
-                      width: slotWidth,
-                      child: InkWell(
-                        key: ValueKey<String>('comic-category-tab-${category.categoryId}'),
-                        onTap: () => widget.onCategoryTap(slotIndex),
-                        child: Center(
-                          child: Text(
-                            category.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                          ),
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-              AnimatedBuilder(
-                animation: Listenable.merge(<Listenable>[
-                  widget.pageController,
-                  _scrollController,
-                ]),
-                builder: (context, child) {
-                  final page = widget.pageController.hasClients ? (widget.pageController.page ?? 0) : 0;
-                  final clampedPage = page.clamp(0, (widget.categories.length - 1).toDouble());
-                  final scrollOffset = useScrollable && _scrollController.hasClients ? _scrollController.offset : 0;
-                  final left = clampedPage * slotWidth - scrollOffset + slotWidth * 0.2;
-
-                  return Positioned(
-                    key: const Key('comic-category-indicator'),
-                    left: left,
-                    bottom: 6,
-                    child: Container(
-                      width: slotWidth * 0.6,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  void _ensureSelectedVisible() {
-    if (!_scrollController.hasClients) {
-      return;
-    }
-
-    // 分类数量不足4个时，固定采用左对齐展示，避免残留滚动偏移导致视觉不对齐。
-    if (widget.categories.length <= 4) {
-      if (_scrollController.offset != 0) {
-        _scrollController.jumpTo(0);
-      }
-      return;
-    }
-
-    final viewportWidth = _scrollController.position.viewportDimension;
-    if (viewportWidth <= 0) {
-      return;
-    }
-
-    final slotWidth = viewportWidth / 4;
-    final maxOffset = _scrollController.position.maxScrollExtent;
-    final targetStartIndex = (widget.selectedIndex - 1).clamp(0, widget.categories.length - 4);
-    final targetOffset = (targetStartIndex * slotWidth).clamp(0.0, maxOffset).toDouble();
-
-    _scrollController.animateTo(
-      targetOffset,
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
+      onTap: onCategoryTap,
+      indicatorKey: const Key('comic-category-indicator'),
+      tabKeyBuilder: (id) => ValueKey<String>('comic-category-tab-$id'),
     );
   }
 }
@@ -517,15 +343,15 @@ class _ComicGridTile extends StatelessWidget {
     required this.onMoveToCategory,
     required this.onReplaceCover,
   });
-
   final ComicShelfItem item;
   final List<ComicShelfCategory> categories;
   final Future<void> Function(String toCategoryId) onMoveToCategory;
   final Future<void> Function(String? coverUrl) onReplaceCover;
-
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return ShelfCoverCard(
+      title: item.title,
+      coverImageUrl: item.coverImageUrl,
       onTap: () {
         Navigator.of(context).push(
           MaterialPageRoute<void>(
@@ -571,7 +397,6 @@ class _ComicGridTile extends StatelessWidget {
                           ],
                         ),
                       );
-
                       if (cover != null) {
                         await onReplaceCover(cover.isEmpty ? null : cover);
                       }
@@ -598,130 +423,9 @@ class _ComicGridTile extends StatelessWidget {
           },
         );
       },
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Container(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: item.coverImageUrl == null
-                  ? const Icon(Icons.image_not_supported_outlined)
-                  : Image.network(
-                      item.coverImageUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return const Icon(Icons.broken_image_outlined);
-                      },
-                    ),
-            ),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0x00000000),
-                      Color(0xA6000000),
-                      Color(0xCC000000),
-                    ],
-                  ),
-                ),
-                child: _TwoLineEllipsisText(
-                  item.title,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+      placeholderIcon: Icons.image_not_supported_outlined,
+      showTwoLineCustomEllipsis: true,
     );
   }
 }
-
-class _TwoLineEllipsisText extends StatelessWidget {
-  const _TwoLineEllipsisText(
-    this.text, {
-    this.style,
-  });
-
-  final String text;
-  final TextStyle? style;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final defaultStyle = DefaultTextStyle.of(context).style;
-        final effectiveStyle = style ?? defaultStyle;
-
-        final painter = TextPainter(
-          text: TextSpan(text: text, style: effectiveStyle),
-          textDirection: Directionality.of(context),
-          maxLines: 2,
-          ellipsis: '···',
-        )..layout(maxWidth: constraints.maxWidth);
-
-        final displayText = painter.didExceedMaxLines
-            ? _truncateToTwoLines(
-                source: text,
-                maxWidth: constraints.maxWidth,
-                style: effectiveStyle,
-                textDirection: Directionality.of(context),
-              )
-            : text;
-
-        return Text(
-          displayText,
-          maxLines: 2,
-          overflow: TextOverflow.clip,
-          style: effectiveStyle,
-        );
-      },
-    );
-  }
-
-  String _truncateToTwoLines({
-    required String source,
-    required double maxWidth,
-    required TextStyle style,
-    required TextDirection textDirection,
-  }) {
-    if (source.isEmpty) {
-      return source;
-    }
-
-    var low = 0;
-    var high = source.length;
-    var best = '';
-
-    while (low <= high) {
-      final mid = (low + high) ~/ 2;
-      final candidate = '${source.substring(0, mid)}···';
-      final painter = TextPainter(
-        text: TextSpan(text: candidate, style: style),
-        textDirection: textDirection,
-        maxLines: 2,
-      )..layout(maxWidth: maxWidth);
-
-      if (painter.didExceedMaxLines) {
-        high = mid - 1;
-      } else {
-        best = candidate;
-        low = mid + 1;
-      }
-    }
-
-    return best.isEmpty ? '···' : best;
-  }
-}
-
 

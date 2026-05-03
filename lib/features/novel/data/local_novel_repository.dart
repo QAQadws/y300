@@ -1,4 +1,5 @@
 ﻿import 'dart:convert';
+import 'dart:math';
 
 import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
@@ -22,17 +23,179 @@ class LocalNovelRepository implements NovelRepository {
 
   static const String _contentType = 'novel';
   static const int _maxRefreshPages = 20;
+  static const String _defaultCategoryId = 'default';
 
   @override
-  Future<List<NovelItem>> getShelfItems({String? sourceFid}) async {
+  Future<List<NovelShelfCategory>> getCategories() async {
     final db = await _dbFuture;
-    final whereParts = <String>['w.content_type = ?'];
-    final whereArgs = <Object>[_contentType];
-    if (sourceFid != null && sourceFid.trim().isNotEmpty) {
-      whereParts.add('w.source_fid = ?');
-      whereArgs.add(sourceFid.trim());
+    final rows = await db.query(
+      ComicLocalDb.novelCategoriesTable,
+      orderBy: 'sort_order ASC, created_at ASC',
+    );
+
+    return rows
+        .map(
+          (row) => NovelShelfCategory(
+            categoryId: row['category_id'] as String,
+            name: row['name'] as String,
+            sortOrder: row['sort_order'] as int,
+            createdAt: DateTime.fromMillisecondsSinceEpoch(row['created_at'] as int),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Future<String> createCategory({required String name}) async {
+    final sanitized = name.trim();
+    if (sanitized.isEmpty) {
+      throw ArgumentError('分类名称不能为空');
     }
 
+    final db = await _dbFuture;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final categoryId = 'n$now${Random().nextInt(1000)}';
+
+    await db.transaction((txn) async {
+      final countResult = await txn.rawQuery(
+        'SELECT COUNT(*) AS count FROM ${ComicLocalDb.novelCategoriesTable}',
+      );
+      final sortOrder = (countResult.first['count'] as int?) ?? 0;
+      await txn.insert(
+        ComicLocalDb.novelCategoriesTable,
+        <String, Object?>{
+          'category_id': categoryId,
+          'name': sanitized,
+          'sort_order': sortOrder,
+          'created_at': now,
+        },
+      );
+    });
+
+    return categoryId;
+  }
+
+  @override
+  Future<void> renameCategory({
+    required String categoryId,
+    required String newName,
+  }) async {
+    final sanitized = newName.trim();
+    if (sanitized.isEmpty) {
+      throw ArgumentError('分类名称不能为空');
+    }
+    if (categoryId == _defaultCategoryId) {
+      throw StateError('默认分类不允许重命名');
+    }
+
+    final db = await _dbFuture;
+    await db.update(
+      ComicLocalDb.novelCategoriesTable,
+      <String, Object?>{'name': sanitized},
+      where: 'category_id = ?',
+      whereArgs: <Object>[categoryId],
+    );
+  }
+
+  @override
+  Future<void> deleteCategory({required String categoryId}) async {
+    if (categoryId == _defaultCategoryId) {
+      throw StateError('默认分类不允许删除');
+    }
+
+    final db = await _dbFuture;
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        ComicLocalDb.novelShelfItemsTable,
+        columns: <String>['novel_id'],
+        where: 'category_id = ?',
+        whereArgs: <Object>[categoryId],
+      );
+
+      for (final row in rows) {
+        final novelId = row['novel_id'] as String;
+        final existsInDefault = await txn.query(
+          ComicLocalDb.novelShelfItemsTable,
+          columns: <String>['id'],
+          where: 'category_id = ? AND novel_id = ?',
+          whereArgs: <Object>[_defaultCategoryId, novelId],
+          limit: 1,
+        );
+        if (existsInDefault.isEmpty) {
+          final sortOrder = await _nextShelfSortOrder(txn, categoryId: _defaultCategoryId);
+          await txn.insert(
+            ComicLocalDb.novelShelfItemsTable,
+            <String, Object?>{
+              'category_id': _defaultCategoryId,
+              'novel_id': novelId,
+              'added_at': now,
+              'sort_order': sortOrder,
+            },
+          );
+        }
+      }
+
+      await txn.delete(
+        ComicLocalDb.novelShelfItemsTable,
+        where: 'category_id = ?',
+        whereArgs: <Object>[categoryId],
+      );
+      await txn.delete(
+        ComicLocalDb.novelCategoriesTable,
+        where: 'category_id = ?',
+        whereArgs: <Object>[categoryId],
+      );
+    });
+  }
+
+  @override
+  Future<void> moveNovelToCategory({
+    required String novelId,
+    required String fromCategoryId,
+    required String toCategoryId,
+  }) async {
+    if (fromCategoryId == toCategoryId) {
+      return;
+    }
+
+    final db = await _dbFuture;
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    await db.transaction((txn) async {
+      final targetExists = await txn.query(
+        ComicLocalDb.novelShelfItemsTable,
+        columns: <String>['id'],
+        where: 'category_id = ? AND novel_id = ?',
+        whereArgs: <Object>[toCategoryId, novelId],
+        limit: 1,
+      );
+      if (targetExists.isEmpty) {
+        final sortOrder = await _nextShelfSortOrder(txn, categoryId: toCategoryId);
+        await txn.insert(
+          ComicLocalDb.novelShelfItemsTable,
+          <String, Object?>{
+            'category_id': toCategoryId,
+            'novel_id': novelId,
+            'added_at': now,
+            'sort_order': sortOrder,
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+      }
+
+      await txn.delete(
+        ComicLocalDb.novelShelfItemsTable,
+        where: 'category_id = ? AND novel_id = ?',
+        whereArgs: <Object>[fromCategoryId, novelId],
+      );
+    });
+  }
+
+  @override
+  Future<List<NovelItem>> getShelfItems({String categoryId = _defaultCategoryId}) async {
+    final db = await _dbFuture;
     final rows = await db.rawQuery('''
       SELECT
         w.work_id,
@@ -42,14 +205,17 @@ class LocalNovelRepository implements NovelRepository {
         w.author,
         w.cover_image_url,
         w.updated_at,
+        si.category_id,
         COUNT(e.episode_id) AS episode_count
-      FROM ${ComicLocalDb.worksTable} w
+      FROM ${ComicLocalDb.novelShelfItemsTable} si
+      INNER JOIN ${ComicLocalDb.worksTable} w
+        ON si.novel_id = w.work_id
       LEFT JOIN ${ComicLocalDb.workEpisodesTable} e
         ON e.work_id = w.work_id AND e.content_type = ?
-      WHERE ${whereParts.join(' AND ')}
-      GROUP BY w.work_id
-      ORDER BY w.updated_at DESC
-    ''', <Object>[_contentType, ...whereArgs]);
+      WHERE w.content_type = ? AND si.category_id = ?
+      GROUP BY w.work_id, si.category_id
+      ORDER BY si.sort_order ASC, si.added_at DESC
+    ''', <Object>[_contentType, _contentType, categoryId]);
 
     return rows.map(_rowToNovelItem).toList(growable: false);
   }
@@ -66,6 +232,7 @@ class LocalNovelRepository implements NovelRepository {
         w.author,
         w.cover_image_url,
         w.updated_at,
+        ? AS category_id,
         COUNT(e.episode_id) AS episode_count
       FROM ${ComicLocalDb.worksTable} w
       LEFT JOIN ${ComicLocalDb.workEpisodesTable} e
@@ -73,7 +240,7 @@ class LocalNovelRepository implements NovelRepository {
       WHERE w.work_id = ? AND w.content_type = ?
       GROUP BY w.work_id
       LIMIT 1
-    ''', <Object>[_contentType, novelId, _contentType]);
+    ''', <Object>[_defaultCategoryId, _contentType, novelId, _contentType]);
 
     if (rows.isEmpty) {
       return null;
@@ -184,21 +351,44 @@ class LocalNovelRepository implements NovelRepository {
     final detail = await _threadGateway.getThreadDetail(tid: seed.tid, page: 1);
     final db = await _dbFuture;
     final now = DateTime.now().millisecondsSinceEpoch;
+    final novelId = _buildNovelId(seed.fid, seed.tid);
 
-    await db.insert(
-      ComicLocalDb.worksTable,
-      <String, Object?>{
-        'work_id': _buildNovelId(seed.fid, seed.tid),
-        'content_type': _contentType,
-        'source_tid': detail.tid,
-        'source_fid': seed.fid,
-        'title': detail.subject.trim().isEmpty ? '未命名小说' : detail.subject.trim(),
-        'author': detail.author.trim().isEmpty ? null : detail.author.trim(),
-        'cover_image_url': null,
-        'updated_at': now,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.transaction((txn) async {
+      await txn.insert(
+        ComicLocalDb.worksTable,
+        <String, Object?>{
+          'work_id': novelId,
+          'content_type': _contentType,
+          'source_tid': detail.tid,
+          'source_fid': seed.fid,
+          'title': detail.subject.trim().isEmpty ? '未命名小说' : detail.subject.trim(),
+          'author': detail.author.trim().isEmpty ? null : detail.author.trim(),
+          'cover_image_url': null,
+          'updated_at': now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      final exists = await txn.query(
+        ComicLocalDb.novelShelfItemsTable,
+        columns: <String>['id'],
+        where: 'category_id = ? AND novel_id = ?',
+        whereArgs: <Object>[_defaultCategoryId, novelId],
+        limit: 1,
+      );
+      if (exists.isEmpty) {
+        final sortOrder = await _nextShelfSortOrder(txn, categoryId: _defaultCategoryId);
+        await txn.insert(
+          ComicLocalDb.novelShelfItemsTable,
+          <String, Object?>{
+            'category_id': _defaultCategoryId,
+            'novel_id': novelId,
+            'added_at': now,
+            'sort_order': sortOrder,
+          },
+        );
+      }
+    });
   }
 
   @override
@@ -337,7 +527,16 @@ class LocalNovelRepository implements NovelRepository {
       coverImageUrl: row['cover_image_url'] as String?,
       updatedAt: DateTime.fromMillisecondsSinceEpoch((row['updated_at'] as int?) ?? 0),
       episodeCount: (row['episode_count'] as int?) ?? 0,
+      categoryId: (row['category_id'] as String?) ?? _defaultCategoryId,
     );
+  }
+
+  Future<int> _nextShelfSortOrder(Transaction txn, {required String categoryId}) async {
+    final countResult = await txn.rawQuery(
+      'SELECT COUNT(*) AS count FROM ${ComicLocalDb.novelShelfItemsTable} WHERE category_id = ?',
+      <Object>[categoryId],
+    );
+    return (countResult.first['count'] as int?) ?? 0;
   }
 
   Future<List<ThreadDetailData>> _fetchPages({required String tid}) async {

@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 6;
+  static const int dbVersion = 7;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -19,6 +19,8 @@ class ComicLocalDb {
   static const String novelEpisodeContentTable = 'novel_episode_content';
   static const String readerPreferencesTable = 'reader_preferences';
   static const String novelReadingProgressTable = 'novel_reading_progress';
+  static const String novelCategoriesTable = 'novel_categories';
+  static const String novelShelfItemsTable = 'novel_shelf_items';
 
   static Future<Database> open({String? databaseName}) {
     final targetDbName = databaseName ?? dbName;
@@ -44,6 +46,9 @@ class ComicLocalDb {
         }
         if (oldVersion < 6) {
           await _createNovelReadingProgressTable(db);
+        }
+        if (oldVersion < 7) {
+          await _createNovelShelfTables(db);
         }
       },
     );
@@ -135,6 +140,7 @@ class ComicLocalDb {
     await _createReadingProgressTable(db);
     await _createNovelTables(db);
     await _createNovelReadingProgressTable(db);
+    await _createNovelShelfTables(db);
   }
 
   static Future<void> _createSettingsTable(Database db) async {
@@ -252,5 +258,45 @@ class ComicLocalDb {
         updated_at INTEGER NOT NULL
       )
     ''');
+  }
+
+  /// Phase 1.2: 小说书架分类体系，和漫画分类能力对齐。
+  static Future<void> _createNovelShelfTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $novelCategoriesTable (
+        category_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $novelShelfItemsTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category_id TEXT NOT NULL,
+        novel_id TEXT NOT NULL,
+        added_at INTEGER NOT NULL,
+        sort_order INTEGER NOT NULL,
+        UNIQUE(category_id, novel_id),
+        FOREIGN KEY (category_id) REFERENCES $novelCategoriesTable(category_id) ON DELETE CASCADE,
+        FOREIGN KEY (novel_id) REFERENCES $worksTable(work_id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.insert(
+      novelCategoriesTable,
+      <String, Object?>{
+        'category_id': 'default',
+        'name': '默认',
+        'sort_order': 0,
+        'created_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_novel_shelf_items_category_sort ON $novelShelfItemsTable(category_id, sort_order)',
+    );
   }
 }
