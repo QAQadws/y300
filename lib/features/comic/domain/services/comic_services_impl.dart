@@ -5,6 +5,8 @@ import 'package:y300/features/comic/data/comic_parser_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_parsing_debug_models.dart';
+import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
 import 'package:y300/features/comic/domain/services/comic_detector.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
@@ -28,35 +30,31 @@ abstract class ComicEpisodeRefreshService {
 
 class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   NetworkComicEpisodeRefreshService({
-    required ThreadRepository threadRepository,
-    required ComicParserService parserService,
-  })  : _threadRepository = threadRepository,
-        _parserService = parserService;
+    required ComicEpisodeDiscoveryService discoveryService,
+  }) : _discoveryService = discoveryService;
 
-  final ThreadRepository _threadRepository;
-  final ComicParserService _parserService;
+  final ComicEpisodeDiscoveryService _discoveryService;
 
   @override
   Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
-    final result = await _threadRepository.getThreadDetail(tid: tid, page: 1);
-    return result.when(
-      success: (data) {
-        final firstPost = data.posts.where((post) => post.isFirst).firstOrNull;
-        if (firstPost == null) {
-          return const <ComicEpisodeLink>[];
-        }
-        final parsed = _parserService.parse(message: firstPost.message);
-        return parsed.episodeLinks;
-      },
-      failure: (_) => const <ComicEpisodeLink>[],
-    );
+    final result = await _discoveryService.discoverFromTid(tid);
+    return result.episodeLinks;
   }
 }
 
+final comicEpisodeDiscoveryServiceProvider = Provider<ComicEpisodeDiscoveryService>((ref) {
+  final engine = ComicPostParsingEngine();
+  final opPostParser = ComicConsecutiveOpPostParser(engine: engine);
+  return ComicEpisodeDiscoveryService(
+    fetchThreadDetail: (tid) => ref.read(threadRepositoryProvider).getThreadDetail(tid: tid, page: 1),
+    opPostParser: opPostParser,
+    catalogHtmlFetcher: DioCatalogHtmlFetcher(),
+  );
+});
+
 final comicEpisodeRefreshServiceProvider = Provider<ComicEpisodeRefreshService>((ref) {
   return NetworkComicEpisodeRefreshService(
-    threadRepository: ref.read(threadRepositoryProvider),
-    parserService: ref.read(comicParserServiceProvider),
+    discoveryService: ref.read(comicEpisodeDiscoveryServiceProvider),
   );
 });
 

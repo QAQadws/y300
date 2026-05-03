@@ -405,5 +405,38 @@ void main() {
         <String?>['12', '第二卷特典', '11', '10', '第一卷特典', '09'],
       );
     });
+
+    test('mergeEpisodesFromLinks normalizes long subject to parsed episode label', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:600',
+        tid: '600',
+        fid: '30',
+        title: '测试漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>[],
+          episodeLinks: <ComicEpisodeLink>[],
+          plainTextSummary: '摘要',
+        ),
+      );
+
+      await repository.mergeEpisodesFromLinks(
+        comicId: 'yamibo:600',
+        fallbackSourceTid: '600',
+        episodeLinks: const <ComicEpisodeLink>[
+          ComicEpisodeLink(
+            url: 'thread-558227-1-1.html',
+            rawText: '【萌木汉化组】[ななつ藤][貴女へささげるサディスティック]献予你的支配之礼 第1.1话',
+            episodeTitle: '【萌木汉化组】[ななつ藤][貴女へささげるサディスティック]献予你的支配之礼 第1.1话',
+          ),
+        ],
+      );
+
+      final episodes = await repository.getComicEpisodes(
+        comicId: 'yamibo:600',
+        descending: false,
+      );
+      expect(episodes.length, 1);
+      expect(episodes.first.episodeTitle, '第1.1话');
+    });
   });
 }

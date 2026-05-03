@@ -7,14 +7,19 @@ import 'package:y300/features/comic/data/local/comic_local_models.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 
 /// 基于 SQLite 的漫画仓库实现。
 class LocalComicRepository implements ComicRepository {
-  LocalComicRepository(this._dbFuture);
+  LocalComicRepository(
+    this._dbFuture, {
+    ComicSubjectParser? subjectParser,
+  }) : _subjectParser = subjectParser ?? const RuleBasedComicSubjectParser();
 
   static const String _defaultCategoryId = 'default';
 
   final Future<Database> _dbFuture;
+  final ComicSubjectParser _subjectParser;
 
   @override
   Future<List<ComicShelfCategory>> getCategories() async {
@@ -614,7 +619,7 @@ class LocalComicRepository implements ComicRepository {
         final record = EpisodeRecord(
           episodeId: episodeId,
           comicId: comicId,
-          episodeTitle: link.episodeTitle ?? link.rawText,
+          episodeTitle: _resolveEpisodeTitle(link),
           sourceTid: sourceTid,
           sourceUrl: link.url,
           orderIndex: index,
@@ -710,6 +715,34 @@ class LocalComicRepository implements ComicRepository {
       return fromContent;
     }
     return null;
+  }
+
+  String _resolveEpisodeTitle(ComicEpisodeLink link) {
+    final preferred = (link.episodeTitle ?? link.rawText).trim();
+    if (preferred.isEmpty) {
+      return link.rawText.trim();
+    }
+
+    // Keep explicit short labels from parser/rules untouched.
+    if (!_shouldNormalizeBySubjectParsing(preferred)) {
+      return preferred;
+    }
+
+    final parsed = _subjectParser.parse(preferred);
+    final episodeLabel = parsed.episodeLabel?.trim();
+    if (episodeLabel != null && episodeLabel.isNotEmpty) {
+      return episodeLabel;
+    }
+    return preferred;
+  }
+
+  bool _shouldNormalizeBySubjectParsing(String text) {
+    if (text.length < 16) {
+      return false;
+    }
+    final hasBracketGroup = (text.contains('【') && text.contains('】')) || (text.contains('[') && text.contains(']'));
+    final hasEpisodeHint = text.contains('第') && text.contains('话');
+    return hasBracketGroup || hasEpisodeHint;
   }
 }
 

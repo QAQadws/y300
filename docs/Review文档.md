@@ -941,3 +941,92 @@
 本轮按约定未执行自动化命令，请本地执行并回传结果：
 1. `flutter test`
 2. `flutter analyze`
+
+---
+
+## 搜索收藏联动 Phase 2 Review 清单（2026-05-03，递归回溯与目录解析）
+
+### 一、架构与解耦
+- [ ] `ComicEpisodeDiscoveryService` 独立于 UI/Controller，职责仅为章节发现编排
+- [ ] 线程详情依赖通过 `ThreadDetailFetcher` 注入，而非硬绑定具体仓储实现
+- [ ] 目录抓取依赖通过 `CatalogHtmlFetcher` 抽象，便于替换和测试
+
+### 二、策略行为验证
+- [ ] `direct`：章节数达到阈值时直接返回，不触发递归/目录
+- [ ] `recursive`：仅在章节不足且 subject 命中高话数信号时启用
+- [ ] `recursive`：具备防环（visited）、深度上限、连续失败熔断
+- [ ] `catalog`：仅在 direct/recursive 不足时启用
+- [ ] `catalog`：支持 thread 链接提取、去重与“下一页”分页遍历
+
+### 三、接入与兼容
+- [ ] `ComicEpisodeRefreshService` 对外接口未变（`fetchEpisodeLinksFromTid`）
+- [ ] `comic_services_impl.dart` 已通过 provider 接入发现服务
+- [ ] 详情页刷新流程无需改动调用方即可使用新策略
+
+### 四、测试覆盖
+- [ ] `comic_episode_discovery_service_test.dart` 覆盖 direct 场景
+- [ ] `comic_episode_discovery_service_test.dart` 覆盖 recursive 场景
+- [ ] `comic_episode_discovery_service_test.dart` 覆盖 catalog 场景
+
+### 五、执行说明
+本轮按约定未执行自动化命令，请本地验证：
+1. `flutter test`
+2. `flutter analyze`
+
+---
+
+## 搜索收藏联动 Phase 2 Review 补充（2026-05-03，目录解析工程化）
+
+### 一、目录解析抽象
+- [ ] 目录 HTML 解析已抽离为独立组件：`CatalogThreadHtmlParser`
+- [ ] 解析输出包含结构化字段：`tid`、`url`、`subject`、`nextPageUrl`
+- [ ] 目录解析逻辑不再和发现编排强耦合
+
+### 二、目录结果质量
+- [ ] 同一 `tid` 多锚点时优先标题锚点（`th` 内链接）
+- [ ] 目录条目可稳定提取 `thread-xxx-1-1.html` 对应 tid
+- [ ] 可稳定提取章节标题（subject）用于后续展示/匹配
+- [ ] 目录分页可识别并继续遍历下一页
+
+### 三、发现链路行为
+- [ ] direct 成功时不触发 catalog
+- [ ] recursive 不足时可进入 catalog 兜底
+- [ ] “仅上一话链接”场景递归链路不再因 strict rule 丢空
+
+### 四、测试覆盖
+- [ ] `catalog_thread_html_parser_test.dart` 覆盖目录行提取与去重
+- [ ] `catalog_thread_html_parser_test.dart` 覆盖 next-page 解析
+- [ ] `comic_episode_discovery_service_test.dart` 覆盖 direct/recursive/catalog 三策略
+
+### 五、执行说明
+本轮按约定未执行自动化命令，请本地验证：
+1. `flutter test`
+2. `flutter analyze`
+
+---
+
+## 漫画详情章节标题规范化 Review 清单（2026-05-03）
+
+### 一、问题修复验证
+- [ ] 目录来源长 subject 不再原样显示在详情页列表标题中
+- [ ] `【...】... 第1.1话` 最终展示为 `第1.1话`
+- [ ] 普通短标题（如 `01`、`第3话`、`特典`）不被误改
+
+### 二、工程化与解耦
+- [ ] 标题规范化逻辑集中在仓储层 `_resolveEpisodeTitle`，UI 层不增加特判
+- [ ] 规则来源复用 `ComicSubjectParser`，不重复造正则
+- [ ] `LocalComicRepository` 支持注入 parser，便于后续替换与测试
+
+### 三、回归风险检查
+- [ ] `mergeEpisodesFromLinks` 插入/更新计数逻辑不受影响
+- [ ] 章节顺序策略（当前按 message/输入顺序）不受本次标题规范化影响
+- [ ] 阅读器打开链路不受影响（依赖 tid 与 episodeId，不依赖原始标题）
+
+### 四、测试覆盖
+- [ ] `local_comic_repository_test.dart` 新增目录长标题规范化用例
+- [ ] 既有 merge/order 相关测试保持通过
+
+### 五、执行说明
+本轮按约定未执行自动化命令，请本地验证：
+1. `flutter test`
+2. `flutter analyze`
