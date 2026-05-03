@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 4;
+  static const int dbVersion = 5;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -14,6 +14,10 @@ class ComicLocalDb {
   static const String shelfItemsTable = 'shelf_items';
   static const String settingsTable = 'settings';
   static const String readingProgressTable = 'reading_progress';
+  static const String worksTable = 'works';
+  static const String workEpisodesTable = 'work_episodes';
+  static const String novelEpisodeContentTable = 'novel_episode_content';
+  static const String readerPreferencesTable = 'reader_preferences';
 
   static Future<Database> open() {
     return openDatabase(
@@ -32,6 +36,9 @@ class ComicLocalDb {
         }
         if (oldVersion < 4) {
           await _migrateComicSubjectMetadataColumns(db);
+        }
+        if (oldVersion < 5) {
+          await _createNovelTables(db);
         }
       },
     );
@@ -121,6 +128,7 @@ class ComicLocalDb {
     await _createSettingsTable(db);
     await _seedDefaultSettings(db);
     await _createReadingProgressTable(db);
+    await _createNovelTables(db);
   }
 
   static Future<void> _createSettingsTable(Database db) async {
@@ -159,6 +167,73 @@ class ComicLocalDb {
   static Future<void> _migrateComicSubjectMetadataColumns(Database db) async {
     await db.execute(
       'ALTER TABLE $comicsTable ADD COLUMN translation_group TEXT',
+    );
+  }
+
+  /// Phase 0: 为小说模块预留统一内容表与阅读偏好表。
+  ///
+  /// 这一批表暂不与现有漫画流程耦合，先完成数据库地基与索引建设，
+  /// 便于后续按阶段接入仓储与页面逻辑。
+  static Future<void> _createNovelTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $worksTable (
+        work_id TEXT PRIMARY KEY,
+        content_type TEXT NOT NULL,
+        source_tid TEXT NOT NULL,
+        source_fid TEXT NOT NULL,
+        title TEXT NOT NULL,
+        author TEXT,
+        cover_image_url TEXT,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $workEpisodesTable (
+        episode_id TEXT PRIMARY KEY,
+        work_id TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        source_tid TEXT NOT NULL,
+        source_pid TEXT,
+        source_page INTEGER,
+        episode_title TEXT,
+        order_index INTEGER NOT NULL,
+        dateline_text TEXT,
+        FOREIGN KEY (work_id) REFERENCES $worksTable(work_id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $novelEpisodeContentTable (
+        episode_id TEXT PRIMARY KEY,
+        raw_html TEXT NOT NULL,
+        plain_text TEXT NOT NULL,
+        paragraph_json TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (episode_id) REFERENCES $workEpisodesTable(episode_id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $readerPreferencesTable (
+        content_type TEXT PRIMARY KEY,
+        font_size REAL NOT NULL,
+        line_height REAL NOT NULL,
+        paragraph_spacing REAL NOT NULL,
+        page_padding REAL NOT NULL,
+        theme_mode TEXT NOT NULL,
+        font_family TEXT
+      )
+    ''');
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_work_type_updated ON $worksTable(content_type, updated_at DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_episode_work_order ON $workEpisodesTable(work_id, order_index ASC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_episode_tid_pid ON $workEpisodesTable(source_tid, source_pid)',
     );
   }
 }

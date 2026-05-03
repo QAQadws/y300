@@ -1175,3 +1175,33 @@
 ### 测试审查
 1. 已新增 API 层单测与页面交互测试。
 2. 本轮未执行测试命令，待本地回归验证结果。
+
+---
+
+## 小说模块 Phase 0 Review 补充清单（2026-05-03）
+
+### 一、基础设施与解耦
+- [ ] 已新增 `features/novel` 分层骨架（data/domain/presentation）。
+- [ ] `NovelRepository` 仅定义抽象，UI 不直接依赖底层存储。
+- [ ] `NovelSyncLogger` 与解析模型分离，日志与业务逻辑解耦。
+
+### 二、数据库迁移
+- [ ] `ComicLocalDb` 版本已升级到 `v5`。
+- [ ] 已创建 `works/work_episodes/novel_episode_content/reader_preferences`。
+- [ ] 已创建小说阶段0索引：`idx_work_type_updated`、`idx_episode_work_order`、`idx_episode_tid_pid`。
+- [ ] 迁移逻辑通过 `oldVersion < 5` 增量执行，不影响旧版漫画主流程。
+
+### 三、主壳导航
+- [ ] `MainShellPage` 已新增 `小说` Tab。
+- [ ] 四栏顺序为：`论坛 / 漫画 / 小说 / 更多`。
+- [ ] `NovelTabPage` 可正常渲染基础占位内容。
+
+### 四、测试覆盖（已编写，未执行）
+- [ ] `test/features/novel/data/novel_phase0_db_migration_test.dart`
+- [ ] `test/features/novel/domain/services/novel_episode_discovery_service_test.dart`
+- [ ] `test/features/startup/presentation/main_shell_page_test.dart`（新增小说Tab断言）
+
+### 五、执行说明
+本轮按约定未执行自动化命令，请本地执行并回传：
+1. `flutter test`
+2. `flutter analyze`

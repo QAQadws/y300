@@ -9,7 +9,7 @@ import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/startup/presentation/main_shell_page.dart';
 
 void main() {
-  testWidgets('MainShellPage can switch between forum/comic/more tabs', (tester) async {
+  testWidgets('MainShellPage can switch between forum/comic/novel/more tabs', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -23,13 +23,36 @@ void main() {
 
     await tester.tap(find.text('漫画'));
     await tester.pumpAndSettle();
-
     expect(find.text('书架'), findsOneWidget);
+
+    await tester.tap(find.text('小说'));
+    await tester.pumpAndSettle();
+    expect(find.text('小说模块建设中'), findsOneWidget);
 
     await tester.tap(find.text('更多'));
     await tester.pumpAndSettle();
     expect(find.text('更多'), findsWidgets);
     expect(find.byKey(const Key('more-login-entry')), findsOneWidget);
+  });
+
+  testWidgets('Novel tab icon changes after tap', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+        ],
+        child: const MaterialApp(home: MainShellPage()),
+      ),
+    );
+
+    expect(find.byIcon(Icons.local_library_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.local_library), findsNothing);
+
+    await tester.tap(find.text('小说'));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.local_library_outlined), findsNothing);
+    expect(find.byIcon(Icons.local_library), findsOneWidget);
   });
 }
 
