@@ -6,6 +6,10 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/library_shared/data/library_state_providers.dart';
+import 'package:y300/features/library_shared/data/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
@@ -18,6 +22,7 @@ void main() {
         overrides: [
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
@@ -27,11 +32,11 @@ void main() {
 
     await tester.tap(find.text('漫画'));
     await tester.pumpAndSettle();
-    expect(find.text('书架'), findsOneWidget);
+    expect(find.text('漫画'), findsOneWidget);
 
     await tester.tap(find.text('小说'));
     await tester.pumpAndSettle();
-    expect(find.text('小说书架'), findsOneWidget);
+    expect(find.text('小说'), findsOneWidget);
 
     await tester.tap(find.text('更多'));
     await tester.pumpAndSettle();
@@ -45,6 +50,7 @@ void main() {
         overrides: [
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
@@ -235,4 +241,134 @@ class _FakeNovelRepository implements NovelRepository {
 
   @override
   Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {}
+}
+
+class _FakeLibraryStateRepository implements LibraryStateRepository {
+  @override
+  Future<void> bindTagToWork({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    required String tagId,
+  }) async {}
+
+  @override
+  Future<int> countDownloadedEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<int> countReadEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<int> countUnreadEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<String> createTag({required String name}) async => 'tag-1';
+
+  @override
+  Future<void> deleteTag({required String tagId}) async {}
+
+  @override
+  Future<LibraryModuleDisplaySettings> getDisplaySettings({
+    required LibraryModuleKey moduleKey,
+    required LibraryDisplayMode defaultDisplayMode,
+  }) async {
+    return LibraryModuleDisplaySettings(
+      moduleKey: moduleKey,
+      displayMode: defaultDisplayMode,
+      gridColumns: 3,
+      updatedAt: DateTime(2026, 1, 1),
+    );
+  }
+
+  @override
+  Future<LibraryEpisodeState?> getEpisodeState({
+    required LibraryModuleKey moduleKey,
+    required String episodeId,
+  }) async {
+    return null;
+  }
+
+  @override
+  Future<List<LibraryTag>> getTags() async => const [];
+
+  @override
+  Future<LibraryWorkState?> getWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return null;
+  }
+
+  @override
+  Future<List<LibraryTag>> getWorkTags({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return const [];
+  }
+
+  @override
+  Future<bool> hasAnyTag({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return false;
+  }
+
+  @override
+  Future<void> renameTag({
+    required String tagId,
+    required String newName,
+  }) async {}
+
+  @override
+  Future<void> unbindTagFromWork({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    required String tagId,
+  }) async {}
+
+  @override
+  Future<void> upsertDisplaySettings({
+    required LibraryModuleKey moduleKey,
+    required LibraryDisplayMode displayMode,
+    required int gridColumns,
+  }) async {}
+
+  @override
+  Future<void> upsertEpisodeState({
+    required LibraryModuleKey moduleKey,
+    required String episodeId,
+    required String workId,
+    bool? isRead,
+    bool? isDownloaded,
+    bool? isBookmarked,
+    DateTime? readAt,
+    DateTime? downloadedAt,
+  }) async {}
+
+  @override
+  Future<void> upsertWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    String? lastReadEpisodeId,
+    DateTime? lastReadAt,
+    DateTime? checkUpdatedAt,
+    DateTime? fetchedUpdatedAt,
+    String? introText,
+  }) async {}
 }

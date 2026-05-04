@@ -177,6 +177,56 @@ class UnifiedShelfController {
     );
   }
 
+  Future<void> createCategory(String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    await _adapter.createCategory(name: trimmed);
+    await _reload();
+  }
+
+  Future<void> renameCategory({
+    required String categoryId,
+    required String newName,
+  }) async {
+    final trimmed = newName.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    await _adapter.renameCategory(categoryId: categoryId, newName: trimmed);
+    await _reload();
+  }
+
+  Future<void> deleteCategory(String categoryId) async {
+    await _adapter.deleteCategory(categoryId: categoryId);
+    await _reload();
+  }
+
+  Future<void> refreshFromSource() async {
+    await _adapter.refreshShelf();
+    await _reload();
+  }
+
+  Future<String?> pickRandomWorkId() async {
+    return _adapter.pickRandomWorkId(categoryId: _state.selectedCategoryId);
+  }
+
+  LibraryCategory? get selectedCategory {
+    if (_state.categories.isEmpty) {
+      return null;
+    }
+    final index = _state.categories.indexWhere((e) => e.categoryId == _state.selectedCategoryId);
+    if (index < 0) {
+      return _state.categories.first;
+    }
+    return _state.categories[index];
+  }
+
+  List<LibraryWorkItem> get selectedCategoryItems {
+    return _state.itemsByCategory[_state.selectedCategoryId] ?? const <LibraryWorkItem>[];
+  }
+
   Future<void> _reload() async {
     _state = _state.copyWith(isLoading: true, clearError: true);
     try {
@@ -303,4 +353,3 @@ class _ResolvedCategoryState {
   final List<LibraryCategory> visibleCategories;
   final Map<String, int> visibleMatchCountByCategory;
 }
-

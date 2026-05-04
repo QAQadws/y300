@@ -1474,3 +1474,40 @@
 本轮按约定未执行自动化命令，请本地验证：
 1. `flutter test`
 2. `flutter analyze`
+
+---
+
+## 书架/详情统一抽象 Phase 3 Review 清单（2026-05-04）
+### 一、统一书架页面能力
+- [ ] `UnifiedShelfPage` 已提供搜索模式切换（普通态/搜索态）。
+- [ ] 搜索态下显示返回箭头 + 搜索输入框（提示词：`搜索···`）。
+- [ ] 分类头使用 `FixedSlotPagerHeader + PageView`，支持横向切换。
+- [ ] 页面支持 `RefreshIndicator` 下拉刷新。
+- [ ] 空状态/错误提示渲染正确。
+
+### 二、筛选/排序/显示面板
+- [ ] `filter_list` 可打开底部弹窗。
+- [ ] 弹窗包含三个横向分栏：`筛选`、`排序`、`显示`。
+- [ ] 筛选分栏支持三态切换（不筛选/包含/排除）。
+- [ ] 排序分栏支持字段切换与升降方向切换。
+- [ ] 显示分栏支持网格/列表切换，网格支持每行个数（1~3）。
+
+### 三、更多菜单动作
+- [ ] `more_vert` 菜单包含：新建分类、重命名当前分类、删除当前分类、更新书架、随机打开作品。
+- [ ] 默认分类不允许重命名与删除。
+- [ ] 删除普通分类时有二次确认弹窗。
+
+### 四、漫画/小说接入解耦
+- [ ] `ComicShelfPage` 仅作为统一页薄壳，负责 adapter 注入和详情跳转。
+- [ ] `NovelShelfPage` 仅作为统一页薄壳，负责 adapter 注入和详情跳转。
+- [ ] 共享交互逻辑全部沉淀到 `library_shared`，避免 comic/novel 重复实现。
+
+### 五、测试覆盖（本轮编写）
+- [ ] `test/features/library_shared/presentation/pages/unified_shelf_page_test.dart`
+- [ ] `test/features/comic/presentation/comic_shelf_page_test.dart`
+- [ ] `test/features/novel/presentation/novel_shelf_page_test.dart`
+
+### 六、执行声明
+本轮按约定未执行自动化命令，请本地验证：
+1. `flutter test`
+2. `flutter analyze`
