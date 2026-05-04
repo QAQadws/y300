@@ -65,6 +65,8 @@ void main() {
     await tester.tap(find.byIcon(Icons.search));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('unified-shelf-search-input')), 'Comic');
+    // UnifiedShelfController 对关键词查询有 250ms 防抖，等待防抖触发 reload。
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
 
     expect(find.text('Default 2'), findsOneWidget);
@@ -114,11 +116,39 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(adapter.refreshCalls, 0);
-    await tester.drag(find.byType(CustomScrollView).first, const Offset(0, 300));
+    // 下拉目标使用列表滚动容器，避免依赖页面结构中是否存在 CustomScrollView。
+    await tester.drag(find.byKey(const Key('unified-shelf-grid-view')), const Offset(0, 300));
     await tester.pump(const Duration(milliseconds: 200));
     await tester.pumpAndSettle();
 
     expect(adapter.refreshCalls, 1);
+  });
+
+  testWidgets('grid and list have cacheExtent for large shelf scrolling', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeShelfAdapter(initialDisplayMode: LibraryDisplayMode.grid),
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final grid = tester.widget<GridView>(find.byKey(const Key('unified-shelf-grid-view')));
+    expect(grid.cacheExtent, 900);
+
+    await tester.tap(find.byIcon(Icons.filter_list).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(TextButton).at(2));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Radio<LibraryDisplayMode>).at(1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(FilledButton).first);
+    await tester.pumpAndSettle();
+
+    final list = tester.widget<ListView>(find.byKey(const Key('unified-shelf-list-view')));
+    expect(list.cacheExtent, 900);
   });
 }
 

@@ -1708,3 +1708,40 @@
 本轮按约定未执行：
 1. `flutter test`
 2. `flutter analyze`
+
+---
+
+## 书架/详情统一抽象 Phase 7 Review 记录（2026-05-04）
+### Review 范围
+- `lib/features/library_shared/presentation/controllers/unified_shelf_controller.dart`
+- `lib/features/library_shared/presentation/pages/unified_shelf_page.dart`
+- `lib/features/library_shared/presentation/pages/unified_detail_page.dart`
+- `lib/features/comic/data/local/comic_local_db.dart`
+- `test/features/library_shared/presentation/controllers/unified_shelf_controller_test.dart`
+- `test/features/library_shared/presentation/pages/unified_shelf_page_test.dart`
+- `test/features/library_shared/presentation/pages/unified_detail_page_test.dart`
+- `test/features/library_shared/data/library_state_phase1_db_migration_test.dart`
+
+### 核对结论
+1. 性能优化达成
+- 搜索路径已加入防抖，避免每次输入字符都触发全量 reload。
+- 网格/列表的虚拟化参数已显式设置，提升大数据量滚动稳定性。
+- 章节列表的 keepAlive/semantic 参数做了轻量化处理。
+
+2. 数据层索引增强达成
+- 数据库版本升级并新增阶段7索引。
+- 迁移测试已补充新索引断言，避免未来回归误删。
+
+3. 测试覆盖增强
+- 控制器新增防抖行为测试。
+- 书架页面新增虚拟化参数测试。
+- 详情页面补充章节长按动作入口测试。
+
+### 风险与后续
+1. 当前防抖阈值固定为 250ms，后续可按真实设备与书架规模调优。
+2. `cacheExtent` 当前使用常量 900，后续可根据卡片尺寸和设备密度做自适应。
+
+### 执行声明
+本轮按约定未执行：
+1. `flutter test`
+2. `flutter analyze`

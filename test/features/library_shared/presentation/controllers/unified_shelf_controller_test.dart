@@ -157,6 +157,45 @@ void main() {
       expect(adapter.lastQueryKeyword, 'ab');
     });
 
+    test('keyword debounce should coalesce fast consecutive input', () async {
+      final adapter = _FakeShelfAdapter(
+        categories: [
+          LibraryCategory(
+            categoryId: 'default',
+            name: 'default',
+            sortOrder: 0,
+            createdAt: DateTime(2026, 1, 1),
+          ),
+        ],
+        queriedItems: {
+          'default': [
+            LibraryWorkItem(
+              workId: 'w1',
+              categoryId: 'default',
+              title: 'abc',
+              unreadCount: 0,
+              totalChapterCount: 1,
+              readChapterCount: 1,
+              addedAt: DateTime.utc(2026, 1, 1),
+            ),
+          ],
+        },
+      );
+      final controller = UnifiedShelfController(adapter: adapter);
+      await controller.initialize();
+      adapter.queryCallCount = 0;
+
+      final f1 = controller.updateKeyword('a');
+      final f2 = controller.updateKeyword('ab');
+      final f3 = controller.updateKeyword('abc');
+      await Future.wait([f1, f2, f3]);
+
+      expect(controller.state.keyword, 'abc');
+      expect(adapter.lastQueryKeyword, 'abc');
+      expect(adapter.queryCallCount, 1);
+      controller.dispose();
+    });
+
     test('update display and grid columns should persist through adapter', () async {
       final adapter = _FakeShelfAdapter(
         categories: const [],
@@ -185,6 +224,7 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
   String? lastQueryKeyword;
   LibraryDisplayMode? lastDisplayMode;
   int? lastGridColumns;
+  int queryCallCount = 0;
 
   @override
   LibraryDisplayMode get defaultDisplayMode => LibraryDisplayMode.grid;
@@ -236,6 +276,7 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
     required LibraryShelfSortOption sortOption,
     required String keyword,
   }) async {
+    queryCallCount += 1;
     lastQueryKeyword = keyword;
     return queriedItems;
   }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -111,8 +113,21 @@ class UnifiedShelfController {
 
   final ShelfModuleAdapter _adapter;
   UnifiedShelfState _state;
+  static const Duration _keywordDebounceDuration = Duration(milliseconds: 250);
+  Timer? _keywordDebounceTimer;
+  Completer<void>? _pendingKeywordCompleter;
 
   UnifiedShelfState get state => _state;
+
+  /// 释放控制器内部的异步资源，避免页面销毁后残留定时器。
+  void dispose() {
+    _keywordDebounceTimer?.cancel();
+    _keywordDebounceTimer = null;
+    if (_pendingKeywordCompleter != null && !_pendingKeywordCompleter!.isCompleted) {
+      _pendingKeywordCompleter!.complete();
+    }
+    _pendingKeywordCompleter = null;
+  }
 
   Future<void> initialize() async {
     await _reload();
@@ -140,7 +155,23 @@ class UnifiedShelfController {
 
   Future<void> updateKeyword(String value) async {
     _state = _state.copyWith(keyword: value);
-    await _reload();
+    _keywordDebounceTimer?.cancel();
+    if (_pendingKeywordCompleter != null && !_pendingKeywordCompleter!.isCompleted) {
+      // 被新输入打断的旧查询直接完成，避免调用方悬挂等待。
+      _pendingKeywordCompleter!.complete();
+    }
+    final completer = Completer<void>();
+    _pendingKeywordCompleter = completer;
+    _keywordDebounceTimer = Timer(_keywordDebounceDuration, () async {
+      try {
+        await _reload();
+      } finally {
+        if (!completer.isCompleted) {
+          completer.complete();
+        }
+      }
+    });
+    await completer.future;
   }
 
   Future<void> selectCategory(String categoryId) async {

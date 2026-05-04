@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 8;
+  static const int dbVersion = 9;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -57,6 +57,9 @@ class ComicLocalDb {
         }
         if (oldVersion < 8) {
           await _createLibraryStateTables(db);
+        }
+        if (oldVersion < 9) {
+          await _createPhase7PerformanceIndexes(db);
         }
       },
     );
@@ -150,6 +153,7 @@ class ComicLocalDb {
     await _createNovelReadingProgressTable(db);
     await _createNovelShelfTables(db);
     await _createLibraryStateTables(db);
+    await _createPhase7PerformanceIndexes(db);
   }
 
   static Future<void> _createSettingsTable(Database db) async {
@@ -375,6 +379,22 @@ class ComicLocalDb {
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_library_work_tags_work ON $libraryWorkTagsTable(content_type, work_id)',
+    );
+  }
+
+  /// Phase 7：针对统一书架/详情的高频筛选与排序路径补充索引。
+  static Future<void> _createPhase7PerformanceIndexes(Database db) async {
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_library_episode_state_work_bookmarked ON '
+      '$libraryEpisodeStateTable(content_type, work_id, is_bookmarked)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_work_episodes_type_work_order ON '
+      '$workEpisodesTable(content_type, work_id, order_index)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_episodes_comic_order ON '
+      '$episodesTable(comic_id, order_index)',
     );
   }
 }

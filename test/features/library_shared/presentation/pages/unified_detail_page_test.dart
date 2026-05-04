@@ -60,6 +60,10 @@ void main() {
     expect(find.text('继续'), findsOneWidget);
     expect(find.byIcon(Icons.file_download), findsOneWidget);
     expect(find.byIcon(Icons.filter_list), findsOneWidget);
+
+    await tester.longPress(find.byKey(const ValueKey<String>('unified-detail-chapter-e1')));
+    await tester.pumpAndSettle();
+    expect(find.text('删除该章节下载'), findsOneWidget);
   });
 }
 

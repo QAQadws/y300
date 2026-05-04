@@ -220,6 +220,9 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                   ),
                   SliverList.builder(
                     itemCount: state.chapters.length,
+                    addAutomaticKeepAlives: false,
+                    addRepaintBoundaries: true,
+                    addSemanticIndexes: false,
                     itemBuilder: (context, index) {
                       final chapter = state.chapters[index];
                       return ListTile(

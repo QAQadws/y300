@@ -43,6 +43,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
 
   @override
   void dispose() {
+    _controller.dispose();
     _pageController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -500,6 +501,8 @@ class _WorkGrid extends StatelessWidget {
       key: const Key('unified-shelf-grid-view'),
       // 保证短列表也能触发 RefreshIndicator 下拉手势。
       physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+      // 大书架场景预渲染适度前后缓存，降低滑动抖动。
+      cacheExtent: 900,
       padding: const EdgeInsets.all(12),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: gridColumns,
@@ -537,6 +540,8 @@ class _WorkList extends StatelessWidget {
       key: const Key('unified-shelf-list-view'),
       // 保证短列表也能触发 RefreshIndicator 下拉手势。
       physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+      // 大书架场景预渲染适度前后缓存，降低滑动抖动。
+      cacheExtent: 900,
       padding: const EdgeInsets.all(12),
       itemCount: items.length,
       separatorBuilder: (context, index) => const SizedBox(height: 10),
