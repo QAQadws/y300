@@ -1,11 +1,13 @@
-import 'package:y300/features/comic/data/comic_repository.dart';
+﻿import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 
-/// 漫画详情适配器（Phase 0 骨架版）。
+/// 漫画详情适配器（Phase 5）。
+///
+/// 负责把漫画仓储数据映射到统一详情模型，并接入章节状态筛选/排序。
 class ComicDetailAdapter implements DetailModuleAdapter {
   ComicDetailAdapter(
     this._repository, {
@@ -42,42 +44,85 @@ class ComicDetailAdapter implements DetailModuleAdapter {
     required LibraryFilterSet filters,
     required LibraryChapterSortOption sortOption,
   }) async {
-    // Phase 0：先返回基础章节数据，不引入新状态位筛选。
-    final descending = sortOption.direction == LibrarySortDirection.desc;
     final episodes = await _repository.getComicEpisodes(
       comicId: workId,
-      descending: descending,
+      descending: false,
     );
-    return episodes
-        .map(
-          (item) => LibraryChapterItem(
-            episodeId: item.episodeId,
-            workId: item.comicId,
-            title: item.episodeTitle?.trim().isNotEmpty == true
-                ? item.episodeTitle!
-                : '章节 ${item.sourceTid}',
-            orderIndex: item.orderIndex,
-            sourceTid: item.sourceTid,
-            publishTimeText: item.publishTimeText,
-          ),
-        )
-        .toList(growable: false);
+
+    final mapped = <LibraryChapterItem>[];
+    for (final item in episodes) {
+      final state = await _stateRepository.getEpisodeState(
+        moduleKey: LibraryModuleKey.comic,
+        episodeId: item.episodeId,
+      );
+      mapped.add(
+        LibraryChapterItem(
+          episodeId: item.episodeId,
+          workId: item.comicId,
+          title: item.episodeTitle?.trim().isNotEmpty == true ? item.episodeTitle! : '章节 ${item.sourceTid}',
+          orderIndex: item.orderIndex,
+          sourceTid: item.sourceTid,
+          publishTimeText: item.publishTimeText,
+          isRead: state?.isRead ?? false,
+          isDownloaded: state?.isDownloaded ?? false,
+          isBookmarked: state?.isBookmarked ?? false,
+        ),
+      );
+    }
+
+    final filtered = _applyFilters(mapped, filters);
+    return _sortChapters(filtered, sortOption);
   }
 
   @override
-  Future<void> clearAllReadState({required String workId}) async {}
+  Future<void> clearAllReadState({required String workId}) async {
+    final episodes = await _repository.getComicEpisodes(comicId: workId, descending: false);
+    for (final episode in episodes) {
+      await _stateRepository.upsertEpisodeState(
+        moduleKey: LibraryModuleKey.comic,
+        episodeId: episode.episodeId,
+        workId: workId,
+        isRead: false,
+        readAt: null,
+      );
+    }
+  }
 
   @override
   Future<void> deleteChapterDownload({
     required String workId,
     required String episodeId,
-  }) async {}
+  }) async {
+    await _stateRepository.upsertEpisodeState(
+      moduleKey: LibraryModuleKey.comic,
+      episodeId: episodeId,
+      workId: workId,
+      isDownloaded: false,
+      downloadedAt: null,
+    );
+  }
 
   @override
-  Future<void> downloadAll({required String workId}) async {}
+  Future<void> downloadAll({required String workId}) async {
+    final episodes = await _repository.getComicEpisodes(comicId: workId, descending: false);
+    for (final episode in episodes) {
+      await markChapterDownloaded(workId: workId, episodeId: episode.episodeId, isDownloaded: true);
+    }
+  }
 
   @override
-  Future<void> downloadUnread({required String workId}) async {}
+  Future<void> downloadUnread({required String workId}) async {
+    final episodes = await _repository.getComicEpisodes(comicId: workId, descending: false);
+    for (final episode in episodes) {
+      final state = await _stateRepository.getEpisodeState(
+        moduleKey: LibraryModuleKey.comic,
+        episodeId: episode.episodeId,
+      );
+      if (!(state?.isRead ?? false)) {
+        await markChapterDownloaded(workId: workId, episodeId: episode.episodeId, isDownloaded: true);
+      }
+    }
+  }
 
   @override
   Future<ReaderRouteTarget?> getReaderRouteTarget({
@@ -153,4 +198,49 @@ class ComicDetailAdapter implements DetailModuleAdapter {
     required String workId,
     required String intro,
   }) async {}
+
+  List<LibraryChapterItem> _applyFilters(
+    List<LibraryChapterItem> source,
+    LibraryFilterSet filters,
+  ) {
+    return source.where((chapter) {
+      if (!_matchTriState(filters.downloaded, chapter.isDownloaded)) {
+        return false;
+      }
+      if (!_matchTriState(filters.unread, !chapter.isRead)) {
+        return false;
+      }
+      if (!_matchTriState(filters.bookmarked, chapter.isBookmarked)) {
+        return false;
+      }
+      return true;
+    }).toList(growable: false);
+  }
+
+  List<LibraryChapterItem> _sortChapters(
+    List<LibraryChapterItem> source,
+    LibraryChapterSortOption sortOption,
+  ) {
+    final list = [...source];
+    int compare(LibraryChapterItem a, LibraryChapterItem b) {
+      final result = switch (sortOption.field) {
+        LibraryChapterSortField.chapterIndex => a.orderIndex.compareTo(b.orderIndex),
+        LibraryChapterSortField.date => (a.publishTimeText ?? '').compareTo(b.publishTimeText ?? ''),
+        LibraryChapterSortField.name => a.title.compareTo(b.title),
+        LibraryChapterSortField.tid => (a.sourceTid ?? '').compareTo(b.sourceTid ?? ''),
+      };
+      return sortOption.direction == LibrarySortDirection.asc ? result : -result;
+    }
+
+    list.sort(compare);
+    return list;
+  }
+
+  bool _matchTriState(TriStateFilterValue filterValue, bool flag) {
+    return switch (filterValue) {
+      TriStateFilterValue.ignore => true,
+      TriStateFilterValue.include => flag,
+      TriStateFilterValue.exclude => !flag,
+    };
+  }
 }

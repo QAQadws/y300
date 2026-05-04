@@ -58,6 +58,7 @@ void main() {
 
     expect(find.text('继续'), findsOneWidget);
     expect(find.byIcon(Icons.file_download), findsOneWidget);
+    expect(find.byIcon(Icons.filter_list), findsOneWidget);
   });
 }
 
@@ -150,3 +151,4 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
     required String intro,
   }) async {}
 }
+

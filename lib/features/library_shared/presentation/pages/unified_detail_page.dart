@@ -2,7 +2,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
+import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/presentation/controllers/unified_detail_controller.dart';
 
 /// 统一详情页骨架（Phase 4）
@@ -30,13 +32,16 @@ class UnifiedDetailPage extends StatefulWidget {
 }
 
 class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
-  static const double _collapsedTitleRevealOffset = 170;
+  // 阈值适当降低，确保常见拖动距离能稳定触发折叠标题显示。
+  static const double _collapsedTitleRevealOffset = 120;
+  static const double _chapterDownloadIconSize = 28;
 
   late final UnifiedDetailController _controller;
   late final ScrollController _scrollController;
 
   bool _introExpanded = false;
   bool _showCollapsedTitle = false;
+  final Set<String> _downloadingEpisodeIds = <String>{};
 
   @override
   void initState() {
@@ -74,7 +79,6 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final pageContext = this.context;
     final state = _controller.state;
     final header = state.header;
     final topInset = MediaQuery.of(context).padding.top;
@@ -123,9 +127,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
           ),
           IconButton(
             icon: const Icon(Icons.filter_list),
-            onPressed: () {
-              // Phase 5 继续实现章节筛选细节。
-            },
+            onPressed: _showChapterFilterSheet,
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
@@ -185,10 +187,10 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         },
                         onOpenThread: () async {
                           final target = await widget.adapter.getThreadRouteTarget(workId: widget.workId);
-                          if (!mounted || !pageContext.mounted || target == null) {
+                          if (!context.mounted || target == null) {
                             return;
                           }
-                          await widget.onOpenThread(pageContext, target);
+                          await widget.onOpenThread(context, target);
                         },
                       ),
                     ),
@@ -231,23 +233,78 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        trailing: Icon(
-                          chapter.isDownloaded ? Icons.check_circle_outline : Icons.arrow_circle_down,
+                        trailing: IconButton(
+                          tooltip: chapter.isDownloaded ? '已下载，点击删除下载' : '下载该章节',
+                          iconSize: _chapterDownloadIconSize,
+                          onPressed: _downloadingEpisodeIds.contains(chapter.episodeId)
+                              ? null
+                              : () async {
+                                  if (chapter.isDownloaded) {
+                                    await _controller.deleteChapterDownload(
+                                      episodeId: chapter.episodeId,
+                                    );
+                                    if (!mounted) {
+                                      return;
+                                    }
+                                    setState(() {});
+                                    return;
+                                  }
+
+                                  setState(() {
+                                    _downloadingEpisodeIds.add(chapter.episodeId);
+                                  });
+                                  try {
+                                    await _controller.markChapterDownloaded(
+                                      episodeId: chapter.episodeId,
+                                      isDownloaded: true,
+                                    );
+                                  } finally {
+                                    if (mounted) {
+                                      setState(() {
+                                        _downloadingEpisodeIds.remove(chapter.episodeId);
+                                      });
+                                    }
+                                  }
+                                },
+                          icon: _downloadingEpisodeIds.contains(chapter.episodeId)
+                              ? SizedBox(
+                                  width: _chapterDownloadIconSize,
+                                  height: _chapterDownloadIconSize,
+                                  child: const CircularProgressIndicator(strokeWidth: 2.2),
+                                )
+                              : Icon(
+                                  chapter.isDownloaded
+                                      ? Icons.check_circle_outline
+                                      : Icons.arrow_circle_down,
+                                  size: _chapterDownloadIconSize,
+                                ),
                         ),
+                        textColor: chapter.isRead ? Theme.of(context).disabledColor : null,
+                        iconColor: chapter.isRead ? Theme.of(context).disabledColor : null,
                         onTap: () async {
                           final target = await widget.adapter.getReaderRouteTarget(
                             workId: widget.workId,
                             preferContinue: false,
                           );
-                          if (!mounted || !pageContext.mounted || target == null) {
+                          if (!context.mounted || target == null) {
                             return;
                           }
-                          await widget.onOpenReader(pageContext, target);
+                          await _controller.markChapterRead(
+                            episodeId: chapter.episodeId,
+                            isRead: true,
+                          );
+                          if (!context.mounted) {
+                            return;
+                          }
+                          setState(() {});
+                          await widget.onOpenReader(context, target);
                         },
+                        onLongPress: () => _showChapterActions(chapter),
                       );
                     },
                   ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 96)),
+                  // 预留足够底部滚动空间，保证短列表场景也能触发折叠标题阈值。
+                  const SliverToBoxAdapter(child: SizedBox(height: 320)),
                 ],
               ),
             ),
@@ -257,14 +314,180 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
             workId: widget.workId,
             preferContinue: true,
           );
-          if (!mounted || !pageContext.mounted || target == null) {
+          if (!context.mounted || target == null) {
             return;
           }
-          await widget.onOpenReader(pageContext, target);
+          await widget.onOpenReader(context, target);
         },
         icon: const Icon(Icons.play_arrow),
         label: const Text('继续'),
       ),
+    );
+  }
+
+  Future<void> _showChapterFilterSheet() async {
+    var selectedFilters = _controller.state.filters;
+    var selectedSortField = _controller.state.chapterSortOption.field;
+    var selectedDirection = _controller.state.chapterSortOption.direction;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _TriStateLine(
+                      label: '已下载',
+                      value: selectedFilters.downloaded,
+                      onChanged: (v) => setSheetState(
+                        () => selectedFilters = selectedFilters.copyWith(downloaded: v),
+                      ),
+                    ),
+                    _TriStateLine(
+                      label: '未读',
+                      value: selectedFilters.unread,
+                      onChanged: (v) => setSheetState(
+                        () => selectedFilters = selectedFilters.copyWith(unread: v),
+                      ),
+                    ),
+                    _TriStateLine(
+                      label: '已加书签',
+                      value: selectedFilters.bookmarked,
+                      onChanged: (v) => setSheetState(
+                        () => selectedFilters = selectedFilters.copyWith(bookmarked: v),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<LibraryChapterSortField>(
+                      initialValue: selectedSortField,
+                      items: const [
+                        DropdownMenuItem(value: LibraryChapterSortField.chapterIndex, child: Text('按章节编号')),
+                        DropdownMenuItem(value: LibraryChapterSortField.date, child: Text('按日期')),
+                        DropdownMenuItem(value: LibraryChapterSortField.name, child: Text('按名称')),
+                        DropdownMenuItem(value: LibraryChapterSortField.tid, child: Text('按Tid')),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setSheetState(() => selectedSortField = value);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Text('排序方向'),
+                        const Spacer(),
+                        SegmentedButton<LibrarySortDirection>(
+                          segments: const [
+                            ButtonSegment(value: LibrarySortDirection.asc, label: Text('升序')),
+                            ButtonSegment(value: LibrarySortDirection.desc, label: Text('降序')),
+                          ],
+                          selected: <LibrarySortDirection>{selectedDirection},
+                          onSelectionChanged: (values) {
+                            setSheetState(() => selectedDirection = values.first);
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(sheetContext).pop(),
+                            child: const Text('取消'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () async {
+                              await _controller.updateFilters(selectedFilters);
+                              await _controller.updateChapterSortField(selectedSortField);
+                              final now = _controller.state.chapterSortOption.direction;
+                              if (now != selectedDirection) {
+                                await _controller.toggleSortDirection();
+                              }
+                              if (!mounted || !sheetContext.mounted) {
+                                return;
+                              }
+                              Navigator.of(sheetContext).pop();
+                              setState(() {});
+                            },
+                            child: const Text('应用'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _showChapterActions(LibraryChapterItem chapter) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.bookmark_add_outlined),
+                  title: Text(chapter.isBookmarked ? '移除书签' : '添加书签'),
+                  onTap: () async {
+                    await _controller.markChapterBookmarked(
+                      episodeId: chapter.episodeId,
+                      isBookmarked: !chapter.isBookmarked,
+                    );
+                    if (!mounted || !sheetContext.mounted) {
+                      return;
+                    }
+                    Navigator.of(sheetContext).pop();
+                    setState(() {});
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.remove_done),
+                  title: const Text('取消全部已读'),
+                  onTap: () async {
+                    await _controller.clearAllReadState();
+                    if (!mounted || !sheetContext.mounted) {
+                      return;
+                    }
+                    Navigator.of(sheetContext).pop();
+                    setState(() {});
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.delete_outline),
+                  title: const Text('删除该章节下载'),
+                  onTap: () async {
+                    await _controller.deleteChapterDownload(episodeId: chapter.episodeId);
+                    if (!mounted || !sheetContext.mounted) {
+                      return;
+                    }
+                    Navigator.of(sheetContext).pop();
+                    setState(() {});
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -501,9 +724,9 @@ class _HeaderActionsRow extends StatelessWidget {
         children: [
           Expanded(
             child: _ActionChip(
-            icon: header.inShelf ? Icons.favorite : Icons.favorite_border,
-            label: header.inShelf ? '在书架中' : '添加到书架',
-            onTap: onToggleShelf,
+              icon: header.inShelf ? Icons.favorite : Icons.favorite_border,
+              label: header.inShelf ? '在书架中' : '添加到书架',
+              onTap: onToggleShelf,
             ),
           ),
           const SizedBox(width: 8),
@@ -619,6 +842,41 @@ class _IntroSection extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _TriStateLine extends StatelessWidget {
+  const _TriStateLine({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final TriStateFilterValue value;
+  final ValueChanged<TriStateFilterValue> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = switch (value) {
+      TriStateFilterValue.ignore => Icons.check_box_outline_blank,
+      TriStateFilterValue.include => Icons.check_box,
+      TriStateFilterValue.exclude => Icons.indeterminate_check_box,
+    };
+
+    return ListTile(
+      dense: true,
+      leading: Icon(icon),
+      title: Text(label),
+      onTap: () {
+        final next = switch (value) {
+          TriStateFilterValue.ignore => TriStateFilterValue.include,
+          TriStateFilterValue.include => TriStateFilterValue.exclude,
+          TriStateFilterValue.exclude => TriStateFilterValue.ignore,
+        };
+        onChanged(next);
+      },
     );
   }
 }

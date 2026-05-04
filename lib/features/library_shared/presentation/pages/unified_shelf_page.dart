@@ -727,10 +727,10 @@ class _DisplayTab extends StatelessWidget {
                 const Text('每行个数'),
                 Expanded(
                   child: Slider(
-                    value: gridColumns.clamp(1, 3),
+                    value: gridColumns.clamp(1, 10),
                     min: 1,
-                    max: 3,
-                    divisions: 2,
+                    max: 10,
+                    divisions: 9,
                     label: '${gridColumns.round()}',
                     onChanged: onGridColumnsChanged,
                   ),

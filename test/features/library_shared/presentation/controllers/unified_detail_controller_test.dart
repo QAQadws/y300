@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -15,7 +15,7 @@ void main() {
     await controller.initialize();
 
     expect(controller.state.header?.title, '测试作品');
-    expect(controller.state.chapters.length, 1);
+    expect(controller.state.chapters.length, 2);
     expect(controller.state.isLoading, isFalse);
   });
 
@@ -33,23 +33,93 @@ void main() {
 
     expect(before == after, isFalse);
   });
+
+  test('updateFilters and chapter actions update state', () async {
+    final adapter = _FakeDetailAdapter();
+    final controller = UnifiedDetailController(
+      adapter: adapter,
+      workId: 'work-1',
+    );
+
+    await controller.initialize();
+
+    await controller.updateFilters(
+      const LibraryFilterSet(unread: TriStateFilterValue.include),
+    );
+    expect(controller.state.chapters.length, 2);
+
+    await controller.markChapterRead(episodeId: 'e1', isRead: true);
+    await controller.updateFilters(
+      const LibraryFilterSet(unread: TriStateFilterValue.include),
+    );
+    expect(controller.state.chapters.length, 1);
+
+    await controller.markChapterBookmarked(episodeId: 'e2', isBookmarked: true);
+    await controller.updateFilters(
+      const LibraryFilterSet(bookmarked: TriStateFilterValue.include),
+    );
+    expect(controller.state.chapters.map((e) => e.episodeId), ['e2']);
+
+    await controller.markChapterDownloaded(episodeId: 'e2', isDownloaded: true);
+    await controller.updateFilters(
+      const LibraryFilterSet(downloaded: TriStateFilterValue.include),
+    );
+    expect(controller.state.chapters.map((e) => e.episodeId), ['e2']);
+
+    await controller.clearAllReadState();
+    await controller.updateFilters(
+      const LibraryFilterSet(unread: TriStateFilterValue.include),
+    );
+    expect(controller.state.chapters.length, 2);
+
+    await controller.deleteChapterDownload(episodeId: 'e2');
+    await controller.updateFilters(
+      const LibraryFilterSet(downloaded: TriStateFilterValue.include),
+    );
+    expect(controller.state.chapters, isEmpty);
+  });
 }
 
 class _FakeDetailAdapter implements DetailModuleAdapter {
+  final Map<String, bool> _read = <String, bool>{
+    'e1': false,
+    'e2': false,
+  };
+  final Map<String, bool> _downloaded = <String, bool>{
+    'e1': false,
+    'e2': false,
+  };
+  final Map<String, bool> _bookmarked = <String, bool>{
+    'e1': false,
+    'e2': false,
+  };
+
   @override
-  Future<void> clearAllReadState({required String workId}) async {}
+  Future<void> clearAllReadState({required String workId}) async {
+    _read.updateAll((key, value) => false);
+  }
 
   @override
   Future<void> deleteChapterDownload({
     required String workId,
     required String episodeId,
-  }) async {}
+  }) async {
+    _downloaded[episodeId] = false;
+  }
 
   @override
-  Future<void> downloadAll({required String workId}) async {}
+  Future<void> downloadAll({required String workId}) async {
+    _downloaded.updateAll((key, value) => true);
+  }
 
   @override
-  Future<void> downloadUnread({required String workId}) async {}
+  Future<void> downloadUnread({required String workId}) async {
+    _downloaded.forEach((episodeId, value) {
+      if (!(_read[episodeId] ?? false)) {
+        _downloaded[episodeId] = true;
+      }
+    });
+  }
 
   @override
   Future<ReaderRouteTarget?> getReaderRouteTarget({
@@ -70,14 +140,47 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
     required LibraryFilterSet filters,
     required LibraryChapterSortOption sortOption,
   }) async {
-    return const [
+    final base = [
       LibraryChapterItem(
         episodeId: 'e1',
-        workId: 'work-1',
+        workId: workId,
         title: '第1章',
         orderIndex: 1,
+        isRead: _read['e1'] ?? false,
+        isDownloaded: _downloaded['e1'] ?? false,
+        isBookmarked: _bookmarked['e1'] ?? false,
+      ),
+      LibraryChapterItem(
+        episodeId: 'e2',
+        workId: workId,
+        title: '第2章',
+        orderIndex: 2,
+        isRead: _read['e2'] ?? false,
+        isDownloaded: _downloaded['e2'] ?? false,
+        isBookmarked: _bookmarked['e2'] ?? false,
       ),
     ];
+
+    return base.where((chapter) {
+      if (!_match(filters.downloaded, chapter.isDownloaded)) {
+        return false;
+      }
+      if (!_match(filters.unread, !chapter.isRead)) {
+        return false;
+      }
+      if (!_match(filters.bookmarked, chapter.isBookmarked)) {
+        return false;
+      }
+      return true;
+    }).toList(growable: false);
+  }
+
+  bool _match(TriStateFilterValue value, bool actual) {
+    return switch (value) {
+      TriStateFilterValue.ignore => true,
+      TriStateFilterValue.include => actual,
+      TriStateFilterValue.exclude => !actual,
+    };
   }
 
   @override
@@ -94,21 +197,27 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
     required String workId,
     required String episodeId,
     required bool isBookmarked,
-  }) async {}
+  }) async {
+    _bookmarked[episodeId] = isBookmarked;
+  }
 
   @override
   Future<void> markChapterDownloaded({
     required String workId,
     required String episodeId,
     required bool isDownloaded,
-  }) async {}
+  }) async {
+    _downloaded[episodeId] = isDownloaded;
+  }
 
   @override
   Future<void> markChapterRead({
     required String workId,
     required String episodeId,
     required bool isRead,
-  }) async {}
+  }) async {
+    _read[episodeId] = isRead;
+  }
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.novel;
@@ -122,4 +231,3 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
     required String intro,
   }) async {}
 }
-

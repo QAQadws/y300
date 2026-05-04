@@ -99,6 +99,70 @@ class UnifiedDetailController {
     await _loadChaptersOnly();
   }
 
+  Future<void> updateChapterSortField(LibraryChapterSortField field) async {
+    _state = _state.copyWith(
+      chapterSortOption: LibraryChapterSortOption(
+        field: field,
+        direction: _state.chapterSortOption.direction,
+      ),
+    );
+    await _loadChaptersOnly();
+  }
+
+  Future<void> updateFilters(LibraryFilterSet filters) async {
+    _state = _state.copyWith(filters: filters);
+    await _loadChaptersOnly();
+  }
+
+  Future<void> markChapterRead({
+    required String episodeId,
+    required bool isRead,
+  }) async {
+    await _adapter.markChapterRead(
+      workId: _workId,
+      episodeId: episodeId,
+      isRead: isRead,
+    );
+    await _loadChaptersOnly();
+  }
+
+  Future<void> markChapterBookmarked({
+    required String episodeId,
+    required bool isBookmarked,
+  }) async {
+    await _adapter.markChapterBookmarked(
+      workId: _workId,
+      episodeId: episodeId,
+      isBookmarked: isBookmarked,
+    );
+    await _loadChaptersOnly();
+  }
+
+  Future<void> markChapterDownloaded({
+    required String episodeId,
+    required bool isDownloaded,
+  }) async {
+    await _adapter.markChapterDownloaded(
+      workId: _workId,
+      episodeId: episodeId,
+      isDownloaded: isDownloaded,
+    );
+    await _loadChaptersOnly();
+  }
+
+  Future<void> clearAllReadState() async {
+    await _adapter.clearAllReadState(workId: _workId);
+    await _loadChaptersOnly();
+  }
+
+  Future<void> deleteChapterDownload({required String episodeId}) async {
+    await _adapter.deleteChapterDownload(
+      workId: _workId,
+      episodeId: episodeId,
+    );
+    await _loadChaptersOnly();
+  }
+
   Future<void> _load() async {
     _state = _state.copyWith(isLoading: true, clearError: true);
     try {
@@ -138,4 +202,3 @@ class UnifiedDetailController {
     }
   }
 }
-

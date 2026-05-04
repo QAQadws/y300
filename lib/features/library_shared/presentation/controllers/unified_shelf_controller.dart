@@ -337,8 +337,8 @@ class UnifiedShelfController {
     if (value < 1) {
       return 1;
     }
-    if (value > 3) {
-      return 3;
+    if (value > 10) {
+      return 10;
     }
     return value;
   }

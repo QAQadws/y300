@@ -1592,3 +1592,26 @@
 ### 待你本地回归
 1. `flutter test`
 2. `flutter analyze`
+
+## Phase 5 Review 记录（章节列表交互与下载/书签状态，2026-05-04）
+### Review 范围
+- `lib/features/library_shared/presentation/controllers/unified_detail_controller.dart`
+- `lib/features/library_shared/presentation/pages/unified_detail_page.dart`
+- `lib/features/comic/presentation/adapters/comic_detail_adapter.dart`
+- `lib/features/novel/presentation/adapters/novel_detail_adapter.dart`
+- `test/features/library_shared/presentation/controllers/unified_detail_controller_test.dart`
+- `test/features/library_shared/presentation/pages/unified_detail_page_test.dart`
+
+### 核对结论
+1. 章节筛选/排序：已接入统一详情页 `filter_list` 面板并写回控制器。
+2. 章节长按动作：已提供加书签/取消全部已读/删除下载三项操作并回写状态。
+3. 状态一致性：漫画与小说 adapter 均已接入 `LibraryStateRepository`，章节状态可在统一模型中回填。
+4. 控制器职责：仍保持“编排层”定位，具体数据读写在 adapter，边界清晰。
+
+### 风险与后续
+1. 当前下载动作主要写统一状态标记，未与真实媒体缓存下载任务深度联动（属于后续增强点）。
+2. 章节筛选排序由 adapter 实现，后续若字段增长建议抽成共享策略以减少重复。
+
+### 待你本地回归（本轮未执行）
+1. `flutter test`
+2. `flutter analyze`
