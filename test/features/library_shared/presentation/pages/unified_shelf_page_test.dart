@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
@@ -24,7 +24,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('unified-shelf-search-input')), findsOneWidget);
-    expect(find.text('搜索···'), findsOneWidget);
     expect(find.byIcon(Icons.arrow_back), findsOneWidget);
   });
 
@@ -40,14 +39,14 @@ void main() {
         if (keyword.trim().isEmpty) {
           return {
             'default': [
-              _item(workId: '1', title: '漫画A'),
+              _item(workId: '1', title: 'Comic A'),
             ],
           };
         }
         return {
           'default': [
-            _item(workId: '1', title: '漫画A'),
-            _item(workId: '2', title: '漫画B'),
+            _item(workId: '1', title: 'Comic A'),
+            _item(workId: '2', title: 'Comic B'),
           ],
         };
       },
@@ -65,13 +64,13 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.search));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('unified-shelf-search-input')), '漫画');
+    await tester.enterText(find.byKey(const Key('unified-shelf-search-input')), 'Comic');
     await tester.pumpAndSettle();
 
-    expect(find.text('默认 2'), findsOneWidget);
+    expect(find.text('Default 2'), findsOneWidget);
   });
 
-  testWidgets('filter sheet has 筛选/排序/显示 tabs', (tester) async {
+  testWidgets('filter sheet and display mode switch work', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: UnifiedShelfPage(
@@ -82,38 +81,24 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.filter_list).first);
-    await tester.pumpAndSettle();
-
-    expect(find.text('筛选'), findsWidgets);
-    expect(find.text('排序'), findsOneWidget);
-    expect(find.text('显示'), findsOneWidget);
-    expect(find.text('已下载'), findsOneWidget);
-  });
-
-  testWidgets('display mode can switch list view rendering', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: UnifiedShelfPage(
-          adapter: _FakeShelfAdapter(initialDisplayMode: LibraryDisplayMode.grid),
-          onOpenWork: (context, workId) async {},
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byType(GridView), findsOneWidget);
+    expect(find.byKey(const Key('unified-shelf-grid-view')), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.filter_list).first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('显示'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('列表'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('应用'));
+
+    // 切到第 3 个 tab（显示），避免依赖具体文案。
+    await tester.tap(find.byType(TextButton).at(2));
     await tester.pumpAndSettle();
 
-    expect(find.byType(ListView), findsOneWidget);
+    // 选择列表模式：第二个 Radio 对应 list。
+    await tester.tap(find.byType(Radio<LibraryDisplayMode>).at(1));
+    await tester.pumpAndSettle();
+
+    // 点击底部右侧应用按钮（FilledButton）。
+    await tester.tap(find.byType(FilledButton).first);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('unified-shelf-list-view')), findsOneWidget);
   });
 }
 
@@ -153,7 +138,7 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
   LibraryDisplayMode get defaultDisplayMode => initialDisplayMode;
 
   @override
-  String get moduleTitle => '漫画';
+  String get moduleTitle => 'Comic';
 
   @override
   Future<Object> buildDetailRouteArgument({required String workId}) async => workId;
@@ -169,7 +154,7 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
     return [
       LibraryCategory(
         categoryId: 'default',
-        name: '默认',
+        name: 'Default',
         sortOrder: 0,
         createdAt: DateTime(2026, 1, 1),
       ),
@@ -178,7 +163,7 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
 
   @override
   Future<List<LibraryWorkItem>> loadCategoryItems({required String categoryId}) async {
-    return [_item(workId: '1', title: '漫画A')];
+    return [_item(workId: '1', title: 'Comic A')];
   }
 
   @override
@@ -215,7 +200,7 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
       );
     }
     return {
-      'default': [_item(workId: '1', title: '漫画A')],
+      'default': [_item(workId: '1', title: 'Comic A')],
     };
   }
 

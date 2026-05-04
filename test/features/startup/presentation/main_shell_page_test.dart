@@ -30,13 +30,15 @@ void main() {
 
     expect(find.text('论坛首页'), findsOneWidget);
 
-    await tester.tap(find.text('漫画'));
+    await tester.tap(find.text('漫画').last);
     await tester.pumpAndSettle();
-    expect(find.text('漫画'), findsOneWidget);
+    expect(find.byType(AppBar), findsOneWidget);
+    expect(find.byIcon(Icons.search), findsOneWidget);
 
-    await tester.tap(find.text('小说'));
+    await tester.tap(find.text('小说').last);
     await tester.pumpAndSettle();
-    expect(find.text('小说'), findsOneWidget);
+    expect(find.byType(AppBar), findsOneWidget);
+    expect(find.byKey(const Key('unified-shelf-category-indicator')), findsOneWidget);
 
     await tester.tap(find.text('更多'));
     await tester.pumpAndSettle();

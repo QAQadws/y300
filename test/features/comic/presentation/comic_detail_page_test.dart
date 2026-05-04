@@ -6,110 +6,38 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
-import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/comic_detail_page.dart';
+import 'package:y300/features/library_shared/data/library_state_providers.dart';
+import 'package:y300/features/library_shared/data/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 
 void main() {
-  testWidgets('ComicDetailPage shows detail header and episodes', (tester) async {
+  testWidgets('ComicDetailPage renders unified detail header and chapter list', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          comicRepositoryProvider.overrideWithValue(_ComicDetailFakeRepository()),
-          comicEpisodeRefreshServiceProvider.overrideWithValue(_FakeRefreshService()),
+          comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
         ],
-        child: const MaterialApp(home: ComicDetailPage(comicId: 'yamibo:100')),
+        child: const MaterialApp(home: ComicDetailPage(comicId: 'comic:1')),
       ),
     );
 
     await tester.pumpAndSettle();
 
-    expect(find.text('测试漫画'), findsOneWidget);
-    expect(find.text('汉化组：测试汉化组'), findsOneWidget);
-    expect(find.byKey(const Key('comic-detail-episode-list')), findsOneWidget);
-    expect(find.text('第2话'), findsOneWidget);
-    expect(find.text('第1话'), findsOneWidget);
-    expect(find.byKey(const Key('comic-detail-sort-button')), findsOneWidget);
-    expect(find.byKey(const Key('comic-detail-sort-hint')), findsOneWidget);
-  });
-
-  testWidgets('ComicDetailPage supports refresh action', (tester) async {
-    final repository = _ComicDetailFakeRepository();
-    final refreshService = _FakeRefreshService();
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(repository),
-          comicEpisodeRefreshServiceProvider.overrideWithValue(refreshService),
-        ],
-        child: const MaterialApp(home: ComicDetailPage(comicId: 'yamibo:100')),
-      ),
+    expect(find.text('Test Comic'), findsAtLeastNWidgets(1));
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')),
+      300,
+      scrollable: find.byType(Scrollable).first,
     );
-
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('comic-detail-refresh-button')));
-    await tester.pump();
-    await tester.pumpAndSettle();
-
-    expect(repository.mergeCalled, isTrue);
-    expect(find.byKey(const Key('comic-detail-refresh-hint')), findsOneWidget);
-  });
-
-  testWidgets('ComicDetailPage toggles episode sort order by tid', (tester) async {
-    final repository = _ComicDetailFakeRepository();
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(repository),
-          comicEpisodeRefreshServiceProvider.overrideWithValue(_FakeRefreshService()),
-        ],
-        child: const MaterialApp(home: ComicDetailPage(comicId: 'yamibo:100')),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('排序：Tid 降序'), findsOneWidget);
-
-    // Default descending: tid=102 appears before tid=101.
-    final tid102 = find.text('Tid: 102');
-    final tid101 = find.text('Tid: 101');
-    expect(tid102, findsOneWidget);
-    expect(tid101, findsOneWidget);
-    expect(tester.getTopLeft(tid102).dy, lessThan(tester.getTopLeft(tid101).dy));
-
-    await tester.tap(find.byKey(const Key('comic-detail-sort-button')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('排序：Tid 升序'), findsOneWidget);
-    expect(tester.getTopLeft(tid101).dy, lessThan(tester.getTopLeft(tid102).dy));
+    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')), findsOneWidget);
+    expect(find.byIcon(Icons.file_download), findsOneWidget);
   });
 }
 
-class _ComicDetailFakeRepository implements ComicRepository {
-  bool mergeCalled = false;
-
-  final List<ComicEpisodeItem> _episodes = <ComicEpisodeItem>[
-    const ComicEpisodeItem(
-      episodeId: 'yamibo:100:101',
-      comicId: 'yamibo:100',
-      episodeTitle: '第1话',
-      sourceTid: '101',
-      sourceUrl: 'thread-101-1-1.html',
-      orderIndex: 0,
-      publishTimeText: null,
-    ),
-    const ComicEpisodeItem(
-      episodeId: 'yamibo:100:102',
-      comicId: 'yamibo:100',
-      episodeTitle: '第2话',
-      sourceTid: '102',
-      sourceUrl: 'thread-102-1-1.html',
-      orderIndex: 1,
-      publishTimeText: null,
-    ),
-  ];
-
+class _FakeComicRepository implements ComicRepository {
   @override
   Future<void> addToShelf({
     required String comicId,
@@ -120,10 +48,13 @@ class _ComicDetailFakeRepository implements ComicRepository {
   }) async {}
 
   @override
-  Future<String> createCategory({required String name}) async => 'mock';
+  Future<String> createCategory({required String name}) async => 'created';
 
   @override
   Future<void> deleteCategory({required String categoryId}) async {}
+
+  @override
+  Future<List<ComicShelfCategory>> getCategories() async => const [];
 
   @override
   Future<ComicDetail?> getComicDetail({required String comicId}) async {
@@ -131,43 +62,45 @@ class _ComicDetailFakeRepository implements ComicRepository {
       comicId: comicId,
       sourceTid: '100',
       sourceFid: '30',
-      title: '测试漫画',
-      author: '作者A',
-      translationGroup: '测试汉化组',
+      title: 'Test Comic',
+      author: 'Author A',
+      translationGroup: 'Group A',
       coverImageUrl: null,
       updatedAt: DateTime(2026, 1, 1),
-      episodeCount: _episodes.length,
+      episodeCount: 1,
     );
   }
 
   @override
   Future<List<ComicEpisodeItem>> getComicEpisodes({required String comicId, bool descending = true}) async {
-    final copy = List<ComicEpisodeItem>.from(_episodes);
-    copy.sort((a, b) => descending ? b.orderIndex.compareTo(a.orderIndex) : a.orderIndex.compareTo(b.orderIndex));
-    return copy;
+    return const [
+      ComicEpisodeItem(
+        episodeId: 'comic:1:e1',
+        comicId: 'comic:1',
+        sourceTid: '100',
+        sourceUrl: 'thread-100-1-1.html',
+        orderIndex: 0,
+        episodeTitle: 'Episode 1',
+        publishTimeText: '2026-01-01',
+      ),
+    ];
   }
 
   @override
-  Future<List<ComicEpisodeImageItem>> getEpisodeImages({required String episodeId}) async {
-    return const <ComicEpisodeImageItem>[];
-  }
+  Future<ComicShelfDisplaySettings> getDisplaySettings() async =>
+      const ComicShelfDisplaySettings(gridColumnCount: 3);
 
   @override
-  Future<List<ComicShelfCategory>> getCategories() async => const <ComicShelfCategory>[];
-
-  @override
-  Future<ComicShelfDisplaySettings> getDisplaySettings() async {
-    return const ComicShelfDisplaySettings(gridColumnCount: 3);
-  }
-
-  @override
-  Future<List<ComicShelfItem>> getShelfItems({String categoryId = 'default'}) async => const <ComicShelfItem>[];
-
-  @override
-  Future<bool> isInShelf({required String comicId}) async => true;
+  Future<List<ComicEpisodeImageItem>> getEpisodeImages({required String episodeId}) async => const [];
 
   @override
   Future<ComicReadingProgress?> getLastReadProgress({required String comicId}) async => null;
+
+  @override
+  Future<List<ComicShelfItem>> getShelfItems({String categoryId = 'default'}) async => const [];
+
+  @override
+  Future<bool> isInShelf({required String comicId}) async => true;
 
   @override
   Future<ComicEpisodeRefreshResult> mergeEpisodesFromLinks({
@@ -175,19 +108,7 @@ class _ComicDetailFakeRepository implements ComicRepository {
     required List<ComicEpisodeLink> episodeLinks,
     required String fallbackSourceTid,
   }) async {
-    mergeCalled = true;
-    _episodes.add(
-      const ComicEpisodeItem(
-        episodeId: 'yamibo:100:103',
-        comicId: 'yamibo:100',
-        episodeTitle: '第3话',
-        sourceTid: '103',
-        sourceUrl: 'thread-103-1-1.html',
-        orderIndex: 2,
-        publishTimeText: null,
-      ),
-    );
-    return ComicEpisodeRefreshResult(insertedCount: 1, updatedCount: 0, totalCount: _episodes.length);
+    return const ComicEpisodeRefreshResult(insertedCount: 0, updatedCount: 0, totalCount: 1);
   }
 
   @override
@@ -198,16 +119,16 @@ class _ComicDetailFakeRepository implements ComicRepository {
   }) async {}
 
   @override
-  Future<void> renameCategory({required String categoryId, required String newName}) async {}
-
-  @override
-  Future<void> updateCustomCover({required String comicId, required String? customCoverImageUrl}) async {}
-
-  @override
-  Future<void> updateGridColumnCount({required int columnCount}) async {}
+  Future<void> renameCategory({
+    required String categoryId,
+    required String newName,
+  }) async {}
 
   @override
   Future<void> saveEpisodeImages({required String episodeId, required List<String> imageUrls}) async {}
+
+  @override
+  Future<void> updateCustomCover({required String comicId, required String? customCoverImageUrl}) async {}
 
   @override
   Future<void> updateEpisodeImageCacheStatus({
@@ -218,6 +139,9 @@ class _ComicDetailFakeRepository implements ComicRepository {
   }) async {}
 
   @override
+  Future<void> updateGridColumnCount({required int columnCount}) async {}
+
+  @override
   Future<void> updateLastReadProgress({
     required String comicId,
     required String episodeId,
@@ -226,11 +150,132 @@ class _ComicDetailFakeRepository implements ComicRepository {
   }) async {}
 }
 
-class _FakeRefreshService implements ComicEpisodeRefreshService {
+class _FakeLibraryStateRepository implements LibraryStateRepository {
   @override
-  Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
-    return const <ComicEpisodeLink>[
-      ComicEpisodeLink(url: 'thread-103-1-1.html', rawText: '3', episodeTitle: '第3话'),
-    ];
+  Future<void> bindTagToWork({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    required String tagId,
+  }) async {}
+
+  @override
+  Future<int> countDownloadedEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return 0;
   }
+
+  @override
+  Future<int> countReadEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<int> countUnreadEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<String> createTag({required String name}) async => 'tag-1';
+
+  @override
+  Future<void> deleteTag({required String tagId}) async {}
+
+  @override
+  Future<LibraryModuleDisplaySettings> getDisplaySettings({
+    required LibraryModuleKey moduleKey,
+    required LibraryDisplayMode defaultDisplayMode,
+  }) async {
+    return LibraryModuleDisplaySettings(
+      moduleKey: moduleKey,
+      displayMode: defaultDisplayMode,
+      gridColumns: 3,
+      updatedAt: DateTime(2026, 1, 1),
+    );
+  }
+
+  @override
+  Future<LibraryEpisodeState?> getEpisodeState({
+    required LibraryModuleKey moduleKey,
+    required String episodeId,
+  }) async {
+    return null;
+  }
+
+  @override
+  Future<List<LibraryTag>> getTags() async => const [];
+
+  @override
+  Future<LibraryWorkState?> getWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return null;
+  }
+
+  @override
+  Future<List<LibraryTag>> getWorkTags({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return const [];
+  }
+
+  @override
+  Future<bool> hasAnyTag({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return false;
+  }
+
+  @override
+  Future<void> renameTag({
+    required String tagId,
+    required String newName,
+  }) async {}
+
+  @override
+  Future<void> unbindTagFromWork({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    required String tagId,
+  }) async {}
+
+  @override
+  Future<void> upsertDisplaySettings({
+    required LibraryModuleKey moduleKey,
+    required LibraryDisplayMode displayMode,
+    required int gridColumns,
+  }) async {}
+
+  @override
+  Future<void> upsertEpisodeState({
+    required LibraryModuleKey moduleKey,
+    required String episodeId,
+    required String workId,
+    bool? isRead,
+    bool? isDownloaded,
+    bool? isBookmarked,
+    DateTime? readAt,
+    DateTime? downloadedAt,
+  }) async {}
+
+  @override
+  Future<void> upsertWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    String? lastReadEpisodeId,
+    DateTime? lastReadAt,
+    DateTime? checkUpdatedAt,
+    DateTime? fetchedUpdatedAt,
+    String? introText,
+  }) async {}
 }

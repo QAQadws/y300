@@ -1,77 +1,53 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/library_shared/data/library_state_providers.dart';
+import 'package:y300/features/library_shared/data/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/presentation/novel_detail_page.dart';
 
 void main() {
-  testWidgets('NovelDetailPage renders episodes and supports sort/refresh actions', (tester) async {
-    final repository = _FakeNovelRepository();
-
+  testWidgets('NovelDetailPage renders unified detail header and chapter list', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          novelRepositoryProvider.overrideWithValue(repository),
+          novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
         ],
-        child: const MaterialApp(home: NovelDetailPage(novelId: 'novel:49:100')),
+        child: const MaterialApp(home: NovelDetailPage(novelId: 'novel:1')),
       ),
     );
 
     await tester.pumpAndSettle();
 
-    expect(find.text('测试小说'), findsOneWidget);
-    expect(find.byKey(const Key('novel-detail-episode-list')), findsOneWidget);
-    expect(find.text('第1章'), findsOneWidget);
-    expect(find.text('第2章'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('novel-detail-sort-button')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('novel-detail-sort-hint')), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('novel-detail-refresh-button')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('novel-detail-refresh-hint')), findsOneWidget);
+    expect(find.text('Test Novel'), findsAtLeastNWidgets(1));
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-novel:1:e1')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-novel:1:e1')), findsOneWidget);
+    expect(find.byIcon(Icons.file_download), findsOneWidget);
   });
 }
 
 class _FakeNovelRepository implements NovelRepository {
-  final List<NovelEpisodeItem> _episodes = [
-    const NovelEpisodeItem(
-      episodeId: 'novel:49:100:5001',
-      novelId: 'novel:49:100',
-      sourceTid: '100',
-      sourcePid: '5001',
-      sourcePage: 1,
-      episodeTitle: '第1章',
-      orderIndex: 0,
-      datelineText: '2026-05-03',
-    ),
-    const NovelEpisodeItem(
-      episodeId: 'novel:49:100:5002',
-      novelId: 'novel:49:100',
-      sourceTid: '100',
-      sourcePid: '5002',
-      sourcePage: 1,
-      episodeTitle: '第2章',
-      orderIndex: 1,
-      datelineText: '2026-05-04',
-    ),
-  ];
-
   @override
-  Future<String> createCategory({required String name}) async => 'default';
+  Future<String> createCategory({required String name}) async => 'created';
 
   @override
   Future<void> deleteCategory({required String categoryId}) async {}
 
   @override
   Future<List<NovelShelfCategory>> getCategories() async {
-    return <NovelShelfCategory>[
+    return [
       NovelShelfCategory(
         categoryId: 'default',
-        name: '默认',
+        name: 'Default',
         sortOrder: 0,
         createdAt: DateTime(2026, 1, 1),
       ),
@@ -79,34 +55,50 @@ class _FakeNovelRepository implements NovelRepository {
   }
 
   @override
+  Future<NovelChapterContent?> getChapterContent({required String episodeId}) async => null;
+
+  @override
   Future<NovelItem?> getDetail({required String novelId}) async {
     return NovelItem(
       novelId: novelId,
       sourceTid: '100',
       sourceFid: '49',
-      title: '测试小说',
-      author: '作者A',
+      title: 'Test Novel',
+      author: 'Author A',
       coverImageUrl: null,
-      updatedAt: DateTime(2026, 5, 3),
-      episodeCount: _episodes.length,
+      updatedAt: DateTime(2026, 1, 1),
+      episodeCount: 1,
+      categoryId: 'default',
     );
   }
 
   @override
-  Future<NovelChapterContent?> getChapterContent({required String episodeId}) async => null;
-
-  @override
-  Future<List<NovelEpisodeItem>> getEpisodes({required String novelId, bool descending = false}) async {
-    final copy = List<NovelEpisodeItem>.from(_episodes);
-    copy.sort((a, b) => descending ? b.orderIndex.compareTo(a.orderIndex) : a.orderIndex.compareTo(b.orderIndex));
-    return copy;
+  Future<List<NovelEpisodeItem>> getEpisodes({
+    required String novelId,
+    bool descending = false,
+  }) async {
+    return const [
+      NovelEpisodeItem(
+        episodeId: 'novel:1:e1',
+        novelId: 'novel:1',
+        sourceTid: '100',
+        sourcePid: '5001',
+        sourcePage: 1,
+        episodeTitle: 'Chapter 1',
+        orderIndex: 0,
+        datelineText: '2026-01-01',
+      ),
+    ];
   }
 
   @override
   Future<NovelReaderPreferences> getReaderPreferences() async => NovelReaderPreferences.defaults();
 
   @override
-  Future<List<NovelItem>> getShelfItems({String categoryId = 'default'}) async => const <NovelItem>[];
+  Future<NovelReadingProgress?> getReadingProgress({required String novelId}) async => null;
+
+  @override
+  Future<List<NovelItem>> getShelfItems({String categoryId = 'default'}) async => const [];
 
   @override
   Future<void> moveNovelToCategory({
@@ -116,27 +108,15 @@ class _FakeNovelRepository implements NovelRepository {
   }) async {}
 
   @override
-  Future<NovelReadingProgress?> getReadingProgress({required String novelId}) async => null;
-
-  @override
   Future<NovelEpisodeRefreshResult> refreshEpisodes({required String novelId}) async {
-    _episodes.add(
-      const NovelEpisodeItem(
-        episodeId: 'novel:49:100:5003',
-        novelId: 'novel:49:100',
-        sourceTid: '100',
-        sourcePid: '5003',
-        sourcePage: 2,
-        episodeTitle: '第3章',
-        orderIndex: 2,
-        datelineText: '2026-05-05',
-      ),
-    );
-    return NovelEpisodeRefreshResult(insertedCount: 1, updatedCount: 0, totalCount: _episodes.length);
+    return const NovelEpisodeRefreshResult(insertedCount: 0, updatedCount: 0, totalCount: 1);
   }
 
   @override
-  Future<void> renameCategory({required String categoryId, required String newName}) async {}
+  Future<void> renameCategory({
+    required String categoryId,
+    required String newName,
+  }) async {}
 
   @override
   Future<void> saveReadingProgress({
@@ -150,4 +130,134 @@ class _FakeNovelRepository implements NovelRepository {
 
   @override
   Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {}
+}
+
+class _FakeLibraryStateRepository implements LibraryStateRepository {
+  @override
+  Future<void> bindTagToWork({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    required String tagId,
+  }) async {}
+
+  @override
+  Future<int> countDownloadedEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<int> countReadEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<int> countUnreadEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<String> createTag({required String name}) async => 'tag-1';
+
+  @override
+  Future<void> deleteTag({required String tagId}) async {}
+
+  @override
+  Future<LibraryModuleDisplaySettings> getDisplaySettings({
+    required LibraryModuleKey moduleKey,
+    required LibraryDisplayMode defaultDisplayMode,
+  }) async {
+    return LibraryModuleDisplaySettings(
+      moduleKey: moduleKey,
+      displayMode: defaultDisplayMode,
+      gridColumns: 3,
+      updatedAt: DateTime(2026, 1, 1),
+    );
+  }
+
+  @override
+  Future<LibraryEpisodeState?> getEpisodeState({
+    required LibraryModuleKey moduleKey,
+    required String episodeId,
+  }) async {
+    return null;
+  }
+
+  @override
+  Future<List<LibraryTag>> getTags() async => const [];
+
+  @override
+  Future<LibraryWorkState?> getWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return null;
+  }
+
+  @override
+  Future<List<LibraryTag>> getWorkTags({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return const [];
+  }
+
+  @override
+  Future<bool> hasAnyTag({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return false;
+  }
+
+  @override
+  Future<void> renameTag({
+    required String tagId,
+    required String newName,
+  }) async {}
+
+  @override
+  Future<void> unbindTagFromWork({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    required String tagId,
+  }) async {}
+
+  @override
+  Future<void> upsertDisplaySettings({
+    required LibraryModuleKey moduleKey,
+    required LibraryDisplayMode displayMode,
+    required int gridColumns,
+  }) async {}
+
+  @override
+  Future<void> upsertEpisodeState({
+    required LibraryModuleKey moduleKey,
+    required String episodeId,
+    required String workId,
+    bool? isRead,
+    bool? isDownloaded,
+    bool? isBookmarked,
+    DateTime? readAt,
+    DateTime? downloadedAt,
+  }) async {}
+
+  @override
+  Future<void> upsertWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    String? lastReadEpisodeId,
+    DateTime? lastReadAt,
+    DateTime? checkUpdatedAt,
+    DateTime? fetchedUpdatedAt,
+    String? introText,
+  }) async {}
 }

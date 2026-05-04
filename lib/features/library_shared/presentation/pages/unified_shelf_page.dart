@@ -490,6 +490,7 @@ class _WorkGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GridView.builder(
+      key: const Key('unified-shelf-grid-view'),
       padding: const EdgeInsets.all(12),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: gridColumns,
@@ -524,6 +525,7 @@ class _WorkList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView.separated(
+      key: const Key('unified-shelf-list-view'),
       padding: const EdgeInsets.all(12),
       itemCount: items.length,
       separatorBuilder: (context, index) => const SizedBox(height: 10),

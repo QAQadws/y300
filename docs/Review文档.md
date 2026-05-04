@@ -1511,3 +1511,84 @@
 本轮按约定未执行自动化命令，请本地验证：
 1. `flutter test`
 2. `flutter analyze`
+
+---
+
+## 书架/详情统一抽象 Phase 4 Review 清单（2026-05-04）
+### 一、统一详情页骨架
+- [ ] 页面已使用 `SliverAppBar` 实现透明扩展态与实体固定态过渡。
+- [ ] 头图存在时有模糊背景与向下渐隐过渡。
+- [ ] 标题在折叠态可显示且超长省略。
+- [ ] 无封面时有稳定兜底样式。
+
+### 二、信息区与通用操作
+- [ ] 头部信息区包含封面、标题、作者/汉化组。
+- [ ] 操作区包含：在书架/更新/原帖。
+- [ ] 简介区域支持展开/收起。
+- [ ] 标签区域保留后续扩展接口（阶段4可占位）。
+
+### 三、章节列表基础能力
+- [ ] 章节列表展示名称与辅助信息（发布时间 + tid）。
+- [ ] 章节右侧展示下载状态图标占位。
+- [ ] 点击章节可进入阅读器（通过 adapter 路由目标）。
+- [ ] FAB（继续）可进入阅读器继续逻辑。
+
+### 四、菜单与解耦
+- [ ] AppBar 右侧包含下载菜单、筛选入口、更多菜单。
+- [ ] 下载菜单包含“未读/全部”。
+- [ ] 刷新动作可触发统一控制器刷新流程。
+- [ ] 页面不直接依赖 comic/novel 仓储，依赖 `DetailModuleAdapter`。
+
+### 五、漫画/小说接入方式
+- [ ] `ComicDetailPage` 已变为统一详情页薄壳接入。
+- [ ] `NovelDetailPage` 已变为统一详情页薄壳接入。
+- [ ] reader/thread 跳转差异仅保留在模块薄壳，未污染共享页。
+
+### 六、测试覆盖（本轮编写）
+- [ ] `test/features/library_shared/presentation/controllers/unified_detail_controller_test.dart`
+- [ ] `test/features/library_shared/presentation/pages/unified_detail_page_test.dart`
+- [ ] `test/features/comic/presentation/comic_detail_page_test.dart`
+- [ ] `test/features/novel/presentation/novel_detail_page_test.dart`
+
+### 七、执行声明
+本轮按约定未执行自动化命令，请本地验证：
+1. `flutter test`
+2. `flutter analyze`
+
+## Phase 4 修复补丁 Review 记录（2026-05-04）
+### 目标
+- 修复 Unified Detail/Shelf/Main Shell 在测试中的不稳定断言与异步上下文问题。
+
+### 检查项
+- [x] UnifiedDetailPage 异步后不再直接使用易失的 build context。
+- [x] Unified Shelf 网格/列表模式提供稳定 key 以支持可维护测试。
+- [x] 详情页章节断言改为滚动后断言，避免 Sliver 首屏可见性差异导致误报。
+- [x] MainShell 小说 Tab 断言替换为结构锚点，降低图标耦合风险。
+
+### 风险评估
+1. 当前修复不改变业务语义，仅增强上下文安全与测试稳定性，低风险。
+2. 由于未执行自动化命令，仍需本地完整回归确认。
+
+### 待回归
+1. `flutter test`
+2. `flutter analyze`
+
+## Phase 4 详情页视觉修复 Review 记录（2026-05-04）
+### Review 范围
+- `lib/features/library_shared/presentation/pages/unified_detail_page.dart`
+- `test/features/library_shared/presentation/pages/unified_detail_page_test.dart`
+
+### 结论
+1. 顶部视觉层已统一，背景模糊图与封面/元信息在同一 Hero 区中渲染，满足“从封面底部往上是同一背景模糊图”的体验要求。
+2. AppBar 标题显隐已改为滚动阈值驱动，展开态不显示，折叠后显示，符合交互预期。
+3. 元信息布局已包含 `person_outlined + 作者` 行，并保留 `group_outlined + 汉化组` 行，信息层次清晰。
+4. 代码拆分为多个私有组件，页面与业务适配器边界保持清晰，可维护性良好。
+
+### 测试覆盖检查（已编写，未执行）
+- [x] 作者行与 person 图标存在
+- [x] 折叠标题初始隐藏
+- [x] 滚动后折叠标题显示
+
+### 待你本地回归
+1. `flutter test`
+2. `flutter analyze`
