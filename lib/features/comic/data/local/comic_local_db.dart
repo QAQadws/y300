@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 7;
+  static const int dbVersion = 8;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -21,6 +21,11 @@ class ComicLocalDb {
   static const String novelReadingProgressTable = 'novel_reading_progress';
   static const String novelCategoriesTable = 'novel_categories';
   static const String novelShelfItemsTable = 'novel_shelf_items';
+  static const String libraryWorkStateTable = 'library_work_state';
+  static const String libraryEpisodeStateTable = 'library_episode_state';
+  static const String libraryTagsTable = 'library_tags';
+  static const String libraryWorkTagsTable = 'library_work_tags';
+  static const String libraryDisplaySettingsTable = 'library_display_settings';
 
   static Future<Database> open({String? databaseName}) {
     final targetDbName = databaseName ?? dbName;
@@ -49,6 +54,9 @@ class ComicLocalDb {
         }
         if (oldVersion < 7) {
           await _createNovelShelfTables(db);
+        }
+        if (oldVersion < 8) {
+          await _createLibraryStateTables(db);
         }
       },
     );
@@ -141,6 +149,7 @@ class ComicLocalDb {
     await _createNovelTables(db);
     await _createNovelReadingProgressTable(db);
     await _createNovelShelfTables(db);
+    await _createLibraryStateTables(db);
   }
 
   static Future<void> _createSettingsTable(Database db) async {
@@ -297,6 +306,75 @@ class ComicLocalDb {
 
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_novel_shelf_items_category_sort ON $novelShelfItemsTable(category_id, sort_order)',
+    );
+  }
+
+  /// Phase 1: 统一状态表（未读/下载/书签/标签/显示配置）。
+  static Future<void> _createLibraryStateTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $libraryWorkStateTable (
+        content_type TEXT NOT NULL,
+        work_id TEXT NOT NULL,
+        last_read_episode_id TEXT,
+        last_read_at INTEGER,
+        check_updated_at INTEGER,
+        fetched_updated_at INTEGER,
+        intro_text TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (content_type, work_id)
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $libraryEpisodeStateTable (
+        content_type TEXT NOT NULL,
+        episode_id TEXT NOT NULL,
+        work_id TEXT NOT NULL,
+        is_read INTEGER NOT NULL DEFAULT 0,
+        is_downloaded INTEGER NOT NULL DEFAULT 0,
+        is_bookmarked INTEGER NOT NULL DEFAULT 0,
+        read_at INTEGER,
+        downloaded_at INTEGER,
+        PRIMARY KEY (content_type, episode_id)
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $libraryTagsTable (
+        tag_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $libraryWorkTagsTable (
+        content_type TEXT NOT NULL,
+        work_id TEXT NOT NULL,
+        tag_id TEXT NOT NULL,
+        UNIQUE(content_type, work_id, tag_id),
+        FOREIGN KEY (tag_id) REFERENCES $libraryTagsTable(tag_id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $libraryDisplaySettingsTable (
+        module_key TEXT PRIMARY KEY,
+        display_mode TEXT NOT NULL,
+        grid_columns INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_library_episode_state_work_read ON $libraryEpisodeStateTable(content_type, work_id, is_read)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_library_episode_state_work_downloaded ON $libraryEpisodeStateTable(content_type, work_id, is_downloaded)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_library_work_tags_work ON $libraryWorkTagsTable(content_type, work_id)',
     );
   }
 }

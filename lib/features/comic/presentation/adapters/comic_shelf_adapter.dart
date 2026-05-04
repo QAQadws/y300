@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -12,9 +13,13 @@ import 'package:y300/features/library_shared/domain/models/library_sort_models.d
 /// 目标：先把“统一接口 -> 现有仓储”的映射打通，后续 Phase 1/2 再逐步填充
 /// 筛选、排序、状态位（未读/已下载/标签）等增强能力。
 class ComicShelfAdapter implements ShelfModuleAdapter {
-  ComicShelfAdapter(this._repository);
+  ComicShelfAdapter(
+    this._repository, {
+    required LibraryStateRepository stateRepository,
+  }) : _stateRepository = stateRepository;
 
   final ComicRepository _repository;
+  final LibraryStateRepository _stateRepository;
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
@@ -34,7 +39,7 @@ class ComicShelfAdapter implements ShelfModuleAdapter {
   @override
   Future<List<LibraryWorkItem>> loadCategoryItems({required String categoryId}) async {
     final items = await _repository.getShelfItems(categoryId: categoryId);
-    return items.map(_mapWork).toList(growable: false);
+    return Future.wait(items.map(_mapWork));
   }
 
   @override
@@ -46,7 +51,8 @@ class ComicShelfAdapter implements ShelfModuleAdapter {
     final result = <String, List<LibraryWorkItem>>{};
     for (final category in categories) {
       final items = await _repository.getShelfItems(categoryId: category.categoryId);
-      final mapped = items.map(_mapWork).where((item) {
+      final mappedSource = await Future.wait(items.map(_mapWork));
+      final mapped = mappedSource.where((item) {
         if (normalized.isEmpty) {
           return true;
         }
@@ -124,16 +130,26 @@ class ComicShelfAdapter implements ShelfModuleAdapter {
     required LibraryDisplayMode displayMode,
     required int gridColumnCount,
   }) async {
-    // 漫画当前只有网格列数配置。
-    await _repository.updateGridColumnCount(columnCount: gridColumnCount);
+    await _stateRepository.upsertDisplaySettings(
+      moduleKey: LibraryModuleKey.comic,
+      displayMode: displayMode,
+      gridColumns: gridColumnCount,
+    );
   }
 
   @override
   Future<LibraryDisplayPreference> loadDisplayPreference() async {
-    final settings = await _repository.getDisplaySettings();
+    final stateSettings = await _stateRepository.getDisplaySettings(
+      moduleKey: LibraryModuleKey.comic,
+      defaultDisplayMode: LibraryDisplayMode.grid,
+    );
+    // 兼容历史数据：若统一配置不存在，回退旧设置表。
+    final legacy = await _repository.getDisplaySettings();
     return LibraryDisplayPreference(
-      displayMode: LibraryDisplayMode.grid,
-      gridColumnCount: settings.gridColumnCount,
+      displayMode: stateSettings.displayMode,
+      gridColumnCount: stateSettings.gridColumns == 3
+          ? legacy.gridColumnCount
+          : stateSettings.gridColumns,
     );
   }
 
@@ -156,17 +172,35 @@ class ComicShelfAdapter implements ShelfModuleAdapter {
     );
   }
 
-  LibraryWorkItem _mapWork(ComicShelfItem source) {
+  Future<LibraryWorkItem> _mapWork(ComicShelfItem source) async {
+    final unread = await _stateRepository.countUnreadEpisodes(
+      moduleKey: LibraryModuleKey.comic,
+      workId: source.comicId,
+    );
+    final read = await _stateRepository.countReadEpisodes(
+      moduleKey: LibraryModuleKey.comic,
+      workId: source.comicId,
+    );
+    final downloaded = await _stateRepository.countDownloadedEpisodes(
+      moduleKey: LibraryModuleKey.comic,
+      workId: source.comicId,
+    );
+    final hasTags = await _stateRepository.hasAnyTag(
+      moduleKey: LibraryModuleKey.comic,
+      workId: source.comicId,
+    );
     return LibraryWorkItem(
       workId: source.comicId,
       categoryId: source.categoryId,
       title: source.title,
       secondaryName: source.author,
       coverImageUrl: source.coverImageUrl,
-      unreadCount: 0,
-      totalChapterCount: 0,
-      readChapterCount: 0,
+      unreadCount: unread,
+      totalChapterCount: unread + read,
+      readChapterCount: read,
       addedAt: source.addedAt,
+      hasTags: hasTags,
+      isDownloaded: downloaded > 0,
     );
   }
 
@@ -196,4 +230,3 @@ class ComicShelfAdapter implements ShelfModuleAdapter {
     return list;
   }
 }
-

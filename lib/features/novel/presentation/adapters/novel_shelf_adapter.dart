@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -9,9 +10,13 @@ import 'package:y300/features/novel/data/novel_repository.dart';
 
 /// 小说书架适配器（Phase 0 骨架版）。
 class NovelShelfAdapter implements ShelfModuleAdapter {
-  NovelShelfAdapter(this._repository);
+  NovelShelfAdapter(
+    this._repository, {
+    required LibraryStateRepository stateRepository,
+  }) : _stateRepository = stateRepository;
 
   final NovelRepository _repository;
+  final LibraryStateRepository _stateRepository;
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.novel;
@@ -31,7 +36,7 @@ class NovelShelfAdapter implements ShelfModuleAdapter {
   @override
   Future<List<LibraryWorkItem>> loadCategoryItems({required String categoryId}) async {
     final items = await _repository.getShelfItems(categoryId: categoryId);
-    return items.map(_mapWork).toList(growable: false);
+    return Future.wait(items.map(_mapWork));
   }
 
   @override
@@ -43,7 +48,8 @@ class NovelShelfAdapter implements ShelfModuleAdapter {
     final result = <String, List<LibraryWorkItem>>{};
     for (final category in categories) {
       final items = await _repository.getShelfItems(categoryId: category.categoryId);
-      final mapped = items.map(_mapWork).where((item) {
+      final mappedSource = await Future.wait(items.map(_mapWork));
+      final mapped = mappedSource.where((item) {
         if (normalized.isEmpty) {
           return true;
         }
@@ -119,14 +125,22 @@ class NovelShelfAdapter implements ShelfModuleAdapter {
     required LibraryDisplayMode displayMode,
     required int gridColumnCount,
   }) async {
-    // Phase 0：小说尚无独立显示偏好持久化，先保留空实现合同。
+    await _stateRepository.upsertDisplaySettings(
+      moduleKey: LibraryModuleKey.novel,
+      displayMode: displayMode,
+      gridColumns: gridColumnCount,
+    );
   }
 
   @override
   Future<LibraryDisplayPreference> loadDisplayPreference() async {
-    return const LibraryDisplayPreference(
-      displayMode: LibraryDisplayMode.list,
-      gridColumnCount: 1,
+    final stateSettings = await _stateRepository.getDisplaySettings(
+      moduleKey: LibraryModuleKey.novel,
+      defaultDisplayMode: LibraryDisplayMode.list,
+    );
+    return LibraryDisplayPreference(
+      displayMode: stateSettings.displayMode,
+      gridColumnCount: stateSettings.gridColumns,
     );
   }
 
@@ -149,18 +163,36 @@ class NovelShelfAdapter implements ShelfModuleAdapter {
     );
   }
 
-  LibraryWorkItem _mapWork(NovelItem source) {
+  Future<LibraryWorkItem> _mapWork(NovelItem source) async {
+    final unread = await _stateRepository.countUnreadEpisodes(
+      moduleKey: LibraryModuleKey.novel,
+      workId: source.novelId,
+    );
+    final read = await _stateRepository.countReadEpisodes(
+      moduleKey: LibraryModuleKey.novel,
+      workId: source.novelId,
+    );
+    final downloaded = await _stateRepository.countDownloadedEpisodes(
+      moduleKey: LibraryModuleKey.novel,
+      workId: source.novelId,
+    );
+    final hasTags = await _stateRepository.hasAnyTag(
+      moduleKey: LibraryModuleKey.novel,
+      workId: source.novelId,
+    );
     return LibraryWorkItem(
       workId: source.novelId,
       categoryId: source.categoryId,
       title: source.title,
       secondaryName: source.author,
       coverImageUrl: source.coverImageUrl,
-      unreadCount: 0,
+      unreadCount: unread,
       totalChapterCount: source.episodeCount,
-      readChapterCount: 0,
+      readChapterCount: read,
       addedAt: source.updatedAt,
       workUpdatedAt: source.updatedAt,
+      hasTags: hasTags,
+      isDownloaded: downloaded > 0,
     );
   }
 
@@ -194,4 +226,3 @@ class NovelShelfAdapter implements ShelfModuleAdapter {
     return list;
   }
 }
-

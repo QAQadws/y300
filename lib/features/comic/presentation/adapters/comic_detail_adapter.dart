@@ -1,4 +1,5 @@
 import 'package:y300/features/comic/data/comic_repository.dart';
+import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -6,9 +7,13 @@ import 'package:y300/features/library_shared/domain/models/library_sort_models.d
 
 /// 漫画详情适配器（Phase 0 骨架版）。
 class ComicDetailAdapter implements DetailModuleAdapter {
-  ComicDetailAdapter(this._repository);
+  ComicDetailAdapter(
+    this._repository, {
+    required LibraryStateRepository stateRepository,
+  }) : _stateRepository = stateRepository;
 
   final ComicRepository _repository;
+  final LibraryStateRepository _stateRepository;
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
@@ -101,21 +106,44 @@ class ComicDetailAdapter implements DetailModuleAdapter {
     required String workId,
     required String episodeId,
     required bool isBookmarked,
-  }) async {}
+  }) async {
+    await _stateRepository.upsertEpisodeState(
+      moduleKey: LibraryModuleKey.comic,
+      episodeId: episodeId,
+      workId: workId,
+      isBookmarked: isBookmarked,
+    );
+  }
 
   @override
   Future<void> markChapterDownloaded({
     required String workId,
     required String episodeId,
     required bool isDownloaded,
-  }) async {}
+  }) async {
+    await _stateRepository.upsertEpisodeState(
+      moduleKey: LibraryModuleKey.comic,
+      episodeId: episodeId,
+      workId: workId,
+      isDownloaded: isDownloaded,
+      downloadedAt: isDownloaded ? DateTime.now() : null,
+    );
+  }
 
   @override
   Future<void> markChapterRead({
     required String workId,
     required String episodeId,
     required bool isRead,
-  }) async {}
+  }) async {
+    await _stateRepository.upsertEpisodeState(
+      moduleKey: LibraryModuleKey.comic,
+      episodeId: episodeId,
+      workId: workId,
+      isRead: isRead,
+      readAt: isRead ? DateTime.now() : null,
+    );
+  }
 
   @override
   Future<void> refreshWork({required String workId}) async {}
@@ -126,4 +154,3 @@ class ComicDetailAdapter implements DetailModuleAdapter {
     required String intro,
   }) async {}
 }
-

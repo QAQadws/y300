@@ -2,13 +2,18 @@ import 'package:y300/features/library_shared/domain/contracts/detail_module_adap
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 
 /// 小说详情适配器（Phase 0 骨架版）。
 class NovelDetailAdapter implements DetailModuleAdapter {
-  NovelDetailAdapter(this._repository);
+  NovelDetailAdapter(
+    this._repository, {
+    required LibraryStateRepository stateRepository,
+  }) : _stateRepository = stateRepository;
 
   final NovelRepository _repository;
+  final LibraryStateRepository _stateRepository;
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.novel;
@@ -99,21 +104,44 @@ class NovelDetailAdapter implements DetailModuleAdapter {
     required String workId,
     required String episodeId,
     required bool isBookmarked,
-  }) async {}
+  }) async {
+    await _stateRepository.upsertEpisodeState(
+      moduleKey: LibraryModuleKey.novel,
+      episodeId: episodeId,
+      workId: workId,
+      isBookmarked: isBookmarked,
+    );
+  }
 
   @override
   Future<void> markChapterDownloaded({
     required String workId,
     required String episodeId,
     required bool isDownloaded,
-  }) async {}
+  }) async {
+    await _stateRepository.upsertEpisodeState(
+      moduleKey: LibraryModuleKey.novel,
+      episodeId: episodeId,
+      workId: workId,
+      isDownloaded: isDownloaded,
+      downloadedAt: isDownloaded ? DateTime.now() : null,
+    );
+  }
 
   @override
   Future<void> markChapterRead({
     required String workId,
     required String episodeId,
     required bool isRead,
-  }) async {}
+  }) async {
+    await _stateRepository.upsertEpisodeState(
+      moduleKey: LibraryModuleKey.novel,
+      episodeId: episodeId,
+      workId: workId,
+      isRead: isRead,
+      readAt: isRead ? DateTime.now() : null,
+    );
+  }
 
   @override
   Future<void> refreshWork({required String workId}) async {
@@ -126,4 +154,3 @@ class NovelDetailAdapter implements DetailModuleAdapter {
     required String intro,
   }) async {}
 }
-
