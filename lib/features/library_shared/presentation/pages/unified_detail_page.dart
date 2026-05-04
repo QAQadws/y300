@@ -133,16 +133,13 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
             icon: const Icon(Icons.more_vert),
             itemBuilder: (context) => const [
               PopupMenuItem(value: 'refresh', child: Text('刷新')),
+              PopupMenuItem(value: 'change-category', child: Text('修改分类')),
               PopupMenuItem(value: 'edit-intro', child: Text('编辑简介')),
+              PopupMenuItem(value: 'add-tag', child: Text('添加标签')),
+              PopupMenuItem(value: 'remove-tag', child: Text('移除标签')),
             ],
             onSelected: (value) async {
-              if (value == 'refresh') {
-                await _controller.refresh();
-                if (!mounted) {
-                  return;
-                }
-                setState(() {});
-              }
+              await _handleMoreAction(value);
             },
           ),
         ],
@@ -177,7 +174,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                     SliverToBoxAdapter(
                       child: _HeaderActionsRow(
                         header: header,
-                        onToggleShelf: () {},
+                        onToggleShelf: () => _showMoveCategorySheet(),
                         onRefresh: () async {
                           await _controller.refresh();
                           if (!mounted) {
@@ -490,6 +487,221 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       },
     );
   }
+
+  Future<void> _handleMoreAction(String value) async {
+    if (value == 'refresh') {
+      await _controller.refresh();
+      if (!mounted) {
+        return;
+      }
+      setState(() {});
+      return;
+    }
+    if (value == 'change-category') {
+      await _showMoveCategorySheet();
+      return;
+    }
+    if (value == 'edit-intro') {
+      await _showEditIntroDialog();
+      return;
+    }
+    if (value == 'add-tag') {
+      await _showAddTagSheet();
+      return;
+    }
+    if (value == 'remove-tag') {
+      await _showRemoveTagSheet();
+    }
+  }
+
+  Future<void> _showMoveCategorySheet() async {
+    final categories = await widget.adapter.loadCategories();
+    if (!mounted) {
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: categories
+                .map(
+                  (item) => ListTile(
+                    title: Text(item.name),
+                    onTap: () async {
+                      await widget.adapter.moveWorkToCategory(
+                        workId: widget.workId,
+                        toCategoryId: item.categoryId,
+                      );
+                      if (!mounted || !sheetContext.mounted) {
+                        return;
+                      }
+                      Navigator.of(sheetContext).pop();
+                    },
+                  ),
+                )
+                .toList(growable: false),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showEditIntroDialog() async {
+    final current = _controller.state.header?.intro ?? '';
+    final inputController = TextEditingController(text: current);
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('编辑简介'),
+          content: TextField(
+            controller: inputController,
+            maxLines: 6,
+            decoration: const InputDecoration(hintText: '请输入简介'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                await widget.adapter.updateIntro(
+                  workId: widget.workId,
+                  intro: inputController.text.trim(),
+                );
+                await _controller.refresh();
+                if (!mounted || !dialogContext.mounted) {
+                  return;
+                }
+                Navigator.of(dialogContext).pop();
+                setState(() {});
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showAddTagSheet() async {
+    final tags = await widget.adapter.getAllTags();
+    if (!mounted) {
+      return;
+    }
+    final inputController = TextEditingController();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 12,
+              right: 12,
+              top: 12,
+              bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 12,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: inputController,
+                  decoration: const InputDecoration(hintText: '新建标签名'),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () async {
+                          final name = inputController.text.trim();
+                          if (name.isEmpty) {
+                            return;
+                          }
+                          await widget.adapter.addNewTagToWork(
+                            workId: widget.workId,
+                            tagName: name,
+                          );
+                          if (!mounted || !sheetContext.mounted) {
+                            return;
+                          }
+                          Navigator.of(sheetContext).pop();
+                        },
+                        child: const Text('新建并添加'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ...tags.map(
+                  (tag) => ListTile(
+                    title: Text(tag.name),
+                    onTap: () async {
+                      await widget.adapter.addExistingTagToWork(
+                        workId: widget.workId,
+                        tagId: tag.tagId,
+                      );
+                      if (!mounted || !sheetContext.mounted) {
+                        return;
+                      }
+                      Navigator.of(sheetContext).pop();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showRemoveTagSheet() async {
+    final tags = await widget.adapter.getWorkTags(workId: widget.workId);
+    if (!mounted) {
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) {
+        if (tags.isEmpty) {
+          return const SafeArea(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('当前作品暂无标签'),
+            ),
+          );
+        }
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: tags
+                .map(
+                  (tag) => ListTile(
+                    title: Text(tag.name),
+                    trailing: const Icon(Icons.remove_circle_outline),
+                    onTap: () async {
+                      await widget.adapter.removeTagFromWork(
+                        workId: widget.workId,
+                        tagId: tag.tagId,
+                      );
+                      if (!mounted || !sheetContext.mounted) {
+                        return;
+                      }
+                      Navigator.of(sheetContext).pop();
+                    },
+                  ),
+                )
+                .toList(growable: false),
+          ),
+        );
+      },
+    );
+  }
 }
 
 /// 可随列表滚动消失的封面+元信息区。
@@ -532,7 +744,10 @@ class _HeroInfoSection extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                _CoverImage(url: header.coverImageUrl),
+                _CoverImage(
+                  url: header.coverImageUrl,
+                  moduleKey: moduleKey,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Padding(
@@ -744,8 +959,12 @@ class _HeaderActionsRow extends StatelessWidget {
 }
 
 class _CoverImage extends StatelessWidget {
-  const _CoverImage({required this.url});
+  const _CoverImage({
+    required this.url,
+    required this.moduleKey,
+  });
   final String? url;
+  final LibraryModuleKey moduleKey;
 
   @override
   Widget build(BuildContext context) {
@@ -757,7 +976,22 @@ class _CoverImage extends StatelessWidget {
         child: url == null || url!.trim().isEmpty
             ? Container(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                child: const Icon(Icons.image_not_supported_outlined),
+                child: moduleKey == LibraryModuleKey.novel
+                    ? Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.menu_book_outlined,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '小说无封面',
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                        ],
+                      )
+                    : const Icon(Icons.image_not_supported_outlined),
               )
             : Image.network(
                 url!,

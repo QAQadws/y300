@@ -1,5 +1,6 @@
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 
 /// 统一详情页模块适配合同。
@@ -62,6 +63,41 @@ abstract class DetailModuleAdapter {
     required String intro,
   });
 
+  /// 修改作品所在分类（详情页 more 菜单动作）。
+  Future<void> moveWorkToCategory({
+    required String workId,
+    required String toCategoryId,
+  });
+
+  /// 读取当前模块可选分类列表。
+  Future<List<LibraryCategory>> loadCategories();
+
+  /// 读取当前作品绑定标签。
+  Future<List<LibraryTag>> getWorkTags({
+    required String workId,
+  });
+
+  /// 读取可用标签池。
+  Future<List<LibraryTag>> getAllTags();
+
+  /// 绑定已存在标签到作品。
+  Future<void> addExistingTagToWork({
+    required String workId,
+    required String tagId,
+  });
+
+  /// 新建标签并绑定到作品。
+  Future<void> addNewTagToWork({
+    required String workId,
+    required String tagName,
+  });
+
+  /// 从作品上移除标签。
+  Future<void> removeTagFromWork({
+    required String workId,
+    required String tagId,
+  });
+
   /// 原帖路由参数。
   Future<ThreadRouteTarget?> getThreadRouteTarget({
     required String workId,
@@ -95,4 +131,3 @@ class ReaderRouteTarget {
   final String workId;
   final String episodeId;
 }
-

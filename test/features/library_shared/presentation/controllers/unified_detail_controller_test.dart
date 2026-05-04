@@ -2,6 +2,7 @@
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/presentation/controllers/unified_detail_controller.dart';
 
@@ -229,5 +230,44 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
   Future<void> updateIntro({
     required String workId,
     required String intro,
+  }) async {}
+
+  @override
+  Future<void> moveWorkToCategory({
+    required String workId,
+    required String toCategoryId,
+  }) async {}
+
+  @override
+  Future<List<LibraryCategory>> loadCategories() async {
+    return const [];
+  }
+
+  @override
+  Future<List<LibraryTag>> getWorkTags({required String workId}) async {
+    return const [];
+  }
+
+  @override
+  Future<List<LibraryTag>> getAllTags() async {
+    return const [];
+  }
+
+  @override
+  Future<void> addExistingTagToWork({
+    required String workId,
+    required String tagId,
+  }) async {}
+
+  @override
+  Future<void> addNewTagToWork({
+    required String workId,
+    required String tagName,
+  }) async {}
+
+  @override
+  Future<void> removeTagFromWork({
+    required String workId,
+    required String tagId,
   }) async {}
 }

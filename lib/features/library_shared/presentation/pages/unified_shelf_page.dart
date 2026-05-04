@@ -65,13 +65,12 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
     return Scaffold(
       appBar: _buildAppBar(state),
       body: RefreshIndicator(
-        onRefresh: () async {
-          await _controller.refreshFromSource();
-          if (!mounted) {
-            return;
-          }
-          setState(() {});
+        // 书架内容位于 PageView 内部，垂直列表/网格滚动通知深度通常 > 0。
+        // 显式放宽 predicate，确保网格/列表场景都能触发下拉刷新。
+        notificationPredicate: (notification) {
+          return notification.metrics.axis == Axis.vertical;
         },
+        onRefresh: _handlePullToRefresh,
         child: state.isLoading
             ? const Center(child: CircularProgressIndicator())
             : Column(
@@ -112,7 +111,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                   if (categories.isNotEmpty) const Divider(height: 1),
                   Expanded(
                     child: categories.isEmpty
-                        ? const Center(child: Text('书架为空'))
+                        ? const _AlwaysScrollableEmptyState(message: '书架为空')
                         : PageView.builder(
                             controller: _pageController,
                             itemCount: categories.length,
@@ -128,7 +127,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                               final items =
                                   state.itemsByCategory[category.categoryId] ?? const <LibraryWorkItem>[];
                               if (items.isEmpty) {
-                                return const Center(child: Text('书架为空'));
+                                return const _AlwaysScrollableEmptyState(message: '书架为空');
                               }
                               if (state.displayMode == LibraryDisplayMode.list) {
                                 return _WorkList(
@@ -148,6 +147,14 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
               ),
       ),
     );
+  }
+
+  Future<void> _handlePullToRefresh() async {
+    await _controller.refreshFromSource();
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
   }
 
   PreferredSizeWidget _buildAppBar(UnifiedShelfState state) {
@@ -491,6 +498,8 @@ class _WorkGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return GridView.builder(
       key: const Key('unified-shelf-grid-view'),
+      // 保证短列表也能触发 RefreshIndicator 下拉手势。
+      physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
       padding: const EdgeInsets.all(12),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: gridColumns,
@@ -526,6 +535,8 @@ class _WorkList extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView.separated(
       key: const Key('unified-shelf-list-view'),
+      // 保证短列表也能触发 RefreshIndicator 下拉手势。
+      physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
       padding: const EdgeInsets.all(12),
       itemCount: items.length,
       separatorBuilder: (context, index) => const SizedBox(height: 10),
@@ -588,6 +599,27 @@ class _UnreadBadge extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
       ),
+    );
+  }
+}
+
+class _AlwaysScrollableEmptyState extends StatelessWidget {
+  const _AlwaysScrollableEmptyState({
+    required this.message,
+  });
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+      children: [
+        SizedBox(
+          height: 320,
+          child: Center(child: Text(message)),
+        ),
+      ],
     );
   }
 }

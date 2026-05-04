@@ -1615,3 +1615,96 @@
 ### 待你本地回归（本轮未执行）
 1. `flutter test`
 2. `flutter analyze`
+
+---
+
+## 书架/详情统一抽象 Phase 6 Review 记录（2026-05-04）
+### Review 范围
+- `lib/features/library_shared/domain/contracts/detail_module_adapter.dart`
+- `lib/features/library_shared/presentation/pages/unified_detail_page.dart`
+- `lib/features/comic/presentation/adapters/comic_detail_adapter.dart`
+- `lib/features/novel/presentation/adapters/novel_detail_adapter.dart`
+- `test/features/library_shared/domain/contracts/detail_module_adapter_contract_test.dart`
+- `test/features/library_shared/presentation/controllers/unified_detail_controller_test.dart`
+- `test/features/library_shared/presentation/pages/unified_detail_page_test.dart`
+
+### 核对结论
+1. 合同层：`DetailModuleAdapter` 已覆盖 Phase 6 需要的分类与标签动作，且保持 shared 层解耦。
+2. 详情页菜单：`more_vert` 已扩展到“修改分类/编辑简介/添加标签/移除标签”，动作均经 adapter 下沉。
+3. 模块差异：
+- 漫画：封面为空时可回退“首话首图”策略。
+- 小说：无封面时有独立兜底视觉（`小说无封面`）。
+4. 线程联动：原帖跳转链路继续通过 `getThreadRouteTarget` + 外部注入 `onOpenThread`，保持统一接入。
+5. 测试可维护性：合同扩展后的 fake adapter 已同步补齐，避免接口升级造成测试编译断裂。
+
+### 风险与后续
+1. 当前“修改分类”基于 adapter 查找当前分类后迁移，后续可在 detail header 中补充当前分类字段以减少遍历成本。
+2. 标签操作完成后未在页面显式展示标签区域（阶段4占位逻辑仍在），后续可在详情页增加标签可视列表与即时刷新反馈。
+
+### 执行说明
+本轮按约定未执行：
+1. `flutter test`
+2. `flutter analyze`
+
+请本地回归后回传日志，我会继续修复。
+
+---
+
+## 统一详情页漫画刷新链路 Review 记录（2026-05-04）
+### Review 范围
+- `lib/features/comic/presentation/adapters/comic_detail_adapter.dart`
+- `lib/features/comic/presentation/comic_detail_page.dart`
+- `test/features/comic/presentation/adapters/comic_detail_adapter_test.dart`
+
+### 结论
+1. 统一刷新入口保持不变：
+- 操作区“更新”按钮
+- 下拉刷新
+- more 菜单“刷新”
+以上三者均通过 `UnifiedDetailController.refresh()` 汇总。
+
+2. 漫画模块已接入域服务刷新策略：
+- `ComicDetailAdapter.refreshWork` 不再是空实现；
+- 通过 `ComicEpisodeRefreshService.fetchEpisodeLinksFromTid` 获取章节链接；
+- 通过 `ComicRepository.mergeEpisodesFromLinks` 合并章节；
+- 统一页随后 reload 即可在 `SliverList.builder` 看到新增章节。
+
+3. 依赖注入边界清晰：
+- `ComicDetailPage` 仅负责注入 refresh service；
+- 统一详情页与控制器不感知漫画实现细节；
+- 适配器承接模块差异，符合 shared 解耦目标。
+
+4. 测试可维护性：
+- 新增 adapter 单测覆盖刷新调用链关键断点。
+
+### 风险与后续
+1. 当前 `unified_detail_page.dart` 文件体量偏大，建议按“header/chapter/more-action 协调器”拆分组件与动作编排文件，降低 review 成本。
+
+### 执行声明
+本轮按约定未执行：
+1. `flutter test`
+2. `flutter analyze`
+
+---
+
+## UnifiedShelf 下拉刷新 Review 记录（2026-05-04）
+### Review 范围
+- `lib/features/library_shared/presentation/pages/unified_shelf_page.dart`
+- `test/features/library_shared/presentation/pages/unified_shelf_page_test.dart`
+
+### 核对结论
+1. 问题定位正确：刷新手势未稳定进入内层网格/列表滚动通知链。
+2. 修复方式合理：
+- `RefreshIndicator.notificationPredicate` 放宽为垂直滚动通知；
+- 内聚 `_handlePullToRefresh`，避免重复逻辑散落。
+3. 可维护性：
+- 刷新策略集中在统一页，不影响 adapter/controller 边界；
+- 测试新增覆盖“下拉动作 -> refreshShelf 调用”链路。
+
+### 风险与后续
+1. 若后续引入新的垂直滚动子树（如嵌套弹层列表），可进一步按 key/上下文细化 predicate。
+
+### 执行说明
+本轮按约定未执行：
+1. `flutter test`
+2. `flutter analyze`

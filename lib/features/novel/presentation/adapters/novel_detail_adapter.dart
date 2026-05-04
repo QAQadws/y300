@@ -3,9 +3,10 @@ import 'package:y300/features/library_shared/domain/contracts/detail_module_adap
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 
-/// 小说详情适配器（Phase 5）。
+/// 小说详情适配器（Phase 6）。
 class NovelDetailAdapter implements DetailModuleAdapter {
   NovelDetailAdapter(
     this._repository, {
@@ -24,6 +25,10 @@ class NovelDetailAdapter implements DetailModuleAdapter {
     if (detail == null) {
       throw StateError('小说不存在或已删除');
     }
+    final workState = await _stateRepository.getWorkState(
+      moduleKey: LibraryModuleKey.novel,
+      workId: workId,
+    );
     return LibraryDetailHeader(
       workId: detail.novelId,
       title: detail.title,
@@ -31,6 +36,7 @@ class NovelDetailAdapter implements DetailModuleAdapter {
       author: detail.author,
       sourceTid: detail.sourceTid,
       inShelf: true,
+      intro: workState?.introText,
     );
   }
 
@@ -198,7 +204,105 @@ class NovelDetailAdapter implements DetailModuleAdapter {
   Future<void> updateIntro({
     required String workId,
     required String intro,
-  }) async {}
+  }) async {
+    await _stateRepository.upsertWorkState(
+      moduleKey: LibraryModuleKey.novel,
+      workId: workId,
+      introText: intro,
+    );
+  }
+
+  @override
+  Future<void> moveWorkToCategory({
+    required String workId,
+    required String toCategoryId,
+  }) async {
+    final fromCategoryId = await _findCurrentCategoryId(workId);
+    if (fromCategoryId == null || fromCategoryId == toCategoryId) {
+      return;
+    }
+    await _repository.moveNovelToCategory(
+      novelId: workId,
+      fromCategoryId: fromCategoryId,
+      toCategoryId: toCategoryId,
+    );
+  }
+
+  @override
+  Future<List<LibraryCategory>> loadCategories() async {
+    final categories = await _repository.getCategories();
+    return categories
+        .map(
+          (item) => LibraryCategory(
+            categoryId: item.categoryId,
+            name: item.name,
+            sortOrder: item.sortOrder,
+            createdAt: item.createdAt,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Future<List<LibraryTag>> getWorkTags({required String workId}) {
+    return _stateRepository.getWorkTags(
+      moduleKey: LibraryModuleKey.novel,
+      workId: workId,
+    );
+  }
+
+  @override
+  Future<List<LibraryTag>> getAllTags() {
+    return _stateRepository.getTags();
+  }
+
+  @override
+  Future<void> addExistingTagToWork({
+    required String workId,
+    required String tagId,
+  }) {
+    return _stateRepository.bindTagToWork(
+      moduleKey: LibraryModuleKey.novel,
+      workId: workId,
+      tagId: tagId,
+    );
+  }
+
+  @override
+  Future<void> addNewTagToWork({
+    required String workId,
+    required String tagName,
+  }) async {
+    final tagId = await _stateRepository.createTag(name: tagName);
+    await _stateRepository.bindTagToWork(
+      moduleKey: LibraryModuleKey.novel,
+      workId: workId,
+      tagId: tagId,
+    );
+  }
+
+  @override
+  Future<void> removeTagFromWork({
+    required String workId,
+    required String tagId,
+  }) {
+    return _stateRepository.unbindTagFromWork(
+      moduleKey: LibraryModuleKey.novel,
+      workId: workId,
+      tagId: tagId,
+    );
+  }
+
+  Future<String?> _findCurrentCategoryId(String workId) async {
+    final categories = await _repository.getCategories();
+    for (final category in categories) {
+      final works = await _repository.getShelfItems(categoryId: category.categoryId);
+      if (works.any((item) => item.novelId == workId)) {
+        return category.categoryId;
+      }
+    }
+    return null;
+  }
 
   List<LibraryChapterItem> _applyFilters(
     List<LibraryChapterItem> source,

@@ -100,6 +100,26 @@ void main() {
 
     expect(find.byKey(const Key('unified-shelf-list-view')), findsOneWidget);
   });
+
+  testWidgets('pull to refresh triggers adapter refresh in grid/list container', (tester) async {
+    final adapter = _FakeShelfAdapter(initialDisplayMode: LibraryDisplayMode.grid);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedShelfPage(
+          adapter: adapter,
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(adapter.refreshCalls, 0);
+    await tester.drag(find.byType(CustomScrollView).first, const Offset(0, 300));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+
+    expect(adapter.refreshCalls, 1);
+  });
 }
 
 LibraryWorkItem _item({
@@ -124,6 +144,7 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
   });
 
   final LibraryDisplayMode initialDisplayMode;
+  int refreshCalls = 0;
   final Future<Map<String, List<LibraryWorkItem>>> Function({
     required List<LibraryCategory> categories,
     required LibraryFilterSet filters,
@@ -205,7 +226,9 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
   }
 
   @override
-  Future<void> refreshShelf() async {}
+  Future<void> refreshShelf() async {
+    refreshCalls += 1;
+  }
 
   @override
   Future<void> renameCategory({

@@ -1,20 +1,27 @@
 ﻿import 'package:y300/features/comic/data/comic_repository.dart';
+import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 
-/// 漫画详情适配器（Phase 5）。
+/// 漫画详情适配器（Phase 6）。
 ///
 /// 负责把漫画仓储数据映射到统一详情模型，并接入章节状态筛选/排序。
+/// 刷新能力通过 ComicEpisodeRefreshService 下沉到漫画域 services，
+/// 保证统一详情页只保留编排，不耦合漫画刷新策略细节。
 class ComicDetailAdapter implements DetailModuleAdapter {
   ComicDetailAdapter(
     this._repository, {
+    ComicEpisodeRefreshService? refreshService,
     required LibraryStateRepository stateRepository,
-  }) : _stateRepository = stateRepository;
+  })  : _refreshService = refreshService,
+        _stateRepository = stateRepository;
 
   final ComicRepository _repository;
+  final ComicEpisodeRefreshService? _refreshService;
   final LibraryStateRepository _stateRepository;
 
   @override
@@ -26,15 +33,31 @@ class ComicDetailAdapter implements DetailModuleAdapter {
     if (detail == null) {
       throw StateError('漫画不存在或已删除');
     }
+    final workState = await _stateRepository.getWorkState(
+      moduleKey: LibraryModuleKey.comic,
+      workId: workId,
+    );
     final inShelf = await _repository.isInShelf(comicId: workId);
+    var coverImageUrl = detail.coverImageUrl;
+    if (coverImageUrl == null || coverImageUrl.trim().isEmpty) {
+      // Phase 6：漫画封面兜底优先尝试“首话首图”。
+      final episodes = await _repository.getComicEpisodes(comicId: workId, descending: false);
+      if (episodes.isNotEmpty) {
+        final images = await _repository.getEpisodeImages(episodeId: episodes.first.episodeId);
+        if (images.isNotEmpty) {
+          coverImageUrl = images.first.imageUrl;
+        }
+      }
+    }
     return LibraryDetailHeader(
       workId: detail.comicId,
       title: detail.title,
-      coverImageUrl: detail.coverImageUrl,
+      coverImageUrl: coverImageUrl,
       author: detail.author,
       translationGroup: detail.translationGroup,
       sourceTid: detail.sourceTid,
       inShelf: inShelf,
+      intro: workState?.introText,
     );
   }
 
@@ -191,13 +214,129 @@ class ComicDetailAdapter implements DetailModuleAdapter {
   }
 
   @override
-  Future<void> refreshWork({required String workId}) async {}
+  Future<void> refreshWork({required String workId}) async {
+    final detail = await _repository.getComicDetail(comicId: workId);
+    if (detail == null) {
+      return;
+    }
+    final refreshService = _refreshService;
+    if (refreshService == null) {
+      return;
+    }
+    final links = await refreshService.fetchEpisodeLinksFromTid(detail.sourceTid);
+    if (links.isEmpty) {
+      return;
+    }
+    await _repository.mergeEpisodesFromLinks(
+      comicId: workId,
+      episodeLinks: links,
+      fallbackSourceTid: detail.sourceTid,
+    );
+  }
 
   @override
   Future<void> updateIntro({
     required String workId,
     required String intro,
-  }) async {}
+  }) async {
+    await _stateRepository.upsertWorkState(
+      moduleKey: LibraryModuleKey.comic,
+      workId: workId,
+      introText: intro,
+    );
+  }
+
+  @override
+  Future<void> moveWorkToCategory({
+    required String workId,
+    required String toCategoryId,
+  }) async {
+    final fromCategoryId = await _findCurrentCategoryId(workId);
+    if (fromCategoryId == null || fromCategoryId == toCategoryId) {
+      return;
+    }
+    await _repository.moveComicToCategory(
+      comicId: workId,
+      fromCategoryId: fromCategoryId,
+      toCategoryId: toCategoryId,
+    );
+  }
+
+  @override
+  Future<List<LibraryCategory>> loadCategories() async {
+    final categories = await _repository.getCategories();
+    return categories
+        .map(
+          (item) => LibraryCategory(
+            categoryId: item.categoryId,
+            name: item.name,
+            sortOrder: item.sortOrder,
+            createdAt: item.createdAt,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Future<List<LibraryTag>> getWorkTags({required String workId}) {
+    return _stateRepository.getWorkTags(
+      moduleKey: LibraryModuleKey.comic,
+      workId: workId,
+    );
+  }
+
+  @override
+  Future<List<LibraryTag>> getAllTags() {
+    return _stateRepository.getTags();
+  }
+
+  @override
+  Future<void> addExistingTagToWork({
+    required String workId,
+    required String tagId,
+  }) {
+    return _stateRepository.bindTagToWork(
+      moduleKey: LibraryModuleKey.comic,
+      workId: workId,
+      tagId: tagId,
+    );
+  }
+
+  @override
+  Future<void> addNewTagToWork({
+    required String workId,
+    required String tagName,
+  }) async {
+    final tagId = await _stateRepository.createTag(name: tagName);
+    await _stateRepository.bindTagToWork(
+      moduleKey: LibraryModuleKey.comic,
+      workId: workId,
+      tagId: tagId,
+    );
+  }
+
+  @override
+  Future<void> removeTagFromWork({
+    required String workId,
+    required String tagId,
+  }) {
+    return _stateRepository.unbindTagFromWork(
+      moduleKey: LibraryModuleKey.comic,
+      workId: workId,
+      tagId: tagId,
+    );
+  }
+
+  Future<String?> _findCurrentCategoryId(String workId) async {
+    final categories = await _repository.getCategories();
+    for (final category in categories) {
+      final works = await _repository.getShelfItems(categoryId: category.categoryId);
+      if (works.any((item) => item.comicId == workId)) {
+        return category.categoryId;
+      }
+    }
+    return null;
+  }
 
   List<LibraryChapterItem> _applyFilters(
     List<LibraryChapterItem> source,
