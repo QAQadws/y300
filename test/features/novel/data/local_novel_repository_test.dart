@@ -29,7 +29,14 @@ void main() {
     });
 
     test('upsertNovelBySeed + refreshEpisodes builds readable shelf and episodes', () async {
-      await repository.upsertNovelBySeed(seed: const NovelRefreshSeed(fid: '49', tid: '200'));
+      await repository.upsertNovelBySeed(
+        seed: const NovelRefreshSeed(
+          fid: '49',
+          tid: '200',
+          typeid: '293',
+          tagName: '原创',
+        ),
+      );
       final result = await repository.refreshEpisodes(novelId: 'novel:49:200');
 
       final shelf = await repository.getShelfItems();
@@ -39,6 +46,8 @@ void main() {
       expect(result.totalCount, greaterThan(0));
       expect(shelf.length, 1);
       expect(shelf.first.sourceFid, '49');
+      expect(shelf.first.sourceTypeId, '293');
+      expect(shelf.first.sourceTagName, '原创');
       expect(shelf.first.categoryId, 'default');
       expect(episodes.length, greaterThan(0));
       expect(content, isNotNull);

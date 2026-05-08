@@ -1,10 +1,14 @@
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 class ThreadDetailPageState {
   const ThreadDetailPageState({
     required this.tid,
     required this.fid,
+    required this.typeid,
+    required this.sourceTagName,
+    required this.contentKind,
     required this.subject,
     required this.currentPage,
     required this.hasMore,
@@ -26,6 +30,9 @@ class ThreadDetailPageState {
 
   final String tid;
   final String fid;
+  final String typeid;
+  final String? sourceTagName;
+  final ThreadContentKind contentKind;
   final String subject;
   final int currentPage;
   final bool hasMore;
@@ -51,6 +58,9 @@ class ThreadDetailPageState {
     return ThreadDetailPageState(
       tid: tid,
       fid: '',
+      typeid: '',
+      sourceTagName: null,
+      contentKind: ThreadContentKind.forum,
       subject: subject,
       currentPage: 0,
       hasMore: true,
@@ -74,6 +84,9 @@ class ThreadDetailPageState {
   ThreadDetailPageState copyWith({
     String? tid,
     String? fid,
+    String? typeid,
+    String? sourceTagName,
+    ThreadContentKind? contentKind,
     String? subject,
     int? currentPage,
     bool? hasMore,
@@ -93,10 +106,16 @@ class ThreadDetailPageState {
     String? errorMessage,
     bool clearReplyHint = false,
     bool clearError = false,
+    bool clearSourceTagName = false,
   }) {
     return ThreadDetailPageState(
       tid: tid ?? this.tid,
       fid: fid ?? this.fid,
+      typeid: typeid ?? this.typeid,
+      sourceTagName: clearSourceTagName
+          ? null
+          : (sourceTagName ?? this.sourceTagName),
+      contentKind: contentKind ?? this.contentKind,
       subject: subject ?? this.subject,
       currentPage: currentPage ?? this.currentPage,
       hasMore: hasMore ?? this.hasMore,

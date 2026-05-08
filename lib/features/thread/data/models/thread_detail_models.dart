@@ -36,6 +36,7 @@ class ThreadDetailData {
   ThreadDetailData({
     required this.tid,
     required this.fid,
+    this.typeid = '',
     required this.subject,
     required this.author,
     required this.replies,
@@ -47,6 +48,7 @@ class ThreadDetailData {
 
   final String tid;
   final String fid;
+  final String typeid;
   final String subject;
   final String author;
   final int replies;
@@ -70,7 +72,14 @@ class ThreadDetailData {
 
     return ThreadDetailData(
       tid: ParseUtils.asString(thread['tid']),
-      fid: ParseUtils.asString(variables['fid']),
+      fid: ParseUtils.asString(
+        variables['fid'],
+        fallback: ParseUtils.asString(thread['fid']),
+      ),
+      typeid: ParseUtils.asString(
+        thread['typeid'],
+        fallback: ParseUtils.asString(variables['typeid']),
+      ),
       subject: ParseUtils.asString(thread['subject']),
       author: ParseUtils.asString(thread['author']),
       replies: ParseUtils.asInt(thread['replies']),

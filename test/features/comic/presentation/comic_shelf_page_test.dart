@@ -38,6 +38,8 @@ class _FakeComicRepository implements ComicRepository {
     required String comicId,
     required String tid,
     required String fid,
+    String? sourceTypeId,
+    String? sourceTagName,
     required String title,
     required ParsedComicPost parsedPost,
   }) async {}
@@ -86,6 +88,8 @@ class _FakeComicRepository implements ComicRepository {
     return [
       ComicShelfItem(
         comicId: 'comic-1',
+        sourceTypeId: '398',
+        sourceTagName: '韩国漫画',
         title: '漫画A',
         author: '作者A',
         coverImageUrl: null,

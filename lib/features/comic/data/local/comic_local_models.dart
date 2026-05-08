@@ -3,6 +3,8 @@
     required this.comicId,
     required this.sourceTid,
     required this.sourceFid,
+    required this.sourceTypeId,
+    required this.sourceTagName,
     required this.title,
     required this.author,
     required this.translationGroup,
@@ -16,6 +18,8 @@
   final String comicId;
   final String sourceTid;
   final String sourceFid;
+  final String? sourceTypeId;
+  final String? sourceTagName;
   final String title;
   final String? author;
   final String? translationGroup;
@@ -30,6 +34,8 @@
       'comic_id': comicId,
       'source_tid': sourceTid,
       'source_fid': sourceFid,
+      'source_typeid': sourceTypeId,
+      'source_tag_name': sourceTagName,
       'title': title,
       'author': author,
       'translation_group': translationGroup,
@@ -46,6 +52,8 @@
       comicId: map['comic_id'] as String,
       sourceTid: map['source_tid'] as String,
       sourceFid: map['source_fid'] as String,
+      sourceTypeId: map['source_typeid'] as String?,
+      sourceTagName: map['source_tag_name'] as String?,
       title: map['title'] as String,
       author: map['author'] as String?,
       translationGroup: map['translation_group'] as String?,

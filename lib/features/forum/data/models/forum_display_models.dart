@@ -51,6 +51,8 @@ class ForumDisplayJsonMapper {
 class ForumThreadSummary {
   ForumThreadSummary({
     required this.tid,
+    this.typeid = '',
+    this.sourceTagName,
     required this.subject,
     required this.author,
     required this.replies,
@@ -59,6 +61,8 @@ class ForumThreadSummary {
   });
 
   final String tid;
+  final String typeid;
+  final String? sourceTagName;
   final String subject;
   final String author;
   final int replies;
@@ -68,6 +72,8 @@ class ForumThreadSummary {
   factory ForumThreadSummary.fromJson(JsonMap json) {
     return ForumThreadSummary(
       tid: ParseUtils.asString(json['tid']),
+      typeid: ParseUtils.asString(json['typeid']),
+      sourceTagName: null,
       subject: ParseUtils.asString(json['subject']),
       author: ParseUtils.asString(
         json['author'],
@@ -79,6 +85,31 @@ class ForumThreadSummary {
         json['dateline'],
         fallback: ParseUtils.asString(json['dbdateline']),
       ),
+    );
+  }
+
+  ForumThreadSummary copyWith({
+    String? tid,
+    String? typeid,
+    String? sourceTagName,
+    String? subject,
+    String? author,
+    int? replies,
+    int? views,
+    String? dateline,
+    bool clearSourceTagName = false,
+  }) {
+    return ForumThreadSummary(
+      tid: tid ?? this.tid,
+      typeid: typeid ?? this.typeid,
+      sourceTagName: clearSourceTagName
+          ? null
+          : (sourceTagName ?? this.sourceTagName),
+      subject: subject ?? this.subject,
+      author: author ?? this.author,
+      replies: replies ?? this.replies,
+      views: views ?? this.views,
+      dateline: dateline ?? this.dateline,
     );
   }
 }

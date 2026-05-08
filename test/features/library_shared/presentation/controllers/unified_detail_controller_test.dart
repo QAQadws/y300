@@ -2,7 +2,6 @@
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
-import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/presentation/controllers/unified_detail_controller.dart';
 
@@ -33,6 +32,20 @@ void main() {
     final after = controller.state.chapterSortOption.direction;
 
     expect(before == after, isFalse);
+  });
+
+  test('reload reads local state without refreshing source chapters', () async {
+    final adapter = _FakeDetailAdapter();
+    final controller = UnifiedDetailController(
+      adapter: adapter,
+      workId: 'work-1',
+    );
+
+    await controller.initialize();
+    await controller.reload();
+
+    expect(adapter.loadHeaderCount, 2);
+    expect(adapter.refreshWorkCount, 0);
   });
 
   test('updateFilters and chapter actions update state', () async {
@@ -82,6 +95,9 @@ void main() {
 }
 
 class _FakeDetailAdapter implements DetailModuleAdapter {
+  int loadHeaderCount = 0;
+  int refreshWorkCount = 0;
+
   final Map<String, bool> _read = <String, bool>{
     'e1': false,
     'e2': false,
@@ -186,6 +202,7 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
 
   @override
   Future<LibraryDetailHeader> loadHeader({required String workId}) async {
+    loadHeaderCount++;
     return const LibraryDetailHeader(
       workId: 'work-1',
       title: '测试作品',
@@ -224,7 +241,9 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
   LibraryModuleKey get moduleKey => LibraryModuleKey.novel;
 
   @override
-  Future<void> refreshWork({required String workId}) async {}
+  Future<void> refreshWork({required String workId}) async {
+    refreshWorkCount++;
+  }
 
   @override
   Future<void> updateIntro({

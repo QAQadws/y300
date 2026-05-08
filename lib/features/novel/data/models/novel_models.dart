@@ -3,6 +3,8 @@
     required this.novelId,
     required this.sourceTid,
     required this.sourceFid,
+    this.sourceTypeId,
+    this.sourceTagName,
     required this.title,
     this.author,
     this.coverImageUrl,
@@ -14,6 +16,8 @@
   final String novelId;
   final String sourceTid;
   final String sourceFid;
+  final String? sourceTypeId;
+  final String? sourceTagName;
   final String title;
   final String? author;
   final String? coverImageUrl;
@@ -135,10 +139,14 @@ class NovelRefreshSeed {
   const NovelRefreshSeed({
     required this.fid,
     required this.tid,
+    this.typeid,
+    this.tagName,
   });
 
   final String fid;
   final String tid;
+  final String? typeid;
+  final String? tagName;
 }
 
 class NovelShelfCategory {

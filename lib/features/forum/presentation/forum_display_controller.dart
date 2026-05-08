@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/forum/data/forum_display_repository.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
 import 'package:y300/features/forum/presentation/forum_display_state.dart';
+import 'package:y300/features/tags/data/tag_providers.dart';
+import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 
 class ForumDisplayArgs {
   const ForumDisplayArgs({required this.fid, this.title = ''});
@@ -58,28 +61,28 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
       page: current.currentPage + 1,
     );
 
-    state = result.when(
-      success: (data) {
-        final merged = <ForumThreadSummary>[...current.threads, ...data.threads];
-        return AsyncData(
-          current.copyWith(
-            title: data.forumName.isNotEmpty ? data.forumName : current.title,
-            currentPage: data.currentPage,
-            hasMore: data.hasMore,
-            isLoadingMore: false,
-            threads: merged,
-            clearError: true,
-          ),
-        );
-      },
-      failure: (error) {
-        return AsyncData(
-          current.copyWith(
-            isLoadingMore: false,
-            errorMessage: error.message,
-          ),
-        );
-      },
+    if (result case ApiSuccess<ForumDisplayData>(:final data)) {
+      final mappedThreads = await _attachSourceTagNames(data);
+      final merged = <ForumThreadSummary>[...current.threads, ...mappedThreads];
+      state = AsyncData(
+        current.copyWith(
+          title: data.forumName.isNotEmpty ? data.forumName : current.title,
+          currentPage: data.currentPage,
+          hasMore: data.hasMore,
+          isLoadingMore: false,
+          threads: merged,
+          clearError: true,
+        ),
+      );
+      return;
+    }
+
+    final error = (result as ApiFailure<ForumDisplayData>).error;
+    state = AsyncData(
+      current.copyWith(
+        isLoadingMore: false,
+        errorMessage: error.message,
+      ),
     );
   }
 
@@ -89,32 +92,63 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
   }) async {
     final result = await _readRepository().getForumDisplay(fid: _args.fid, page: page);
 
-    return result.when(
-      success: (data) {
-        final merged = page == 1 ? data.threads : <ForumThreadSummary>[...previous, ...data.threads];
-        return ForumDisplayPageState(
-          fid: _args.fid,
-          title: data.forumName.isNotEmpty ? data.forumName : _args.title,
-          currentPage: data.currentPage,
-          hasMore: data.hasMore,
-          isLoadingInitial: false,
-          isLoadingMore: false,
-          threads: merged,
-        );
-      },
-      failure: (error) {
-        return ForumDisplayPageState(
-          fid: _args.fid,
-          title: _args.title,
-          currentPage: page == 1 ? 0 : page,
-          hasMore: false,
-          isLoadingInitial: false,
-          isLoadingMore: false,
-          threads: previous,
-          errorMessage: error.message,
-        );
-      },
+    if (result case ApiSuccess<ForumDisplayData>(:final data)) {
+      final mappedThreads = await _attachSourceTagNames(data);
+      final merged = page == 1
+          ? mappedThreads
+          : <ForumThreadSummary>[...previous, ...mappedThreads];
+      return ForumDisplayPageState(
+        fid: _args.fid,
+        title: data.forumName.isNotEmpty ? data.forumName : _args.title,
+        currentPage: data.currentPage,
+        hasMore: data.hasMore,
+        isLoadingInitial: false,
+        isLoadingMore: false,
+        threads: merged,
+      );
+    }
+
+    final error = (result as ApiFailure<ForumDisplayData>).error;
+    return ForumDisplayPageState(
+      fid: _args.fid,
+      title: _args.title,
+      currentPage: page == 1 ? 0 : page,
+      hasMore: false,
+      isLoadingInitial: false,
+      isLoadingMore: false,
+      threads: previous,
+      errorMessage: error.message,
     );
+  }
+
+  Future<List<ForumThreadSummary>> _attachSourceTagNames(
+    ForumDisplayData data,
+  ) async {
+    if (!data.threads.any((thread) => thread.typeid.trim().isNotEmpty)) {
+      return data.threads;
+    }
+    final lookup = await _readTagLookup();
+    if (lookup == null) {
+      return data.threads;
+    }
+    return data.threads
+        .map(
+          (thread) => thread.copyWith(
+            sourceTagName: lookup.findName(
+              fid: data.fid,
+              typeid: thread.typeid,
+            ),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<ForumTagLookup?> _readTagLookup() async {
+    try {
+      return await ref.read(forumTagLookupProvider.future);
+    } catch (_) {
+      return null;
+    }
   }
 
   ForumDisplayRepository _readRepository() {

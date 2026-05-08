@@ -43,6 +43,8 @@ class _FakeComicRepository implements ComicRepository {
     required String comicId,
     required String tid,
     required String fid,
+    String? sourceTypeId,
+    String? sourceTagName,
     required String title,
     required ParsedComicPost parsedPost,
   }) async {}
@@ -62,6 +64,8 @@ class _FakeComicRepository implements ComicRepository {
       comicId: comicId,
       sourceTid: '100',
       sourceFid: '30',
+      sourceTypeId: '398',
+      sourceTagName: '韩国漫画',
       title: 'Test Comic',
       author: 'Author A',
       translationGroup: 'Group A',

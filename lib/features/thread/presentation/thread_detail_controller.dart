@@ -11,8 +11,10 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
+import 'package:y300/features/tags/data/tag_providers.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
+import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 
 class ThreadDetailArgs {
@@ -95,7 +97,9 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
   Future<void> addToShelf() async {
     final current = state.value;
-    if (current == null || current.isComicActionLoading || !current.comicCandidateInfo.isCandidate) {
+    if (current == null ||
+        current.isComicActionLoading ||
+        current.contentKind != ThreadContentKind.comic) {
       return;
     }
     final snapshot = current;
@@ -108,6 +112,8 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         comicId: comicId,
         tid: snapshot.tid,
         fid: snapshot.fid,
+        sourceTypeId: snapshot.typeid,
+        sourceTagName: snapshot.sourceTagName,
         title: snapshot.subject,
         parsedPost: snapshot.parsedComicPost,
       );
@@ -136,7 +142,9 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
   Future<void> addNovelToShelf() async {
     final current = state.value;
-    if (current == null || current.isNovelActionLoading || !current.isNovelCandidate) {
+    if (current == null ||
+        current.isNovelActionLoading ||
+        current.contentKind != ThreadContentKind.novel) {
       return;
     }
     final snapshot = current;
@@ -155,7 +163,12 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       final novelId = 'novel:$fid:$tid';
 
       await repository.upsertNovelBySeed(
-        seed: NovelRefreshSeed(fid: fid, tid: tid),
+        seed: NovelRefreshSeed(
+          fid: fid,
+          tid: tid,
+          typeid: current.typeid,
+          tagName: current.sourceTagName,
+        ),
       );
       await repository.refreshEpisodes(novelId: novelId);
 
@@ -263,17 +276,28 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     if (result case ApiSuccess<ThreadDetailData>(:final data)) {
       final merged = page == 1 ? data.posts : <ThreadPost>[...previous, ...data.posts];
       final aggregation = ref.read(comicPostAggregationServiceProvider).build(merged);
-      final comicMeta = _detectAndParseComic(
+      final subject = data.subject.isNotEmpty ? data.subject : _args.subject;
+      final sourceTagName = await _findSourceTagName(
         fid: data.fid,
+        typeid: data.typeid,
+      );
+      final contentKind = ref.read(threadContentClassifierProvider).classify(
+            fid: data.fid,
+            typeid: data.typeid,
+            tagName: sourceTagName,
+          );
+      final comicMeta = _parseComicWhenTagged(
+        isComic: contentKind == ThreadContentKind.comic,
         subject: data.subject.isNotEmpty ? data.subject : _args.subject,
-        message: aggregation.detectionMessage,
         parseMessage: aggregation.parseMessage,
       );
+      // 内容类型由 fid + typeid + 来源标签统一判定，避免漫画/小说入口各自维护规则。
+      final comicCandidate = contentKind == ThreadContentKind.comic;
       final comicId = _buildComicId(tid: _args.tid);
-      final isInShelf = await _readComicRepository().isInShelf(comicId: comicId);
-      // 对齐漫画入口策略：在帖子详情阶段先做“是否候选”与“是否已入书架”判定，
-      // 页面层只消费状态并渲染按钮，避免把规则散落到 UI。
-      final novelCandidate = _isNovelCandidateFid(data.fid);
+      final isInShelf = comicCandidate
+          ? await _readComicRepository().isInShelf(comicId: comicId)
+          : false;
+      final novelCandidate = contentKind == ThreadContentKind.novel;
       var isNovelInShelf = false;
       if (novelCandidate) {
         final novelId = 'novel:${data.fid}:${_args.tid}';
@@ -283,7 +307,10 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       return ThreadDetailPageState(
         tid: _args.tid,
         fid: data.fid,
-        subject: data.subject.isNotEmpty ? data.subject : _args.subject,
+        typeid: data.typeid,
+        sourceTagName: sourceTagName,
+        contentKind: contentKind,
+        subject: subject,
         currentPage: data.currentPage,
         hasMore: data.hasMore,
         isLoadingInitial: false,
@@ -306,6 +333,9 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     return ThreadDetailPageState(
       tid: _args.tid,
       fid: '',
+      typeid: '',
+      sourceTagName: null,
+      contentKind: ThreadContentKind.forum,
       subject: _args.subject,
       currentPage: page == 1 ? 0 : page,
       hasMore: false,
@@ -334,37 +364,47 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     return ref.read(comicRepositoryProvider);
   }
 
-  (ComicCandidateInfo, ParsedComicPost) _detectAndParseComic({
-    required String fid,
+  (ComicCandidateInfo, ParsedComicPost) _parseComicWhenTagged({
+    required bool isComic,
     required String subject,
-    required String message,
     required String parseMessage,
   }) {
-    if (message.isEmpty) {
+    if (!isComic || parseMessage.isEmpty) {
       return (ComicCandidateInfo.notCandidate, ParsedComicPost.empty);
     }
 
-    final detector = ref.read(comicDetectorProvider);
     final parser = ref.read(comicParserServiceProvider);
     final subjectParser = ref.read(comicSubjectParserProvider);
-    final candidate = detector.detect(fid: fid, subject: subject, message: message);
-
-    if (!candidate.isCandidate) {
-      return (candidate, ParsedComicPost.empty);
-    }
-
     final parsed = parser.parse(message: parseMessage).copyWith(
           subjectMetadata: subjectParser.parse(subject),
         );
-    return (candidate, parsed);
+    return (
+      const ComicCandidateInfo(
+        isCandidate: true,
+        score: 100,
+        reasons: <String>['tag-rule'],
+      ),
+      parsed,
+    );
   }
 
   String _buildComicId({required String tid}) {
     return 'yamibo:$tid';
   }
 
-  bool _isNovelCandidateFid(String fid) {
-    return fid == '49' || fid == '55';
+  Future<String?> _findSourceTagName({
+    required String fid,
+    required String typeid,
+  }) async {
+    if (fid.trim().isEmpty || typeid.trim().isEmpty) {
+      return null;
+    }
+    try {
+      final lookup = await ref.read(forumTagLookupProvider.future);
+      return lookup.findName(fid: fid, typeid: typeid);
+    } catch (_) {
+      // 标签 asset 失败不应阻断帖子正文；分类服务仍会用公告 typeid 兜底。
+      return null;
+    }
   }
-
 }

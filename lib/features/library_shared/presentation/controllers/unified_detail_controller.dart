@@ -76,6 +76,11 @@ class UnifiedDetailController {
     await _load();
   }
 
+  /// 仅重新读取本地详情与章节状态，不触发模块侧“更新章节”动作。
+  Future<void> reload() async {
+    await _load();
+  }
+
   Future<void> refresh() async {
     _state = _state.copyWith(isRefreshing: true, clearError: true);
     try {

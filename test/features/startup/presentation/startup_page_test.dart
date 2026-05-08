@@ -65,6 +65,8 @@ class _FakeComicRepository implements ComicRepository {
     required String comicId,
     required String tid,
     required String fid,
+    String? sourceTypeId,
+    String? sourceTagName,
     required String title,
     required ParsedComicPost parsedPost,
   }) async {}
@@ -338,4 +340,3 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
     String? introText,
   }) async {}
 }
-

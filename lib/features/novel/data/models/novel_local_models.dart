@@ -5,6 +5,8 @@ class NovelWorkRecord {
     required this.contentType,
     required this.sourceTid,
     required this.sourceFid,
+    this.sourceTypeId,
+    this.sourceTagName,
     required this.title,
     this.author,
     this.coverImageUrl,
@@ -15,6 +17,8 @@ class NovelWorkRecord {
   final String contentType;
   final String sourceTid;
   final String sourceFid;
+  final String? sourceTypeId;
+  final String? sourceTagName;
   final String title;
   final String? author;
   final String? coverImageUrl;

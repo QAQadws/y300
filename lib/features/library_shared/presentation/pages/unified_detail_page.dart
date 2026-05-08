@@ -209,6 +209,14 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         onToggle: () => setState(() => _introExpanded = !_introExpanded),
                       ),
                     ),
+                  if (header != null)
+                    SliverToBoxAdapter(
+                      child: _TagStrip(
+                        sourceTagName: header.sourceTagName,
+                        sourceTypeId: header.sourceTypeId,
+                        customTags: header.customTags,
+                      ),
+                    ),
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -575,7 +583,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                   workId: widget.workId,
                   intro: inputController.text.trim(),
                 );
-                await _controller.refresh();
+                await _controller.reload();
                 if (!mounted || !dialogContext.mounted) {
                   return;
                 }
@@ -629,10 +637,12 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                             workId: widget.workId,
                             tagName: name,
                           );
+                          await _controller.reload();
                           if (!mounted || !sheetContext.mounted) {
                             return;
                           }
                           Navigator.of(sheetContext).pop();
+                          setState(() {});
                         },
                         child: const Text('新建并添加'),
                       ),
@@ -648,10 +658,12 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         workId: widget.workId,
                         tagId: tag.tagId,
                       );
+                      await _controller.reload();
                       if (!mounted || !sheetContext.mounted) {
                         return;
                       }
                       Navigator.of(sheetContext).pop();
+                      setState(() {});
                     },
                   ),
                 ),
@@ -692,10 +704,12 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         workId: widget.workId,
                         tagId: tag.tagId,
                       );
+                      await _controller.reload();
                       if (!mounted || !sheetContext.mounted) {
                         return;
                       }
                       Navigator.of(sheetContext).pop();
+                      setState(() {});
                     },
                   ),
                 )
@@ -1078,6 +1092,82 @@ class _IntroSection extends StatelessWidget {
             style: TextStyle(color: Theme.of(context).colorScheme.primary),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TagStrip extends StatelessWidget {
+  const _TagStrip({
+    required this.sourceTagName,
+    required this.sourceTypeId,
+    required this.customTags,
+  });
+
+  final String? sourceTagName;
+  final String? sourceTypeId;
+  final List<LibraryTag> customTags;
+
+  @override
+  Widget build(BuildContext context) {
+    final sourceLabel = _sourceLabel();
+    final labels = <String>[
+      ?sourceLabel,
+      ...customTags.map((tag) => tag.name.trim()).where((name) => name.isNotEmpty),
+    ];
+    if (labels.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return SingleChildScrollView(
+      key: const Key('unified-detail-tag-strip'),
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+      child: Row(
+        children: [
+          for (var i = 0; i < labels.length; i++) ...[
+            _TagChip(label: labels[i]),
+            if (i != labels.length - 1) const SizedBox(width: 8),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String? _sourceLabel() {
+    final tagName = sourceTagName?.trim();
+    if (tagName != null && tagName.isNotEmpty) {
+      return tagName;
+    }
+    final typeId = sourceTypeId?.trim();
+    if (typeId != null && typeId.isNotEmpty) {
+      return 'typeid=$typeId';
+    }
+    return null;
+  }
+}
+
+class _TagChip extends StatelessWidget {
+  const _TagChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      constraints: const BoxConstraints(minHeight: 30, maxWidth: 160),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.labelMedium,
       ),
     );
   }

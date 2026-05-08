@@ -21,6 +21,8 @@ void main() {
         comicId: 'yamibo:100',
         tid: '100',
         fid: '30',
+        sourceTypeId: '398',
+        sourceTagName: '韩国漫画',
         title: '测试漫画',
         parsedPost: const ParsedComicPost(
           imageUrls: <String>['https://img.test/cover.jpg'],
@@ -38,6 +40,8 @@ void main() {
       expect(inShelf, isTrue);
       expect(items.length, 1);
       expect(items.first.title, '测试漫画');
+      expect(items.first.sourceTypeId, '398');
+      expect(items.first.sourceTagName, '韩国漫画');
       expect(items.first.author, '作者A');
       expect(items.first.coverImageUrl, 'https://img.test/cover.jpg');
     });

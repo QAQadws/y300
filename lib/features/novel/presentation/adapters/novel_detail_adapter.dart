@@ -3,7 +3,6 @@ import 'package:y300/features/library_shared/domain/contracts/detail_module_adap
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
-import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 
 /// 小说详情适配器（Phase 6）。
@@ -29,12 +28,19 @@ class NovelDetailAdapter implements DetailModuleAdapter {
       moduleKey: LibraryModuleKey.novel,
       workId: workId,
     );
+    final customTags = await _stateRepository.getWorkTags(
+      moduleKey: LibraryModuleKey.novel,
+      workId: workId,
+    );
     return LibraryDetailHeader(
       workId: detail.novelId,
       title: detail.title,
       coverImageUrl: detail.coverImageUrl,
       author: detail.author,
       sourceTid: detail.sourceTid,
+      sourceTypeId: detail.sourceTypeId,
+      sourceTagName: detail.sourceTagName,
+      customTags: customTags,
       inShelf: true,
       intro: workState?.introText,
     );

@@ -15,6 +15,7 @@ void main() {
         'forum_threadlist': <Map<String, dynamic>>[
           <String, dynamic>{
             'tid': '533721',
+            'typeid': '400',
             'subject': '如何找回账号/如何修改密码',
             'author': 'hongyuny',
             'replies': '3',
@@ -33,6 +34,7 @@ void main() {
       expect(data.totalThreads, 27956);
       expect(data.threads, hasLength(1));
       expect(data.threads.first.tid, '533721');
+      expect(data.threads.first.typeid, '400');
       expect(data.threads.first.subject, '如何找回账号/如何修改密码');
       expect(data.threads.first.author, 'hongyuny');
       expect(data.threads.first.replies, 3);

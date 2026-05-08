@@ -4,7 +4,6 @@ import 'package:y300/features/library_shared/data/library_state_repository.dart'
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
-import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 
 /// 漫画详情适配器（Phase 6）。
@@ -37,6 +36,10 @@ class ComicDetailAdapter implements DetailModuleAdapter {
       moduleKey: LibraryModuleKey.comic,
       workId: workId,
     );
+    final customTags = await _stateRepository.getWorkTags(
+      moduleKey: LibraryModuleKey.comic,
+      workId: workId,
+    );
     final inShelf = await _repository.isInShelf(comicId: workId);
     var coverImageUrl = detail.coverImageUrl;
     if (coverImageUrl == null || coverImageUrl.trim().isEmpty) {
@@ -56,6 +59,9 @@ class ComicDetailAdapter implements DetailModuleAdapter {
       author: detail.author,
       translationGroup: detail.translationGroup,
       sourceTid: detail.sourceTid,
+      sourceTypeId: detail.sourceTypeId,
+      sourceTagName: detail.sourceTagName,
+      customTags: customTags,
       inShelf: inShelf,
       intro: workState?.introText,
     );

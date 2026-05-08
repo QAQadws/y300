@@ -10,6 +10,19 @@ enum LibraryDisplayMode {
   list,
 }
 
+/// 标签模型。
+class LibraryTag {
+  const LibraryTag({
+    required this.tagId,
+    required this.name,
+    required this.createdAt,
+  });
+
+  final String tagId;
+  final String name;
+  final DateTime createdAt;
+}
+
 /// 通用分类模型。
 class LibraryCategory {
   const LibraryCategory({
@@ -97,6 +110,9 @@ class LibraryDetailHeader {
     this.translationGroup,
     this.intro,
     this.sourceTid,
+    this.sourceTypeId,
+    this.sourceTagName,
+    this.customTags = const <LibraryTag>[],
     required this.inShelf,
   });
 
@@ -107,6 +123,9 @@ class LibraryDetailHeader {
   final String? translationGroup;
   final String? intro;
   final String? sourceTid;
+  final String? sourceTypeId;
+  final String? sourceTagName;
+  final List<LibraryTag> customTags;
   final bool inShelf;
 }
 

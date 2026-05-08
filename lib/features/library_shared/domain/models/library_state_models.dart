@@ -1,5 +1,8 @@
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 
+export 'package:y300/features/library_shared/domain/models/library_models.dart'
+    show LibraryTag;
+
 /// 统一作品级状态。
 class LibraryWorkState {
   const LibraryWorkState({
@@ -62,17 +65,3 @@ class LibraryModuleDisplaySettings {
   final int gridColumns;
   final DateTime updatedAt;
 }
-
-/// 标签模型。
-class LibraryTag {
-  const LibraryTag({
-    required this.tagId,
-    required this.name,
-    required this.createdAt,
-  });
-
-  final String tagId;
-  final String name;
-  final DateTime createdAt;
-}
-

@@ -263,6 +263,8 @@ class LocalComicRepository implements ComicRepository {
     required String comicId,
     required String tid,
     required String fid,
+    String? sourceTypeId,
+    String? sourceTagName,
     required String title,
     required ParsedComicPost parsedPost,
   }) async {
@@ -274,6 +276,8 @@ class LocalComicRepository implements ComicRepository {
         comicId: comicId,
         sourceTid: tid,
         sourceFid: fid,
+        sourceTypeId: _normalizeNullable(sourceTypeId),
+        sourceTagName: _normalizeNullable(sourceTagName),
         title: _resolveComicTitle(rawTitle: title, parsedPost: parsedPost),
         author: _resolveComicAuthor(parsedPost),
         translationGroup: parsedPost.subjectMetadata?.translationGroup,
@@ -373,6 +377,8 @@ class LocalComicRepository implements ComicRepository {
         si.category_id,
         si.added_at,
         c.comic_id,
+        c.source_typeid,
+        c.source_tag_name,
         c.title,
         c.author,
         COALESCE(c.custom_cover_image_url, c.cover_image_url) AS cover_image_url
@@ -387,6 +393,8 @@ class LocalComicRepository implements ComicRepository {
         .map(
           (row) => ComicShelfItem(
             comicId: row['comic_id'] as String,
+            sourceTypeId: row['source_typeid'] as String?,
+            sourceTagName: row['source_tag_name'] as String?,
             title: row['title'] as String,
             author: row['author'] as String?,
             coverImageUrl: row['cover_image_url'] as String?,
@@ -405,6 +413,8 @@ class LocalComicRepository implements ComicRepository {
         c.comic_id,
         c.source_tid,
         c.source_fid,
+        c.source_typeid,
+        c.source_tag_name,
         c.title,
         c.author,
         c.translation_group,
@@ -428,6 +438,8 @@ class LocalComicRepository implements ComicRepository {
       comicId: row['comic_id'] as String,
       sourceTid: row['source_tid'] as String,
       sourceFid: row['source_fid'] as String,
+      sourceTypeId: row['source_typeid'] as String?,
+      sourceTagName: row['source_tag_name'] as String?,
       title: row['title'] as String,
       author: row['author'] as String?,
       translationGroup: row['translation_group'] as String?,
@@ -691,6 +703,11 @@ class LocalComicRepository implements ComicRepository {
 
     final damagedTidMatch = RegExp(r'(^|[?&;])tid=(\d+)(?:[&#]|$)', caseSensitive: false).firstMatch(url);
     return damagedTidMatch?.group(2);
+  }
+
+  String? _normalizeNullable(String? value) {
+    final trimmed = value?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 
   String _resolveComicTitle({

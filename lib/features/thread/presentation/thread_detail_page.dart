@@ -5,6 +5,7 @@ import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
+import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/shared/widgets/shelf/candidate_shelf_action_row.dart';
 import 'package:y300/shared/widgets/app_skeleton.dart';
 
@@ -66,7 +67,11 @@ class ThreadDetailPage extends ConsumerWidget {
                       }
 
                       final post = state.posts[index];
-                      final showComicEntry = post.isFirst && state.comicCandidateInfo.isCandidate;
+                      final sourceTagLabel = _sourceTagLabel(state);
+                      final showComicEntry =
+                          post.isFirst && state.contentKind == ThreadContentKind.comic;
+                      final showNovelEntry =
+                          post.isFirst && state.contentKind == ThreadContentKind.novel;
 
                       return Card(
                         margin: const EdgeInsets.only(bottom: 10),
@@ -79,16 +84,16 @@ class ThreadDetailPage extends ConsumerWidget {
                               if (showComicEntry) ...[
                                 const SizedBox(height: 8),
                                 CandidateShelfActionRow(
-                                  label: '漫画候选（评分 ${state.comicCandidateInfo.score}）',
+                                  label: '漫画 · $sourceTagLabel',
                                   inShelf: state.isInShelf,
                                   isLoading: state.isComicActionLoading,
                                   onPressed: controller.addToShelf,
                                 ),
                               ],
-                              if (post.isFirst && state.isNovelCandidate) ...[
+                              if (showNovelEntry) ...[
                                 const SizedBox(height: 8),
                                 CandidateShelfActionRow(
-                                  label: '小说候选（fid=${state.fid}）',
+                                  label: '小说 · $sourceTagLabel',
                                   inShelf: state.isNovelInShelf,
                                   isLoading: state.isNovelActionLoading,
                                   onPressed: controller.addNovelToShelf,
@@ -116,6 +121,15 @@ class ThreadDetailPage extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  String _sourceTagLabel(ThreadDetailPageState state) {
+    final tagName = state.sourceTagName?.trim();
+    if (tagName != null && tagName.isNotEmpty) {
+      return tagName;
+    }
+    final typeid = state.typeid.trim();
+    return typeid.isEmpty ? '未标记' : 'typeid=$typeid';
   }
 }
 

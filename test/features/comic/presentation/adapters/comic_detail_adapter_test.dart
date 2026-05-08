@@ -52,6 +52,8 @@ class _FakeComicRepository implements ComicRepository {
       comicId: comicId,
       sourceTid: '100',
       sourceFid: '30',
+      sourceTypeId: '398',
+      sourceTagName: '韩国漫画',
       title: 'Test Comic',
       author: 'Author A',
       translationGroup: 'Group A',
@@ -74,7 +76,7 @@ class _FakeComicRepository implements ComicRepository {
   }
 
   @override
-  Future<void> addToShelf({required String comicId, required String tid, required String fid, required String title, required ParsedComicPost parsedPost}) async {}
+  Future<void> addToShelf({required String comicId, required String tid, required String fid, String? sourceTypeId, String? sourceTagName, required String title, required ParsedComicPost parsedPost}) async {}
   @override
   Future<String> createCategory({required String name}) async => 'c1';
   @override

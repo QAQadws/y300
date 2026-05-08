@@ -201,6 +201,8 @@ class LocalNovelRepository implements NovelRepository {
         w.work_id,
         w.source_tid,
         w.source_fid,
+        w.source_typeid,
+        w.source_tag_name,
         w.title,
         w.author,
         w.cover_image_url,
@@ -228,6 +230,8 @@ class LocalNovelRepository implements NovelRepository {
         w.work_id,
         w.source_tid,
         w.source_fid,
+        w.source_typeid,
+        w.source_tag_name,
         w.title,
         w.author,
         w.cover_image_url,
@@ -361,6 +365,8 @@ class LocalNovelRepository implements NovelRepository {
           'content_type': _contentType,
           'source_tid': detail.tid,
           'source_fid': seed.fid,
+          'source_typeid': _normalizeNullable(seed.typeid ?? detail.typeid),
+          'source_tag_name': _normalizeNullable(seed.tagName),
           'title': detail.subject.trim().isEmpty ? '未命名小说' : detail.subject.trim(),
           'author': detail.author.trim().isEmpty ? null : detail.author.trim(),
           'cover_image_url': null,
@@ -522,6 +528,8 @@ class LocalNovelRepository implements NovelRepository {
       novelId: row['work_id'] as String,
       sourceTid: row['source_tid'] as String,
       sourceFid: row['source_fid'] as String,
+      sourceTypeId: row['source_typeid'] as String?,
+      sourceTagName: row['source_tag_name'] as String?,
       title: row['title'] as String,
       author: row['author'] as String?,
       coverImageUrl: row['cover_image_url'] as String?,
@@ -552,5 +560,10 @@ class LocalNovelRepository implements NovelRepository {
       }
     }
     return pages;
+  }
+
+  String? _normalizeNullable(String? value) {
+    final trimmed = value?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 }

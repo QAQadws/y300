@@ -69,7 +69,17 @@ class ForumDisplayPage extends ConsumerWidget {
                     child: ListTile(
                       key: Key('forum-thread-${thread.tid}'),
                       title: Text(thread.subject),
-                      subtitle: Text('${thread.author} · 回复 ${thread.replies} · 浏览 ${thread.views}'),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (thread.sourceTagName?.trim().isNotEmpty == true) ...[
+                            _ForumThreadTag(label: thread.sourceTagName!.trim()),
+                            const SizedBox(height: 4),
+                          ],
+                          Text('${thread.author} · 回复 ${thread.replies} · 浏览 ${thread.views}'),
+                        ],
+                      ),
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute<void>(
@@ -82,6 +92,31 @@ class ForumDisplayPage extends ConsumerWidget {
                 },
               ),
             ),
+    );
+  }
+}
+
+class _ForumThreadTag extends StatelessWidget {
+  const _ForumThreadTag({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 24, maxWidth: 140),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.labelSmall,
+      ),
     );
   }
 }

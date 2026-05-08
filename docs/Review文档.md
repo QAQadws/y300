@@ -1687,6 +1687,52 @@
 
 ---
 
+## 分阶段实现 01：标签与 typeid Review 清单（2026-05-08）
+
+### 一、标签基础设施
+- [ ] `pubspec.yaml` 已声明 `assets/tag.json`。
+- [ ] `ForumTagLookup` 可通过 `fid + typeid` 查到标签名。
+- [ ] 标签加载逻辑位于 `features/tags`，UI 不直接读取 asset。
+- [ ] 标签加载失败不会阻断帖子详情正文展示。
+
+### 二、帖子详情与分类规则
+- [ ] `ThreadDetailData.fromVariables` 能解析 `typeid`。
+- [ ] `ThreadDetailPageState` 携带 `typeid/sourceTagName/contentKind`。
+- [ ] 漫画入口不再使用评分候选文案。
+- [ ] 小说入口不再只靠页面层 fid 判断。
+- [ ] 公告帖通过标签名或固定 typeid 被排除为普通论坛帖。
+
+### 三、漫画/小说数据持久化
+- [ ] `comics` 表包含 `source_typeid/source_tag_name`。
+- [ ] `works` 表包含 `source_typeid/source_tag_name`。
+- [ ] `ComicRepository.addToShelf` 写入来源标签字段。
+- [ ] `NovelRefreshSeed` 可携带并保存来源标签字段。
+- [ ] 老库升级到 DB v10 时新增列不破坏既有数据。
+
+### 四、统一详情页标签展示
+- [ ] `LibraryDetailHeader` 携带来源标签和自定义标签。
+- [ ] 漫画/小说 detail adapter 会读取 `LibraryStateRepository.getWorkTags`。
+- [ ] `UnifiedDetailPage` 在简介下方展示标签条。
+- [ ] 标签顺序为：论坛来源标签在前，自定义标签在后。
+- [ ] 无标签时不占用可见空间。
+- [ ] 添加/移除自定义标签后使用轻量 `reload()` 刷新本地详情，不触发章节更新网络链路。
+
+### 五、测试覆盖（仅编写，未执行）
+- [ ] `thread_detail_models_test.dart` 覆盖 typeid 解析。
+- [ ] `forum_tag_lookup_test.dart` 覆盖 `fid=30,typeid=65 => 公告`。
+- [ ] `thread_content_classifier_test.dart` 覆盖漫画/小说/公告规则。
+- [ ] `source_tag_db_migration_test.dart` 覆盖新建库 DB 新列和旧 v9 -> v10 迁移补列。
+- [ ] `unified_detail_controller_test.dart` 覆盖 `reload()` 不调用 `refreshWork`。
+- [ ] `unified_detail_page_test.dart` 覆盖来源标签 + 自定义标签展示。
+
+### 六、待你本地回归
+1. `flutter test`
+2. `flutter analyze`
+
+说明：`dart format` 按本轮要求未执行，也不作为本轮回归项。
+
+---
+
 ## UnifiedShelf 下拉刷新 Review 记录（2026-05-04）
 ### Review 范围
 - `lib/features/library_shared/presentation/pages/unified_shelf_page.dart`

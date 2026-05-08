@@ -157,6 +157,8 @@ class _ReaderRepoForControllerTest implements ComicRepository {
     required String comicId,
     required String tid,
     required String fid,
+    String? sourceTypeId,
+    String? sourceTagName,
     required String title,
     required ParsedComicPost parsedPost,
   }) async {}

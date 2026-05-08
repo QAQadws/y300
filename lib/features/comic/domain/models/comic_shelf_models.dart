@@ -1,6 +1,8 @@
 ﻿class ComicShelfItem {
   const ComicShelfItem({
     required this.comicId,
+    this.sourceTypeId,
+    this.sourceTagName,
     required this.title,
     required this.author,
     required this.coverImageUrl,
@@ -9,6 +11,8 @@
   });
 
   final String comicId;
+  final String? sourceTypeId;
+  final String? sourceTagName;
   final String title;
   final String? author;
   final String? coverImageUrl;

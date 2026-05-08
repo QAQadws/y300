@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
-import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_detail_page.dart';
 
@@ -60,6 +59,9 @@ void main() {
     expect(find.text('继续'), findsOneWidget);
     expect(find.byIcon(Icons.file_download), findsOneWidget);
     expect(find.byIcon(Icons.filter_list), findsOneWidget);
+    expect(find.byKey(const Key('unified-detail-tag-strip')), findsOneWidget);
+    expect(find.text('韩国漫画'), findsOneWidget);
+    expect(find.text('自定义标签'), findsOneWidget);
 
     await tester.longPress(find.byKey(const ValueKey<String>('unified-detail-chapter-e1')));
     await tester.pumpAndSettle();
@@ -114,12 +116,21 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
 
   @override
   Future<LibraryDetailHeader> loadHeader({required String workId}) async {
-    return const LibraryDetailHeader(
+    return LibraryDetailHeader(
       workId: 'work-1',
       title: '测试作品',
       author: '作者A',
       inShelf: true,
       intro: '这是一段简介',
+      sourceTypeId: '398',
+      sourceTagName: '韩国漫画',
+      customTags: <LibraryTag>[
+        LibraryTag(
+          tagId: 'tag-1',
+          name: '自定义标签',
+          createdAt: DateTime(2026, 1, 1),
+        ),
+      ],
     );
   }
 

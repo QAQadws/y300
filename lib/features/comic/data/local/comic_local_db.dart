@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 9;
+  static const int dbVersion = 10;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -61,6 +61,9 @@ class ComicLocalDb {
         if (oldVersion < 9) {
           await _createPhase7PerformanceIndexes(db);
         }
+        if (oldVersion < 10) {
+          await _migrateSourceTagColumns(db);
+        }
       },
     );
   }
@@ -71,6 +74,8 @@ class ComicLocalDb {
         comic_id TEXT PRIMARY KEY,
         source_tid TEXT NOT NULL,
         source_fid TEXT NOT NULL,
+        source_typeid TEXT,
+        source_tag_name TEXT,
         title TEXT NOT NULL,
         author TEXT,
         cover_image_url TEXT,
@@ -206,6 +211,8 @@ class ComicLocalDb {
         content_type TEXT NOT NULL,
         source_tid TEXT NOT NULL,
         source_fid TEXT NOT NULL,
+        source_typeid TEXT,
+        source_tag_name TEXT,
         title TEXT NOT NULL,
         author TEXT,
         cover_image_url TEXT,
@@ -396,5 +403,46 @@ class ComicLocalDb {
       'CREATE INDEX IF NOT EXISTS idx_episodes_comic_order ON '
       '$episodesTable(comic_id, order_index)',
     );
+  }
+
+  /// Phase 01：保存论坛自带 typeid/tagName，供收藏同步和统一详情标签条复用。
+  static Future<void> _migrateSourceTagColumns(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      tableName: comicsTable,
+      columnName: 'source_typeid',
+      definition: 'TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      tableName: comicsTable,
+      columnName: 'source_tag_name',
+      definition: 'TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      tableName: worksTable,
+      columnName: 'source_typeid',
+      definition: 'TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      tableName: worksTable,
+      columnName: 'source_tag_name',
+      definition: 'TEXT',
+    );
+  }
+
+  static Future<void> _addColumnIfMissing(
+    Database db, {
+    required String tableName,
+    required String columnName,
+    required String definition,
+  }) async {
+    final rows = await db.rawQuery('PRAGMA table_info($tableName)');
+    final exists = rows.any((row) => row['name'] == columnName);
+    if (!exists) {
+      await db.execute('ALTER TABLE $tableName ADD COLUMN $columnName $definition');
+    }
   }
 }

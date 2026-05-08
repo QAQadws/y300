@@ -3,6 +3,8 @@
     required this.comicId,
     required this.sourceTid,
     required this.sourceFid,
+    this.sourceTypeId,
+    this.sourceTagName,
     required this.title,
     required this.author,
     required this.translationGroup,
@@ -14,6 +16,8 @@
   final String comicId;
   final String sourceTid;
   final String sourceFid;
+  final String? sourceTypeId;
+  final String? sourceTagName;
   final String title;
   final String? author;
   final String? translationGroup;

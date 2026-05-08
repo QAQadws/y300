@@ -13,6 +13,10 @@ import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
+import 'package:y300/features/tags/data/forum_tag_repository.dart';
+import 'package:y300/features/tags/data/tag_providers.dart';
+import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
+import 'package:y300/features/tags/domain/forum_tag_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
@@ -97,6 +101,7 @@ void main() {
           ThreadDetailData(
             tid: tid,
             fid: '30',
+            typeid: '398',
             subject: '【测试汉化组】第1话',
             author: 'alice',
             replies: 0,
@@ -129,7 +134,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 120));
 
       expect(find.byKey(const Key('comic-in-shelf-button')), findsOneWidget);
-      expect(find.textContaining('漫画候选（评分'), findsOneWidget);
+      expect(find.text('漫画 · 韩国漫画'), findsOneWidget);
+      expect(find.textContaining('漫画候选（评分'), findsNothing);
     });
 
     testWidgets('shows novel add-to-shelf button for fid 49 first post', (tester) async {
@@ -138,6 +144,7 @@ void main() {
           ThreadDetailData(
             tid: tid,
             fid: '49',
+            typeid: '293',
             subject: '测试小说帖',
             author: 'alice',
             replies: 0,
@@ -165,7 +172,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      expect(find.textContaining('小说候选（fid=49）'), findsOneWidget);
+      expect(find.text('小说 · 原创'), findsOneWidget);
       expect(find.byKey(const Key('comic-add-to-shelf-button')), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('comic-add-to-shelf-button')).last);
@@ -183,6 +190,7 @@ void main() {
           ThreadDetailData(
             tid: tid,
             fid: '30',
+            typeid: '398',
             subject: '【测试汉化组】第1话',
             author: 'alice',
             replies: 1,
@@ -307,11 +315,38 @@ Widget _buildTestApp(
       comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
       novelRepositoryProvider.overrideWithValue(novelRepository ?? _FakeNovelRepository()),
       replyRepositoryProvider.overrideWithValue(replyRepository ?? _FakeReplyRepository()),
+      forumTagRepositoryProvider.overrideWithValue(_FakeForumTagRepository()),
     ],
     child: const MaterialApp(
       home: ThreadDetailPage(tid: '100', subject: '测试主题'),
     ),
   );
+}
+
+class _FakeForumTagRepository implements ForumTagRepository {
+  @override
+  Future<ForumTagLookup> loadLookup() async {
+    return ForumTagLookup(
+      const <ForumBoardTagSet>[
+        ForumBoardTagSet(
+          fid: '30',
+          name: '中文百合漫画区',
+          tags: <ForumTagDefinition>[
+            ForumTagDefinition(fid: '30', typeid: '398', name: '韩国漫画'),
+            ForumTagDefinition(fid: '30', typeid: '65', name: '公告'),
+          ],
+        ),
+        ForumBoardTagSet(
+          fid: '49',
+          name: '文学区',
+          tags: <ForumTagDefinition>[
+            ForumTagDefinition(fid: '49', typeid: '293', name: '原创'),
+            ForumTagDefinition(fid: '49', typeid: '121', name: '公告'),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
 class _FakeReplyRepository implements ReplyRepository {
@@ -349,6 +384,8 @@ class _FakeComicRepository implements ComicRepository {
     required String comicId,
     required String tid,
     required String fid,
+    String? sourceTypeId,
+    String? sourceTagName,
     required String title,
     required ParsedComicPost parsedPost,
   }) async {
@@ -481,6 +518,8 @@ class _FakeNovelRepository implements NovelRepository {
       novelId: novelId,
       sourceTid: '100',
       sourceFid: '49',
+      sourceTypeId: null,
+      sourceTagName: null,
       title: '测试小说',
       author: '作者A',
       coverImageUrl: null,
