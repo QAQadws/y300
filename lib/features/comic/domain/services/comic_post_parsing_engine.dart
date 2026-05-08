@@ -1,8 +1,8 @@
 import 'dart:collection';
 
-import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/comic/domain/models/comic_parsing_debug_models.dart';
 import 'package:y300/features/comic/domain/models/comic_post_parsing_models.dart';
+import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 
 /// Phase-1 parser engine:
 /// - Normalize anchors from post html
@@ -12,7 +12,9 @@ import 'package:y300/features/comic/domain/models/comic_post_parsing_models.dart
 class ComicPostParsingEngine {
   ComicPostParsingEngine({
     List<ComicPostParsingRule>? rules,
-  }) : _rules = rules ??
+    ForumPostDomExtractor? domExtractor,
+  }) : _domExtractor = domExtractor ?? const ForumPostDomExtractor(),
+       _rules = rules ??
             <ComicPostParsingRule>[
               CatalogRule(),
               EpisodeStrongRule(),
@@ -20,16 +22,10 @@ class ComicPostParsingEngine {
               RejectRule(),
             ];
 
-  static const String _yamiboOrigin = 'https://bbs.yamibo.com/';
-  static final RegExp _threadPathPattern = RegExp(r'thread-(\d+)-\d+-\d+\.html', caseSensitive: false);
-  static final RegExp _forumViewThreadPattern = RegExp(
-    r'forum\.php\?[^#]*\bmod=viewthread\b[^#]*\btid=(\d+)',
-    caseSensitive: false,
-  );
-  static final RegExp _damagedTidPattern = RegExp(r'(^|[?&;])tid=(\d+)(?:[&#]|$)', caseSensitive: false);
   static final RegExp _ordinalPattern = RegExp(r'(^\d+(\.\d+)?$|第\s*.+\s*话)', caseSensitive: false);
   static final RegExp _specialPattern = RegExp(r'(特典|附录|番外)', caseSensitive: false);
 
+  final ForumPostDomExtractor _domExtractor;
   final List<ComicPostParsingRule> _rules;
 
   EpisodeExtractionResult parse({
@@ -61,7 +57,7 @@ class ComicPostParsingEngine {
             catalogLinks.add(anchor.normalizedUrl);
             break;
           case RuleAction.addEpisode:
-            final tid = _extractTid(anchor.normalizedUrl);
+            final tid = anchor.tidCandidate;
             if (tid != null) {
               drafts.add(
                 _EpisodeDraft(
@@ -101,35 +97,24 @@ class ComicPostParsingEngine {
     required String messageHtml,
     required List<ComicParsingSignal> debugSignals,
   }) {
-    final document = html_parser.parseFragment(messageHtml);
-    final nodes = document.querySelectorAll('a');
-    debugSignals.add(ComicParsingSignal(stage: 'anchor', message: 'raw anchors=${nodes.length}'));
+    final extracted = _domExtractor.extractAnchors(messageHtml);
+    debugSignals.add(ComicParsingSignal(stage: 'anchor', message: 'raw anchors=${extracted.length}'));
     final anchors = <ParsedAnchor>[];
 
-    for (final node in nodes) {
-      final rawHref = (node.attributes['href'] ?? '').trim();
-      if (rawHref.isEmpty) {
-        continue;
-      }
-      final normalized = _normalizeUrl(rawHref);
-      if (normalized == null) {
-        debugSignals.add(ComicParsingSignal(stage: 'anchor', message: 'reject href=$rawHref'));
-        continue;
-      }
-      final text = node.text.trim();
+    for (final anchor in extracted) {
+      final text = anchor.text;
       final features = ParsedAnchorFeatures(
         containsOrdinal: _ordinalPattern.hasMatch(text),
         containsSpecial: _specialPattern.hasMatch(text),
         containsCatalog: text.contains('目录'),
       );
-      final tid = _extractTid(normalized);
-      final kind = _inferKind(normalized, features);
+      final kind = _inferKind(anchor.normalizedUrl, features, anchor.tid);
       anchors.add(
         ParsedAnchor(
-          rawHref: rawHref,
-          normalizedUrl: normalized,
+          rawHref: anchor.rawHref,
+          normalizedUrl: anchor.normalizedUrl,
           text: text,
-          tidCandidate: tid,
+          tidCandidate: anchor.tid,
           linkKind: kind,
           features: features,
         ),
@@ -212,82 +197,17 @@ class ComicPostParsingEngine {
         .toList(growable: false);
   }
 
-  ParsedLinkKind _inferKind(String url, ParsedAnchorFeatures features) {
+  ParsedLinkKind _inferKind(String url, ParsedAnchorFeatures features, String? tid) {
     if (features.containsCatalog) {
       return ParsedLinkKind.catalog;
     }
-    if (_extractTid(url) != null) {
+    if (tid != null) {
       return ParsedLinkKind.episode;
     }
     if (url.startsWith('http://') || url.startsWith('https://')) {
       return ParsedLinkKind.external;
     }
     return ParsedLinkKind.unknown;
-  }
-
-  String? _normalizeUrl(String href) {
-    var decoded = href.trim();
-    while (decoded.contains('&amp;')) {
-      decoded = decoded.replaceAll('&amp;', '&');
-    }
-    if (decoded.startsWith(';tid=') || decoded.startsWith('tid=')) {
-      final damagedTid = _extractTidFromDamagedHref(decoded);
-      if (damagedTid != null) {
-        return 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=$damagedTid';
-      }
-    }
-    final uri = Uri.tryParse(decoded);
-    if (uri == null) {
-      return null;
-    }
-    final effectiveUri = uri.hasScheme ? uri : Uri.parse(_yamiboOrigin).resolveUri(uri);
-    final isThreadHtml = _threadPathPattern.hasMatch(effectiveUri.path);
-    final isForumViewThread = effectiveUri.path.toLowerCase().endsWith('forum.php') &&
-        effectiveUri.queryParameters['mod']?.toLowerCase() == 'viewthread' &&
-        (effectiveUri.queryParameters['tid']?.isNotEmpty ?? false);
-
-    String? normalizedQuery;
-    if (isForumViewThread) {
-      final mod = effectiveUri.queryParameters['mod'];
-      final tid = effectiveUri.queryParameters['tid'];
-      final fromuid = effectiveUri.queryParameters['fromuid'];
-      final queryPairs = <String>[
-        if (mod != null) 'mod=$mod',
-        if (tid != null) 'tid=$tid',
-        if (fromuid != null && fromuid.isNotEmpty) 'fromuid=$fromuid',
-      ];
-      normalizedQuery = queryPairs.isEmpty ? null : queryPairs.join('&');
-    } else if (isThreadHtml) {
-      normalizedQuery = null;
-    } else {
-      normalizedQuery = effectiveUri.hasQuery ? effectiveUri.query : null;
-    }
-
-    return Uri(
-      scheme: effectiveUri.scheme,
-      userInfo: effectiveUri.userInfo,
-      host: effectiveUri.host,
-      port: effectiveUri.hasPort ? effectiveUri.port : null,
-      path: effectiveUri.path,
-      query: normalizedQuery,
-    ).toString();
-  }
-
-  String? _extractTid(String normalizedUrl) {
-    final threadMatch = _threadPathPattern.firstMatch(normalizedUrl);
-    if (threadMatch != null) {
-      return threadMatch.group(1);
-    }
-    final viewthreadMatch = _forumViewThreadPattern.firstMatch(normalizedUrl);
-    if (viewthreadMatch != null) {
-      return viewthreadMatch.group(1);
-    }
-    return _extractTidFromDamagedHref(normalizedUrl);
-  }
-
-  String? _extractTidFromDamagedHref(String href) {
-    final match = _damagedTidPattern.firstMatch(href);
-    return match?.group(2);
   }
 }
 

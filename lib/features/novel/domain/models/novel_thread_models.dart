@@ -1,4 +1,5 @@
-﻿import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/novel/domain/models/novel_parsing_models.dart';
+import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
 class NovelEpisodeDraft {
   const NovelEpisodeDraft({
@@ -13,6 +14,7 @@ class NovelEpisodeDraft {
     required this.rawHtml,
     required this.plainText,
     required this.paragraphs,
+    this.imageUrls = const <String>[],
   });
 
   final String episodeId;
@@ -26,6 +28,7 @@ class NovelEpisodeDraft {
   final String rawHtml;
   final String plainText;
   final List<String> paragraphs;
+  final List<String> imageUrls;
 }
 
 class NovelRefreshPlan {
@@ -34,12 +37,20 @@ class NovelRefreshPlan {
     required this.subject,
     required this.author,
     required this.episodes,
+    this.intro,
+    this.coverImageUrl,
+    this.inlineImageUrls = const <String>[],
+    this.debugInfo,
   });
 
   final String tid;
   final String subject;
   final String author;
   final List<NovelEpisodeDraft> episodes;
+  final String? intro;
+  final String? coverImageUrl;
+  final List<String> inlineImageUrls;
+  final NovelParsingDebugInfo? debugInfo;
 }
 
 abstract class NovelThreadGateway {

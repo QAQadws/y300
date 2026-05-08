@@ -70,6 +70,7 @@ class NovelDetailAdapter implements DetailModuleAdapter {
           title: item.episodeTitle,
           orderIndex: item.orderIndex,
           sourceTid: item.sourceTid,
+          sourcePid: item.sourcePid,
           publishTimeText: item.datelineText,
           isRead: state?.isRead ?? false,
           isDownloaded: state?.isDownloaded ?? false,
@@ -142,7 +143,9 @@ class NovelDetailAdapter implements DetailModuleAdapter {
     if (episodes.isEmpty) {
       return null;
     }
-    if (preferContinue && progress != null) {
+    if (preferContinue &&
+        progress != null &&
+        episodes.any((episode) => episode.episodeId == progress.episodeId)) {
       return ReaderRouteTarget(workId: workId, episodeId: progress.episodeId);
     }
     return ReaderRouteTarget(workId: workId, episodeId: episodes.first.episodeId);
@@ -338,7 +341,7 @@ class NovelDetailAdapter implements DetailModuleAdapter {
         LibraryChapterSortField.chapterIndex => a.orderIndex.compareTo(b.orderIndex),
         LibraryChapterSortField.date => (a.publishTimeText ?? '').compareTo(b.publishTimeText ?? ''),
         LibraryChapterSortField.name => a.title.compareTo(b.title),
-        LibraryChapterSortField.tid => (a.sourceTid ?? '').compareTo(b.sourceTid ?? ''),
+        LibraryChapterSortField.tid => _compareNumericText(a.sourcePid ?? '', b.sourcePid ?? ''),
       };
       return sortOption.direction == LibrarySortDirection.asc ? result : -result;
     }
@@ -353,5 +356,14 @@ class NovelDetailAdapter implements DetailModuleAdapter {
       TriStateFilterValue.include => flag,
       TriStateFilterValue.exclude => !flag,
     };
+  }
+
+  int _compareNumericText(String a, String b) {
+    final aNumber = int.tryParse(a);
+    final bNumber = int.tryParse(b);
+    if (aNumber != null && bNumber != null) {
+      return aNumber.compareTo(bNumber);
+    }
+    return a.compareTo(b);
   }
 }

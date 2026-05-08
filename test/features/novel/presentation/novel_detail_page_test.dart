@@ -31,6 +31,7 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.byKey(const ValueKey<String>('unified-detail-chapter-novel:1:e1')), findsOneWidget);
+    expect(find.textContaining('Pid:5001'), findsOneWidget);
     expect(find.byIcon(Icons.file_download), findsOneWidget);
   });
 }

@@ -1646,6 +1646,58 @@
 1. `flutter test`
 2. `flutter analyze`
 
+---
+
+## 分阶段实现 02：解析规则重构 Review 清单（2026-05-08）
+
+### 一、DOM/URL 工具边界
+- [ ] `ForumThreadUrlParser` 只负责链接规范化和 `tid` 提取，不承载漫画/小说业务语义。
+- [ ] `ForumPostDomExtractor` 只提供 anchor、图片、纯文本、段落和标题候选等通用 DOM 提取能力。
+- [ ] 图片提取支持 `src/data-src/data-original/file`。
+- [ ] 表情、头像、论坛 UI 图片默认被过滤。
+- [ ] 普通文本中的 `thread-xxx` 不会被当作递归候选。
+
+### 二、漫画解析稳定性
+- [ ] `ComicConsecutiveOpPostParser._extractImages` 不再正则扫描 `<img>`。
+- [ ] `ComicEpisodeDiscoveryService._collectRecursiveTidCandidates` 不再对整段 raw HTML 做 `allMatches`。
+- [ ] `ComicPostParsingEngine` 通过 DOM 工具获取 anchors，漫画规则仍只负责目录/章节/拒绝等语义判断。
+- [ ] 既有章节顺序、目录识别、损坏链接兼容行为保持不变。
+
+### 三、小说规则化架构
+- [ ] `NovelEpisodeDiscoveryService` 只负责遍历和合并规则结果。
+- [ ] 默认规则列表包含楼主过滤、有效内容、标题正则、DOM 标题、封面、简介、兜底标题。
+- [ ] 新增规则时可以实现 `NovelParsingRule`，无需继续在 discovery service 内堆叠 if。
+- [ ] `NovelRefreshPlan` 已携带 `intro/coverImageUrl/inlineImageUrls/debugInfo`。
+- [ ] `NovelEpisodeDraft` 已携带章节内 `imageUrls`。
+- [ ] 小说刷新发现封面候选时会更新本地 `cover_image_url`，未发现时保留旧值。
+
+### 四、小说形式资料专项核对
+- [ ] 小说作品保持一个主题帖 `tid`，章节列表使用同帖楼层 `pid` 定位。
+- [ ] `NovelSameThreadCatalogExtractor` 只识别同帖 `mod=redirect&goto=findpost&ptid=<tid>&pid=<pid>` 目录。
+- [ ] 目录中的“目录/contents/catalog”锚点不会生成章节。
+- [ ] 同帖目录只扫描首屏前 5-10 个楼主楼层，避免把后续正文中的跳转误判为全书目录。
+- [ ] 无目录时回退楼主楼层 `postlist.pid`，并能从 `<strong>001 xxx</strong><br>` 结构提取章节名。
+- [ ] `ForumPostDomExtractor.extractPlainText` 保留 `<br>` 换行，避免标题和正文粘连。
+- [ ] `LocalNovelRepository.refreshEpisodes` 在新解析结果非空时清理旧的错误章节行与正文缓存。
+- [ ] 统一详情页章节行优先展示 `Pid`，仅缺失 pid 时回退 `Tid`。
+- [ ] 统一详情页点击章节打开当前列表项 `episodeId`，不再误走第一章/续读目标。
+
+### 五、测试覆盖（仅编写，未执行）
+- [ ] `forum_post_dom_extractor_test.dart` 覆盖图片字段、过滤和 anchor tid。
+- [ ] `comic_consecutive_op_post_parser_test.dart` 覆盖懒加载图片提取。
+- [ ] `comic_episode_discovery_service_test.dart` 覆盖非 anchor 文本 URL 不入递归候选。
+- [ ] `novel_episode_discovery_service_test.dart` 覆盖楼主过滤、标题识别、番外/特典、封面、简介、插图。
+- [ ] `novel_episode_discovery_service_test.dart` 覆盖同帖 pid 目录与无目录 pid 回退。
+- [ ] `novel_same_thread_catalog_extractor_test.dart` 覆盖同帖目录提取、跨帖/非楼主/过晚楼层过滤。
+- [ ] `local_novel_repository_test.dart` 覆盖刷新后清理旧错误章节缓存。
+- [ ] `unified_detail_page_test.dart` 覆盖列表展示 `Pid` 与章节点击打开当前 `episodeId`。
+
+### 六、待你本地回归
+1. `flutter test`
+2. `flutter analyze`
+
+说明：`dart format` 按本轮要求未执行，也不作为本轮回归项。
+
 请本地回归后回传日志，我会继续修复。
 
 ---

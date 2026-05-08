@@ -237,7 +237,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         key: ValueKey<String>('unified-detail-chapter-${chapter.episodeId}'),
                         title: Text(chapter.title),
                         subtitle: Text(
-                          '${chapter.publishTimeText ?? '-'}  Tid:${chapter.sourceTid ?? '-'}',
+                          _chapterSubtitle(chapter),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -290,11 +290,11 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         textColor: chapter.isRead ? Theme.of(context).disabledColor : null,
                         iconColor: chapter.isRead ? Theme.of(context).disabledColor : null,
                         onTap: () async {
-                          final target = await widget.adapter.getReaderRouteTarget(
+                          final target = ReaderRouteTarget(
                             workId: widget.workId,
-                            preferContinue: false,
+                            episodeId: chapter.episodeId,
                           );
-                          if (!context.mounted || target == null) {
+                          if (!context.mounted) {
                             return;
                           }
                           await _controller.markChapterRead(
@@ -331,6 +331,15 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
         label: const Text('继续'),
       ),
     );
+  }
+
+  String _chapterSubtitle(LibraryChapterItem chapter) {
+    final date = chapter.publishTimeText ?? '-';
+    final sourcePid = chapter.sourcePid?.trim();
+    if (sourcePid != null && sourcePid.isNotEmpty) {
+      return '$date  Pid:$sourcePid';
+    }
+    return '$date  Tid:${chapter.sourceTid ?? '-'}';
   }
 
   Future<void> _showChapterFilterSheet() async {
@@ -377,7 +386,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         DropdownMenuItem(value: LibraryChapterSortField.chapterIndex, child: Text('按章节编号')),
                         DropdownMenuItem(value: LibraryChapterSortField.date, child: Text('按日期')),
                         DropdownMenuItem(value: LibraryChapterSortField.name, child: Text('按名称')),
-                        DropdownMenuItem(value: LibraryChapterSortField.tid, child: Text('按Tid')),
+                        DropdownMenuItem(value: LibraryChapterSortField.tid, child: Text('按来源')),
                       ],
                       onChanged: (value) {
                         if (value != null) {

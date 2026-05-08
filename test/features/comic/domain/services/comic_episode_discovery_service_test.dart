@@ -130,6 +130,27 @@ void main() {
       expect(result.episodeLinks.length, 3);
       expect(result.episodeLinks.any((e) => e.url.contains('thread-802-1-1.html')), isTrue);
     });
+
+    test('recursive fallback ignores plain text thread urls outside anchors', () async {
+      final service = ComicEpisodeDiscoveryService(
+        fetchThreadDetail: _fakeThreadFetcher(
+          detailsByTid: {
+            '900': _thread(
+              tid: '900',
+              subject: '测试漫画 第3话',
+              message: 'plain text thread-899-1-1.html should stay plain text',
+            ),
+          },
+        ),
+        opPostParser: ComicConsecutiveOpPostParser(engine: ComicPostParsingEngine()),
+        catalogHtmlFetcher: _FakeCatalogHtmlFetcher(<String, String>{}),
+      );
+
+      final result = await service.discoverFromTid('900');
+
+      expect(result.strategy, EpisodeDiscoveryStrategy.direct);
+      expect(result.episodeLinks, isEmpty);
+    });
   });
 }
 

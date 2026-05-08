@@ -50,6 +50,35 @@ void main() {
       expect(result.episodeLinks.any((e) => e.url.contains('thread-999-1-1.html')), false);
       expect(result.imageUrls.length, 2);
     });
+
+    test('extracts lazy-loaded images and filters forum chrome images', () {
+      final parser = ComicConsecutiveOpPostParser(
+        engine: ComicPostParsingEngine(),
+      );
+      final posts = <ThreadPost>[
+        ThreadPost(
+          pid: '1',
+          author: 'op',
+          authorId: '100',
+          message: '''
+<img data-src="https://img.test/lazy.jpg" />
+<img file="https://img.test/file.jpg" />
+<img src="https://bbs.yamibo.com/static/image/common/smile.gif" />
+''',
+          number: 1,
+          isFirst: true,
+          dateline: '',
+        ),
+      ];
+
+      final result = parser.parse(
+        tid: '500000',
+        fid: '30',
+        subject: 'subject',
+        posts: posts,
+      );
+
+      expect(result.imageUrls, <String>['https://img.test/lazy.jpg', 'https://img.test/file.jpg']);
+    });
   });
 }
-

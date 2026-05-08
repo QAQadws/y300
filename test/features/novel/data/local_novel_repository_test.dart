@@ -14,11 +14,13 @@ void main() {
 
   group('LocalNovelRepository', () {
     late LocalNovelRepository repository;
+    late Future<Database> dbFuture;
 
     setUp(() async {
       await deleteDatabase(testDbName);
+      dbFuture = ComicLocalDb.open(databaseName: testDbName);
       repository = LocalNovelRepository(
-        ComicLocalDb.open(databaseName: testDbName),
+        dbFuture,
         threadGateway: _FakeGateway(),
         discoveryService: const NovelEpisodeDiscoveryService(),
       );
@@ -48,8 +50,11 @@ void main() {
       expect(shelf.first.sourceFid, '49');
       expect(shelf.first.sourceTypeId, '293');
       expect(shelf.first.sourceTagName, '原创');
+      expect(shelf.first.coverImageUrl, 'https://img.test/novel-cover.jpg');
       expect(shelf.first.categoryId, 'default');
       expect(episodes.length, greaterThan(0));
+      expect(episodes.first.sourceTid, '200');
+      expect(episodes.first.sourcePid, '5001');
       expect(content, isNotNull);
       expect(content!.paragraphs, isNotEmpty);
     });
@@ -83,6 +88,42 @@ void main() {
       expect(progress, isNotNull);
       expect(progress!.episodeId, episodes.first.episodeId);
       expect(progress.scrollOffset, 222.5);
+    });
+
+    test('refreshEpisodes removes stale parsed episode rows', () async {
+      await repository.upsertNovelBySeed(seed: const NovelRefreshSeed(fid: '49', tid: '200'));
+      final db = await dbFuture;
+      await db.insert(
+        ComicLocalDb.workEpisodesTable,
+        <String, Object?>{
+          'episode_id': 'novel:49:200:stale-tid',
+          'work_id': 'novel:49:200',
+          'content_type': 'novel',
+          'source_tid': '200',
+          'source_pid': '200',
+          'source_page': 1,
+          'episode_title': '错误旧章节',
+          'order_index': 99,
+          'dateline_text': '',
+        },
+      );
+      await db.insert(
+        ComicLocalDb.novelEpisodeContentTable,
+        <String, Object?>{
+          'episode_id': 'novel:49:200:stale-tid',
+          'raw_html': '',
+          'plain_text': '',
+          'paragraph_json': '[]',
+          'updated_at': 0,
+        },
+      );
+
+      await repository.refreshEpisodes(novelId: 'novel:49:200');
+
+      final episodes = await repository.getEpisodes(novelId: 'novel:49:200');
+      final staleContent = await repository.getChapterContent(episodeId: 'novel:49:200:stale-tid');
+      expect(episodes.map((episode) => episode.episodeId), isNot(contains('novel:49:200:stale-tid')));
+      expect(staleContent, isNull);
     });
   });
 }
@@ -118,7 +159,7 @@ class _FakeGateway implements NovelThreadGateway {
           pid: '5001',
           author: '楼主A',
           authorId: '1',
-          message: '<p>第1章 开始</p><p>这是第一段。</p>',
+          message: '<p>第1章 开始</p><p>这是第一段。</p><img data-src="https://img.test/novel-cover.jpg" />',
           number: 1,
           isFirst: true,
           dateline: '2026-05-03',

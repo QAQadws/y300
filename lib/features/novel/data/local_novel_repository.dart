@@ -411,6 +411,7 @@ class LocalNovelRepository implements NovelRepository {
     var updated = 0;
 
     await db.transaction((txn) async {
+      final planEpisodeIds = plan.episodes.map((episode) => episode.episodeId).toSet();
       for (final draft in plan.episodes) {
         final existing = await txn.query(
           ComicLocalDb.workEpisodesTable,
@@ -455,11 +456,42 @@ class LocalNovelRepository implements NovelRepository {
         }
       }
 
+      // A refresh is a full snapshot for one novel thread. Removing stale
+      // episode rows prevents earlier bad parses (for example tid-as-chapter
+      // entries) from continuing to appear after the parser has been fixed.
+      if (planEpisodeIds.isNotEmpty) {
+        final existingRows = await txn.query(
+          ComicLocalDb.workEpisodesTable,
+          columns: <String>['episode_id'],
+          where: 'work_id = ? AND content_type = ?',
+          whereArgs: <Object>[novelId, _contentType],
+        );
+        for (final row in existingRows) {
+          final episodeId = row['episode_id'] as String;
+          if (planEpisodeIds.contains(episodeId)) {
+            continue;
+          }
+          await txn.delete(
+            ComicLocalDb.novelEpisodeContentTable,
+            where: 'episode_id = ?',
+            whereArgs: <Object>[episodeId],
+          );
+          await txn.delete(
+            ComicLocalDb.workEpisodesTable,
+            where: 'episode_id = ?',
+            whereArgs: <Object>[episodeId],
+          );
+        }
+      }
+
       await txn.update(
         ComicLocalDb.worksTable,
         <String, Object?>{
           'title': plan.subject.trim().isEmpty ? detail.title : plan.subject.trim(),
           'author': plan.author.trim().isEmpty ? detail.author : plan.author.trim(),
+          // Parser-produced cover is a candidate only; keep an existing cover
+          // when the current refresh does not discover a reliable image.
+          if (_normalizeNullable(plan.coverImageUrl) != null) 'cover_image_url': _normalizeNullable(plan.coverImageUrl),
           'updated_at': DateTime.now().millisecondsSinceEpoch,
         },
         where: 'work_id = ? AND content_type = ?',

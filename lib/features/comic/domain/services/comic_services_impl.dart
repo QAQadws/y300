@@ -1,6 +1,5 @@
 ﻿import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/comic/data/comic_parser_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
@@ -13,6 +12,7 @@ import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/data/discuz_search_service.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
+import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 
 final comicDetectorProvider = Provider<ComicDetector>((ref) {
   return RuleBasedComicDetector();
@@ -318,39 +318,22 @@ class RuleBasedComicDetector implements ComicDetector {
 }
 
 class HtmlComicParserService implements ComicParserService {
-  static final RegExp _emojiLikeImage = RegExp(
-    r'(smilies|static/image|emotion|avatar)',
-    caseSensitive: false,
-  );
-
   static final RegExp _episodeTextPattern = RegExp(
     r'^(\d+(\.\d+)?|\u7b2c\s*.+\s*\u8bdd|.*\u7279\u5178.*)$',
   );
   final ComicPostParsingEngine _engine;
+  final ForumPostDomExtractor _domExtractor;
 
   HtmlComicParserService({
     ComicPostParsingEngine? engine,
-  }) : _engine = engine ?? ComicPostParsingEngine();
+    ForumPostDomExtractor? domExtractor,
+  }) : _domExtractor = domExtractor ?? const ForumPostDomExtractor(),
+       _engine = engine ?? ComicPostParsingEngine(domExtractor: domExtractor);
 
   @override
   ParsedComicPost parse({required String message}) {
     final signals = <ComicParsingSignal>[];
-    final document = html_parser.parseFragment(message);
-
-    final imageUrls = <String>[];
-    final seenImages = <String>{};
-    for (final node in document.querySelectorAll('img')) {
-      final src = (node.attributes['src'] ?? '').trim();
-      if (src.isEmpty || _emojiLikeImage.hasMatch(src)) {
-        if (src.isNotEmpty) {
-          signals.add(ComicParsingSignal(stage: 'image', message: 'ignored image src=$src'));
-        }
-        continue;
-      }
-      if (seenImages.add(src)) {
-        imageUrls.add(src);
-      }
-    }
+    final imageUrls = _domExtractor.extractImageSources(message);
     signals.add(ComicParsingSignal(stage: 'image', message: 'accepted images=${imageUrls.length}'));
 
     final parsedByEngine = _engine.parse(messageHtml: message);
@@ -366,11 +349,11 @@ class HtmlComicParserService implements ComicParserService {
     final catalogUrl = parsedByEngine.catalogLinks.isEmpty ? null : parsedByEngine.catalogLinks.first;
     signals.addAll(parsedByEngine.debugSignals);
 
-    final plainText = (document.text ?? '').replaceAll(RegExp(r'\s+'), ' ').trim();
+    final plainText = _domExtractor.extractPlainText(message).replaceAll(RegExp(r'\s+'), ' ').trim();
 
     final debugInfo = ComicParsingDebugInfo(
       signals: signals,
-      totalAnchors: document.querySelectorAll('a').length,
+      totalAnchors: _domExtractor.extractAnchors(message).length,
       totalEpisodeLinks: episodeLinks.length,
       catalogUrl: catalogUrl,
     );

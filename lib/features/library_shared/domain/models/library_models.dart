@@ -137,6 +137,7 @@ class LibraryChapterItem {
     required this.title,
     required this.orderIndex,
     this.sourceTid,
+    this.sourcePid,
     this.publishTimeText,
     this.threadPostDateText,
     this.threadTidText,
@@ -150,6 +151,7 @@ class LibraryChapterItem {
   final String title;
   final int orderIndex;
   final String? sourceTid;
+  final String? sourcePid;
   final String? publishTimeText;
   final String? threadPostDateText;
   final String? threadTidText;

@@ -8,12 +8,15 @@ import 'package:y300/features/library_shared/presentation/pages/unified_detail_p
 
 void main() {
   testWidgets('UnifiedDetailPage renders header/chapter and FAB', (tester) async {
+    ReaderRouteTarget? openedTarget;
     await tester.pumpWidget(
       MaterialApp(
         home: UnifiedDetailPage(
           adapter: _FakeDetailAdapter(),
           workId: 'work-1',
-          onOpenReader: (context, target) async {},
+          onOpenReader: (context, target) async {
+            openedTarget = target;
+          },
           onOpenThread: (context, target) async {},
         ),
       ),
@@ -55,6 +58,7 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.byKey(const ValueKey<String>('unified-detail-chapter-e1')), findsOneWidget);
+    expect(find.textContaining('Pid:5001'), findsOneWidget);
 
     expect(find.text('继续'), findsOneWidget);
     expect(find.byIcon(Icons.file_download), findsOneWidget);
@@ -62,6 +66,10 @@ void main() {
     expect(find.byKey(const Key('unified-detail-tag-strip')), findsOneWidget);
     expect(find.text('韩国漫画'), findsOneWidget);
     expect(find.text('自定义标签'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey<String>('unified-detail-chapter-e1')));
+    await tester.pumpAndSettle();
+    expect(openedTarget?.episodeId, 'e1');
 
     await tester.longPress(find.byKey(const ValueKey<String>('unified-detail-chapter-e1')));
     await tester.pumpAndSettle();
@@ -110,6 +118,8 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
         workId: 'work-1',
         title: '第1章',
         orderIndex: 1,
+        sourceTid: '100',
+        sourcePid: '5001',
       ),
     ];
   }

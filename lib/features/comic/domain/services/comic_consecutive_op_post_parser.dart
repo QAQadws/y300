@@ -3,6 +3,7 @@ import 'package:y300/features/comic/domain/models/comic_parsing_debug_models.dar
 import 'package:y300/features/comic/domain/models/comic_post_parsing_models.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 
 /// Parse consecutive OP posts from floor-1.
 ///
@@ -13,9 +14,12 @@ import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 class ComicConsecutiveOpPostParser {
   ComicConsecutiveOpPostParser({
     required ComicPostParsingEngine engine,
-  }) : _engine = engine;
+    ForumPostDomExtractor? domExtractor,
+  }) : _engine = engine,
+       _domExtractor = domExtractor ?? const ForumPostDomExtractor();
 
   final ComicPostParsingEngine _engine;
+  final ForumPostDomExtractor _domExtractor;
 
   ParsedComicPost parse({
     required String tid,
@@ -95,19 +99,7 @@ class ComicConsecutiveOpPostParser {
   }
 
   List<String> _extractImages(String html) {
-    final matches = RegExp('<img[^>]*\\ssrc=["\\\']([^"\\\']+)["\\\']', caseSensitive: false).allMatches(html);
-    final images = <String>[];
-    final seen = <String>{};
-    for (final match in matches) {
-      final src = (match.group(1) ?? '').trim();
-      if (src.isEmpty) {
-        continue;
-      }
-      if (seen.add(src)) {
-        images.add(src);
-      }
-    }
-    return images;
+    return _domExtractor.extractImageSources(html);
   }
 
   List<ComicEpisodeLink> _toEpisodeLinks(List<EpisodeLinkCandidate> candidates) {

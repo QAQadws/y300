@@ -7,6 +7,8 @@ import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/catalog_thread_html_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
+import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
 
 enum EpisodeDiscoveryStrategy {
   direct,
@@ -80,31 +82,25 @@ class ComicEpisodeDiscoveryService {
     required ComicConsecutiveOpPostParser opPostParser,
     required CatalogHtmlFetcher catalogHtmlFetcher,
     CatalogThreadHtmlParser? catalogThreadHtmlParser,
+    ForumPostDomExtractor? domExtractor,
+    ForumThreadUrlParser? urlParser,
     EpisodeDiscoveryConfig config = const EpisodeDiscoveryConfig(),
   }) : _fetchThreadDetail = fetchThreadDetail,
        _opPostParser = opPostParser,
        _catalogHtmlFetcher = catalogHtmlFetcher,
        _catalogThreadHtmlParser = catalogThreadHtmlParser ?? CatalogThreadHtmlParser(),
+       _domExtractor = domExtractor ?? ForumPostDomExtractor(urlParser: urlParser ?? const ForumThreadUrlParser()),
+       _urlParser = urlParser ?? const ForumThreadUrlParser(),
        _config = config;
 
-  static final RegExp _threadPathPattern = RegExp(
-    r'thread-(\d+)-\d+-\d+\.html',
-    caseSensitive: false,
-  );
-  static final RegExp _viewThreadPattern = RegExp(
-    r'forum\.php\?[^#]*\bmod=viewthread\b[^#]*\btid=(\d+)',
-    caseSensitive: false,
-  );
-  static final RegExp _damagedTidPattern = RegExp(
-    r'(^|[?&;])tid=(\d+)(?:[&#]|$)',
-    caseSensitive: false,
-  );
   static final RegExp _subjectEpisodeNoPattern = RegExp(r'第\s*(\d+)\s*话', caseSensitive: false);
 
   final ThreadDetailFetcher _fetchThreadDetail;
   final ComicConsecutiveOpPostParser _opPostParser;
   final CatalogHtmlFetcher _catalogHtmlFetcher;
   final CatalogThreadHtmlParser _catalogThreadHtmlParser;
+  final ForumPostDomExtractor _domExtractor;
+  final ForumThreadUrlParser _urlParser;
   final EpisodeDiscoveryConfig _config;
 
   Future<EpisodeDiscoveryResult> discoverFromTid(String tid) async {
@@ -373,25 +369,12 @@ class ComicEpisodeDiscoveryService {
       }
     }
 
-    // Fallback: recursive posts often only contain previous-link text,
-    // which may not match strict episode semantic rules.
+    // Fallback: recursive posts often only contain previous-link anchors,
+    // which may not match strict episode semantic rules. Keep this DOM-based
+    // so plain text, scripts, and quoted raw URLs are not promoted accidentally.
     for (final post in posts) {
-      final html = post.message;
-      for (final match in _threadPathPattern.allMatches(html)) {
-        final candidateTid = match.group(1);
-        if (candidateTid != null && candidateTid != tid) {
-          candidates.add(candidateTid);
-        }
-      }
-      for (final match in _viewThreadPattern.allMatches(html)) {
-        final candidateTid = match.group(1);
-        if (candidateTid != null && candidateTid != tid) {
-          candidates.add(candidateTid);
-        }
-      }
-      for (final match in _damagedTidPattern.allMatches(html)) {
-        final candidateTid = match.group(2);
-        if (candidateTid != null && candidateTid != tid) {
+      for (final candidateTid in _domExtractor.extractThreadTids(post.message)) {
+        if (candidateTid != tid) {
           candidates.add(candidateTid);
         }
       }
@@ -400,16 +383,7 @@ class ComicEpisodeDiscoveryService {
   }
 
   String? _extractTidFromUrl(String url) {
-    final threadMatch = _threadPathPattern.firstMatch(url);
-    if (threadMatch != null) {
-      return threadMatch.group(1);
-    }
-    final viewThreadMatch = _viewThreadPattern.firstMatch(url);
-    if (viewThreadMatch != null) {
-      return viewThreadMatch.group(1);
-    }
-    final damagedMatch = _damagedTidPattern.firstMatch(url);
-    return damagedMatch?.group(2);
+    return _urlParser.extractTid(url);
   }
 }
 

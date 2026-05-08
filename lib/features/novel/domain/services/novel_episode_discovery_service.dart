@@ -1,15 +1,28 @@
-﻿import 'package:html/parser.dart' as html_parser;
+import 'package:y300/features/novel/domain/models/novel_parsing_models.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
+import 'package:y300/features/novel/domain/services/novel_parsing_rule.dart';
+import 'package:y300/features/novel/domain/services/novel_same_thread_catalog_extractor.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 
-/// Phase 1 章节发现：先做稳定最小实现。
+/// Builds a refresh plan from thread pages by applying small parsing rules.
 ///
-/// 规则：
-/// 1. 仅解析楼主楼层。
-/// 2. 每个楼主楼层作为一个章节。
-/// 3. 章节标题优先使用“第x章/话/节”匹配，否则回退“第N节（PID）”。
+/// The service is intentionally only an orchestrator: DOM normalization lives in
+/// [ForumPostDomExtractor], while title/cover/intro decisions live in
+/// [NovelParsingRule] implementations. New parser capabilities should normally
+/// be added as rules instead of expanding this loop.
 class NovelEpisodeDiscoveryService {
-  const NovelEpisodeDiscoveryService();
+  const NovelEpisodeDiscoveryService({
+    List<NovelParsingRule>? rules,
+    ForumPostDomExtractor? domExtractor,
+    NovelSameThreadCatalogExtractor? catalogExtractor,
+  }) : _rules = rules ?? NovelParsingRules.defaults,
+       _domExtractor = domExtractor ?? const ForumPostDomExtractor(),
+       _catalogExtractor = catalogExtractor ?? const NovelSameThreadCatalogExtractor();
+
+  final List<NovelParsingRule> _rules;
+  final ForumPostDomExtractor _domExtractor;
+  final NovelSameThreadCatalogExtractor _catalogExtractor;
 
   NovelRefreshPlan buildPlan({
     required String novelId,
@@ -21,84 +34,261 @@ class NovelEpisodeDiscoveryService {
 
     final firstPage = pages.first;
     final opAuthorId = firstPage.posts.isEmpty ? '' : firstPage.posts.first.authorId;
-    var order = 0;
-    final episodes = <NovelEpisodeDraft>[];
+    final builder = _NovelRefreshPlanBuilder(
+      firstPage: firstPage,
+      pageCount: pages.length,
+    );
+    final allPosts = _flattenPosts(pages);
+    final postsByPid = <String, _PostOnPage>{
+      for (final item in allPosts) item.post.pid: item,
+    };
+    final firstPagePosts = pages.first.posts;
+    final catalogEntries = _catalogExtractor.extract(
+      threadTid: firstPage.tid,
+      opAuthorId: opAuthorId,
+      posts: firstPagePosts,
+    );
+
+    if (catalogEntries.isNotEmpty) {
+      _collectCatalogMeta(
+        novelId: novelId,
+        opAuthorId: opAuthorId,
+        posts: allPosts,
+        builder: builder,
+      );
+      for (final entry in catalogEntries) {
+        final source = postsByPid[entry.pid];
+        final sourcePost = source?.post;
+        final sourcePage = source?.page;
+        final plainText = sourcePost == null ? '' : _domExtractor.extractPlainText(sourcePost.message);
+        final paragraphs = sourcePost == null
+            ? const <String>[]
+            : _domExtractor.extractParagraphTexts(sourcePost.message);
+        final imageUrls = sourcePost == null
+            ? const <String>[]
+            : _domExtractor.extractImageSources(sourcePost.message);
+        builder.addInlineImages(imageUrls);
+        builder.addEpisode(
+          NovelEpisodeDraft(
+            episodeId: '$novelId:${entry.pid}',
+            novelId: novelId,
+            sourceTid: firstPage.tid,
+            sourcePid: entry.pid,
+            sourcePage: sourcePage?.currentPage ?? 0,
+            episodeTitle: entry.title,
+            orderIndex: builder.episodeCount,
+            datelineText: sourcePost?.dateline ?? '',
+            rawHtml: sourcePost?.message ?? '',
+            plainText: plainText,
+            paragraphs: paragraphs,
+            imageUrls: imageUrls,
+          ),
+        );
+      }
+      builder.addSignal(
+        NovelParsingSignal(stage: 'catalog', message: 'same-thread pid catalog entries=${catalogEntries.length}'),
+      );
+      return builder.build();
+    }
 
     for (var pageIndex = 0; pageIndex < pages.length; pageIndex++) {
       final page = pages[pageIndex];
       for (final post in page.posts) {
-        if (opAuthorId.isNotEmpty && post.authorId != opAuthorId) {
+        final context = NovelParsingContext(
+          novelId: novelId,
+          page: page,
+          post: post,
+          opAuthorId: opAuthorId,
+          domExtractor: _domExtractor,
+          currentOrderIndex: builder.episodeCount,
+          plainText: _domExtractor.extractPlainText(post.message),
+          paragraphs: _domExtractor.extractParagraphTexts(post.message),
+          imageUrls: _domExtractor.extractImageSources(post.message),
+          headingTexts: _domExtractor.extractHeadingTexts(post.message),
+        );
+        builder.addPostStats(
+          totalAnchors: _domExtractor.extractAnchors(post.message).length,
+          isOpPost: opAuthorId.isEmpty || post.authorId == opAuthorId,
+        );
+
+        final result = _applyRules(context);
+        builder.acceptMeta(result);
+        if (result.rejectPost || !result.acceptAsEpisode) {
           continue;
         }
-        final plainText = _toPlainText(post.message);
-        if (plainText.isEmpty) {
-          continue;
-        }
-        final paragraphs = _splitParagraphs(plainText);
-        final title = _resolveEpisodeTitle(post: post, fallbackOrder: order + 1, plainText: plainText);
+
         final pageNumber = page.currentPage > 0 ? page.currentPage : (pageIndex + 1);
-        episodes.add(
+        builder.addEpisode(
           NovelEpisodeDraft(
             episodeId: '$novelId:${post.pid}',
             novelId: novelId,
             sourceTid: page.tid,
             sourcePid: post.pid,
             sourcePage: pageNumber,
-            episodeTitle: title,
-            orderIndex: order,
+            episodeTitle: result.titleCandidate ?? '第${builder.episodeCount + 1}节（PID:${post.pid}）',
+            orderIndex: builder.episodeCount,
             datelineText: post.dateline,
             rawHtml: post.message,
-            plainText: plainText,
-            paragraphs: paragraphs,
+            plainText: context.plainText,
+            paragraphs: result.paragraphs ?? context.paragraphs,
+            imageUrls: result.imageUrls,
           ),
         );
-        order++;
       }
     }
 
+    return builder.build();
+  }
+
+  List<_PostOnPage> _flattenPosts(List<ThreadDetailData> pages) {
+    return <_PostOnPage>[
+      for (final page in pages)
+        for (final post in page.posts) _PostOnPage(page: page, post: post),
+    ]..sort((a, b) {
+        final pageCompare = a.page.currentPage.compareTo(b.page.currentPage);
+        if (pageCompare != 0) {
+          return pageCompare;
+        }
+        return a.post.number.compareTo(b.post.number);
+      });
+  }
+
+  void _collectCatalogMeta({
+    required String novelId,
+    required String opAuthorId,
+    required List<_PostOnPage> posts,
+    required _NovelRefreshPlanBuilder builder,
+  }) {
+    for (final item in posts) {
+      final page = item.page;
+      final post = item.post;
+      final isOpPost = opAuthorId.isEmpty || post.authorId == opAuthorId;
+      builder.addPostStats(
+        totalAnchors: _domExtractor.extractAnchors(post.message).length,
+        isOpPost: isOpPost,
+      );
+      if (!isOpPost) {
+        continue;
+      }
+      final context = NovelParsingContext(
+        novelId: novelId,
+        page: page,
+        post: post,
+        opAuthorId: opAuthorId,
+        domExtractor: _domExtractor,
+        currentOrderIndex: builder.episodeCount,
+        plainText: _domExtractor.extractPlainText(post.message),
+        paragraphs: _domExtractor.extractParagraphTexts(post.message),
+        imageUrls: _domExtractor.extractImageSources(post.message),
+        headingTexts: _domExtractor.extractHeadingTexts(post.message),
+      );
+      final result = _applyRules(context);
+      builder.acceptMeta(result);
+    }
+  }
+
+  NovelRuleResult _applyRules(NovelParsingContext context) {
+    var merged = NovelRuleResult.empty;
+    for (final rule in _rules) {
+      merged = merged.merge(rule.apply(context));
+      if (merged.rejectPost) {
+        break;
+      }
+    }
+    return merged;
+  }
+}
+
+class _NovelRefreshPlanBuilder {
+  _NovelRefreshPlanBuilder({
+    required this.firstPage,
+    required this.pageCount,
+  });
+
+  final ThreadDetailData firstPage;
+  final int pageCount;
+  final List<NovelEpisodeDraft> _episodes = <NovelEpisodeDraft>[];
+  final List<NovelParsingSignal> _signals = <NovelParsingSignal>[];
+  final List<String> _inlineImageUrls = <String>[];
+  final Set<String> _seenInlineImageUrls = <String>{};
+  String? _intro;
+  String? _coverImageUrl;
+  int _totalAnchors = 0;
+  int _totalOpPosts = 0;
+  int _fallbackTitleCount = 0;
+
+  int get episodeCount => _episodes.length;
+
+  void addPostStats({
+    required int totalAnchors,
+    required bool isOpPost,
+  }) {
+    _totalAnchors += totalAnchors;
+    if (isOpPost) {
+      _totalOpPosts += 1;
+    }
+  }
+
+  void acceptMeta(NovelRuleResult result) {
+    _signals.addAll(result.signals);
+    _intro ??= _normalizeNullable(result.intro);
+    _coverImageUrl ??= _normalizeNullable(result.coverImageUrl);
+    if (result.usedFallbackTitle) {
+      _fallbackTitleCount += 1;
+    }
+    addInlineImages(result.imageUrls);
+  }
+
+  void addInlineImages(Iterable<String> imageUrls) {
+    for (final imageUrl in imageUrls) {
+      if (_seenInlineImageUrls.add(imageUrl)) {
+        _inlineImageUrls.add(imageUrl);
+      }
+    }
+  }
+
+  void addSignal(NovelParsingSignal signal) {
+    _signals.add(signal);
+  }
+
+  void addEpisode(NovelEpisodeDraft draft) {
+    _episodes.add(draft);
+  }
+
+  NovelRefreshPlan build() {
     return NovelRefreshPlan(
       tid: firstPage.tid,
       subject: firstPage.subject,
       author: firstPage.author,
-      episodes: episodes,
+      episodes: List<NovelEpisodeDraft>.unmodifiable(_episodes),
+      intro: _intro,
+      coverImageUrl: _coverImageUrl,
+      inlineImageUrls: List<String>.unmodifiable(_inlineImageUrls),
+      debugInfo: NovelParsingDebugInfo(
+        totalAnchors: _totalAnchors,
+        totalOpPosts: _totalOpPosts,
+        matchedChapterCandidates: _episodes.length,
+        fallbackPagesVisited: pageCount,
+        signals: <NovelParsingSignal>[
+          ..._signals,
+          NovelParsingSignal(stage: 'summary', message: 'fallbackTitles=$_fallbackTitleCount'),
+        ],
+      ),
     );
   }
 
-  String _toPlainText(String rawHtml) {
-    final fragment = html_parser.parseFragment(rawHtml);
-    final text = (fragment.text ?? '')
-        .replaceAll('\u00A0', ' ')
-        .replaceAll(RegExp(r'\r\n|\r'), '\n')
-        .replaceAll(RegExp(r'[ \t]+'), ' ')
-        .trim();
-    return text;
+  String? _normalizeNullable(String? value) {
+    final trimmed = value?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
+}
 
-  List<String> _splitParagraphs(String plainText) {
-    return plainText
-        .split(RegExp(r'\n{1,}'))
-        .map((line) => line.trim())
-        .where((line) => line.isNotEmpty)
-        .toList(growable: false);
-  }
+class _PostOnPage {
+  const _PostOnPage({
+    required this.page,
+    required this.post,
+  });
 
-  String _resolveEpisodeTitle({
-    required ThreadPost post,
-    required int fallbackOrder,
-    required String plainText,
-  }) {
-    final direct = RegExp(r'(第\s*[0-9一二三四五六七八九十百千零〇两\.]+\s*[章节话回卷])')
-        .firstMatch(plainText)
-        ?.group(1)
-        ?.replaceAll(RegExp(r'\s+'), '');
-    if (direct != null && direct.isNotEmpty) {
-      return direct;
-    }
-
-    if (post.number == 1) {
-      return '序章';
-    }
-
-    return '第$fallbackOrder节（PID:${post.pid}）';
-  }
+  final ThreadDetailData page;
+  final ThreadPost post;
 }
