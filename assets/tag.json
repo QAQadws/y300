@@ -1,0 +1,866 @@
+[
+  {
+    "fid": 30,
+    "name": "中文百合漫画区",
+    "tags": [
+      {
+        "typeid": 65,
+        "name": "公告"
+      },
+      {
+        "typeid": 398,
+        "name": "韩国漫画"
+      },
+      {
+        "typeid": 503,
+        "name": "泰国漫画"
+      },
+      {
+        "typeid": 504,
+        "name": "欧美其他"
+      },
+      {
+        "typeid": 69,
+        "name": "長篇連載"
+      },
+      {
+        "typeid": 68,
+        "name": "短篇漫畫"
+      },
+      {
+        "typeid": 66,
+        "name": "百合雜誌"
+      },
+      {
+        "typeid": 70,
+        "name": "奇字標記"
+      },
+      {
+        "typeid": 71,
+        "name": "單行本"
+      },
+      {
+        "typeid": 234,
+        "name": "東方"
+      },
+      {
+        "typeid": 225,
+        "name": "聖母在上"
+      },
+      {
+        "typeid": 335,
+        "name": "光之美少女"
+      },
+      {
+        "typeid": 224,
+        "name": "HIME"
+      },
+      {
+        "typeid": 227,
+        "name": "魔炮"
+      },
+      {
+        "typeid": 229,
+        "name": "SW"
+      },
+      {
+        "typeid": 236,
+        "name": "K-ON!"
+      },
+      {
+        "typeid": 228,
+        "name": "SAKI"
+      },
+      {
+        "typeid": 230,
+        "name": "魔法少女小圓"
+      },
+      {
+        "typeid": 343,
+        "name": "戦姫絶唱"
+      },
+      {
+        "typeid": 341,
+        "name": "少女与战车"
+      },
+      {
+        "typeid": 231,
+        "name": "LoveLive!"
+      },
+      {
+        "typeid": 338,
+        "name": "佐贺偶像是传奇"
+      },
+      {
+        "typeid": 226,
+        "name": "進擊的巨人"
+      },
+      {
+        "typeid": 340,
+        "name": "RWBY"
+      },
+      {
+        "typeid": 232,
+        "name": "艦これ"
+      },
+      {
+        "typeid": 342,
+        "name": "響け!"
+      },
+      {
+        "typeid": 329,
+        "name": "BanG Dream"
+      },
+      {
+        "typeid": 336,
+        "name": "赛马娘"
+      },
+      {
+        "typeid": 333,
+        "name": "少女☆歌剧"
+      },
+      {
+        "typeid": 330,
+        "name": "偶像大師"
+      },
+      {
+        "typeid": 337,
+        "name": "偶像活动"
+      },
+      {
+        "typeid": 339,
+        "name": "摇曳露营"
+      },
+      {
+        "typeid": 477,
+        "name": "孤独摇滚"
+      },
+      {
+        "typeid": 479,
+        "name": "Lycoris Recoil"
+      },
+      {
+        "typeid": 470,
+        "name": "水星的魔女"
+      },
+      {
+        "typeid": 478,
+        "name": "绯染天空"
+      },
+      {
+        "typeid": 480,
+        "name": "Assault Lily"
+      },
+      {
+        "typeid": 421,
+        "name": "Vtuber"
+      },
+      {
+        "typeid": 235,
+        "name": "其他"
+      }
+    ]
+  },
+  {
+    "fid": 49,
+    "name": "文学区",
+    "tags": [
+      {
+        "typeid": 121,
+        "name": "公告"
+      },
+      {
+        "typeid": 293,
+        "name": "原创"
+      },
+      {
+        "typeid": 291,
+        "name": "霹雳"
+      },
+      {
+        "typeid": 290,
+        "name": "美战"
+      },
+      {
+        "typeid": 248,
+        "name": "EVA"
+      },
+      {
+        "typeid": 127,
+        "name": "东方"
+      },
+      {
+        "typeid": 324,
+        "name": "柯南"
+      },
+      {
+        "typeid": 426,
+        "name": "少女革命"
+      },
+      {
+        "typeid": 253,
+        "name": "海贼王"
+      },
+      {
+        "typeid": 323,
+        "name": "NOIR"
+      },
+      {
+        "typeid": 431,
+        "name": "FATE"
+      },
+      {
+        "typeid": 122,
+        "name": "聖母在上"
+      },
+      {
+        "typeid": 289,
+        "name": "光美"
+      },
+      {
+        "typeid": 119,
+        "name": "HiME"
+      },
+      {
+        "typeid": 123,
+        "name": "神無月"
+      },
+      {
+        "typeid": 125,
+        "name": "魔炮"
+      },
+      {
+        "typeid": 292,
+        "name": "死神"
+      },
+      {
+        "typeid": 252,
+        "name": "ARIA"
+      },
+      {
+        "typeid": 288,
+        "name": "惊爆草莓"
+      },
+      {
+        "typeid": 124,
+        "name": "魔法老师NGM"
+      },
+      {
+        "typeid": 249,
+        "name": "大剑"
+      },
+      {
+        "typeid": 467,
+        "name": "魔女猎人"
+      },
+      {
+        "typeid": 250,
+        "name": "食灵零"
+      },
+      {
+        "typeid": 172,
+        "name": "STRIKE WITCHES"
+      },
+      {
+        "typeid": 171,
+        "name": "K-ON！"
+      },
+      {
+        "typeid": 128,
+        "name": "SAKI"
+      },
+      {
+        "typeid": 251,
+        "name": "CANAAN"
+      },
+      {
+        "typeid": 244,
+        "name": "电磁炮"
+      },
+      {
+        "typeid": 214,
+        "name": "魔法少女小圆"
+      },
+      {
+        "typeid": 173,
+        "name": "摇曳百合"
+      },
+      {
+        "typeid": 222,
+        "name": "戦姫絶唱"
+      },
+      {
+        "typeid": 246,
+        "name": "贫乏神"
+      },
+      {
+        "typeid": 245,
+        "name": "中二病"
+      },
+      {
+        "typeid": 322,
+        "name": "少女与战车"
+      },
+      {
+        "typeid": 242,
+        "name": "Psycho-Pass"
+      },
+      {
+        "typeid": 215,
+        "name": "LoveLive！"
+      },
+      {
+        "typeid": 243,
+        "name": "進擊的巨人"
+      },
+      {
+        "typeid": 218,
+        "name": "艦これ"
+      },
+      {
+        "typeid": 247,
+        "name": "RWBY"
+      },
+      {
+        "typeid": 217,
+        "name": "FROZEN"
+      },
+      {
+        "typeid": 221,
+        "name": "恶魔之谜"
+      },
+      {
+        "typeid": 427,
+        "name": "Flowers"
+      },
+      {
+        "typeid": 266,
+        "name": "響け！"
+      },
+      {
+        "typeid": 463,
+        "name": "结城友奈是勇者"
+      },
+      {
+        "typeid": 436,
+        "name": "少女前线"
+      },
+      {
+        "typeid": 345,
+        "name": "终末的伊泽塔"
+      },
+      {
+        "typeid": 331,
+        "name": "BanG Dream!"
+      },
+      {
+        "typeid": 462,
+        "name": "princess principal"
+      },
+      {
+        "typeid": 430,
+        "name": "citrus"
+      },
+      {
+        "typeid": 428,
+        "name": "赛马娘"
+      },
+      {
+        "typeid": 327,
+        "name": "少女歌剧"
+      },
+      {
+        "typeid": 344,
+        "name": "终将成为你"
+      },
+      {
+        "typeid": 332,
+        "name": "明日方舟"
+      },
+      {
+        "typeid": 321,
+        "name": "IM@S"
+      },
+      {
+        "typeid": 454,
+        "name": "PJSK"
+      },
+      {
+        "typeid": 461,
+        "name": "lycoris recoil"
+      },
+      {
+        "typeid": 466,
+        "name": "孤独摇滚"
+      },
+      {
+        "typeid": 469,
+        "name": "水星的魔女"
+      },
+      {
+        "typeid": 468,
+        "name": "转天革命"
+      },
+      {
+        "typeid": 481,
+        "name": "我推恶役"
+      },
+      {
+        "typeid": 502,
+        "name": "安达与岛村"
+      },
+      {
+        "typeid": 518,
+        "name": "超辉夜姬"
+      },
+      {
+        "typeid": 519,
+        "name": "恋人不行"
+      },
+      {
+        "typeid": 223,
+        "name": "Vocaloid"
+      },
+      {
+        "typeid": 429,
+        "name": "vtuber"
+      },
+      {
+        "typeid": 219,
+        "name": "游戏"
+      },
+      {
+        "typeid": 216,
+        "name": "影视"
+      },
+      {
+        "typeid": 320,
+        "name": "中之人"
+      },
+      {
+        "typeid": 287,
+        "name": "文评"
+      },
+      {
+        "typeid": 120,
+        "name": "其它"
+      }
+    ]
+  },
+  {
+    "fid": 55,
+    "name": "轻小说/译文区",
+    "tags": [
+      {
+        "typeid": 145,
+        "name": "外文原文"
+      },
+      {
+        "typeid": 146,
+        "name": "其他小说"
+      },
+      {
+        "typeid": 147,
+        "name": "公告"
+      },
+      {
+        "typeid": 149,
+        "name": "文学/文艺小说"
+      },
+      {
+        "typeid": 295,
+        "name": "轻小说"
+      }
+    ]
+  },
+  {
+    "fid": 5,
+    "name": "动漫区",
+    "tags": [
+      {
+        "typeid": 4,
+        "name": "公告"
+      },
+      {
+        "typeid": 399,
+        "name": "活动"
+      },
+      {
+        "typeid": 400,
+        "name": "动画讨论"
+      },
+      {
+        "typeid": 401,
+        "name": "漫画讨论"
+      },
+      {
+        "typeid": 515,
+        "name": "轻小说"
+      },
+      {
+        "typeid": 516,
+        "name": "音声"
+      },
+      {
+        "typeid": 405,
+        "name": "2.5 次元"
+      },
+      {
+        "typeid": 404,
+        "name": "情报"
+      },
+      {
+        "typeid": 303,
+        "name": "翻译资料"
+      },
+      {
+        "typeid": 402,
+        "name": "推荐"
+      },
+      {
+        "typeid": 403,
+        "name": "求推"
+      },
+      {
+        "typeid": 1,
+        "name": "杂谈"
+      },
+      {
+        "typeid": 256,
+        "name": "争议慎跳"
+      },
+      {
+        "typeid": 257,
+        "name": "别拦着我"
+      },
+      {
+        "typeid": 3,
+        "name": "其他"
+      }
+    ]
+  },
+  {
+    "fid": 33,
+    "name": "海域区",
+    "tags": [
+      {
+        "typeid": 408,
+        "name": "八卦杂谈"
+      },
+      {
+        "typeid": 409,
+        "name": "情感树洞"
+      },
+      {
+        "typeid": 406,
+        "name": "为什么呀"
+      },
+      {
+        "typeid": 410,
+        "name": "理性探讨"
+      },
+      {
+        "typeid": 407,
+        "name": "新闻资讯"
+      },
+      {
+        "typeid": 272,
+        "name": "电脑数码"
+      },
+      {
+        "typeid": 273,
+        "name": "宰客留情"
+      },
+      {
+        "typeid": 326,
+        "name": "互相安利"
+      },
+      {
+        "typeid": 412,
+        "name": "呼朋引伴"
+      },
+      {
+        "typeid": 276,
+        "name": "女王教室"
+      },
+      {
+        "typeid": 270,
+        "name": "影音殿堂"
+      },
+      {
+        "typeid": 271,
+        "name": "偶像团体"
+      },
+      {
+        "typeid": 328,
+        "name": "姬情安价"
+      },
+      {
+        "typeid": 411,
+        "name": "水库科研"
+      },
+      {
+        "typeid": 274,
+        "name": "Cosplay"
+      },
+      {
+        "typeid": 275,
+        "name": "百合wiki"
+      },
+      {
+        "typeid": 325,
+        "name": "活动"
+      },
+      {
+        "typeid": 268,
+        "name": "公告"
+      },
+      {
+        "typeid": 269,
+        "name": "其它"
+      }
+    ]
+  },
+  {
+    "fid": 13,
+    "name": "贴图区",
+    "tags": [
+      {
+        "typeid": 13,
+        "name": "公告"
+      },
+      {
+        "typeid": 12,
+        "name": "教程"
+      },
+      {
+        "typeid": 16,
+        "name": "雜圖转载"
+      },
+      {
+        "typeid": 500,
+        "name": "同人创作"
+      },
+      {
+        "typeid": 17,
+        "name": "同人转载"
+      }
+    ]
+  },
+  {
+    "fid": 46,
+    "name": "原创图作区",
+    "tags": [
+      {
+        "typeid": 44,
+        "name": "原创"
+      },
+      {
+        "typeid": 45,
+        "name": "其它"
+      },
+      {
+        "typeid": 46,
+        "name": "公告"
+      },
+      {
+        "typeid": 47,
+        "name": "技法"
+      },
+      {
+        "typeid": 48,
+        "name": "活动"
+      }
+    ]
+  },
+  {
+    "fid": 37,
+    "name": "百合漫画图源区",
+    "tags": [
+      {
+        "typeid": 79,
+        "name": "已翻译"
+      },
+      {
+        "typeid": 80,
+        "name": "公告"
+      },
+      {
+        "typeid": 81,
+        "name": "未翻译"
+      },
+      {
+        "typeid": 82,
+        "name": "單行本"
+      }
+    ]
+  },
+  {
+    "fid": 44,
+    "name": "游戏区",
+    "tags": [
+      {
+        "typeid": 259,
+        "name": "公告"
+      },
+      {
+        "typeid": 260,
+        "name": "新闻"
+      },
+      {
+        "typeid": 261,
+        "name": "心得"
+      },
+      {
+        "typeid": 262,
+        "name": "杂谈"
+      },
+      {
+        "typeid": 263,
+        "name": "安利"
+      },
+      {
+        "typeid": 264,
+        "name": "征友"
+      },
+      {
+        "typeid": 265,
+        "name": "其它"
+      }
+    ]
+  },
+  {
+    "fid": 379,
+    "name": "影视区",
+    "tags": [
+      {
+        "typeid": 505,
+        "name": "公告"
+      },
+      {
+        "typeid": 506,
+        "name": "剧集"
+      },
+      {
+        "typeid": 507,
+        "name": "电影"
+      },
+      {
+        "typeid": 508,
+        "name": "CP"
+      },
+      {
+        "typeid": 510,
+        "name": "资源"
+      },
+      {
+        "typeid": 511,
+        "name": "新闻"
+      },
+      {
+        "typeid": 512,
+        "name": "其他"
+      }
+    ]
+  },
+  {
+    "fid": 19,
+    "name": "资源交流区",
+    "tags": [
+      {
+        "typeid": 26,
+        "name": "公告"
+      },
+      {
+        "typeid": 28,
+        "name": "动画"
+      },
+      {
+        "typeid": 29,
+        "name": "漫画"
+      },
+      {
+        "typeid": 27,
+        "name": "音乐"
+      },
+      {
+        "typeid": 30,
+        "name": "游戏"
+      },
+      {
+        "typeid": 31,
+        "name": "Drama"
+      },
+      {
+        "typeid": 24,
+        "name": "其它"
+      },
+      {
+        "typeid": 32,
+        "name": "YA字幕组"
+      },
+      {
+        "typeid": 297,
+        "name": "求助補檔"
+      },
+      {
+        "typeid": 298,
+        "name": "在线视频"
+      },
+      {
+        "typeid": 25,
+        "name": "教程"
+      },
+      {
+        "typeid": 33,
+        "name": "不推荐"
+      }
+    ]
+  },
+  {
+    "fid": 27,
+    "name": "非百合资源区",
+    "tags": [
+      {
+        "typeid": 300,
+        "name": "在线视频"
+      },
+      {
+        "typeid": 302,
+        "name": "求助補檔"
+      },
+      {
+        "typeid": 54,
+        "name": "其它"
+      },
+      {
+        "typeid": 55,
+        "name": "公告"
+      },
+      {
+        "typeid": 56,
+        "name": "音乐"
+      },
+      {
+        "typeid": 57,
+        "name": "动画"
+      },
+      {
+        "typeid": 58,
+        "name": "漫画"
+      },
+      {
+        "typeid": 59,
+        "name": "游戏"
+      },
+      {
+        "typeid": 60,
+        "name": "Drama"
+      },
+      {
+        "typeid": 61,
+        "name": "不推荐"
+      }
+    ]
+  }
+]
