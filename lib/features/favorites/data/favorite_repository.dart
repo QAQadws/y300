@@ -5,11 +5,20 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/utils/parse_utils.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 
-class FavoriteRepository {
-  FavoriteRepository(this._apiClient);
+abstract class FavoriteRepository {
+  Future<ApiResult<List<FavoriteForum>>> getFavoriteForums();
+
+  Future<ApiResult<FavoriteThreadsPage>> getFavoriteThreads({
+    required int page,
+  });
+}
+
+class ApiFavoriteRepository implements FavoriteRepository {
+  ApiFavoriteRepository(this._apiClient);
 
   final ApiClient _apiClient;
 
+  @override
   Future<ApiResult<List<FavoriteForum>>> getFavoriteForums() {
     return _apiClient.getParsed<List<FavoriteForum>>(
       module: 'myfavforum',
@@ -19,12 +28,15 @@ class FavoriteRepository {
     );
   }
 
+  @override
   Future<ApiResult<FavoriteThreadsPage>> getFavoriteThreads({
     required int page,
   }) {
     return _apiClient.getParsed<FavoriteThreadsPage>(
       module: 'myfavthread',
-      queryParameters: {'page': page},
+      // 收藏接口文档固定使用 version=4。这里显式声明，避免后续全局默认版本
+      // 调整时影响收藏同步解析。
+      queryParameters: {'version': '4', 'page': page},
       parser: (response) =>
           FavoriteThreadsPage.fromVariables(response.variables, page: page),
     );
@@ -32,5 +44,5 @@ class FavoriteRepository {
 }
 
 final favoriteRepositoryProvider = Provider<FavoriteRepository>((ref) {
-  return FavoriteRepository(ref.watch(apiClientProvider));
+  return ApiFavoriteRepository(ref.watch(apiClientProvider));
 });

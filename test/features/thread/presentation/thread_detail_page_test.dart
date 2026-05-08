@@ -393,6 +393,11 @@ class _FakeComicRepository implements ComicRepository {
   }
 
   @override
+  Future<void> removeFromShelf({required String comicId}) async {
+    _ids.remove(comicId);
+  }
+
+  @override
   Future<String> createCategory({required String name}) async => 'mock-category';
 
   @override
@@ -556,6 +561,11 @@ class _FakeNovelRepository implements NovelRepository {
   Future<NovelEpisodeRefreshResult> refreshEpisodes({required String novelId}) async {
     refreshCalled = true;
     return const NovelEpisodeRefreshResult(insertedCount: 1, updatedCount: 0, totalCount: 1);
+  }
+
+  @override
+  Future<void> removeFromShelf({required String novelId}) async {
+    _ids.remove(novelId);
   }
 
   @override

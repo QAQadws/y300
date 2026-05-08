@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
@@ -35,19 +34,7 @@ class ForumHomeController extends AsyncNotifier<ForumHomeViewData> {
   }
 
   List<ForumSection> _mapSections(ForumHomePayload payload) {
-    final regularSections = _mapRegularSections(payload.forumIndex);
-    if (!payload.isLoggedIn) {
-      return regularSections;
-    }
-
-    return [
-      ForumSection(
-        title: '我收藏的版块',
-        items: _mapFavoriteForums(payload.favoriteForums),
-        type: ForumSectionType.favorite,
-      ),
-      ...regularSections,
-    ];
+    return _mapRegularSections(payload.forumIndex);
   }
 
   List<ForumSection> _mapRegularSections(ForumIndexData data) {
@@ -101,22 +88,6 @@ class ForumHomeController extends AsyncNotifier<ForumHomeViewData> {
     return sections;
   }
 
-  List<ForumItem> _mapFavoriteForums(List<FavoriteForum> favoriteForums) {
-    return favoriteForums
-        .map(
-          (item) => ForumItem(
-            fid: item.fid,
-            name: item.title,
-            threads: item.threads,
-            posts: item.posts,
-            todayPosts: item.todayPosts,
-            description: item.description,
-            icon: '',
-            subForums: const [],
-          ),
-        )
-        .toList();
-  }
 }
 
 class ForumHomeException implements Exception {

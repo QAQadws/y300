@@ -6,14 +6,22 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/favorites/data/favorite_providers.dart';
+import 'package:y300/features/favorites/data/favorite_sync_service.dart';
+import 'package:y300/features/favorites/data/local_favorite_repository.dart';
+import 'package:y300/features/favorites/data/models/favorite_models.dart';
+import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/startup/presentation/main_shell_page.dart';
+import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
   testWidgets('MainShellPage can switch between forum/comic/novel/more tabs', (tester) async {
@@ -23,12 +31,19 @@ void main() {
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
           libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+          localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository()),
+          favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
     );
 
     expect(find.text('论坛首页'), findsOneWidget);
+
+    await tester.tap(find.text('收藏').last);
+    await tester.pumpAndSettle();
+    expect(find.text('收藏'), findsWidgets);
+    expect(find.byKey(const Key('unified-shelf-list-view')), findsOneWidget);
 
     await tester.tap(find.text('漫画').last);
     await tester.pumpAndSettle();
@@ -53,6 +68,8 @@ void main() {
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
           libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+          localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository()),
+          favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
@@ -80,6 +97,9 @@ class _FakeComicRepository implements ComicRepository {
     required String title,
     required ParsedComicPost parsedPost,
   }) async {}
+
+  @override
+  Future<void> removeFromShelf({required String comicId}) async {}
 
   @override
   Future<String> createCategory({required String name}) async => 'mock-category';
@@ -231,6 +251,9 @@ class _FakeNovelRepository implements NovelRepository {
   }
 
   @override
+  Future<void> removeFromShelf({required String novelId}) async {}
+
+  @override
   Future<void> renameCategory({required String categoryId, required String newName}) async {}
 
   @override
@@ -245,6 +268,147 @@ class _FakeNovelRepository implements NovelRepository {
 
   @override
   Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {}
+}
+
+class _FakeFavoriteSyncService implements FavoriteSyncService {
+  @override
+  Future<FavoriteSyncResult> sync() async {
+    return const FavoriteSyncResult(
+      mode: FavoriteSyncMode.incremental,
+      remoteCount: 1,
+      fetchedPages: 1,
+      upsertedCount: 0,
+      removedRecords: <FavoriteThreadCacheRecord>[],
+      detailLoadedCount: 0,
+      failedDetailTids: <String>[],
+    );
+  }
+}
+
+class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
+  final _category = LibraryCategory(
+    categoryId: favoriteDefaultCategoryId,
+    name: '默认',
+    sortOrder: 0,
+    createdAt: DateTime(2026, 1, 1),
+  );
+
+  final _item = LibraryWorkItem(
+    workId: FavoriteShelfWorkId.fromTid('100'),
+    categoryId: favoriteDefaultCategoryId,
+    title: '收藏帖',
+    secondaryName: '作者A',
+    unreadCount: 0,
+    totalChapterCount: 1,
+    readChapterCount: 0,
+    addedAt: DateTime(2026, 1, 1),
+  );
+
+  @override
+  Future<int> countActiveThreads() async => 1;
+
+  @override
+  Future<String> createCategory({required String name}) async => 'fav-custom';
+
+  @override
+  Future<void> deleteCategory({required String categoryId}) async {}
+
+  @override
+  Future<void> finishSync({
+    required FavoriteSyncMode mode,
+    required int remoteCount,
+    String? status,
+    String? message,
+  }) async {}
+
+  @override
+  Future<Set<String>> getActiveTids() async => const <String>{'100'};
+
+  @override
+  Future<FavoriteThreadCacheRecord?> getActiveThreadByTid(String tid) async => null;
+
+  @override
+  Future<List<FavoriteThreadCacheRecord>> getMissingDetailRecords({
+    int limit = 20,
+    Set<String> excludedTids = const <String>{},
+  }) async {
+    return const <FavoriteThreadCacheRecord>[];
+  }
+
+  @override
+  Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(String workId) async {
+    return const FavoriteRouteTarget(
+      tid: '100',
+      title: '收藏帖',
+      contentKind: ThreadContentKind.forum,
+      workId: 'thread:100',
+    );
+  }
+
+  @override
+  Future<FavoriteSyncSnapshot?> getSyncSnapshot() async {
+    return FavoriteSyncSnapshot(
+      syncKey: favoriteSyncKey,
+      remoteCount: 1,
+      localActiveCount: 1,
+      lastSyncedAt: DateTime(2026, 1, 1),
+    );
+  }
+
+  @override
+  Future<List<LibraryWorkItem>> loadCategoryItems(String categoryId) async {
+    return <LibraryWorkItem>[_item];
+  }
+
+  @override
+  Future<List<LibraryCategory>> loadVisibleCategories() async {
+    return <LibraryCategory>[_category];
+  }
+
+  @override
+  Future<void> markSyncFailure(String message) async {}
+
+  @override
+  Future<List<FavoriteThreadCacheRecord>> markRemovedTids(Set<String> activeRemoteTids) async {
+    return const <FavoriteThreadCacheRecord>[];
+  }
+
+  @override
+  Future<void> moveThreadToCategory({required String tid, required String toCategoryId}) async {}
+
+  @override
+  Future<String?> pickRandomWorkId({required String categoryId}) async => _item.workId;
+
+  @override
+  Future<Map<String, List<LibraryWorkItem>>> queryItems({
+    required List<LibraryCategory> categories,
+    required LibraryFilterSet filters,
+    required LibraryShelfSortOption sortOption,
+    required String keyword,
+  }) async {
+    return <String, List<LibraryWorkItem>>{
+      for (final category in categories) category.categoryId: <LibraryWorkItem>[_item],
+    };
+  }
+
+  @override
+  Future<void> renameCategory({required String categoryId, required String newName}) async {}
+
+  @override
+  Future<void> updateThreadDetailMeta({
+    required String tid,
+    required String fid,
+    required String typeid,
+    required String? tagName,
+    required ThreadContentKind contentKind,
+    required String? workId,
+  }) async {}
+
+  @override
+  Future<int> upsertRemotePage({
+    required FavoriteThreadsPage page,
+    required int pageStartOrder,
+  }) async => 0;
 }
 
 class _FakeLibraryStateRepository implements LibraryStateRepository {

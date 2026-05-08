@@ -69,29 +69,21 @@ class _ForumHomeContent extends ConsumerWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
-            if (section.items.isEmpty && section.isFavorite) ...[
-              Text(
-                '暂无收藏版块',
-                key: const Key('forum-favorite-empty-text'),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ] else ...[
-              for (final forum in section.items) ...[
-                _ForumCard(
-                  item: forum,
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => ForumDisplayPage(
-                          fid: forum.fid,
-                          title: forum.name,
-                        ),
+            for (final forum in section.items) ...[
+              _ForumCard(
+                item: forum,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ForumDisplayPage(
+                        fid: forum.fid,
+                        title: forum.name,
                       ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 10),
-              ],
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 10),
             ],
             const SizedBox(height: 8),
           ],

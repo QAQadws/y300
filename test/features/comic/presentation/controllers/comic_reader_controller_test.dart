@@ -164,6 +164,9 @@ class _ReaderRepoForControllerTest implements ComicRepository {
   }) async {}
 
   @override
+  Future<void> removeFromShelf({required String comicId}) async {}
+
+  @override
   Future<String> createCategory({required String name}) async => 'mock';
 
   @override

@@ -179,6 +179,7 @@ lib/features/thread/domain/thread_content_classifier.dart
 
 ```dart
 enum ThreadContentKind {
+  unknown,
   comic,
   novel,
   forum,

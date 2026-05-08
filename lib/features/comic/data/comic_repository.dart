@@ -42,6 +42,12 @@ abstract class ComicRepository {
     required ParsedComicPost parsedPost,
   });
 
+  /// 从漫画书架移除作品，但保留作品、章节和阅读缓存。
+  ///
+  /// 收藏同步取消收藏时只改变“是否在书架”，不应静默删除用户已产生的
+  /// 阅读进度、图片缓存或后续下载存储。
+  Future<void> removeFromShelf({required String comicId});
+
   Future<List<ComicShelfItem>> getShelfItems({
     String categoryId = 'default',
   });

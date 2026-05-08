@@ -2,6 +2,7 @@
 enum LibraryModuleKey {
   comic,
   novel,
+  favorite,
 }
 
 /// 作品展示方式：网格或列表。

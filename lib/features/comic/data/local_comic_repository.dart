@@ -370,6 +370,16 @@ class LocalComicRepository implements ComicRepository {
   }
 
   @override
+  Future<void> removeFromShelf({required String comicId}) async {
+    final db = await _dbFuture;
+    await db.delete(
+      ComicLocalDb.shelfItemsTable,
+      where: 'comic_id = ?',
+      whereArgs: <Object>[comicId],
+    );
+  }
+
+  @override
   Future<List<ComicShelfItem>> getShelfItems({String categoryId = _defaultCategoryId}) async {
     final db = await _dbFuture;
     final rows = await db.rawQuery('''

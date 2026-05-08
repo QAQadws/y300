@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_page.dart';
@@ -40,19 +39,16 @@ void main() {
       expect(find.byKey(const Key('forum-card-2')), findsOneWidget);
     });
 
-    testWidgets('shows favorite section first when logged in', (tester) async {
+    testWidgets('does not render legacy favorite forum section when logged in', (tester) async {
       final repository = _FakeForumHomeRepository(() async => ApiSuccess(_loggedInPayloadWithFavorites()));
 
       await tester.pumpWidget(_buildTestApp(repository));
       await tester.pumpAndSettle();
 
-      expect(find.text('我收藏的版块'), findsOneWidget);
-      expect(find.byKey(const Key('forum-card-30')), findsOneWidget);
-      expect(find.byKey(const Key('forum-card-55')), findsOneWidget);
-
-      final favoriteTop = tester.getTopLeft(find.text('我收藏的版块')).dy;
-      final regularTop = tester.getTopLeft(find.text('综合区')).dy;
-      expect(favoriteTop, lessThan(regularTop));
+      expect(find.text('我收藏的版块'), findsNothing);
+      expect(find.byKey(const Key('forum-card-30')), findsNothing);
+      expect(find.byKey(const Key('forum-card-55')), findsNothing);
+      expect(find.text('综合区'), findsOneWidget);
     });
   });
 }
@@ -96,26 +92,7 @@ ForumHomePayload _loggedInPayloadWithFavorites() {
   return ForumHomePayload(
     forumIndex: _sampleForumIndexData(),
     isLoggedIn: true,
-    favoriteForums: [
-      FavoriteForum(
-        favid: '1863090',
-        fid: '30',
-        title: '中文百合漫画区',
-        description: '',
-        threads: 51916,
-        posts: 1737117,
-        todayPosts: 193,
-      ),
-      FavoriteForum(
-        favid: '1792542',
-        fid: '55',
-        title: '轻小说译文区',
-        description: '',
-        threads: 1279,
-        posts: 145828,
-        todayPosts: 68,
-      ),
-    ],
+    favoriteForums: const [],
   );
 }
 

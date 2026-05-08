@@ -1,6 +1,6 @@
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
 
-enum ForumSectionType { favorite, regular }
+enum ForumSectionType { regular }
 
 /// 论坛首页中一个可展示分组，通常对应一个分类
 class ForumSection {
@@ -13,8 +13,6 @@ class ForumSection {
   final String title;
   final List<ForumItem> items;
   final ForumSectionType type;
-
-  bool get isFavorite => type == ForumSectionType.favorite;
 }
 
 /// 首页渲染模型，避免页面直接依赖后端原始结构

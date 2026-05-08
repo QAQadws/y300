@@ -29,5 +29,9 @@ void main() {
       classifier.classify(fid: '55', typeid: '295'),
       ThreadContentKind.novel,
     );
+    expect(
+      classifier.classify(fid: '', typeid: ''),
+      ThreadContentKind.unknown,
+    );
   });
 }

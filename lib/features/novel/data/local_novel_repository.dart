@@ -508,6 +508,16 @@ class LocalNovelRepository implements NovelRepository {
   }
 
   @override
+  Future<void> removeFromShelf({required String novelId}) async {
+    final db = await _dbFuture;
+    await db.delete(
+      ComicLocalDb.novelShelfItemsTable,
+      where: 'novel_id = ?',
+      whereArgs: <Object>[novelId],
+    );
+  }
+
+  @override
   Future<void> saveReadingProgress({
     required String novelId,
     required String episodeId,

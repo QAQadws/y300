@@ -1,0 +1,354 @@
+import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/comic/data/comic_favorite_ingest_service.dart';
+import 'package:y300/features/favorites/data/favorite_repository.dart';
+import 'package:y300/features/favorites/data/local_favorite_repository.dart';
+import 'package:y300/features/favorites/data/models/favorite_models.dart';
+import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
+import 'package:y300/features/novel/data/novel_favorite_ingest_service.dart';
+import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
+import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/thread_content_classifier.dart';
+
+typedef FavoriteThreadDetailLoader = Future<ApiResult<ThreadDetailData>> Function(String tid);
+typedef FavoriteTagLookupLoader = Future<ForumTagLookup> Function();
+
+abstract class FavoriteSyncService {
+  Future<FavoriteSyncResult> sync();
+}
+
+class NetworkFavoriteSyncService implements FavoriteSyncService {
+  NetworkFavoriteSyncService({
+    required FavoriteRepository remoteRepository,
+    required LocalFavoriteRepository localRepository,
+    required FavoriteThreadDetailLoader loadThreadDetail,
+    required FavoriteTagLookupLoader loadTagLookup,
+    required ThreadContentClassifier classifier,
+    required ComicFavoriteIngestService comicIngestService,
+    required NovelFavoriteIngestService novelIngestService,
+    int detailBatchLimit = 20,
+  })  : _remoteRepository = remoteRepository,
+        _localRepository = localRepository,
+        _loadThreadDetail = loadThreadDetail,
+        _loadTagLookup = loadTagLookup,
+        _classifier = classifier,
+        _comicIngestService = comicIngestService,
+        _novelIngestService = novelIngestService,
+        _detailBatchLimit = detailBatchLimit;
+
+  final FavoriteRepository _remoteRepository;
+  final LocalFavoriteRepository _localRepository;
+  final FavoriteThreadDetailLoader _loadThreadDetail;
+  final FavoriteTagLookupLoader _loadTagLookup;
+  final ThreadContentClassifier _classifier;
+  final ComicFavoriteIngestService _comicIngestService;
+  final NovelFavoriteIngestService _novelIngestService;
+  final int _detailBatchLimit;
+
+  @override
+  Future<FavoriteSyncResult> sync() async {
+    try {
+      return await _syncInternal();
+    } on _FavoriteSyncFailure catch (error) {
+      await _localRepository.markSyncFailure(error.message);
+      throw StateError(error.message);
+    } catch (error) {
+      await _localRepository.markSyncFailure('$error');
+      rethrow;
+    }
+  }
+
+  Future<FavoriteSyncResult> _syncInternal() async {
+    final firstPageResult = await _remoteRepository.getFavoriteThreads(page: 1);
+    if (firstPageResult is ApiFailure<FavoriteThreadsPage>) {
+      throw _FavoriteSyncFailure(firstPageResult.error.message);
+    }
+
+    final firstPage = firstPageResult.dataOrNull!;
+    final activeBefore = await _localRepository.getActiveTids();
+    final snapshot = await _localRepository.getSyncSnapshot();
+    final mode = _resolveSyncMode(
+      firstPage: firstPage,
+      activeBefore: activeBefore,
+      snapshot: snapshot,
+    );
+
+    final pages = <FavoriteThreadsPage>[firstPage];
+    if (mode == FavoriteSyncMode.fullDiff) {
+      pages.addAll(await _fetchRemainingPages(firstPage));
+    } else {
+      pages.addAll(
+        await _fetchIncrementalPages(
+          firstPage: firstPage,
+          activeBefore: activeBefore,
+        ),
+      );
+    }
+
+    var upsertedCount = 0;
+    final remoteTids = <String>{};
+    for (final page in pages) {
+      remoteTids.addAll(page.items.map((item) => item.tid.trim()).where((tid) => tid.isNotEmpty));
+      final pageStartOrder = (page.page - 1) * page.perPage;
+      upsertedCount += await _localRepository.upsertRemotePage(
+        page: page,
+        pageStartOrder: pageStartOrder,
+      );
+    }
+
+    final removedRecords = mode == FavoriteSyncMode.fullDiff
+        ? await _localRepository.markRemovedTids(remoteTids)
+        : const <FavoriteThreadCacheRecord>[];
+    await _removeModuleShelfItems(removedRecords);
+
+    final detailResult = await _fillMissingDetails();
+    await _localRepository.finishSync(
+      mode: mode,
+      remoteCount: firstPage.totalCount,
+      status: detailResult.failedTids.isEmpty ? 'ok' : 'partial',
+      message: detailResult.failedTids.isEmpty
+          ? null
+          : _buildPartialFailureMessage(detailResult.errors),
+    );
+
+    return FavoriteSyncResult(
+      mode: mode,
+      remoteCount: firstPage.totalCount,
+      fetchedPages: pages.length,
+      upsertedCount: upsertedCount,
+      removedRecords: removedRecords,
+      detailLoadedCount: detailResult.loadedCount,
+      failedDetailTids: detailResult.failedTids,
+    );
+  }
+
+  FavoriteSyncMode _resolveSyncMode({
+    required FavoriteThreadsPage firstPage,
+    required Set<String> activeBefore,
+    required FavoriteSyncSnapshot? snapshot,
+  }) {
+    if (snapshot == null) {
+      return FavoriteSyncMode.fullDiff;
+    }
+
+    if (firstPage.totalCount < snapshot.localActiveCount) {
+      return FavoriteSyncMode.fullDiff;
+    }
+
+    final pageOneTids = firstPage.items.map((item) => item.tid.trim()).where((tid) => tid.isNotEmpty);
+    final pageOneAllKnown = pageOneTids.every(activeBefore.contains);
+    if (firstPage.totalCount == snapshot.localActiveCount && !pageOneAllKnown) {
+      return FavoriteSyncMode.fullDiff;
+    }
+
+    return FavoriteSyncMode.incremental;
+  }
+
+  Future<List<FavoriteThreadsPage>> _fetchRemainingPages(
+    FavoriteThreadsPage firstPage,
+  ) async {
+    final pages = <FavoriteThreadsPage>[];
+    var current = firstPage;
+    while (current.hasMore) {
+      final nextPageNumber = current.page + 1;
+      final result = await _remoteRepository.getFavoriteThreads(page: nextPageNumber);
+      if (result is ApiFailure<FavoriteThreadsPage>) {
+        throw _FavoriteSyncFailure(result.error.message);
+      }
+      current = result.dataOrNull!;
+      pages.add(current);
+    }
+    return pages;
+  }
+
+  Future<List<FavoriteThreadsPage>> _fetchIncrementalPages({
+    required FavoriteThreadsPage firstPage,
+    required Set<String> activeBefore,
+  }) async {
+    final pages = <FavoriteThreadsPage>[];
+    var current = firstPage;
+    while (current.hasMore && !_pageAllKnown(current, activeBefore)) {
+      final nextPageNumber = current.page + 1;
+      final result = await _remoteRepository.getFavoriteThreads(page: nextPageNumber);
+      if (result is ApiFailure<FavoriteThreadsPage>) {
+        throw _FavoriteSyncFailure(result.error.message);
+      }
+      current = result.dataOrNull!;
+      pages.add(current);
+    }
+    return pages;
+  }
+
+  bool _pageAllKnown(FavoriteThreadsPage page, Set<String> activeBefore) {
+    if (page.items.isEmpty) {
+      return true;
+    }
+    return page.items
+        .map((item) => item.tid.trim())
+        .where((tid) => tid.isNotEmpty)
+        .every(activeBefore.contains);
+  }
+
+  Future<_DetailFillResult> _fillMissingDetails() async {
+    final failedTids = <String>[];
+    final failedTidSet = <String>{};
+    final errors = <String, String>{};
+    var loadedCount = 0;
+
+    while (true) {
+      final records = await _localRepository.getMissingDetailRecords(
+        limit: _detailBatchLimit,
+        excludedTids: failedTidSet,
+      );
+      if (records.isEmpty) {
+        break;
+      }
+
+      var madeProgress = false;
+      final failedCountBefore = failedTidSet.length;
+      for (final record in records) {
+        try {
+          final loaded = await _fillOneDetail(record);
+          if (loaded) {
+            loadedCount++;
+            madeProgress = true;
+          } else {
+            failedTidSet.add(record.tid);
+            failedTids.add(record.tid);
+            errors[record.tid] = '加载帖子详情失败';
+          }
+        } catch (error) {
+          failedTidSet.add(record.tid);
+          failedTids.add(record.tid);
+          errors[record.tid] = '$error';
+        }
+      }
+
+      // 如果一批全部失败，失败 tid 会被本轮同步临时排除，继续处理后续收藏；
+      // 只有既没有成功也没有新增失败时才退出，避免仓储实现异常导致死循环。
+      if (!madeProgress && failedTidSet.length == failedCountBefore) {
+        break;
+      }
+    }
+
+    return _DetailFillResult(
+      loadedCount: loadedCount,
+      failedTids: failedTids,
+      errors: errors,
+    );
+  }
+
+  Future<bool> _fillOneDetail(FavoriteThreadCacheRecord record) async {
+    final result = await _loadThreadDetail(record.tid);
+    if (result is ApiFailure<ThreadDetailData>) {
+      return false;
+    }
+
+    final detail = result.dataOrNull;
+    if (detail == null) {
+      return false;
+    }
+
+    final tagName = await _findTagName(
+      fid: detail.fid,
+      typeid: detail.typeid,
+    );
+    final kind = _classifier.classify(
+      fid: detail.fid,
+      typeid: detail.typeid,
+      tagName: tagName,
+    );
+    final workId = await _syncModule(detail: detail, kind: kind, tagName: tagName);
+
+    await _localRepository.updateThreadDetailMeta(
+      tid: record.tid,
+      fid: detail.fid,
+      typeid: detail.typeid,
+      tagName: tagName,
+      contentKind: kind,
+      workId: workId,
+    );
+    return true;
+  }
+
+  Future<String?> _findTagName({
+    required String fid,
+    required String typeid,
+  }) async {
+    if (fid.trim().isEmpty || typeid.trim().isEmpty) {
+      return null;
+    }
+    try {
+      final lookup = await _loadTagLookup();
+      return lookup.findName(fid: fid, typeid: typeid);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> _syncModule({
+    required ThreadDetailData detail,
+    required ThreadContentKind kind,
+    required String? tagName,
+  }) async {
+    switch (kind) {
+      case ThreadContentKind.comic:
+        return _comicIngestService.upsertFromThreadDetail(
+          detail: detail,
+          sourceTagName: tagName,
+        );
+      case ThreadContentKind.novel:
+        return _novelIngestService.upsertFromThreadDetail(
+          detail: detail,
+          sourceTagName: tagName,
+        );
+      case ThreadContentKind.unknown:
+      case ThreadContentKind.forum:
+        return 'thread:${detail.tid}';
+    }
+  }
+
+  Future<void> _removeModuleShelfItems(
+    List<FavoriteThreadCacheRecord> records,
+  ) async {
+    for (final record in records) {
+      final workId = record.workId?.trim();
+      if (workId == null || workId.isEmpty) {
+        continue;
+      }
+      switch (record.contentKind) {
+        case ThreadContentKind.comic:
+          await _comicIngestService.removeFromShelf(workId: workId);
+          break;
+        case ThreadContentKind.novel:
+          await _novelIngestService.removeFromShelf(workId: workId);
+          break;
+        case ThreadContentKind.unknown:
+        case ThreadContentKind.forum:
+          break;
+      }
+    }
+  }
+
+  String _buildPartialFailureMessage(Map<String, String> errors) {
+    final details = errors.entries.map((entry) => '${entry.key}:${entry.value}').join(',');
+    return '部分收藏详情补全失败：$details';
+  }
+}
+
+class _FavoriteSyncFailure implements Exception {
+  const _FavoriteSyncFailure(this.message);
+
+  final String message;
+}
+
+class _DetailFillResult {
+  const _DetailFillResult({
+    required this.loadedCount,
+    required this.failedTids,
+    required this.errors,
+  });
+
+  final int loadedCount;
+  final List<String> failedTids;
+  final Map<String, String> errors;
+}

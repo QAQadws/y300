@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 10;
+  static const int dbVersion = 11;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -26,6 +26,10 @@ class ComicLocalDb {
   static const String libraryTagsTable = 'library_tags';
   static const String libraryWorkTagsTable = 'library_work_tags';
   static const String libraryDisplaySettingsTable = 'library_display_settings';
+  static const String favoriteSyncStateTable = 'favorite_sync_state';
+  static const String favoriteThreadsTable = 'favorite_threads';
+  static const String favoriteCategoriesTable = 'favorite_categories';
+  static const String favoriteThreadCategoryTable = 'favorite_thread_category';
 
   static Future<Database> open({String? databaseName}) {
     final targetDbName = databaseName ?? dbName;
@@ -63,6 +67,9 @@ class ComicLocalDb {
         }
         if (oldVersion < 10) {
           await _migrateSourceTagColumns(db);
+        }
+        if (oldVersion < 11) {
+          await _createFavoriteTables(db);
         }
       },
     );
@@ -159,6 +166,7 @@ class ComicLocalDb {
     await _createNovelShelfTables(db);
     await _createLibraryStateTables(db);
     await _createPhase7PerformanceIndexes(db);
+    await _createFavoriteTables(db);
   }
 
   static Future<void> _createSettingsTable(Database db) async {
@@ -430,6 +438,79 @@ class ComicLocalDb {
       tableName: worksTable,
       columnName: 'source_tag_name',
       definition: 'TEXT',
+    );
+  }
+
+  /// Phase 03：收藏线程缓存与收藏页自定义分类。
+  ///
+  /// 收藏是漫画/小说同步入口，但数据表保持独立，避免收藏页状态和
+  /// 漫画/小说书架分类互相污染。
+  static Future<void> _createFavoriteTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $favoriteSyncStateTable (
+        sync_key TEXT PRIMARY KEY,
+        remote_count INTEGER NOT NULL DEFAULT 0,
+        local_active_count INTEGER NOT NULL DEFAULT 0,
+        last_synced_at INTEGER,
+        last_full_synced_at INTEGER,
+        status TEXT,
+        message TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $favoriteThreadsTable (
+        tid TEXT PRIMARY KEY,
+        favid TEXT,
+        title TEXT NOT NULL,
+        description TEXT,
+        author TEXT,
+        replies INTEGER NOT NULL DEFAULT 0,
+        url TEXT,
+        dateline INTEGER,
+        remote_order INTEGER,
+        source_fid TEXT,
+        source_typeid TEXT,
+        source_tag_name TEXT,
+        content_kind TEXT NOT NULL DEFAULT 'unknown',
+        work_id TEXT,
+        detail_loaded_at INTEGER,
+        first_seen_at INTEGER NOT NULL,
+        last_seen_at INTEGER NOT NULL,
+        removed_at INTEGER
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $favoriteCategoriesTable (
+        category_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $favoriteThreadCategoryTable (
+        tid TEXT PRIMARY KEY,
+        category_id TEXT NOT NULL,
+        assigned_at INTEGER NOT NULL,
+        FOREIGN KEY (tid) REFERENCES $favoriteThreadsTable(tid) ON DELETE CASCADE,
+        FOREIGN KEY (category_id) REFERENCES $favoriteCategoriesTable(category_id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_favorite_threads_kind_order ON '
+      '$favoriteThreadsTable(content_kind, remote_order)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_favorite_threads_removed ON '
+      '$favoriteThreadsTable(removed_at)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_favorite_thread_category_category ON '
+      '$favoriteThreadCategoryTable(category_id)',
     );
   }
 

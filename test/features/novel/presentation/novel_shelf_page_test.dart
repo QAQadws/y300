@@ -99,6 +99,9 @@ class _FakeNovelRepository implements NovelRepository {
   }
 
   @override
+  Future<void> removeFromShelf({required String novelId}) async {}
+
+  @override
   Future<void> renameCategory({
     required String categoryId,
     required String newName,

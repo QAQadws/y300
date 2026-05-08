@@ -78,6 +78,8 @@ class _FakeComicRepository implements ComicRepository {
   @override
   Future<void> addToShelf({required String comicId, required String tid, required String fid, String? sourceTypeId, String? sourceTagName, required String title, required ParsedComicPost parsedPost}) async {}
   @override
+  Future<void> removeFromShelf({required String comicId}) async {}
+  @override
   Future<String> createCategory({required String name}) async => 'c1';
   @override
   Future<void> deleteCategory({required String categoryId}) async {}

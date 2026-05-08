@@ -417,6 +417,8 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
         return 'comic';
       case LibraryModuleKey.novel:
         return 'novel';
+      case LibraryModuleKey.favorite:
+        return 'favorite';
     }
   }
 
@@ -456,4 +458,3 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
     return null;
   }
 }
-

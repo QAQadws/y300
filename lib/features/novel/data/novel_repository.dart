@@ -38,6 +38,9 @@ abstract class NovelRepository {
 
   Future<NovelEpisodeRefreshResult> refreshEpisodes({required String novelId});
 
+  /// 从小说书架移除作品，但保留作品数据和已缓存章节正文。
+  Future<void> removeFromShelf({required String novelId});
+
   Future<void> saveReadingProgress({
     required String novelId,
     required String episodeId,

@@ -29,12 +29,28 @@ class SessionInfo {
   }
 }
 
-class AuthRepository {
-  AuthRepository(this._apiClient);
+abstract class AuthRepository {
+  Future<ApiResult<SessionInfo>> refreshSession();
+
+  Future<ApiResult<bool>> verifyAuthByForumIndex();
+
+  Future<ApiResult<SessionInfo>> login({
+    required String username,
+    required String password,
+    String questionId = '0',
+    String answer = '',
+  });
+
+  Future<void> logout();
+}
+
+class ApiAuthRepository implements AuthRepository {
+  ApiAuthRepository(this._apiClient);
 
   final ApiClient _apiClient;
 
   /// 通过 profile 探活当前登录态。
+  @override
   Future<ApiResult<SessionInfo>> refreshSession() {
     return _apiClient.getParsed<SessionInfo>(
       module: 'profile',
@@ -44,6 +60,7 @@ class AuthRepository {
 
   /// 通过 forumindex 校验 cookie 中 auth 是否已经生效。
   /// Discuz 在未登录时通常返回 `auth: null`。
+  @override
   Future<ApiResult<bool>> verifyAuthByForumIndex() async {
     final result = await _apiClient.getDiscuz(module: 'forumindex');
     return result.when(
@@ -57,6 +74,7 @@ class AuthRepository {
   }
 
   /// 通过 Discuz 网页表单登录，并在成功后立即校验会话是否生效。
+  @override
   Future<ApiResult<SessionInfo>> login({
     required String username,
     required String password,
@@ -112,11 +130,12 @@ class AuthRepository {
     );
   }
 
+  @override
   Future<void> logout() {
     return _apiClient.clearSession();
   }
 }
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  return AuthRepository(ref.watch(apiClientProvider));
+  return ApiAuthRepository(ref.watch(apiClientProvider));
 });

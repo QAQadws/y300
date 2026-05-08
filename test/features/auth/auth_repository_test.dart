@@ -114,7 +114,7 @@ void main() {
 
 AuthRepository _buildAuthRepository(HttpClientAdapter adapter) {
   final apiClient = _buildApiClient(adapter);
-  return AuthRepository(apiClient);
+  return ApiAuthRepository(apiClient);
 }
 
 ApiClient _buildApiClient(HttpClientAdapter adapter) {

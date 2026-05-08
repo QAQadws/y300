@@ -1,0 +1,63 @@
+import 'package:y300/features/comic/data/comic_parser_service.dart';
+import 'package:y300/features/comic/data/comic_repository.dart';
+import 'package:y300/features/comic/domain/services/comic_post_aggregation_service.dart';
+import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
+import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+
+abstract class ComicFavoriteIngestService {
+  Future<String> upsertFromThreadDetail({
+    required ThreadDetailData detail,
+    String? sourceTagName,
+  });
+
+  Future<void> removeFromShelf({required String workId});
+}
+
+class RepositoryComicFavoriteIngestService implements ComicFavoriteIngestService {
+  RepositoryComicFavoriteIngestService({
+    required ComicRepository repository,
+    required ComicParserService parserService,
+    required ComicSubjectParser subjectParser,
+    required ComicPostAggregationService aggregationService,
+  })  : _repository = repository,
+        _parserService = parserService,
+        _subjectParser = subjectParser,
+        _aggregationService = aggregationService;
+
+  final ComicRepository _repository;
+  final ComicParserService _parserService;
+  final ComicSubjectParser _subjectParser;
+  final ComicPostAggregationService _aggregationService;
+
+  @override
+  Future<String> upsertFromThreadDetail({
+    required ThreadDetailData detail,
+    String? sourceTagName,
+  }) async {
+    final comicId = buildComicWorkId(detail.tid);
+    final aggregation = _aggregationService.build(detail.posts);
+    final parsed = _parserService.parse(message: aggregation.parseMessage).copyWith(
+          subjectMetadata: _subjectParser.parse(detail.subject),
+        );
+
+    await _repository.addToShelf(
+      comicId: comicId,
+      tid: detail.tid,
+      fid: detail.fid,
+      sourceTypeId: detail.typeid,
+      sourceTagName: sourceTagName,
+      title: detail.subject,
+      parsedPost: parsed,
+    );
+    return comicId;
+  }
+
+  @override
+  Future<void> removeFromShelf({required String workId}) {
+    return _repository.removeFromShelf(comicId: workId);
+  }
+
+  static String buildComicWorkId(String tid) {
+    return 'yamibo:${tid.trim()}';
+  }
+}

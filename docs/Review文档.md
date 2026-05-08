@@ -82,18 +82,18 @@
 
 ---
 
-## 4. forumdisplay 页面检查
+## 4. 论坛首页旧收藏版块历史检查（Phase 03 后已禁用）
 
 - [ ] 未登录时首页仅展示 forumindex 分组
-- [ ] 已登录时首页优先展示“我收藏的版块”
-- [ ] “我收藏的版块”使用与普通分组一致的 `_ForumCard` 组件
-- [ ] myfavforum 失败时首页可降级展示 forumindex，不阻塞主流程
-- [ ] 收藏区为空时首页展示空态提示，不出现崩溃
+- [ ] 已登录时首页仍仅展示 forumindex 分组
+- [ ] 首页不再展示“我收藏的版块”
+- [ ] 首页不再请求 `myfavforum`
+- [ ] 线程收藏统一通过主 Tab“收藏”处理
 
 判定说明：
 
-1. 首页登录态顺序错误（收藏区未置顶），判定为 P1。
-2. myfavforum 失败导致首页不可用，判定为 P0。
+1. 首页仍请求或展示旧收藏版块，判定为 P1。
+2. 禁用旧收藏版块导致 forumindex 主流程不可用，判定为 P0。
 
 ---
 
@@ -153,7 +153,7 @@
 
 - [ ] 首页聚合已使用 `module=forumindex`
 - [ ] 首页聚合已使用 `module=profile` 判定登录态
-- [ ] 首页聚合已使用 `module=myfavforum` 拉取收藏版块
+- [ ] 首页聚合不再使用 `module=myfavforum`
 - [ ] `forumdisplay` 使用 `module=forumdisplay`
 - [ ] `forumdisplay` 列表字段兼容 `forum_threadlist/threadlist`
 - [ ] `forumdisplay` 分页字段兼容 `tpp/perpage`
@@ -201,7 +201,7 @@
 ## 10. 手工验证（可选）
 
 - [ ] forumdisplay 页面可进入 viewthread 页面
-- [ ] 登录后首页可见“我收藏的版块”并位于普通分组前
+- [ ] 登录后首页不再出现“我收藏的版块”
 - [ ] 登录成功后可回到已登录使用路径
 - [ ] 弱网下可看到加载态，不会崩溃
 - [ ] 异常情况下可触发重试恢复
@@ -1778,6 +1778,76 @@
 - [ ] `unified_detail_page_test.dart` 覆盖来源标签 + 自定义标签展示。
 
 ### 六、待你本地回归
+1. `flutter test`
+2. `flutter analyze`
+
+说明：`dart format` 按本轮要求未执行，也不作为本轮回归项。
+
+---
+
+## 分阶段实现 03：收藏同步与收藏 Tab Review 清单（2026-05-08）
+
+### 一、数据库与本地缓存
+- [ ] `ComicLocalDb.dbVersion` 已升级到 `11`。
+- [ ] 新建库包含 `favorite_sync_state/favorite_threads/favorite_categories/favorite_thread_category`。
+- [ ] 老库升级到 v11 时可补齐收藏表，不破坏漫画/小说/统一状态表。
+- [ ] `favorite_threads.content_kind` 支持 `unknown/comic/novel/forum`。
+- [ ] detail 尚未补全的 `unknown` 记录暂归入默认分类。
+- [ ] `removed_at IS NULL` 表示当前远程仍收藏。
+- [ ] 收藏自定义分类只写入 `favorite_categories`，系统分类不入表。
+
+### 二、同步策略
+- [ ] `myfavthread` 请求显式携带 `version=4&page=N`。
+- [ ] 首次同步读取 `myfavthread` 全部页。
+- [ ] `remote_count < local_active_count` 时执行完整 diff 并标记 removed。
+- [ ] `remote_count == local_active_count` 但 page 1 有未知 tid 时执行完整 diff。
+- [ ] 增量同步会从 page 1 往后读取，直到遇到已知页。
+- [ ] 同步失败会写入 sync state 的失败状态，不清空已有本地缓存。
+
+### 三、进帖补全与分类规则
+- [ ] 收藏补全使用 `ThreadRepository.getThreadDetail(tid,page:1)`。
+- [ ] 来源标签使用 `ForumTagLookup(fid,typeid)`。
+- [ ] 内容类型使用统一 `ThreadContentClassifier`。
+- [ ] 漫画规则仍为 `fid=30 && 非公告`。
+- [ ] 小说规则仍为 `fid=49/55 && 非公告`。
+- [ ] 公告帖不会同步进入漫画/小说模块。
+
+### 四、漫画/小说同步
+- [ ] 漫画收藏写入 `workId=yamibo:<tid>`。
+- [ ] 漫画 ingest 复用聚合、DOM 解析和标题元数据解析服务。
+- [ ] 小说收藏写入 `workId=novel:<fid>:<tid>`。
+- [ ] 小说 ingest 传入 `NovelRefreshSeed(fid/tid/typeid/tagName)` 并刷新章节。
+- [ ] 取消收藏时从漫画/小说 shelf 表移除，但不静默删除作品数据、阅读进度、缓存或下载存储。
+
+### 五、收藏页 UI
+- [ ] 主 Tab 顺序为：论坛、收藏、漫画、小说、更多。
+- [ ] 收藏页复用 `UnifiedShelfPage`。
+- [ ] 收藏页默认列表显示。
+- [ ] 收藏页首次进入且无 sync state 时自动同步一次。
+- [ ] 收藏页系统分类为“漫画”“小说”“默认”。
+- [ ] 默认分类不包含漫画/小说。
+- [ ] 自定义分类可覆盖系统分类。
+- [ ] 点击漫画收藏进入漫画详情页。
+- [ ] 点击小说收藏进入小说详情页。
+- [ ] 点击普通论坛收藏进入帖子详情页。
+
+### 六、论坛旧收藏版块禁用
+- [ ] `ForumHomeRepository` 不再请求 `myfavforum`。
+- [ ] `ForumHomeController` 不再构造“我收藏的版块”分组。
+- [ ] `ForumHomePage` 不再展示“暂无收藏版块”旧空态。
+- [ ] 禁用旧收藏版块不影响论坛首页基础分组加载。
+
+### 七、测试覆盖（仅编写，未执行）
+- [ ] `favorite_models_test.dart` 覆盖 `FavoriteThreadsPage` 解析。
+- [ ] `favorite_phase3_db_migration_test.dart` 覆盖 v11 表和索引。
+- [ ] `local_favorite_repository_test.dart` 覆盖系统分类、默认排除漫画/小说、自定义分类覆盖、removed 标记。
+- [ ] `favorite_sync_service_test.dart` 覆盖首次全量同步、漫画/小说 ingest、count 减少完整 diff、详情失败不阻塞后续记录。
+- [ ] `favorite_shelf_adapter_test.dart` 覆盖默认模块、列表显示和首次同步。
+- [ ] `favorite_shelf_page_test.dart` 覆盖收藏页薄壳构建。
+- [ ] 论坛首页测试已更新为“不展示旧收藏版块”。
+- [ ] 主壳测试已覆盖收藏 Tab。
+
+### 八、待你本地回归
 1. `flutter test`
 2. `flutter analyze`
 
