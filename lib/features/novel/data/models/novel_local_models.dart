@@ -10,6 +10,8 @@ class NovelWorkRecord {
     required this.title,
     this.author,
     this.coverImageUrl,
+    this.coverLocalPath,
+    this.customCoverLocalPath,
     required this.updatedAt,
   });
 
@@ -22,6 +24,8 @@ class NovelWorkRecord {
   final String title;
   final String? author;
   final String? coverImageUrl;
+  final String? coverLocalPath;
+  final String? customCoverLocalPath;
   final int updatedAt;
 }
 

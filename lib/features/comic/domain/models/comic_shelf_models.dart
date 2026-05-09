@@ -6,6 +6,8 @@
     required this.title,
     required this.author,
     required this.coverImageUrl,
+    this.coverLocalPath,
+    this.customCoverLocalPath,
     required this.categoryId,
     required this.addedAt,
   });
@@ -16,6 +18,8 @@
   final String title;
   final String? author;
   final String? coverImageUrl;
+  final String? coverLocalPath;
+  final String? customCoverLocalPath;
   final String categoryId;
   final DateTime addedAt;
 }

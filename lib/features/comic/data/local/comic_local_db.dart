@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 11;
+  static const int dbVersion = 12;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -30,6 +30,7 @@ class ComicLocalDb {
   static const String favoriteThreadsTable = 'favorite_threads';
   static const String favoriteCategoriesTable = 'favorite_categories';
   static const String favoriteThreadCategoryTable = 'favorite_thread_category';
+  static const String cachedImagesTable = 'cached_images';
 
   static Future<Database> open({String? databaseName}) {
     final targetDbName = databaseName ?? dbName;
@@ -40,37 +41,10 @@ class ComicLocalDb {
         await _createTables(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 2) {
-          await _createSettingsTable(db);
-          await _seedDefaultSettings(db);
-        }
-        if (oldVersion < 3) {
-          await _createReadingProgressTable(db);
-        }
-        if (oldVersion < 4) {
-          await _migrateComicSubjectMetadataColumns(db);
-        }
-        if (oldVersion < 5) {
-          await _createNovelTables(db);
-        }
-        if (oldVersion < 6) {
-          await _createNovelReadingProgressTable(db);
-        }
-        if (oldVersion < 7) {
-          await _createNovelShelfTables(db);
-        }
-        if (oldVersion < 8) {
-          await _createLibraryStateTables(db);
-        }
-        if (oldVersion < 9) {
-          await _createPhase7PerformanceIndexes(db);
-        }
-        if (oldVersion < 10) {
-          await _migrateSourceTagColumns(db);
-        }
-        if (oldVersion < 11) {
-          await _createFavoriteTables(db);
-        }
+        await _rebuildLatestSchema(db);
+      },
+      onDowngrade: (db, oldVersion, newVersion) async {
+        await _rebuildLatestSchema(db);
       },
     );
   }
@@ -87,6 +61,8 @@ class ComicLocalDb {
         author TEXT,
         cover_image_url TEXT,
         custom_cover_image_url TEXT,
+        cover_local_path TEXT,
+        custom_cover_local_path TEXT,
         translation_group TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
@@ -113,6 +89,13 @@ class ComicLocalDb {
         episode_id TEXT NOT NULL,
         image_url TEXT NOT NULL,
         image_index INTEGER NOT NULL,
+        stable_cache_key TEXT,
+        last_source_url TEXT,
+        local_path TEXT,
+        bytes INTEGER NOT NULL DEFAULT 0,
+        mime_type TEXT,
+        last_accessed_at INTEGER,
+        protected INTEGER NOT NULL DEFAULT 0,
         cache_local_path TEXT,
         cache_status TEXT NOT NULL DEFAULT 'none',
         FOREIGN KEY (episode_id) REFERENCES $episodesTable(episode_id) ON DELETE CASCADE
@@ -167,6 +150,7 @@ class ComicLocalDb {
     await _createLibraryStateTables(db);
     await _createPhase7PerformanceIndexes(db);
     await _createFavoriteTables(db);
+    await _createImageCacheTables(db);
   }
 
   static Future<void> _createSettingsTable(Database db) async {
@@ -202,12 +186,6 @@ class ComicLocalDb {
     ''');
   }
 
-  static Future<void> _migrateComicSubjectMetadataColumns(Database db) async {
-    await db.execute(
-      'ALTER TABLE $comicsTable ADD COLUMN translation_group TEXT',
-    );
-  }
-
   /// Phase 0: 为小说模块预留统一内容表与阅读偏好表。
   ///
   /// 这一批表暂不与现有漫画流程耦合，先完成数据库地基与索引建设，
@@ -224,6 +202,8 @@ class ComicLocalDb {
         title TEXT NOT NULL,
         author TEXT,
         cover_image_url TEXT,
+        cover_local_path TEXT,
+        custom_cover_local_path TEXT,
         updated_at INTEGER NOT NULL
       )
     ''');
@@ -413,34 +393,6 @@ class ComicLocalDb {
     );
   }
 
-  /// Phase 01：保存论坛自带 typeid/tagName，供收藏同步和统一详情标签条复用。
-  static Future<void> _migrateSourceTagColumns(Database db) async {
-    await _addColumnIfMissing(
-      db,
-      tableName: comicsTable,
-      columnName: 'source_typeid',
-      definition: 'TEXT',
-    );
-    await _addColumnIfMissing(
-      db,
-      tableName: comicsTable,
-      columnName: 'source_tag_name',
-      definition: 'TEXT',
-    );
-    await _addColumnIfMissing(
-      db,
-      tableName: worksTable,
-      columnName: 'source_typeid',
-      definition: 'TEXT',
-    );
-    await _addColumnIfMissing(
-      db,
-      tableName: worksTable,
-      columnName: 'source_tag_name',
-      definition: 'TEXT',
-    );
-  }
-
   /// Phase 03：收藏线程缓存与收藏页自定义分类。
   ///
   /// 收藏是漫画/小说同步入口，但数据表保持独立，避免收藏页状态和
@@ -514,16 +466,81 @@ class ComicLocalDb {
     );
   }
 
-  static Future<void> _addColumnIfMissing(
-    Database db, {
-    required String tableName,
-    required String columnName,
-    required String definition,
-  }) async {
-    final rows = await db.rawQuery('PRAGMA table_info($tableName)');
-    final exists = rows.any((row) => row['name'] == columnName);
-    if (!exists) {
-      await db.execute('ALTER TABLE $tableName ADD COLUMN $columnName $definition');
-    }
+  /// Phase 04：统一图片缓存表。
+  ///
+  /// 开发阶段不维护逐版本图片缓存迁移；最新版 schema 已直接包含
+  /// `episode_images` 与作品封面的本地路径字段，这里只补独立缓存表
+  /// 和与最新版读取路径有关的索引。
+  static Future<void> _createImageCacheTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $cachedImagesTable (
+        cache_key TEXT PRIMARY KEY,
+        owner_type TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        episode_id TEXT,
+        image_index INTEGER,
+        role TEXT NOT NULL,
+        last_source_url TEXT,
+        local_path TEXT,
+        bytes INTEGER NOT NULL DEFAULT 0,
+        mime_type TEXT,
+        protected INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        last_accessed_at INTEGER
+      )
+    ''');
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_cached_images_owner ON '
+      '$cachedImagesTable(owner_type, owner_id, role)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_cached_images_prune ON '
+      '$cachedImagesTable(protected, last_accessed_at, updated_at)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_episode_images_stable_key ON '
+      '$episodeImagesTable(stable_cache_key)',
+    );
   }
+
+  /// 开发期数据库策略：不维护复杂的历史兼容迁移。
+  ///
+  /// 当前 App 仍处于开发阶段，旧本地库可以安全丢弃。升级/降级时先删除
+  /// 本模块管理的表，再按最新版 schema 重新创建，避免迁移链为了兼容
+  /// 半成品历史表结构不断膨胀。
+  static Future<void> _rebuildLatestSchema(Database db) async {
+    for (final tableName in _managedTablesInDropOrder) {
+      await db.execute('DROP TABLE IF EXISTS $tableName');
+    }
+    await _createTables(db);
+  }
+
+  static const List<String> _managedTablesInDropOrder = <String>[
+    favoriteThreadCategoryTable,
+    favoriteCategoriesTable,
+    favoriteThreadsTable,
+    favoriteSyncStateTable,
+    libraryWorkTagsTable,
+    libraryTagsTable,
+    libraryEpisodeStateTable,
+    libraryWorkStateTable,
+    libraryDisplaySettingsTable,
+    novelEpisodeContentTable,
+    workEpisodesTable,
+    novelShelfItemsTable,
+    novelCategoriesTable,
+    novelReadingProgressTable,
+    readerPreferencesTable,
+    worksTable,
+    cachedImagesTable,
+    readingProgressTable,
+    shelfItemsTable,
+    categoriesTable,
+    episodeImagesTable,
+    episodesTable,
+    comicsTable,
+    settingsTable,
+  ];
 }

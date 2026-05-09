@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
@@ -17,6 +18,9 @@ abstract class ShelfModuleAdapter {
 
   /// 默认显示模式：漫画通常网格，小说通常列表。
   LibraryDisplayMode get defaultDisplayMode;
+
+  /// 可选的长任务进度。默认没有进度源，收藏等模块可按需接入。
+  ValueListenable<LibraryShelfTaskProgress?>? get taskProgress => null;
 
   /// 加载分类列表。
   Future<List<LibraryCategory>> loadCategories();
@@ -79,6 +83,28 @@ abstract class ShelfModuleAdapter {
   });
 }
 
+class LibraryShelfTaskProgress {
+  const LibraryShelfTaskProgress({
+    required this.message,
+    this.current = 0,
+    this.total,
+    this.active = true,
+  });
+
+  final String message;
+  final int current;
+  final int? total;
+  final bool active;
+
+  double? get fraction {
+    final resolvedTotal = total;
+    if (resolvedTotal == null || resolvedTotal <= 0) {
+      return null;
+    }
+    return (current / resolvedTotal).clamp(0.0, 1.0).toDouble();
+  }
+}
+
 /// 统一显示偏好。
 class LibraryDisplayPreference {
   const LibraryDisplayPreference({
@@ -94,4 +120,3 @@ class LibraryDisplayPreference {
     gridColumnCount: 3,
   );
 }
-

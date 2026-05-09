@@ -72,6 +72,8 @@ class LibraryWorkItem {
     required this.title,
     this.secondaryName,
     this.coverImageUrl,
+    this.coverLocalPath,
+    this.customCoverLocalPath,
     required this.unreadCount,
     required this.totalChapterCount,
     required this.readChapterCount,
@@ -89,6 +91,8 @@ class LibraryWorkItem {
   final String title;
   final String? secondaryName;
   final String? coverImageUrl;
+  final String? coverLocalPath;
+  final String? customCoverLocalPath;
   final int unreadCount;
   final int totalChapterCount;
   final int readChapterCount;
@@ -107,6 +111,8 @@ class LibraryDetailHeader {
     required this.workId,
     required this.title,
     this.coverImageUrl,
+    this.coverLocalPath,
+    this.customCoverLocalPath,
     this.author,
     this.translationGroup,
     this.intro,
@@ -120,6 +126,8 @@ class LibraryDetailHeader {
   final String workId;
   final String title;
   final String? coverImageUrl;
+  final String? coverLocalPath;
+  final String? customCoverLocalPath;
   final String? author;
   final String? translationGroup;
   final String? intro;

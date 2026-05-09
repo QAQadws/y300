@@ -1,11 +1,15 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/comic_detail_page.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
@@ -18,6 +22,8 @@ void main() {
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+          comicEpisodeRefreshServiceProvider.overrideWithValue(_FakeComicEpisodeRefreshService()),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
           libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
         ],
         child: const MaterialApp(home: ComicDetailPage(comicId: 'comic:1')),
@@ -35,6 +41,49 @@ void main() {
     expect(find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')), findsOneWidget);
     expect(find.byIcon(Icons.file_download), findsOneWidget);
   });
+}
+
+class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
+  @override
+  Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
+    return const <ComicEpisodeLink>[];
+  }
+}
+
+class _FakeImageCacheService implements ImageCacheService {
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    return CachedImageResult(
+      success: true,
+      cacheKey: request.cacheKey,
+      localPath: 'memory://${request.cacheKey}',
+      fromCache: true,
+    );
+  }
+
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async => null;
+
+  @override
+  Future<CachedImageResult> copyProtectedLocalFile(
+    ImageCacheLocalCopyRequest request,
+  ) async {
+    return CachedImageResult(
+      success: true,
+      cacheKey: request.cacheKey,
+      localPath: request.sourcePath,
+      fromCache: true,
+    );
+  }
+
+  @override
+  Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
+
+  @override
+  Future<void> pruneToLimit({required int maxBytes}) async {}
+
+  @override
+  Future<void> clearUnprotected() async {}
 }
 
 class _FakeComicRepository implements ComicRepository {

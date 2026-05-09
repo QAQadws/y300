@@ -15,9 +15,15 @@ abstract class MoreSettingsRepository {
   Future<void> setCustomCacheDirectory(String? path);
 
   Future<String?> pickDirectory();
+
+  Future<int> getImageCacheMaxBytes();
+
+  Future<void> setImageCacheMaxBytes(int bytes);
 }
 
 class MoreSettingsRepositoryImpl implements MoreSettingsRepository {
+  static const int defaultImageCacheMaxBytes = 512 * 1024 * 1024;
+
   @override
   Future<String> getDefaultCacheDirectory() async {
     final directory = await getTemporaryDirectory();
@@ -48,5 +54,25 @@ class MoreSettingsRepositoryImpl implements MoreSettingsRepository {
   @override
   Future<String?> pickDirectory() {
     return FilePicker.getDirectoryPath();
+  }
+
+  @override
+  Future<int> getImageCacheMaxBytes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getInt(AppStorageKeys.imageCacheMaxBytes);
+    if (value == null || value <= 0) {
+      return defaultImageCacheMaxBytes;
+    }
+    return value;
+  }
+
+  @override
+  Future<void> setImageCacheMaxBytes(int bytes) async {
+    final normalized = bytes.clamp(
+      128 * 1024 * 1024,
+      2048 * 1024 * 1024,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(AppStorageKeys.imageCacheMaxBytes, normalized);
   }
 }

@@ -1,6 +1,7 @@
 ﻿import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -763,7 +764,9 @@ class _HeroInfoSection extends StatelessWidget {
           _DetailHeaderBackground(
             title: title,
             coverImageUrl: header.coverImageUrl,
-            hasCover: header.coverImageUrl?.trim().isNotEmpty == true,
+            coverLocalPath: header.coverLocalPath,
+            customCoverLocalPath: header.customCoverLocalPath,
+            hasCover: _hasCover(header),
           ),
           Padding(
             padding: _contentPadding.copyWith(top: topInset + kToolbarHeight + 4),
@@ -772,6 +775,7 @@ class _HeroInfoSection extends StatelessWidget {
               children: [
                 _CoverImage(
                   url: header.coverImageUrl,
+                  localPath: _preferredLocalPath(header),
                   moduleKey: moduleKey,
                 ),
                 const SizedBox(width: 12),
@@ -810,6 +814,20 @@ class _HeroInfoSection extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  bool _hasCover(LibraryDetailHeader header) {
+    return _preferredLocalPath(header) != null ||
+        header.coverImageUrl?.trim().isNotEmpty == true;
+  }
+
+  String? _preferredLocalPath(LibraryDetailHeader header) {
+    final custom = header.customCoverLocalPath?.trim();
+    if (custom != null && custom.isNotEmpty) {
+      return custom;
+    }
+    final cover = header.coverLocalPath?.trim();
+    return cover == null || cover.isEmpty ? null : cover;
   }
 }
 
@@ -887,6 +905,8 @@ class _DetailHeaderBackground extends StatelessWidget {
   const _DetailHeaderBackground({
     required this.title,
     required this.coverImageUrl,
+    required this.coverLocalPath,
+    required this.customCoverLocalPath,
     required this.hasCover,
   });
 
@@ -895,6 +915,8 @@ class _DetailHeaderBackground extends StatelessWidget {
 
   final String title;
   final String? coverImageUrl;
+  final String? coverLocalPath;
+  final String? customCoverLocalPath;
   final bool hasCover;
 
   @override
@@ -914,12 +936,11 @@ class _DetailHeaderBackground extends StatelessWidget {
         ClipRect(
           child: ImageFiltered(
             imageFilter: ImageFilter.blur(sigmaX: _blurSigma, sigmaY: _blurSigma),
-            child: Image.network(
-              coverImageUrl!,
+            child: LibraryCachedImage(
+              localPath: _preferredLocalPath,
+              imageUrl: coverImageUrl,
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return Container(color: Theme.of(context).colorScheme.surfaceContainerHighest);
-              },
+              placeholder: Container(color: Theme.of(context).colorScheme.surfaceContainerHighest),
             ),
           ),
         ),
@@ -940,6 +961,15 @@ class _DetailHeaderBackground extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  String? get _preferredLocalPath {
+    final custom = customCoverLocalPath?.trim();
+    if (custom != null && custom.isNotEmpty) {
+      return custom;
+    }
+    final cover = coverLocalPath?.trim();
+    return cover == null || cover.isEmpty ? null : cover;
   }
 }
 
@@ -987,9 +1017,11 @@ class _HeaderActionsRow extends StatelessWidget {
 class _CoverImage extends StatelessWidget {
   const _CoverImage({
     required this.url,
+    required this.localPath,
     required this.moduleKey,
   });
   final String? url;
+  final String? localPath;
   final LibraryModuleKey moduleKey;
 
   @override
@@ -999,7 +1031,8 @@ class _CoverImage extends StatelessWidget {
       child: SizedBox(
         width: 120,
         height: 168,
-        child: url == null || url!.trim().isEmpty
+        child: (url == null || url!.trim().isEmpty) &&
+                (localPath == null || localPath!.trim().isEmpty)
             ? Container(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 child: moduleKey == LibraryModuleKey.novel
@@ -1019,10 +1052,11 @@ class _CoverImage extends StatelessWidget {
                       )
                     : const Icon(Icons.image_not_supported_outlined),
               )
-            : Image.network(
-                url!,
+            : LibraryCachedImage(
+                localPath: localPath,
+                imageUrl: url,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
+                placeholder: Container(
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   child: const Icon(Icons.broken_image_outlined),
                 ),
@@ -1216,3 +1250,4 @@ class _TriStateLine extends StatelessWidget {
     );
   }
 }
+

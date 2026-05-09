@@ -1,4 +1,5 @@
 ﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/foundation.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -234,6 +235,9 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
 
   @override
   String get moduleTitle => 'comic';
+
+  @override
+  ValueListenable<LibraryShelfTaskProgress?>? get taskProgress => null;
 
   @override
   Future<Object> buildDetailRouteArgument({required String workId}) async => workId;

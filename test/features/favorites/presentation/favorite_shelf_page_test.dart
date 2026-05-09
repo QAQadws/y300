@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -34,11 +37,47 @@ void main() {
     expect(find.byKey(const Key('unified-shelf-list-view')), findsOneWidget);
     expect(find.text('收藏帖'), findsOneWidget);
   });
+
+  testWidgets('FavoriteShelfPage shows first-sync progress while cache is building', (tester) async {
+    final sync = _FakeFavoriteSyncService(autoComplete: false);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository(hasSnapshot: false)),
+          favoriteSyncServiceProvider.overrideWith((ref) => sync),
+          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+        ],
+        child: const MaterialApp(home: FavoriteShelfPage()),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('unified-shelf-task-progress-bar')), findsOneWidget);
+    expect(find.text('正在解析收藏详情'), findsOneWidget);
+  });
 }
 
 class _FakeFavoriteSyncService implements FavoriteSyncService {
+  _FakeFavoriteSyncService({this.autoComplete = true});
+
+  final bool autoComplete;
+  final _progress = ValueNotifier<FavoriteSyncProgress>(FavoriteSyncProgress.idle);
+
+  @override
+  ValueListenable<FavoriteSyncProgress> get progress => _progress;
+
   @override
   Future<FavoriteSyncResult> sync() async {
+    _progress.value = const FavoriteSyncProgress(
+      phase: FavoriteSyncProgressPhase.loadingDetails,
+      message: '正在解析收藏详情',
+      current: 1,
+      total: 10,
+    );
+    if (!autoComplete) {
+      return Completer<FavoriteSyncResult>().future;
+    }
+    _progress.value = FavoriteSyncProgress.idle;
     return const FavoriteSyncResult(
       mode: FavoriteSyncMode.incremental,
       remoteCount: 1,
@@ -52,6 +91,9 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
 }
 
 class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
+  _FakeLocalFavoriteRepository({this.hasSnapshot = true});
+
+  final bool hasSnapshot;
   final _category = LibraryCategory(
     categoryId: favoriteDefaultCategoryId,
     name: '默认',
@@ -98,6 +140,9 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   }
   @override
   Future<FavoriteSyncSnapshot?> getSyncSnapshot() async {
+    if (!hasSnapshot) {
+      return null;
+    }
     return FavoriteSyncSnapshot(
       syncKey: favoriteSyncKey,
       remoteCount: 1,

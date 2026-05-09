@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
@@ -32,7 +33,11 @@ void main() {
 }
 
 class _FakeFavoriteSyncService implements FavoriteSyncService {
+  final _progress = ValueNotifier<FavoriteSyncProgress>(FavoriteSyncProgress.idle);
   int syncCount = 0;
+
+  @override
+  ValueListenable<FavoriteSyncProgress> get progress => _progress;
 
   @override
   Future<FavoriteSyncResult> sync() async {

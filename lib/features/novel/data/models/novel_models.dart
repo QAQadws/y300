@@ -8,6 +8,8 @@
     required this.title,
     this.author,
     this.coverImageUrl,
+    this.coverLocalPath,
+    this.customCoverLocalPath,
     required this.updatedAt,
     required this.episodeCount,
     this.categoryId = 'default',
@@ -21,6 +23,8 @@
   final String title;
   final String? author;
   final String? coverImageUrl;
+  final String? coverLocalPath;
+  final String? customCoverLocalPath;
   final DateTime updatedAt;
   final int episodeCount;
   final String categoryId;

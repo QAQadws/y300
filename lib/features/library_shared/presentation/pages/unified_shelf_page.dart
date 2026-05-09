@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -73,9 +74,15 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
         },
         onRefresh: _handlePullToRefresh,
         child: state.isLoading
-            ? const Center(child: CircularProgressIndicator())
+            ? Column(
+                children: [
+                  _buildTaskProgressBanner(),
+                  const Expanded(child: Center(child: CircularProgressIndicator())),
+                ],
+              )
             : Column(
                 children: [
+                  _buildTaskProgressBanner(),
                   if (state.errorMessage != null && state.errorMessage!.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
@@ -156,6 +163,22 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
       return;
     }
     setState(() {});
+  }
+
+  Widget _buildTaskProgressBanner() {
+    final progressListenable = widget.adapter.taskProgress;
+    if (progressListenable == null) {
+      return const SizedBox.shrink();
+    }
+    return ValueListenableBuilder<LibraryShelfTaskProgress?>(
+      valueListenable: progressListenable,
+      builder: (context, progress, _) {
+        if (progress == null || !progress.active) {
+          return const SizedBox.shrink();
+        }
+        return _ShelfTaskProgressBanner(progress: progress);
+      },
+    );
   }
 
   PreferredSizeWidget _buildAppBar(UnifiedShelfState state) {
@@ -516,12 +539,73 @@ class _WorkGrid extends StatelessWidget {
         return ShelfCoverCard(
           title: item.title,
           coverImageUrl: item.coverImageUrl,
+          coverLocalPath: item.coverLocalPath,
+          customCoverLocalPath: item.customCoverLocalPath,
           onTap: () => onTapItem(item.workId),
           topLeftBadge: _UnreadBadge(count: item.unreadCount),
           showTwoLineCustomEllipsis: true,
         );
       },
     );
+  }
+}
+
+class _ShelfTaskProgressBanner extends StatelessWidget {
+  const _ShelfTaskProgressBanner({
+    required this.progress,
+  });
+
+  final LibraryShelfTaskProgress progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final countText = _countText();
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    progress.message,
+                    key: const Key('unified-shelf-task-progress-message'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+                if (countText != null) ...[
+                  const SizedBox(width: 10),
+                  Text(
+                    countText,
+                    key: const Key('unified-shelf-task-progress-count'),
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(
+              key: const Key('unified-shelf-task-progress-bar'),
+              value: progress.fraction,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String? _countText() {
+    final total = progress.total;
+    if (total == null || total <= 0) {
+      return null;
+    }
+    return '${progress.current.clamp(0, total)}/$total';
   }
 }
 
@@ -556,19 +640,15 @@ class _WorkList extends StatelessWidget {
             child: SizedBox(
               width: 52,
               height: 52,
-              child: item.coverImageUrl == null || item.coverImageUrl!.trim().isEmpty
-                  ? Container(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                      child: const Icon(Icons.image_not_supported_outlined),
-                    )
-                  : Image.network(
-                      item.coverImageUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                        child: const Icon(Icons.broken_image_outlined),
-                      ),
-                    ),
+              child: LibraryCachedImage(
+                localPath: _preferredLocalPath(item),
+                imageUrl: item.coverImageUrl,
+                fit: BoxFit.cover,
+                placeholder: Container(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  child: const Icon(Icons.image_not_supported_outlined),
+                ),
+              ),
             ),
           ),
           title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -576,6 +656,15 @@ class _WorkList extends StatelessWidget {
         );
       },
     );
+  }
+
+  String? _preferredLocalPath(LibraryWorkItem item) {
+    final custom = item.customCoverLocalPath?.trim();
+    if (custom != null && custom.isNotEmpty) {
+      return custom;
+    }
+    final cover = item.coverLocalPath?.trim();
+    return cover == null || cover.isEmpty ? null : cover;
   }
 }
 

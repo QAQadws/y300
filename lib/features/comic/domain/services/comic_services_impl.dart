@@ -1,5 +1,8 @@
 ﻿import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/comic_parser_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
@@ -48,20 +51,26 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
 
   @override
   Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
-    final preferred = await _discoveryService.discoverFromTidWithPreference(
+    // 当前帖的连续跳转链接常只覆盖“上一话/历史话”，不能作为完整章节表。
+    // 因此仅在目录解析成功时直接信任；否则继续走搜索补全，并按 tid 合并。
+    final current = await _discoveryService.discoverFromTidWithPreference(
       tid: tid,
       preferCatalogFirst: true,
     );
-    if (preferred.episodeLinks.isNotEmpty) {
-      return preferred.episodeLinks;
+    if (current.strategy == EpisodeDiscoveryStrategy.catalog && current.episodeLinks.isNotEmpty) {
+      return current.episodeLinks;
     }
 
-    final fallback = await _discoveryService.discoverFromTid(tid);
-    if (fallback.episodeLinks.isNotEmpty) {
-      return fallback.episodeLinks;
+    final searchLinks = await _searchFallbackFromCurrentTid(tid);
+    if (searchLinks.isNotEmpty) {
+      return _mergeEpisodeLinks(
+        current.episodeLinks,
+        searchLinks,
+        preferSupplement: true,
+      );
     }
 
-    return _searchFallbackFromCurrentTid(tid);
+    return current.episodeLinks;
   }
 
   Future<List<ComicEpisodeLink>> _searchFallbackFromCurrentTid(String tid) async {
@@ -96,16 +105,54 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
       ..sort((a, b) => b.score.compareTo(a.score));
 
     const topK = 3;
-    for (final candidate in candidates.take(topK)) {
+    var collectedLinks = const <ComicEpisodeLink>[];
+    for (final candidate in candidates
+        .where((item) => item.item.tid.trim() != tid.trim())
+        .take(topK)) {
       final result = await _discoveryService.discoverFromTidWithPreference(
         tid: candidate.item.tid,
         preferCatalogFirst: true,
       );
       if (result.episodeLinks.isNotEmpty) {
-        return result.episodeLinks;
+        collectedLinks = _mergeEpisodeLinks(collectedLinks, result.episodeLinks);
       }
     }
-    return const <ComicEpisodeLink>[];
+    return collectedLinks;
+  }
+
+  List<ComicEpisodeLink> _mergeEpisodeLinks(
+    List<ComicEpisodeLink> primary,
+    List<ComicEpisodeLink> supplement, {
+    bool preferSupplement = false,
+  }) {
+    final merged = <String, ComicEpisodeLink>{};
+    for (final link in primary) {
+      merged.putIfAbsent(_linkIdentity(link), () => link);
+    }
+    for (final link in supplement) {
+      final key = _linkIdentity(link);
+      if (preferSupplement) {
+        // 搜索/目录补全通常带有更完整的章节标题，重复 tid 时保留补全侧信息。
+        merged[key] = link;
+      } else {
+        merged.putIfAbsent(key, () => link);
+      }
+    }
+    return merged.values.toList(growable: false);
+  }
+
+  String _linkIdentity(ComicEpisodeLink link) {
+    final uri = Uri.tryParse(link.url.trim());
+    final tid = uri?.queryParameters['tid']?.trim();
+    if (tid != null && tid.isNotEmpty) {
+      return 'tid:$tid';
+    }
+    final threadMatch = RegExp(r'thread-(\d+)-', caseSensitive: false).firstMatch(link.url);
+    final threadTid = threadMatch?.group(1)?.trim();
+    if (threadTid != null && threadTid.isNotEmpty) {
+      return 'tid:$threadTid';
+    }
+    return link.url.trim();
   }
 
   Future<ThreadSeed?> _fetchThreadDetail(String tid) async {
@@ -177,7 +224,16 @@ typedef ThreadSeedFetcher = Future<ThreadSeed?> Function(String tid);
 abstract class ComicReaderService {
   Future<List<String>> fetchEpisodeImagesByTid(String tid);
 
-  Future<ComicImageCacheResult> cacheImage({required String imageUrl});
+  Future<ComicImageCacheResult> cacheImage({
+    required String imageUrl,
+    String? cacheKey,
+    ImageCacheOwnerType? ownerType,
+    String? ownerId,
+    ImageCacheRole role = ImageCacheRole.comicPage,
+    String? episodeId,
+    int? imageIndex,
+    bool protected = false,
+  });
 
   Future<void> prefetchImages({required List<String> imageUrls}) async {
     for (final imageUrl in imageUrls) {
@@ -190,23 +246,32 @@ class ComicImageCacheResult {
   const ComicImageCacheResult({
     required this.success,
     this.localPath,
+    this.cacheKey,
+    this.bytes = 0,
+    this.fromCache = false,
   });
 
   final bool success;
   final String? localPath;
+  final String? cacheKey;
+  final int bytes;
+  final bool fromCache;
 }
 
 class NetworkComicReaderService implements ComicReaderService {
   NetworkComicReaderService({
     required ThreadRepository threadRepository,
     required ComicParserService parserService,
+    ImageCacheService? imageCacheService,
     BaseCacheManager? cacheManager,
   })  : _threadRepository = threadRepository,
         _parserService = parserService,
+        _imageCacheService = imageCacheService,
         _cacheManager = cacheManager ?? DefaultCacheManager();
 
   final ThreadRepository _threadRepository;
   final ComicParserService _parserService;
+  final ImageCacheService? _imageCacheService;
   final BaseCacheManager _cacheManager;
 
   @override
@@ -225,12 +290,55 @@ class NetworkComicReaderService implements ComicReaderService {
   }
 
   @override
-  Future<ComicImageCacheResult> cacheImage({required String imageUrl}) async {
+  Future<ComicImageCacheResult> cacheImage({
+    required String imageUrl,
+    String? cacheKey,
+    ImageCacheOwnerType? ownerType,
+    String? ownerId,
+    ImageCacheRole role = ImageCacheRole.comicPage,
+    String? episodeId,
+    int? imageIndex,
+    bool protected = false,
+  }) async {
+    final normalizedKey = cacheKey?.trim();
+    final cacheService = _imageCacheService;
+    if (cacheService != null &&
+        normalizedKey != null &&
+        normalizedKey.isNotEmpty &&
+        ownerType != null &&
+        ownerId != null &&
+        ownerId.trim().isNotEmpty) {
+      final result = await cacheService.ensureCached(
+        ImageCacheRequest(
+          cacheKey: normalizedKey,
+          sourceUrl: imageUrl,
+          ownerType: ownerType,
+          ownerId: ownerId,
+          role: role,
+          episodeId: episodeId,
+          imageIndex: imageIndex,
+          protected: protected,
+        ),
+      );
+      return ComicImageCacheResult(
+        success: result.success,
+        localPath: result.localPath,
+        cacheKey: result.cacheKey,
+        bytes: result.bytes,
+        fromCache: result.fromCache,
+      );
+    }
+
     try {
-      final fileInfo = await _cacheManager.downloadFile(imageUrl, key: imageUrl);
+      final fileInfo = await _cacheManager.downloadFile(
+        imageUrl,
+        key: normalizedKey == null || normalizedKey.isEmpty ? imageUrl : normalizedKey,
+      );
       return ComicImageCacheResult(
         success: true,
         localPath: fileInfo.file.path,
+        cacheKey: normalizedKey == null || normalizedKey.isEmpty ? imageUrl : normalizedKey,
+        bytes: await fileInfo.file.length(),
       );
     } catch (_) {
       return const ComicImageCacheResult(success: false);
@@ -249,6 +357,7 @@ final comicReaderServiceProvider = FutureProvider<ComicReaderService>((ref) asyn
   return NetworkComicReaderService(
     threadRepository: ref.read(threadRepositoryProvider),
     parserService: ref.read(comicParserServiceProvider),
+    imageCacheService: ref.read(imageCacheServiceProvider),
     cacheManager: await ref.read(comicCacheManagerProvider.future),
   );
 });

@@ -673,11 +673,15 @@ class SqfliteLocalFavoriteRepository implements LocalFavoriteRepository {
     );
     final addedAt = record.dateline ?? record.firstSeenAt;
     final totalCount = max(1, record.replies + 1);
+    final cover = await _loadModuleCover(db, record);
     return LibraryWorkItem(
       workId: record.shelfWorkId,
       categoryId: record.resolvedCategoryId,
       title: record.title,
       secondaryName: record.author,
+      coverImageUrl: cover.coverImageUrl,
+      coverLocalPath: cover.coverLocalPath,
+      customCoverLocalPath: cover.customCoverLocalPath,
       unreadCount: 0,
       totalChapterCount: totalCount,
       readChapterCount: 0,
@@ -685,6 +689,64 @@ class SqfliteLocalFavoriteRepository implements LocalFavoriteRepository {
       workUpdatedAt: record.dateline,
       lastFetchedAt: record.detailLoadedAt,
       hasTags: tagRows.isNotEmpty,
+    );
+  }
+
+  Future<_FavoriteCoverSnapshot> _loadModuleCover(
+    Database db,
+    FavoriteThreadCacheRecord record,
+  ) async {
+    // 收藏页自身只缓存线程元数据；封面归漫画/小说模块维护。
+    // 列表模式展示时按 workId 轻量读取模块封面，避免复制缓存策略。
+    final workId = record.workId?.trim();
+    if (workId == null || workId.isEmpty) {
+      return const _FavoriteCoverSnapshot.empty();
+    }
+
+    switch (record.contentKind) {
+      case ThreadContentKind.comic:
+        final rows = await db.query(
+          ComicLocalDb.comicsTable,
+          columns: const <String>[
+            'cover_image_url',
+            'custom_cover_image_url',
+            'cover_local_path',
+            'custom_cover_local_path',
+          ],
+          where: 'comic_id = ?',
+          whereArgs: <Object>[workId],
+          limit: 1,
+        );
+        return _coverSnapshotFromRows(rows);
+      case ThreadContentKind.novel:
+        final rows = await db.query(
+          ComicLocalDb.worksTable,
+          columns: const <String>[
+            'cover_image_url',
+            'cover_local_path',
+            'custom_cover_local_path',
+          ],
+          where: 'work_id = ? AND content_type = ?',
+          whereArgs: <Object>[workId, 'novel'],
+          limit: 1,
+        );
+        return _coverSnapshotFromRows(rows);
+      case ThreadContentKind.unknown:
+      case ThreadContentKind.forum:
+        return const _FavoriteCoverSnapshot.empty();
+    }
+  }
+
+  _FavoriteCoverSnapshot _coverSnapshotFromRows(List<Map<String, Object?>> rows) {
+    if (rows.isEmpty) {
+      return const _FavoriteCoverSnapshot.empty();
+    }
+    final row = rows.first;
+    final customCoverImageUrl = row['custom_cover_image_url'] as String?;
+    return _FavoriteCoverSnapshot(
+      coverImageUrl: customCoverImageUrl ?? row['cover_image_url'] as String?,
+      coverLocalPath: row['cover_local_path'] as String?,
+      customCoverLocalPath: row['custom_cover_local_path'] as String?,
     );
   }
 
@@ -808,4 +870,21 @@ class SqfliteLocalFavoriteRepository implements LocalFavoriteRepository {
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
+}
+
+class _FavoriteCoverSnapshot {
+  const _FavoriteCoverSnapshot({
+    this.coverImageUrl,
+    this.coverLocalPath,
+    this.customCoverLocalPath,
+  });
+
+  const _FavoriteCoverSnapshot.empty()
+      : coverImageUrl = null,
+        coverLocalPath = null,
+        customCoverLocalPath = null;
+
+  final String? coverImageUrl;
+  final String? coverLocalPath;
+  final String? customCoverLocalPath;
 }

@@ -1,4 +1,7 @@
-﻿import 'package:y300/features/comic/data/comic_repository.dart';
+﻿import 'package:y300/features/cache/domain/image_cache_keys.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/image_cache_service.dart';
+import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
@@ -15,12 +18,15 @@ class ComicDetailAdapter implements DetailModuleAdapter {
   ComicDetailAdapter(
     this._repository, {
     ComicEpisodeRefreshService? refreshService,
+    ImageCacheService? imageCacheService,
     required LibraryStateRepository stateRepository,
   })  : _refreshService = refreshService,
+        _imageCacheService = imageCacheService,
         _stateRepository = stateRepository;
 
   final ComicRepository _repository;
   final ComicEpisodeRefreshService? _refreshService;
+  final ImageCacheService? _imageCacheService;
   final LibraryStateRepository _stateRepository;
 
   @override
@@ -42,6 +48,8 @@ class ComicDetailAdapter implements DetailModuleAdapter {
     );
     final inShelf = await _repository.isInShelf(comicId: workId);
     var coverImageUrl = detail.coverImageUrl;
+    var coverLocalPath = detail.coverLocalPath;
+    final customCoverLocalPath = detail.customCoverLocalPath;
     if (coverImageUrl == null || coverImageUrl.trim().isEmpty) {
       // Phase 6：漫画封面兜底优先尝试“首话首图”。
       final episodes = await _repository.getComicEpisodes(comicId: workId, descending: false);
@@ -52,10 +60,31 @@ class ComicDetailAdapter implements DetailModuleAdapter {
         }
       }
     }
+    if ((coverLocalPath == null || coverLocalPath.trim().isEmpty) &&
+        coverImageUrl != null &&
+        coverImageUrl.trim().isNotEmpty) {
+      final cachedCover = await _cacheCover(
+        comicId: workId,
+        sourceUrl: coverImageUrl,
+      );
+      if (cachedCover?.localPath != null) {
+        coverLocalPath = cachedCover!.localPath;
+        if (_repository is ComicCoverCacheWriter) {
+          final writer = _repository as ComicCoverCacheWriter;
+          await writer.updateCoverCache(
+            comicId: workId,
+            coverImageUrl: coverImageUrl,
+            coverLocalPath: coverLocalPath,
+          );
+        }
+      }
+    }
     return LibraryDetailHeader(
       workId: detail.comicId,
       title: detail.title,
       coverImageUrl: coverImageUrl,
+      coverLocalPath: coverLocalPath,
+      customCoverLocalPath: customCoverLocalPath,
       author: detail.author,
       translationGroup: detail.translationGroup,
       sourceTid: detail.sourceTid,
@@ -344,6 +373,27 @@ class ComicDetailAdapter implements DetailModuleAdapter {
     return null;
   }
 
+  Future<CachedImageResult?> _cacheCover({
+    required String comicId,
+    required String sourceUrl,
+  }) async {
+    final cacheService = _imageCacheService;
+    if (cacheService == null) {
+      return null;
+    }
+    final result = await cacheService.ensureCached(
+      ImageCacheRequest(
+        cacheKey: ImageCacheKeys.comicCover(comicId),
+        sourceUrl: sourceUrl,
+        ownerType: ImageCacheOwnerType.comic,
+        ownerId: comicId,
+        role: ImageCacheRole.cover,
+        protected: true,
+      ),
+    );
+    return result.success ? result : null;
+  }
+
   List<LibraryChapterItem> _applyFilters(
     List<LibraryChapterItem> source,
     LibraryFilterSet filters,
@@ -389,3 +439,4 @@ class ComicDetailAdapter implements DetailModuleAdapter {
     };
   }
 }
+

@@ -97,6 +97,107 @@ void main() {
 
       expect(links, isEmpty);
     });
+
+    test('searches once and merges when current tid only has older direct links', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{
+          '100': const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-90-1-1.html', rawText: '上一话'),
+          ],
+          '301': const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-90-1-1.html', rawText: '第13话'),
+            ComicEpisodeLink(url: 'thread-100-1-1.html', rawText: '第14话'),
+            ComicEpisodeLink(url: 'thread-110-1-1.html', rawText: '第15话'),
+          ],
+        },
+      );
+      final searchService = _FakeDiscuzSearchService(
+        response: DiscuzSearchResponse(
+          items: const <DiscuzSearchResultItem>[
+            DiscuzSearchResultItem(
+              tid: '301',
+              title: '百合情结 第15话',
+              url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301',
+              fid: '30',
+            ),
+          ],
+          rateLimited: false,
+        ),
+      );
+      final service = NetworkComicEpisodeRefreshService(
+        discoveryService: discovery,
+        searchService: searchService,
+        subjectParser: const RuleBasedComicSubjectParser(),
+        threadSeedFetcher: (tid) async {
+          return ThreadSeed(
+            subject: const <String, String>{
+              '100': '【提黄灯喵汉化组】百合情结 第14话',
+            }[tid]!,
+          );
+        },
+      );
+
+      final links = await service.fetchEpisodeLinksFromTid('100');
+
+      expect(searchService.calledKeywords, contains('百合情结'));
+      expect(discovery.requestedTids, containsAll(<String>['100', '301']));
+      expect(links.map((link) => link.url), <String>[
+        'thread-90-1-1.html',
+        'thread-100-1-1.html',
+        'thread-110-1-1.html',
+      ]);
+      expect(links.first.rawText, '第13话');
+    });
+
+    test('search fallback skips current tid and keeps scanning candidates', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{
+          '100': const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-90-1-1.html', rawText: '上一话'),
+          ],
+          '301': const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-90-1-1.html', rawText: '第13话'),
+            ComicEpisodeLink(url: 'thread-110-1-1.html', rawText: '第15话'),
+          ],
+        },
+      );
+      final searchService = _FakeDiscuzSearchService(
+        response: DiscuzSearchResponse(
+          items: const <DiscuzSearchResultItem>[
+            DiscuzSearchResultItem(
+              tid: '100',
+              title: '百合情结 第14话',
+              url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
+              fid: '30',
+            ),
+            DiscuzSearchResultItem(
+              tid: '301',
+              title: '百合情结 第15话',
+              url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301',
+              fid: '30',
+            ),
+          ],
+          rateLimited: false,
+        ),
+      );
+      final service = NetworkComicEpisodeRefreshService(
+        discoveryService: discovery,
+        searchService: searchService,
+        subjectParser: const RuleBasedComicSubjectParser(),
+        threadSeedFetcher: (tid) async {
+          return ThreadSeed(
+            subject: const <String, String>{
+              '100': '【提黄灯喵汉化组】百合情结 第14话',
+            }[tid]!,
+          );
+        },
+      );
+
+      final links = await service.fetchEpisodeLinksFromTid('100');
+
+      expect(discovery.requestedTids, <String>['100', '301']);
+      expect(links.map((link) => link.rawText), <String>['第13话', '第15话']);
+    });
   });
 }
 

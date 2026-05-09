@@ -36,6 +36,8 @@ class NovelDetailAdapter implements DetailModuleAdapter {
       workId: detail.novelId,
       title: detail.title,
       coverImageUrl: detail.coverImageUrl,
+      coverLocalPath: detail.coverLocalPath,
+      customCoverLocalPath: detail.customCoverLocalPath,
       author: detail.author,
       sourceTid: detail.sourceTid,
       sourceTypeId: detail.sourceTypeId,

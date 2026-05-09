@@ -10,6 +10,8 @@
     required this.translationGroup,
     required this.coverImageUrl,
     required this.customCoverImageUrl,
+    this.coverLocalPath,
+    this.customCoverLocalPath,
     required this.createdAt,
     required this.updatedAt,
     required this.lastReadEpisodeId,
@@ -25,6 +27,8 @@
   final String? translationGroup;
   final String? coverImageUrl;
   final String? customCoverImageUrl;
+  final String? coverLocalPath;
+  final String? customCoverLocalPath;
   final int createdAt;
   final int updatedAt;
   final String? lastReadEpisodeId;
@@ -41,6 +45,8 @@
       'translation_group': translationGroup,
       'cover_image_url': coverImageUrl,
       'custom_cover_image_url': customCoverImageUrl,
+      'cover_local_path': coverLocalPath,
+      'custom_cover_local_path': customCoverLocalPath,
       'created_at': createdAt,
       'updated_at': updatedAt,
       'last_read_episode_id': lastReadEpisodeId,
@@ -59,6 +65,8 @@
       translationGroup: map['translation_group'] as String?,
       coverImageUrl: map['cover_image_url'] as String?,
       customCoverImageUrl: map['custom_cover_image_url'] as String?,
+      coverLocalPath: map['cover_local_path'] as String?,
+      customCoverLocalPath: map['custom_cover_local_path'] as String?,
       createdAt: map['created_at'] as int,
       updatedAt: map['updated_at'] as int,
       lastReadEpisodeId: map['last_read_episode_id'] as String?,
@@ -103,6 +111,13 @@ class EpisodeImageRecord {
     required this.episodeId,
     required this.imageUrl,
     required this.imageIndex,
+    this.stableCacheKey,
+    this.lastSourceUrl,
+    this.localPath,
+    this.bytes = 0,
+    this.mimeType,
+    this.lastAccessedAt,
+    this.protected = false,
     this.cacheLocalPath,
     this.cacheStatus = 'none',
   });
@@ -110,6 +125,13 @@ class EpisodeImageRecord {
   final String episodeId;
   final String imageUrl;
   final int imageIndex;
+  final String? stableCacheKey;
+  final String? lastSourceUrl;
+  final String? localPath;
+  final int bytes;
+  final String? mimeType;
+  final int? lastAccessedAt;
+  final bool protected;
   final String? cacheLocalPath;
   final String cacheStatus;
 
@@ -118,6 +140,13 @@ class EpisodeImageRecord {
       'episode_id': episodeId,
       'image_url': imageUrl,
       'image_index': imageIndex,
+      'stable_cache_key': stableCacheKey,
+      'last_source_url': lastSourceUrl ?? imageUrl,
+      'local_path': localPath,
+      'bytes': bytes,
+      'mime_type': mimeType,
+      'last_accessed_at': lastAccessedAt,
+      'protected': protected ? 1 : 0,
       'cache_local_path': cacheLocalPath,
       'cache_status': cacheStatus,
     };

@@ -1,5 +1,6 @@
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart' as image_cache;
 import 'package:y300/features/comic/data/comic_cache_directory_provider.dart';
 import 'package:y300/features/comic/data/comic_cache_manager_factory.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
@@ -21,8 +22,7 @@ final comicCacheManagerFactoryProvider = Provider<ComicCacheManagerFactory>((ref
 });
 
 final comicCacheManagerProvider = FutureProvider<BaseCacheManager>((ref) async {
-  final resolver = ref.read(comicCacheDirectoryResolverProvider);
-  final cacheDirectoryPath = await resolver.resolve();
-  final factory = ref.read(comicCacheManagerFactoryProvider);
-  return factory.create(cacheDirectoryPath: cacheDirectoryPath);
+  // Compatibility provider kept for older comic code/tests.  The actual stage
+  // 04 image cache service now owns cache key policy and metadata persistence.
+  return ref.watch(image_cache.imageCacheManagerProvider.future);
 });

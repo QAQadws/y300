@@ -1,4 +1,5 @@
 ﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/novel/data/local_novel_repository.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
@@ -14,5 +15,6 @@ final novelRepositoryProvider = Provider<NovelRepository>((ref) {
     ComicLocalDb.open(),
     threadGateway: ref.watch(novelThreadGatewayProvider),
     discoveryService: ref.watch(novelEpisodeDiscoveryServiceProvider),
+    imageCacheService: ref.watch(imageCacheServiceProvider),
   );
 });

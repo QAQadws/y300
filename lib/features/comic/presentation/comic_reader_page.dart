@@ -1,6 +1,6 @@
-﻿import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/comic/presentation/models/reader_preferences.dart';
 import 'package:y300/features/comic/presentation/providers/reader_preferences_provider.dart';
@@ -413,7 +413,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
       itemCount: viewState.images.length,
       itemBuilder: (context, index) {
         final image = viewState.images[index];
-        return _buildReaderImage(viewState: viewState, imageUrl: image.imageUrl, index: index);
+        return _buildReaderImage(viewState: viewState, image: image, index: index);
       },
     );
   }
@@ -435,7 +435,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
         final image = viewState.images[index];
         return _buildReaderImage(
           viewState: viewState,
-          imageUrl: image.imageUrl,
+          image: image,
           index: index,
           paged: true,
         );
@@ -445,57 +445,23 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
 
   Widget _buildReaderImage({
     required ComicReaderViewState viewState,
-    required String imageUrl,
+    required ComicReaderImageState image,
     required int index,
     bool paged = false,
   }) {
+    final imageUrl = image.imageUrl;
     final imageWidget = ReaderZoomableImage(
       onZoomStateChanged: (isZoomed) => _onImageZoomStateChanged(index, isZoomed),
-      child: CachedNetworkImage(
+      child: LibraryCachedImage(
+        localPath: image.effectiveLocalPath,
         imageUrl: imageUrl,
         fit: paged ? BoxFit.contain : BoxFit.fitWidth,
         width: paged ? null : double.infinity,
-        placeholder: (context, placeholderUrl) => paged
-            ? Center(
-                child: Text('加载中 ${index + 1}/${viewState.images.length}'),
-              )
-            : AspectRatio(
-                aspectRatio: 3 / 4,
-                child: Center(
-                  child: Text('加载中 ${index + 1}/${viewState.images.length}'),
-                ),
-              ),
-        errorWidget: (context, errorUrl, error) {
-          return paged
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('图片加载失败'),
-                      const SizedBox(height: 8),
-                      OutlinedButton(
-                        key: ValueKey<String>('comic-reader-retry-$imageUrl'),
-                        onPressed: () => _controller().retryImage(imageUrl),
-                        child: const Text('重试'),
-                      ),
-                    ],
-                  ),
-                )
-              : Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Column(
-                    children: [
-                      const Text('图片加载失败'),
-                      const SizedBox(height: 8),
-                      OutlinedButton(
-                        key: ValueKey<String>('comic-reader-retry-$imageUrl'),
-                        onPressed: () => _controller().retryImage(imageUrl),
-                        child: const Text('重试'),
-                      ),
-                    ],
-                  ),
-                );
-        },
+        placeholder: _ReaderImageErrorPlaceholder(
+          imageUrl: imageUrl,
+          paged: paged,
+          onRetry: () => _controller().retryImage(imageUrl),
+        ),
       ),
     );
 
@@ -601,3 +567,44 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     _menuAnimationController.reverse();
   }
 }
+
+class _ReaderImageErrorPlaceholder extends StatelessWidget {
+  const _ReaderImageErrorPlaceholder({
+    required this.imageUrl,
+    required this.paged,
+    required this.onRetry,
+  });
+
+  final String imageUrl;
+  final bool paged;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Column(
+      mainAxisSize: paged ? MainAxisSize.min : MainAxisSize.max,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Text('图片加载失败'),
+        const SizedBox(height: 8),
+        OutlinedButton(
+          key: ValueKey<String>('comic-reader-retry-$imageUrl'),
+          onPressed: onRetry,
+          child: const Text('重试'),
+        ),
+      ],
+    );
+
+    if (paged) {
+      return Center(child: content);
+    }
+    return AspectRatio(
+      aspectRatio: 3 / 4,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: content,
+      ),
+    );
+  }
+}
+

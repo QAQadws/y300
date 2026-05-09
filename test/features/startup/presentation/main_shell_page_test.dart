@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
@@ -271,6 +272,11 @@ class _FakeNovelRepository implements NovelRepository {
 }
 
 class _FakeFavoriteSyncService implements FavoriteSyncService {
+  final _progress = ValueNotifier<FavoriteSyncProgress>(FavoriteSyncProgress.idle);
+
+  @override
+  ValueListenable<FavoriteSyncProgress> get progress => _progress;
+
   @override
   Future<FavoriteSyncResult> sync() async {
     return const FavoriteSyncResult(

@@ -1,6 +1,8 @@
 ﻿import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/cache/domain/image_cache_keys.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
@@ -34,6 +36,8 @@ class ComicReaderImageState {
     required this.imageUrl,
     required this.imageIndex,
     required this.cacheStatus,
+    this.cacheKey,
+    this.localPath,
     this.cacheLocalPath,
     this.failed = false,
   });
@@ -41,11 +45,24 @@ class ComicReaderImageState {
   final String imageUrl;
   final int imageIndex;
   final String cacheStatus;
+  final String? cacheKey;
+  final String? localPath;
   final String? cacheLocalPath;
   final bool failed;
 
+  String? get effectiveLocalPath {
+    final local = localPath?.trim();
+    if (local != null && local.isNotEmpty) {
+      return local;
+    }
+    final legacy = cacheLocalPath?.trim();
+    return legacy == null || legacy.isEmpty ? null : legacy;
+  }
+
   ComicReaderImageState copyWith({
     String? cacheStatus,
+    String? cacheKey,
+    String? localPath,
     String? cacheLocalPath,
     bool? failed,
   }) {
@@ -53,6 +70,8 @@ class ComicReaderImageState {
       imageUrl: imageUrl,
       imageIndex: imageIndex,
       cacheStatus: cacheStatus ?? this.cacheStatus,
+      cacheKey: cacheKey ?? this.cacheKey,
+      localPath: localPath ?? this.localPath,
       cacheLocalPath: cacheLocalPath ?? this.cacheLocalPath,
       failed: failed ?? this.failed,
     );
@@ -145,7 +164,8 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     updatedImages[idx] = updatedImages[idx].copyWith(failed: false, cacheStatus: 'downloading');
     state = AsyncData(current.copyWith(images: updatedImages, clearHint: true));
 
-    final cacheResult = await _readerService.cacheImage(imageUrl: imageUrl);
+    final targetImage = updatedImages[idx];
+    final cacheResult = await _cacheReaderImage(targetImage);
     final done = cacheResult.success;
     if (!ref.mounted) {
       return;
@@ -156,11 +176,21 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       cacheStatus: done ? 'done' : 'failed',
       cacheLocalPath: done ? cacheResult.localPath : null,
     );
+    await _updateImageCacheMetadata(
+      episodeId: _args.episodeId,
+      imageUrl: imageUrl,
+      stableCacheKey: done ? cacheResult.cacheKey : targetImage.cacheKey,
+      lastSourceUrl: imageUrl,
+      localPath: done ? cacheResult.localPath : null,
+      bytes: done ? cacheResult.bytes : null,
+      lastAccessedAt: done ? DateTime.now() : null,
+    );
 
     final refreshed = [...updatedImages];
     refreshed[idx] = refreshed[idx].copyWith(
       failed: !done,
       cacheStatus: done ? 'done' : 'failed',
+      localPath: done ? cacheResult.localPath : null,
       cacheLocalPath: done ? cacheResult.localPath : null,
     );
     if (!ref.mounted) {
@@ -180,7 +210,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         imageUrl: image.imageUrl,
         cacheStatus: 'downloading',
       );
-      final cacheResult = await _readerService.cacheImage(imageUrl: image.imageUrl);
+      final cacheResult = await _cacheReaderImage(image);
       final done = cacheResult.success;
       if (!ref.mounted) {
         return;
@@ -190,6 +220,15 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         imageUrl: image.imageUrl,
         cacheStatus: done ? 'done' : 'failed',
         cacheLocalPath: done ? cacheResult.localPath : null,
+      );
+      await _updateImageCacheMetadata(
+        episodeId: _args.episodeId,
+        imageUrl: image.imageUrl,
+        stableCacheKey: done ? cacheResult.cacheKey : image.cacheKey,
+        lastSourceUrl: image.imageUrl,
+        localPath: done ? cacheResult.localPath : null,
+        bytes: done ? cacheResult.bytes : null,
+        lastAccessedAt: done ? DateTime.now() : null,
       );
     }
     final nextState = await _loadState();
@@ -217,7 +256,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
           imageUrl: image.imageUrl,
           cacheStatus: 'downloading',
         );
-        final cacheResult = await _readerService.cacheImage(imageUrl: image.imageUrl);
+        final cacheResult = await _cacheEpisodeImage(image);
         final done = cacheResult.success;
         if (!ref.mounted) {
           return;
@@ -227,6 +266,15 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
           imageUrl: image.imageUrl,
           cacheStatus: done ? 'done' : 'failed',
           cacheLocalPath: done ? cacheResult.localPath : null,
+        );
+        await _updateImageCacheMetadata(
+          episodeId: episode.episodeId,
+          imageUrl: image.imageUrl,
+          stableCacheKey: done ? cacheResult.cacheKey : image.stableCacheKey,
+          lastSourceUrl: image.effectiveSourceUrl,
+          localPath: done ? cacheResult.localPath : null,
+          bytes: done ? cacheResult.bytes : null,
+          lastAccessedAt: done ? DateTime.now() : null,
         );
       }
     }
@@ -315,11 +363,11 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     const radius = 2;
     final start = (centerIndex - radius).clamp(0, current.images.length - 1);
     final end = (centerIndex + radius).clamp(0, current.images.length - 1);
-    final urls = <String>[];
+    final futures = <Future<ComicImageCacheResult>>[];
     for (var i = start; i <= end; i++) {
-      urls.add(current.images[i].imageUrl);
+      futures.add(_cacheReaderImage(current.images[i]));
     }
-    await _readerService.prefetchImages(imageUrls: urls);
+    await Future.wait(futures);
   }
 
   /// Returns previous episode id if available.
@@ -379,6 +427,8 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
               imageUrl: image.imageUrl,
               imageIndex: image.imageIndex,
               cacheStatus: image.cacheStatus,
+              cacheKey: _stableKeyForEpisodeImage(image),
+              localPath: image.effectiveLocalPath,
               cacheLocalPath: image.cacheLocalPath,
             ),
           )
@@ -410,8 +460,78 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   void _preloadFirstBatch(List<ComicEpisodeImageItem> images) {
     final limit = images.length < 3 ? images.length : 3;
     for (var i = 0; i < limit; i++) {
-      final imageUrl = images[i].imageUrl;
-      unawaited(_readerService.cacheImage(imageUrl: imageUrl));
+      unawaited(_cacheEpisodeImage(images[i]));
     }
+  }
+
+  Future<ComicImageCacheResult> _cacheReaderImage(ComicReaderImageState image) {
+    final key = image.cacheKey ?? _stableKeyForIndex(image.imageIndex);
+    return _readerService.cacheImage(
+      imageUrl: image.imageUrl,
+      cacheKey: key,
+      ownerType: ImageCacheOwnerType.comic,
+      ownerId: _args.comicId,
+      role: ImageCacheRole.comicPage,
+      episodeId: _args.episodeId,
+      imageIndex: image.imageIndex,
+    );
+  }
+
+  Future<ComicImageCacheResult> _cacheEpisodeImage(ComicEpisodeImageItem image) {
+    final key = _stableKeyForEpisodeImage(image);
+    return _readerService.cacheImage(
+      imageUrl: image.effectiveSourceUrl,
+      cacheKey: key,
+      ownerType: ImageCacheOwnerType.comic,
+      ownerId: _args.comicId,
+      role: ImageCacheRole.comicPage,
+      episodeId: image.episodeId,
+      imageIndex: image.imageIndex,
+    );
+  }
+
+  String _stableKeyForEpisodeImage(ComicEpisodeImageItem image) {
+    final key = image.stableCacheKey?.trim();
+    if (key != null && key.isNotEmpty) {
+      return key;
+    }
+    return ImageCacheKeys.comicPage(
+      comicId: _args.comicId,
+      episodeId: image.episodeId,
+      imageIndex: image.imageIndex,
+    );
+  }
+
+  String _stableKeyForIndex(int imageIndex) {
+    return ImageCacheKeys.comicPage(
+      comicId: _args.comicId,
+      episodeId: _args.episodeId,
+      imageIndex: imageIndex,
+    );
+  }
+
+  Future<void> _updateImageCacheMetadata({
+    required String episodeId,
+    required String imageUrl,
+    String? stableCacheKey,
+    String? lastSourceUrl,
+    String? localPath,
+    int? bytes,
+    DateTime? lastAccessedAt,
+  }) async {
+    if (_repository is! ComicEpisodeImageCacheMetadataWriter) {
+      return;
+    }
+    final writer = _repository as ComicEpisodeImageCacheMetadataWriter;
+    await writer.updateEpisodeImageCacheMetadata(
+      episodeId: episodeId,
+      imageUrl: imageUrl,
+      stableCacheKey: stableCacheKey,
+      lastSourceUrl: lastSourceUrl,
+      localPath: localPath,
+      bytes: bytes,
+      lastAccessedAt: lastAccessedAt,
+      protected: false,
+    );
   }
 }

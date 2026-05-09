@@ -15,7 +15,7 @@ void main() {
     expect(find.byKey(const Key('more-login-entry')), findsOneWidget);
     expect(find.text('登录'), findsOneWidget);
     expect(find.byKey(const Key('more-cache-settings-entry')), findsOneWidget);
-    expect(find.text('缓存目录'), findsOneWidget);
+    expect(find.text('数据与存储'), findsOneWidget);
     expect(find.byKey(const Key('more-reader-settings-placeholder')), findsOneWidget);
     expect(find.byKey(const Key('more-about-placeholder')), findsOneWidget);
   });

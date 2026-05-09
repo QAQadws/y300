@@ -2,6 +2,9 @@
 import 'dart:math';
 
 import 'package:sqflite/sqflite.dart';
+import 'package:y300/features/cache/domain/image_cache_keys.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
@@ -14,12 +17,15 @@ class LocalNovelRepository implements NovelRepository {
     this._dbFuture, {
     required NovelThreadGateway threadGateway,
     required NovelEpisodeDiscoveryService discoveryService,
+    ImageCacheService? imageCacheService,
   })  : _threadGateway = threadGateway,
-        _discoveryService = discoveryService;
+        _discoveryService = discoveryService,
+        _imageCacheService = imageCacheService;
 
   final Future<Database> _dbFuture;
   final NovelThreadGateway _threadGateway;
   final NovelEpisodeDiscoveryService _discoveryService;
+  final ImageCacheService? _imageCacheService;
 
   static const String _contentType = 'novel';
   static const int _maxRefreshPages = 20;
@@ -206,6 +212,8 @@ class LocalNovelRepository implements NovelRepository {
         w.title,
         w.author,
         w.cover_image_url,
+        w.cover_local_path,
+        w.custom_cover_local_path,
         w.updated_at,
         si.category_id,
         COUNT(e.episode_id) AS episode_count
@@ -235,6 +243,8 @@ class LocalNovelRepository implements NovelRepository {
         w.title,
         w.author,
         w.cover_image_url,
+        w.cover_local_path,
+        w.custom_cover_local_path,
         w.updated_at,
         ? AS category_id,
         COUNT(e.episode_id) AS episode_count
@@ -250,6 +260,33 @@ class LocalNovelRepository implements NovelRepository {
       return null;
     }
     return _rowToNovelItem(rows.first);
+  }
+
+  Future<void> updateCoverCache({
+    required String novelId,
+    String? coverImageUrl,
+    String? coverLocalPath,
+    String? customCoverLocalPath,
+  }) async {
+    final db = await _dbFuture;
+    final values = <String, Object?>{
+      'updated_at': DateTime.now().millisecondsSinceEpoch,
+    };
+    if (coverImageUrl != null) {
+      values['cover_image_url'] = _normalizeNullable(coverImageUrl);
+    }
+    if (coverLocalPath != null) {
+      values['cover_local_path'] = _normalizeNullable(coverLocalPath);
+    }
+    if (customCoverLocalPath != null) {
+      values['custom_cover_local_path'] = _normalizeNullable(customCoverLocalPath);
+    }
+    await db.update(
+      ComicLocalDb.worksTable,
+      values,
+      where: 'work_id = ? AND content_type = ?',
+      whereArgs: <Object>[novelId, _contentType],
+    );
   }
 
   @override
@@ -370,6 +407,8 @@ class LocalNovelRepository implements NovelRepository {
           'title': detail.subject.trim().isEmpty ? '未命名小说' : detail.subject.trim(),
           'author': detail.author.trim().isEmpty ? null : detail.author.trim(),
           'cover_image_url': null,
+          'cover_local_path': null,
+          'custom_cover_local_path': null,
           'updated_at': now,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
@@ -499,6 +538,21 @@ class LocalNovelRepository implements NovelRepository {
       );
     });
 
+    final coverUrl = _normalizeNullable(plan.coverImageUrl);
+    if (coverUrl != null) {
+      final coverResult = await _cacheNovelCover(
+        novelId: novelId,
+        sourceUrl: coverUrl,
+      );
+      if (coverResult?.localPath != null) {
+        await updateCoverCache(
+          novelId: novelId,
+          coverImageUrl: coverUrl,
+          coverLocalPath: coverResult!.localPath,
+        );
+      }
+    }
+
     final total = await getEpisodes(novelId: novelId);
     return NovelEpisodeRefreshResult(
       insertedCount: inserted,
@@ -575,6 +629,8 @@ class LocalNovelRepository implements NovelRepository {
       title: row['title'] as String,
       author: row['author'] as String?,
       coverImageUrl: row['cover_image_url'] as String?,
+      coverLocalPath: row['cover_local_path'] as String?,
+      customCoverLocalPath: row['custom_cover_local_path'] as String?,
       updatedAt: DateTime.fromMillisecondsSinceEpoch((row['updated_at'] as int?) ?? 0),
       episodeCount: (row['episode_count'] as int?) ?? 0,
       categoryId: (row['category_id'] as String?) ?? _defaultCategoryId,
@@ -602,6 +658,27 @@ class LocalNovelRepository implements NovelRepository {
       }
     }
     return pages;
+  }
+
+  Future<CachedImageResult?> _cacheNovelCover({
+    required String novelId,
+    required String sourceUrl,
+  }) async {
+    final cacheService = _imageCacheService;
+    if (cacheService == null) {
+      return null;
+    }
+    final result = await cacheService.ensureCached(
+      ImageCacheRequest(
+        cacheKey: ImageCacheKeys.novelCover(novelId),
+        sourceUrl: sourceUrl,
+        ownerType: ImageCacheOwnerType.novel,
+        ownerId: novelId,
+        role: ImageCacheRole.cover,
+        protected: true,
+      ),
+    );
+    return result.success ? result : null;
   }
 
   String? _normalizeNullable(String? value) {

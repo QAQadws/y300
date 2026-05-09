@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
@@ -26,6 +27,9 @@ class NovelShelfAdapter implements ShelfModuleAdapter {
 
   @override
   LibraryDisplayMode get defaultDisplayMode => LibraryDisplayMode.list;
+
+  @override
+  ValueListenable<LibraryShelfTaskProgress?>? get taskProgress => null;
 
   @override
   Future<List<LibraryCategory>> loadCategories() async {
@@ -186,6 +190,8 @@ class NovelShelfAdapter implements ShelfModuleAdapter {
       title: source.title,
       secondaryName: source.author,
       coverImageUrl: source.coverImageUrl,
+      coverLocalPath: source.coverLocalPath,
+      customCoverLocalPath: source.customCoverLocalPath,
       unreadCount: unread,
       totalChapterCount: source.episodeCount,
       readChapterCount: read,

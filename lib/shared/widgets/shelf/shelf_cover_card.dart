@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 
 /// 通用书架封面卡片。
 ///
@@ -11,6 +12,8 @@ class ShelfCoverCard extends StatelessWidget {
     required this.title,
     required this.coverImageUrl,
     required this.onTap,
+    this.coverLocalPath,
+    this.customCoverLocalPath,
     this.onLongPress,
     this.topLeftBadge,
     this.showTwoLineCustomEllipsis = false,
@@ -20,6 +23,8 @@ class ShelfCoverCard extends StatelessWidget {
 
   final String title;
   final String? coverImageUrl;
+  final String? coverLocalPath;
+  final String? customCoverLocalPath;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
   final Widget? topLeftBadge;
@@ -57,16 +62,21 @@ class ShelfCoverCard extends StatelessWidget {
   }
 
   Widget _buildCoverLayer(BuildContext context) {
-    if (coverImageUrl != null && coverImageUrl!.trim().isNotEmpty) {
-      return Image.network(
-        coverImageUrl!,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          return _buildFallback(context);
-        },
-      );
+    return LibraryCachedImage(
+      localPath: _preferredLocalPath,
+      imageUrl: coverImageUrl,
+      fit: BoxFit.cover,
+      placeholder: _buildFallback(context),
+    );
+  }
+
+  String? get _preferredLocalPath {
+    final custom = customCoverLocalPath?.trim();
+    if (custom != null && custom.isNotEmpty) {
+      return custom;
     }
-    return _buildFallback(context);
+    final cover = coverLocalPath?.trim();
+    return cover == null || cover.isEmpty ? null : cover;
   }
 
   Widget _buildFallback(BuildContext context) {
@@ -187,3 +197,4 @@ class _TwoLineEllipsisText extends StatelessWidget {
     return best.isEmpty ? '···' : best;
   }
 }
+

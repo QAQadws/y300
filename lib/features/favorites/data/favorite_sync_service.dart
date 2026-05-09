@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/comic/data/comic_favorite_ingest_service.dart';
 import 'package:y300/features/favorites/data/favorite_repository.dart';
@@ -12,8 +13,61 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 typedef FavoriteThreadDetailLoader = Future<ApiResult<ThreadDetailData>> Function(String tid);
 typedef FavoriteTagLookupLoader = Future<ForumTagLookup> Function();
 
+enum FavoriteSyncProgressPhase {
+  idle,
+  fetchingList,
+  savingList,
+  loadingDetails,
+  finishing,
+  completed,
+  failed,
+}
+
+class FavoriteSyncProgress {
+  const FavoriteSyncProgress({
+    required this.phase,
+    required this.message,
+    this.current = 0,
+    this.total,
+  });
+
+  final FavoriteSyncProgressPhase phase;
+  final String message;
+  final int current;
+  final int? total;
+
+  bool get isActive {
+    return switch (phase) {
+      FavoriteSyncProgressPhase.fetchingList ||
+      FavoriteSyncProgressPhase.savingList ||
+      FavoriteSyncProgressPhase.loadingDetails ||
+      FavoriteSyncProgressPhase.finishing =>
+        true,
+      FavoriteSyncProgressPhase.idle ||
+      FavoriteSyncProgressPhase.completed ||
+      FavoriteSyncProgressPhase.failed =>
+        false,
+    };
+  }
+
+  double? get fraction {
+    final resolvedTotal = total;
+    if (resolvedTotal == null || resolvedTotal <= 0) {
+      return null;
+    }
+    return (current / resolvedTotal).clamp(0.0, 1.0).toDouble();
+  }
+
+  static const idle = FavoriteSyncProgress(
+    phase: FavoriteSyncProgressPhase.idle,
+    message: '',
+  );
+}
+
 abstract class FavoriteSyncService {
   Future<FavoriteSyncResult> sync();
+
+  ValueListenable<FavoriteSyncProgress> get progress;
 }
 
 class NetworkFavoriteSyncService implements FavoriteSyncService {
@@ -43,27 +97,67 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   final ComicFavoriteIngestService _comicIngestService;
   final NovelFavoriteIngestService _novelIngestService;
   final int _detailBatchLimit;
+  final ValueNotifier<FavoriteSyncProgress> _progress = ValueNotifier<FavoriteSyncProgress>(
+    FavoriteSyncProgress.idle,
+  );
+
+  @override
+  ValueListenable<FavoriteSyncProgress> get progress => _progress;
 
   @override
   Future<FavoriteSyncResult> sync() async {
     try {
-      return await _syncInternal();
+      final result = await _syncInternal();
+      _emitProgress(
+        const FavoriteSyncProgress(
+          phase: FavoriteSyncProgressPhase.completed,
+          message: '收藏同步完成',
+        ),
+      );
+      return result;
     } on _FavoriteSyncFailure catch (error) {
+      _emitProgress(
+        FavoriteSyncProgress(
+          phase: FavoriteSyncProgressPhase.failed,
+          message: error.message,
+        ),
+      );
       await _localRepository.markSyncFailure(error.message);
       throw StateError(error.message);
     } catch (error) {
+      _emitProgress(
+        FavoriteSyncProgress(
+          phase: FavoriteSyncProgressPhase.failed,
+          message: '$error',
+        ),
+      );
       await _localRepository.markSyncFailure('$error');
       rethrow;
     }
   }
 
   Future<FavoriteSyncResult> _syncInternal() async {
+    _emitProgress(
+      const FavoriteSyncProgress(
+        phase: FavoriteSyncProgressPhase.fetchingList,
+        message: '正在读取收藏列表 1/?',
+        current: 0,
+      ),
+    );
     final firstPageResult = await _remoteRepository.getFavoriteThreads(page: 1);
     if (firstPageResult is ApiFailure<FavoriteThreadsPage>) {
       throw _FavoriteSyncFailure(firstPageResult.error.message);
     }
 
     final firstPage = firstPageResult.dataOrNull!;
+    _emitProgress(
+      FavoriteSyncProgress(
+        phase: FavoriteSyncProgressPhase.fetchingList,
+        message: '正在读取收藏列表 1/${_estimatedPageCount(firstPage)}',
+        current: 1,
+        total: _estimatedPageCount(firstPage),
+      ),
+    );
     final activeBefore = await _localRepository.getActiveTids();
     final snapshot = await _localRepository.getSyncSnapshot();
     final mode = _resolveSyncMode(
@@ -86,7 +180,16 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
 
     var upsertedCount = 0;
     final remoteTids = <String>{};
-    for (final page in pages) {
+    for (var index = 0; index < pages.length; index++) {
+      final page = pages[index];
+      _emitProgress(
+        FavoriteSyncProgress(
+          phase: FavoriteSyncProgressPhase.savingList,
+          message: '正在写入收藏列表 ${index + 1}/${pages.length}',
+          current: index + 1,
+          total: pages.length,
+        ),
+      );
       remoteTids.addAll(page.items.map((item) => item.tid.trim()).where((tid) => tid.isNotEmpty));
       final pageStartOrder = (page.page - 1) * page.perPage;
       upsertedCount += await _localRepository.upsertRemotePage(
@@ -101,6 +204,12 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     await _removeModuleShelfItems(removedRecords);
 
     final detailResult = await _fillMissingDetails();
+    _emitProgress(
+      const FavoriteSyncProgress(
+        phase: FavoriteSyncProgressPhase.finishing,
+        message: '正在整理收藏同步结果',
+      ),
+    );
     await _localRepository.finishSync(
       mode: mode,
       remoteCount: firstPage.totalCount,
@@ -148,14 +257,31 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   ) async {
     final pages = <FavoriteThreadsPage>[];
     var current = firstPage;
+    final estimatedTotal = _estimatedPageCount(firstPage);
     while (current.hasMore) {
       final nextPageNumber = current.page + 1;
+      _emitProgress(
+        FavoriteSyncProgress(
+          phase: FavoriteSyncProgressPhase.fetchingList,
+          message: '正在读取收藏列表 $nextPageNumber/$estimatedTotal',
+          current: nextPageNumber - 1,
+          total: estimatedTotal,
+        ),
+      );
       final result = await _remoteRepository.getFavoriteThreads(page: nextPageNumber);
       if (result is ApiFailure<FavoriteThreadsPage>) {
         throw _FavoriteSyncFailure(result.error.message);
       }
       current = result.dataOrNull!;
       pages.add(current);
+      _emitProgress(
+        FavoriteSyncProgress(
+          phase: FavoriteSyncProgressPhase.fetchingList,
+          message: '正在读取收藏列表 $nextPageNumber/$estimatedTotal',
+          current: nextPageNumber,
+          total: estimatedTotal,
+        ),
+      );
     }
     return pages;
   }
@@ -168,6 +294,13 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     var current = firstPage;
     while (current.hasMore && !_pageAllKnown(current, activeBefore)) {
       final nextPageNumber = current.page + 1;
+      _emitProgress(
+        FavoriteSyncProgress(
+          phase: FavoriteSyncProgressPhase.fetchingList,
+          message: '正在读取新增收藏第 $nextPageNumber 页',
+          current: pages.length + 1,
+        ),
+      );
       final result = await _remoteRepository.getFavoriteThreads(page: nextPageNumber);
       if (result is ApiFailure<FavoriteThreadsPage>) {
         throw _FavoriteSyncFailure(result.error.message);
@@ -206,6 +339,13 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       var madeProgress = false;
       final failedCountBefore = failedTidSet.length;
       for (final record in records) {
+        _emitProgress(
+          FavoriteSyncProgress(
+            phase: FavoriteSyncProgressPhase.loadingDetails,
+            message: '正在解析收藏详情 ${loadedCount + failedTids.length + 1}',
+            current: loadedCount + failedTids.length,
+          ),
+        );
         try {
           final loaded = await _fillOneDetail(record);
           if (loaded) {
@@ -221,6 +361,13 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
           failedTids.add(record.tid);
           errors[record.tid] = '$error';
         }
+        _emitProgress(
+          FavoriteSyncProgress(
+            phase: FavoriteSyncProgressPhase.loadingDetails,
+            message: '已解析收藏详情 ${loadedCount + failedTids.length}',
+            current: loadedCount + failedTids.length,
+          ),
+        );
       }
 
       // 如果一批全部失败，失败 tid 会被本轮同步临时排除，继续处理后续收藏；
@@ -332,6 +479,17 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   String _buildPartialFailureMessage(Map<String, String> errors) {
     final details = errors.entries.map((entry) => '${entry.key}:${entry.value}').join(',');
     return '部分收藏详情补全失败：$details';
+  }
+
+  int _estimatedPageCount(FavoriteThreadsPage page) {
+    if (page.perPage <= 0 || page.totalCount <= 0) {
+      return page.page;
+    }
+    return (page.totalCount / page.perPage).ceil();
+  }
+
+  void _emitProgress(FavoriteSyncProgress progress) {
+    _progress.value = progress;
   }
 }
 

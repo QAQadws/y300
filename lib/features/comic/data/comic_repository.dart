@@ -92,3 +92,26 @@ abstract class ComicRepository {
     required String fallbackSourceTid,
   });
 }
+
+abstract class ComicCoverCacheWriter {
+  Future<void> updateCoverCache({
+    required String comicId,
+    String? coverImageUrl,
+    String? coverLocalPath,
+    String? customCoverLocalPath,
+  });
+}
+
+abstract class ComicEpisodeImageCacheMetadataWriter {
+  Future<void> updateEpisodeImageCacheMetadata({
+    required String episodeId,
+    required String imageUrl,
+    String? stableCacheKey,
+    String? lastSourceUrl,
+    String? localPath,
+    int? bytes,
+    String? mimeType,
+    DateTime? lastAccessedAt,
+    bool? protected,
+  });
+}

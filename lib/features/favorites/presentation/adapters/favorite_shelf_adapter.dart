@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
@@ -13,12 +14,17 @@ class FavoriteShelfAdapter implements ShelfModuleAdapter {
     required FavoriteSyncService syncService,
     required LibraryStateRepository stateRepository,
   })  : _syncService = syncService,
-        _stateRepository = stateRepository;
+        _stateRepository = stateRepository,
+        _taskProgress = _FavoriteShelfTaskProgressListenable(syncService.progress);
 
   final LocalFavoriteRepository _repository;
   final FavoriteSyncService _syncService;
   final LibraryStateRepository _stateRepository;
+  final ValueListenable<LibraryShelfTaskProgress?> _taskProgress;
   var _initialSyncAttempted = false;
+
+  @override
+  ValueListenable<LibraryShelfTaskProgress?> get taskProgress => _taskProgress;
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.favorite;
@@ -158,5 +164,35 @@ class FavoriteShelfAdapter implements ShelfModuleAdapter {
     }
     // 首次进入收藏页时建立本地缓存；失败交给统一书架错误区展示。
     await _syncService.sync();
+  }
+}
+
+class _FavoriteShelfTaskProgressListenable implements ValueListenable<LibraryShelfTaskProgress?> {
+  const _FavoriteShelfTaskProgressListenable(this._source);
+
+  final ValueListenable<FavoriteSyncProgress> _source;
+
+  @override
+  LibraryShelfTaskProgress? get value {
+    // 把收藏同步内部阶段翻译成 shared 层通用进度，避免 UnifiedShelfPage 依赖 favorites 包。
+    final progress = _source.value;
+    if (!progress.isActive) {
+      return null;
+    }
+    return LibraryShelfTaskProgress(
+      message: progress.message,
+      current: progress.current,
+      total: progress.total,
+    );
+  }
+
+  @override
+  void addListener(VoidCallback listener) {
+    _source.addListener(listener);
+  }
+
+  @override
+  void removeListener(VoidCallback listener) {
+    _source.removeListener(listener);
   }
 }

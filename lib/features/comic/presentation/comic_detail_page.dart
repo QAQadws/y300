@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/presentation/adapters/comic_detail_adapter.dart';
 import 'package:y300/features/comic/presentation/comic_reader_page.dart';
@@ -22,6 +23,7 @@ class ComicDetailPage extends ConsumerWidget {
     final adapter = ComicDetailAdapter(
       ref.watch(comicRepositoryProvider),
       refreshService: ref.watch(comicEpisodeRefreshServiceProvider),
+      imageCacheService: ref.watch(imageCacheServiceProvider),
       stateRepository: ref.watch(libraryStateRepositoryProvider),
     );
     return UnifiedDetailPage(

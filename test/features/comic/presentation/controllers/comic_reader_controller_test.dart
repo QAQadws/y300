@@ -1,6 +1,7 @@
 ﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
@@ -38,13 +39,17 @@ void main() {
 
     final args = const ComicReaderArgs(comicId: 'yamibo:100', episodeId: 'yamibo:100:101');
     await container.read(comicReaderControllerProvider(args).future);
+    service.cachedImageUrls.clear();
 
     await container
         .read(comicReaderControllerProvider(args).notifier)
         .jumpToImageIndex(3, scrollOffset: 120);
+    await Future<void>.delayed(Duration.zero);
 
-    expect(service.prefetchedBatches, isNotEmpty);
-    expect(service.prefetchedBatches.last.length, greaterThanOrEqualTo(3));
+    expect(service.cachedImageUrls, isNotEmpty);
+    expect(service.cachedImageUrls.length, greaterThanOrEqualTo(3));
+    expect(service.cachedImageUrls, contains('https://img.test/101-2.jpg'));
+    expect(service.cachedImageUrls, contains('https://img.test/101-5.jpg'));
   });
 
   test('onScrollProgress persists with debounce', () async {
@@ -105,11 +110,22 @@ void main() {
 }
 
 class _ReaderServiceSpy implements ComicReaderService {
+  final List<String> cachedImageUrls = <String>[];
   final List<List<String>> prefetchedBatches = <List<String>>[];
 
   @override
-  Future<ComicImageCacheResult> cacheImage({required String imageUrl}) async {
-    return const ComicImageCacheResult(success: true, localPath: '/cache/mock.jpg');
+  Future<ComicImageCacheResult> cacheImage({
+    required String imageUrl,
+    String? cacheKey,
+    ImageCacheOwnerType? ownerType,
+    String? ownerId,
+    ImageCacheRole role = ImageCacheRole.comicPage,
+    String? episodeId,
+    int? imageIndex,
+    bool protected = false,
+  }) async {
+    cachedImageUrls.add(imageUrl);
+    return ComicImageCacheResult(success: true, localPath: '/cache/mock.jpg', cacheKey: cacheKey);
   }
 
   @override

@@ -4,5 +4,5 @@
 /// between settings module and feature modules.
 abstract final class AppStorageKeys {
   static const String comicCacheDirectory = 'comic_cache_dir';
+  static const String imageCacheMaxBytes = 'image_cache_max_bytes';
 }
-

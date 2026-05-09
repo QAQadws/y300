@@ -127,6 +127,77 @@ void main() {
       expect(removed.map((record) => record.tid), <String>['200']);
       expect(active, <String>{'100'});
     });
+
+    test('favorite shelf item reuses comic and novel module covers', () async {
+      final db = await ComicLocalDb.open(databaseName: dbName);
+      await db.insert(
+        ComicLocalDb.comicsTable,
+        <String, Object?>{
+          'comic_id': 'yamibo:100',
+          'source_tid': '100',
+          'source_fid': '30',
+          'title': '漫画',
+          'cover_image_url': 'https://img.test/comic.jpg',
+          'custom_cover_image_url': 'https://img.test/comic-custom-network.jpg',
+          'cover_local_path': '/cache/comic.jpg',
+          'custom_cover_local_path': '/cache/comic-custom.jpg',
+          'created_at': DateTime(2026, 1, 1).millisecondsSinceEpoch,
+          'updated_at': DateTime(2026, 1, 1).millisecondsSinceEpoch,
+        },
+      );
+      await db.insert(
+        ComicLocalDb.worksTable,
+        <String, Object?>{
+          'work_id': 'novel:49:200',
+          'content_type': 'novel',
+          'source_tid': '200',
+          'source_fid': '49',
+          'title': '小说',
+          'cover_image_url': 'https://img.test/novel.jpg',
+          'cover_local_path': '/cache/novel.jpg',
+          'custom_cover_local_path': '/cache/novel-custom.jpg',
+          'updated_at': DateTime(2026, 1, 1).millisecondsSinceEpoch,
+        },
+      );
+      await repository.upsertRemotePage(
+        page: FavoriteThreadsPage(
+          page: 1,
+          perPage: 20,
+          totalCount: 2,
+          items: <FavoriteThread>[
+            _thread(tid: '100', title: '漫画'),
+            _thread(tid: '200', title: '小说'),
+          ],
+        ),
+        pageStartOrder: 0,
+      );
+      await repository.updateThreadDetailMeta(
+        tid: '100',
+        fid: '30',
+        typeid: '398',
+        tagName: '韩国漫画',
+        contentKind: ThreadContentKind.comic,
+        workId: 'yamibo:100',
+      );
+      await repository.updateThreadDetailMeta(
+        tid: '200',
+        fid: '49',
+        typeid: '293',
+        tagName: '原创',
+        contentKind: ThreadContentKind.novel,
+        workId: 'novel:49:200',
+      );
+
+      final comicItems = await repository.loadCategoryItems(favoriteComicCategoryId);
+      final novelItems = await repository.loadCategoryItems(favoriteNovelCategoryId);
+
+      expect(comicItems.single.coverImageUrl, 'https://img.test/comic-custom-network.jpg');
+      expect(comicItems.single.coverLocalPath, '/cache/comic.jpg');
+      expect(comicItems.single.customCoverLocalPath, '/cache/comic-custom.jpg');
+      expect(novelItems.single.coverImageUrl, 'https://img.test/novel.jpg');
+      expect(novelItems.single.coverLocalPath, '/cache/novel.jpg');
+      expect(novelItems.single.customCoverLocalPath, '/cache/novel-custom.jpg');
+    });
   });
 }
 

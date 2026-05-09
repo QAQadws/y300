@@ -600,10 +600,10 @@
 ## 漫画阅读迁移阶段1续做 Review 补充（2026-05-01）
 
 ### 一、更多页信息架构
-- [ ] “更多”页包含：登录、缓存目录、阅读设置占位、关于占位
+- [ ] “更多”页包含：登录、数据与存储、阅读设置占位、关于占位
 - [ ] 登录入口仅在“更多”页可见，论坛页不再提供登录按钮
 
-### 二、缓存目录设置页
+### 二、数据与存储设置页
 - [ ] 默认目录与当前生效目录可见
 - [ ] 选择自定义目录后，自定义目录与生效目录同步更新
 - [ ] 恢复默认后，自定义目录清空，生效目录回到默认目录
@@ -1189,7 +1189,7 @@
 - [ ] `ComicLocalDb` 版本已升级到 `v5`。
 - [ ] 已创建 `works/work_episodes/novel_episode_content/reader_preferences`。
 - [ ] 已创建小说阶段0索引：`idx_work_type_updated`、`idx_episode_work_order`、`idx_episode_tid_pid`。
-- [ ] 迁移逻辑通过 `oldVersion < 5` 增量执行，不影响旧版漫画主流程。
+- [ ] 最新版 schema 已包含小说阶段0表和索引；开发阶段旧库升级会重建数据库，不再维护 `oldVersion < 5` 增量迁移链。
 
 ### 三、主壳导航
 - [ ] `MainShellPage` 已新增 `小说` Tab。
@@ -1648,6 +1648,45 @@
 
 ---
 
+## 分阶段实现 04：缓存机制重构测试反馈修复 Review 记录（2026-05-09）
+
+### Review 范围
+- `lib/features/comic/data/local/comic_local_db.dart`
+- `lib/features/comic/presentation/adapters/comic_detail_adapter.dart`
+- `lib/features/comic/presentation/controllers/comic_reader_controller.dart`
+- `lib/features/novel/data/local_novel_repository.dart`
+- `test/features/more/presentation/cache_settings_controller_test.dart`
+- `test/features/more/presentation/cache_settings_page_test.dart`
+- `test/features/more/presentation/more_page_test.dart`
+
+### 核对结论
+1. DB v12 开发期重建策略：
+- [ ] `onUpgrade/onDowngrade` 统一调用 `_rebuildLatestSchema`。
+- [ ] `_rebuildLatestSchema` 只删除本模块管理的表，再创建最新版 schema。
+- [ ] 逐版本 `ALTER TABLE` 兼容链已移除，避免为开发期历史库持续膨胀迁移代码。
+- [ ] 最新 schema 直接包含 source tag、本地封面路径、图片缓存 metadata、收藏表和统一状态表。
+- [ ] `source_tag_db_migration_test.dart` 与 `image_cache_phase4_db_migration_test.dart` 已改为验证开发期重建策略。
+
+2. 缓存写入接口边界：
+- [ ] 漫画封面缓存写入通过 `ComicCoverCacheWriter` 窄接口显式转型。
+- [ ] 漫画章节图片缓存 metadata 写入通过 `ComicEpisodeImageCacheMetadataWriter` 窄接口显式转型。
+- [ ] `ComicRepository` 主接口未因图片缓存细节继续膨胀。
+- [ ] `LocalNovelRepository.updateCoverCache` 不再错误标注 `@override`。
+
+3. 更多页数据与存储测试：
+- [ ] fake `MoreSettingsRepository` 已实现图片缓存上限读写。
+- [ ] 设置页/controller 测试已覆盖 `imageCacheServiceProvider` fake 注入。
+- [ ] More 页入口断言已从“缓存目录”改为“数据与存储”。
+- [ ] 提示文案断言与当前实现一致：`存储位置已更新`、`已恢复默认存储位置`。
+
+### 待你本地回归
+1. `flutter test`
+2. `flutter analyze`
+
+说明：本轮按要求未执行自动化命令，也未执行 `dart format`。
+
+---
+
 ## 分阶段实现 02：解析规则重构 Review 清单（2026-05-08）
 
 ### 一、DOM/URL 工具边界
@@ -1739,6 +1778,63 @@
 
 ---
 
+## 收藏与章节刷新体验修复 Review 记录（2026-05-09）
+### Review 范围
+- `lib/features/comic/domain/services/comic_services_impl.dart`
+- `lib/features/favorites/data/local_favorite_repository.dart`
+- `lib/features/favorites/data/favorite_sync_service.dart`
+- `lib/features/favorites/presentation/adapters/favorite_shelf_adapter.dart`
+- `lib/features/library_shared/domain/contracts/shelf_module_adapter.dart`
+- `lib/features/library_shared/presentation/pages/unified_shelf_page.dart`
+- `test/features/comic/domain/services/network_comic_episode_refresh_service_test.dart`
+- `test/features/favorites/data/local_favorite_repository_test.dart`
+- `test/features/favorites/data/favorite_sync_service_test.dart`
+- `test/features/library_shared/presentation/pages/unified_shelf_page_test.dart`
+- `test/features/favorites/presentation/favorite_shelf_page_test.dart`
+
+### 一、漫画章节刷新
+- [ ] 当前 tid 发现 direct/recursive 链接后不会直接停止。
+- [ ] 目录解析成功且非空时优先使用目录结果。
+- [ ] 无目录完整结果时会执行一次搜索 fallback 补全。
+- [ ] 搜索 fallback 跳过当前 tid，避免搜索首项为当前帖时再次停在旧链路。
+- [ ] 当前发现与搜索发现按 tid 去重合并。
+- [ ] 重复 tid 时使用搜索/目录补全侧标题覆盖“上一话”等弱标题。
+- [ ] 章节刷新逻辑仍集中在 `ComicEpisodeRefreshService`，详情页和 adapter 不感知搜索补全细节。
+
+### 二、收藏页封面
+- [ ] 收藏缓存不复制漫画/小说封面缓存策略。
+- [ ] 收藏漫画条目可从 `comics` 表读取 `custom_cover_image_url / cover_image_url / cover_local_path / custom_cover_local_path`，并优先使用自定义网络封面。
+- [ ] 收藏小说条目可从 `works` 表读取 `cover_image_url / cover_local_path / custom_cover_local_path`。
+- [ ] `UnifiedShelfPage` 列表模式使用 `LibraryCachedImage`，本地封面优先，网络封面兜底。
+- [ ] 无封面时仍显示稳定占位。
+
+### 三、首次收藏同步进度
+- [ ] `FavoriteSyncService.progress` 能描述读取列表、写入列表、解析详情、收尾等阶段。
+- [ ] 首次无 sync state 进入收藏页时，同步进行中能显示进度条。
+- [ ] 进度通过 `ShelfModuleAdapter.taskProgress` 可选能力进入 shared 层。
+- [ ] `UnifiedShelfPage` 只依赖 `LibraryShelfTaskProgress`，不依赖 favorites 包。
+- [ ] loading 阶段和普通列表阶段都能展示进度条。
+
+### 四、测试覆盖（仅编写，未执行）
+- [ ] `network_comic_episode_refresh_service_test.dart` 覆盖 direct 后搜索补全、跳过当前 tid 与去重。
+- [ ] `local_favorite_repository_test.dart` 覆盖收藏条目复用漫画/小说封面。
+- [ ] `favorite_sync_service_test.dart` 覆盖同步进度事件。
+- [ ] `unified_shelf_page_test.dart` 覆盖通用任务进度条。
+- [ ] `favorite_shelf_page_test.dart` 覆盖首次同步 loading 阶段进度显示。
+
+### 风险与后续
+1. 搜索 fallback 会增加一次网络搜索成本；当前限定为 direct/recursive 非目录结果后的补全，且 Top-K 验证仍在同步服务内控制。
+2. 收藏页封面是列表渲染时轻量查询模块表，若后续收藏量极大且封面查询成为瓶颈，可在仓库层改为 SQL join 或批量预取。
+3. 进度条当前展示同步阶段与页/条计数，若后续需要取消同步，可在 `FavoriteSyncService` 继续扩展取消令牌，不影响 shared 页面合同。
+
+### 执行声明
+本轮按约定未执行：
+1. `flutter test`
+2. `flutter analyze`
+3. `dart format`
+
+---
+
 ## 分阶段实现 01：标签与 typeid Review 清单（2026-05-08）
 
 ### 一、标签基础设施
@@ -1773,7 +1869,7 @@
 - [ ] `thread_detail_models_test.dart` 覆盖 typeid 解析。
 - [ ] `forum_tag_lookup_test.dart` 覆盖 `fid=30,typeid=65 => 公告`。
 - [ ] `thread_content_classifier_test.dart` 覆盖漫画/小说/公告规则。
-- [ ] `source_tag_db_migration_test.dart` 覆盖新建库 DB 新列和旧 v9 -> v10 迁移补列。
+- [ ] `source_tag_db_migration_test.dart` 覆盖最新版 DB 新列，以及旧开发期库升级后重建为最新版结构。
 - [ ] `unified_detail_controller_test.dart` 覆盖 `reload()` 不调用 `refreshWork`。
 - [ ] `unified_detail_page_test.dart` 覆盖来源标签 + 自定义标签展示。
 

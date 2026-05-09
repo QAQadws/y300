@@ -29,9 +29,9 @@ class MorePage extends ConsumerWidget {
           ),
           ListTile(
             key: const Key('more-cache-settings-entry'),
-            leading: const Icon(Icons.folder_special_outlined),
-            title: const Text('缓存目录'),
-            subtitle: const Text('配置漫画图片缓存的存储位置'),
+            leading: const Icon(Icons.storage_outlined),
+            title: const Text('数据与存储'),
+            subtitle: const Text('管理图片缓存和本地存储位置'),
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(builder: (_) => const CacheSettingsPage()),

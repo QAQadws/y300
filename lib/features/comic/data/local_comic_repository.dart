@@ -1,6 +1,7 @@
 ﻿import 'dart:math';
 
 import 'package:sqflite/sqflite.dart';
+import 'package:y300/features/cache/domain/image_cache_keys.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/local/comic_local_models.dart';
@@ -10,7 +11,11 @@ import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 
 /// 基于 SQLite 的漫画仓库实现。
-class LocalComicRepository implements ComicRepository {
+class LocalComicRepository
+    implements
+        ComicRepository,
+        ComicCoverCacheWriter,
+        ComicEpisodeImageCacheMetadataWriter {
   LocalComicRepository(
     this._dbFuture, {
     ComicSubjectParser? subjectParser,
@@ -246,6 +251,34 @@ class LocalComicRepository implements ComicRepository {
   }
 
   @override
+  Future<void> updateCoverCache({
+    required String comicId,
+    String? coverImageUrl,
+    String? coverLocalPath,
+    String? customCoverLocalPath,
+  }) async {
+    final db = await _dbFuture;
+    final values = <String, Object?>{
+      'updated_at': DateTime.now().millisecondsSinceEpoch,
+    };
+    if (coverImageUrl != null) {
+      values['cover_image_url'] = _normalizeNullable(coverImageUrl);
+    }
+    if (coverLocalPath != null) {
+      values['cover_local_path'] = _normalizeNullable(coverLocalPath);
+    }
+    if (customCoverLocalPath != null) {
+      values['custom_cover_local_path'] = _normalizeNullable(customCoverLocalPath);
+    }
+    await db.update(
+      ComicLocalDb.comicsTable,
+      values,
+      where: 'comic_id = ?',
+      whereArgs: <Object>[comicId],
+    );
+  }
+
+  @override
   Future<bool> isInShelf({required String comicId}) async {
     final db = await _dbFuture;
     final rows = await db.query(
@@ -283,6 +316,8 @@ class LocalComicRepository implements ComicRepository {
         translationGroup: parsedPost.subjectMetadata?.translationGroup,
         coverImageUrl: parsedPost.imageUrls.isEmpty ? null : parsedPost.imageUrls.first,
         customCoverImageUrl: null,
+        coverLocalPath: null,
+        customCoverLocalPath: null,
         createdAt: now,
         updatedAt: now,
         lastReadEpisodeId: null,
@@ -336,6 +371,12 @@ class LocalComicRepository implements ComicRepository {
             episodeId: defaultEpisodeId,
             imageUrl: parsedPost.imageUrls[imageIndex],
             imageIndex: imageIndex,
+            stableCacheKey: ImageCacheKeys.comicPage(
+              comicId: comicId,
+              episodeId: defaultEpisodeId,
+              imageIndex: imageIndex,
+            ),
+            lastSourceUrl: parsedPost.imageUrls[imageIndex],
           );
           await txn.insert(
             ComicLocalDb.episodeImagesTable,
@@ -391,7 +432,9 @@ class LocalComicRepository implements ComicRepository {
         c.source_tag_name,
         c.title,
         c.author,
-        COALESCE(c.custom_cover_image_url, c.cover_image_url) AS cover_image_url
+        COALESCE(c.custom_cover_image_url, c.cover_image_url) AS cover_image_url,
+        c.cover_local_path,
+        c.custom_cover_local_path
       FROM ${ComicLocalDb.shelfItemsTable} si
       INNER JOIN ${ComicLocalDb.comicsTable} c
         ON si.comic_id = c.comic_id
@@ -408,6 +451,8 @@ class LocalComicRepository implements ComicRepository {
             title: row['title'] as String,
             author: row['author'] as String?,
             coverImageUrl: row['cover_image_url'] as String?,
+            coverLocalPath: row['cover_local_path'] as String?,
+            customCoverLocalPath: row['custom_cover_local_path'] as String?,
             categoryId: row['category_id'] as String,
             addedAt: DateTime.fromMillisecondsSinceEpoch(row['added_at'] as int),
           ),
@@ -429,6 +474,8 @@ class LocalComicRepository implements ComicRepository {
         c.author,
         c.translation_group,
         COALESCE(c.custom_cover_image_url, c.cover_image_url) AS cover_image_url,
+        c.cover_local_path,
+        c.custom_cover_local_path,
         c.updated_at,
         COUNT(e.episode_id) AS episode_count
       FROM ${ComicLocalDb.comicsTable} c
@@ -454,6 +501,8 @@ class LocalComicRepository implements ComicRepository {
       author: row['author'] as String?,
       translationGroup: row['translation_group'] as String?,
       coverImageUrl: row['cover_image_url'] as String?,
+      coverLocalPath: row['cover_local_path'] as String?,
+      customCoverLocalPath: row['custom_cover_local_path'] as String?,
       updatedAt: DateTime.fromMillisecondsSinceEpoch(row['updated_at'] as int),
       episodeCount: row['episode_count'] as int? ?? 0,
     );
@@ -506,6 +555,13 @@ class LocalComicRepository implements ComicRepository {
             imageUrl: row['image_url'] as String,
             imageIndex: row['image_index'] as int,
             cacheStatus: row['cache_status'] as String,
+            stableCacheKey: row['stable_cache_key'] as String?,
+            lastSourceUrl: row['last_source_url'] as String?,
+            localPath: row['local_path'] as String?,
+            bytes: row['bytes'] as int? ?? 0,
+            mimeType: row['mime_type'] as String?,
+            lastAccessedAt: _toDateTime(row['last_accessed_at']),
+            protected: (row['protected'] as int? ?? 0) == 1,
             cacheLocalPath: row['cache_local_path'] as String?,
           ),
         )
@@ -531,6 +587,11 @@ class LocalComicRepository implements ComicRepository {
             episodeId: episodeId,
             imageUrl: imageUrls[index],
             imageIndex: index,
+            stableCacheKey: _buildEpisodeImageCacheKey(
+              episodeId: episodeId,
+              imageIndex: index,
+            ),
+            lastSourceUrl: imageUrls[index],
           ).toMap(),
         );
       }
@@ -551,6 +612,53 @@ class LocalComicRepository implements ComicRepository {
         'cache_status': cacheStatus,
         'cache_local_path': cacheLocalPath,
       },
+      where: 'episode_id = ? AND image_url = ?',
+      whereArgs: <Object>[episodeId, imageUrl],
+    );
+  }
+
+  @override
+  Future<void> updateEpisodeImageCacheMetadata({
+    required String episodeId,
+    required String imageUrl,
+    String? stableCacheKey,
+    String? lastSourceUrl,
+    String? localPath,
+    int? bytes,
+    String? mimeType,
+    DateTime? lastAccessedAt,
+    bool? protected,
+  }) async {
+    final db = await _dbFuture;
+    final values = <String, Object?>{};
+    if (stableCacheKey != null) {
+      values['stable_cache_key'] = _normalizeNullable(stableCacheKey);
+    }
+    if (lastSourceUrl != null) {
+      values['last_source_url'] = _normalizeNullable(lastSourceUrl);
+    }
+    if (localPath != null) {
+      values['local_path'] = _normalizeNullable(localPath);
+      values['cache_local_path'] = _normalizeNullable(localPath);
+    }
+    if (bytes != null) {
+      values['bytes'] = bytes;
+    }
+    if (mimeType != null) {
+      values['mime_type'] = _normalizeNullable(mimeType);
+    }
+    if (lastAccessedAt != null) {
+      values['last_accessed_at'] = lastAccessedAt.millisecondsSinceEpoch;
+    }
+    if (protected != null) {
+      values['protected'] = protected ? 1 : 0;
+    }
+    if (values.isEmpty) {
+      return;
+    }
+    await db.update(
+      ComicLocalDb.episodeImagesTable,
+      values,
       where: 'episode_id = ? AND image_url = ?',
       whereArgs: <Object>[episodeId, imageUrl],
     );
@@ -718,6 +826,36 @@ class LocalComicRepository implements ComicRepository {
   String? _normalizeNullable(String? value) {
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
+
+  DateTime? _toDateTime(Object? value) {
+    if (value is! int || value <= 0) {
+      return null;
+    }
+    return DateTime.fromMillisecondsSinceEpoch(value);
+  }
+
+  String? _buildEpisodeImageCacheKey({
+    required String episodeId,
+    required int imageIndex,
+  }) {
+    final comicId = _extractComicIdFromEpisodeId(episodeId);
+    if (comicId == null) {
+      return null;
+    }
+    return ImageCacheKeys.comicPage(
+      comicId: comicId,
+      episodeId: episodeId,
+      imageIndex: imageIndex,
+    );
+  }
+
+  String? _extractComicIdFromEpisodeId(String episodeId) {
+    final lastColon = episodeId.lastIndexOf(':');
+    if (lastColon <= 0) {
+      return null;
+    }
+    return episodeId.substring(0, lastColon);
   }
 
   String _resolveComicTitle({

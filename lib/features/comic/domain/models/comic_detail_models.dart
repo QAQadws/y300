@@ -9,6 +9,8 @@
     required this.author,
     required this.translationGroup,
     required this.coverImageUrl,
+    this.coverLocalPath,
+    this.customCoverLocalPath,
     required this.updatedAt,
     required this.episodeCount,
   });
@@ -22,6 +24,8 @@
   final String? author;
   final String? translationGroup;
   final String? coverImageUrl;
+  final String? coverLocalPath;
+  final String? customCoverLocalPath;
   final DateTime updatedAt;
   final int episodeCount;
 }
@@ -64,6 +68,13 @@ class ComicEpisodeImageItem {
     required this.imageUrl,
     required this.imageIndex,
     required this.cacheStatus,
+    this.stableCacheKey,
+    this.lastSourceUrl,
+    this.localPath,
+    this.bytes = 0,
+    this.mimeType,
+    this.lastAccessedAt,
+    this.protected = false,
     this.cacheLocalPath,
   });
 
@@ -71,7 +82,28 @@ class ComicEpisodeImageItem {
   final String imageUrl;
   final int imageIndex;
   final String cacheStatus;
+  final String? stableCacheKey;
+  final String? lastSourceUrl;
+  final String? localPath;
+  final int bytes;
+  final String? mimeType;
+  final DateTime? lastAccessedAt;
+  final bool protected;
   final String? cacheLocalPath;
+
+  String get effectiveSourceUrl {
+    final source = lastSourceUrl?.trim();
+    return source == null || source.isEmpty ? imageUrl : source;
+  }
+
+  String? get effectiveLocalPath {
+    final local = localPath?.trim();
+    if (local != null && local.isNotEmpty) {
+      return local;
+    }
+    final legacy = cacheLocalPath?.trim();
+    return legacy == null || legacy.isEmpty ? null : legacy;
+  }
 }
 
 class ComicReadingProgress {

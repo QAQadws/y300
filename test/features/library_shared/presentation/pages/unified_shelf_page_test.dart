@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
@@ -150,6 +151,37 @@ void main() {
     final list = tester.widget<ListView>(find.byKey(const Key('unified-shelf-list-view')));
     expect(list.cacheExtent, 900);
   });
+
+  testWidgets('optional task progress renders above shelf content', (tester) async {
+    final progress = ValueNotifier<LibraryShelfTaskProgress?>(
+      const LibraryShelfTaskProgress(
+        message: '正在解析收藏详情',
+        current: 3,
+        total: 10,
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.list,
+            taskProgress: progress,
+          ),
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('unified-shelf-task-progress-bar')), findsOneWidget);
+    expect(find.text('正在解析收藏详情'), findsOneWidget);
+    expect(find.text('3/10'), findsOneWidget);
+
+    progress.value = null;
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('unified-shelf-task-progress-bar')), findsNothing);
+  });
 }
 
 LibraryWorkItem _item({
@@ -171,9 +203,12 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
   _FakeShelfAdapter({
     required this.initialDisplayMode,
     this.onQuery,
+    this.taskProgress,
   });
 
   final LibraryDisplayMode initialDisplayMode;
+  @override
+  final ValueListenable<LibraryShelfTaskProgress?>? taskProgress;
   int refreshCalls = 0;
   final Future<Map<String, List<LibraryWorkItem>>> Function({
     required List<LibraryCategory> categories,

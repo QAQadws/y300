@@ -2,6 +2,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
@@ -194,8 +195,17 @@ void main() {
 
 class _ReaderFakeService implements ComicReaderService {
   @override
-  Future<ComicImageCacheResult> cacheImage({required String imageUrl}) async {
-    return const ComicImageCacheResult(success: true, localPath: '/cache/mock.jpg');
+  Future<ComicImageCacheResult> cacheImage({
+    required String imageUrl,
+    String? cacheKey,
+    ImageCacheOwnerType? ownerType,
+    String? ownerId,
+    ImageCacheRole role = ImageCacheRole.comicPage,
+    String? episodeId,
+    int? imageIndex,
+    bool protected = false,
+  }) async {
+    return ComicImageCacheResult(success: true, localPath: '/cache/mock.jpg', cacheKey: cacheKey);
   }
 
   @override

@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
@@ -29,6 +30,9 @@ class ComicShelfAdapter implements ShelfModuleAdapter {
 
   @override
   LibraryDisplayMode get defaultDisplayMode => LibraryDisplayMode.grid;
+
+  @override
+  ValueListenable<LibraryShelfTaskProgress?>? get taskProgress => null;
 
   @override
   Future<List<LibraryCategory>> loadCategories() async {
@@ -195,6 +199,8 @@ class ComicShelfAdapter implements ShelfModuleAdapter {
       title: source.title,
       secondaryName: source.author,
       coverImageUrl: source.coverImageUrl,
+      coverLocalPath: source.coverLocalPath,
+      customCoverLocalPath: source.customCoverLocalPath,
       unreadCount: unread,
       totalChapterCount: unread + read,
       readChapterCount: read,

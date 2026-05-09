@@ -122,6 +122,51 @@ void main() {
     expect(local.records['100']?.detailLoadedAt, isNull);
     expect(local.records['200']?.detailLoadedAt, isNotNull);
   });
+
+  test('emits list and detail progress during first full sync', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(page: 1, totalCount: 3, items: <FavoriteThread>[
+        _favoriteThread(tid: '100', title: '漫画'),
+        _favoriteThread(tid: '200', title: '小说'),
+      ]),
+      2: _page(page: 2, totalCount: 3, items: <FavoriteThread>[
+        _favoriteThread(tid: '300', title: '普通帖'),
+      ]),
+    });
+    final service = NetworkFavoriteSyncService(
+      remoteRepository: remote,
+      localRepository: _MemoryLocalFavoriteRepository(),
+      loadThreadDetail: (tid) async => ApiSuccess(_detailForTid(tid)),
+      loadTagLookup: () async => _lookup(),
+      classifier: const ThreadContentClassifier(),
+      comicIngestService: _FakeComicIngestService(),
+      novelIngestService: _FakeNovelIngestService(),
+      detailBatchLimit: 10,
+    );
+    final emitted = <FavoriteSyncProgress>[];
+    void listener() {
+      emitted.add(service.progress.value);
+    }
+    service.progress.addListener(listener);
+    addTearDown(() => service.progress.removeListener(listener));
+
+    await service.sync();
+
+    expect(
+      emitted.map((progress) => progress.phase),
+      containsAll(<FavoriteSyncProgressPhase>[
+        FavoriteSyncProgressPhase.fetchingList,
+        FavoriteSyncProgressPhase.savingList,
+        FavoriteSyncProgressPhase.loadingDetails,
+        FavoriteSyncProgressPhase.completed,
+      ]),
+    );
+    expect(
+      emitted.any((progress) => progress.phase == FavoriteSyncProgressPhase.fetchingList && progress.total == 2),
+      isTrue,
+    );
+    expect(service.progress.value.isActive, isFalse);
+  });
 }
 
 class _FakeFavoriteRepository implements FavoriteRepository {
