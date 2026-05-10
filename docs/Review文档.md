@@ -1648,6 +1648,55 @@
 
 ---
 
+## 分阶段实现 05：下载存储结构 Review 清单（2026-05-10）
+### 一、下载存储根目录
+- [ ] 下载存储与图片缓存目录分离。
+- [ ] 根目录包含 `.nomedia`、`favorites.json`、`comics/`、`novels/`。
+- [ ] `comics/` 与 `novels/` 子目录均包含 `.nomedia`。
+- [ ] 安全文件名会过滤 `\/:*?"<>|`，并处理过长名称与重名 hash。
+- [ ] JSON 写入使用临时文件 + rename，避免写入中断留下半截 `meta.json`。
+
+### 二、漫画下载结构
+- [ ] 单章下载生成 `meta.json + cover.jpg + NNN-title.cbz`。
+- [ ] CBZ 内部图片为扁平 `001.jpg / 002.png / 003.webp`。
+- [ ] 图片扩展名优先根据 mime，其次根据本地路径或源 URL 推断。
+- [ ] `meta.json.chapters` 是章节顺序来源，不依赖文件系统排序。
+- [ ] 删除章节下载时会删除对应 CBZ，并从 `meta.json.chapters` 移除该章节。
+
+### 三、小说下载结构
+- [ ] 小说目录包含 `meta.json + cover.jpg + chapters/ + images/`。
+- [ ] 章节 JSON 保存 `episodeId/sourceTid/sourcePid/sourcePage/title/orderIndex/rawHtml/plainText/paragraphs/images`。
+- [ ] `meta.json.chapters[].file` 使用 posix 相对路径，例如 `chapters/001-序章.json`。
+- [ ] 离线读取能从章节 JSON 恢复 `NovelChapterContent`。
+- [ ] 当前插图 URL 未入正文缓存时，`images` 字段为空但结构保留。
+
+### 四、读取优先级
+- [ ] 漫画阅读器优先读取下载 CBZ，再回退 SQLite 图片索引/缓存，再请求网络。
+- [ ] 已下载漫画图片不会被首屏预加载或跳页预取重新写入图片缓存。
+- [ ] 小说阅读器优先读取下载章节 JSON，再回退 SQLite 正文缓存。
+- [ ] 详情页下载按钮通过模块 adapter 调用下载服务，shared 层不直接依赖具体下载实现。
+
+### 五、收藏快照
+- [ ] 收藏同步成功后会写入下载根目录 `favorites.json`。
+- [ ] 快照包含 `tid/favid/title/author/fid/typeid/tagName/contentKind/workId/removed/dateline`。
+- [ ] SQLite 仍是 App 主索引，`favorites.json` 只作为可读快照和后续迁移输入。
+
+### 六、测试覆盖（仅编写，未执行）
+- [ ] `download_storage_service_test.dart` 覆盖存储根目录和 `.nomedia`。
+- [ ] `comic_download_service_test.dart` 覆盖漫画 CBZ 与 `meta.json`。
+- [ ] `novel_download_service_test.dart` 覆盖小说章节 JSON、`meta.json` 和离线读取。
+- [ ] 漫画阅读器测试覆盖下载存储优先级。
+- [ ] 小说阅读器测试覆盖下载 JSON 优先级。
+- [ ] 收藏同步测试覆盖 `favorites.json` 快照写入。
+
+### 七、待你本地回归
+1. `flutter test`
+2. `flutter analyze`
+
+说明：`dart format` 按本轮要求未执行，也不作为本轮回归项。
+
+---
+
 ## 分阶段实现 04：缓存机制重构测试反馈修复 Review 记录（2026-05-09）
 
 ### Review 范围

@@ -3,6 +3,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/domain/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/comic/data/comic_download_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
@@ -135,6 +136,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   final ComicReaderArgs _args;
   late final ComicRepository _repository;
   late final ComicReaderService _readerService;
+  late final ComicDownloadService _downloadService;
   Timer? _progressPersistDebounceTimer;
   int _persistVersion = 0;
 
@@ -144,6 +146,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     // async continuations after provider disposal.
     _repository = ref.read(comicRepositoryProvider);
     _readerService = await ref.read(comicReaderServiceProvider.future);
+    _downloadService = ref.read(comicDownloadServiceProvider);
     ref.onDispose(() {
       _progressPersistDebounceTimer?.cancel();
     });
@@ -441,6 +444,14 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   }
 
   Future<List<ComicEpisodeImageItem>> _ensureEpisodeImages(ComicEpisodeItem episode) async {
+    final downloaded = await _downloadService.getDownloadedEpisodeImages(
+      comicId: _args.comicId,
+      episodeId: episode.episodeId,
+    );
+    if (downloaded.isNotEmpty) {
+      return downloaded;
+    }
+
     var images = await _repository.getEpisodeImages(episodeId: episode.episodeId);
     if (images.isNotEmpty) {
       return images;
@@ -460,11 +471,24 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   void _preloadFirstBatch(List<ComicEpisodeImageItem> images) {
     final limit = images.length < 3 ? images.length : 3;
     for (var i = 0; i < limit; i++) {
+      if (_isDownloadedEpisodeImage(images[i])) {
+        continue;
+      }
       unawaited(_cacheEpisodeImage(images[i]));
     }
   }
 
   Future<ComicImageCacheResult> _cacheReaderImage(ComicReaderImageState image) {
+    if (_isDownloadedReaderImage(image)) {
+      return Future<ComicImageCacheResult>.value(
+        ComicImageCacheResult(
+          success: true,
+          localPath: image.effectiveLocalPath,
+          cacheKey: image.cacheKey,
+          fromCache: true,
+        ),
+      );
+    }
     final key = image.cacheKey ?? _stableKeyForIndex(image.imageIndex);
     return _readerService.cacheImage(
       imageUrl: image.imageUrl,
@@ -478,6 +502,17 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   }
 
   Future<ComicImageCacheResult> _cacheEpisodeImage(ComicEpisodeImageItem image) {
+    if (_isDownloadedEpisodeImage(image)) {
+      return Future<ComicImageCacheResult>.value(
+        ComicImageCacheResult(
+          success: true,
+          localPath: image.effectiveLocalPath,
+          cacheKey: image.stableCacheKey,
+          bytes: image.bytes,
+          fromCache: true,
+        ),
+      );
+    }
     final key = _stableKeyForEpisodeImage(image);
     return _readerService.cacheImage(
       imageUrl: image.effectiveSourceUrl,
@@ -488,6 +523,14 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       episodeId: image.episodeId,
       imageIndex: image.imageIndex,
     );
+  }
+
+  bool _isDownloadedReaderImage(ComicReaderImageState image) {
+    return image.cacheStatus == 'downloaded' && image.effectiveLocalPath != null;
+  }
+
+  bool _isDownloadedEpisodeImage(ComicEpisodeImageItem image) {
+    return image.cacheStatus == 'downloaded' && image.effectiveLocalPath != null;
   }
 
   String _stableKeyForEpisodeImage(ComicEpisodeImageItem image) {

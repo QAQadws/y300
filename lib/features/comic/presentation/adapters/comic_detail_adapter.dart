@@ -1,6 +1,7 @@
 ﻿import 'package:y300/features/cache/domain/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
+import 'package:y300/features/comic/data/comic_download_service.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
@@ -18,14 +19,17 @@ class ComicDetailAdapter implements DetailModuleAdapter {
   ComicDetailAdapter(
     this._repository, {
     ComicEpisodeRefreshService? refreshService,
+    ComicDownloadService? downloadService,
     ImageCacheService? imageCacheService,
     required LibraryStateRepository stateRepository,
   })  : _refreshService = refreshService,
+        _downloadService = downloadService,
         _imageCacheService = imageCacheService,
         _stateRepository = stateRepository;
 
   final ComicRepository _repository;
   final ComicEpisodeRefreshService? _refreshService;
+  final ComicDownloadService? _downloadService;
   final ImageCacheService? _imageCacheService;
   final LibraryStateRepository _stateRepository;
 
@@ -151,6 +155,10 @@ class ComicDetailAdapter implements DetailModuleAdapter {
     required String workId,
     required String episodeId,
   }) async {
+    await _downloadService?.deleteEpisodeDownload(
+      comicId: workId,
+      episodeId: episodeId,
+    );
     await _stateRepository.upsertEpisodeState(
       moduleKey: LibraryModuleKey.comic,
       episodeId: episodeId,
@@ -224,6 +232,12 @@ class ComicDetailAdapter implements DetailModuleAdapter {
     required String episodeId,
     required bool isDownloaded,
   }) async {
+    if (isDownloaded) {
+      await _downloadService?.downloadEpisode(
+        comicId: workId,
+        episodeId: episodeId,
+      );
+    }
     await _stateRepository.upsertEpisodeState(
       moduleKey: LibraryModuleKey.comic,
       episodeId: episodeId,

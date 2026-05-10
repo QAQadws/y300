@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
+import 'package:y300/features/comic/data/comic_download_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
@@ -15,6 +16,7 @@ import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
+import 'package:y300/features/storage/domain/download_storage_models.dart';
 
 void main() {
   testWidgets('ComicDetailPage renders unified detail header and chapter list', (tester) async {
@@ -23,6 +25,7 @@ void main() {
         overrides: [
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
           comicEpisodeRefreshServiceProvider.overrideWithValue(_FakeComicEpisodeRefreshService()),
+          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
           libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
         ],
@@ -47,6 +50,24 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   @override
   Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
     return const <ComicEpisodeLink>[];
+  }
+}
+
+class _NoopComicDownloadService implements ComicDownloadService {
+  @override
+  Future<void> deleteEpisodeDownload({required String comicId, required String episodeId}) async {}
+
+  @override
+  Future<DownloadedComicEpisode> downloadEpisode({required String comicId, required String episodeId}) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<List<ComicEpisodeImageItem>> getDownloadedEpisodeImages({
+    required String comicId,
+    required String episodeId,
+  }) async {
+    return const <ComicEpisodeImageItem>[];
   }
 }
 

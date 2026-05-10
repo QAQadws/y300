@@ -16,6 +16,8 @@ abstract class LocalFavoriteRepository {
 
   Future<Set<String>> getActiveTids();
 
+  Future<List<FavoriteThreadCacheRecord>> getActiveThreadsForSnapshot();
+
   Future<void> finishSync({
     required FavoriteSyncMode mode,
     required int remoteCount,
@@ -128,6 +130,17 @@ class SqfliteLocalFavoriteRepository implements LocalFavoriteRepository {
       where: 'removed_at IS NULL',
     );
     return rows.map((row) => row['tid'] as String).toSet();
+  }
+
+  @override
+  Future<List<FavoriteThreadCacheRecord>> getActiveThreadsForSnapshot() async {
+    final db = await _dbFuture;
+    final rows = await db.query(
+      ComicLocalDb.favoriteThreadsTable,
+      where: 'removed_at IS NULL',
+      orderBy: 'remote_order ASC, last_seen_at DESC',
+    );
+    return rows.map(_recordFromRow).toList(growable: false);
   }
 
   @override

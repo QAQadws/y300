@@ -1,10 +1,12 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
+import 'package:y300/features/storage/domain/download_storage_models.dart';
 
 void main() {
   testWidgets('NovelReaderPage supports style controls and paragraph render', (tester) async {
@@ -14,6 +16,7 @@ void main() {
       ProviderScope(
         overrides: [
           novelRepositoryProvider.overrideWithValue(repository),
+          novelDownloadServiceProvider.overrideWithValue(_NoopNovelDownloadService()),
         ],
         child: const MaterialApp(
           home: NovelReaderPage(
@@ -39,6 +42,69 @@ void main() {
 
     expect(repository.latestPreferences?.themeMode, 'sepia');
   });
+
+  testWidgets('NovelReaderPage prefers downloaded chapter json', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+          novelDownloadServiceProvider.overrideWithValue(
+            _DownloadedNovelServiceFake(
+              const NovelChapterContent(
+                episodeId: 'novel:49:100:5001',
+                rawHtml: '<p>离线段。</p>',
+                plainText: '离线段。',
+                paragraphs: <String>['离线段。'],
+              ),
+            ),
+          ),
+        ],
+        child: const MaterialApp(
+          home: NovelReaderPage(
+            novelId: 'novel:49:100',
+            initialEpisodeId: 'novel:49:100:5001',
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('离线段。'), findsOneWidget);
+    expect(find.text('第一段。'), findsNothing);
+  });
+}
+
+class _NoopNovelDownloadService implements NovelDownloadService {
+  @override
+  Future<void> deleteChapterDownload({required String novelId, required String episodeId}) async {}
+
+  @override
+  Future<DownloadedNovelChapter> downloadChapter({required String novelId, required String episodeId}) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<NovelChapterContent?> getDownloadedChapterContent({
+    required String novelId,
+    required String episodeId,
+  }) async {
+    return null;
+  }
+}
+
+class _DownloadedNovelServiceFake extends _NoopNovelDownloadService {
+  _DownloadedNovelServiceFake(this.content);
+
+  final NovelChapterContent content;
+
+  @override
+  Future<NovelChapterContent?> getDownloadedChapterContent({
+    required String novelId,
+    required String episodeId,
+  }) async {
+    return content;
+  }
 }
 
 class _FakeNovelRepository implements NovelRepository {

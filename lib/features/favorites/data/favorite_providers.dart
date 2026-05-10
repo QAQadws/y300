@@ -11,6 +11,7 @@ import 'package:y300/features/favorites/presentation/adapters/favorite_shelf_ada
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/novel/data/novel_favorite_ingest_service.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
+import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/tags/data/tag_providers.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
@@ -44,6 +45,7 @@ final favoriteSyncServiceProvider = Provider<FavoriteSyncService>((ref) {
     classifier: ref.watch(threadContentClassifierProvider),
     comicIngestService: ref.watch(comicFavoriteIngestServiceProvider),
     novelIngestService: ref.watch(novelFavoriteIngestServiceProvider),
+    downloadStorageService: ref.watch(downloadStorageServiceProvider),
   );
 });
 

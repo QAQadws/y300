@@ -80,6 +80,9 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   Future<Set<String>> getActiveTids() async => const <String>{'100'};
 
   @override
+  Future<List<FavoriteThreadCacheRecord>> getActiveThreadsForSnapshot() async => const <FavoriteThreadCacheRecord>[];
+
+  @override
   Future<FavoriteThreadCacheRecord?> getActiveThreadByTid(String tid) async => null;
 
   @override

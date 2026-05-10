@@ -1,6 +1,7 @@
 ﻿import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
 
@@ -122,7 +123,12 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       orElse: () => episodes.first,
     );
 
-    final content = await repository.getChapterContent(episodeId: currentEpisode.episodeId);
+    final downloadService = ref.read(novelDownloadServiceProvider);
+    final content = await downloadService.getDownloadedChapterContent(
+          novelId: _args.novelId,
+          episodeId: currentEpisode.episodeId,
+        ) ??
+        await repository.getChapterContent(episodeId: currentEpisode.episodeId);
     if (content == null) {
       throw StateError('章节内容不存在');
     }

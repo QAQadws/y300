@@ -5,4 +5,5 @@
 abstract final class AppStorageKeys {
   static const String comicCacheDirectory = 'comic_cache_dir';
   static const String imageCacheMaxBytes = 'image_cache_max_bytes';
+  static const String downloadStorageDirectory = 'download_storage_dir';
 }

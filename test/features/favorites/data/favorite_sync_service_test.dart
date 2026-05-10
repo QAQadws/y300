@@ -1,3 +1,5 @@
+import 'dart:io' as io;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/comic/data/comic_favorite_ingest_service.dart';
@@ -10,6 +12,8 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/novel/data/novel_favorite_ingest_service.dart';
+import 'package:y300/features/storage/domain/download_storage_models.dart';
+import 'package:y300/features/storage/domain/download_storage_service.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/tags/domain/forum_tag_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
@@ -167,6 +171,59 @@ void main() {
     );
     expect(service.progress.value.isActive, isFalse);
   });
+
+  test('writes favorites snapshot to download storage after sync', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(page: 1, totalCount: 1, items: <FavoriteThread>[
+        _favoriteThread(tid: '100', title: '漫画'),
+      ]),
+    });
+    final storage = _FavoriteSnapshotStorageSpy();
+    final service = NetworkFavoriteSyncService(
+      remoteRepository: remote,
+      localRepository: _MemoryLocalFavoriteRepository(),
+      loadThreadDetail: (tid) async => ApiSuccess(_detailForTid(tid)),
+      loadTagLookup: () async => _lookup(),
+      classifier: const ThreadContentClassifier(),
+      comicIngestService: _FakeComicIngestService(),
+      novelIngestService: _FakeNovelIngestService(),
+      downloadStorageService: storage,
+      detailBatchLimit: 10,
+    );
+
+    await service.sync();
+
+    expect(storage.snapshot?['remoteCount'], 1);
+    final threads = storage.snapshot?['threads'] as List<dynamic>;
+    expect(threads.single['tid'], '100');
+    expect(threads.single['contentKind'], 'comic');
+  });
+}
+
+class _FavoriteSnapshotStorageSpy implements DownloadStorageService {
+  Map<String, Object?>? snapshot;
+
+  @override
+  Future<void> writeFavoritesSnapshot(Map<String, Object?> json) async {
+    snapshot = json;
+  }
+
+  @override
+  Future<DownloadedComicEpisode?> findDownloadedComicEpisode({required String workId, required String title, required String episodeId}) async => null;
+  @override
+  Future<DownloadedNovelChapter?> findDownloadedNovelChapter({required String novelId, required String title, required String episodeId}) async => null;
+  @override
+  Future<DownloadStorageRoot> prepareRoot() => throw UnimplementedError();
+  @override
+  Future<io.Directory> prepareComicDirectory({required String workId, required String title}) => throw UnimplementedError();
+  @override
+  Future<io.Directory> prepareNovelDirectory({required String novelId, required String title}) => throw UnimplementedError();
+  @override
+  String numberedFileName({required int index, required String title, required String extension}) => throw UnimplementedError();
+  @override
+  String safeFileName(String value, {String fallback = 'untitled'}) => value;
+  @override
+  Future<void> writeJsonAtomically(io.File file, Object? value) => throw UnimplementedError();
 }
 
 class _FakeFavoriteRepository implements FavoriteRepository {
@@ -255,6 +312,11 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
   @override
   Future<Set<String>> getActiveTids() async {
     return records.values.where((record) => record.isActive).map((record) => record.tid).toSet();
+  }
+
+  @override
+  Future<List<FavoriteThreadCacheRecord>> getActiveThreadsForSnapshot() async {
+    return records.values.where((record) => record.isActive).toList(growable: false);
   }
 
   @override

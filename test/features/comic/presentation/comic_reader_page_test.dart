@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/comic/data/comic_download_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
@@ -11,6 +12,7 @@ import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/comic_reader_page.dart';
 import 'package:y300/features/comic/presentation/widgets/reader_zoomable_image.dart';
+import 'package:y300/features/storage/domain/download_storage_models.dart';
 
 void main() {
   setUp(() {
@@ -33,6 +35,7 @@ void main() {
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
           comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
+          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
         ],
         child: const MaterialApp(
           home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
@@ -71,6 +74,7 @@ void main() {
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
           comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
+          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
         ],
         child: const MaterialApp(
           home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
@@ -91,6 +95,7 @@ void main() {
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
           comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
+          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
         ],
         child: const MaterialApp(
           home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
@@ -117,6 +122,7 @@ void main() {
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
           comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
+          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
         ],
         child: const MaterialApp(
           home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
@@ -149,6 +155,7 @@ void main() {
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
           comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
+          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
         ],
         child: const MaterialApp(
           home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
@@ -168,6 +175,7 @@ void main() {
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
           comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
+          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
         ],
         child: const MaterialApp(
           home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
@@ -191,6 +199,24 @@ void main() {
     expect(find.byKey(const Key('comic-reader-current-page-label')), findsOneWidget);
     expect(find.byKey(const Key('comic-reader-total-page-label')), findsOneWidget);
   });
+}
+
+class _NoopComicDownloadService implements ComicDownloadService {
+  @override
+  Future<void> deleteEpisodeDownload({required String comicId, required String episodeId}) async {}
+
+  @override
+  Future<DownloadedComicEpisode> downloadEpisode({required String comicId, required String episodeId}) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<List<ComicEpisodeImageItem>> getDownloadedEpisodeImages({
+    required String comicId,
+    required String episodeId,
+  }) async {
+    return const <ComicEpisodeImageItem>[];
+  }
 }
 
 class _ReaderFakeService implements ComicReaderService {

@@ -6,6 +6,7 @@ import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
 import 'package:y300/features/novel/data/novel_favorite_ingest_service.dart';
+import 'package:y300/features/storage/domain/download_storage_service.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
@@ -79,6 +80,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     required ThreadContentClassifier classifier,
     required ComicFavoriteIngestService comicIngestService,
     required NovelFavoriteIngestService novelIngestService,
+    DownloadStorageService? downloadStorageService,
     int detailBatchLimit = 20,
   })  : _remoteRepository = remoteRepository,
         _localRepository = localRepository,
@@ -87,6 +89,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         _classifier = classifier,
         _comicIngestService = comicIngestService,
         _novelIngestService = novelIngestService,
+        _downloadStorageService = downloadStorageService,
         _detailBatchLimit = detailBatchLimit;
 
   final FavoriteRepository _remoteRepository;
@@ -96,6 +99,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   final ThreadContentClassifier _classifier;
   final ComicFavoriteIngestService _comicIngestService;
   final NovelFavoriteIngestService _novelIngestService;
+  final DownloadStorageService? _downloadStorageService;
   final int _detailBatchLimit;
   final ValueNotifier<FavoriteSyncProgress> _progress = ValueNotifier<FavoriteSyncProgress>(
     FavoriteSyncProgress.idle,
@@ -218,6 +222,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
           ? null
           : _buildPartialFailureMessage(detailResult.errors),
     );
+    await _writeFavoritesSnapshot(remoteCount: firstPage.totalCount);
 
     return FavoriteSyncResult(
       mode: mode,
@@ -490,6 +495,40 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
 
   void _emitProgress(FavoriteSyncProgress progress) {
     _progress.value = progress;
+  }
+
+  Future<void> _writeFavoritesSnapshot({required int remoteCount}) async {
+    final storage = _downloadStorageService;
+    if (storage == null) {
+      return;
+    }
+    final records = await _localRepository.getActiveThreadsForSnapshot();
+    await storage.writeFavoritesSnapshot(
+      <String, Object?>{
+        'schemaVersion': 1,
+        'remoteCount': remoteCount,
+        'syncedAt': DateTime.now().toUtc().toIso8601String(),
+        'threads': records.map(_favoriteSnapshotRow).toList(growable: false),
+      },
+    );
+  }
+
+  Map<String, Object?> _favoriteSnapshotRow(FavoriteThreadCacheRecord record) {
+    return <String, Object?>{
+      'tid': record.tid,
+      'favid': record.favid,
+      'title': record.title,
+      'author': record.author,
+      'fid': record.sourceFid,
+      'typeid': record.sourceTypeid,
+      'tagName': record.sourceTagName,
+      'contentKind': favoriteContentKindToDb(record.contentKind),
+      'workId': record.workId,
+      'removed': record.removedAt != null,
+      'dateline': record.dateline?.millisecondsSinceEpoch == null
+          ? null
+          : record.dateline!.millisecondsSinceEpoch ~/ 1000,
+    };
   }
 }
 

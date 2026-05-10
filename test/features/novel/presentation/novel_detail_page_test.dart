@@ -5,10 +5,12 @@ import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
+import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/presentation/novel_detail_page.dart';
+import 'package:y300/features/storage/domain/download_storage_models.dart';
 
 void main() {
   testWidgets('NovelDetailPage renders unified detail header and chapter list', (tester) async {
@@ -16,6 +18,7 @@ void main() {
       ProviderScope(
         overrides: [
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+          novelDownloadServiceProvider.overrideWithValue(_NoopNovelDownloadService()),
           libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
         ],
         child: const MaterialApp(home: NovelDetailPage(novelId: 'novel:1')),
@@ -34,6 +37,24 @@ void main() {
     expect(find.textContaining('Pid:5001'), findsOneWidget);
     expect(find.byIcon(Icons.file_download), findsOneWidget);
   });
+}
+
+class _NoopNovelDownloadService implements NovelDownloadService {
+  @override
+  Future<void> deleteChapterDownload({required String novelId, required String episodeId}) async {}
+
+  @override
+  Future<DownloadedNovelChapter> downloadChapter({required String novelId, required String episodeId}) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<NovelChapterContent?> getDownloadedChapterContent({
+    required String novelId,
+    required String episodeId,
+  }) async {
+    return null;
+  }
 }
 
 class _FakeNovelRepository implements NovelRepository {

@@ -2,6 +2,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/comic/data/comic_download_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
@@ -9,6 +10,7 @@ import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
+import 'package:y300/features/storage/domain/download_storage_models.dart';
 
 void main() {
   setUp(() {
@@ -33,6 +35,7 @@ void main() {
       overrides: [
         comicRepositoryProvider.overrideWithValue(repository),
         comicReaderServiceProvider.overrideWith((ref) async => service),
+        comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
       ],
     );
     addTearDown(container.dispose);
@@ -59,6 +62,7 @@ void main() {
       overrides: [
         comicRepositoryProvider.overrideWithValue(repository),
         comicReaderServiceProvider.overrideWith((ref) async => service),
+        comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
       ],
     );
     addTearDown(container.dispose);
@@ -92,6 +96,7 @@ void main() {
       overrides: [
         comicRepositoryProvider.overrideWithValue(repository),
         comicReaderServiceProvider.overrideWith((ref) async => service),
+        comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
       ],
     );
     addTearDown(container.dispose);
@@ -107,6 +112,69 @@ void main() {
     );
     expect(doneWrite.cacheLocalPath, '/cache/mock.jpg');
   });
+
+  test('loadState prefers downloaded CBZ images before repository cache', () async {
+    final repository = _ReaderRepoForControllerTest();
+    final service = _ReaderServiceSpy();
+    final downloadService = _DownloadedComicServiceFake(
+      const <ComicEpisodeImageItem>[
+        ComicEpisodeImageItem(
+          episodeId: 'yamibo:100:101',
+          imageUrl: 'downloaded://001.jpg',
+          imageIndex: 0,
+          cacheStatus: 'downloaded',
+          localPath: '/storage/001.jpg',
+        ),
+      ],
+    );
+    final container = ProviderContainer(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(repository),
+        comicReaderServiceProvider.overrideWith((ref) async => service),
+        comicDownloadServiceProvider.overrideWithValue(downloadService),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final args = const ComicReaderArgs(comicId: 'yamibo:100', episodeId: 'yamibo:100:101');
+    final state = await container.read(comicReaderControllerProvider(args).future);
+
+    expect(state.images, hasLength(1));
+    expect(state.images.first.localPath, '/storage/001.jpg');
+    expect(service.cachedImageUrls, isEmpty);
+  });
+}
+
+class _NoopComicDownloadService implements ComicDownloadService {
+  @override
+  Future<void> deleteEpisodeDownload({required String comicId, required String episodeId}) async {}
+
+  @override
+  Future<DownloadedComicEpisode> downloadEpisode({required String comicId, required String episodeId}) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<List<ComicEpisodeImageItem>> getDownloadedEpisodeImages({
+    required String comicId,
+    required String episodeId,
+  }) async {
+    return const <ComicEpisodeImageItem>[];
+  }
+}
+
+class _DownloadedComicServiceFake extends _NoopComicDownloadService {
+  _DownloadedComicServiceFake(this.images);
+
+  final List<ComicEpisodeImageItem> images;
+
+  @override
+  Future<List<ComicEpisodeImageItem>> getDownloadedEpisodeImages({
+    required String comicId,
+    required String episodeId,
+  }) async {
+    return images;
+  }
 }
 
 class _ReaderServiceSpy implements ComicReaderService {

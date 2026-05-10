@@ -3,16 +3,20 @@ import 'package:y300/features/library_shared/domain/contracts/detail_module_adap
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 
 /// 小说详情适配器（Phase 6）。
 class NovelDetailAdapter implements DetailModuleAdapter {
   NovelDetailAdapter(
     this._repository, {
+    NovelDownloadService? downloadService,
     required LibraryStateRepository stateRepository,
-  }) : _stateRepository = stateRepository;
+  })  : _downloadService = downloadService,
+        _stateRepository = stateRepository;
 
   final NovelRepository _repository;
+  final NovelDownloadService? _downloadService;
   final LibraryStateRepository _stateRepository;
 
   @override
@@ -104,6 +108,10 @@ class NovelDetailAdapter implements DetailModuleAdapter {
     required String workId,
     required String episodeId,
   }) async {
+    await _downloadService?.deleteChapterDownload(
+      novelId: workId,
+      episodeId: episodeId,
+    );
     await _stateRepository.upsertEpisodeState(
       moduleKey: LibraryModuleKey.novel,
       episodeId: episodeId,
@@ -182,6 +190,12 @@ class NovelDetailAdapter implements DetailModuleAdapter {
     required String episodeId,
     required bool isDownloaded,
   }) async {
+    if (isDownloaded) {
+      await _downloadService?.downloadChapter(
+        novelId: workId,
+        episodeId: episodeId,
+      );
+    }
     await _stateRepository.upsertEpisodeState(
       moduleKey: LibraryModuleKey.novel,
       episodeId: episodeId,
