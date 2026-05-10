@@ -1,6 +1,7 @@
 ﻿import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
@@ -21,12 +22,14 @@ class UnifiedDetailPage extends StatefulWidget {
     required this.workId,
     required this.onOpenReader,
     required this.onOpenThread,
+    this.imageHeaderBuilder,
   });
 
   final DetailModuleAdapter adapter;
   final String workId;
   final Future<void> Function(BuildContext context, ReaderRouteTarget target) onOpenReader;
   final Future<void> Function(BuildContext context, ThreadRouteTarget target) onOpenThread;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
 
   @override
   State<UnifiedDetailPage> createState() => _UnifiedDetailPageState();
@@ -169,6 +172,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         header: header,
                         moduleKey: widget.adapter.moduleKey,
                         topInset: topInset,
+                        imageHeaderBuilder: widget.imageHeaderBuilder,
                       ),
                     ),
                   if (header != null)
@@ -737,6 +741,7 @@ class _HeroInfoSection extends StatelessWidget {
     required this.header,
     required this.moduleKey,
     required this.topInset,
+    required this.imageHeaderBuilder,
   });
 
   // Hero 区高度（含状态栏与 AppBar 覆盖区）
@@ -748,6 +753,7 @@ class _HeroInfoSection extends StatelessWidget {
   final LibraryDetailHeader header;
   final LibraryModuleKey moduleKey;
   final double topInset;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -767,6 +773,7 @@ class _HeroInfoSection extends StatelessWidget {
             coverLocalPath: header.coverLocalPath,
             customCoverLocalPath: header.customCoverLocalPath,
             hasCover: _hasCover(header),
+            imageHeaderBuilder: imageHeaderBuilder,
           ),
           Padding(
             padding: _contentPadding.copyWith(top: topInset + kToolbarHeight + 4),
@@ -777,6 +784,7 @@ class _HeroInfoSection extends StatelessWidget {
                   url: header.coverImageUrl,
                   localPath: _preferredLocalPath(header),
                   moduleKey: moduleKey,
+                  imageHeaderBuilder: imageHeaderBuilder,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -908,6 +916,7 @@ class _DetailHeaderBackground extends StatelessWidget {
     required this.coverLocalPath,
     required this.customCoverLocalPath,
     required this.hasCover,
+    required this.imageHeaderBuilder,
   });
 
   // 可统一调节模糊强度；你觉得偏糊就继续往下调。
@@ -918,6 +927,7 @@ class _DetailHeaderBackground extends StatelessWidget {
   final String? coverLocalPath;
   final String? customCoverLocalPath;
   final bool hasCover;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -941,6 +951,7 @@ class _DetailHeaderBackground extends StatelessWidget {
               imageUrl: coverImageUrl,
               fit: BoxFit.cover,
               placeholder: Container(color: Theme.of(context).colorScheme.surfaceContainerHighest),
+              headerBuilder: imageHeaderBuilder,
             ),
           ),
         ),
@@ -1019,10 +1030,12 @@ class _CoverImage extends StatelessWidget {
     required this.url,
     required this.localPath,
     required this.moduleKey,
+    required this.imageHeaderBuilder,
   });
   final String? url;
   final String? localPath;
   final LibraryModuleKey moduleKey;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -1060,6 +1073,7 @@ class _CoverImage extends StatelessWidget {
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   child: const Icon(Icons.broken_image_outlined),
                 ),
+                headerBuilder: imageHeaderBuilder,
               ),
       ),
     );

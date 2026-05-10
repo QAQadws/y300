@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/presentation/adapters/comic_shelf_adapter.dart';
 import 'package:y300/features/comic/presentation/comic_detail_page.dart';
@@ -20,6 +21,7 @@ class ComicShelfPage extends ConsumerWidget {
     );
     return UnifiedShelfPage(
       adapter: adapter,
+      imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
       onOpenWork: (context, workId) async {
         await Navigator.of(context).push(
           MaterialPageRoute<void>(

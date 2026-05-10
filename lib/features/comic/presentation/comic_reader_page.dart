@@ -1,5 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/comic/presentation/models/reader_preferences.dart';
@@ -93,6 +95,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     final mode = preferencesState.value?.readerMode ?? ReaderModePreference.vertical;
 
     final state = ref.watch(comicReaderControllerProvider(_readerArgs));
+    final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
 
     return Scaffold(
       body: state.when(
@@ -108,7 +111,11 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
 
           return Stack(
             children: [
-              _buildReaderContentLayer(viewState: viewState, mode: mode),
+              _buildReaderContentLayer(
+                viewState: viewState,
+                mode: mode,
+                imageHeaderBuilder: imageHeaderBuilder,
+              ),
               ReaderTapZones(
                 onCenterTap: _toggleReaderMenu,
                 onLeftTap: mode == ReaderModePreference.vertical
@@ -384,6 +391,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
   Widget _buildReaderContentLayer({
     required ComicReaderViewState viewState,
     required ReaderModePreference mode,
+    required ImageRequestHeaderBuilder imageHeaderBuilder,
   }) {
     return Column(
       children: [
@@ -399,29 +407,45 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
           ),
         Expanded(
           child: mode == ReaderModePreference.vertical
-              ? _buildVerticalReaderView(viewState)
-              : _buildPagedReaderView(viewState, mode),
+              ? _buildVerticalReaderView(
+                  viewState,
+                  imageHeaderBuilder: imageHeaderBuilder,
+                )
+              : _buildPagedReaderView(
+                  viewState,
+                  mode,
+                  imageHeaderBuilder: imageHeaderBuilder,
+                ),
         ),
       ],
     );
   }
 
-  Widget _buildVerticalReaderView(ComicReaderViewState viewState) {
+  Widget _buildVerticalReaderView(
+    ComicReaderViewState viewState, {
+    required ImageRequestHeaderBuilder imageHeaderBuilder,
+  }) {
     return ListView.builder(
       key: const Key('comic-reader-image-list'),
       controller: _scrollController,
       itemCount: viewState.images.length,
       itemBuilder: (context, index) {
         final image = viewState.images[index];
-        return _buildReaderImage(viewState: viewState, image: image, index: index);
+        return _buildReaderImage(
+          viewState: viewState,
+          image: image,
+          index: index,
+          imageHeaderBuilder: imageHeaderBuilder,
+        );
       },
     );
   }
 
   Widget _buildPagedReaderView(
     ComicReaderViewState viewState,
-    ReaderModePreference mode,
-  ) {
+    ReaderModePreference mode, {
+    required ImageRequestHeaderBuilder imageHeaderBuilder,
+  }) {
     return PageView.builder(
       key: const Key('comic-reader-page-view'),
       controller: _pageController,
@@ -437,6 +461,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
           viewState: viewState,
           image: image,
           index: index,
+          imageHeaderBuilder: imageHeaderBuilder,
           paged: true,
         );
       },
@@ -447,6 +472,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     required ComicReaderViewState viewState,
     required ComicReaderImageState image,
     required int index,
+    required ImageRequestHeaderBuilder imageHeaderBuilder,
     bool paged = false,
   }) {
     final imageUrl = image.imageUrl;
@@ -462,6 +488,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
           paged: paged,
           onRetry: () => _controller().retryImage(imageUrl),
         ),
+        headerBuilder: imageHeaderBuilder,
       ),
     );
 

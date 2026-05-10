@@ -1,5 +1,6 @@
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
+import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
 
 class ForumPostAnchor {
@@ -26,9 +27,12 @@ class ForumPostAnchor {
 class ForumPostDomExtractor {
   const ForumPostDomExtractor({
     ForumThreadUrlParser? urlParser,
-  }) : _urlParser = urlParser ?? const ForumThreadUrlParser();
+    SiteUrlResolver urlResolver = const SiteUrlResolver(),
+  })  : _urlParser = urlParser ?? const ForumThreadUrlParser(),
+        _urlResolver = urlResolver;
 
   final ForumThreadUrlParser _urlParser;
+  final SiteUrlResolver _urlResolver;
 
   static final RegExp forumChromeImagePattern = RegExp(
     r'(smilies|static/image|emotion|avatar|uc_server/data/avatar)',
@@ -93,15 +97,21 @@ class ForumPostDomExtractor {
       if (src == null || src.isEmpty) {
         continue;
       }
-      if (ignoreForumChromeImages && forumChromeImagePattern.hasMatch(src)) {
+      final normalizedSrc = normalizeImageSource(src);
+      if (normalizedSrc == null || normalizedSrc.isEmpty) {
         continue;
       }
-      if (seen.add(src)) {
-        images.add(src);
+      if (ignoreForumChromeImages && forumChromeImagePattern.hasMatch(normalizedSrc)) {
+        continue;
+      }
+      if (seen.add(normalizedSrc)) {
+        images.add(normalizedSrc);
       }
     }
     return images;
   }
+
+  String? normalizeImageSource(String src) => _urlResolver.resolve(src);
 
   String extractPlainText(String html) {
     final fragment = html_parser.parseFragment(_preserveTextBreaks(html));

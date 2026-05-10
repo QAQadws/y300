@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 import 'package:y300/shared/widgets/shelf/candidate_shelf_action_row.dart';
 import 'package:y300/shared/widgets/app_skeleton.dart';
 
@@ -20,6 +21,7 @@ class ThreadDetailPage extends ConsumerWidget {
     final args = ThreadDetailArgs(tid: tid, subject: subject);
     final asyncState = ref.watch(threadDetailControllerProvider(args));
     final controller = ref.read(threadDetailControllerProvider(args).notifier);
+    final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
     final state = asyncState.value ?? ThreadDetailPageState.initial(tid: tid, subject: subject);
 
     return Scaffold(
@@ -100,9 +102,10 @@ class ThreadDetailPage extends ConsumerWidget {
                                 ),
                               ],
                               const SizedBox(height: 8),
-                              Html(
+                              ThreadPostHtml(
                                 data: post.message,
                                 key: Key('thread-post-${post.pid}'),
+                                imageHeaderBuilder: imageHeaderBuilder,
                               ),
                             ],
                           ),

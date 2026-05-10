@@ -1,0 +1,63 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
+
+void main() {
+  testWidgets('network image uses headers from header builder', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LibraryCachedImage(
+          imageUrl: 'https://bbs.yamibo.com/data/attachment/test.jpg',
+          fit: BoxFit.cover,
+          placeholder: const SizedBox(key: Key('placeholder')),
+          headerBuilder: const _StaticImageHeaderBuilder(<String, String>{
+            'Referer': 'https://bbs.yamibo.com/',
+            'Cookie': 'auth=token123',
+          }),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key('placeholder')), findsOneWidget);
+    await tester.pump();
+
+    final image = tester.widget<Image>(find.byType(Image));
+    final provider = image.image as NetworkImage;
+    expect(provider.headers, <String, String>{
+      'Referer': 'https://bbs.yamibo.com/',
+      'Cookie': 'auth=token123',
+    });
+  });
+
+  testWidgets('network image normalizes relative Yamibo attachment urls', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: LibraryCachedImage(
+          imageUrl: 'data/attachment/forum/page-1.jpg',
+          fit: BoxFit.cover,
+          placeholder: SizedBox(key: Key('placeholder')),
+        ),
+      ),
+    );
+
+    final image = tester.widget<Image>(find.byType(Image));
+    expect(
+      image.image,
+      isA<NetworkImage>().having(
+        (provider) => provider.url,
+        'url',
+        'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
+      ),
+    );
+  });
+}
+
+class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
+  const _StaticImageHeaderBuilder(this.headers);
+
+  final Map<String, String> headers;
+
+  @override
+  Future<Map<String, String>> buildHeaders(String imageUrl) async => headers;
+}

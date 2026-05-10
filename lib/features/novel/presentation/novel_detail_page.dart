@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_detail_page.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
@@ -25,6 +26,7 @@ class NovelDetailPage extends ConsumerWidget {
     return UnifiedDetailPage(
       adapter: adapter,
       workId: novelId,
+      imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
       onOpenReader: (context, target) async {
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
@@ -48,4 +50,3 @@ class NovelDetailPage extends ConsumerWidget {
     );
   }
 }
-

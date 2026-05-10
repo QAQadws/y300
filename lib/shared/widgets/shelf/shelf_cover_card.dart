@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 
 /// 通用书架封面卡片。
@@ -19,6 +20,7 @@ class ShelfCoverCard extends StatelessWidget {
     this.showTwoLineCustomEllipsis = false,
     this.placeholderIcon = Icons.image_not_supported_outlined,
     this.fallbackBackground,
+    this.imageHeaderBuilder,
   });
 
   final String title;
@@ -31,6 +33,7 @@ class ShelfCoverCard extends StatelessWidget {
   final bool showTwoLineCustomEllipsis;
   final IconData placeholderIcon;
   final Decoration? fallbackBackground;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +70,7 @@ class ShelfCoverCard extends StatelessWidget {
       imageUrl: coverImageUrl,
       fit: BoxFit.cover,
       placeholder: _buildFallback(context),
+      headerBuilder: imageHeaderBuilder,
     );
   }
 

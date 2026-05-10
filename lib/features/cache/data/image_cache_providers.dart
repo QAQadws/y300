@@ -1,5 +1,6 @@
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/default_image_cache_service.dart';
 import 'package:y300/features/cache/data/image_cache_directory_provider.dart';
 import 'package:y300/features/cache/data/image_cache_manager_factory.dart';
@@ -30,5 +31,6 @@ final imageCacheServiceProvider = Provider<ImageCacheService>((ref) {
     repository: ref.watch(imageCacheRepositoryProvider),
     cacheManagerFuture: ref.watch(imageCacheManagerProvider.future),
     directoryResolver: ref.watch(imageCacheDirectoryResolverProvider),
+    headerBuilder: ref.watch(imageRequestHeaderBuilderProvider),
   );
 });

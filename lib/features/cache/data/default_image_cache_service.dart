@@ -2,28 +2,67 @@ import 'dart:io' as io;
 
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:path/path.dart' as p;
+import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/cache/data/image_cache_directory_provider.dart';
 import 'package:y300/features/cache/data/image_cache_repository.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
+
+abstract class ImageFileDownloader {
+  Future<String> download({
+    required BaseCacheManager cacheManager,
+    required String sourceUrl,
+    required String cacheKey,
+    Map<String, String>? headers,
+  });
+}
+
+class CacheManagerImageFileDownloader implements ImageFileDownloader {
+  const CacheManagerImageFileDownloader();
+
+  @override
+  Future<String> download({
+    required BaseCacheManager cacheManager,
+    required String sourceUrl,
+    required String cacheKey,
+    Map<String, String>? headers,
+  }) async {
+    final fileInfo = await cacheManager.downloadFile(
+      sourceUrl,
+      key: cacheKey,
+      authHeaders: headers,
+    );
+    return fileInfo.file.path;
+  }
+}
 
 class DefaultImageCacheService implements ImageCacheService {
   DefaultImageCacheService({
     required ImageCacheRepository repository,
     required Future<BaseCacheManager> cacheManagerFuture,
     required ImageCacheDirectoryResolver directoryResolver,
+    ImageRequestHeaderBuilder? headerBuilder,
+    SiteUrlResolver urlResolver = const SiteUrlResolver(),
+    ImageFileDownloader downloader = const CacheManagerImageFileDownloader(),
   })  : _repository = repository,
         _cacheManagerFuture = cacheManagerFuture,
-        _directoryResolver = directoryResolver;
+        _directoryResolver = directoryResolver,
+        _headerBuilder = headerBuilder,
+        _urlResolver = urlResolver,
+        _downloader = downloader;
 
   final ImageCacheRepository _repository;
   final Future<BaseCacheManager> _cacheManagerFuture;
   final ImageCacheDirectoryResolver _directoryResolver;
+  final ImageRequestHeaderBuilder? _headerBuilder;
+  final SiteUrlResolver _urlResolver;
+  final ImageFileDownloader _downloader;
 
   @override
   Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
     final cacheKey = request.cacheKey.trim();
-    final sourceUrl = request.sourceUrl.trim();
+    final sourceUrl = _urlResolver.resolve(request.sourceUrl) ?? request.sourceUrl.trim();
     if (cacheKey.isEmpty || sourceUrl.isEmpty) {
       return CachedImageResult.failed;
     }
@@ -38,6 +77,7 @@ class DefaultImageCacheService implements ImageCacheService {
         await _repository.upsert(
           _recordFromRequest(
             request,
+            sourceUrl: sourceUrl,
             localPath: file.path,
             bytes: bytes,
             now: now,
@@ -61,6 +101,7 @@ class DefaultImageCacheService implements ImageCacheService {
       await _repository.upsert(
         _recordFromRequest(
           request,
+          sourceUrl: sourceUrl,
           localPath: cached.file.path,
           bytes: bytes,
           now: now,
@@ -77,12 +118,18 @@ class DefaultImageCacheService implements ImageCacheService {
     }
 
     try {
-      final fileInfo = await cacheManager.downloadFile(sourceUrl, key: cacheKey);
-      final localPath = fileInfo.file.path;
+      final headers = await _buildHeaders(sourceUrl);
+      final localPath = await _downloader.download(
+        cacheManager: cacheManager,
+        sourceUrl: sourceUrl,
+        cacheKey: cacheKey,
+        headers: headers.isEmpty ? null : headers,
+      );
       final bytes = await io.File(localPath).length();
       await _repository.upsert(
         _recordFromRequest(
           request,
+          sourceUrl: sourceUrl,
           localPath: localPath,
           bytes: bytes,
           now: now,
@@ -98,6 +145,14 @@ class DefaultImageCacheService implements ImageCacheService {
     } catch (_) {
       return CachedImageResult.failed;
     }
+  }
+
+  Future<Map<String, String>> _buildHeaders(String sourceUrl) async {
+    final builder = _headerBuilder;
+    if (builder == null) {
+      return const <String, String>{};
+    }
+    return builder.buildHeaders(sourceUrl);
   }
 
   @override
@@ -202,6 +257,7 @@ class DefaultImageCacheService implements ImageCacheService {
 
   CachedImageRecord _recordFromRequest(
     ImageCacheRequest request, {
+    required String sourceUrl,
     required String localPath,
     required int bytes,
     required DateTime now,
@@ -214,7 +270,7 @@ class DefaultImageCacheService implements ImageCacheService {
       episodeId: request.episodeId,
       imageIndex: request.imageIndex,
       role: request.role.dbValue,
-      lastSourceUrl: request.sourceUrl,
+      lastSourceUrl: sourceUrl,
       localPath: localPath,
       bytes: bytes,
       protected: request.protected,
@@ -245,4 +301,5 @@ class DefaultImageCacheService implements ImageCacheService {
   String _fileNameSafe(String value) {
     return value.trim().replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
   }
+
 }

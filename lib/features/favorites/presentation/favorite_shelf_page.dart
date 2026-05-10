@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/comic/presentation/comic_detail_page.dart';
 import 'package:y300/features/favorites/data/favorite_providers.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
@@ -17,6 +18,7 @@ class FavoriteShelfPage extends ConsumerWidget {
     final repository = ref.watch(localFavoriteRepositoryProvider);
     return UnifiedShelfPage(
       adapter: adapter,
+      imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
       onOpenWork: (context, workId) async {
         final target = await repository.getRouteTargetByShelfWorkId(workId);
         if (!context.mounted || target == null) {

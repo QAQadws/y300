@@ -1,5 +1,8 @@
 ﻿import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
@@ -264,15 +267,21 @@ class NetworkComicReaderService implements ComicReaderService {
     required ComicParserService parserService,
     ImageCacheService? imageCacheService,
     BaseCacheManager? cacheManager,
+    ImageRequestHeaderBuilder? headerBuilder,
+    SiteUrlResolver urlResolver = const SiteUrlResolver(),
   })  : _threadRepository = threadRepository,
         _parserService = parserService,
         _imageCacheService = imageCacheService,
-        _cacheManager = cacheManager ?? DefaultCacheManager();
+        _cacheManager = cacheManager ?? DefaultCacheManager(),
+        _headerBuilder = headerBuilder,
+        _urlResolver = urlResolver;
 
   final ThreadRepository _threadRepository;
   final ComicParserService _parserService;
   final ImageCacheService? _imageCacheService;
   final BaseCacheManager _cacheManager;
+  final ImageRequestHeaderBuilder? _headerBuilder;
+  final SiteUrlResolver _urlResolver;
 
   @override
   Future<List<String>> fetchEpisodeImagesByTid(String tid) async {
@@ -300,6 +309,7 @@ class NetworkComicReaderService implements ComicReaderService {
     int? imageIndex,
     bool protected = false,
   }) async {
+    final sourceUrl = _urlResolver.resolve(imageUrl) ?? imageUrl.trim();
     final normalizedKey = cacheKey?.trim();
     final cacheService = _imageCacheService;
     if (cacheService != null &&
@@ -311,7 +321,7 @@ class NetworkComicReaderService implements ComicReaderService {
       final result = await cacheService.ensureCached(
         ImageCacheRequest(
           cacheKey: normalizedKey,
-          sourceUrl: imageUrl,
+          sourceUrl: sourceUrl,
           ownerType: ownerType,
           ownerId: ownerId,
           role: role,
@@ -330,19 +340,29 @@ class NetworkComicReaderService implements ComicReaderService {
     }
 
     try {
+      final headers = await _buildHeaders(sourceUrl);
       final fileInfo = await _cacheManager.downloadFile(
-        imageUrl,
-        key: normalizedKey == null || normalizedKey.isEmpty ? imageUrl : normalizedKey,
+        sourceUrl,
+        key: normalizedKey == null || normalizedKey.isEmpty ? sourceUrl : normalizedKey,
+        authHeaders: headers.isEmpty ? null : headers,
       );
       return ComicImageCacheResult(
         success: true,
         localPath: fileInfo.file.path,
-        cacheKey: normalizedKey == null || normalizedKey.isEmpty ? imageUrl : normalizedKey,
+        cacheKey: normalizedKey == null || normalizedKey.isEmpty ? sourceUrl : normalizedKey,
         bytes: await fileInfo.file.length(),
       );
     } catch (_) {
       return const ComicImageCacheResult(success: false);
     }
+  }
+
+  Future<Map<String, String>> _buildHeaders(String imageUrl) async {
+    final builder = _headerBuilder;
+    if (builder == null) {
+      return const <String, String>{};
+    }
+    return builder.buildHeaders(imageUrl);
   }
 
   @override
@@ -359,6 +379,7 @@ final comicReaderServiceProvider = FutureProvider<ComicReaderService>((ref) asyn
     parserService: ref.read(comicParserServiceProvider),
     imageCacheService: ref.read(imageCacheServiceProvider),
     cacheManager: await ref.read(comicCacheManagerProvider.future),
+    headerBuilder: ref.read(imageRequestHeaderBuilderProvider),
   );
 });
 

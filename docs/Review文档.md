@@ -1778,6 +1778,70 @@
 
 ---
 
+## 图片直链防盗链请求头修复 Review 记录（2026-05-10）
+### Review 范围
+- `lib/core/network/image_request_headers.dart`
+- `lib/core/network/site_url_resolver.dart`
+- `lib/core/network/network_providers.dart`
+- `lib/features/cache/data/default_image_cache_service.dart`
+- `lib/features/cache/presentation/widgets/library_cached_image.dart`
+- `lib/features/comic/domain/services/comic_services_impl.dart`
+- `lib/features/comic/presentation/comic_reader_page.dart`
+- `lib/features/thread/domain/services/forum_post_dom_extractor.dart`
+- `lib/features/thread/presentation/thread_detail_page.dart`
+- `lib/features/thread/presentation/widgets/thread_post_html.dart`
+- `lib/features/library_shared/presentation/pages/unified_shelf_page.dart`
+- `lib/features/library_shared/presentation/pages/unified_detail_page.dart`
+- `lib/shared/widgets/shelf/shelf_cover_card.dart`
+- `test/core/network/image_request_headers_test.dart`
+- `test/core/network/site_url_resolver_test.dart`
+- `test/features/cache/data/default_image_cache_service_test.dart`
+- `test/features/cache/presentation/widgets/library_cached_image_test.dart`
+- `test/features/thread/domain/services/forum_post_dom_extractor_test.dart`
+- `test/features/thread/presentation/widgets/thread_post_html_test.dart`
+
+### 一、请求头策略
+- [ ] 图片请求头逻辑集中在 `ImageRequestHeaderBuilder`，页面和服务不散写 Referer/Cookie。
+- [ ] 默认 Referer 为 `https://bbs.yamibo.com/`。
+- [ ] 默认带浏览器态 `User-Agent`。
+- [ ] 默认带图片类 `Accept` 与 `Accept-Language`。
+- [ ] Cookie 只按图片 URL 自身 host 读取，避免把站点 Cookie 泄露给第三方图床。
+- [ ] `SiteUrlResolver` 统一归一化图片 URL，调用点不各自拼接站点地址。
+
+### 二、下载与直显链路
+- [ ] `DefaultImageCacheService.ensureCached` 下载图片时传入 `authHeaders`。
+- [ ] `NetworkComicReaderService` legacy 下载兜底也传入同一套 headers。
+- [ ] `LibraryCachedImage` 远程直显时通过 `Image.network(headers: ...)` 传入 headers。
+- [ ] 原帖 `ThreadPostHtml` 的 `<img>` 也走 `LibraryCachedImage`，避免 `flutter_html` 默认图片绕过 headers。
+- [ ] 本地缓存路径仍优先，不因 header builder 影响本地文件展示。
+- [ ] shared widget 通过可选依赖接收 header builder，不反向依赖 Riverpod。
+
+### 三、图片 URL 归一化
+- [ ] `ForumPostDomExtractor.extractImageSources` 支持 `src` / `data-src` / `data-original` / `file`。
+- [ ] 相对路径、根路径、协议相对路径会归一化为 Yamibo 绝对 URL。
+- [ ] 表情、头像等站点装饰图仍会被过滤。
+- [ ] 旧数据中残留的相对图片地址在 UI 展示和缓存下载前也会被归一化。
+
+### 四、测试覆盖（仅编写，未执行）
+- [ ] `image_request_headers_test.dart` 覆盖 Referer/User-Agent/Cookie 与第三方图床不泄露 Cookie。
+- [ ] `site_url_resolver_test.dart` 覆盖绝对/相对/协议相对 URL。
+- [ ] `default_image_cache_service_test.dart` 覆盖缓存下载 header 转发。
+- [ ] `library_cached_image_test.dart` 覆盖 UI 直显 header 转发。
+- [ ] `forum_post_dom_extractor_test.dart` 覆盖图片 URL 归一化。
+- [ ] `thread_post_html_test.dart` 覆盖原帖 HTML 图片 header 转发。
+
+### 风险与后续
+1. 第三方图床如果同时要求它自己的登录 Cookie，当前不会携带 Yamibo Cookie；这是刻意的安全边界。
+2. 如果某个图床要求更具体的 Referer（例如原帖 URL 而不是站点根），后续可在 `ImageRequestHeaderBuilder` 扩展上下文参数，而不改 UI/缓存调用点。
+
+### 执行声明
+本轮按约定未执行：
+1. `flutter test`
+2. `flutter analyze`
+3. `dart format`
+
+---
+
 ## 收藏与章节刷新体验修复 Review 记录（2026-05-09）
 ### Review 范围
 - `lib/features/comic/domain/services/comic_services_impl.dart`

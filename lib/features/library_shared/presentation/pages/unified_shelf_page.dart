@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
@@ -14,10 +15,12 @@ class UnifiedShelfPage extends StatefulWidget {
     super.key,
     required this.adapter,
     required this.onOpenWork,
+    this.imageHeaderBuilder,
   });
 
   final ShelfModuleAdapter adapter;
   final Future<void> Function(BuildContext context, String workId) onOpenWork;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
 
   @override
   State<UnifiedShelfPage> createState() => _UnifiedShelfPageState();
@@ -53,6 +56,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
   @override
   Widget build(BuildContext context) {
     final state = _controller.state;
+    final imageHeaderBuilder = widget.imageHeaderBuilder;
     final categories = state.categories;
     final tabs = categories
         .map(
@@ -140,12 +144,14 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                               if (state.displayMode == LibraryDisplayMode.list) {
                                 return _WorkList(
                                   items: items,
+                                  imageHeaderBuilder: imageHeaderBuilder,
                                   onTapItem: (workId) => widget.onOpenWork(context, workId),
                                 );
                               }
                               return _WorkGrid(
                                 items: items,
                                 gridColumns: state.gridColumnCount,
+                                imageHeaderBuilder: imageHeaderBuilder,
                                 onTapItem: (workId) => widget.onOpenWork(context, workId),
                               );
                             },
@@ -511,11 +517,13 @@ class _WorkGrid extends StatelessWidget {
   const _WorkGrid({
     required this.items,
     required this.gridColumns,
+    this.imageHeaderBuilder,
     required this.onTapItem,
   });
 
   final List<LibraryWorkItem> items;
   final int gridColumns;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<String> onTapItem;
 
   @override
@@ -541,6 +549,7 @@ class _WorkGrid extends StatelessWidget {
           coverImageUrl: item.coverImageUrl,
           coverLocalPath: item.coverLocalPath,
           customCoverLocalPath: item.customCoverLocalPath,
+          imageHeaderBuilder: imageHeaderBuilder,
           onTap: () => onTapItem(item.workId),
           topLeftBadge: _UnreadBadge(count: item.unreadCount),
           showTwoLineCustomEllipsis: true,
@@ -612,10 +621,12 @@ class _ShelfTaskProgressBanner extends StatelessWidget {
 class _WorkList extends StatelessWidget {
   const _WorkList({
     required this.items,
+    this.imageHeaderBuilder,
     required this.onTapItem,
   });
 
   final List<LibraryWorkItem> items;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<String> onTapItem;
 
   @override
@@ -648,6 +659,7 @@ class _WorkList extends StatelessWidget {
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   child: const Icon(Icons.image_not_supported_outlined),
                 ),
+                headerBuilder: imageHeaderBuilder,
               ),
             ),
           ),

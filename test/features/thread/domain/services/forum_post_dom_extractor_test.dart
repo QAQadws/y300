@@ -24,6 +24,23 @@ void main() {
       );
     });
 
+    test('normalizes relative and protocol-relative image sources to site urls', () {
+      final images = extractor.extractImageSources('''
+<img src="data/attachment/forum/a.jpg">
+<img data-src="//bbs.yamibo.com/data/attachment/forum/b.jpg">
+<img file="/data/attachment/forum/c.jpg">
+''');
+
+      expect(
+        images,
+        <String>[
+          'https://bbs.yamibo.com/data/attachment/forum/a.jpg',
+          'https://bbs.yamibo.com/data/attachment/forum/b.jpg',
+          'https://bbs.yamibo.com/data/attachment/forum/c.jpg',
+        ],
+      );
+    });
+
     test('filters forum chrome images by default', () {
       final images = extractor.extractImageSources('''
 <img src="https://bbs.yamibo.com/static/image/common/smile.gif">
