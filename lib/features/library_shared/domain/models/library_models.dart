@@ -72,6 +72,7 @@ class LibraryWorkItem {
     required this.title,
     this.secondaryName,
     this.coverImageUrl,
+    this.customCoverImageUrl,
     this.coverLocalPath,
     this.customCoverLocalPath,
     required this.unreadCount,
@@ -91,6 +92,7 @@ class LibraryWorkItem {
   final String title;
   final String? secondaryName;
   final String? coverImageUrl;
+  final String? customCoverImageUrl;
   final String? coverLocalPath;
   final String? customCoverLocalPath;
   final int unreadCount;
@@ -111,6 +113,7 @@ class LibraryDetailHeader {
     required this.workId,
     required this.title,
     this.coverImageUrl,
+    this.customCoverImageUrl,
     this.coverLocalPath,
     this.customCoverLocalPath,
     this.author,
@@ -126,6 +129,7 @@ class LibraryDetailHeader {
   final String workId;
   final String title;
   final String? coverImageUrl;
+  final String? customCoverImageUrl;
   final String? coverLocalPath;
   final String? customCoverLocalPath;
   final String? author;

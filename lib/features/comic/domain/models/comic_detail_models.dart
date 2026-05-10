@@ -9,6 +9,7 @@
     required this.author,
     required this.translationGroup,
     required this.coverImageUrl,
+    this.customCoverImageUrl,
     this.coverLocalPath,
     this.customCoverLocalPath,
     required this.updatedAt,
@@ -24,6 +25,7 @@
   final String? author;
   final String? translationGroup;
   final String? coverImageUrl;
+  final String? customCoverImageUrl;
   final String? coverLocalPath;
   final String? customCoverLocalPath;
   final DateTime updatedAt;

@@ -168,6 +168,34 @@ void main() {
     expect(find.byType(ReaderZoomableImage), findsWidgets);
   });
 
+  testWidgets('ComicReaderPage reserves stable slots for vertical images', (tester) async {
+    await prepareLargeViewport(tester);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
+          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+        ],
+        child: const MaterialApp(
+          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey<String>('comic-reader-image-slot-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('comic-reader-image-slot-1')), findsOneWidget);
+    final slot = tester.widget<ConstrainedBox>(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('comic-reader-image-slot-0')),
+        matching: find.byType(ConstrainedBox),
+      ).first,
+    );
+    expect(slot.constraints.minHeight, greaterThan(0));
+  });
+
   testWidgets('ComicReaderPage keeps slider stable during jump commit', (tester) async {
     await prepareLargeViewport(tester);
     await tester.pumpWidget(

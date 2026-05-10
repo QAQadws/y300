@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
@@ -34,7 +35,31 @@ class ForumHomeController extends AsyncNotifier<ForumHomeViewData> {
   }
 
   List<ForumSection> _mapSections(ForumHomePayload payload) {
-    return _mapRegularSections(payload.forumIndex);
+    final sections = <ForumSection>[];
+    final favoriteForums = _dedupeFavoriteForums(payload.favoriteForums);
+    if (favoriteForums.isNotEmpty) {
+      sections.add(
+        ForumSection(
+          title: '我收藏的版块',
+          favoriteItems: favoriteForums,
+          type: ForumSectionType.favorite,
+        ),
+      );
+    }
+    sections.addAll(_mapRegularSections(payload.forumIndex));
+    return sections;
+  }
+
+  List<FavoriteForum> _dedupeFavoriteForums(List<FavoriteForum> source) {
+    final seen = <String>{};
+    final output = <FavoriteForum>[];
+    for (final forum in source) {
+      if (forum.fid.trim().isEmpty || !seen.add(forum.fid)) {
+        continue;
+      }
+      output.add(forum);
+    }
+    return output;
   }
 
   List<ForumSection> _mapRegularSections(ForumIndexData data) {

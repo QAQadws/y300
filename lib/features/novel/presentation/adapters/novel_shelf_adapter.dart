@@ -1,11 +1,15 @@
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:y300/features/cache/domain/image_cache_keys.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 
@@ -14,10 +18,16 @@ class NovelShelfAdapter implements ShelfModuleAdapter {
   NovelShelfAdapter(
     this._repository, {
     required LibraryStateRepository stateRepository,
-  }) : _stateRepository = stateRepository;
+    ImageCacheService? imageCacheService,
+    ImageCacheServiceResolver? imageCacheServiceResolver,
+  })  : _stateRepository = stateRepository,
+        _coverCacheService = imageCacheServiceResolver == null
+            ? LibraryCoverCacheService(imageCacheService)
+            : LibraryCoverCacheService.lazy(imageCacheServiceResolver);
 
   final NovelRepository _repository;
   final LibraryStateRepository _stateRepository;
+  final LibraryCoverCacheService _coverCacheService;
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.novel;
@@ -184,13 +194,14 @@ class NovelShelfAdapter implements ShelfModuleAdapter {
       moduleKey: LibraryModuleKey.novel,
       workId: source.novelId,
     );
+    final coverLocalPath = await _ensureCoverCached(source);
     return LibraryWorkItem(
       workId: source.novelId,
       categoryId: source.categoryId,
       title: source.title,
       secondaryName: source.author,
       coverImageUrl: source.coverImageUrl,
-      coverLocalPath: source.coverLocalPath,
+      coverLocalPath: coverLocalPath,
       customCoverLocalPath: source.customCoverLocalPath,
       unreadCount: unread,
       totalChapterCount: source.episodeCount,
@@ -200,6 +211,35 @@ class NovelShelfAdapter implements ShelfModuleAdapter {
       hasTags: hasTags,
       isDownloaded: downloaded > 0,
     );
+  }
+
+  Future<String?> _ensureCoverCached(NovelItem source) async {
+    final existing = source.coverLocalPath?.trim();
+    if (existing != null && existing.isNotEmpty) {
+      return existing;
+    }
+    final sourceUrl = source.coverImageUrl?.trim();
+    if (sourceUrl == null || sourceUrl.isEmpty) {
+      return source.coverLocalPath;
+    }
+    final cached = await _coverCacheService.ensureProtectedCover(
+      cacheKey: ImageCacheKeys.novelCover(source.novelId),
+      sourceUrl: sourceUrl,
+      ownerType: ImageCacheOwnerType.novel,
+      ownerId: source.novelId,
+    );
+    final localPath = cached?.localPath?.trim();
+    if (localPath == null || localPath.isEmpty) {
+      return source.coverLocalPath;
+    }
+    if (_repository is NovelCoverCacheWriter) {
+      await (_repository as NovelCoverCacheWriter).updateCoverCache(
+        novelId: source.novelId,
+        coverImageUrl: sourceUrl,
+        coverLocalPath: localPath,
+      );
+    }
+    return localPath;
   }
 
   List<LibraryWorkItem> _applyBasicSort(

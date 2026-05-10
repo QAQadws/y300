@@ -168,17 +168,11 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                 slivers: [
                   if (header != null)
                     SliverToBoxAdapter(
-                      child: _HeroInfoSection(
+                      child: _DetailHeaderSection(
                         header: header,
                         moduleKey: widget.adapter.moduleKey,
                         topInset: topInset,
                         imageHeaderBuilder: widget.imageHeaderBuilder,
-                      ),
-                    ),
-                  if (header != null)
-                    SliverToBoxAdapter(
-                      child: _HeaderActionsRow(
-                        header: header,
                         onToggleShelf: () => _showMoveCategorySheet(),
                         onRefresh: () async {
                           await _controller.refresh();
@@ -735,6 +729,50 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   }
 }
 
+/// 顶部视觉区与动作区作为一个滚动单元，避免 RefreshIndicator 下拉拉伸时
+/// 两个 Sliver 独立变形造成肉眼可见的缝隙。
+class _DetailHeaderSection extends StatelessWidget {
+  const _DetailHeaderSection({
+    required this.header,
+    required this.moduleKey,
+    required this.topInset,
+    required this.imageHeaderBuilder,
+    required this.onToggleShelf,
+    required this.onRefresh,
+    required this.onOpenThread,
+  });
+
+  final LibraryDetailHeader header;
+  final LibraryModuleKey moduleKey;
+  final double topInset;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final VoidCallback onToggleShelf;
+  final VoidCallback onRefresh;
+  final VoidCallback onOpenThread;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      key: const Key('unified-detail-header-section'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _HeroInfoSection(
+          header: header,
+          moduleKey: moduleKey,
+          topInset: topInset,
+          imageHeaderBuilder: imageHeaderBuilder,
+        ),
+        _HeaderActionsRow(
+          header: header,
+          onToggleShelf: onToggleShelf,
+          onRefresh: onRefresh,
+          onOpenThread: onOpenThread,
+        ),
+      ],
+    );
+  }
+}
+
 /// 可随列表滚动消失的封面+元信息区。
 class _HeroInfoSection extends StatelessWidget {
   const _HeroInfoSection({
@@ -1000,6 +1038,7 @@ class _HeaderActionsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
+      key: const Key('unified-detail-header-actions-row'),
       // 顶部边界不留白，避免下拉时出现“被拉开”的缝隙感。
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
       child: Row(

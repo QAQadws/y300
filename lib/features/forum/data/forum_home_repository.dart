@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/auth/data/auth_repository.dart';
+import 'package:y300/features/favorites/data/favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/forum_repository.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
@@ -27,16 +28,19 @@ abstract class ForumHomeRepository {
 /// 约定：
 /// 1) forumindex 是首页主数据，失败则整体失败。
 /// 2) profile 仅用于判断登录态。
-/// 3) Phase 03 起旧 myfavforum 收藏版块入口禁用，线程收藏统一走收藏 Tab。
+/// 3) 版块收藏只是论坛首页的快捷入口，线程收藏仍统一走收藏 Tab。
 class DiscuzForumHomeRepository implements ForumHomeRepository {
   DiscuzForumHomeRepository({
     required Future<ApiResult<ForumIndexData>> Function() loadForumIndex,
     required Future<ApiResult<SessionInfo>> Function() refreshSession,
+    Future<ApiResult<List<FavoriteForum>>> Function()? loadFavoriteForums,
   }) : _loadForumIndex = loadForumIndex,
-       _refreshSession = refreshSession;
+       _refreshSession = refreshSession,
+       _loadFavoriteForums = loadFavoriteForums;
 
   final Future<ApiResult<ForumIndexData>> Function() _loadForumIndex;
   final Future<ApiResult<SessionInfo>> Function() _refreshSession;
+  final Future<ApiResult<List<FavoriteForum>>> Function()? _loadFavoriteForums;
 
   @override
   Future<ApiResult<ForumHomePayload>> getForumHomePayload() async {
@@ -52,13 +56,26 @@ class DiscuzForumHomeRepository implements ForumHomeRepository {
       success: (session) => session.isLoggedIn,
       failure: (_) => false,
     );
+    final favoriteForums = isLoggedIn ? await _safeLoadFavoriteForums() : const <FavoriteForum>[];
 
     return ApiSuccess(
       ForumHomePayload(
         forumIndex: forumIndex,
         isLoggedIn: isLoggedIn,
-        favoriteForums: const [],
+        favoriteForums: favoriteForums,
       ),
+    );
+  }
+
+  Future<List<FavoriteForum>> _safeLoadFavoriteForums() async {
+    final loader = _loadFavoriteForums;
+    if (loader == null) {
+      return const <FavoriteForum>[];
+    }
+    final result = await loader();
+    return result.when(
+      success: (forums) => forums,
+      failure: (_) => const <FavoriteForum>[],
     );
   }
 }
@@ -70,5 +87,6 @@ final forumHomeRepositoryProvider = Provider<ForumHomeRepository>((ref) {
   return DiscuzForumHomeRepository(
     loadForumIndex: forumRepository.getForumIndex,
     refreshSession: authRepository.refreshSession,
+    loadFavoriteForums: ref.watch(favoriteRepositoryProvider).getFavoriteForums,
   );
 });

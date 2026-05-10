@@ -483,7 +483,11 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
         imageUrl: imageUrl,
         fit: paged ? BoxFit.contain : BoxFit.fitWidth,
         width: paged ? null : double.infinity,
-        placeholder: _ReaderImageErrorPlaceholder(
+        placeholder: _ReaderImageLoadingPlaceholder(
+          paged: paged,
+          imageIndex: index,
+        ),
+        errorPlaceholder: _ReaderImageErrorPlaceholder(
           imageUrl: imageUrl,
           paged: paged,
           onRetry: () => _controller().retryImage(imageUrl),
@@ -501,7 +505,10 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
 
     return Column(
       children: [
-        imageWidget,
+        _ReaderImageSlot(
+          imageIndex: index,
+          child: imageWidget,
+        ),
         const SizedBox(height: 8),
       ],
     );
@@ -592,6 +599,73 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
       return;
     }
     _menuAnimationController.reverse();
+  }
+}
+
+class _ReaderImageSlot extends StatelessWidget {
+  const _ReaderImageSlot({
+    required this.imageIndex,
+    required this.child,
+  });
+
+  final int imageIndex;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      key: ValueKey<String>('comic-reader-image-slot-$imageIndex'),
+      builder: (context, constraints) {
+        final width = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : MediaQuery.sizeOf(context).width;
+        return ConstrainedBox(
+          // Reserve a portrait comic-page footprint while still allowing the
+          // loaded image to grow to its real fitWidth height.
+          constraints: BoxConstraints(minHeight: width * 4 / 3),
+          child: ClipRect(child: child),
+        );
+      },
+    );
+  }
+}
+
+class _ReaderImageLoadingPlaceholder extends StatelessWidget {
+  const _ReaderImageLoadingPlaceholder({
+    required this.paged,
+    required this.imageIndex,
+  });
+
+  final bool paged;
+  final int imageIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Column(
+      key: ValueKey<String>('comic-reader-image-loading-$imageIndex'),
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(strokeWidth: 2.4),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          '图片加载中',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    );
+
+    if (paged) {
+      return Center(child: content);
+    }
+    return ColoredBox(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(96),
+      child: Center(child: content),
+    );
   }
 }
 

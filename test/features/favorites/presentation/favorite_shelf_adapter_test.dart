@@ -1,5 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/image_cache_service.dart';
+import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
@@ -30,6 +33,96 @@ void main() {
     expect(sync.syncCount, 1);
     expect(categories.single.categoryId, favoriteDefaultCategoryId);
   });
+
+  test('FavoriteShelfAdapter caches comic cover and writes local path back to module', () async {
+    final local = _FakeLocalFavoriteRepository(
+      items: <LibraryWorkItem>[
+        LibraryWorkItem(
+          workId: FavoriteShelfWorkId.fromTid('100'),
+          categoryId: favoriteComicCategoryId,
+          title: '收藏漫画',
+          coverImageUrl: 'https://img.test/cover.jpg',
+          unreadCount: 0,
+          totalChapterCount: 1,
+          readChapterCount: 0,
+          addedAt: DateTime(2026, 1, 1),
+        ),
+      ],
+      routeTargets: const <String, FavoriteRouteTarget>{
+        'favorite:100': FavoriteRouteTarget(
+          tid: '100',
+          title: '收藏漫画',
+          contentKind: ThreadContentKind.comic,
+          workId: 'yamibo:100',
+        ),
+      },
+    );
+    final imageCache = _FakeImageCacheService(localPath: '/cache/comic-cover.jpg');
+    final writer = _FakeComicCoverCacheWriter();
+    final sync = _FakeFavoriteSyncService();
+    sync.markSynced();
+    final adapter = FavoriteShelfAdapter(
+      local,
+      syncService: sync,
+      stateRepository: _FakeLibraryStateRepository(),
+      imageCacheService: imageCache,
+      comicCoverCacheWriter: writer,
+    );
+
+    final items = await adapter.loadCategoryItems(categoryId: favoriteComicCategoryId);
+
+    expect(items.single.coverLocalPath, '/cache/comic-cover.jpg');
+    expect(imageCache.lastRequest?.cacheKey, 'cover/comic/yamibo:100');
+    expect(writer.lastComicId, 'yamibo:100');
+    expect(writer.lastCoverLocalPath, '/cache/comic-cover.jpg');
+  });
+
+  test('FavoriteShelfAdapter caches custom comic cover separately', () async {
+    final local = _FakeLocalFavoriteRepository(
+      items: <LibraryWorkItem>[
+        LibraryWorkItem(
+          workId: FavoriteShelfWorkId.fromTid('101'),
+          categoryId: favoriteComicCategoryId,
+          title: '自定义封面漫画',
+          coverImageUrl: 'https://img.test/custom-cover.jpg',
+          customCoverImageUrl: 'https://img.test/custom-cover.jpg',
+          unreadCount: 0,
+          totalChapterCount: 1,
+          readChapterCount: 0,
+          addedAt: DateTime(2026, 1, 1),
+        ),
+      ],
+      routeTargets: const <String, FavoriteRouteTarget>{
+        'favorite:101': FavoriteRouteTarget(
+          tid: '101',
+          title: '自定义封面漫画',
+          contentKind: ThreadContentKind.comic,
+          workId: 'yamibo:101',
+        ),
+      },
+    );
+    final imageCache = _FakeImageCacheService(localPath: '/cache/custom-cover.jpg');
+    final writer = _FakeComicCoverCacheWriter();
+    final sync = _FakeFavoriteSyncService();
+    sync.markSynced();
+    final adapter = FavoriteShelfAdapter(
+      local,
+      syncService: sync,
+      stateRepository: _FakeLibraryStateRepository(),
+      imageCacheService: imageCache,
+      comicCoverCacheWriter: writer,
+    );
+
+    final items = await adapter.loadCategoryItems(categoryId: favoriteComicCategoryId);
+
+    expect(items.single.coverLocalPath, isNull);
+    expect(items.single.customCoverLocalPath, '/cache/custom-cover.jpg');
+    expect(imageCache.lastRequest?.cacheKey, 'cover/custom/comic/yamibo:101');
+    expect(imageCache.lastRequest?.role, ImageCacheRole.customCover);
+    expect(writer.lastCoverImageUrl, isNull);
+    expect(writer.lastCoverLocalPath, isNull);
+    expect(writer.lastCustomCoverLocalPath, '/cache/custom-cover.jpg');
+  });
 }
 
 class _FakeFavoriteSyncService implements FavoriteSyncService {
@@ -52,10 +145,21 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
       failedDetailTids: <String>[],
     );
   }
+
+  void markSynced() {
+    syncCount = 1;
+  }
 }
 
 class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
+  _FakeLocalFavoriteRepository({
+    this.items = const <LibraryWorkItem>[],
+    this.routeTargets = const <String, FavoriteRouteTarget>{},
+  });
+
   FavoriteSyncSnapshot? snapshot;
+  final List<LibraryWorkItem> items;
+  final Map<String, FavoriteRouteTarget> routeTargets;
 
   @override
   Future<int> countActiveThreads() async => 1;
@@ -92,13 +196,15 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   }) async => const <FavoriteThreadCacheRecord>[];
 
   @override
-  Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(String workId) async => null;
+  Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(String workId) async => routeTargets[workId];
 
   @override
   Future<FavoriteSyncSnapshot?> getSyncSnapshot() async => snapshot;
 
   @override
-  Future<List<LibraryWorkItem>> loadCategoryItems(String categoryId) async => const <LibraryWorkItem>[];
+  Future<List<LibraryWorkItem>> loadCategoryItems(String categoryId) async {
+    return items.where((item) => item.categoryId == categoryId).toList(growable: false);
+  }
 
   @override
   Future<List<LibraryCategory>> loadVisibleCategories() async {
@@ -131,7 +237,10 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
     required LibraryShelfSortOption sortOption,
     required String keyword,
   }) async => <String, List<LibraryWorkItem>>{
-        for (final category in categories) category.categoryId: const <LibraryWorkItem>[],
+        for (final category in categories)
+          category.categoryId: items
+              .where((item) => item.categoryId == category.categoryId)
+              .toList(growable: false),
       };
 
   @override
@@ -149,6 +258,66 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
 
   @override
   Future<int> upsertRemotePage({required FavoriteThreadsPage page, required int pageStartOrder}) async => page.items.length;
+}
+
+class _FakeImageCacheService implements ImageCacheService {
+  _FakeImageCacheService({required this.localPath});
+
+  final String localPath;
+  ImageCacheRequest? lastRequest;
+
+  @override
+  Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
+
+  @override
+  Future<void> clearUnprotected() async {}
+
+  @override
+  Future<CachedImageResult> copyProtectedLocalFile(
+    ImageCacheLocalCopyRequest request,
+  ) async {
+    return CachedImageResult(
+      success: true,
+      cacheKey: request.cacheKey,
+      localPath: localPath,
+    );
+  }
+
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    lastRequest = request;
+    return CachedImageResult(
+      success: true,
+      cacheKey: request.cacheKey,
+      localPath: localPath,
+    );
+  }
+
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async => null;
+
+  @override
+  Future<void> pruneToLimit({required int maxBytes}) async {}
+}
+
+class _FakeComicCoverCacheWriter implements ComicCoverCacheWriter {
+  String? lastComicId;
+  String? lastCoverImageUrl;
+  String? lastCoverLocalPath;
+  String? lastCustomCoverLocalPath;
+
+  @override
+  Future<void> updateCoverCache({
+    required String comicId,
+    String? coverImageUrl,
+    String? coverLocalPath,
+    String? customCoverLocalPath,
+  }) async {
+    lastComicId = comicId;
+    lastCoverImageUrl = coverImageUrl;
+    lastCoverLocalPath = coverLocalPath;
+    lastCustomCoverLocalPath = customCoverLocalPath;
+  }
 }
 
 class _FakeLibraryStateRepository implements LibraryStateRepository {

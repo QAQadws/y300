@@ -12,7 +12,7 @@ import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/domain/services/novel_episode_discovery_service.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
-class LocalNovelRepository implements NovelRepository {
+class LocalNovelRepository implements NovelRepository, NovelCoverCacheWriter {
   LocalNovelRepository(
     this._dbFuture, {
     required NovelThreadGateway threadGateway,
@@ -262,6 +262,7 @@ class LocalNovelRepository implements NovelRepository {
     return _rowToNovelItem(rows.first);
   }
 
+  @override
   Future<void> updateCoverCache({
     required String novelId,
     String? coverImageUrl,

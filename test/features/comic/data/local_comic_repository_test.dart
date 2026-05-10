@@ -178,7 +178,40 @@ void main() {
       final settings = await repository.getDisplaySettings();
 
       expect(items.first.coverImageUrl, 'https://img.test/custom.jpg');
+      expect(items.first.customCoverImageUrl, 'https://img.test/custom.jpg');
       expect(settings.gridColumnCount, 4);
+    });
+
+    test('updating custom cover clears stale custom local path', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:101',
+        tid: '101',
+        fid: '30',
+        title: '测试漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>['https://img.test/original.jpg'],
+          episodeLinks: <ComicEpisodeLink>[],
+          plainTextSummary: '摘要',
+        ),
+      );
+
+      await repository.updateCustomCover(
+        comicId: 'yamibo:101',
+        customCoverImageUrl: 'https://img.test/custom-a.jpg',
+      );
+      await repository.updateCoverCache(
+        comicId: 'yamibo:101',
+        customCoverLocalPath: '/cache/custom-a.jpg',
+      );
+      await repository.updateCustomCover(
+        comicId: 'yamibo:101',
+        customCoverImageUrl: 'https://img.test/custom-b.jpg',
+      );
+
+      final detail = await repository.getComicDetail(comicId: 'yamibo:101');
+      expect(detail?.coverImageUrl, 'https://img.test/custom-b.jpg');
+      expect(detail?.customCoverImageUrl, 'https://img.test/custom-b.jpg');
+      expect(detail?.customCoverLocalPath, isNull);
     });
 
     test('can query comic detail and episodes descending', () async {
@@ -292,6 +325,63 @@ void main() {
       expect(progress!.episodeId, episodeId);
       expect(progress.imageIndex, 1);
       expect(progress.scrollOffset, 222.5);
+    });
+
+    test('saveEpisodeImages promotes smallest tid first image as initial cover', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:700',
+        tid: '700',
+        fid: '30',
+        title: '测试漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>[],
+          episodeLinks: <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-701-1-1.html', rawText: '后话', episodeTitle: '后话'),
+            ComicEpisodeLink(url: 'thread-699-1-1.html', rawText: '首话', episodeTitle: '首话'),
+          ],
+          plainTextSummary: '摘要',
+        ),
+      );
+
+      await repository.saveEpisodeImages(
+        episodeId: 'yamibo:700:701',
+        imageUrls: const <String>['https://img.test/701-1.jpg'],
+      );
+      var detail = await repository.getComicDetail(comicId: 'yamibo:700');
+      expect(detail?.coverImageUrl, isNull);
+
+      await repository.saveEpisodeImages(
+        episodeId: 'yamibo:700:699',
+        imageUrls: const <String>['https://img.test/699-1.jpg'],
+      );
+      detail = await repository.getComicDetail(comicId: 'yamibo:700');
+
+      expect(detail?.coverImageUrl, 'https://img.test/699-1.jpg');
+    });
+
+    test('saveEpisodeImages corrects parsed first-floor cover to smallest tid image', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:701',
+        tid: '701',
+        fid: '30',
+        title: '测试漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>['https://img.test/first-floor.jpg'],
+          episodeLinks: <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-702-1-1.html', rawText: '后话', episodeTitle: '后话'),
+            ComicEpisodeLink(url: 'thread-700-1-1.html', rawText: '首话', episodeTitle: '首话'),
+          ],
+          plainTextSummary: '摘要',
+        ),
+      );
+
+      await repository.saveEpisodeImages(
+        episodeId: 'yamibo:701:700',
+        imageUrls: const <String>['https://img.test/700-1.jpg'],
+      );
+
+      final detail = await repository.getComicDetail(comicId: 'yamibo:701');
+      expect(detail?.coverImageUrl, 'https://img.test/700-1.jpg');
     });
 
     test('mergeEpisodesFromLinks extracts tid from viewthread links and keeps unique episodes', () async {

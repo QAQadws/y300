@@ -243,6 +243,7 @@ class LocalComicRepository
         'custom_cover_image_url': customCoverImageUrl?.trim().isEmpty ?? true
             ? null
             : customCoverImageUrl!.trim(),
+        'custom_cover_local_path': null,
         'updated_at': DateTime.now().millisecondsSinceEpoch,
       },
       where: 'comic_id = ?',
@@ -433,6 +434,7 @@ class LocalComicRepository
         c.title,
         c.author,
         COALESCE(c.custom_cover_image_url, c.cover_image_url) AS cover_image_url,
+        c.custom_cover_image_url,
         c.cover_local_path,
         c.custom_cover_local_path
       FROM ${ComicLocalDb.shelfItemsTable} si
@@ -451,6 +453,7 @@ class LocalComicRepository
             title: row['title'] as String,
             author: row['author'] as String?,
             coverImageUrl: row['cover_image_url'] as String?,
+            customCoverImageUrl: row['custom_cover_image_url'] as String?,
             coverLocalPath: row['cover_local_path'] as String?,
             customCoverLocalPath: row['custom_cover_local_path'] as String?,
             categoryId: row['category_id'] as String,
@@ -474,6 +477,7 @@ class LocalComicRepository
         c.author,
         c.translation_group,
         COALESCE(c.custom_cover_image_url, c.cover_image_url) AS cover_image_url,
+        c.custom_cover_image_url,
         c.cover_local_path,
         c.custom_cover_local_path,
         c.updated_at,
@@ -501,6 +505,7 @@ class LocalComicRepository
       author: row['author'] as String?,
       translationGroup: row['translation_group'] as String?,
       coverImageUrl: row['cover_image_url'] as String?,
+      customCoverImageUrl: row['custom_cover_image_url'] as String?,
       coverLocalPath: row['cover_local_path'] as String?,
       customCoverLocalPath: row['custom_cover_local_path'] as String?,
       updatedAt: DateTime.fromMillisecondsSinceEpoch(row['updated_at'] as int),
@@ -595,6 +600,11 @@ class LocalComicRepository
           ).toMap(),
         );
       }
+      await _promoteFirstEpisodeCoverIfNeeded(
+        txn,
+        episodeId: episodeId,
+        imageUrls: imageUrls,
+      );
     });
   }
 
@@ -856,6 +866,95 @@ class LocalComicRepository
       return null;
     }
     return episodeId.substring(0, lastColon);
+  }
+
+  Future<void> _promoteFirstEpisodeCoverIfNeeded(
+    Transaction txn, {
+    required String episodeId,
+    required List<String> imageUrls,
+  }) async {
+    if (imageUrls.isEmpty) {
+      return;
+    }
+    final comicId = _extractComicIdFromEpisodeId(episodeId);
+    if (comicId == null) {
+      return;
+    }
+
+    final comics = await txn.query(
+      ComicLocalDb.comicsTable,
+      columns: const <String>[
+        'cover_image_url',
+        'cover_local_path',
+        'custom_cover_image_url',
+        'custom_cover_local_path',
+      ],
+      where: 'comic_id = ?',
+      whereArgs: <Object>[comicId],
+      limit: 1,
+    );
+    if (comics.isEmpty) {
+      return;
+    }
+    final customCover = _normalizeNullable(comics.first['custom_cover_image_url'] as String?);
+    final customCoverLocalPath = _normalizeNullable(comics.first['custom_cover_local_path'] as String?);
+    if (customCover != null || customCoverLocalPath != null) {
+      return;
+    }
+
+    final episodes = await txn.query(
+      ComicLocalDb.episodesTable,
+      columns: const <String>['episode_id', 'source_tid', 'order_index'],
+      where: 'comic_id = ?',
+      whereArgs: <Object>[comicId],
+    );
+    if (episodes.isEmpty) {
+      return;
+    }
+    // sqflite 的查询结果在部分实现中是只读列表；排序前复制成普通 List，
+    // 避免 ListBase.sort 交换元素时触发 Unsupported operation: read-only。
+    final orderedEpisodes = episodes.toList(growable: true)
+      ..sort(_compareEpisodeRowsByFirstTid);
+    if (orderedEpisodes.first['episode_id'] != episodeId) {
+      return;
+    }
+
+    final currentCover = _normalizeNullable(comics.first['cover_image_url'] as String?);
+    if (currentCover == imageUrls.first) {
+      return;
+    }
+
+    // 允许“首楼图片”纠正为真实首话首图；但用户自定义封面拥有最高优先级，
+    // 读图流程不应覆盖 custom_cover_* 字段。
+    await txn.update(
+      ComicLocalDb.comicsTable,
+      <String, Object?>{
+        'cover_image_url': imageUrls.first,
+        'cover_local_path': null,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'comic_id = ?',
+      whereArgs: <Object>[comicId],
+    );
+  }
+
+  int _compareEpisodeRowsByFirstTid(Map<String, Object?> a, Map<String, Object?> b) {
+    final aTid = int.tryParse((a['source_tid'] as String? ?? '').trim());
+    final bTid = int.tryParse((b['source_tid'] as String? ?? '').trim());
+    if (aTid != null && bTid != null && aTid != bTid) {
+      return aTid.compareTo(bTid);
+    }
+    if (aTid != null && bTid == null) {
+      return -1;
+    }
+    if (aTid == null && bTid != null) {
+      return 1;
+    }
+    final order = (a['order_index'] as int? ?? 0).compareTo(b['order_index'] as int? ?? 0);
+    if (order != 0) {
+      return order;
+    }
+    return (a['episode_id'] as String? ?? '').compareTo(b['episode_id'] as String? ?? '');
   }
 
   String _resolveComicTitle({

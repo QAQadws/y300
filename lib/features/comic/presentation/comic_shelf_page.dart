@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/presentation/adapters/comic_shelf_adapter.dart';
 import 'package:y300/features/comic/presentation/comic_detail_page.dart';
@@ -18,6 +19,7 @@ class ComicShelfPage extends ConsumerWidget {
     final adapter = ComicShelfAdapter(
       ref.watch(comicRepositoryProvider),
       stateRepository: ref.watch(libraryStateRepositoryProvider),
+      imageCacheServiceResolver: () => ref.read(imageCacheServiceProvider),
     );
     return UnifiedShelfPage(
       adapter: adapter,

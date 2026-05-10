@@ -24,6 +24,14 @@ void main() {
 
     await tester.pumpAndSettle();
 
+    expect(find.byKey(const Key('unified-detail-header-section')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('unified-detail-header-section')),
+        matching: find.byKey(const Key('unified-detail-header-actions-row')),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('测试作品'), findsWidgets);
     expect(find.byKey(const Key('unified-detail-author-row')), findsOneWidget);
     expect(

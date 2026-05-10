@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_page.dart';
@@ -39,15 +40,16 @@ void main() {
       expect(find.byKey(const Key('forum-card-2')), findsOneWidget);
     });
 
-    testWidgets('does not render legacy favorite forum section when logged in', (tester) async {
+    testWidgets('renders favorite forum section when logged in payload has favorites', (tester) async {
       final repository = _FakeForumHomeRepository(() async => ApiSuccess(_loggedInPayloadWithFavorites()));
 
       await tester.pumpWidget(_buildTestApp(repository));
       await tester.pumpAndSettle();
 
-      expect(find.text('我收藏的版块'), findsNothing);
-      expect(find.byKey(const Key('forum-card-30')), findsNothing);
-      expect(find.byKey(const Key('forum-card-55')), findsNothing);
+      expect(find.text('共2 个分组，1 个版块'), findsOneWidget);
+      expect(find.text('我收藏的版块'), findsOneWidget);
+      expect(find.byKey(const Key('forum-favorite-card-2')), findsOneWidget);
+      expect(find.byKey(const Key('forum-favorite-card-55')), findsOneWidget);
       expect(find.text('综合区'), findsOneWidget);
     });
   });
@@ -92,7 +94,26 @@ ForumHomePayload _loggedInPayloadWithFavorites() {
   return ForumHomePayload(
     forumIndex: _sampleForumIndexData(),
     isLoggedIn: true,
-    favoriteForums: const [],
+    favoriteForums: [
+      FavoriteForum(
+        favid: '1',
+        fid: '2',
+        title: '百合会综合讨论区',
+        description: '常逛版块',
+        threads: 12,
+        posts: 34,
+        todayPosts: 1,
+      ),
+      FavoriteForum(
+        favid: '2',
+        fid: '55',
+        title: '漫画交流区',
+        description: '',
+        threads: 56,
+        posts: 78,
+        todayPosts: 2,
+      ),
+    ],
   );
 }
 

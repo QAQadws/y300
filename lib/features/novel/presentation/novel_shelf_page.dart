@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_shelf_page.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
@@ -18,6 +19,7 @@ class NovelShelfPage extends ConsumerWidget {
     final adapter = NovelShelfAdapter(
       ref.watch(novelRepositoryProvider),
       stateRepository: ref.watch(libraryStateRepositoryProvider),
+      imageCacheServiceResolver: () => ref.read(imageCacheServiceProvider),
     );
     return UnifiedShelfPage(
       adapter: adapter,

@@ -192,6 +192,7 @@ void main() {
       final novelItems = await repository.loadCategoryItems(favoriteNovelCategoryId);
 
       expect(comicItems.single.coverImageUrl, 'https://img.test/comic-custom-network.jpg');
+      expect(comicItems.single.customCoverImageUrl, 'https://img.test/comic-custom-network.jpg');
       expect(comicItems.single.coverLocalPath, '/cache/comic.jpg');
       expect(comicItems.single.customCoverLocalPath, '/cache/comic-custom.jpg');
       expect(novelItems.single.coverImageUrl, 'https://img.test/novel.jpg');

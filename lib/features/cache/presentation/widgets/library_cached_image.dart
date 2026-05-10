@@ -18,6 +18,7 @@ class LibraryCachedImage extends StatefulWidget {
     this.width,
     this.height,
     required this.placeholder,
+    this.errorPlaceholder,
     this.headerBuilder,
   });
 
@@ -27,6 +28,7 @@ class LibraryCachedImage extends StatefulWidget {
   final double? width;
   final double? height;
   final Widget placeholder;
+  final Widget? errorPlaceholder;
   final ImageRequestHeaderBuilder? headerBuilder;
 
   @override
@@ -61,7 +63,7 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
           fit: widget.fit,
           width: widget.width,
           height: widget.height,
-          errorBuilder: (context, error, stackTrace) => widget.placeholder,
+          errorBuilder: (context, error, stackTrace) => _errorPlaceholder,
         );
       }
     }
@@ -100,15 +102,26 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
   }
 
   Widget _buildNetworkImage(String remote, Map<String, String> headers) {
-    return Image.network(
+    final provider = NetworkImage(
       remote,
       headers: headers.isEmpty ? null : headers,
+    );
+    return Image(
+      image: provider,
       fit: widget.fit,
       width: widget.width,
       height: widget.height,
-      errorBuilder: (context, error, stackTrace) => widget.placeholder,
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) {
+          return child;
+        }
+        return widget.placeholder;
+      },
+      errorBuilder: (context, error, stackTrace) => _errorPlaceholder,
     );
   }
+
+  Widget get _errorPlaceholder => widget.errorPlaceholder ?? widget.placeholder;
 
   String? _normalizeRemoteUrl(String? raw) {
     final trimmed = raw?.trim();

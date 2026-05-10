@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/auth/data/auth_repository.dart';
+import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
 
@@ -36,10 +37,21 @@ void main() {
       expect(payload.favoriteForums, isEmpty);
     });
 
-    test('keeps legacy favorite forum payload empty after login', () async {
+    test('loads favorite forum payload after login', () async {
       final repository = DiscuzForumHomeRepository(
         loadForumIndex: () async => ApiSuccess(_sampleForumIndexData()),
         refreshSession: () async => ApiSuccess(_loggedInSession()),
+        loadFavoriteForums: () async => ApiSuccess(<FavoriteForum>[
+          FavoriteForum(
+            favid: '1',
+            fid: '30',
+            title: '我收藏的版块',
+            description: '',
+            threads: 1,
+            posts: 2,
+            todayPosts: 0,
+          ),
+        ]),
       );
 
       final result = await repository.getForumHomePayload();
@@ -47,7 +59,7 @@ void main() {
       expect(result.isSuccess, isTrue);
       final payload = result.dataOrNull!;
       expect(payload.isLoggedIn, isTrue);
-      expect(payload.favoriteForums, isEmpty);
+      expect(payload.favoriteForums.single.fid, '30');
     });
   });
 }

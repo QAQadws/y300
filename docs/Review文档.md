@@ -82,18 +82,17 @@
 
 ---
 
-## 4. 论坛首页旧收藏版块历史检查（Phase 03 后已禁用）
+## 4. 论坛首页收藏版块入口检查
 
 - [ ] 未登录时首页仅展示 forumindex 分组
-- [ ] 已登录时首页仍仅展示 forumindex 分组
-- [ ] 首页不再展示“我收藏的版块”
-- [ ] 首页不再请求 `myfavforum`
+- [ ] 已登录且有版块收藏时首页展示“我收藏的版块”
+- [ ] 首页请求 `myfavforum` 失败时降级为空，不影响 forumindex
 - [ ] 线程收藏统一通过主 Tab“收藏”处理
 
 判定说明：
 
-1. 首页仍请求或展示旧收藏版块，判定为 P1。
-2. 禁用旧收藏版块导致 forumindex 主流程不可用，判定为 P0。
+1. 登录态有版块收藏但首页不展示，判定为 P1。
+2. `myfavforum` 失败导致 forumindex 主流程不可用，判定为 P0。
 
 ---
 
@@ -201,7 +200,7 @@
 ## 10. 手工验证（可选）
 
 - [ ] forumdisplay 页面可进入 viewthread 页面
-- [ ] 登录后首页不再出现“我收藏的版块”
+- [ ] 登录后有版块收藏时首页出现“我收藏的版块”
 - [ ] 登录成功后可回到已登录使用路径
 - [ ] 弱网下可看到加载态，不会崩溃
 - [ ] 异常情况下可触发重试恢复
@@ -1648,6 +1647,86 @@
 
 ---
 
+## 问题汇总补充修复 Review 记录（2026-05-10）
+### Review 范围
+- `lib/features/comic/data/local_comic_repository.dart`
+- `lib/features/comic/presentation/adapters/comic_detail_adapter.dart`
+- `lib/features/comic/presentation/adapters/comic_shelf_adapter.dart`
+- `lib/features/favorites/data/local_favorite_repository.dart`
+- `lib/features/favorites/presentation/adapters/favorite_shelf_adapter.dart`
+- `lib/features/library_shared/domain/models/library_models.dart`
+- 对应新增/调整测试文件
+
+### 核对结论
+1. 自定义封面与普通封面已分流
+- 自定义封面使用 `customCoverImageUrl/customCoverLocalPath` 数据链路。
+- 缓存使用 `cover/custom/...` key 与 `ImageCacheRole.customCover`，不再写入普通封面本地路径。
+
+2. 本地存储写回边界更清晰
+- `updateCustomCover()` 会清空旧 `custom_cover_local_path`，防止远程封面变化后继续命中旧文件。
+- 详情页、漫画书架、收藏书架写回时只更新对应字段。
+
+3. 收藏页复用模块封面更安全
+- 收藏仓库透传漫画模块的自定义远程封面。
+- 收藏适配器区分普通/自定义封面缓存目标，避免把自定义封面写成普通封面。
+
+### 风险与后续
+1. 小说模块当前只有 `custom_cover_local_path`，若后续增加自定义远程封面字段，可复用 shared 层 `customCoverImageUrl` 和收藏适配器的 custom cover 分流策略。
+2. 本轮未执行格式化，可能存在需要 `dart format` 调整的长行。
+
+### 执行声明
+本轮按约定未执行：
+1. `flutter test`
+2. `flutter analyze`
+3. `dart format`
+
+---
+
+## 问题汇总修复 Review 记录（2026-05-10）
+### Review 范围
+- 阅读器：`comic_reader_page.dart`、`library_cached_image.dart`
+- 封面缓存：漫画/小说/收藏 shelf adapter、`LibraryCoverCacheService`、`DefaultImageCacheService`
+- 本地封面：`local_comic_repository.dart`、`comic_detail_adapter.dart`
+- 书架/详情：`unified_shelf_controller.dart`、`unified_detail_page.dart`
+- 论坛首页：`forum_home_repository.dart`、`forum_home_controller.dart`、`forum_home_page.dart`、`forum_home_state.dart`
+- 对应测试文件与本文档、开发文档
+
+### 核对结论
+1. 阅读器占位
+- [ ] 纵向模式每张图片有稳定槽位，加载阶段不再把图片突然插入列表。
+- [ ] 加载占位和错误占位分离，失败态仍保留重试按钮。
+
+2. 封面缓存
+- [ ] 漫画首图封面按最小 `sourceTid` 章节判定。
+- [ ] 首楼封面可被真实首话首图纠正，但不会覆盖自定义封面。
+- [ ] 漫画/小说/收藏书架远程封面会写入受保护缓存，并回写模块本地路径。
+- [ ] 稳定 cache key 的来源 URL 变化会强制重拉，避免旧封面残留。
+
+3. 书架加载体验
+- [ ] 初始状态不再闪现“书架为空”。
+- [ ] 已有内容的刷新不再阻塞式清空列表。
+
+4. 详情页头部
+- [ ] Hero 信息区和操作行处于同一个 header sliver，降低下拉刷新拉伸缝隙风险。
+
+5. 论坛首页收藏版块
+- [ ] 登录态可恢复展示“我收藏的版块”。
+- [ ] `myfavforum` 加载失败不影响 forumindex 基础首页。
+- [ ] 首页常规版块计数不被收藏快捷入口重复污染。
+
+### 风险与后续
+1. 阅读器槽位使用通用肖像比例作为最小高度，超长图加载后仍会扩展到真实高度；若后续需要绝对稳定滚动高度，可在图片 metadata 入库后按真实宽高比渲染。
+2. 封面缓存现在在书架映射时惰性触发；首次打开大书架可能伴随少量封面缓存任务，后续可考虑批量限流队列。
+3. 论坛首页恢复 `myfavforum` 后会多一个登录态接口请求；当前按失败降级处理，避免阻塞首页。
+
+### 执行声明
+本轮按约定未执行：
+1. `flutter test`
+2. `flutter analyze`
+3. `dart format`
+
+---
+
 ## 分阶段实现 05：下载存储结构 Review 清单（2026-05-10）
 ### 一、下载存储根目录
 - [ ] 下载存储与图片缓存目录分离。
@@ -2040,11 +2119,11 @@
 - [ ] 点击小说收藏进入小说详情页。
 - [ ] 点击普通论坛收藏进入帖子详情页。
 
-### 六、论坛旧收藏版块禁用
-- [ ] `ForumHomeRepository` 不再请求 `myfavforum`。
-- [ ] `ForumHomeController` 不再构造“我收藏的版块”分组。
-- [ ] `ForumHomePage` 不再展示“暂无收藏版块”旧空态。
-- [ ] 禁用旧收藏版块不影响论坛首页基础分组加载。
+### 六、论坛版块收藏入口
+- [ ] `ForumHomeRepository` 登录态请求 `myfavforum`。
+- [ ] `ForumHomeController` 在有版块收藏时构造“我收藏的版块”分组。
+- [ ] `ForumHomePage` 不展示“暂无收藏版块”旧空态。
+- [ ] `myfavforum` 失败不影响论坛首页基础分组加载。
 
 ### 七、测试覆盖（仅编写，未执行）
 - [ ] `favorite_models_test.dart` 覆盖 `FavoriteThreadsPage` 解析。
@@ -2053,7 +2132,7 @@
 - [ ] `favorite_sync_service_test.dart` 覆盖首次全量同步、漫画/小说 ingest、count 减少完整 diff、详情失败不阻塞后续记录。
 - [ ] `favorite_shelf_adapter_test.dart` 覆盖默认模块、列表显示和首次同步。
 - [ ] `favorite_shelf_page_test.dart` 覆盖收藏页薄壳构建。
-- [ ] 论坛首页测试已更新为“不展示旧收藏版块”。
+- [ ] 论坛首页测试已更新为“有收藏时展示收藏版块”。
 - [ ] 主壳测试已覆盖收藏 Tab。
 
 ### 八、待你本地回归

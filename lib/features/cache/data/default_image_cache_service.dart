@@ -15,6 +15,7 @@ abstract class ImageFileDownloader {
     required String sourceUrl,
     required String cacheKey,
     Map<String, String>? headers,
+    bool force = false,
   });
 }
 
@@ -27,11 +28,13 @@ class CacheManagerImageFileDownloader implements ImageFileDownloader {
     required String sourceUrl,
     required String cacheKey,
     Map<String, String>? headers,
+    bool force = false,
   }) async {
     final fileInfo = await cacheManager.downloadFile(
       sourceUrl,
       key: cacheKey,
       authHeaders: headers,
+      force: force,
     );
     return fileInfo.file.path;
   }
@@ -69,8 +72,12 @@ class DefaultImageCacheService implements ImageCacheService {
 
     final now = DateTime.now();
     final existing = await _repository.getByKey(cacheKey);
+    final existingSourceUrl = existing?.lastSourceUrl?.trim();
+    final sourceChanged = existingSourceUrl != null &&
+        existingSourceUrl.isNotEmpty &&
+        existingSourceUrl != sourceUrl;
     final existingPath = existing?.localPath?.trim();
-    if (existingPath != null && existingPath.isNotEmpty) {
+    if (!sourceChanged && existingPath != null && existingPath.isNotEmpty) {
       final file = io.File(existingPath);
       if (await file.exists()) {
         final bytes = await file.length();
@@ -96,7 +103,7 @@ class DefaultImageCacheService implements ImageCacheService {
 
     final cacheManager = await _cacheManagerFuture;
     final cached = await cacheManager.getFileFromCache(cacheKey);
-    if (cached != null && await io.File(cached.file.path).exists()) {
+    if (!sourceChanged && cached != null && await io.File(cached.file.path).exists()) {
       final bytes = await io.File(cached.file.path).length();
       await _repository.upsert(
         _recordFromRequest(
@@ -124,6 +131,7 @@ class DefaultImageCacheService implements ImageCacheService {
         sourceUrl: sourceUrl,
         cacheKey: cacheKey,
         headers: headers.isEmpty ? null : headers,
+        force: sourceChanged,
       );
       final bytes = await io.File(localPath).length();
       await _repository.upsert(

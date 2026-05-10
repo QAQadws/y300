@@ -6,6 +6,7 @@
     required this.title,
     required this.author,
     required this.coverImageUrl,
+    this.customCoverImageUrl,
     this.coverLocalPath,
     this.customCoverLocalPath,
     required this.categoryId,
@@ -18,6 +19,7 @@
   final String title;
   final String? author;
   final String? coverImageUrl;
+  final String? customCoverImageUrl;
   final String? coverLocalPath;
   final String? customCoverLocalPath;
   final String categoryId;

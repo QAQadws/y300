@@ -54,6 +54,8 @@ void main() {
 
     expect(find.byKey(const Key('unified-shelf-task-progress-bar')), findsOneWidget);
     expect(find.text('正在解析收藏详情'), findsOneWidget);
+    sync.completePendingSync();
+    await tester.pumpAndSettle();
   });
 }
 
@@ -62,6 +64,7 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
 
   final bool autoComplete;
   final _progress = ValueNotifier<FavoriteSyncProgress>(FavoriteSyncProgress.idle);
+  Completer<FavoriteSyncResult>? _pendingCompleter;
 
   @override
   ValueListenable<FavoriteSyncProgress> get progress => _progress;
@@ -75,7 +78,8 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
       total: 10,
     );
     if (!autoComplete) {
-      return Completer<FavoriteSyncResult>().future;
+      _pendingCompleter = Completer<FavoriteSyncResult>();
+      return _pendingCompleter!.future;
     }
     _progress.value = FavoriteSyncProgress.idle;
     return const FavoriteSyncResult(
@@ -86,6 +90,25 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
       removedRecords: <FavoriteThreadCacheRecord>[],
       detailLoadedCount: 0,
       failedDetailTids: <String>[],
+    );
+  }
+
+  void completePendingSync() {
+    final completer = _pendingCompleter;
+    if (completer == null || completer.isCompleted) {
+      return;
+    }
+    _progress.value = FavoriteSyncProgress.idle;
+    completer.complete(
+      const FavoriteSyncResult(
+        mode: FavoriteSyncMode.incremental,
+        remoteCount: 1,
+        fetchedPages: 1,
+        upsertedCount: 0,
+        removedRecords: <FavoriteThreadCacheRecord>[],
+        detailLoadedCount: 0,
+        failedDetailTids: <String>[],
+      ),
     );
   }
 }

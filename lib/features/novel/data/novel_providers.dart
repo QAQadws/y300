@@ -18,3 +18,10 @@ final novelRepositoryProvider = Provider<NovelRepository>((ref) {
     imageCacheService: ref.watch(imageCacheServiceProvider),
   );
 });
+
+final novelCoverCacheWriterProvider = Provider<NovelCoverCacheWriter?>((ref) {
+  final repository = ref.watch(novelRepositoryProvider);
+  return repository is NovelCoverCacheWriter
+      ? repository as NovelCoverCacheWriter
+      : null;
+});

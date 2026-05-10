@@ -3,6 +3,7 @@ import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/comic_download_service.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
+import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
@@ -51,25 +52,48 @@ class ComicDetailAdapter implements DetailModuleAdapter {
       workId: workId,
     );
     final inShelf = await _repository.isInShelf(comicId: workId);
+    final customCoverImageUrl = detail.customCoverImageUrl?.trim();
     var coverImageUrl = detail.coverImageUrl;
     var coverLocalPath = detail.coverLocalPath;
-    final customCoverLocalPath = detail.customCoverLocalPath;
+    var customCoverLocalPath = detail.customCoverLocalPath;
     if (coverImageUrl == null || coverImageUrl.trim().isEmpty) {
-      // Phase 6：漫画封面兜底优先尝试“首话首图”。
-      final episodes = await _repository.getComicEpisodes(comicId: workId, descending: false);
-      if (episodes.isNotEmpty) {
-        final images = await _repository.getEpisodeImages(episodeId: episodes.first.episodeId);
-        if (images.isNotEmpty) {
-          coverImageUrl = images.first.imageUrl;
+      // 漫画初始封面使用“tid 最小的话的第一张图”。orderIndex 只代表
+      // 当前解析顺序，遇到目录/补全章节时不一定等于真实首话。
+      coverImageUrl = await _loadFirstEpisodeImageUrl(workId);
+    }
+    if (customCoverImageUrl != null &&
+        customCoverImageUrl.isNotEmpty &&
+        (customCoverLocalPath == null || customCoverLocalPath.trim().isEmpty)) {
+      final cachedCustomCover = await _cacheCover(
+        comicId: workId,
+        sourceUrl: customCoverImageUrl,
+        cacheKey: ImageCacheKeys.customCover(
+          ownerType: ImageCacheOwnerType.comic.dbValue,
+          ownerId: workId,
+        ),
+        role: ImageCacheRole.customCover,
+      );
+      if (cachedCustomCover?.localPath != null) {
+        customCoverLocalPath = cachedCustomCover!.localPath;
+        if (_repository is ComicCoverCacheWriter) {
+          await (_repository as ComicCoverCacheWriter).updateCoverCache(
+            comicId: workId,
+            customCoverLocalPath: customCoverLocalPath,
+          );
         }
       }
-    }
-    if ((coverLocalPath == null || coverLocalPath.trim().isEmpty) &&
+      if (customCoverLocalPath == null || customCoverLocalPath.trim().isEmpty) {
+        // 自定义远程封面应优先于普通本地封面；缓存未完成时让 UI 使用远程图。
+        coverLocalPath = null;
+      }
+    } else if ((coverLocalPath == null || coverLocalPath.trim().isEmpty) &&
         coverImageUrl != null &&
         coverImageUrl.trim().isNotEmpty) {
       final cachedCover = await _cacheCover(
         comicId: workId,
         sourceUrl: coverImageUrl,
+        cacheKey: ImageCacheKeys.comicCover(workId),
+        role: ImageCacheRole.cover,
       );
       if (cachedCover?.localPath != null) {
         coverLocalPath = cachedCover!.localPath;
@@ -87,6 +111,7 @@ class ComicDetailAdapter implements DetailModuleAdapter {
       workId: detail.comicId,
       title: detail.title,
       coverImageUrl: coverImageUrl,
+      customCoverImageUrl: customCoverImageUrl,
       coverLocalPath: coverLocalPath,
       customCoverLocalPath: customCoverLocalPath,
       author: detail.author,
@@ -98,6 +123,40 @@ class ComicDetailAdapter implements DetailModuleAdapter {
       inShelf: inShelf,
       intro: workState?.introText,
     );
+  }
+
+  Future<String?> _loadFirstEpisodeImageUrl(String workId) async {
+    final episodes = await _repository.getComicEpisodes(comicId: workId, descending: false);
+    if (episodes.isEmpty) {
+      return null;
+    }
+    final ordered = [...episodes]..sort(_compareEpisodesByFirstTid);
+    for (final episode in ordered) {
+      final images = await _repository.getEpisodeImages(episodeId: episode.episodeId);
+      if (images.isNotEmpty) {
+        return images.first.imageUrl;
+      }
+    }
+    return null;
+  }
+
+  int _compareEpisodesByFirstTid(ComicEpisodeItem a, ComicEpisodeItem b) {
+    final aTid = int.tryParse(a.sourceTid.trim());
+    final bTid = int.tryParse(b.sourceTid.trim());
+    if (aTid != null && bTid != null && aTid != bTid) {
+      return aTid.compareTo(bTid);
+    }
+    if (aTid != null && bTid == null) {
+      return -1;
+    }
+    if (aTid == null && bTid != null) {
+      return 1;
+    }
+    final order = a.orderIndex.compareTo(b.orderIndex);
+    if (order != 0) {
+      return order;
+    }
+    return a.episodeId.compareTo(b.episodeId);
   }
 
   @override
@@ -390,6 +449,8 @@ class ComicDetailAdapter implements DetailModuleAdapter {
   Future<CachedImageResult?> _cacheCover({
     required String comicId,
     required String sourceUrl,
+    required String cacheKey,
+    required ImageCacheRole role,
   }) async {
     final cacheService = _imageCacheService;
     if (cacheService == null) {
@@ -397,11 +458,11 @@ class ComicDetailAdapter implements DetailModuleAdapter {
     }
     final result = await cacheService.ensureCached(
       ImageCacheRequest(
-        cacheKey: ImageCacheKeys.comicCover(comicId),
+        cacheKey: cacheKey,
         sourceUrl: sourceUrl,
         ownerType: ImageCacheOwnerType.comic,
         ownerId: comicId,
-        role: ImageCacheRole.cover,
+        role: role,
         protected: true,
       ),
     );

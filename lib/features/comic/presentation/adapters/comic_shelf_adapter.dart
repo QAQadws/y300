@@ -1,6 +1,9 @@
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:y300/features/cache/domain/image_cache_keys.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
@@ -8,6 +11,7 @@ import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapt
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
 
 /// 漫画书架适配器（Phase 0 骨架版）。
 ///
@@ -17,10 +21,16 @@ class ComicShelfAdapter implements ShelfModuleAdapter {
   ComicShelfAdapter(
     this._repository, {
     required LibraryStateRepository stateRepository,
-  }) : _stateRepository = stateRepository;
+    ImageCacheService? imageCacheService,
+    ImageCacheServiceResolver? imageCacheServiceResolver,
+  })  : _stateRepository = stateRepository,
+        _coverCacheService = imageCacheServiceResolver == null
+            ? LibraryCoverCacheService(imageCacheService)
+            : LibraryCoverCacheService.lazy(imageCacheServiceResolver);
 
   final ComicRepository _repository;
   final LibraryStateRepository _stateRepository;
+  final LibraryCoverCacheService _coverCacheService;
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
@@ -193,14 +203,16 @@ class ComicShelfAdapter implements ShelfModuleAdapter {
       moduleKey: LibraryModuleKey.comic,
       workId: source.comicId,
     );
+    final coverPaths = await _ensureCoverCached(source);
     return LibraryWorkItem(
       workId: source.comicId,
       categoryId: source.categoryId,
       title: source.title,
       secondaryName: source.author,
       coverImageUrl: source.coverImageUrl,
-      coverLocalPath: source.coverLocalPath,
-      customCoverLocalPath: source.customCoverLocalPath,
+      customCoverImageUrl: source.customCoverImageUrl,
+      coverLocalPath: coverPaths.coverLocalPath,
+      customCoverLocalPath: coverPaths.customCoverLocalPath,
       unreadCount: unread,
       totalChapterCount: unread + read,
       readChapterCount: read,
@@ -208,6 +220,81 @@ class ComicShelfAdapter implements ShelfModuleAdapter {
       hasTags: hasTags,
       isDownloaded: downloaded > 0,
     );
+  }
+
+  Future<_ComicCoverPaths> _ensureCoverCached(ComicShelfItem source) async {
+    final customExisting = source.customCoverLocalPath?.trim();
+    if (customExisting != null && customExisting.isNotEmpty) {
+      return _ComicCoverPaths(
+        coverLocalPath: source.coverLocalPath,
+        customCoverLocalPath: customExisting,
+      );
+    }
+    final customSource = source.customCoverImageUrl?.trim();
+    if (customSource != null && customSource.isNotEmpty) {
+      final localPath = await _cacheCover(
+        comicId: source.comicId,
+        sourceUrl: customSource,
+        cacheKey: ImageCacheKeys.customCover(
+          ownerType: ImageCacheOwnerType.comic.dbValue,
+          ownerId: source.comicId,
+        ),
+        role: ImageCacheRole.customCover,
+        writeCustom: true,
+      );
+      return _ComicCoverPaths(
+        // 自定义远程封面存在但本地缓存未命中时，不复用普通封面的本地路径；
+        // 否则 UI 会优先展示旧普通封面，而不是新的自定义远程图。
+        coverLocalPath: null,
+        customCoverLocalPath: localPath,
+      );
+    }
+
+    final existing = source.coverLocalPath?.trim();
+    if (existing != null && existing.isNotEmpty) {
+      return _ComicCoverPaths(coverLocalPath: existing);
+    }
+    final sourceUrl = source.coverImageUrl?.trim();
+    if (sourceUrl == null || sourceUrl.isEmpty) {
+      return _ComicCoverPaths(coverLocalPath: source.coverLocalPath);
+    }
+    final localPath = await _cacheCover(
+      comicId: source.comicId,
+      sourceUrl: sourceUrl,
+      cacheKey: ImageCacheKeys.comicCover(source.comicId),
+      role: ImageCacheRole.cover,
+      writeCustom: false,
+    );
+    return _ComicCoverPaths(coverLocalPath: localPath ?? source.coverLocalPath);
+  }
+
+  Future<String?> _cacheCover({
+    required String comicId,
+    required String sourceUrl,
+    required String cacheKey,
+    required ImageCacheRole role,
+    required bool writeCustom,
+  }) async {
+    final cached = await _coverCacheService.ensureProtectedCover(
+      cacheKey: cacheKey,
+      sourceUrl: sourceUrl,
+      ownerType: ImageCacheOwnerType.comic,
+      ownerId: comicId,
+      role: role,
+    );
+    final localPath = cached?.localPath?.trim();
+    if (localPath == null || localPath.isEmpty) {
+      return null;
+    }
+    if (_repository is ComicCoverCacheWriter) {
+      await (_repository as ComicCoverCacheWriter).updateCoverCache(
+        comicId: comicId,
+        coverImageUrl: writeCustom ? null : sourceUrl,
+        coverLocalPath: writeCustom ? null : localPath,
+        customCoverLocalPath: writeCustom ? localPath : null,
+      );
+    }
+    return localPath;
   }
 
   List<LibraryWorkItem> _applyBasicSort(
@@ -235,4 +322,14 @@ class ComicShelfAdapter implements ShelfModuleAdapter {
     });
     return list;
   }
+}
+
+class _ComicCoverPaths {
+  const _ComicCoverPaths({
+    this.coverLocalPath,
+    this.customCoverLocalPath,
+  });
+
+  final String? coverLocalPath;
+  final String? customCoverLocalPath;
 }

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/comic/data/comic_favorite_ingest_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
@@ -54,5 +55,10 @@ final favoriteShelfAdapterProvider = Provider<FavoriteShelfAdapter>((ref) {
     ref.watch(localFavoriteRepositoryProvider),
     syncService: ref.watch(favoriteSyncServiceProvider),
     stateRepository: ref.watch(libraryStateRepositoryProvider),
+    imageCacheServiceResolver: () => ref.read(imageCacheServiceProvider),
+    // 封面写回只在收藏条目确实需要缓存封面时才读取，避免收藏页初始化
+    // 被漫画/小说模块的真实 provider 依赖拖住，也便于 widget 测试只覆盖收藏链路。
+    comicCoverCacheWriterResolver: () => ref.read(comicCoverCacheWriterProvider),
+    novelCoverCacheWriterResolver: () => ref.read(novelCoverCacheWriterProvider),
   );
 });

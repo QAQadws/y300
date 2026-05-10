@@ -49,7 +49,7 @@ class UnifiedShelfState {
     return UnifiedShelfState(
       moduleKey: moduleKey,
       moduleTitle: moduleTitle,
-      isLoading: false,
+      isLoading: true,
       isSearchMode: false,
       keyword: '',
       filters: LibraryFilterSet.defaults,
@@ -259,7 +259,8 @@ class UnifiedShelfController {
   }
 
   Future<void> _reload() async {
-    _state = _state.copyWith(isLoading: true, clearError: true);
+    final shouldBlock = !_hasAnyContent(_state);
+    _state = _state.copyWith(isLoading: shouldBlock, clearError: true);
     try {
       final displaySettings = await _adapter.loadDisplayPreference();
       final categories = await _adapter.loadCategories();
@@ -372,6 +373,13 @@ class UnifiedShelfController {
       return 10;
     }
     return value;
+  }
+
+  bool _hasAnyContent(UnifiedShelfState state) {
+    if (state.categories.isNotEmpty) {
+      return true;
+    }
+    return state.itemsByCategory.values.any((items) => items.isNotEmpty);
   }
 }
 

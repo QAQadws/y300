@@ -182,6 +182,38 @@ void main() {
 
     expect(find.byKey(const Key('unified-shelf-task-progress-bar')), findsNothing);
   });
+
+  testWidgets('initial loading does not flash empty shelf state', (tester) async {
+    final adapter = _FakeShelfAdapter(
+      initialDisplayMode: LibraryDisplayMode.grid,
+      onQuery: ({
+        required List<LibraryCategory> categories,
+        required LibraryFilterSet filters,
+        required LibraryShelfSortOption sortOption,
+        required String keyword,
+      }) async {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        return {
+          'default': [_item(workId: '1', title: 'Comic A')],
+        };
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedShelfPage(
+          adapter: adapter,
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+
+    expect(find.text('书架为空'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pumpAndSettle();
+  });
 }
 
 LibraryWorkItem _item({

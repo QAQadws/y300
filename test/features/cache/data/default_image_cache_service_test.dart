@@ -86,6 +86,61 @@ void main() {
       'https://bbs.yamibo.com/data/attachment/test.jpg',
     );
   });
+
+  test('ensureCached redownloads when a stable key gets a new source url', () async {
+    final tempDir = await io.Directory.systemTemp.createTemp('y300-image-cache-test-');
+    addTearDown(() async {
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+    final oldFile = io.File('${tempDir.path}/old.jpg');
+    final newFile = io.File('${tempDir.path}/new.jpg');
+    await oldFile.writeAsBytes(<int>[1, 2, 3]);
+    await newFile.writeAsBytes(<int>[4, 5, 6, 7]);
+
+    final repository = _MemoryImageCacheRepository();
+    repository.records['cover/comic/yamibo:100'] = CachedImageRecord(
+      cacheKey: 'cover/comic/yamibo:100',
+      ownerType: ImageCacheOwnerType.comic.dbValue,
+      ownerId: 'yamibo:100',
+      role: ImageCacheRole.cover.dbValue,
+      lastSourceUrl: 'https://bbs.yamibo.com/data/attachment/old.jpg',
+      localPath: oldFile.path,
+      bytes: 3,
+      protected: true,
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+    );
+    final downloader = _SpyImageFileDownloader(localPath: newFile.path);
+    final service = DefaultImageCacheService(
+      repository: repository,
+      cacheManagerFuture: Future<BaseCacheManager>.value(_UnusedCacheManager()),
+      directoryResolver: const ImageCacheDirectoryResolver(),
+      downloader: downloader,
+    );
+
+    final result = await service.ensureCached(
+      const ImageCacheRequest(
+        cacheKey: 'cover/comic/yamibo:100',
+        sourceUrl: 'https://bbs.yamibo.com/data/attachment/new.jpg',
+        ownerType: ImageCacheOwnerType.comic,
+        ownerId: 'yamibo:100',
+        role: ImageCacheRole.cover,
+        protected: true,
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(result.localPath, newFile.path);
+    expect(result.fromCache, isFalse);
+    expect(downloader.lastSourceUrl, 'https://bbs.yamibo.com/data/attachment/new.jpg');
+    expect(downloader.lastForce, isTrue);
+    expect(
+      repository.records['cover/comic/yamibo:100']?.lastSourceUrl,
+      'https://bbs.yamibo.com/data/attachment/new.jpg',
+    );
+  });
 }
 
 class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
@@ -113,6 +168,7 @@ class _SpyImageFileDownloader implements ImageFileDownloader {
   final String localPath;
   Map<String, String>? lastHeaders;
   String? lastSourceUrl;
+  bool? lastForce;
 
   @override
   Future<String> download({
@@ -120,9 +176,11 @@ class _SpyImageFileDownloader implements ImageFileDownloader {
     required String sourceUrl,
     required String cacheKey,
     Map<String, String>? headers,
+    bool force = false,
   }) async {
     lastSourceUrl = sourceUrl;
     lastHeaders = headers;
+    lastForce = force;
     return localPath;
   }
 }

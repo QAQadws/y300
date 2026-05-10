@@ -693,6 +693,7 @@ class SqfliteLocalFavoriteRepository implements LocalFavoriteRepository {
       title: record.title,
       secondaryName: record.author,
       coverImageUrl: cover.coverImageUrl,
+      customCoverImageUrl: cover.customCoverImageUrl,
       coverLocalPath: cover.coverLocalPath,
       customCoverLocalPath: cover.customCoverLocalPath,
       unreadCount: 0,
@@ -758,6 +759,7 @@ class SqfliteLocalFavoriteRepository implements LocalFavoriteRepository {
     final customCoverImageUrl = row['custom_cover_image_url'] as String?;
     return _FavoriteCoverSnapshot(
       coverImageUrl: customCoverImageUrl ?? row['cover_image_url'] as String?,
+      customCoverImageUrl: customCoverImageUrl,
       coverLocalPath: row['cover_local_path'] as String?,
       customCoverLocalPath: row['custom_cover_local_path'] as String?,
     );
@@ -888,16 +890,19 @@ class SqfliteLocalFavoriteRepository implements LocalFavoriteRepository {
 class _FavoriteCoverSnapshot {
   const _FavoriteCoverSnapshot({
     this.coverImageUrl,
+    this.customCoverImageUrl,
     this.coverLocalPath,
     this.customCoverLocalPath,
   });
 
   const _FavoriteCoverSnapshot.empty()
       : coverImageUrl = null,
+        customCoverImageUrl = null,
         coverLocalPath = null,
         customCoverLocalPath = null;
 
   final String? coverImageUrl;
+  final String? customCoverImageUrl;
   final String? coverLocalPath;
   final String? customCoverLocalPath;
 }

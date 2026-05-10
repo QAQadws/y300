@@ -49,3 +49,12 @@ abstract class NovelRepository {
 
   Future<NovelReadingProgress?> getReadingProgress({required String novelId});
 }
+
+abstract class NovelCoverCacheWriter {
+  Future<void> updateCoverCache({
+    required String novelId,
+    String? coverImageUrl,
+    String? coverLocalPath,
+    String? customCoverLocalPath,
+  });
+}

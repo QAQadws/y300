@@ -13,6 +13,13 @@ final comicRepositoryProvider = Provider<ComicRepository>((ref) {
   );
 });
 
+final comicCoverCacheWriterProvider = Provider<ComicCoverCacheWriter?>((ref) {
+  final repository = ref.watch(comicRepositoryProvider);
+  return repository is ComicCoverCacheWriter
+      ? repository as ComicCoverCacheWriter
+      : null;
+});
+
 final comicCacheDirectoryResolverProvider = Provider<ComicCacheDirectoryResolver>((ref) {
   return const ComicCacheDirectoryResolver();
 });
