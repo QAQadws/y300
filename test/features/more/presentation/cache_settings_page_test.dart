@@ -1,56 +1,64 @@
+import 'dart:io' as io;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
-import 'package:y300/features/more/data/more_settings_repository.dart';
-import 'package:y300/features/more/presentation/cache_settings_controller.dart';
-import 'package:y300/features/more/presentation/cache_settings_page.dart';
+import 'package:y300/features/more/data/data_storage_settings_repository.dart';
+import 'package:y300/features/more/presentation/data_storage_controller.dart';
+import 'package:y300/features/more/presentation/data_storage_page.dart';
+import 'package:y300/features/storage/data/storage_providers.dart';
+import 'package:y300/features/storage/domain/download_storage_models.dart';
+import 'package:y300/features/storage/domain/download_storage_service.dart';
 
 void main() {
-  testWidgets('CacheSettingsPage renders default and effective directory', (tester) async {
-    final repo = _FakeMoreSettingsRepository(
-      defaultDir: '/tmp/default',
-      customDir: null,
+  testWidgets('DataStoragePage renders default and effective storage directory', (tester) async {
+    final repo = _FakeDataStorageSettingsRepository(
+      defaultPath: '/tmp/default-downloads',
+      customPath: null,
     );
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          moreSettingsRepositoryProvider.overrideWithValue(repo),
+          dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+          downloadStorageServiceProvider.overrideWithValue(_FakeDownloadStorageService(repo: repo)),
         ],
-        child: const MaterialApp(home: CacheSettingsPage()),
+        child: const MaterialApp(home: DataStoragePage()),
       ),
     );
 
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('cache-settings-default-directory')), findsOneWidget);
-    expect(find.text('/tmp/default'), findsNWidgets(2));
-    expect(find.byKey(const Key('cache-settings-custom-directory')), findsNothing);
+    expect(find.byKey(const Key('data-storage-default-directory')), findsOneWidget);
+    expect(find.text('/tmp/default-downloads'), findsNWidgets(2));
+    expect(find.byKey(const Key('data-storage-custom-directory')), findsNothing);
   });
 
-  testWidgets('CacheSettingsPage chooses custom directory and shows hint', (tester) async {
-    final repo = _FakeMoreSettingsRepository(
-      defaultDir: '/tmp/default',
-      customDir: null,
-      pickedDir: '/mnt/comic-cache',
+  testWidgets('DataStoragePage chooses custom storage directory and shows hint', (tester) async {
+    final repo = _FakeDataStorageSettingsRepository(
+      defaultPath: '/tmp/default-downloads',
+      customPath: null,
+      pickedPath: '/mnt/y300-downloads',
     );
+    final storage = _FakeDownloadStorageService(repo: repo);
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          moreSettingsRepositoryProvider.overrideWithValue(repo),
+          dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+          downloadStorageServiceProvider.overrideWithValue(storage),
         ],
-        child: const MaterialApp(home: CacheSettingsPage()),
+        child: const MaterialApp(home: DataStoragePage()),
       ),
     );
 
     await tester.pumpAndSettle();
-    final chooseButton = find.byKey(const Key('cache-settings-choose-directory-button'));
+    final chooseButton = find.byKey(const Key('data-storage-choose-directory-button'));
     await tester.scrollUntilVisible(
       chooseButton,
       120,
@@ -60,17 +68,18 @@ void main() {
     await _tapVisibleCenter(tester, chooseButton);
     await tester.pumpAndSettle();
 
-    final customDirectory = find.byKey(const Key('cache-settings-custom-directory'));
+    final customDirectory = find.byKey(const Key('data-storage-custom-directory'));
     await tester.scrollUntilVisible(
       customDirectory,
       -120,
       scrollable: find.byType(Scrollable).first,
     );
     expect(customDirectory, findsOneWidget);
-    expect(find.text('/mnt/comic-cache'), findsAtLeastNWidgets(1));
+    expect(find.text('/mnt/y300-downloads'), findsAtLeastNWidgets(1));
+    expect(storage.prepareRootCalls, 2);
 
     await tester.scrollUntilVisible(
-      find.byKey(const Key('cache-settings-hint-text')),
+      find.byKey(const Key('data-storage-hint-text')),
       120,
       scrollable: find.byType(Scrollable).first,
     );
@@ -78,24 +87,25 @@ void main() {
     expect(find.text('存储位置已更新'), findsOneWidget);
   });
 
-  testWidgets('CacheSettingsPage restores default directory', (tester) async {
-    final repo = _FakeMoreSettingsRepository(
-      defaultDir: '/tmp/default',
-      customDir: '/mnt/comic-cache',
+  testWidgets('DataStoragePage restores default storage directory', (tester) async {
+    final repo = _FakeDataStorageSettingsRepository(
+      defaultPath: '/tmp/default-downloads',
+      customPath: '/mnt/y300-downloads',
     );
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          moreSettingsRepositoryProvider.overrideWithValue(repo),
+          dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+          downloadStorageServiceProvider.overrideWithValue(_FakeDownloadStorageService(repo: repo)),
         ],
-        child: const MaterialApp(home: CacheSettingsPage()),
+        child: const MaterialApp(home: DataStoragePage()),
       ),
     );
 
     await tester.pumpAndSettle();
-    final restoreButton = find.byKey(const Key('cache-settings-restore-default-button'));
+    final restoreButton = find.byKey(const Key('data-storage-restore-default-button'));
     await tester.scrollUntilVisible(
       restoreButton,
       120,
@@ -104,24 +114,29 @@ void main() {
     await tester.ensureVisible(restoreButton);
     await _tapVisibleCenter(tester, restoreButton);
     await tester.pumpAndSettle();
-    expect(repo.customDir, isNull);
+    expect(repo.customPath, isNull);
 
     await tester.scrollUntilVisible(
-      find.byKey(const Key('cache-settings-default-directory')),
+      find.byKey(const Key('data-storage-default-directory')),
       -120,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.byKey(const Key('cache-settings-custom-directory')), findsNothing);
-    expect(find.text('/tmp/default'), findsAtLeastNWidgets(1));
+    expect(find.byKey(const Key('data-storage-custom-directory')), findsNothing);
+    expect(find.text('/tmp/default-downloads'), findsAtLeastNWidgets(1));
 
     await tester.scrollUntilVisible(
-      find.byKey(const Key('cache-settings-hint-text')),
+      find.byKey(const Key('data-storage-hint-text')),
       120,
       scrollable: find.byType(Scrollable).first,
     );
 
-    expect(find.byKey(const Key('cache-settings-custom-directory')), findsNothing);
     expect(find.text('已恢复默认存储位置'), findsOneWidget);
+  });
+
+  test('formatDataStorageBytes uses KB, MB and GB units', () {
+    expect(formatDataStorageBytes(512), '0.5 KB');
+    expect(formatDataStorageBytes(4 * 1024 * 1024), '4.0 MB');
+    expect(formatDataStorageBytes(3 * 1024 * 1024 * 1024), '3.0 GB');
   });
 }
 
@@ -142,33 +157,33 @@ Future<void> _tapVisibleCenter(WidgetTester tester, Finder finder) async {
   );
 }
 
-class _FakeMoreSettingsRepository implements MoreSettingsRepository {
-  _FakeMoreSettingsRepository({
-    required String defaultDir,
-    required String? customDir,
-    this.pickedDir,
-  })  : _defaultDir = defaultDir,
-        _customDir = customDir;
+class _FakeDataStorageSettingsRepository implements DataStorageSettingsRepository {
+  _FakeDataStorageSettingsRepository({
+    required String defaultPath,
+    required String? customPath,
+    this.pickedPath,
+  })  : _defaultPath = defaultPath,
+        _customPath = customPath;
 
-  final String _defaultDir;
-  String? _customDir;
-  final String? pickedDir;
-  int _maxBytes = 512 * 1024 * 1024;
+  final String _defaultPath;
+  String? _customPath;
+  final String? pickedPath;
+  int _maxBytes = DataStorageSettingsRepositoryImpl.defaultImageCacheMaxBytes;
 
-  String? get customDir => _customDir;
-
-  @override
-  Future<String> getDefaultCacheDirectory() async => _defaultDir;
+  String? get customPath => _customPath;
 
   @override
-  Future<String?> getCustomCacheDirectory() async => _customDir;
+  Future<String> getDefaultStoragePath() async => _defaultPath;
 
   @override
-  Future<String?> pickDirectory() async => pickedDir;
+  Future<String?> getCustomStoragePath() async => _customPath;
 
   @override
-  Future<void> setCustomCacheDirectory(String? path) async {
-    _customDir = path;
+  Future<String?> pickDirectory() async => pickedPath;
+
+  @override
+  Future<void> setCustomStoragePath(String? path) async {
+    _customPath = path;
   }
 
   @override
@@ -177,6 +192,69 @@ class _FakeMoreSettingsRepository implements MoreSettingsRepository {
   @override
   Future<void> setImageCacheMaxBytes(int bytes) async {
     _maxBytes = bytes;
+  }
+}
+
+class _FakeDownloadStorageService implements DownloadStorageService {
+  _FakeDownloadStorageService({required this.repo});
+
+  final _FakeDataStorageSettingsRepository repo;
+  int prepareRootCalls = 0;
+
+  @override
+  Future<DownloadStorageRoot> prepareRoot() async {
+    prepareRootCalls += 1;
+    final path = await repo.getCustomStoragePath() ?? await repo.getDefaultStoragePath();
+    return DownloadStorageRoot(
+      path: path,
+      comicsPath: '$path/comics',
+      novelsPath: '$path/novels',
+      favoritesJsonPath: '$path/favorites.json',
+    );
+  }
+
+  @override
+  Future<io.Directory> prepareComicDirectory({required String workId, required String title}) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<io.Directory> prepareNovelDirectory({required String novelId, required String title}) {
+    throw UnimplementedError();
+  }
+
+  @override
+  String safeFileName(String value, {String fallback = 'untitled'}) => value;
+
+  @override
+  String numberedFileName({required int index, required String title, required String extension}) => title;
+
+  @override
+  Future<void> writeJsonAtomically(io.File file, Object? value) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> writeFavoritesSnapshot(Map<String, Object?> json) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<DownloadedComicEpisode?> findDownloadedComicEpisode({
+    required String workId,
+    required String title,
+    required String episodeId,
+  }) async {
+    return null;
+  }
+
+  @override
+  Future<DownloadedNovelChapter?> findDownloadedNovelChapter({
+    required String novelId,
+    required String title,
+    required String episodeId,
+  }) async {
+    return null;
   }
 }
 

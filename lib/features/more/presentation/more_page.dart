@@ -2,7 +2,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
-import 'package:y300/features/more/presentation/cache_settings_page.dart';
+import 'package:y300/features/more/presentation/data_storage_page.dart';
 
 class MorePage extends ConsumerWidget {
   const MorePage({super.key});
@@ -28,13 +28,13 @@ class MorePage extends ConsumerWidget {
             },
           ),
           ListTile(
-            key: const Key('more-cache-settings-entry'),
+            key: const Key('more-data-storage-entry'),
             leading: const Icon(Icons.storage_outlined),
             title: const Text('数据与存储'),
-            subtitle: const Text('管理图片缓存和本地存储位置'),
+            subtitle: const Text('管理图片缓存与下载位置'),
             onTap: () {
               Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const CacheSettingsPage()),
+                MaterialPageRoute<void>(builder: (_) => const DataStoragePage()),
               );
             },
           ),

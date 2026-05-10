@@ -2064,6 +2064,49 @@
 
 ---
 
+## 分阶段实现 06：更多页数据与存储 Review 清单（2026-05-10）
+
+### 一、更多页入口
+- [ ] `MorePage` 不再出现 `more-cache-settings-entry`。
+- [ ] `MorePage` 出现 `more-data-storage-entry`。
+- [ ] 入口文案为“数据与存储 / 管理图片缓存与下载位置”。
+- [ ] 点击入口进入 `DataStoragePage`。
+
+### 二、图片缓存管理
+- [ ] 页面展示当前图片缓存占用。
+- [ ] `清除` 操作调用 `ImageCacheService.clearUnprotected()`。
+- [ ] 清除图片缓存不删除封面、作品信息、标签、阅读状态和下载文件。
+- [ ] 图片缓存上限写入 `AppStorageKeys.imageCacheMaxBytes`。
+- [ ] 上限范围保持 128 MB 到 2048 MB，默认 512 MB。
+- [ ] 调整上限后调用 `pruneToLimit()`。
+
+### 三、下载存储位置
+- [ ] 自定义下载目录写入 `AppStorageKeys.downloadStorageDirectory`。
+- [ ] 旧 `comic_cache_dir` 不作为下载存储目录复用。
+- [ ] 选择目录后调用 `DownloadStorageService.prepareRoot()`。
+- [ ] 恢复默认后调用 `DownloadStorageService.prepareRoot()`。
+- [ ] `prepareRoot()` 创建根目录 `.nomedia`、`comics/.nomedia`、`novels/.nomedia` 和 `favorites.json`。
+- [ ] 恢复默认只清除自定义目录偏好，不删除旧自定义目录。
+
+### 四、架构边界
+- [ ] `DataStorageSettingsRepository` 不直接创建下载目录结构。
+- [ ] More 页面不直接操作文件系统。
+- [ ] 下载目录结构只由 `DownloadStorageService` 初始化。
+- [ ] `cache_settings_*` 旧文件只作为 deprecated 兼容层，不保留旧缓存目录写入逻辑。
+
+### 五、测试覆盖（仅编写，未执行）
+- [ ] `more_page_test.dart` 覆盖入口替换。
+- [ ] `cache_settings_controller_test.dart` 覆盖选择目录、恢复默认、清缓存、上限写入和真实目录结构初始化。
+- [ ] `cache_settings_page_test.dart` 覆盖页面路径展示、提示文案和容量单位格式。
+
+### 六、待你本地回归
+1. `flutter test`
+2. `flutter analyze`
+
+说明：`dart format` 按本轮要求未执行，也不作为本轮回归项。
+
+---
+
 ## UnifiedShelf 下拉刷新 Review 记录（2026-05-04）
 ### Review 范围
 - `lib/features/library_shared/presentation/pages/unified_shelf_page.dart`
