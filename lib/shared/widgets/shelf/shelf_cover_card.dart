@@ -1,6 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
-import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
+import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
 
 /// 通用书架封面卡片。
 ///
@@ -10,6 +10,7 @@ import 'package:y300/features/cache/presentation/widgets/library_cached_image.da
 class ShelfCoverCard extends StatelessWidget {
   const ShelfCoverCard({
     super.key,
+    this.coverKey,
     required this.title,
     required this.coverImageUrl,
     required this.onTap,
@@ -23,6 +24,7 @@ class ShelfCoverCard extends StatelessWidget {
     this.imageHeaderBuilder,
   });
 
+  final String? coverKey;
   final String title;
   final String? coverImageUrl;
   final String? coverLocalPath;
@@ -65,12 +67,12 @@ class ShelfCoverCard extends StatelessWidget {
   }
 
   Widget _buildCoverLayer(BuildContext context) {
-    return LibraryCachedImage(
+    return ShelfCoverImage(
+      coverKey: coverKey ?? title,
       localPath: _preferredLocalPath,
-      imageUrl: coverImageUrl,
+      remoteUrl: coverImageUrl,
       fit: BoxFit.cover,
       placeholder: _buildFallback(context),
-      headerBuilder: imageHeaderBuilder,
     );
   }
 

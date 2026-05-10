@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
-import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -8,6 +7,7 @@ import 'package:y300/features/library_shared/domain/models/library_sort_models.d
 import 'package:y300/features/library_shared/presentation/controllers/unified_shelf_controller.dart';
 import 'package:y300/shared/widgets/shelf/fixed_slot_pager_header.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
+import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
 
 /// 统一书架页面（Phase 3）。
 class UnifiedShelfPage extends StatefulWidget {
@@ -148,22 +148,35 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                               final category = categories[index];
                               final items =
                                   state.itemsByCategory[category.categoryId] ?? const <LibraryWorkItem>[];
-                              if (items.isEmpty) {
-                                return const _AlwaysScrollableEmptyState(message: '书架为空');
-                              }
-                              if (state.displayMode == LibraryDisplayMode.list) {
-                                return _WorkList(
-                                  items: items,
-                                  imageHeaderBuilder: imageHeaderBuilder,
-                                  onTapItem: (workId) => widget.onOpenWork(context, workId),
-                                );
-                              }
-                              return _WorkGrid(
+                              return _ShelfCategoryPage(
+                                key: PageStorageKey<String>('unified-shelf-category-page-${category.categoryId}'),
+                                categoryId: category.categoryId,
                                 items: items,
+                                displayMode: state.displayMode,
                                 gridColumns: state.gridColumnCount,
                                 imageHeaderBuilder: imageHeaderBuilder,
                                 onTapItem: (workId) => widget.onOpenWork(context, workId),
+                                onVisibleRangeChanged: ({
+                                  required firstIndex,
+                                  required lastIndex,
+                                }) {
+                                  _controller.reportVisibleRange(
+                                    categoryId: category.categoryId,
+                                    firstIndex: firstIndex,
+                                    lastIndex: lastIndex,
+                                  );
+                                },
                               );
+                            },
+                            findChildIndexCallback: (key) {
+                              final valueKey = key is ValueKey<String> ? key.value : null;
+                              if (valueKey == null ||
+                                  !valueKey.startsWith('unified-shelf-category-page-')) {
+                                return null;
+                              }
+                              final categoryId = valueKey.substring('unified-shelf-category-page-'.length);
+                              final index = categories.indexWhere((category) => category.categoryId == categoryId);
+                              return index < 0 ? null : index;
                             },
                           ),
                   ),
@@ -523,14 +536,141 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
   }
 }
 
+class _ShelfCategoryPage extends StatefulWidget {
+  const _ShelfCategoryPage({
+    super.key,
+    required this.categoryId,
+    required this.items,
+    required this.displayMode,
+    required this.gridColumns,
+    this.imageHeaderBuilder,
+    required this.onTapItem,
+    required this.onVisibleRangeChanged,
+  });
+
+  final String categoryId;
+  final List<LibraryWorkItem> items;
+  final LibraryDisplayMode displayMode;
+  final int gridColumns;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final ValueChanged<String> onTapItem;
+  final void Function({
+    required int firstIndex,
+    required int lastIndex,
+  }) onVisibleRangeChanged;
+
+  @override
+  State<_ShelfCategoryPage> createState() => _ShelfCategoryPageState();
+}
+
+class _ShelfCategoryPageState extends State<_ShelfCategoryPage> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reportInitialRange());
+  }
+
+  @override
+  void didUpdateWidget(covariant _ShelfCategoryPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.items.length != widget.items.length ||
+        oldWidget.displayMode != widget.displayMode ||
+        oldWidget.gridColumns != widget.gridColumns) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _reportInitialRange());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    if (widget.items.isEmpty) {
+      return const _AlwaysScrollableEmptyState(message: '书架为空');
+    }
+    final child = widget.displayMode == LibraryDisplayMode.list
+        ? _WorkList(
+            categoryId: widget.categoryId,
+            items: widget.items,
+            onTapItem: widget.onTapItem,
+          )
+        : _WorkGrid(
+            categoryId: widget.categoryId,
+            items: widget.items,
+            gridColumns: widget.gridColumns,
+            imageHeaderBuilder: widget.imageHeaderBuilder,
+            onTapItem: widget.onTapItem,
+          );
+    return RepaintBoundary(
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          if (notification.metrics.axis == Axis.vertical) {
+            _reportRangeForMetrics(notification.metrics);
+          }
+          return false;
+        },
+        child: KeyedSubtree(
+          key: ValueKey<String>('unified-shelf-category-scroll-host-${widget.categoryId}'),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  void _reportInitialRange() {
+    if (!mounted || widget.items.isEmpty) {
+      return;
+    }
+    widget.onVisibleRangeChanged(
+      firstIndex: 0,
+      lastIndex: _estimateVisibleCount() - 1,
+    );
+  }
+
+  void _reportRangeForMetrics(ScrollMetrics metrics) {
+    if (widget.items.isEmpty) {
+      return;
+    }
+    final firstIndex = _estimateFirstIndex(metrics.pixels);
+    final visibleCount = _estimateVisibleCount();
+    widget.onVisibleRangeChanged(
+      firstIndex: firstIndex,
+      lastIndex: firstIndex + visibleCount - 1,
+    );
+  }
+
+  int _estimateFirstIndex(double scrollOffset) {
+    if (widget.displayMode == LibraryDisplayMode.list) {
+      return (scrollOffset / 72).floor().clamp(0, widget.items.length - 1).toInt();
+    }
+    final columns = widget.gridColumns < 1 ? 1 : widget.gridColumns;
+    final viewportWidth = MediaQuery.sizeOf(context).width;
+    final tileWidth = (viewportWidth - 24 - ((columns - 1) * 10)) / columns;
+    final tileHeight = tileWidth * 3 / 2;
+    final rowExtent = tileHeight + 10;
+    return ((scrollOffset / rowExtent).floor() * columns).clamp(0, widget.items.length - 1).toInt();
+  }
+
+  int _estimateVisibleCount() {
+    if (widget.displayMode == LibraryDisplayMode.list) {
+      return 10;
+    }
+    final columns = widget.gridColumns < 1 ? 1 : widget.gridColumns;
+    return columns * 4;
+  }
+}
+
 class _WorkGrid extends StatelessWidget {
   const _WorkGrid({
+    required this.categoryId,
     required this.items,
     required this.gridColumns,
     this.imageHeaderBuilder,
     required this.onTapItem,
   });
 
+  final String categoryId;
   final List<LibraryWorkItem> items;
   final int gridColumns;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
@@ -538,33 +678,38 @@ class _WorkGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
-      key: const Key('unified-shelf-grid-view'),
-      // 保证短列表也能触发 RefreshIndicator 下拉手势。
-      physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
-      // 大书架场景预渲染适度前后缓存，降低滑动抖动。
-      cacheExtent: 900,
-      padding: const EdgeInsets.all(12),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: gridColumns,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        childAspectRatio: 2 / 3,
+    return KeyedSubtree(
+      key: PageStorageKey<String>('unified-shelf-grid-storage-$categoryId'),
+      child: GridView.builder(
+        key: const Key('unified-shelf-grid-view'),
+        // 保证短列表也能触发 RefreshIndicator 下拉手势。
+        physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+        // 大书架场景预渲染适度前后缓存，降低滑动抖动。
+        cacheExtent: 900,
+        padding: const EdgeInsets.all(12),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: gridColumns,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          childAspectRatio: 2 / 3,
+        ),
+        itemCount: items.length,
+        itemBuilder: (context, index) {
+          final item = items[index];
+          return ShelfCoverCard(
+            key: ValueKey<String>('unified-shelf-grid-item-${item.workId}'),
+            coverKey: item.workId,
+            title: item.title,
+            coverImageUrl: item.coverImageUrl,
+            coverLocalPath: item.coverLocalPath,
+            customCoverLocalPath: item.customCoverLocalPath,
+            imageHeaderBuilder: imageHeaderBuilder,
+            onTap: () => onTapItem(item.workId),
+            topLeftBadge: _UnreadBadge(count: item.unreadCount),
+            showTwoLineCustomEllipsis: true,
+          );
+        },
       ),
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return ShelfCoverCard(
-          title: item.title,
-          coverImageUrl: item.coverImageUrl,
-          coverLocalPath: item.coverLocalPath,
-          customCoverLocalPath: item.customCoverLocalPath,
-          imageHeaderBuilder: imageHeaderBuilder,
-          onTap: () => onTapItem(item.workId),
-          topLeftBadge: _UnreadBadge(count: item.unreadCount),
-          showTwoLineCustomEllipsis: true,
-        );
-      },
     );
   }
 }
@@ -630,53 +775,57 @@ class _ShelfTaskProgressBanner extends StatelessWidget {
 
 class _WorkList extends StatelessWidget {
   const _WorkList({
+    required this.categoryId,
     required this.items,
-    this.imageHeaderBuilder,
     required this.onTapItem,
   });
 
+  final String categoryId;
   final List<LibraryWorkItem> items;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<String> onTapItem;
 
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
-      key: const Key('unified-shelf-list-view'),
-      // 保证短列表也能触发 RefreshIndicator 下拉手势。
-      physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
-      // 大书架场景预渲染适度前后缓存，降低滑动抖动。
-      cacheExtent: 900,
-      padding: const EdgeInsets.all(12),
-      itemCount: items.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 10),
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return ListTile(
-          onTap: () => onTapItem(item.workId),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          tileColor: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(64),
-          leading: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: SizedBox(
-              width: 52,
-              height: 52,
-              child: LibraryCachedImage(
-                localPath: _preferredLocalPath(item),
-                imageUrl: item.coverImageUrl,
-                fit: BoxFit.cover,
-                placeholder: Container(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  child: const Icon(Icons.image_not_supported_outlined),
+    return KeyedSubtree(
+      key: PageStorageKey<String>('unified-shelf-list-storage-$categoryId'),
+      child: ListView.separated(
+        key: const Key('unified-shelf-list-view'),
+        // 保证短列表也能触发 RefreshIndicator 下拉手势。
+        physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+        // 大书架场景预渲染适度前后缓存，降低滑动抖动。
+        cacheExtent: 900,
+        padding: const EdgeInsets.all(12),
+        itemCount: items.length,
+        separatorBuilder: (context, index) => const SizedBox(height: 10),
+        itemBuilder: (context, index) {
+          final item = items[index];
+          return ListTile(
+            key: ValueKey<String>('unified-shelf-list-item-${item.workId}'),
+            onTap: () => onTapItem(item.workId),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            tileColor: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(64),
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: 52,
+                height: 52,
+                child: ShelfCoverImage(
+                  coverKey: item.workId,
+                  localPath: _preferredLocalPath(item),
+                  remoteUrl: item.coverImageUrl,
+                  fit: BoxFit.cover,
+                  placeholder: Container(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    child: const Icon(Icons.image_not_supported_outlined),
+                  ),
                 ),
-                headerBuilder: imageHeaderBuilder,
               ),
             ),
-          ),
-          title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-          trailing: _UnreadBadge(count: item.unreadCount),
-        );
-      },
+            title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+            trailing: _UnreadBadge(count: item.unreadCount),
+          );
+        },
+      ),
     );
   }
 

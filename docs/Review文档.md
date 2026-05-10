@@ -1647,6 +1647,59 @@
 
 ---
 
+## Shelf 性能优化 Milestone C Review 记录（2026-05-10）
+### Review 范围
+- `lib/features/library_shared/domain/services/shelf_cover_warmup_service.dart`
+- `lib/features/library_shared/presentation/controllers/unified_shelf_controller.dart`
+- `lib/features/library_shared/presentation/pages/unified_shelf_page.dart`
+- `lib/shared/widgets/shelf/shelf_cover_image.dart`
+- `lib/shared/widgets/shelf/shelf_cover_card.dart`
+- `test/features/library_shared/domain/services/shelf_cover_warmup_service_test.dart`
+- `test/features/library_shared/presentation/controllers/unified_shelf_controller_test.dart`
+- `test/features/library_shared/presentation/pages/unified_shelf_page_test.dart`
+- `test/shared/widgets/shelf/shelf_cover_image_test.dart`
+
+### 核对结论
+1. 封面队列边界
+- Shared 层现在负责优先级、取消 token、去重和失败冷却。
+- 漫画/小说/收藏 adapter 仍只负责构造 request 与模块写回，未把模块细节扩散到页面层。
+
+2. 视口优先级
+- 页面只上报分类可见 index 范围。
+- Controller 根据当前分类、可见范围、显示模式和相邻分类计算 warmup 优先级。
+- 新 tab 选中后会重新发起 warmup，新分类首屏能优先补图。
+
+3. 分类页稳定性
+- 分类页拆出 `_ShelfCategoryPage`，使用 `AutomaticKeepAliveClientMixin`。
+- 每个分类页、grid/list 和 item 都有稳定 key，便于保留滚动位置并减少无意义重建。
+- 页面刷新时旧内容不会因为 background warmup 结果而整页重建。
+
+4. 图片组件现代化范围
+- 新增 `ShelfCoverImage` 仅用于 shelf 场景。
+- Shelf 封面不再在 build 中执行同步文件存在检查。
+- Shelf 封面不直接 fallback 到 `NetworkImage`，网络加载统一回到 warmup pipeline。
+- `gaplessPlayback` 已开启，local path 增量更新时降低闪烁。
+
+### 风险与后续
+1. 当前可见范围使用网格/list 的估算值，已经足够支撑 P0/P1 排队；后续可结合真实 viewport layout 做更精确计算。
+2. `imageHeaderBuilder` 在 shelf 参数中仍保留但暂不参与 `ShelfCoverImage`，后续若统一移除需要同步外部调用和测试。
+3. 失败冷却存在于 `ShelfCoverWarmupService` 实例生命周期内，App 重启后会清空；Milestone D 可再做持久化或 stale-while-revalidate。
+4. 分类 keep-alive 当前依赖 PageView 生命周期和 PageStorage，若分类数量特别多，后续可加最近访问分类数量限制。
+
+### 测试覆盖（仅编写，未执行）
+- [ ] `shelf_cover_warmup_service_test.dart` 覆盖优先级、失败冷却、视口/相邻分类标记。
+- [ ] `unified_shelf_controller_test.dart` 覆盖视口范围提升 warmup 优先级。
+- [ ] `unified_shelf_page_test.dart` 覆盖分类页稳定 PageStorageKey。
+- [ ] `shelf_cover_image_test.dart` 覆盖 placeholder 与本地 FileImage/gapless 行为。
+
+### 待你本地回归
+1. `flutter test`
+2. `flutter analyze`
+
+说明：本轮按你的要求未执行 `flutter test`、`flutter analyze`、`dart format`。
+
+---
+
 ## Shelf 性能优化 Milestone B Review 记录（2026-05-10）
 ### Review 范围
 - `lib/features/library_shared/domain/models/library_models.dart`

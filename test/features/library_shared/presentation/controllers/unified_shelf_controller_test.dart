@@ -303,6 +303,37 @@ void main() {
       controller.dispose();
     });
 
+    test('reported visible range upgrades cover warmup priority before background items', () async {
+      final adapter = _PriorityWarmupShelfAdapter(
+        categories: [
+          LibraryCategory(
+            categoryId: 'default',
+            name: 'default',
+            sortOrder: 0,
+            createdAt: DateTime(2026, 1, 1),
+          ),
+        ],
+        queriedItems: {
+          'default': [
+            _workItem('w0'),
+            _workItem('w1'),
+            _workItem('w2'),
+          ],
+        },
+      );
+      final controller = UnifiedShelfController(
+        adapter: adapter,
+        coverWarmupService: ShelfCoverWarmupService(maxConcurrent: 1),
+      );
+
+      controller.reportVisibleRange(categoryId: 'default', firstIndex: 1, lastIndex: 1);
+      await controller.initialize();
+      await adapter.waitForWarmupCalls(3);
+
+      expect(adapter.warmedWorkIds.first, 'w1');
+      controller.dispose();
+    });
+
     test('completed background task reloads metadata and notifies listener', () async {
       final progress = ValueNotifier<LibraryShelfTaskProgress?>(null);
       final adapter = _FakeShelfAdapter(
@@ -512,6 +543,55 @@ class _WarmupShelfAdapter extends _FakeShelfAdapter implements ShelfCoverWarmupA
   }
 }
 
+class _PriorityWarmupShelfAdapter extends _FakeShelfAdapter implements ShelfCoverWarmupAdapter {
+  _PriorityWarmupShelfAdapter({
+    required super.categories,
+    required super.queriedItems,
+  });
+
+  final warmedWorkIds = <String>[];
+  final Completer<void> _callsCompleter = Completer<void>();
+
+  Future<void> waitForWarmupCalls(int count) async {
+    if (warmedWorkIds.length >= count) {
+      return;
+    }
+    await _callsCompleter.future;
+  }
+
+  @override
+  Future<List<ShelfCoverWarmupRequest>> buildCoverWarmupRequests({
+    required Map<String, List<LibraryWorkItem>> itemsByCategory,
+    String? selectedCategoryId,
+  }) async {
+    final items = itemsByCategory['default'] ?? const <LibraryWorkItem>[];
+    return items.map((item) {
+      return ShelfCoverWarmupRequest(
+        moduleKey: LibraryModuleKey.comic,
+        workId: item.workId,
+        cacheKey: 'cover/comic/${item.workId}',
+        sourceUrl: item.coverImageUrl!,
+        ownerType: ImageCacheOwnerType.comic,
+        ownerId: item.workId,
+        role: ImageCacheRole.cover,
+        useCustomCover: false,
+      );
+    }).toList(growable: false);
+  }
+
+  @override
+  Future<ShelfCoverWarmupResult?> warmCover(ShelfCoverWarmupRequest request) async {
+    warmedWorkIds.add(request.workId);
+    if (warmedWorkIds.length >= 3 && !_callsCompleter.isCompleted) {
+      _callsCompleter.complete();
+    }
+    return ShelfCoverWarmupResult(
+      workId: request.workId,
+      coverLocalPath: '/cache/${request.workId}.jpg',
+    );
+  }
+}
+
 class _SnapshotShelfAdapter extends _FakeShelfAdapter implements ShelfSnapshotAdapter {
   _SnapshotShelfAdapter({
     required super.categories,
@@ -544,4 +624,17 @@ class _SnapshotShelfAdapter extends _FakeShelfAdapter implements ShelfSnapshotAd
       },
     );
   }
+}
+
+LibraryWorkItem _workItem(String workId) {
+  return LibraryWorkItem(
+    workId: workId,
+    categoryId: 'default',
+    title: workId,
+    coverImageUrl: 'https://img.test/$workId.jpg',
+    unreadCount: 0,
+    totalChapterCount: 1,
+    readChapterCount: 0,
+    addedAt: DateTime.utc(2026, 1, 1),
+  );
 }

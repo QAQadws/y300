@@ -152,6 +152,27 @@ void main() {
     expect(list.cacheExtent, 900);
   });
 
+  testWidgets('category pages keep stable PageStorage keys for scroll restoration', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeShelfAdapter(initialDisplayMode: LibraryDisplayMode.grid),
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const PageStorageKey<String>('unified-shelf-category-page-default')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const PageStorageKey<String>('unified-shelf-grid-storage-default')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('optional task progress renders above shelf content', (tester) async {
     final progress = ValueNotifier<LibraryShelfTaskProgress?>(
       const LibraryShelfTaskProgress(

@@ -131,6 +131,8 @@ class UnifiedShelfController {
   static const Duration _keywordDebounceDuration = Duration(milliseconds: 250);
   Timer? _keywordDebounceTimer;
   Completer<void>? _pendingKeywordCompleter;
+  final Map<String, ShelfCoverVisibleRange> _visibleRangesByCategory = <String, ShelfCoverVisibleRange>{};
+  ShelfCoverWarmupToken? _coverWarmupToken;
   bool _taskProgressWasActive = false;
   bool _adapterRefreshInProgress = false;
   var _disposed = false;
@@ -142,6 +144,8 @@ class UnifiedShelfController {
   void dispose() {
     _disposed = true;
     _reloadGeneration++;
+    _coverWarmupToken?.cancel();
+    _coverWarmupToken = null;
     _taskProgressListenable?.removeListener(_handleTaskProgressChanged);
     _keywordDebounceTimer?.cancel();
     _keywordDebounceTimer = null;
@@ -201,6 +205,28 @@ class UnifiedShelfController {
       return;
     }
     _state = _state.copyWith(selectedCategoryId: categoryId);
+    _startCoverWarmup(generation: _reloadGeneration);
+  }
+
+  void reportVisibleRange({
+    required String categoryId,
+    required int firstIndex,
+    required int lastIndex,
+  }) {
+    if (_disposed) {
+      return;
+    }
+    final range = ShelfCoverVisibleRange(
+      firstIndex: firstIndex,
+      lastIndex: lastIndex,
+    );
+    if (_visibleRangesByCategory[categoryId] == range) {
+      return;
+    }
+    _visibleRangesByCategory[categoryId] = range;
+    if (categoryId == _state.selectedCategoryId) {
+      _startCoverWarmup(generation: _reloadGeneration);
+    }
   }
 
   Future<void> updateFilters(LibraryFilterSet filters) async {
@@ -396,14 +422,29 @@ class UnifiedShelfController {
       return;
     }
     final snapshot = _state;
+    _coverWarmupToken?.cancel();
+    final token = ShelfCoverWarmupToken();
+    _coverWarmupToken = token;
     unawaited(() async {
       try {
         final requests = await warmupAdapter.buildCoverWarmupRequests(
           itemsByCategory: snapshot.itemsByCategory,
           selectedCategoryId: snapshot.selectedCategoryId,
         );
-        await _coverWarmupService.warmCovers(
+        if (_disposed || generation != _reloadGeneration || token.isCancelled) {
+          return;
+        }
+        final prioritized = prioritizeShelfCoverWarmupRequests(
           requests: requests,
+          itemsByCategory: snapshot.itemsByCategory,
+          categories: snapshot.categories,
+          selectedCategoryId: snapshot.selectedCategoryId,
+          visibleRangesByCategory: Map<String, ShelfCoverVisibleRange>.from(_visibleRangesByCategory),
+          displayMode: snapshot.displayMode,
+          gridColumnCount: snapshot.gridColumnCount,
+        );
+        await _coverWarmupService.warmCovers(
+          requests: prioritized,
           warmCover: warmupAdapter.warmCover,
           onResult: (result) {
             if (_disposed || generation != _reloadGeneration) {
@@ -411,6 +452,7 @@ class UnifiedShelfController {
             }
             _applyCoverWarmupResult(result);
           },
+          token: token,
         );
       } catch (_) {
         // Cover warmup is an opportunistic background path. Request building
