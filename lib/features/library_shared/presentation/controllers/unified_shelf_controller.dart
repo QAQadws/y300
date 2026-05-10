@@ -295,30 +295,21 @@ class UnifiedShelfController {
         'display',
         _adapter.loadDisplayPreference,
       );
-      final categories = await trace.measure(
-        'categories',
-        _adapter.loadCategories,
-      );
-      final queried = await trace.measure(
-        'queryItems',
-        () => _adapter.queryItems(
-          categories: categories,
-          filters: _state.filters,
-          sortOption: _state.sortOption,
-          keyword: _state.keyword,
-        ),
+      final snapshot = await trace.measure(
+        _adapter is ShelfSnapshotAdapter ? 'querySnapshot' : 'queryItems',
+        _queryShelfSnapshot,
       );
       trace
-        ..metric('categories', categories.length)
-        ..metric('items', queried.values.fold<int>(0, (total, items) => total + items.length))
+        ..metric('categories', snapshot.categories.length)
+        ..metric('items', snapshot.itemsByCategory.values.fold<int>(0, (total, items) => total + items.length))
         ..metric('blocking', shouldBlock);
       if (_disposed || generation != _reloadGeneration) {
         return;
       }
 
       final resolved = _resolveCategoryVisibility(
-        sourceCategories: categories,
-        itemsByCategory: queried,
+        sourceCategories: snapshot.categories,
+        itemsByCategory: snapshot.itemsByCategory,
       );
 
       final selectedCategoryId = _resolveSelectedCategoryId(
@@ -332,7 +323,7 @@ class UnifiedShelfController {
         gridColumnCount: _normalizeGridColumnCount(displaySettings.gridColumnCount),
         categories: resolved.visibleCategories,
         selectedCategoryId: selectedCategoryId,
-        itemsByCategory: queried,
+        itemsByCategory: snapshot.itemsByCategory,
         visibleMatchCountByCategory: resolved.visibleMatchCountByCategory,
         clearError: true,
       );
@@ -348,6 +339,35 @@ class UnifiedShelfController {
     } finally {
       trace.finish();
     }
+  }
+
+  Future<LibraryShelfSnapshot> _queryShelfSnapshot() async {
+    final snapshotAdapter = _adapter is ShelfSnapshotAdapter
+        ? _adapter as ShelfSnapshotAdapter
+        : null;
+    if (snapshotAdapter != null) {
+      return snapshotAdapter.querySnapshot(
+        filters: _state.filters,
+        sortOption: _state.sortOption,
+        keyword: _state.keyword,
+      );
+    }
+
+    final categories = await _adapter.loadCategories();
+    final queried = await _adapter.queryItems(
+      categories: categories,
+      filters: _state.filters,
+      sortOption: _state.sortOption,
+      keyword: _state.keyword,
+    );
+    return LibraryShelfSnapshot(
+      categories: categories,
+      itemsByCategory: queried,
+      visibleMatchCountByCategory: <String, int>{
+        for (final category in categories)
+          category.categoryId: (queried[category.categoryId] ?? const <LibraryWorkItem>[]).length,
+      },
+    );
   }
 
   void _handleTaskProgressChanged() {

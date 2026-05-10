@@ -1,6 +1,9 @@
 ﻿import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 
 /// 漫画仓库：封装书架数据访问，屏蔽具体存储实现。
 abstract class ComicRepository {
@@ -90,6 +93,14 @@ abstract class ComicRepository {
     required String comicId,
     required List<ComicEpisodeLink> episodeLinks,
     required String fallbackSourceTid,
+  });
+}
+
+abstract class ComicShelfSnapshotRepository {
+  Future<LibraryShelfSnapshot> queryShelfSnapshot({
+    required LibraryFilterSet filters,
+    required LibraryShelfSortOption sortOption,
+    required String keyword,
   });
 }
 

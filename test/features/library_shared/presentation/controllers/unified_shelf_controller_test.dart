@@ -44,6 +44,41 @@ void main() {
       expect(controller.state.itemsByCategory['default']?.length, 1);
     });
 
+    test('initialize prefers snapshot adapter without loading categories separately', () async {
+      final adapter = _SnapshotShelfAdapter(
+        categories: [
+          LibraryCategory(
+            categoryId: 'default',
+            name: 'default',
+            sortOrder: 0,
+            createdAt: DateTime(2026, 1, 1),
+          ),
+        ],
+        queriedItems: {
+          'default': [
+            LibraryWorkItem(
+              workId: 'w1',
+              categoryId: 'default',
+              title: 'snapshot title',
+              unreadCount: 2,
+              totalChapterCount: 3,
+              readChapterCount: 1,
+              addedAt: DateTime.utc(2026, 1, 1),
+            ),
+          ],
+        },
+      );
+      final controller = UnifiedShelfController(adapter: adapter);
+
+      await controller.initialize();
+
+      expect(controller.state.isLoading, isFalse);
+      expect(controller.state.itemsByCategory['default']?.single.title, 'snapshot title');
+      expect(adapter.snapshotCallCount, 1);
+      expect(adapter.loadCategoriesCallCount, 0);
+      expect(adapter.queryCallCount, 0);
+    });
+
     test('hide default category when default is empty and others have items', () async {
       final adapter = _FakeShelfAdapter(
         categories: [
@@ -474,5 +509,39 @@ class _WarmupShelfAdapter extends _FakeShelfAdapter implements ShelfCoverWarmupA
 
   void completeWarmup(String localPath) {
     _warmupCompleter.complete(localPath);
+  }
+}
+
+class _SnapshotShelfAdapter extends _FakeShelfAdapter implements ShelfSnapshotAdapter {
+  _SnapshotShelfAdapter({
+    required super.categories,
+    required super.queriedItems,
+  });
+
+  int snapshotCallCount = 0;
+  int loadCategoriesCallCount = 0;
+
+  @override
+  Future<List<LibraryCategory>> loadCategories() async {
+    loadCategoriesCallCount++;
+    return super.loadCategories();
+  }
+
+  @override
+  Future<LibraryShelfSnapshot> querySnapshot({
+    required LibraryFilterSet filters,
+    required LibraryShelfSortOption sortOption,
+    required String keyword,
+  }) async {
+    snapshotCallCount++;
+    lastQueryKeyword = keyword;
+    return LibraryShelfSnapshot(
+      categories: categories,
+      itemsByCategory: queriedItems,
+      visibleMatchCountByCategory: <String, int>{
+        for (final category in categories)
+          category.categoryId: (queriedItems[category.categoryId] ?? const <LibraryWorkItem>[]).length,
+      },
+    );
   }
 }

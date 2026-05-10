@@ -4,6 +4,10 @@ import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
+import 'package:y300/features/library_shared/data/local_library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
@@ -198,6 +202,65 @@ void main() {
       expect(novelItems.single.coverImageUrl, 'https://img.test/novel.jpg');
       expect(novelItems.single.coverLocalPath, '/cache/novel.jpg');
       expect(novelItems.single.customCoverLocalPath, '/cache/novel-custom.jpg');
+    });
+
+    test('queryShelfSnapshot batches category counts, tags, and module covers', () async {
+      final db = await ComicLocalDb.open(databaseName: dbName);
+      await db.insert(
+        ComicLocalDb.comicsTable,
+        <String, Object?>{
+          'comic_id': 'yamibo:100',
+          'source_tid': '100',
+          'source_fid': '30',
+          'title': '漫画模块标题',
+          'cover_image_url': 'https://img.test/comic.jpg',
+          'custom_cover_image_url': 'https://img.test/comic-custom.jpg',
+          'cover_local_path': '/cache/comic.jpg',
+          'custom_cover_local_path': '/cache/comic-custom.jpg',
+          'created_at': DateTime(2026, 1, 1).millisecondsSinceEpoch,
+          'updated_at': DateTime(2026, 1, 1).millisecondsSinceEpoch,
+        },
+      );
+      await repository.upsertRemotePage(
+        page: FavoriteThreadsPage(
+          page: 1,
+          perPage: 20,
+          totalCount: 1,
+          items: <FavoriteThread>[_thread(tid: '100', title: '收藏漫画')],
+        ),
+        pageStartOrder: 0,
+      );
+      await repository.updateThreadDetailMeta(
+        tid: '100',
+        fid: '30',
+        typeid: '398',
+        tagName: '韩国漫画',
+        contentKind: ThreadContentKind.comic,
+        workId: 'yamibo:100',
+      );
+      final stateRepository = LocalLibraryStateRepository(ComicLocalDb.open(databaseName: dbName));
+      final tagId = await stateRepository.createTag(name: '收藏标签');
+      await stateRepository.bindTagToWork(
+        moduleKey: LibraryModuleKey.favorite,
+        workId: FavoriteShelfWorkId.fromTid('100'),
+        tagId: tagId,
+      );
+
+      final snapshot = await repository.queryShelfSnapshot(
+        filters: LibraryFilterSet.defaults,
+        sortOption: LibraryShelfSortOption.defaults,
+        keyword: '收藏',
+      );
+      final comicItems = snapshot.itemsByCategory[favoriteComicCategoryId]!;
+
+      expect(snapshot.categories.map((category) => category.categoryId), contains(favoriteComicCategoryId));
+      expect(snapshot.visibleMatchCountByCategory[favoriteComicCategoryId], 1);
+      expect(comicItems.single.workId, FavoriteShelfWorkId.fromTid('100'));
+      expect(comicItems.single.coverImageUrl, 'https://img.test/comic-custom.jpg');
+      expect(comicItems.single.customCoverImageUrl, 'https://img.test/comic-custom.jpg');
+      expect(comicItems.single.coverLocalPath, '/cache/comic.jpg');
+      expect(comicItems.single.customCoverLocalPath, '/cache/comic-custom.jpg');
+      expect(comicItems.single.hasTags, isTrue);
     });
   });
 }

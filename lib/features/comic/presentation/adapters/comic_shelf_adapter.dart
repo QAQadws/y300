@@ -18,7 +18,8 @@ import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_
 ///
 /// 目标：先把“统一接口 -> 现有仓储”的映射打通，后续 Phase 1/2 再逐步填充
 /// 筛选、排序、状态位（未读/已下载/标签）等增强能力。
-class ComicShelfAdapter implements ShelfModuleAdapter, ShelfCoverWarmupAdapter {
+class ComicShelfAdapter
+    implements ShelfModuleAdapter, ShelfSnapshotAdapter, ShelfCoverWarmupAdapter {
   ComicShelfAdapter(
     this._repository, {
     required LibraryStateRepository stateRepository,
@@ -96,6 +97,40 @@ class ComicShelfAdapter implements ShelfModuleAdapter, ShelfCoverWarmupAdapter {
       output[category.categoryId] = items;
     }
     return output;
+  }
+
+  @override
+  Future<LibraryShelfSnapshot> querySnapshot({
+    required LibraryFilterSet filters,
+    required LibraryShelfSortOption sortOption,
+    required String keyword,
+  }) async {
+    final snapshotRepository = _repository is ComicShelfSnapshotRepository
+        ? _repository as ComicShelfSnapshotRepository
+        : null;
+    if (snapshotRepository != null) {
+      return snapshotRepository.queryShelfSnapshot(
+        filters: filters,
+        sortOption: sortOption,
+        keyword: keyword,
+      );
+    }
+
+    final categories = await loadCategories();
+    final itemsByCategory = await queryItems(
+      categories: categories,
+      filters: filters,
+      sortOption: sortOption,
+      keyword: keyword,
+    );
+    return LibraryShelfSnapshot(
+      categories: categories,
+      itemsByCategory: itemsByCategory,
+      visibleMatchCountByCategory: <String, int>{
+        for (final category in categories)
+          category.categoryId: (itemsByCategory[category.categoryId] ?? const <LibraryWorkItem>[]).length,
+      },
+    );
   }
 
   @override

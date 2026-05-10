@@ -61,6 +61,22 @@ class LibraryCategory {
   }
 }
 
+/// 统一书架的元数据快照。
+///
+/// Snapshot 是 Milestone B 的查询边界：适配器/仓储一次性返回 UI 首屏所需
+/// 的分类、作品和搜索命中数，避免控制器再按分类或按作品触发多轮查询。
+class LibraryShelfSnapshot {
+  const LibraryShelfSnapshot({
+    required this.categories,
+    required this.itemsByCategory,
+    required this.visibleMatchCountByCategory,
+  });
+
+  final List<LibraryCategory> categories;
+  final Map<String, List<LibraryWorkItem>> itemsByCategory;
+  final Map<String, int> visibleMatchCountByCategory;
+}
+
 /// 统一书架“作品卡片”最小视图模型。
 ///
 /// - [secondaryName]：漫画可放汉化组，小说可放作者。

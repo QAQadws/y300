@@ -83,6 +83,18 @@ abstract class ShelfModuleAdapter {
   });
 }
 
+/// 可选的聚合快照能力。
+///
+/// 支持该合同的模块可以把分类、筛选后作品、命中数量一次性返回给控制器。
+/// 不支持的模块仍会走旧的 `loadCategories + queryItems` 回退路径。
+abstract class ShelfSnapshotAdapter {
+  Future<LibraryShelfSnapshot> querySnapshot({
+    required LibraryFilterSet filters,
+    required LibraryShelfSortOption sortOption,
+    required String keyword,
+  });
+}
+
 class LibraryShelfTaskProgress {
   const LibraryShelfTaskProgress({
     required this.message,

@@ -1,6 +1,10 @@
 ﻿import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/features/library_shared/data/local_library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/novel/data/local_novel_repository.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
@@ -88,6 +92,47 @@ void main() {
       expect(progress, isNotNull);
       expect(progress!.episodeId, episodes.first.episodeId);
       expect(progress.scrollOffset, 222.5);
+    });
+
+    test('queryShelfSnapshot aggregates episode state and tags', () async {
+      await repository.upsertNovelBySeed(seed: const NovelRefreshSeed(fid: '49', tid: '200'));
+      await repository.refreshEpisodes(novelId: 'novel:49:200');
+      final episodes = await repository.getEpisodes(novelId: 'novel:49:200');
+      final stateRepository = LocalLibraryStateRepository(dbFuture);
+      await stateRepository.upsertEpisodeState(
+        moduleKey: LibraryModuleKey.novel,
+        episodeId: episodes.first.episodeId,
+        workId: 'novel:49:200',
+        isRead: false,
+        isDownloaded: true,
+      );
+      await stateRepository.upsertEpisodeState(
+        moduleKey: LibraryModuleKey.novel,
+        episodeId: episodes.last.episodeId,
+        workId: 'novel:49:200',
+        isRead: true,
+      );
+      final tagId = await stateRepository.createTag(name: '连载');
+      await stateRepository.bindTagToWork(
+        moduleKey: LibraryModuleKey.novel,
+        workId: 'novel:49:200',
+        tagId: tagId,
+      );
+
+      final snapshot = await repository.queryShelfSnapshot(
+        filters: LibraryFilterSet.defaults,
+        sortOption: LibraryShelfSortOption.defaults,
+        keyword: '测试小说',
+      );
+      final item = snapshot.itemsByCategory['default']!.single;
+
+      expect(snapshot.visibleMatchCountByCategory['default'], 1);
+      expect(item.title, '测试小说标题');
+      expect(item.unreadCount, 1);
+      expect(item.readChapterCount, 1);
+      expect(item.totalChapterCount, greaterThanOrEqualTo(episodes.length));
+      expect(item.isDownloaded, isTrue);
+      expect(item.hasTags, isTrue);
     });
 
     test('refreshEpisodes removes stale parsed episode rows', () async {

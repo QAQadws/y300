@@ -1,5 +1,9 @@
 ﻿import 'package:y300/features/novel/data/models/novel_models.dart';
 
+import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+
 /// 小说仓储：封装小说书架、章节、正文、阅读偏好与阅读进度。
 abstract class NovelRepository {
   Future<List<NovelShelfCategory>> getCategories();
@@ -48,6 +52,14 @@ abstract class NovelRepository {
   });
 
   Future<NovelReadingProgress?> getReadingProgress({required String novelId});
+}
+
+abstract class NovelShelfSnapshotRepository {
+  Future<LibraryShelfSnapshot> queryShelfSnapshot({
+    required LibraryFilterSet filters,
+    required LibraryShelfSortOption sortOption,
+    required String keyword,
+  });
 }
 
 abstract class NovelCoverCacheWriter {

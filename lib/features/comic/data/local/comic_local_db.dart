@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 12;
+  static const int dbVersion = 13;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -391,6 +391,14 @@ class ComicLocalDb {
       'CREATE INDEX IF NOT EXISTS idx_episodes_comic_order ON '
       '$episodesTable(comic_id, order_index)',
     );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_shelf_items_comic ON '
+      '$shelfItemsTable(comic_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_novel_shelf_items_novel ON '
+      '$novelShelfItemsTable(novel_id)',
+    );
   }
 
   /// Phase 03：收藏线程缓存与收藏页自定义分类。
@@ -463,6 +471,10 @@ class ComicLocalDb {
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_favorite_thread_category_category ON '
       '$favoriteThreadCategoryTable(category_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_favorite_threads_active_kind_order ON '
+      '$favoriteThreadsTable(removed_at, content_kind, remote_order)',
     );
   }
 

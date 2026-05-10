@@ -15,7 +15,8 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 
 /// 小说书架适配器（Phase 0 骨架版）。
-class NovelShelfAdapter implements ShelfModuleAdapter, ShelfCoverWarmupAdapter {
+class NovelShelfAdapter
+    implements ShelfModuleAdapter, ShelfSnapshotAdapter, ShelfCoverWarmupAdapter {
   NovelShelfAdapter(
     this._repository, {
     required LibraryStateRepository stateRepository,
@@ -92,6 +93,40 @@ class NovelShelfAdapter implements ShelfModuleAdapter, ShelfCoverWarmupAdapter {
       output[category.categoryId] = items;
     }
     return output;
+  }
+
+  @override
+  Future<LibraryShelfSnapshot> querySnapshot({
+    required LibraryFilterSet filters,
+    required LibraryShelfSortOption sortOption,
+    required String keyword,
+  }) async {
+    final snapshotRepository = _repository is NovelShelfSnapshotRepository
+        ? _repository as NovelShelfSnapshotRepository
+        : null;
+    if (snapshotRepository != null) {
+      return snapshotRepository.queryShelfSnapshot(
+        filters: filters,
+        sortOption: sortOption,
+        keyword: keyword,
+      );
+    }
+
+    final categories = await loadCategories();
+    final itemsByCategory = await queryItems(
+      categories: categories,
+      filters: filters,
+      sortOption: sortOption,
+      keyword: keyword,
+    );
+    return LibraryShelfSnapshot(
+      categories: categories,
+      itemsByCategory: itemsByCategory,
+      visibleMatchCountByCategory: <String, int>{
+        for (final category in categories)
+          category.categoryId: (itemsByCategory[category.categoryId] ?? const <LibraryWorkItem>[]).length,
+      },
+    );
   }
 
   @override

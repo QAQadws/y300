@@ -6,13 +6,18 @@ import 'package:y300/features/cache/domain/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_query_utils.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/domain/services/novel_episode_discovery_service.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
-class LocalNovelRepository implements NovelRepository, NovelCoverCacheWriter {
+class LocalNovelRepository
+    implements NovelRepository, NovelShelfSnapshotRepository, NovelCoverCacheWriter {
   LocalNovelRepository(
     this._dbFuture, {
     required NovelThreadGateway threadGateway,
@@ -228,6 +233,108 @@ class LocalNovelRepository implements NovelRepository, NovelCoverCacheWriter {
     ''', <Object>[_contentType, _contentType, categoryId]);
 
     return rows.map(_rowToNovelItem).toList(growable: false);
+  }
+
+  @override
+  Future<LibraryShelfSnapshot> queryShelfSnapshot({
+    required LibraryFilterSet filters,
+    required LibraryShelfSortOption sortOption,
+    required String keyword,
+  }) async {
+    final db = await _dbFuture;
+    final categories = await _loadLibraryCategories(db);
+    final rows = await db.rawQuery('''
+      WITH episode_stats AS (
+        SELECT
+          work_id,
+          COUNT(*) AS total_count
+        FROM ${ComicLocalDb.workEpisodesTable}
+        WHERE content_type = ?
+        GROUP BY work_id
+      ),
+      state_stats AS (
+        SELECT
+          work_id,
+          COUNT(*) AS state_count,
+          SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END) AS unread_count,
+          SUM(CASE WHEN is_read = 1 THEN 1 ELSE 0 END) AS read_count,
+          SUM(CASE WHEN is_downloaded = 1 THEN 1 ELSE 0 END) AS downloaded_count
+        FROM ${ComicLocalDb.libraryEpisodeStateTable}
+        WHERE content_type = ?
+        GROUP BY work_id
+      ),
+      tag_stats AS (
+        SELECT work_id, 1 AS has_tags
+        FROM ${ComicLocalDb.libraryWorkTagsTable}
+        WHERE content_type = ?
+        GROUP BY work_id
+      ),
+      work_state AS (
+        SELECT
+          work_id,
+          last_read_at,
+          check_updated_at,
+          fetched_updated_at
+        FROM ${ComicLocalDb.libraryWorkStateTable}
+        WHERE content_type = ?
+      )
+      SELECT
+        si.category_id,
+        si.added_at,
+        si.sort_order,
+        w.work_id,
+        w.source_tid,
+        w.source_fid,
+        w.source_typeid,
+        w.source_tag_name,
+        w.title,
+        w.author,
+        w.cover_image_url,
+        w.cover_local_path,
+        w.custom_cover_local_path,
+        w.updated_at AS work_updated_at,
+        COALESCE(es.total_count, ss.state_count, 0) AS total_count,
+        COALESCE(ss.unread_count, 0) AS unread_count,
+        COALESCE(ss.read_count, 0) AS read_count,
+        COALESCE(ss.downloaded_count, 0) AS downloaded_count,
+        COALESCE(ts.has_tags, 0) AS has_tags,
+        ws.last_read_at,
+        ws.check_updated_at,
+        ws.fetched_updated_at
+      FROM ${ComicLocalDb.novelShelfItemsTable} si
+      INNER JOIN ${ComicLocalDb.worksTable} w
+        ON si.novel_id = w.work_id
+      LEFT JOIN episode_stats es
+        ON es.work_id = w.work_id
+      LEFT JOIN state_stats ss
+        ON ss.work_id = w.work_id
+      LEFT JOIN tag_stats ts
+        ON ts.work_id = w.work_id
+      LEFT JOIN work_state ws
+        ON ws.work_id = w.work_id
+      WHERE w.content_type = ?
+      ORDER BY si.category_id ASC, si.sort_order ASC, si.added_at DESC
+    ''', <Object>[_contentType, _contentType, _contentType, _contentType, _contentType]);
+
+    final sourceByCategory = <String, List<LibraryWorkItem>>{
+      for (final category in categories) category.categoryId: <LibraryWorkItem>[],
+    };
+    for (final row in rows) {
+      final item = _rowToLibraryWorkItem(row);
+      sourceByCategory.putIfAbsent(item.categoryId, () => <LibraryWorkItem>[]).add(item);
+    }
+
+    final queried = LibraryShelfQueryUtils.filterAndSortByCategory(
+      source: sourceByCategory,
+      filters: filters,
+      sortOption: sortOption,
+      keyword: keyword,
+    );
+    return LibraryShelfSnapshot(
+      categories: categories,
+      itemsByCategory: queried,
+      visibleMatchCountByCategory: LibraryShelfQueryUtils.countByCategory(queried),
+    );
   }
 
   @override
@@ -638,6 +745,47 @@ class LocalNovelRepository implements NovelRepository, NovelCoverCacheWriter {
     );
   }
 
+  Future<List<LibraryCategory>> _loadLibraryCategories(Database db) async {
+    final rows = await db.query(
+      ComicLocalDb.novelCategoriesTable,
+      orderBy: 'sort_order ASC, created_at ASC',
+    );
+    return rows
+        .map(
+          (row) => LibraryCategory(
+            categoryId: row['category_id'] as String,
+            name: row['name'] as String,
+            sortOrder: row['sort_order'] as int,
+            createdAt: DateTime.fromMillisecondsSinceEpoch(row['created_at'] as int),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  LibraryWorkItem _rowToLibraryWorkItem(Map<String, Object?> row) {
+    final unreadCount = row['unread_count'] as int? ?? 0;
+    final readCount = row['read_count'] as int? ?? 0;
+    return LibraryWorkItem(
+      workId: row['work_id'] as String,
+      categoryId: (row['category_id'] as String?) ?? _defaultCategoryId,
+      title: row['title'] as String,
+      secondaryName: row['author'] as String?,
+      coverImageUrl: row['cover_image_url'] as String?,
+      coverLocalPath: row['cover_local_path'] as String?,
+      customCoverLocalPath: row['custom_cover_local_path'] as String?,
+      unreadCount: unreadCount,
+      totalChapterCount: row['total_count'] as int? ?? unreadCount + readCount,
+      readChapterCount: readCount,
+      addedAt: DateTime.fromMillisecondsSinceEpoch(row['added_at'] as int? ?? 0),
+      lastReadAt: _toDateTime(row['last_read_at']),
+      workUpdatedAt: _toDateTime(row['work_updated_at']),
+      lastCheckedAt: _toDateTime(row['check_updated_at']),
+      lastFetchedAt: _toDateTime(row['fetched_updated_at']),
+      hasTags: (row['has_tags'] as int? ?? 0) == 1,
+      isDownloaded: (row['downloaded_count'] as int? ?? 0) > 0,
+    );
+  }
+
   Future<int> _nextShelfSortOrder(Transaction txn, {required String categoryId}) async {
     final countResult = await txn.rawQuery(
       'SELECT COUNT(*) AS count FROM ${ComicLocalDb.novelShelfItemsTable} WHERE category_id = ?',
@@ -685,5 +833,12 @@ class LocalNovelRepository implements NovelRepository, NovelCoverCacheWriter {
   String? _normalizeNullable(String? value) {
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
+
+  DateTime? _toDateTime(Object? value) {
+    if (value is! int || value <= 0) {
+      return null;
+    }
+    return DateTime.fromMillisecondsSinceEpoch(value);
   }
 }

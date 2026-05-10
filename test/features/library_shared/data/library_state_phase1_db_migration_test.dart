@@ -28,6 +28,9 @@ void main() {
     expect(indexNames.contains('idx_library_episode_state_work_bookmarked'), isTrue);
     expect(indexNames.contains('idx_work_episodes_type_work_order'), isTrue);
     expect(indexNames.contains('idx_episodes_comic_order'), isTrue);
+    expect(indexNames.contains('idx_shelf_items_comic'), isTrue);
+    expect(indexNames.contains('idx_novel_shelf_items_novel'), isTrue);
+    expect(indexNames.contains('idx_favorite_threads_active_kind_order'), isTrue);
 
     await db.close();
     await deleteDatabase(dbName);

@@ -25,7 +25,8 @@ typedef _FavoriteCoverWriteBack = Future<void> Function(
 typedef ComicCoverCacheWriterResolver = ComicCoverCacheWriter? Function();
 typedef NovelCoverCacheWriterResolver = NovelCoverCacheWriter? Function();
 
-class FavoriteShelfAdapter implements ShelfModuleAdapter, ShelfCoverWarmupAdapter {
+class FavoriteShelfAdapter
+    implements ShelfModuleAdapter, ShelfSnapshotAdapter, ShelfCoverWarmupAdapter {
   FavoriteShelfAdapter(
     this._repository, {
     required FavoriteSyncService syncService,
@@ -110,6 +111,47 @@ class FavoriteShelfAdapter implements ShelfModuleAdapter, ShelfCoverWarmupAdapte
       keyword: keyword,
     );
     return _withoutOrdinaryCoversWhenCustomIsPending(queried);
+  }
+
+  @override
+  Future<LibraryShelfSnapshot> querySnapshot({
+    required LibraryFilterSet filters,
+    required LibraryShelfSortOption sortOption,
+    required String keyword,
+  }) async {
+    _startInitialSyncIfNeeded();
+    final snapshotRepository = _repository is FavoriteShelfSnapshotRepository
+        ? _repository as FavoriteShelfSnapshotRepository
+        : null;
+    if (snapshotRepository != null) {
+      final snapshot = await snapshotRepository.queryShelfSnapshot(
+        filters: filters,
+        sortOption: sortOption,
+        keyword: keyword,
+      );
+      final itemsByCategory = _withoutOrdinaryCoversWhenCustomIsPending(snapshot.itemsByCategory);
+      return LibraryShelfSnapshot(
+        categories: snapshot.categories,
+        itemsByCategory: itemsByCategory,
+        visibleMatchCountByCategory: snapshot.visibleMatchCountByCategory,
+      );
+    }
+
+    final categories = await loadCategories();
+    final queried = await queryItems(
+      categories: categories,
+      filters: filters,
+      sortOption: sortOption,
+      keyword: keyword,
+    );
+    return LibraryShelfSnapshot(
+      categories: categories,
+      itemsByCategory: queried,
+      visibleMatchCountByCategory: <String, int>{
+        for (final category in categories)
+          category.categoryId: (queried[category.categoryId] ?? const <LibraryWorkItem>[]).length,
+      },
+    );
   }
 
   @override

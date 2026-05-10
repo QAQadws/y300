@@ -7,6 +7,7 @@ import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_query_utils.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 abstract class LocalFavoriteRepository {
@@ -82,7 +83,16 @@ abstract class LocalFavoriteRepository {
   Future<String?> pickRandomWorkId({required String categoryId});
 }
 
-class SqfliteLocalFavoriteRepository implements LocalFavoriteRepository {
+abstract class FavoriteShelfSnapshotRepository {
+  Future<LibraryShelfSnapshot> queryShelfSnapshot({
+    required LibraryFilterSet filters,
+    required LibraryShelfSortOption sortOption,
+    required String keyword,
+  });
+}
+
+class SqfliteLocalFavoriteRepository
+    implements LocalFavoriteRepository, FavoriteShelfSnapshotRepository {
   SqfliteLocalFavoriteRepository(this._dbFuture);
 
   final Future<Database> _dbFuture;
@@ -492,6 +502,87 @@ class SqfliteLocalFavoriteRepository implements LocalFavoriteRepository {
   }
 
   @override
+  Future<LibraryShelfSnapshot> queryShelfSnapshot({
+    required LibraryFilterSet filters,
+    required LibraryShelfSortOption sortOption,
+    required String keyword,
+  }) async {
+    final db = await _dbFuture;
+    final rows = await db.rawQuery(
+      '''
+      WITH favorite_tag_stats AS (
+        SELECT work_id, 1 AS has_tags
+        FROM ${ComicLocalDb.libraryWorkTagsTable}
+        WHERE content_type = 'favorite'
+        GROUP BY work_id
+      )
+      SELECT
+        ft.*,
+        fc.category_id AS custom_category_id,
+        CASE
+          WHEN ft.content_kind = 'comic' THEN COALESCE(c.custom_cover_image_url, c.cover_image_url)
+          WHEN ft.content_kind = 'novel' THEN w.cover_image_url
+          ELSE NULL
+        END AS module_cover_image_url,
+        CASE
+          WHEN ft.content_kind = 'comic' THEN c.custom_cover_image_url
+          ELSE NULL
+        END AS module_custom_cover_image_url,
+        CASE
+          WHEN ft.content_kind = 'comic' THEN c.cover_local_path
+          WHEN ft.content_kind = 'novel' THEN w.cover_local_path
+          ELSE NULL
+        END AS module_cover_local_path,
+        CASE
+          WHEN ft.content_kind = 'comic' THEN c.custom_cover_local_path
+          WHEN ft.content_kind = 'novel' THEN w.custom_cover_local_path
+          ELSE NULL
+        END AS module_custom_cover_local_path,
+        COALESCE(tags.has_tags, 0) AS has_tags
+      FROM ${ComicLocalDb.favoriteThreadsTable} ft
+      LEFT JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
+        ON fc.tid = ft.tid
+      LEFT JOIN ${ComicLocalDb.comicsTable} c
+        ON ft.content_kind = 'comic' AND c.comic_id = ft.work_id
+      LEFT JOIN ${ComicLocalDb.worksTable} w
+        ON ft.content_kind = 'novel' AND w.work_id = ft.work_id AND w.content_type = 'novel'
+      LEFT JOIN favorite_tag_stats tags
+        ON tags.work_id = 'favorite:' || ft.tid
+      WHERE ft.removed_at IS NULL
+      ORDER BY ft.remote_order ASC, ft.dateline DESC, ft.last_seen_at DESC
+      ''',
+    );
+
+    final sourceByCategory = <String, List<LibraryWorkItem>>{};
+    final rawCountByCategory = <String, int>{};
+    for (final row in rows) {
+      final item = _rowToSnapshotWorkItem(row);
+      sourceByCategory.putIfAbsent(item.categoryId, () => <LibraryWorkItem>[]).add(item);
+      rawCountByCategory[item.categoryId] = (rawCountByCategory[item.categoryId] ?? 0) + 1;
+    }
+
+    final categories = await _loadSnapshotCategories(
+      db,
+      rawCountByCategory: rawCountByCategory,
+    );
+    for (final category in categories) {
+      sourceByCategory.putIfAbsent(category.categoryId, () => <LibraryWorkItem>[]);
+    }
+
+    final queried = LibraryShelfQueryUtils.filterAndSortByCategory(
+      source: sourceByCategory,
+      filters: filters,
+      sortOption: sortOption,
+      keyword: keyword,
+    );
+    return LibraryShelfSnapshot(
+      categories: categories,
+      itemsByCategory: queried,
+      visibleMatchCountByCategory: LibraryShelfQueryUtils.countByCategory(queried),
+    );
+  }
+
+  @override
   Future<String> createCategory({required String name}) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) {
@@ -659,6 +750,72 @@ class SqfliteLocalFavoriteRepository implements LocalFavoriteRepository {
     return rows.map(_recordFromRow).toList(growable: false);
   }
 
+  Future<List<LibraryCategory>> _loadSnapshotCategories(
+    Database db, {
+    required Map<String, int> rawCountByCategory,
+  }) async {
+    final now = DateTime.fromMillisecondsSinceEpoch(0);
+    final categories = <LibraryCategory>[];
+
+    final comicCount = rawCountByCategory[favoriteComicCategoryId] ?? 0;
+    if (comicCount > 0) {
+      categories.add(
+        LibraryCategory(
+          categoryId: favoriteComicCategoryId,
+          name: '漫画',
+          sortOrder: 0,
+          createdAt: now,
+          visibleMatchCount: comicCount,
+        ),
+      );
+    }
+
+    final novelCount = rawCountByCategory[favoriteNovelCategoryId] ?? 0;
+    if (novelCount > 0) {
+      categories.add(
+        LibraryCategory(
+          categoryId: favoriteNovelCategoryId,
+          name: '小说',
+          sortOrder: 1,
+          createdAt: now,
+          visibleMatchCount: novelCount,
+        ),
+      );
+    }
+
+    final defaultCount = rawCountByCategory[favoriteDefaultCategoryId] ?? 0;
+    if (defaultCount > 0) {
+      categories.add(
+        LibraryCategory(
+          categoryId: favoriteDefaultCategoryId,
+          name: '默认',
+          sortOrder: 2,
+          createdAt: now,
+          visibleMatchCount: defaultCount,
+        ),
+      );
+    }
+
+    final customRows = await db.query(
+      ComicLocalDb.favoriteCategoriesTable,
+      orderBy: 'sort_order ASC, created_at ASC',
+    );
+    for (final row in customRows) {
+      final categoryId = row['category_id'] as String;
+      categories.add(
+        LibraryCategory(
+          categoryId: categoryId,
+          name: row['name'] as String,
+          sortOrder: (row['sort_order'] as int? ?? 0) + 100,
+          createdAt: _toDateTime(row['created_at']) ?? now,
+          visibleMatchCount: rawCountByCategory[categoryId] ?? 0,
+        ),
+      );
+    }
+
+    return categories;
+  }
+
   String _systemCategorySqlCondition(String categoryId) {
     switch (categoryId) {
       case favoriteComicCategoryId:
@@ -704,6 +861,48 @@ class SqfliteLocalFavoriteRepository implements LocalFavoriteRepository {
       lastFetchedAt: record.detailLoadedAt,
       hasTags: tagRows.isNotEmpty,
     );
+  }
+
+  LibraryWorkItem _rowToSnapshotWorkItem(Map<String, Object?> row) {
+    final tid = row['tid'] as String;
+    final dateline = _toDatelineDate(row['dateline']);
+    final firstSeenAt = _toDateTime(row['first_seen_at']) ?? DateTime.fromMillisecondsSinceEpoch(0);
+    final addedAt = dateline ?? firstSeenAt;
+    final totalCount = max(1, (row['replies'] as int? ?? 0) + 1);
+    final workId = FavoriteShelfWorkId.fromTid(tid);
+    return LibraryWorkItem(
+      workId: workId,
+      categoryId: _resolvedCategoryIdFromRow(row),
+      title: row['title'] as String,
+      secondaryName: row['author'] as String?,
+      coverImageUrl: row['module_cover_image_url'] as String?,
+      customCoverImageUrl: row['module_custom_cover_image_url'] as String?,
+      coverLocalPath: row['module_cover_local_path'] as String?,
+      customCoverLocalPath: row['module_custom_cover_local_path'] as String?,
+      unreadCount: 0,
+      totalChapterCount: totalCount,
+      readChapterCount: 0,
+      addedAt: addedAt,
+      workUpdatedAt: dateline,
+      lastFetchedAt: _toDateTime(row['detail_loaded_at']),
+      hasTags: (row['has_tags'] as int? ?? 0) == 1,
+    );
+  }
+
+  String _resolvedCategoryIdFromRow(Map<String, Object?> row) {
+    final custom = _normalizeNullable(row['custom_category_id'] as String?);
+    if (custom != null) {
+      return custom;
+    }
+    switch (favoriteContentKindFromDb(row['content_kind'] as String?)) {
+      case ThreadContentKind.comic:
+        return favoriteComicCategoryId;
+      case ThreadContentKind.novel:
+        return favoriteNovelCategoryId;
+      case ThreadContentKind.unknown:
+      case ThreadContentKind.forum:
+        return favoriteDefaultCategoryId;
+    }
   }
 
   Future<_FavoriteCoverSnapshot> _loadModuleCover(

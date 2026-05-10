@@ -9,11 +9,16 @@ import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
+import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_query_utils.dart';
 
 /// 基于 SQLite 的漫画仓库实现。
 class LocalComicRepository
     implements
         ComicRepository,
+        ComicShelfSnapshotRepository,
         ComicCoverCacheWriter,
         ComicEpisodeImageCacheMetadataWriter {
   LocalComicRepository(
@@ -464,6 +469,103 @@ class LocalComicRepository
   }
 
   @override
+  Future<LibraryShelfSnapshot> queryShelfSnapshot({
+    required LibraryFilterSet filters,
+    required LibraryShelfSortOption sortOption,
+    required String keyword,
+  }) async {
+    final db = await _dbFuture;
+    final categories = await _loadLibraryCategories(db);
+    final rows = await db.rawQuery('''
+      WITH episode_stats AS (
+        SELECT
+          work_id,
+          COUNT(*) AS state_count,
+          SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END) AS unread_count,
+          SUM(CASE WHEN is_read = 1 THEN 1 ELSE 0 END) AS read_count,
+          SUM(CASE WHEN is_downloaded = 1 THEN 1 ELSE 0 END) AS downloaded_count
+        FROM ${ComicLocalDb.libraryEpisodeStateTable}
+        WHERE content_type = 'comic'
+        GROUP BY work_id
+      ),
+      chapter_stats AS (
+        SELECT comic_id AS work_id, COUNT(*) AS total_count
+        FROM ${ComicLocalDb.episodesTable}
+        GROUP BY comic_id
+      ),
+      tag_stats AS (
+        SELECT work_id, 1 AS has_tags
+        FROM ${ComicLocalDb.libraryWorkTagsTable}
+        WHERE content_type = 'comic'
+        GROUP BY work_id
+      ),
+      work_state AS (
+        SELECT
+          work_id,
+          last_read_at,
+          check_updated_at,
+          fetched_updated_at
+        FROM ${ComicLocalDb.libraryWorkStateTable}
+        WHERE content_type = 'comic'
+      )
+      SELECT
+        si.category_id,
+        si.added_at,
+        si.sort_order,
+        c.comic_id,
+        c.source_typeid,
+        c.source_tag_name,
+        c.title,
+        c.author,
+        COALESCE(c.custom_cover_image_url, c.cover_image_url) AS cover_image_url,
+        c.custom_cover_image_url,
+        c.cover_local_path,
+        c.custom_cover_local_path,
+        c.updated_at AS work_updated_at,
+        COALESCE(es.unread_count, 0) AS unread_count,
+        COALESCE(es.read_count, 0) AS read_count,
+        COALESCE(es.downloaded_count, 0) AS downloaded_count,
+        COALESCE(cs.total_count, es.state_count, 0) AS total_count,
+        COALESCE(ts.has_tags, 0) AS has_tags,
+        ws.last_read_at,
+        ws.check_updated_at,
+        ws.fetched_updated_at
+      FROM ${ComicLocalDb.shelfItemsTable} si
+      INNER JOIN ${ComicLocalDb.comicsTable} c
+        ON si.comic_id = c.comic_id
+      LEFT JOIN episode_stats es
+        ON es.work_id = c.comic_id
+      LEFT JOIN chapter_stats cs
+        ON cs.work_id = c.comic_id
+      LEFT JOIN tag_stats ts
+        ON ts.work_id = c.comic_id
+      LEFT JOIN work_state ws
+        ON ws.work_id = c.comic_id
+      ORDER BY si.category_id ASC, si.sort_order ASC, si.added_at DESC
+    ''');
+
+    final sourceByCategory = <String, List<LibraryWorkItem>>{
+      for (final category in categories) category.categoryId: <LibraryWorkItem>[],
+    };
+    for (final row in rows) {
+      final item = _rowToLibraryWorkItem(row);
+      sourceByCategory.putIfAbsent(item.categoryId, () => <LibraryWorkItem>[]).add(item);
+    }
+
+    final queried = LibraryShelfQueryUtils.filterAndSortByCategory(
+      source: sourceByCategory,
+      filters: filters,
+      sortOption: sortOption,
+      keyword: keyword,
+    );
+    return LibraryShelfSnapshot(
+      categories: categories,
+      itemsByCategory: queried,
+      visibleMatchCountByCategory: LibraryShelfQueryUtils.countByCategory(queried),
+    );
+  }
+
+  @override
   Future<ComicDetail?> getComicDetail({required String comicId}) async {
     final db = await _dbFuture;
     final rows = await db.rawQuery('''
@@ -803,6 +905,52 @@ class LocalComicRepository
       <Object>[categoryId],
     );
     return (countResult.first['count'] as int?) ?? 0;
+  }
+
+  Future<List<LibraryCategory>> _loadLibraryCategories(Database db) async {
+    final rows = await db.query(
+      ComicLocalDb.categoriesTable,
+      orderBy: 'sort_order ASC, created_at ASC',
+    );
+    return rows
+        .map(
+          (row) => LibraryCategory(
+            categoryId: row['category_id'] as String,
+            name: row['name'] as String,
+            sortOrder: row['sort_order'] as int,
+            createdAt: DateTime.fromMillisecondsSinceEpoch(row['created_at'] as int),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  LibraryWorkItem _rowToLibraryWorkItem(Map<String, Object?> row) {
+    final customSource = _normalizeNullable(row['custom_cover_image_url'] as String?);
+    final customLocal = _normalizeNullable(row['custom_cover_local_path'] as String?);
+    final hasPendingCustomCover = customSource != null && customLocal == null;
+    final unreadCount = row['unread_count'] as int? ?? 0;
+    final readCount = row['read_count'] as int? ?? 0;
+    return LibraryWorkItem(
+      workId: row['comic_id'] as String,
+      categoryId: row['category_id'] as String,
+      title: row['title'] as String,
+      secondaryName: row['author'] as String?,
+      coverImageUrl: row['cover_image_url'] as String?,
+      customCoverImageUrl: customSource,
+      // 自定义封面有远程源但还没缓存时，不暴露旧普通本地封面，避免 UI 闪回旧图。
+      coverLocalPath: hasPendingCustomCover ? null : row['cover_local_path'] as String?,
+      customCoverLocalPath: customLocal,
+      unreadCount: unreadCount,
+      totalChapterCount: row['total_count'] as int? ?? unreadCount + readCount,
+      readChapterCount: readCount,
+      addedAt: DateTime.fromMillisecondsSinceEpoch(row['added_at'] as int? ?? 0),
+      lastReadAt: _toDateTime(row['last_read_at']),
+      workUpdatedAt: _toDateTime(row['work_updated_at']),
+      lastCheckedAt: _toDateTime(row['check_updated_at']),
+      lastFetchedAt: _toDateTime(row['fetched_updated_at']),
+      hasTags: (row['has_tags'] as int? ?? 0) == 1,
+      isDownloaded: (row['downloaded_count'] as int? ?? 0) > 0,
+    );
   }
 
   int _normalizeColumnCount(int value) {

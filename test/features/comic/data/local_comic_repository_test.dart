@@ -3,6 +3,10 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/local_comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/library_shared/data/local_library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -10,10 +14,12 @@ void main() {
 
   group('LocalComicRepository', () {
     late LocalComicRepository repository;
+    late Future<Database> dbFuture;
 
     setUp(() async {
       await deleteDatabase(ComicLocalDb.dbName);
-      repository = LocalComicRepository(ComicLocalDb.open());
+      dbFuture = ComicLocalDb.open();
+      repository = LocalComicRepository(dbFuture);
     });
 
     test('adds comic to shelf and can query shelf state', () async {
@@ -277,6 +283,60 @@ void main() {
       expect(result.updatedCount, 1);
       expect(result.totalCount, episodes.length);
       expect(episodes.any((e) => e.episodeTitle == '第1话-修订'), isTrue);
+    });
+
+    test('queryShelfSnapshot aggregates episode state and tags', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:900',
+        tid: '900',
+        fid: '30',
+        title: '聚合漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>['https://img.test/snapshot-cover.jpg'],
+          episodeLinks: <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-901-1-1.html', rawText: '1', episodeTitle: '第1话'),
+            ComicEpisodeLink(url: 'thread-902-1-1.html', rawText: '2', episodeTitle: '第2话'),
+          ],
+          plainTextSummary: '摘要',
+          inferredAuthor: '作者S',
+        ),
+      );
+      final stateRepository = LocalLibraryStateRepository(dbFuture);
+      await stateRepository.upsertEpisodeState(
+        moduleKey: LibraryModuleKey.comic,
+        episodeId: 'yamibo:900:901',
+        workId: 'yamibo:900',
+        isRead: false,
+        isDownloaded: true,
+      );
+      await stateRepository.upsertEpisodeState(
+        moduleKey: LibraryModuleKey.comic,
+        episodeId: 'yamibo:900:902',
+        workId: 'yamibo:900',
+        isRead: true,
+      );
+      final tagId = await stateRepository.createTag(name: '追更');
+      await stateRepository.bindTagToWork(
+        moduleKey: LibraryModuleKey.comic,
+        workId: 'yamibo:900',
+        tagId: tagId,
+      );
+
+      final snapshot = await repository.queryShelfSnapshot(
+        filters: LibraryFilterSet.defaults,
+        sortOption: LibraryShelfSortOption.defaults,
+        keyword: '',
+      );
+      final item = snapshot.itemsByCategory['default']!.single;
+
+      expect(snapshot.categories.single.categoryId, 'default');
+      expect(snapshot.visibleMatchCountByCategory['default'], 1);
+      expect(item.title, '聚合漫画');
+      expect(item.unreadCount, 1);
+      expect(item.readChapterCount, 1);
+      expect(item.totalChapterCount, greaterThanOrEqualTo(2));
+      expect(item.isDownloaded, isTrue);
+      expect(item.hasTags, isTrue);
     });
 
     test('can persist reading progress and image cache status', () async {

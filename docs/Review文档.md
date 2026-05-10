@@ -1647,6 +1647,63 @@
 
 ---
 
+## Shelf 性能优化 Milestone B Review 记录（2026-05-10）
+### Review 范围
+- `lib/features/library_shared/domain/models/library_models.dart`
+- `lib/features/library_shared/domain/contracts/shelf_module_adapter.dart`
+- `lib/features/library_shared/domain/services/library_shelf_query_utils.dart`
+- `lib/features/library_shared/presentation/controllers/unified_shelf_controller.dart`
+- `lib/features/comic/data/comic_repository.dart`
+- `lib/features/comic/data/local_comic_repository.dart`
+- `lib/features/comic/presentation/adapters/comic_shelf_adapter.dart`
+- `lib/features/novel/data/novel_repository.dart`
+- `lib/features/novel/data/local_novel_repository.dart`
+- `lib/features/novel/presentation/adapters/novel_shelf_adapter.dart`
+- `lib/features/favorites/data/local_favorite_repository.dart`
+- `lib/features/favorites/presentation/adapters/favorite_shelf_adapter.dart`
+- `lib/features/comic/data/local/comic_local_db.dart`
+- 新增/更新的 snapshot 相关测试文件
+
+### 核对结论
+1. Snapshot 边界达成
+- Shared 层新增 `LibraryShelfSnapshot` 与可选 `ShelfSnapshotAdapter`。
+- Controller 优先走 snapshot，不支持时回退旧查询，降低一次性改造风险。
+
+2. per-item 查询收敛
+- 漫画/小说 snapshot 使用 SQL 聚合 unread/read/download/tag/章节数，不再需要 adapter 对每个作品调用状态仓库。
+- 收藏 snapshot 批量 join 分类、标签和模块封面，避免每个收藏条目单独查 tag/封面。
+
+3. 封面链路仍保持非阻塞
+- Snapshot 只返回当前 DB 中已有的封面 URL/local path。
+- 后台 `ShelfCoverWarmupService` 仍由 controller 在 metadata ready 后触发，不回退到查询阶段下载封面。
+
+4. 可维护性
+- keyword/filter/sort 统一收敛到 `LibraryShelfQueryUtils`。
+- 三模块 repository 只负责批量取字段，adapter 只负责桥接 snapshot/fallback。
+- 新增 repository snapshot 接口为可选接口，避免已有 fake 和其它调用方被强制改造。
+
+### 风险与后续
+1. 聚合 SQL 和旧 per-item 逻辑的统计口径需要通过你本地测试进一步对齐，尤其是“未读”是否只统计已有状态行。
+2. 当前筛选排序仍在 Dart 层执行，后续大数据量可继续把部分排序下推 SQL。
+3. 收藏 snapshot 的系统分类只在有原始内容时出现；搜索后空分类由 controller 可见性规则继续处理。
+4. DB 版本已提升到 `13`，开发期仍沿用重建最新版 schema 策略。
+5. 收藏表索引需要在 `_createFavoriteTables()` 中创建，不能放在早于收藏表创建的通用索引方法里。
+
+### 测试覆盖（仅编写，未执行）
+- [ ] `unified_shelf_controller_test.dart` 覆盖 snapshot adapter 优先路径。
+- [ ] `local_comic_repository_test.dart` 覆盖漫画聚合状态/标签。
+- [ ] `local_novel_repository_test.dart` 覆盖小说聚合状态/标签。
+- [ ] `local_favorite_repository_test.dart` 覆盖收藏聚合分类/标签/封面。
+- [ ] `library_state_phase1_db_migration_test.dart` 覆盖 snapshot 新索引。
+
+### 待你本地回归
+1. `flutter test`
+2. `flutter analyze`
+
+说明：本轮按你的要求未执行 `flutter test`、`flutter analyze`、`dart format`。
+
+---
+
 ## 问题汇总补充修复 Review 记录（2026-05-10）
 ### Review 范围
 - `lib/features/comic/data/local_comic_repository.dart`
