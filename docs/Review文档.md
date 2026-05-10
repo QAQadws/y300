@@ -1647,6 +1647,63 @@
 
 ---
 
+## Shelf 性能优化 Milestone D Review 记录（2026-05-10）
+### Review 范围
+- `lib/features/library_shared/domain/services/shelf_feature_flags.dart`
+- `lib/features/library_shared/domain/services/library_shelf_snapshot_diff.dart`
+- `lib/features/library_shared/domain/services/shelf_cover_resolver.dart`
+- `lib/features/library_shared/presentation/controllers/unified_shelf_controller.dart`
+- `lib/features/cache/domain/protected_cover_cache_maintenance.dart`
+- `lib/features/cache/data/protected_cover_file_store.dart`
+- `lib/features/cache/data/image_cache_repository.dart`
+- `lib/features/cache/data/image_cache_providers.dart`
+- Milestone D 新增/更新的测试文件
+
+### 核对结论
+1. 状态增量与 SWR
+- Controller 新增 `stateListenable`，保留现有 `state` 读取方式，降低页面迁移风险。
+- `UnifiedShelfPage` 分类内容区域已接入 `ValueListenableBuilder`，封面 warmup patch 不再触发整页 `setState()`。
+- 封面 warmup 结果只 patch 相关 `workId` 的 local path，不重新查询 metadata。
+- 默认 stale-while-revalidate 保持旧列表可见；关闭 flag 后可回退阻塞 loading。
+
+2. 灰度开关
+- `ShelfFeatureFlags` 覆盖 snapshot、cover queue、cover image、SWR 四条优化路径。
+- Snapshot、cover queue、cover image 和 SWR 已接入页面/controller，可逐项回滚。
+- `useShelfCoverImage=false` 时，书架 grid/list 封面回退 `LibraryCachedImage`；`ShelfCoverCard` 通过 builder 注入避免 shared 层反向依赖 cache feature。
+
+3. 缓存一致性
+- `ShelfCoverResolver.resolveFast()` 明确了 custom local > normal local > cache metadata > stale/remote 的读取顺序。
+- `ImageCacheRepository.listProtectedCovers()` 只列出 protected cover/custom cover，不混入阅读页普通图片。
+- `ProtectedCoverCacheMaintenance` 通过 metadata/file 两个小 store 合同清理 orphan/stale protected cover，避免 domain 依赖 SQLite 和 `dart:io` 细节。
+- `protectedCoverCacheMaintenanceProvider` 已提供统一装配入口，后续 UI 或后台任务只需提供 owner 判定逻辑。
+
+4. 可观测性
+- `LibraryShelfSnapshotDiffer` 为 reload 输出新增、删除、变更和顺序变化计数。
+- `UnifiedShelfController._reload()` 将 diff 计数写入 `ShelfPerfTrace`，后续可作为性能 dashboard 的基础。
+
+### 风险与后续
+1. `stateListenable` 当前已覆盖分类内容区域；AppBar、筛选弹层和全局 loading 仍沿用页面 `setState`，后续可继续细分。
+2. `ShelfCoverResolver` 当前只做 fast resolve，不直接接管 adapter warmup；后续可把 resolver 输出接到 tile 级状态 store。
+3. Protected cover orphan 清理由调用方传入 `ownerExists`，后续可分别为漫画/小说仓库提供批量 owner 判定。
+4. `useShelfCoverImage` 当前通过构造参数接入，后续如需运行时开关可接设置页或实验配置。
+
+### 测试覆盖（仅编写，未执行）
+- [ ] `shelf_feature_flags_test.dart` 覆盖灰度开关。
+- [ ] `library_shelf_snapshot_diff_test.dart` 覆盖 snapshot diff。
+- [ ] `shelf_cover_resolver_test.dart` 覆盖 fast resolver 优先级与 stale 状态。
+- [ ] `protected_cover_cache_maintenance_test.dart` 覆盖 protected cover 清理。
+- [ ] `unified_shelf_controller_test.dart` 覆盖 flags、SWR、stateListenable 增量 patch。
+- [ ] `unified_shelf_page_test.dart` 覆盖 cover image flag 回退路径。
+- [ ] `image_cache_repository_test.dart` 覆盖 protected cover 查询。
+
+### 待你本地回归
+1. `flutter test`
+2. `flutter analyze`
+
+说明：本轮按你的要求未执行 `flutter test`、`flutter analyze`、`dart format`。
+
+---
+
 ## Shelf 性能优化 Milestone C Review 记录（2026-05-10）
 ### Review 范围
 - `lib/features/library_shared/domain/services/shelf_cover_warmup_service.dart`

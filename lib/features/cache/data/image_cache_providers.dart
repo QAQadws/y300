@@ -5,7 +5,9 @@ import 'package:y300/features/cache/data/default_image_cache_service.dart';
 import 'package:y300/features/cache/data/image_cache_directory_provider.dart';
 import 'package:y300/features/cache/data/image_cache_manager_factory.dart';
 import 'package:y300/features/cache/data/image_cache_repository.dart';
+import 'package:y300/features/cache/data/protected_cover_file_store.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
+import 'package:y300/features/cache/domain/protected_cover_cache_maintenance.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 
 final imageCacheDirectoryResolverProvider = Provider<ImageCacheDirectoryResolver>((ref) {
@@ -24,6 +26,17 @@ final imageCacheManagerProvider = FutureProvider<BaseCacheManager>((ref) async {
 
 final imageCacheRepositoryProvider = Provider<ImageCacheRepository>((ref) {
   return LocalImageCacheRepository(ComicLocalDb.open());
+});
+
+final protectedCoverFileStoreProvider = Provider<ProtectedCoverFileStore>((ref) {
+  return const LocalProtectedCoverFileStore();
+});
+
+final protectedCoverCacheMaintenanceProvider = Provider<ProtectedCoverCacheMaintenance>((ref) {
+  return ProtectedCoverCacheMaintenance(
+    repository: ref.watch(imageCacheRepositoryProvider),
+    fileStore: ref.watch(protectedCoverFileStoreProvider),
+  );
 });
 
 final imageCacheServiceProvider = Provider<ImageCacheService>((ref) {

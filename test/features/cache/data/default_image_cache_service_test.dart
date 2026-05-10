@@ -203,6 +203,18 @@ class _MemoryImageCacheRepository implements ImageCacheRepository {
   Future<List<CachedImageRecord>> listUnprotectedByAccessTime() async => const <CachedImageRecord>[];
 
   @override
+  Future<List<CachedImageRecord>> listProtectedCovers() async {
+    return records.values
+        .where(
+          (record) =>
+              record.protected &&
+              (record.role == ImageCacheRole.cover.dbValue ||
+                  record.role == ImageCacheRole.customCover.dbValue),
+        )
+        .toList(growable: false);
+  }
+
+  @override
   Future<void> touch(String cacheKey, DateTime accessedAt) async {}
 
   @override

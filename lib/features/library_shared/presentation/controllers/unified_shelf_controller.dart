@@ -5,7 +5,9 @@ import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapt
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_snapshot_diff.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
+import 'package:y300/features/library_shared/domain/services/shelf_feature_flags.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_perf_trace.dart';
 
 /// 统一书架页面状态。
@@ -108,15 +110,16 @@ class UnifiedShelfController {
   UnifiedShelfController({
     required ShelfModuleAdapter adapter,
     ShelfCoverWarmupService? coverWarmupService,
+    ShelfFeatureFlags featureFlags = ShelfFeatureFlags.defaults,
     void Function()? onStateChanged,
   })  : _adapter = adapter,
         _coverWarmupService = coverWarmupService ?? ShelfCoverWarmupService(),
+        _featureFlags = featureFlags,
         _onStateChanged = onStateChanged,
         _taskProgressListenable = adapter.taskProgress,
-        _state = UnifiedShelfState.initial(
-          moduleKey: adapter.moduleKey,
-          moduleTitle: adapter.moduleTitle,
-          defaultDisplayMode: adapter.defaultDisplayMode,
+        _state = _initialState(adapter),
+        _stateListenable = ValueNotifier<UnifiedShelfState>(
+          _initialState(adapter),
         ) {
     final taskProgressListenable = _taskProgressListenable;
     _taskProgressWasActive = taskProgressListenable?.value?.active ?? false;
@@ -125,9 +128,12 @@ class UnifiedShelfController {
 
   final ShelfModuleAdapter _adapter;
   final ShelfCoverWarmupService _coverWarmupService;
+  final ShelfFeatureFlags _featureFlags;
+  final LibraryShelfSnapshotDiffer _snapshotDiffer = const LibraryShelfSnapshotDiffer();
   final void Function()? _onStateChanged;
   final ValueListenable<LibraryShelfTaskProgress?>? _taskProgressListenable;
   UnifiedShelfState _state;
+  final ValueNotifier<UnifiedShelfState> _stateListenable;
   static const Duration _keywordDebounceDuration = Duration(milliseconds: 250);
   Timer? _keywordDebounceTimer;
   Completer<void>? _pendingKeywordCompleter;
@@ -140,6 +146,16 @@ class UnifiedShelfController {
 
   UnifiedShelfState get state => _state;
 
+  ValueListenable<UnifiedShelfState> get stateListenable => _stateListenable;
+
+  static UnifiedShelfState _initialState(ShelfModuleAdapter adapter) {
+    return UnifiedShelfState.initial(
+      moduleKey: adapter.moduleKey,
+      moduleTitle: adapter.moduleTitle,
+      defaultDisplayMode: adapter.defaultDisplayMode,
+    );
+  }
+
   /// 释放控制器内部的异步资源，避免页面销毁后残留定时器。
   void dispose() {
     _disposed = true;
@@ -147,6 +163,7 @@ class UnifiedShelfController {
     _coverWarmupToken?.cancel();
     _coverWarmupToken = null;
     _taskProgressListenable?.removeListener(_handleTaskProgressChanged);
+    _stateListenable.dispose();
     _keywordDebounceTimer?.cancel();
     _keywordDebounceTimer = null;
     if (_pendingKeywordCompleter != null && !_pendingKeywordCompleter!.isCompleted) {
@@ -164,23 +181,23 @@ class UnifiedShelfController {
   }
 
   Future<void> enterSearchMode() async {
-    _state = _state.copyWith(
+    _setState(_state.copyWith(
       isSearchMode: true,
       clearError: true,
-    );
+    ));
   }
 
   Future<void> exitSearchMode() async {
-    _state = _state.copyWith(
+    _setState(_state.copyWith(
       isSearchMode: false,
       keyword: '',
       clearError: true,
-    );
+    ));
     await _reload();
   }
 
   Future<void> updateKeyword(String value) async {
-    _state = _state.copyWith(keyword: value);
+    _setState(_state.copyWith(keyword: value));
     _keywordDebounceTimer?.cancel();
     if (_pendingKeywordCompleter != null && !_pendingKeywordCompleter!.isCompleted) {
       // 被新输入打断的旧查询直接完成，避免调用方悬挂等待。
@@ -204,7 +221,7 @@ class UnifiedShelfController {
     if (_state.selectedCategoryId == categoryId) {
       return;
     }
-    _state = _state.copyWith(selectedCategoryId: categoryId);
+    _setState(_state.copyWith(selectedCategoryId: categoryId));
     _startCoverWarmup(generation: _reloadGeneration);
   }
 
@@ -230,17 +247,17 @@ class UnifiedShelfController {
   }
 
   Future<void> updateFilters(LibraryFilterSet filters) async {
-    _state = _state.copyWith(filters: filters);
+    _setState(_state.copyWith(filters: filters));
     await _reload();
   }
 
   Future<void> updateSortOption(LibraryShelfSortOption option) async {
-    _state = _state.copyWith(sortOption: option);
+    _setState(_state.copyWith(sortOption: option));
     await _reload();
   }
 
   Future<void> updateDisplayMode(LibraryDisplayMode mode) async {
-    _state = _state.copyWith(displayMode: mode);
+    _setState(_state.copyWith(displayMode: mode));
     await _adapter.updateDisplayPreference(
       displayMode: mode,
       gridColumnCount: _state.gridColumnCount,
@@ -249,7 +266,7 @@ class UnifiedShelfController {
 
   Future<void> updateGridColumnCount(int count) async {
     final normalized = _normalizeGridColumnCount(count);
-    _state = _state.copyWith(gridColumnCount: normalized);
+    _setState(_state.copyWith(gridColumnCount: normalized));
     await _adapter.updateDisplayPreference(
       displayMode: _state.displayMode,
       gridColumnCount: normalized,
@@ -315,20 +332,35 @@ class UnifiedShelfController {
     final generation = ++_reloadGeneration;
     final trace = ShelfPerfTrace(name: '${_adapter.moduleKey.name}.reload');
     final shouldBlock = !_hasAnyContent(_state);
-    _state = _state.copyWith(isLoading: shouldBlock, clearError: true);
+    final previousSnapshot = _snapshotFromState(_state);
+    _setState(_state.copyWith(
+      isLoading: shouldBlock || !_featureFlags.useStaleWhileRevalidate,
+      clearError: true,
+    ));
     try {
       final displaySettings = await trace.measure(
         'display',
         _adapter.loadDisplayPreference,
       );
       final snapshot = await trace.measure(
-        _adapter is ShelfSnapshotAdapter ? 'querySnapshot' : 'queryItems',
+        _shouldUseSnapshotAdapter ? 'querySnapshot' : 'queryItems',
         _queryShelfSnapshot,
       );
       trace
         ..metric('categories', snapshot.categories.length)
         ..metric('items', snapshot.itemsByCategory.values.fold<int>(0, (total, items) => total + items.length))
         ..metric('blocking', shouldBlock);
+      if (previousSnapshot != null) {
+        final diff = _snapshotDiffer.diff(
+          previous: previousSnapshot,
+          next: snapshot,
+        );
+        trace
+          ..metric('snapshotAdded', diff.addedWorkIds.length)
+          ..metric('snapshotRemoved', diff.removedWorkIds.length)
+          ..metric('snapshotChanged', diff.changedWorkIds.length)
+          ..metric('snapshotOrderChanged', diff.orderChangedCategoryIds.length);
+      }
       if (_disposed || generation != _reloadGeneration) {
         return;
       }
@@ -343,7 +375,7 @@ class UnifiedShelfController {
         preferred: _state.selectedCategoryId,
       );
 
-      _state = _state.copyWith(
+      _setState(_state.copyWith(
         isLoading: false,
         displayMode: displaySettings.displayMode,
         gridColumnCount: _normalizeGridColumnCount(displaySettings.gridColumnCount),
@@ -352,23 +384,23 @@ class UnifiedShelfController {
         itemsByCategory: snapshot.itemsByCategory,
         visibleMatchCountByCategory: resolved.visibleMatchCountByCategory,
         clearError: true,
-      );
+      ));
       _startCoverWarmup(generation: generation);
     } catch (error) {
       if (_disposed || generation != _reloadGeneration) {
         return;
       }
-      _state = _state.copyWith(
+      _setState(_state.copyWith(
         isLoading: false,
         errorMessage: '$error',
-      );
+      ));
     } finally {
       trace.finish();
     }
   }
 
   Future<LibraryShelfSnapshot> _queryShelfSnapshot() async {
-    final snapshotAdapter = _adapter is ShelfSnapshotAdapter
+    final snapshotAdapter = _shouldUseSnapshotAdapter
         ? _adapter as ShelfSnapshotAdapter
         : null;
     if (snapshotAdapter != null) {
@@ -396,6 +428,21 @@ class UnifiedShelfController {
     );
   }
 
+  LibraryShelfSnapshot? _snapshotFromState(UnifiedShelfState state) {
+    if (!_hasAnyContent(state)) {
+      return null;
+    }
+    return LibraryShelfSnapshot(
+      categories: state.categories,
+      itemsByCategory: state.itemsByCategory,
+      visibleMatchCountByCategory: state.visibleMatchCountByCategory,
+    );
+  }
+
+  bool get _shouldUseSnapshotAdapter {
+    return _featureFlags.useShelfSnapshotQuery && _adapter is ShelfSnapshotAdapter;
+  }
+
   void _handleTaskProgressChanged() {
     final active = _taskProgressListenable?.value?.active ?? false;
     final completedBackgroundTask = _taskProgressWasActive && !active;
@@ -418,7 +465,7 @@ class UnifiedShelfController {
     final warmupAdapter = _adapter is ShelfCoverWarmupAdapter
         ? _adapter as ShelfCoverWarmupAdapter
         : null;
-    if (warmupAdapter == null) {
+    if (!_featureFlags.useShelfCoverQueue || warmupAdapter == null) {
       return;
     }
     final snapshot = _state;
@@ -495,8 +542,21 @@ class UnifiedShelfController {
     if (!changed) {
       return;
     }
-    _state = _state.copyWith(itemsByCategory: Map<String, List<LibraryWorkItem>>.unmodifiable(nextItemsByCategory));
-    _onStateChanged?.call();
+    _setState(
+      _state.copyWith(
+        itemsByCategory: Map<String, List<LibraryWorkItem>>.unmodifiable(nextItemsByCategory),
+      ),
+    );
+  }
+
+  void _setState(UnifiedShelfState next) {
+    if (identical(_state, next)) {
+      return;
+    }
+    _state = next;
+    if (!_disposed) {
+      _stateListenable.value = next;
+    }
   }
 
   _ResolvedCategoryState _resolveCategoryVisibility({

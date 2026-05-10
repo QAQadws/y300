@@ -1,11 +1,14 @@
-﻿import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/services/shelf_feature_flags.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_shelf_page.dart';
+import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
 
 void main() {
   testWidgets('search mode switches app bar layout', (tester) async {
@@ -150,6 +153,22 @@ void main() {
 
     final list = tester.widget<ListView>(find.byKey(const Key('unified-shelf-list-view')));
     expect(list.cacheExtent, 900);
+  });
+
+  testWidgets('cover image feature flag can fall back to LibraryCachedImage', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeShelfAdapter(initialDisplayMode: LibraryDisplayMode.grid),
+          featureFlags: ShelfFeatureFlags.defaults.copyWith(useShelfCoverImage: false),
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LibraryCachedImage), findsOneWidget);
+    expect(find.byType(ShelfCoverImage), findsNothing);
   });
 
   testWidgets('category pages keep stable PageStorage keys for scroll restoration', (tester) async {

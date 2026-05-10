@@ -2,6 +2,27 @@
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
 
+typedef ShelfCoverLayerBuilder = Widget Function(
+  BuildContext context,
+  ShelfCoverLayerConfig config,
+);
+
+class ShelfCoverLayerConfig {
+  const ShelfCoverLayerConfig({
+    required this.localPath,
+    required this.remoteUrl,
+    required this.placeholder,
+    required this.fit,
+    this.imageHeaderBuilder,
+  });
+
+  final String? localPath;
+  final String? remoteUrl;
+  final Widget placeholder;
+  final BoxFit fit;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+}
+
 /// 通用书架封面卡片。
 ///
 /// 设计目标：
@@ -22,6 +43,7 @@ class ShelfCoverCard extends StatelessWidget {
     this.placeholderIcon = Icons.image_not_supported_outlined,
     this.fallbackBackground,
     this.imageHeaderBuilder,
+    this.coverLayerBuilder,
   });
 
   final String? coverKey;
@@ -36,6 +58,7 @@ class ShelfCoverCard extends StatelessWidget {
   final IconData placeholderIcon;
   final Decoration? fallbackBackground;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final ShelfCoverLayerBuilder? coverLayerBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -67,12 +90,26 @@ class ShelfCoverCard extends StatelessWidget {
   }
 
   Widget _buildCoverLayer(BuildContext context) {
+    final placeholder = _buildFallback(context);
+    final builder = coverLayerBuilder;
+    if (builder != null) {
+      return builder(
+        context,
+        ShelfCoverLayerConfig(
+          localPath: _preferredLocalPath,
+          remoteUrl: coverImageUrl,
+          fit: BoxFit.cover,
+          placeholder: placeholder,
+          imageHeaderBuilder: imageHeaderBuilder,
+        ),
+      );
+    }
     return ShelfCoverImage(
       coverKey: coverKey ?? title,
       localPath: _preferredLocalPath,
       remoteUrl: coverImageUrl,
       fit: BoxFit.cover,
-      placeholder: _buildFallback(context),
+      placeholder: placeholder,
     );
   }
 

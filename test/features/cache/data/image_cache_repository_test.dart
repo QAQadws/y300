@@ -48,6 +48,7 @@ void main() {
     expect(await repository.calculateUsageBytes(includeProtected: false), 20);
     expect(await repository.calculateUsageBytes(includeProtected: true), 30);
     expect((await repository.listUnprotectedByAccessTime()).single.cacheKey, contains('/000'));
+    expect((await repository.listProtectedCovers()).single.cacheKey, 'cover/comic/yamibo:100');
 
     final cover = await repository.getByKey('cover/comic/yamibo:100');
     expect(cover, isNotNull);

@@ -1,8 +1,9 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/protected_cover_cache_maintenance.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 
-abstract class ImageCacheRepository {
+abstract class ImageCacheRepository implements ProtectedCoverCacheStore {
   Future<CachedImageRecord?> getByKey(String cacheKey);
 
   Future<void> upsert(CachedImageRecord record);
@@ -13,6 +14,10 @@ abstract class ImageCacheRepository {
 
   Future<List<CachedImageRecord>> listUnprotectedByAccessTime();
 
+  @override
+  Future<List<CachedImageRecord>> listProtectedCovers();
+
+  @override
   Future<void> deleteByKey(String cacheKey);
 }
 
@@ -97,6 +102,21 @@ class LocalImageCacheRepository implements ImageCacheRepository {
       ComicLocalDb.cachedImagesTable,
       where: 'protected = 0',
       orderBy: 'COALESCE(last_accessed_at, updated_at, created_at) ASC',
+    );
+    return rows.map(_fromRow).toList(growable: false);
+  }
+
+  @override
+  Future<List<CachedImageRecord>> listProtectedCovers() async {
+    final db = await _dbFuture;
+    final rows = await db.query(
+      ComicLocalDb.cachedImagesTable,
+      where: 'protected = 1 AND role IN (?, ?)',
+      whereArgs: <Object>[
+        ImageCacheRole.cover.dbValue,
+        ImageCacheRole.customCover.dbValue,
+      ],
+      orderBy: 'updated_at ASC',
     );
     return rows.map(_fromRow).toList(growable: false);
   }
