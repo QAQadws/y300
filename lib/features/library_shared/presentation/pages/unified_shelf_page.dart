@@ -34,7 +34,10 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
   @override
   void initState() {
     super.initState();
-    _controller = UnifiedShelfController(adapter: widget.adapter);
+    _controller = UnifiedShelfController(
+      adapter: widget.adapter,
+      onStateChanged: _handleControllerStateChanged,
+    );
     _pageController = PageController();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _controller.initialize();
@@ -43,6 +46,13 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
       }
       setState(() {});
     });
+  }
+
+  void _handleControllerStateChanged() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
   }
 
   @override

@@ -1678,6 +1678,71 @@
 本轮按约定未执行：
 1. `flutter test`
 2. `flutter analyze`
+
+---
+
+## Shelf 性能优化 Milestone A Review 记录（2026-05-10）
+### Review 范围
+- `lib/features/library_shared/domain/services/shelf_cover_warmup_service.dart`
+- `lib/features/library_shared/domain/services/shelf_perf_trace.dart`
+- `lib/features/library_shared/domain/models/library_models.dart`
+- `lib/features/library_shared/presentation/controllers/unified_shelf_controller.dart`
+- `lib/features/library_shared/presentation/pages/unified_shelf_page.dart`
+- `lib/features/comic/presentation/adapters/comic_shelf_adapter.dart`
+- `lib/features/novel/presentation/adapters/novel_shelf_adapter.dart`
+- `lib/features/favorites/presentation/adapters/favorite_shelf_adapter.dart`
+- `test/features/library_shared/domain/services/shelf_cover_warmup_service_test.dart`
+- `test/features/library_shared/presentation/controllers/unified_shelf_controller_test.dart`
+- `test/features/favorites/presentation/favorite_shelf_adapter_test.dart`
+- `test/features/comic/presentation/adapters/comic_shelf_adapter_test.dart`
+- `test/features/novel/presentation/adapters/novel_shelf_adapter_test.dart`
+
+### 核对结论
+1. Milestone A 目标达成
+- 漫画、小说、收藏 adapter 的元数据查询不再直接调用 `ensureCached/ensureProtectedCover`。
+- 封面缓存与写回迁移到 `ShelfCoverWarmupAdapter.warmCover()`。
+- `UnifiedShelfController` 在 metadata 可用后启动后台 warmup，不再把封面下载纳入首屏 loading。
+- 收藏首次同步改为后台任务，不阻塞 `loadCategories()`。
+
+2. 架构边界合理
+- shared 层只定义 warmup 合同、并发/去重和 controller 编排。
+- cache key、ownerType、role、模块仓储写回仍由各模块 adapter 自己负责。
+- `LibraryWorkItem.copyWith()` 只补足视图模型增量更新能力，没有把缓存服务引入 model。
+
+3. 状态一致性
+- controller 使用 generation 和 dispose guard，避免旧 warmup 结果覆盖新 reload。
+- warmup 结果只更新命中 workId 的封面路径，并通过 `onStateChanged` 通知 UI。
+- 后台任务进度从 active 变为 inactive 后会触发一次 metadata reload，覆盖收藏首次同步完成后的快照刷新。
+
+4. 异常处理
+- `ShelfCoverWarmupService` 内部吞掉单个封面失败。
+- controller 的 warmup request 构建和 warmup 调度也做 best-effort 保护，避免未等待 Future 异常进入 Flutter error handler。
+- 收藏 `_syncIfNoSnapshot()` 捕获异常，错误由同步服务进度/状态链路负责，不破坏首屏 metadata 路径。
+
+5. 测试覆盖
+- 已补充服务层、controller 层、漫画/小说/收藏 adapter 层测试。
+- 新测试重点覆盖 metadata-only、后台 warmup 写回、自定义封面优先级、收藏首次同步非阻塞和后台任务完成后自动刷新。
+
+### Review Checklist
+- [ ] `queryItems/loadCategoryItems/searchItemsByKeyword` 不应再下载封面或写回封面缓存。
+- [ ] `buildCoverWarmupRequests()` 只根据当前 state 快照生成请求，不修改仓储。
+- [ ] `warmCover()` 可以写缓存和仓储，但失败必须返回 `null` 或被上层吞掉，不影响页面。
+- [ ] 同一 `cacheKey` 在 warmup service 中应去重，避免多分类重复下载同一作品封面。
+- [ ] 自定义封面 pending 时，普通本地封面不应被当作首选封面展示。
+- [ ] 收藏首次进入时，页面应能显示结构和进度 banner，不等待完整同步。
+- [ ] 后台任务完成后，应有一次轻量 metadata reload，使新同步数据进入当前页面。
+- [ ] controller dispose 后，旧 warmup/reload 不能再更新 state 或触发 UI 回调。
+
+### 风险与后续
+1. 当前 warmup 仍是“当前分类优先 + 后续分类顺序”的基础队列，尚未做到真正视口级优先级；该能力属于 Milestone C。
+2. 漫画/小说仍有 per-item unread/read/download/tag 查询，数据量大时仍会拖慢 metadata query；该能力属于 Milestone B 的 snapshot 聚合查询。
+3. `LibraryCachedImage` 仍在 build 中做同步文件存在检查，Milestone A 暂未处理；后续应进入现代化图片组件阶段。
+4. 未做真实设备性能采样，本轮仅提供 debug/profile 日志入口。
+
+### 执行声明
+本轮按约定未执行：
+1. `flutter test`
+2. `flutter analyze`
 3. `dart format`
 
 ---

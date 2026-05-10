@@ -10,11 +10,12 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
+import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 
 /// 小说书架适配器（Phase 0 骨架版）。
-class NovelShelfAdapter implements ShelfModuleAdapter {
+class NovelShelfAdapter implements ShelfModuleAdapter, ShelfCoverWarmupAdapter {
   NovelShelfAdapter(
     this._repository, {
     required LibraryStateRepository stateRepository,
@@ -194,14 +195,13 @@ class NovelShelfAdapter implements ShelfModuleAdapter {
       moduleKey: LibraryModuleKey.novel,
       workId: source.novelId,
     );
-    final coverLocalPath = await _ensureCoverCached(source);
     return LibraryWorkItem(
       workId: source.novelId,
       categoryId: source.categoryId,
       title: source.title,
       secondaryName: source.author,
       coverImageUrl: source.coverImageUrl,
-      coverLocalPath: coverLocalPath,
+      coverLocalPath: source.coverLocalPath,
       customCoverLocalPath: source.customCoverLocalPath,
       unreadCount: unread,
       totalChapterCount: source.episodeCount,
@@ -213,33 +213,65 @@ class NovelShelfAdapter implements ShelfModuleAdapter {
     );
   }
 
-  Future<String?> _ensureCoverCached(NovelItem source) async {
-    final existing = source.coverLocalPath?.trim();
-    if (existing != null && existing.isNotEmpty) {
-      return existing;
+  @override
+  Future<List<ShelfCoverWarmupRequest>> buildCoverWarmupRequests({
+    required Map<String, List<LibraryWorkItem>> itemsByCategory,
+    String? selectedCategoryId,
+  }) async {
+    final requests = <ShelfCoverWarmupRequest>[];
+    final items = orderedShelfItemsForCoverWarmup(
+      itemsByCategory: itemsByCategory,
+      selectedCategoryId: selectedCategoryId,
+    );
+    for (final item in items) {
+      final customLocal = item.customCoverLocalPath?.trim();
+      if (customLocal != null && customLocal.isNotEmpty) {
+        continue;
+      }
+      final local = item.coverLocalPath?.trim();
+      final sourceUrl = item.coverImageUrl?.trim();
+      if ((local == null || local.isEmpty) && sourceUrl != null && sourceUrl.isNotEmpty) {
+        requests.add(
+          ShelfCoverWarmupRequest(
+            moduleKey: LibraryModuleKey.novel,
+            workId: item.workId,
+            cacheKey: ImageCacheKeys.novelCover(item.workId),
+            sourceUrl: sourceUrl,
+            ownerType: ImageCacheOwnerType.novel,
+            ownerId: item.workId,
+            role: ImageCacheRole.cover,
+            useCustomCover: false,
+          ),
+        );
+      }
     }
-    final sourceUrl = source.coverImageUrl?.trim();
-    if (sourceUrl == null || sourceUrl.isEmpty) {
-      return source.coverLocalPath;
-    }
+    return requests;
+  }
+
+  @override
+  Future<ShelfCoverWarmupResult?> warmCover(ShelfCoverWarmupRequest request) async {
     final cached = await _coverCacheService.ensureProtectedCover(
-      cacheKey: ImageCacheKeys.novelCover(source.novelId),
-      sourceUrl: sourceUrl,
+      cacheKey: request.cacheKey,
+      sourceUrl: request.sourceUrl,
       ownerType: ImageCacheOwnerType.novel,
-      ownerId: source.novelId,
+      ownerId: request.ownerId,
+      role: request.role,
     );
     final localPath = cached?.localPath?.trim();
     if (localPath == null || localPath.isEmpty) {
-      return source.coverLocalPath;
+      return null;
     }
     if (_repository is NovelCoverCacheWriter) {
       await (_repository as NovelCoverCacheWriter).updateCoverCache(
-        novelId: source.novelId,
-        coverImageUrl: sourceUrl,
+        novelId: request.ownerId,
+        coverImageUrl: request.sourceUrl,
         coverLocalPath: localPath,
       );
     }
-    return localPath;
+    return ShelfCoverWarmupResult(
+      workId: request.workId,
+      coverLocalPath: localPath,
+    );
   }
 
   List<LibraryWorkItem> _applyBasicSort(

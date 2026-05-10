@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/cache/domain/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
@@ -12,6 +14,7 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
+import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
@@ -22,7 +25,7 @@ typedef _FavoriteCoverWriteBack = Future<void> Function(
 typedef ComicCoverCacheWriterResolver = ComicCoverCacheWriter? Function();
 typedef NovelCoverCacheWriterResolver = NovelCoverCacheWriter? Function();
 
-class FavoriteShelfAdapter implements ShelfModuleAdapter {
+class FavoriteShelfAdapter implements ShelfModuleAdapter, ShelfCoverWarmupAdapter {
   FavoriteShelfAdapter(
     this._repository, {
     required FavoriteSyncService syncService,
@@ -67,7 +70,7 @@ class FavoriteShelfAdapter implements ShelfModuleAdapter {
 
   @override
   Future<List<LibraryCategory>> loadCategories() async {
-    await _ensureInitialSync();
+    _startInitialSyncIfNeeded();
     return _repository.loadVisibleCategories();
   }
 
@@ -76,7 +79,7 @@ class FavoriteShelfAdapter implements ShelfModuleAdapter {
     required String categoryId,
   }) async {
     final items = await _repository.loadCategoryItems(categoryId);
-    return Future.wait(items.map(_ensureFavoriteCoverCached));
+    return items.map(_withoutOrdinaryCoverWhenCustomIsPending).toList(growable: false);
   }
 
   @override
@@ -90,7 +93,7 @@ class FavoriteShelfAdapter implements ShelfModuleAdapter {
       sortOption: LibraryShelfSortOption.defaults,
       keyword: keyword,
     );
-    return _ensureCoversForQueryResult(queried);
+    return _withoutOrdinaryCoversWhenCustomIsPending(queried);
   }
 
   @override
@@ -106,7 +109,7 @@ class FavoriteShelfAdapter implements ShelfModuleAdapter {
       sortOption: sortOption,
       keyword: keyword,
     );
-    return _ensureCoversForQueryResult(queried);
+    return _withoutOrdinaryCoversWhenCustomIsPending(queried);
   }
 
   @override
@@ -114,14 +117,24 @@ class FavoriteShelfAdapter implements ShelfModuleAdapter {
     await _syncService.sync();
   }
 
-  Future<Map<String, List<LibraryWorkItem>>> _ensureCoversForQueryResult(
+  Map<String, List<LibraryWorkItem>> _withoutOrdinaryCoversWhenCustomIsPending(
     Map<String, List<LibraryWorkItem>> source,
-  ) async {
-    final output = <String, List<LibraryWorkItem>>{};
-    for (final entry in source.entries) {
-      output[entry.key] = await Future.wait(entry.value.map(_ensureFavoriteCoverCached));
+  ) {
+    return <String, List<LibraryWorkItem>>{
+      for (final entry in source.entries)
+        entry.key: entry.value.map(_withoutOrdinaryCoverWhenCustomIsPending).toList(growable: false),
+    };
+  }
+
+  LibraryWorkItem _withoutOrdinaryCoverWhenCustomIsPending(LibraryWorkItem item) {
+    final customSource = item.customCoverImageUrl?.trim();
+    final customLocal = item.customCoverLocalPath?.trim();
+    if (customSource == null ||
+        customSource.isEmpty ||
+        (customLocal != null && customLocal.isNotEmpty)) {
+      return item;
     }
-    return output;
+    return item.copyWith(clearCoverLocalPath: true);
   }
 
   @override
@@ -196,88 +209,81 @@ class FavoriteShelfAdapter implements ShelfModuleAdapter {
     return _repository.pickRandomWorkId(categoryId: categoryId);
   }
 
-  Future<void> _ensureInitialSync() async {
+  void _startInitialSyncIfNeeded() {
     if (_initialSyncAttempted) {
       return;
     }
     _initialSyncAttempted = true;
-    final snapshot = await _repository.getSyncSnapshot();
-    if (snapshot != null) {
-      return;
-    }
-    // 首次进入收藏页时建立本地缓存；失败交给统一书架错误区展示。
-    await _syncService.sync();
+    // The first favorite sync may load remote list/detail data. Fire it in the
+    // background so the shelf chrome and progress banner can render immediately.
+    unawaited(_syncIfNoSnapshot());
   }
 
-  Future<LibraryWorkItem> _ensureFavoriteCoverCached(LibraryWorkItem item) async {
-    final customSourceUrl = item.customCoverImageUrl?.trim();
-    if (customSourceUrl != null && customSourceUrl.isNotEmpty) {
-      return _ensureFavoriteCoverCachedWithTarget(
-        item: item,
-        sourceUrl: customSourceUrl,
-        useCustomCover: true,
+  Future<void> _syncIfNoSnapshot() async {
+    try {
+      final snapshot = await _repository.getSyncSnapshot();
+      if (snapshot != null) {
+        return;
+      }
+      await _syncService.sync();
+    } catch (_) {
+      // The sync service owns progress/error reporting. Keep the initial shelf
+      // metadata path non-blocking even if the first remote sync fails.
+    }
+  }
+
+  @override
+  Future<List<ShelfCoverWarmupRequest>> buildCoverWarmupRequests({
+    required Map<String, List<LibraryWorkItem>> itemsByCategory,
+    String? selectedCategoryId,
+  }) async {
+    final requests = <ShelfCoverWarmupRequest>[];
+    final items = orderedShelfItemsForCoverWarmup(
+      itemsByCategory: itemsByCategory,
+      selectedCategoryId: selectedCategoryId,
+    );
+    for (final item in items) {
+      final customSourceUrl = item.customCoverImageUrl?.trim();
+      final useCustomCover = customSourceUrl != null && customSourceUrl.isNotEmpty;
+      final sourceUrl = useCustomCover ? customSourceUrl : item.coverImageUrl?.trim();
+      if (sourceUrl == null || sourceUrl.isEmpty) {
+        continue;
+      }
+      if (useCustomCover) {
+        final customLocal = item.customCoverLocalPath?.trim();
+        if (customLocal != null && customLocal.isNotEmpty) {
+          continue;
+        }
+      } else if (_hasPreferredLocalCover(item)) {
+        continue;
+      }
+      final target = await _repository.getRouteTargetByShelfWorkId(item.workId);
+      final moduleWorkId = target?.workId?.trim();
+      if (target == null || moduleWorkId == null || moduleWorkId.isEmpty) {
+        continue;
+      }
+      final cacheTarget = _resolveCacheTarget(
+        target.contentKind,
+        moduleWorkId,
+        useCustomCover: useCustomCover,
+      );
+      if (cacheTarget == null) {
+        continue;
+      }
+      requests.add(
+        ShelfCoverWarmupRequest(
+          moduleKey: LibraryModuleKey.favorite,
+          workId: item.workId,
+          cacheKey: cacheTarget.cacheKey,
+          sourceUrl: sourceUrl,
+          ownerType: cacheTarget.ownerType,
+          ownerId: moduleWorkId,
+          role: cacheTarget.role,
+          useCustomCover: useCustomCover,
+        ),
       );
     }
-
-    final sourceUrl = item.coverImageUrl?.trim();
-    if (sourceUrl == null || sourceUrl.isEmpty || _hasPreferredLocalCover(item)) {
-      return item;
-    }
-    return _ensureFavoriteCoverCachedWithTarget(
-      item: item,
-      sourceUrl: sourceUrl,
-      useCustomCover: false,
-    );
-  }
-
-  Future<LibraryWorkItem> _ensureFavoriteCoverCachedWithTarget({
-    required LibraryWorkItem item,
-    required String sourceUrl,
-    required bool useCustomCover,
-  }) async {
-    if (useCustomCover) {
-      final customLocal = item.customCoverLocalPath?.trim();
-      if (customLocal != null && customLocal.isNotEmpty) {
-        return item;
-      }
-    } else if (_hasPreferredLocalCover(item)) {
-      return item;
-    }
-
-    final target = await _repository.getRouteTargetByShelfWorkId(item.workId);
-    if (target == null) {
-      return item;
-    }
-    final workId = target.workId?.trim();
-    if (workId == null || workId.isEmpty) {
-      return item;
-    }
-
-    final cacheTarget = _resolveCacheTarget(
-      target.contentKind,
-      workId,
-      useCustomCover: useCustomCover,
-    );
-    if (cacheTarget == null) {
-      return useCustomCover ? _copyForCustomRemoteFallback(item) : item;
-    }
-    final cached = await _coverCacheService.ensureProtectedCover(
-      cacheKey: cacheTarget.cacheKey,
-      sourceUrl: sourceUrl,
-      ownerType: cacheTarget.ownerType,
-      ownerId: workId,
-      role: cacheTarget.role,
-    );
-    final localPath = cached?.localPath?.trim();
-    if (localPath == null || localPath.isEmpty) {
-      return useCustomCover ? _copyForCustomRemoteFallback(item) : item;
-    }
-    await cacheTarget.writeBack(sourceUrl, localPath);
-    return _copyWithCoverLocalPath(
-      item,
-      localPath,
-      useCustomCover: useCustomCover,
-    );
+    return requests;
   }
 
   bool _hasPreferredLocalCover(LibraryWorkItem item) {
@@ -287,6 +293,43 @@ class FavoriteShelfAdapter implements ShelfModuleAdapter {
     }
     final cover = item.coverLocalPath?.trim();
     return cover != null && cover.isNotEmpty;
+  }
+
+  @override
+  Future<ShelfCoverWarmupResult?> warmCover(ShelfCoverWarmupRequest request) async {
+    final cached = await _coverCacheService.ensureProtectedCover(
+      cacheKey: request.cacheKey,
+      sourceUrl: request.sourceUrl,
+      ownerType: request.ownerType,
+      ownerId: request.ownerId,
+      role: request.role,
+    );
+    final localPath = cached?.localPath?.trim();
+    if (localPath == null || localPath.isEmpty) {
+      return null;
+    }
+    final cacheTarget = _resolveCacheTarget(
+      _kindFromOwnerType(request.ownerType),
+      request.ownerId,
+      useCustomCover: request.useCustomCover,
+    );
+    if (cacheTarget == null) {
+      return null;
+    }
+    await cacheTarget.writeBack(request.sourceUrl, localPath);
+    return ShelfCoverWarmupResult(
+      workId: request.workId,
+      coverLocalPath: request.useCustomCover ? null : localPath,
+      customCoverLocalPath: request.useCustomCover ? localPath : null,
+    );
+  }
+
+  ThreadContentKind _kindFromOwnerType(ImageCacheOwnerType ownerType) {
+    return switch (ownerType) {
+      ImageCacheOwnerType.comic => ThreadContentKind.comic,
+      ImageCacheOwnerType.novel => ThreadContentKind.novel,
+      ImageCacheOwnerType.thread => ThreadContentKind.forum,
+    };
   }
 
   _FavoriteCoverCacheTarget? _resolveCacheTarget(
@@ -341,56 +384,6 @@ class FavoriteShelfAdapter implements ShelfModuleAdapter {
       case ThreadContentKind.forum:
         return null;
     }
-  }
-
-  LibraryWorkItem _copyWithCoverLocalPath(
-    LibraryWorkItem item,
-    String localPath, {
-    required bool useCustomCover,
-  }) {
-    return LibraryWorkItem(
-      workId: item.workId,
-      categoryId: item.categoryId,
-      title: item.title,
-      secondaryName: item.secondaryName,
-      coverImageUrl: item.coverImageUrl,
-      customCoverImageUrl: item.customCoverImageUrl,
-      coverLocalPath: useCustomCover ? item.coverLocalPath : localPath,
-      customCoverLocalPath: useCustomCover ? localPath : item.customCoverLocalPath,
-      unreadCount: item.unreadCount,
-      totalChapterCount: item.totalChapterCount,
-      readChapterCount: item.readChapterCount,
-      addedAt: item.addedAt,
-      lastReadAt: item.lastReadAt,
-      workUpdatedAt: item.workUpdatedAt,
-      lastCheckedAt: item.lastCheckedAt,
-      lastFetchedAt: item.lastFetchedAt,
-      hasTags: item.hasTags,
-      isDownloaded: item.isDownloaded,
-    );
-  }
-
-  LibraryWorkItem _copyForCustomRemoteFallback(LibraryWorkItem item) {
-    return LibraryWorkItem(
-      workId: item.workId,
-      categoryId: item.categoryId,
-      title: item.title,
-      secondaryName: item.secondaryName,
-      coverImageUrl: item.coverImageUrl,
-      customCoverImageUrl: item.customCoverImageUrl,
-      coverLocalPath: null,
-      customCoverLocalPath: item.customCoverLocalPath,
-      unreadCount: item.unreadCount,
-      totalChapterCount: item.totalChapterCount,
-      readChapterCount: item.readChapterCount,
-      addedAt: item.addedAt,
-      lastReadAt: item.lastReadAt,
-      workUpdatedAt: item.workUpdatedAt,
-      lastCheckedAt: item.lastCheckedAt,
-      lastFetchedAt: item.lastFetchedAt,
-      hasTags: item.hasTags,
-      isDownloaded: item.isDownloaded,
-    );
   }
 }
 

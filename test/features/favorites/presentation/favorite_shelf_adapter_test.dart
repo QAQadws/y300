@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
@@ -16,9 +18,10 @@ import 'package:y300/features/library_shared/domain/models/library_state_models.
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
-  test('FavoriteShelfAdapter defaults to favorite list module and triggers first sync once', () async {
+  test('FavoriteShelfAdapter defaults to favorite list module and starts first sync without blocking categories', () async {
     final local = _FakeLocalFavoriteRepository();
     final sync = _FakeFavoriteSyncService();
+    sync.pauseNextSync();
     final adapter = FavoriteShelfAdapter(
       local,
       syncService: sync,
@@ -27,14 +30,17 @@ void main() {
 
     final categories = await adapter.loadCategories();
     await adapter.loadCategories();
+    await sync.syncStarted;
 
     expect(adapter.moduleKey, LibraryModuleKey.favorite);
     expect(adapter.defaultDisplayMode, LibraryDisplayMode.list);
     expect(sync.syncCount, 1);
     expect(categories.single.categoryId, favoriteDefaultCategoryId);
+    expect(sync.hasPendingSync, isTrue);
+    sync.completePausedSync();
   });
 
-  test('FavoriteShelfAdapter caches comic cover and writes local path back to module', () async {
+  test('FavoriteShelfAdapter returns metadata before warming comic cover, then writes local path back', () async {
     final local = _FakeLocalFavoriteRepository(
       items: <LibraryWorkItem>[
         LibraryWorkItem(
@@ -71,13 +77,24 @@ void main() {
 
     final items = await adapter.loadCategoryItems(categoryId: favoriteComicCategoryId);
 
-    expect(items.single.coverLocalPath, '/cache/comic-cover.jpg');
+    expect(items.single.coverLocalPath, isNull);
+    expect(imageCache.lastRequest, isNull);
+
+    final requests = await adapter.buildCoverWarmupRequests(
+      selectedCategoryId: favoriteComicCategoryId,
+      itemsByCategory: <String, List<LibraryWorkItem>>{
+        favoriteComicCategoryId: items,
+      },
+    );
+    final result = await adapter.warmCover(requests.single);
+
+    expect(result?.coverLocalPath, '/cache/comic-cover.jpg');
     expect(imageCache.lastRequest?.cacheKey, 'cover/comic/yamibo:100');
     expect(writer.lastComicId, 'yamibo:100');
     expect(writer.lastCoverLocalPath, '/cache/comic-cover.jpg');
   });
 
-  test('FavoriteShelfAdapter caches custom comic cover separately', () async {
+  test('FavoriteShelfAdapter warms custom comic cover separately', () async {
     final local = _FakeLocalFavoriteRepository(
       items: <LibraryWorkItem>[
         LibraryWorkItem(
@@ -116,7 +133,19 @@ void main() {
     final items = await adapter.loadCategoryItems(categoryId: favoriteComicCategoryId);
 
     expect(items.single.coverLocalPath, isNull);
-    expect(items.single.customCoverLocalPath, '/cache/custom-cover.jpg');
+    expect(items.single.customCoverLocalPath, isNull);
+    expect(imageCache.lastRequest, isNull);
+
+    final requests = await adapter.buildCoverWarmupRequests(
+      selectedCategoryId: favoriteComicCategoryId,
+      itemsByCategory: <String, List<LibraryWorkItem>>{
+        favoriteComicCategoryId: items,
+      },
+    );
+    final result = await adapter.warmCover(requests.single);
+
+    expect(result?.coverLocalPath, isNull);
+    expect(result?.customCoverLocalPath, '/cache/custom-cover.jpg');
     expect(imageCache.lastRequest?.cacheKey, 'cover/custom/comic/yamibo:101');
     expect(imageCache.lastRequest?.role, ImageCacheRole.customCover);
     expect(writer.lastCoverImageUrl, isNull);
@@ -127,6 +156,8 @@ void main() {
 
 class _FakeFavoriteSyncService implements FavoriteSyncService {
   final _progress = ValueNotifier<FavoriteSyncProgress>(FavoriteSyncProgress.idle);
+  Completer<void>? _pausedSync;
+  Completer<void>? _syncStarted;
   int syncCount = 0;
 
   @override
@@ -135,6 +166,11 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
   @override
   Future<FavoriteSyncResult> sync() async {
     syncCount++;
+    final started = _syncStarted;
+    if (started != null && !started.isCompleted) {
+      started.complete();
+    }
+    await (_pausedSync?.future ?? Future<void>.value());
     return const FavoriteSyncResult(
       mode: FavoriteSyncMode.fullDiff,
       remoteCount: 1,
@@ -148,6 +184,22 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
 
   void markSynced() {
     syncCount = 1;
+  }
+
+  bool get hasPendingSync => _pausedSync != null && !_pausedSync!.isCompleted;
+
+  Future<void> get syncStarted => _syncStarted?.future ?? Future<void>.value();
+
+  void pauseNextSync() {
+    _pausedSync = Completer<void>();
+    _syncStarted = Completer<void>();
+  }
+
+  void completePausedSync() {
+    final paused = _pausedSync;
+    if (paused != null && !paused.isCompleted) {
+      paused.complete();
+    }
   }
 }
 

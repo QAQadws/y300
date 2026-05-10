@@ -1,9 +1,13 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+﻿import 'dart:async';
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
 import 'package:y300/features/library_shared/presentation/controllers/unified_shelf_controller.dart';
 
 void main() {
@@ -210,6 +214,119 @@ void main() {
       expect(adapter.lastDisplayMode, LibraryDisplayMode.list);
       expect(adapter.lastGridColumns, 2);
     });
+
+    test('initialize shows metadata before cover warmup finishes and applies warmed cover later', () async {
+      final adapter = _WarmupShelfAdapter(
+        categories: [
+          LibraryCategory(
+            categoryId: 'default',
+            name: 'default',
+            sortOrder: 0,
+            createdAt: DateTime(2026, 1, 1),
+          ),
+        ],
+        queriedItems: {
+          'default': [
+            LibraryWorkItem(
+              workId: 'w1',
+              categoryId: 'default',
+              title: 'title',
+              coverImageUrl: 'https://img.test/w1.jpg',
+              unreadCount: 0,
+              totalChapterCount: 1,
+              readChapterCount: 0,
+              addedAt: DateTime.utc(2026, 1, 1),
+            ),
+          ],
+        },
+      );
+      final stateChanged = Completer<void>();
+      var stateChangeCount = 0;
+      final controller = UnifiedShelfController(
+        adapter: adapter,
+        coverWarmupService: ShelfCoverWarmupService(maxConcurrent: 1),
+        onStateChanged: () {
+          stateChangeCount++;
+          if (!stateChanged.isCompleted) {
+            stateChanged.complete();
+          }
+        },
+      );
+
+      await controller.initialize();
+
+      expect(controller.state.isLoading, isFalse);
+      expect(controller.state.itemsByCategory['default']?.single.coverLocalPath, isNull);
+      await adapter.warmCoverStarted;
+      expect(adapter.warmCoverCallCount, 1);
+
+      adapter.completeWarmup('/cache/w1.jpg');
+      await stateChanged.future;
+
+      expect(controller.state.itemsByCategory['default']?.single.coverLocalPath, '/cache/w1.jpg');
+      expect(stateChangeCount, 1);
+      controller.dispose();
+    });
+
+    test('completed background task reloads metadata and notifies listener', () async {
+      final progress = ValueNotifier<LibraryShelfTaskProgress?>(null);
+      final adapter = _FakeShelfAdapter(
+        categories: [
+          LibraryCategory(
+            categoryId: 'default',
+            name: 'default',
+            sortOrder: 0,
+            createdAt: DateTime(2026, 1, 1),
+          ),
+        ],
+        queriedItems: {
+          'default': [
+            LibraryWorkItem(
+              workId: 'w1',
+              categoryId: 'default',
+              title: 'before sync',
+              unreadCount: 0,
+              totalChapterCount: 1,
+              readChapterCount: 0,
+              addedAt: DateTime.utc(2026, 1, 1),
+            ),
+          ],
+        },
+        taskProgress: progress,
+      );
+      final stateChanged = Completer<void>();
+      final controller = UnifiedShelfController(
+        adapter: adapter,
+        onStateChanged: () {
+          if (!stateChanged.isCompleted) {
+            stateChanged.complete();
+          }
+        },
+      );
+
+      await controller.initialize();
+      adapter.queriedItems = {
+        'default': [
+          LibraryWorkItem(
+            workId: 'w2',
+            categoryId: 'default',
+            title: 'after sync',
+            unreadCount: 0,
+            totalChapterCount: 1,
+            readChapterCount: 0,
+            addedAt: DateTime.utc(2026, 1, 2),
+          ),
+        ],
+      };
+
+      progress.value = const LibraryShelfTaskProgress(message: 'syncing');
+      progress.value = null;
+      await stateChanged.future;
+
+      expect(controller.state.itemsByCategory['default']?.single.workId, 'w2');
+      controller.dispose();
+      progress.dispose();
+    });
   });
 }
 
@@ -217,10 +334,13 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
   _FakeShelfAdapter({
     required this.categories,
     required this.queriedItems,
+    this.taskProgress,
   });
 
   final List<LibraryCategory> categories;
-  final Map<String, List<LibraryWorkItem>> queriedItems;
+  Map<String, List<LibraryWorkItem>> queriedItems;
+  @override
+  final ValueListenable<LibraryShelfTaskProgress?>? taskProgress;
 
   String? lastQueryKeyword;
   LibraryDisplayMode? lastDisplayMode;
@@ -235,9 +355,6 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
 
   @override
   String get moduleTitle => 'comic';
-
-  @override
-  ValueListenable<LibraryShelfTaskProgress?>? get taskProgress => null;
 
   @override
   Future<Object> buildDetailRouteArgument({required String workId}) async => workId;
@@ -307,5 +424,55 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
   }) async {
     lastDisplayMode = displayMode;
     lastGridColumns = gridColumnCount;
+  }
+}
+
+class _WarmupShelfAdapter extends _FakeShelfAdapter implements ShelfCoverWarmupAdapter {
+  _WarmupShelfAdapter({
+    required super.categories,
+    required super.queriedItems,
+  });
+
+  final Completer<String> _warmupCompleter = Completer<String>();
+  final Completer<void> _warmCoverStarted = Completer<void>();
+  int warmCoverCallCount = 0;
+
+  Future<void> get warmCoverStarted => _warmCoverStarted.future;
+
+  @override
+  Future<List<ShelfCoverWarmupRequest>> buildCoverWarmupRequests({
+    required Map<String, List<LibraryWorkItem>> itemsByCategory,
+    String? selectedCategoryId,
+  }) async {
+    final item = itemsByCategory['default']!.single;
+    return <ShelfCoverWarmupRequest>[
+      ShelfCoverWarmupRequest(
+        moduleKey: LibraryModuleKey.comic,
+        workId: item.workId,
+        cacheKey: 'cover/comic/${item.workId}',
+        sourceUrl: item.coverImageUrl!,
+        ownerType: ImageCacheOwnerType.comic,
+        ownerId: item.workId,
+        role: ImageCacheRole.cover,
+        useCustomCover: false,
+      ),
+    ];
+  }
+
+  @override
+  Future<ShelfCoverWarmupResult?> warmCover(ShelfCoverWarmupRequest request) async {
+    warmCoverCallCount++;
+    if (!_warmCoverStarted.isCompleted) {
+      _warmCoverStarted.complete();
+    }
+    final localPath = await _warmupCompleter.future;
+    return ShelfCoverWarmupResult(
+      workId: request.workId,
+      coverLocalPath: localPath,
+    );
+  }
+
+  void completeWarmup(String localPath) {
+    _warmupCompleter.complete(localPath);
   }
 }

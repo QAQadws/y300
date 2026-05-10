@@ -105,6 +105,50 @@ class LibraryWorkItem {
   final DateTime? lastFetchedAt;
   final bool hasTags;
   final bool isDownloaded;
+
+  LibraryWorkItem copyWith({
+    String? title,
+    String? secondaryName,
+    String? coverImageUrl,
+    String? customCoverImageUrl,
+    String? coverLocalPath,
+    String? customCoverLocalPath,
+    int? unreadCount,
+    int? totalChapterCount,
+    int? readChapterCount,
+    DateTime? addedAt,
+    DateTime? lastReadAt,
+    DateTime? workUpdatedAt,
+    DateTime? lastCheckedAt,
+    DateTime? lastFetchedAt,
+    bool? hasTags,
+    bool? isDownloaded,
+    bool clearCoverLocalPath = false,
+    bool clearCustomCoverLocalPath = false,
+  }) {
+    return LibraryWorkItem(
+      workId: workId,
+      categoryId: categoryId,
+      title: title ?? this.title,
+      secondaryName: secondaryName ?? this.secondaryName,
+      coverImageUrl: coverImageUrl ?? this.coverImageUrl,
+      customCoverImageUrl: customCoverImageUrl ?? this.customCoverImageUrl,
+      coverLocalPath: clearCoverLocalPath ? null : (coverLocalPath ?? this.coverLocalPath),
+      customCoverLocalPath: clearCustomCoverLocalPath
+          ? null
+          : (customCoverLocalPath ?? this.customCoverLocalPath),
+      unreadCount: unreadCount ?? this.unreadCount,
+      totalChapterCount: totalChapterCount ?? this.totalChapterCount,
+      readChapterCount: readChapterCount ?? this.readChapterCount,
+      addedAt: addedAt ?? this.addedAt,
+      lastReadAt: lastReadAt ?? this.lastReadAt,
+      workUpdatedAt: workUpdatedAt ?? this.workUpdatedAt,
+      lastCheckedAt: lastCheckedAt ?? this.lastCheckedAt,
+      lastFetchedAt: lastFetchedAt ?? this.lastFetchedAt,
+      hasTags: hasTags ?? this.hasTags,
+      isDownloaded: isDownloaded ?? this.isDownloaded,
+    );
+  }
 }
 
 /// 统一详情页头部信息模型。

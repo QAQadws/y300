@@ -1,9 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
+import 'package:y300/features/library_shared/domain/services/shelf_perf_trace.dart';
 
 /// 统一书架页面状态。
 ///
@@ -104,23 +107,42 @@ class UnifiedShelfState {
 class UnifiedShelfController {
   UnifiedShelfController({
     required ShelfModuleAdapter adapter,
+    ShelfCoverWarmupService? coverWarmupService,
+    void Function()? onStateChanged,
   })  : _adapter = adapter,
+        _coverWarmupService = coverWarmupService ?? ShelfCoverWarmupService(),
+        _onStateChanged = onStateChanged,
+        _taskProgressListenable = adapter.taskProgress,
         _state = UnifiedShelfState.initial(
           moduleKey: adapter.moduleKey,
           moduleTitle: adapter.moduleTitle,
           defaultDisplayMode: adapter.defaultDisplayMode,
-        );
+        ) {
+    final taskProgressListenable = _taskProgressListenable;
+    _taskProgressWasActive = taskProgressListenable?.value?.active ?? false;
+    taskProgressListenable?.addListener(_handleTaskProgressChanged);
+  }
 
   final ShelfModuleAdapter _adapter;
+  final ShelfCoverWarmupService _coverWarmupService;
+  final void Function()? _onStateChanged;
+  final ValueListenable<LibraryShelfTaskProgress?>? _taskProgressListenable;
   UnifiedShelfState _state;
   static const Duration _keywordDebounceDuration = Duration(milliseconds: 250);
   Timer? _keywordDebounceTimer;
   Completer<void>? _pendingKeywordCompleter;
+  bool _taskProgressWasActive = false;
+  bool _adapterRefreshInProgress = false;
+  var _disposed = false;
+  var _reloadGeneration = 0;
 
   UnifiedShelfState get state => _state;
 
   /// 释放控制器内部的异步资源，避免页面销毁后残留定时器。
   void dispose() {
+    _disposed = true;
+    _reloadGeneration++;
+    _taskProgressListenable?.removeListener(_handleTaskProgressChanged);
     _keywordDebounceTimer?.cancel();
     _keywordDebounceTimer = null;
     if (_pendingKeywordCompleter != null && !_pendingKeywordCompleter!.isCompleted) {
@@ -235,8 +257,13 @@ class UnifiedShelfController {
   }
 
   Future<void> refreshFromSource() async {
-    await _adapter.refreshShelf();
-    await _reload();
+    _adapterRefreshInProgress = true;
+    try {
+      await _adapter.refreshShelf();
+      await _reload();
+    } finally {
+      _adapterRefreshInProgress = false;
+    }
   }
 
   Future<String?> pickRandomWorkId() async {
@@ -259,17 +286,35 @@ class UnifiedShelfController {
   }
 
   Future<void> _reload() async {
+    final generation = ++_reloadGeneration;
+    final trace = ShelfPerfTrace(name: '${_adapter.moduleKey.name}.reload');
     final shouldBlock = !_hasAnyContent(_state);
     _state = _state.copyWith(isLoading: shouldBlock, clearError: true);
     try {
-      final displaySettings = await _adapter.loadDisplayPreference();
-      final categories = await _adapter.loadCategories();
-      final queried = await _adapter.queryItems(
-        categories: categories,
-        filters: _state.filters,
-        sortOption: _state.sortOption,
-        keyword: _state.keyword,
+      final displaySettings = await trace.measure(
+        'display',
+        _adapter.loadDisplayPreference,
       );
+      final categories = await trace.measure(
+        'categories',
+        _adapter.loadCategories,
+      );
+      final queried = await trace.measure(
+        'queryItems',
+        () => _adapter.queryItems(
+          categories: categories,
+          filters: _state.filters,
+          sortOption: _state.sortOption,
+          keyword: _state.keyword,
+        ),
+      );
+      trace
+        ..metric('categories', categories.length)
+        ..metric('items', queried.values.fold<int>(0, (total, items) => total + items.length))
+        ..metric('blocking', shouldBlock);
+      if (_disposed || generation != _reloadGeneration) {
+        return;
+      }
 
       final resolved = _resolveCategoryVisibility(
         sourceCategories: categories,
@@ -291,12 +336,105 @@ class UnifiedShelfController {
         visibleMatchCountByCategory: resolved.visibleMatchCountByCategory,
         clearError: true,
       );
+      _startCoverWarmup(generation: generation);
     } catch (error) {
+      if (_disposed || generation != _reloadGeneration) {
+        return;
+      }
       _state = _state.copyWith(
         isLoading: false,
         errorMessage: '$error',
       );
+    } finally {
+      trace.finish();
     }
+  }
+
+  void _handleTaskProgressChanged() {
+    final active = _taskProgressListenable?.value?.active ?? false;
+    final completedBackgroundTask = _taskProgressWasActive && !active;
+    _taskProgressWasActive = active;
+    if (!completedBackgroundTask || _disposed || _adapterRefreshInProgress) {
+      return;
+    }
+    // Background tasks such as the first favorite sync can populate a local
+    // snapshot after the page has already rendered. Reload metadata once the
+    // task settles so the visible shelf catches up without user intervention.
+    unawaited(() async {
+      await _reload();
+      if (!_disposed) {
+        _onStateChanged?.call();
+      }
+    }());
+  }
+
+  void _startCoverWarmup({required int generation}) {
+    final warmupAdapter = _adapter is ShelfCoverWarmupAdapter
+        ? _adapter as ShelfCoverWarmupAdapter
+        : null;
+    if (warmupAdapter == null) {
+      return;
+    }
+    final snapshot = _state;
+    unawaited(() async {
+      try {
+        final requests = await warmupAdapter.buildCoverWarmupRequests(
+          itemsByCategory: snapshot.itemsByCategory,
+          selectedCategoryId: snapshot.selectedCategoryId,
+        );
+        await _coverWarmupService.warmCovers(
+          requests: requests,
+          warmCover: warmupAdapter.warmCover,
+          onResult: (result) {
+            if (_disposed || generation != _reloadGeneration) {
+              return;
+            }
+            _applyCoverWarmupResult(result);
+          },
+        );
+      } catch (_) {
+        // Cover warmup is an opportunistic background path. Request building
+        // failures must not escape into Flutter's unawaited future handler.
+      }
+    }());
+  }
+
+  void _applyCoverWarmupResult(ShelfCoverWarmupResult result) {
+    final nextItemsByCategory = <String, List<LibraryWorkItem>>{};
+    var changed = false;
+    for (final entry in _state.itemsByCategory.entries) {
+      final nextItems = <LibraryWorkItem>[];
+      var categoryChanged = false;
+      for (final item in entry.value) {
+        if (item.workId != result.workId) {
+          nextItems.add(item);
+          continue;
+        }
+        final nextCoverLocalPath = result.coverLocalPath ?? item.coverLocalPath;
+        final nextCustomCoverLocalPath = result.customCoverLocalPath ?? item.customCoverLocalPath;
+        final itemChanged = nextCoverLocalPath != item.coverLocalPath ||
+            nextCustomCoverLocalPath != item.customCoverLocalPath;
+        if (!itemChanged) {
+          nextItems.add(item);
+          continue;
+        }
+        final next = item.copyWith(
+          coverLocalPath: nextCoverLocalPath,
+          customCoverLocalPath: nextCustomCoverLocalPath,
+        );
+        nextItems.add(next);
+        categoryChanged = true;
+      }
+      nextItemsByCategory[entry.key] = categoryChanged
+          ? List<LibraryWorkItem>.unmodifiable(nextItems)
+          : entry.value;
+      changed = changed || categoryChanged;
+    }
+    if (!changed) {
+      return;
+    }
+    _state = _state.copyWith(itemsByCategory: Map<String, List<LibraryWorkItem>>.unmodifiable(nextItemsByCategory));
+    _onStateChanged?.call();
   }
 
   _ResolvedCategoryState _resolveCategoryVisibility({
