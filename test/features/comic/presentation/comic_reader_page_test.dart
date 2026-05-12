@@ -9,6 +9,7 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/comic_reader_page.dart';
 import 'package:y300/features/comic/presentation/widgets/reader_zoomable_image.dart';
@@ -34,6 +35,7 @@ void main() {
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
           comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
           comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
         ],
@@ -73,6 +75,7 @@ void main() {
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
           comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
           comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
         ],
@@ -94,6 +97,7 @@ void main() {
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
           comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
           comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
         ],
@@ -121,6 +125,7 @@ void main() {
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
           comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
           comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
         ],
@@ -154,6 +159,7 @@ void main() {
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
           comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
           comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
         ],
@@ -174,6 +180,7 @@ void main() {
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
           comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
           comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
         ],
@@ -202,6 +209,7 @@ void main() {
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
           comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
           comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
         ],
@@ -272,6 +280,33 @@ class _ReaderFakeService implements ComicReaderService {
 
   @override
   Future<void> prefetchImages({required List<String> imageUrls}) async {}
+}
+
+class _NoopReadingStateWriter implements ComicReadingStateWriter {
+  @override
+  Future<bool> isEpisodeRead({
+    required String comicId,
+    required String episodeId,
+  }) async {
+    return false;
+  }
+
+  @override
+  Future<void> saveProgress({
+    required String comicId,
+    required String episodeId,
+    required int imageIndex,
+    required double scrollOffset,
+  }) async {}
+
+  @override
+  Future<void> markEpisodeCompleted({
+    required String comicId,
+    required String episodeId,
+    required int imageIndex,
+    required double scrollOffset,
+    required DateTime completedAt,
+  }) async {}
 }
 
 class _ReaderFakeRepository implements ComicRepository {

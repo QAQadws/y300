@@ -1647,6 +1647,53 @@
 
 ---
 
+## 漫画阅读器 Phase 0/1 Review 记录（2026-05-12）
+### Review 范围
+- `lib/features/comic/domain/services/comic_reader_events.dart`
+- `lib/features/comic/domain/services/comic_reading_state_writer.dart`
+- `lib/features/comic/domain/models/comic_reader_exit_result.dart`
+- `lib/features/comic/data/comic_providers.dart`
+- `lib/features/comic/presentation/controllers/comic_reader_controller.dart`
+- `lib/features/comic/presentation/comic_reader_page.dart`
+- `lib/features/library_shared/presentation/pages/unified_detail_page.dart`
+- `test/features/comic/presentation/controllers/comic_reader_controller_test.dart`
+- `test/features/comic/presentation/comic_reader_page_test.dart`
+- `test/features/library_shared/presentation/pages/unified_detail_page_test.dart`
+
+### 核对清单
+- [ ] 详情页章节 `onTap` 不再调用 `markChapterRead(isRead: true)`。
+- [ ] 手动标记已读/未读入口仍保留在章节操作中。
+- [ ] 阅读进度保存统一通过 `ComicReadingStateWriter.saveProgress()`。
+- [ ] 最后一页完成统一通过 `ComicReadingStateWriter.markEpisodeCompleted()`。
+- [ ] `markEpisodeCompleted()` 同时写阅读进度、章节已读状态和作品最近阅读状态。
+- [ ] 单页章节不会在 `_loadState` 阶段直接标记已读。
+- [ ] 最后一页必须进入视口后才自动已读。
+- [ ] 失败页不会触发自动已读。
+- [ ] 自动已读具备防重复写入保护。
+- [ ] reader 退出时会 flush 最新进度。
+- [ ] reader 返回后详情页会 reload 本地章节状态。
+- [ ] Phase 0 日志覆盖 open、page visible、chapter completed、exit。
+- [ ] 手动取消已读时 `read_at` 会被清空。
+
+### 测试检查（仅编写，未执行）
+- [ ] controller 测试覆盖“倒数第二页不已读，最后一页已读”。
+- [ ] controller 测试覆盖“单页章节可见后已读”。
+- [ ] 页面测试覆盖 reader provider 依赖隔离。
+- [ ] 统一详情页测试覆盖“点击章节不提前已读”。
+- [ ] 状态仓储测试覆盖“取消已读清空 readAt”。
+
+### 待你本地回归
+1. `flutter test test/features/comic/presentation/controllers/comic_reader_controller_test.dart`
+2. `flutter test test/features/comic/presentation/comic_reader_page_test.dart`
+3. `flutter test test/features/library_shared/presentation/pages/unified_detail_page_test.dart`
+4. `flutter test test/features/library_shared/data/local_library_state_repository_test.dart`
+5. `flutter test`
+6. `flutter analyze`
+
+说明：按本轮要求，我未执行测试、分析或 `dart format`。
+
+---
+
 ## Shelf 性能优化 Milestone D Review 记录（2026-05-10）
 ### Review 范围
 - `lib/features/library_shared/domain/services/shelf_feature_flags.dart`

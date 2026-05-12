@@ -7,6 +7,8 @@ import 'package:y300/features/comic/data/comic_download_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
+import 'package:y300/features/comic/domain/services/comic_reader_events.dart';
+import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 
 class ComicReaderArgs {
@@ -89,6 +91,7 @@ class ComicReaderViewState {
     required this.lastScrollOffset,
     required this.hasPreviousEpisode,
     required this.hasNextEpisode,
+    this.isCurrentEpisodeRead = false,
     this.hint,
   });
 
@@ -100,6 +103,7 @@ class ComicReaderViewState {
   final double lastScrollOffset;
   final bool hasPreviousEpisode;
   final bool hasNextEpisode;
+  final bool isCurrentEpisodeRead;
   final String? hint;
 
   ComicReaderViewState copyWith({
@@ -108,6 +112,7 @@ class ComicReaderViewState {
     double? lastScrollOffset,
     bool? hasPreviousEpisode,
     bool? hasNextEpisode,
+    bool? isCurrentEpisodeRead,
     String? hint,
     bool clearHint = false,
   }) {
@@ -120,6 +125,7 @@ class ComicReaderViewState {
       lastScrollOffset: lastScrollOffset ?? this.lastScrollOffset,
       hasPreviousEpisode: hasPreviousEpisode ?? this.hasPreviousEpisode,
       hasNextEpisode: hasNextEpisode ?? this.hasNextEpisode,
+      isCurrentEpisodeRead: isCurrentEpisodeRead ?? this.isCurrentEpisodeRead,
       hint: clearHint ? null : (hint ?? this.hint),
     );
   }
@@ -137,8 +143,14 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   late final ComicRepository _repository;
   late final ComicReaderService _readerService;
   late final ComicDownloadService _downloadService;
+  late final ComicReadingStateWriter _readingStateWriter;
+  late final ComicReaderEventLogger _eventLogger;
   Timer? _progressPersistDebounceTimer;
   int _persistVersion = 0;
+  final Set<String> _completedEpisodeIds = <String>{};
+  final Set<String> _completingEpisodeIds = <String>{};
+  final Set<int> _visibleImageIndexes = <int>{};
+  DateTime? _openedAt;
 
   @override
   FutureOr<ComicReaderViewState> build() async {
@@ -147,6 +159,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     _repository = ref.read(comicRepositoryProvider);
     _readerService = await ref.read(comicReaderServiceProvider.future);
     _downloadService = ref.read(comicDownloadServiceProvider);
+    _readingStateWriter = ref.read(comicReadingStateWriterProvider);
+    _eventLogger = ref.read(comicReaderEventLoggerProvider);
+    _openedAt = DateTime.now();
     ref.onDispose(() {
       _progressPersistDebounceTimer?.cancel();
     });
@@ -296,9 +311,10 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (current == null) {
       return;
     }
-    _scheduleProgressPersistence(
+    _recordVisiblePage(
       currentIndex: currentIndex,
       scrollOffset: scrollOffset,
+      source: ComicReaderProgressSource.scroll,
     );
     state = AsyncData(
       current.copyWith(
@@ -319,11 +335,12 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     }
     final clampedIndex = index.clamp(0, current.images.length - 1);
     final nextOffset = scrollOffset ?? current.lastScrollOffset;
-    await _repository.updateLastReadProgress(
-      comicId: _args.comicId,
-      episodeId: _args.episodeId,
-      imageIndex: clampedIndex,
+    _cancelScheduledProgressPersistence();
+    _visibleImageIndexes.add(clampedIndex);
+    await _saveProgressNow(
+      currentIndex: clampedIndex,
       scrollOffset: nextOffset,
+      source: ComicReaderProgressSource.jump,
     );
     state = AsyncData(
       current.copyWith(
@@ -331,29 +348,192 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         lastScrollOffset: nextOffset,
       ),
     );
+    await _markEpisodeCompletedIfNeeded(
+      currentIndex: clampedIndex,
+      scrollOffset: nextOffset,
+      source: ComicReaderProgressSource.jump,
+    );
     // Warm up images around the jump target to improve immediate readability.
     unawaited(_prefetchAroundIndex(clampedIndex));
+  }
+
+  /// Records that an image slot reached the reader viewport.
+  ///
+  /// This is intentionally separate from `_loadState`: single-page chapters
+  /// should become read only after the page is actually visible, not merely
+  /// because the chapter metadata was loaded.
+  Future<void> onImageVisible(int imageIndex) async {
+    final current = state.value;
+    if (current == null || current.images.isEmpty) {
+      return;
+    }
+    final clampedIndex = imageIndex.clamp(0, current.images.length - 1);
+    _recordVisiblePage(
+      currentIndex: clampedIndex,
+      scrollOffset: current.lastScrollOffset,
+      source: ComicReaderProgressSource.initialVisible,
+      checkCompletion: false,
+    );
+    await _markEpisodeCompletedIfNeeded(
+      currentIndex: clampedIndex,
+      scrollOffset: current.lastScrollOffset,
+      source: ComicReaderProgressSource.initialVisible,
+    );
+  }
+
+  /// Flushes the latest progress when the reader is closed.
+  Future<void> onExitReader() async {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    _cancelScheduledProgressPersistence();
+    await _saveProgressNow(
+      currentIndex: current.currentImageIndex,
+      scrollOffset: current.lastScrollOffset,
+      source: ComicReaderProgressSource.exit,
+    );
+    _logReaderEvent(
+      'exit',
+      pageIndex: current.currentImageIndex,
+      totalPages: current.images.length,
+    );
   }
 
   void _scheduleProgressPersistence({
     required int currentIndex,
     required double scrollOffset,
+    required ComicReaderProgressSource source,
   }) {
     _progressPersistDebounceTimer?.cancel();
     final version = ++_persistVersion;
     _progressPersistDebounceTimer = Timer(
       const Duration(milliseconds: 180),
       () async {
-        await _repository.updateLastReadProgress(
-          comicId: _args.comicId,
-          episodeId: _args.episodeId,
-          imageIndex: currentIndex,
+        await _saveProgressNow(
+          currentIndex: currentIndex,
           scrollOffset: scrollOffset,
+          source: source,
         );
         if (!ref.mounted || version != _persistVersion) {
           return;
         }
       },
+    );
+  }
+
+  void _cancelScheduledProgressPersistence() {
+    _progressPersistDebounceTimer?.cancel();
+    _progressPersistDebounceTimer = null;
+    _persistVersion++;
+  }
+
+  void _recordVisiblePage({
+    required int currentIndex,
+    required double scrollOffset,
+    required ComicReaderProgressSource source,
+    bool checkCompletion = true,
+  }) {
+    _visibleImageIndexes.add(currentIndex);
+    _scheduleProgressPersistence(
+      currentIndex: currentIndex,
+      scrollOffset: scrollOffset,
+      source: source,
+    );
+    if (!checkCompletion) {
+      return;
+    }
+    unawaited(
+      _markEpisodeCompletedIfNeeded(
+        currentIndex: currentIndex,
+        scrollOffset: scrollOffset,
+        source: source,
+      ),
+    );
+  }
+
+  Future<void> _saveProgressNow({
+    required int currentIndex,
+    required double scrollOffset,
+    required ComicReaderProgressSource source,
+  }) async {
+    await _readingStateWriter.saveProgress(
+      comicId: _args.comicId,
+      episodeId: _args.episodeId,
+      imageIndex: currentIndex,
+      scrollOffset: scrollOffset,
+    );
+    _logReaderEvent(
+      'page_visible',
+      source: source,
+      pageIndex: currentIndex,
+      scrollOffset: scrollOffset,
+    );
+  }
+
+  Future<void> _markEpisodeCompletedIfNeeded({
+    required int currentIndex,
+    required double scrollOffset,
+    required ComicReaderProgressSource source,
+  }) async {
+    final current = state.value;
+    if (current == null || current.images.isEmpty) {
+      return;
+    }
+    final lastIndex = current.images.length - 1;
+    if (currentIndex < lastIndex) {
+      return;
+    }
+    if (_completedEpisodeIds.contains(_args.episodeId)) {
+      return;
+    }
+    if (_completingEpisodeIds.contains(_args.episodeId)) {
+      return;
+    }
+    // The last page must have actually entered the viewport. This prevents
+    // automatic read completion from firing during chapter load.
+    if (!_visibleImageIndexes.contains(lastIndex)) {
+      return;
+    }
+    final lastImage = current.images[lastIndex];
+    if (lastImage.failed || lastImage.cacheStatus == 'failed') {
+      return;
+    }
+
+    final completedAt = DateTime.now();
+    _completingEpisodeIds.add(_args.episodeId);
+    try {
+      await _readingStateWriter.markEpisodeCompleted(
+        comicId: _args.comicId,
+        episodeId: _args.episodeId,
+        imageIndex: lastIndex,
+        scrollOffset: scrollOffset,
+        completedAt: completedAt,
+      );
+      _completedEpisodeIds.add(_args.episodeId);
+    } finally {
+      _completingEpisodeIds.remove(_args.episodeId);
+    }
+    _logReaderEvent(
+      'chapter_completed',
+      source: source,
+      pageIndex: lastIndex,
+      totalPages: current.images.length,
+      scrollOffset: scrollOffset,
+    );
+    if (!ref.mounted) {
+      return;
+    }
+    final latest = state.value;
+    if (latest == null) {
+      return;
+    }
+    state = AsyncData(
+      latest.copyWith(
+        currentImageIndex: lastIndex,
+        lastScrollOffset: scrollOffset,
+        isCurrentEpisodeRead: true,
+      ),
     );
   }
 
@@ -400,6 +580,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   }
 
   Future<ComicReaderViewState> _loadState() async {
+    final startedAt = DateTime.now();
     final episodes = await _repository.getComicEpisodes(comicId: _args.comicId, descending: false);
     final episodeIndex = episodes.indexWhere((e) => e.episodeId == _args.episodeId);
     if (episodeIndex < 0) {
@@ -417,10 +598,17 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     final scrollOffset = progress != null && progress.episodeId == _args.episodeId
         ? progress.scrollOffset
         : 0.0;
+    final isRead = await _readingStateWriter.isEpisodeRead(
+      comicId: _args.comicId,
+      episodeId: _args.episodeId,
+    );
+    if (isRead) {
+      _completedEpisodeIds.add(_args.episodeId);
+    }
 
     _preloadFirstBatch(images);
 
-    return ComicReaderViewState(
+    final viewState = ComicReaderViewState(
       comicId: _args.comicId,
       episodeId: _args.episodeId,
       episodeTitle: episode.episodeTitle ?? '章节 ${episode.sourceTid}',
@@ -440,7 +628,15 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       lastScrollOffset: scrollOffset,
       hasPreviousEpisode: episodeIndex > 0,
       hasNextEpisode: episodeIndex < episodes.length - 1,
+      isCurrentEpisodeRead: isRead,
     );
+    _logReaderEvent(
+      'open',
+      pageIndex: currentImageIndex,
+      totalPages: viewState.images.length,
+      elapsedMs: DateTime.now().difference(startedAt).inMilliseconds,
+    );
+    return viewState;
   }
 
   Future<List<ComicEpisodeImageItem>> _ensureEpisodeImages(ComicEpisodeItem episode) async {
@@ -575,6 +771,30 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       bytes: bytes,
       lastAccessedAt: lastAccessedAt,
       protected: false,
+    );
+  }
+
+  void _logReaderEvent(
+    String event, {
+    ComicReaderProgressSource? source,
+    int? pageIndex,
+    int? totalPages,
+    double? scrollOffset,
+    int? elapsedMs,
+  }) {
+    final openedAt = _openedAt;
+    _eventLogger.log(
+      event: event,
+      comicId: _args.comicId,
+      episodeId: _args.episodeId,
+      source: source,
+      pageIndex: pageIndex,
+      totalPages: totalPages,
+      scrollOffset: scrollOffset,
+      elapsedMs: elapsedMs,
+      sinceOpenMs: openedAt == null
+          ? null
+          : DateTime.now().difference(openedAt).inMilliseconds,
     );
   }
 }

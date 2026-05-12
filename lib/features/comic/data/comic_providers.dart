@@ -6,6 +6,9 @@ import 'package:y300/features/comic/data/comic_cache_manager_factory.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/local_comic_repository.dart';
+import 'package:y300/features/comic/domain/services/comic_reader_events.dart';
+import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
+import 'package:y300/features/library_shared/data/library_state_providers.dart';
 
 final comicRepositoryProvider = Provider<ComicRepository>((ref) {
   return LocalComicRepository(
@@ -18,6 +21,17 @@ final comicCoverCacheWriterProvider = Provider<ComicCoverCacheWriter?>((ref) {
   return repository is ComicCoverCacheWriter
       ? repository as ComicCoverCacheWriter
       : null;
+});
+
+final comicReaderEventLoggerProvider = Provider<ComicReaderEventLogger>((ref) {
+  return const ComicReaderEventLogger();
+});
+
+final comicReadingStateWriterProvider = Provider<ComicReadingStateWriter>((ref) {
+  return DefaultComicReadingStateWriter(
+    comicRepository: ref.watch(comicRepositoryProvider),
+    libraryStateRepository: ref.watch(libraryStateRepositoryProvider),
+  );
 });
 
 final comicCacheDirectoryResolverProvider = Provider<ComicCacheDirectoryResolver>((ref) {

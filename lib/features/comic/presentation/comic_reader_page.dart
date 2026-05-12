@@ -1,8 +1,11 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
+import 'package:y300/features/comic/domain/models/comic_reader_exit_result.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/comic/presentation/models/reader_preferences.dart';
 import 'package:y300/features/comic/presentation/providers/reader_preferences_provider.dart';
@@ -44,9 +47,12 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
   late final AnimationController _menuAnimationController;
   late final Animation<Offset> _topMenuSlideAnimation;
   late final Animation<Offset> _bottomMenuSlideAnimation;
+  final Set<int> _reportedVisibleImageIndexes = <int>{};
   // Keep per-image zoom flags so page-level gestures can be coordinated
   // without coupling gesture logic into image rendering code.
   final Map<int, bool> _zoomedStateByIndex = <int, bool>{};
+  ComicReaderController? _lastController;
+  bool _exitFlushed = false;
 
   ComicReaderArgs get _readerArgs =>
       ComicReaderArgs(comicId: widget.comicId, episodeId: widget.episodeId);
@@ -81,6 +87,10 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
 
   @override
   void dispose() {
+    final controller = _lastController;
+    if (!_exitFlushed && controller != null) {
+      unawaited(controller.onExitReader());
+    }
     _scrollController
       ..removeListener(_onVerticalScroll)
       ..dispose();
@@ -95,6 +105,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     final mode = preferencesState.value?.readerMode ?? ReaderModePreference.vertical;
 
     final state = ref.watch(comicReaderControllerProvider(_readerArgs));
+    _lastController = ref.read(comicReaderControllerProvider(_readerArgs).notifier);
     final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
 
     return Scaffold(
@@ -108,6 +119,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
 
           _syncPageControllerIfNeeded(mode, viewState.currentImageIndex);
           _restorePositionIfNeeded(mode, viewState);
+          _notifyCurrentImageVisible(viewState.currentImageIndex);
 
           return Stack(
             children: [
@@ -137,6 +149,30 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
 
   ComicReaderController _controller() {
     return ref.read(comicReaderControllerProvider(_readerArgs).notifier);
+  }
+
+  Future<void> _popReader([Object? result]) async {
+    if (!_exitFlushed) {
+      _exitFlushed = true;
+      await _controller().onExitReader();
+    }
+    if (!mounted) {
+      return;
+    }
+    Navigator.of(context).pop(result);
+  }
+
+  void _notifyCurrentImageVisible(int imageIndex) {
+    if (_reportedVisibleImageIndexes.contains(imageIndex)) {
+      return;
+    }
+    _reportedVisibleImageIndexes.add(imageIndex);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _controller().onImageVisible(imageIndex);
+    });
   }
 
   Future<void> _onReaderModeChanged(
@@ -267,6 +303,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
       return;
     }
     _lastKnownIndex = pageIndex;
+    _reportedVisibleImageIndexes.add(pageIndex);
     await _controller().jumpToImageIndex(pageIndex, scrollOffset: 0);
     _tryReleaseSliderCommitLock(pageIndex);
   }
@@ -542,7 +579,15 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
           position: _topMenuSlideAnimation,
           child: ReaderTopBar(
             episodeTitle: viewState.episodeTitle,
-            onBack: () => Navigator.of(context).pop(),
+            onBack: () => _popReader(
+              ComicReaderExitResult(
+                comicId: viewState.comicId,
+                lastReadEpisodeId: viewState.episodeId,
+                completedEpisodeIds: viewState.isCurrentEpisodeRead
+                    ? <String>[viewState.episodeId]
+                    : const <String>[],
+              ),
+            ),
             onCacheEpisode: () => _controller().cacheCurrentEpisode(),
             onCacheUnread: () => _controller().cacheAllUnread(),
           ),
@@ -574,8 +619,8 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
             totalPages: total,
             hasPreviousEpisode: viewState.hasPreviousEpisode,
             hasNextEpisode: viewState.hasNextEpisode,
-            onPreviousEpisode: () => Navigator.of(context).pop('previous'),
-            onNextEpisode: () => Navigator.of(context).pop('next'),
+            onPreviousEpisode: () => _popReader('previous'),
+            onNextEpisode: () => _popReader('next'),
             onProgressChangeStart: (value) => _onProgressChangeStart(value, total),
             onProgressChanged: (value) => _onProgressChanged(value, total),
             onProgressChangeEnd: (value) => _onProgressChangeEnd(

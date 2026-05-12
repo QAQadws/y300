@@ -296,15 +296,14 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                           if (!context.mounted) {
                             return;
                           }
-                          await _controller.markChapterRead(
-                            episodeId: chapter.episodeId,
-                            isRead: true,
-                          );
+                          await widget.onOpenReader(context, target);
                           if (!context.mounted) {
                             return;
                           }
-                          setState(() {});
-                          await widget.onOpenReader(context, target);
+                          await _controller.reload();
+                          if (mounted) {
+                            setState(() {});
+                          }
                         },
                         onLongPress: () => _showChapterActions(chapter),
                       );

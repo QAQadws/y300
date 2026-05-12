@@ -74,6 +74,32 @@ void main() {
       expect(downloaded, 1);
     });
 
+    test('marking episode unread clears readAt', () async {
+      await repository.upsertEpisodeState(
+        moduleKey: LibraryModuleKey.comic,
+        episodeId: 'ep1',
+        workId: 'comic:1',
+        isRead: true,
+        readAt: DateTime(2026, 5, 12),
+      );
+      await repository.upsertEpisodeState(
+        moduleKey: LibraryModuleKey.comic,
+        episodeId: 'ep1',
+        workId: 'comic:1',
+        isRead: false,
+        readAt: null,
+      );
+
+      final state = await repository.getEpisodeState(
+        moduleKey: LibraryModuleKey.comic,
+        episodeId: 'ep1',
+      );
+
+      expect(state, isNotNull);
+      expect(state!.isRead, isFalse);
+      expect(state.readAt, isNull);
+    });
+
     test('can save and load display settings', () async {
       await repository.upsertDisplaySettings(
         moduleKey: LibraryModuleKey.comic,
@@ -123,4 +149,3 @@ void main() {
     });
   });
 }
-

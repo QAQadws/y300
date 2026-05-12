@@ -9,10 +9,11 @@ import 'package:y300/features/library_shared/presentation/pages/unified_detail_p
 void main() {
   testWidgets('UnifiedDetailPage renders header/chapter and FAB', (tester) async {
     ReaderRouteTarget? openedTarget;
+    final adapter = _FakeDetailAdapter();
     await tester.pumpWidget(
       MaterialApp(
         home: UnifiedDetailPage(
-          adapter: _FakeDetailAdapter(),
+          adapter: adapter,
           workId: 'work-1',
           onOpenReader: (context, target) async {
             openedTarget = target;
@@ -78,6 +79,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey<String>('unified-detail-chapter-e1')));
     await tester.pumpAndSettle();
     expect(openedTarget?.episodeId, 'e1');
+    expect(adapter.markReadCallCount, 0);
+    expect(adapter.loadChaptersCallCount, greaterThanOrEqualTo(2));
 
     await tester.longPress(find.byKey(const ValueKey<String>('unified-detail-chapter-e1')));
     await tester.pumpAndSettle();
@@ -86,6 +89,9 @@ void main() {
 }
 
 class _FakeDetailAdapter implements DetailModuleAdapter {
+  int markReadCallCount = 0;
+  int loadChaptersCallCount = 0;
+
   @override
   Future<void> clearAllReadState({required String workId}) async {}
 
@@ -120,6 +126,7 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
     required LibraryFilterSet filters,
     required LibraryChapterSortOption sortOption,
   }) async {
+    loadChaptersCallCount++;
     return const [
       LibraryChapterItem(
         episodeId: 'e1',
@@ -171,7 +178,9 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
     required String workId,
     required String episodeId,
     required bool isRead,
-  }) async {}
+  }) async {
+    markReadCallCount++;
+  }
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.novel;
