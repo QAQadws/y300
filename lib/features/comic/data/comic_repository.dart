@@ -104,6 +104,30 @@ abstract class ComicShelfSnapshotRepository {
   });
 }
 
+/// 单个漫画作品在书架上的章节状态聚合。
+///
+/// 聚合口径以章节表为主：章节存在但还没有 `library_episode_state` 行时，
+/// 默认视为未读。这个模型用于没有走 snapshot 批量查询时的适配器 fallback。
+class ComicShelfWorkStats {
+  const ComicShelfWorkStats({
+    required this.totalCount,
+    required this.unreadCount,
+    required this.readCount,
+    required this.downloadedCount,
+  });
+
+  final int totalCount;
+  final int unreadCount;
+  final int readCount;
+  final int downloadedCount;
+}
+
+abstract class ComicShelfStatsRepository {
+  Future<ComicShelfWorkStats> getShelfWorkStats({
+    required String comicId,
+  });
+}
+
 abstract class ComicCoverCacheWriter {
   Future<void> updateCoverCache({
     required String comicId,

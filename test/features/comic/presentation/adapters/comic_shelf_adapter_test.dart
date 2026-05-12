@@ -78,12 +78,50 @@ void main() {
     expect(requests.single.role, ImageCacheRole.customCover);
     expect(requests.single.cacheKey, 'cover/custom/comic/comic-2');
   });
+
+  test('ComicShelfAdapter fallback uses repository stats for missing state rows', () async {
+    final adapter = ComicShelfAdapter(
+      _FakeComicRepository(
+        shelfItems: <ComicShelfItem>[
+          ComicShelfItem(
+            comicId: 'comic-3',
+            title: '漫画C',
+            author: '作者C',
+            coverImageUrl: null,
+            categoryId: 'default',
+            addedAt: DateTime(2026, 1, 1),
+          ),
+        ],
+        statsByComicId: const <String, ComicShelfWorkStats>{
+          'comic-3': ComicShelfWorkStats(
+            totalCount: 3,
+            unreadCount: 2,
+            readCount: 1,
+            downloadedCount: 1,
+          ),
+        },
+      ),
+      stateRepository: _FakeLibraryStateRepository(),
+    );
+
+    final items = await adapter.loadCategoryItems(categoryId: 'default');
+
+    expect(items.single.totalChapterCount, 3);
+    expect(items.single.unreadCount, 2);
+    expect(items.single.readChapterCount, 1);
+    expect(items.single.isDownloaded, isTrue);
+  });
 }
 
-class _FakeComicRepository implements ComicRepository, ComicCoverCacheWriter {
-  _FakeComicRepository({required this.shelfItems});
+class _FakeComicRepository
+    implements ComicRepository, ComicShelfStatsRepository, ComicCoverCacheWriter {
+  _FakeComicRepository({
+    required this.shelfItems,
+    this.statsByComicId = const <String, ComicShelfWorkStats>{},
+  });
 
   final List<ComicShelfItem> shelfItems;
+  final Map<String, ComicShelfWorkStats> statsByComicId;
   String? lastCoverLocalPath;
 
   @override
@@ -123,6 +161,17 @@ class _FakeComicRepository implements ComicRepository, ComicCoverCacheWriter {
 
   @override
   Future<ComicShelfDisplaySettings> getDisplaySettings() async => const ComicShelfDisplaySettings(gridColumnCount: 3);
+
+  @override
+  Future<ComicShelfWorkStats> getShelfWorkStats({required String comicId}) async {
+    return statsByComicId[comicId] ??
+        const ComicShelfWorkStats(
+          totalCount: 0,
+          unreadCount: 0,
+          readCount: 0,
+          downloadedCount: 0,
+        );
+  }
 
   @override
   Future<List<ComicEpisodeImageItem>> getEpisodeImages({required String episodeId}) async => const [];

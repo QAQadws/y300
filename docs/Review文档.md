@@ -1647,6 +1647,43 @@
 
 ---
 
+## 分阶段优化漫画阅读器 Phase 2 Review 清单（2026-05-12）
+
+### 一、未读聚合语义
+- [ ] `LocalComicRepository.queryShelfSnapshot()` 以 `episodes` 为主表统计章节总数。
+- [ ] `library_episode_state` 仅作为状态覆盖，左联条件包含 `content_type = 'comic'` 与 `episode_id`。
+- [ ] 无状态章节通过 `COALESCE(is_read, 0)` 视为未读。
+- [ ] `total_count/read_count/unread_count/downloaded_count` 来自同一套 `chapter_stats` 聚合。
+- [ ] 手动标记已读后，书架未读数减少。
+- [ ] 手动取消已读后，书架未读数增加。
+
+### 二、Fallback 与架构边界
+- [ ] `ComicShelfWorkStats` / `ComicShelfStatsRepository` 作为窄接口存在，未把统计方法塞进 `ComicRepository` 主合同。
+- [ ] `ComicShelfAdapter.loadCategoryItems()` 在仓储支持时使用 `ComicShelfStatsRepository`。
+- [ ] 仓储不支持窄接口时仍保留旧 `LibraryStateRepository.count*` fallback。
+- [ ] shared 层不直接依赖漫画 SQL 或漫画仓储实现。
+
+### 三、继续阅读与刷新闭环
+- [ ] `ComicDetailAdapter.getReaderRouteTarget(preferContinue: true)` 优先使用 `reading_progress.episode_id`。
+- [ ] 无阅读进度时回退 `library_work_state.last_read_episode_id`。
+- [ ] 无历史进度时打开第一章未读章节；无状态章节视为未读。
+- [ ] 右下角“继续”打开 reader 返回后详情页执行本地 reload。
+- [ ] 书架打开详情返回后执行 refresh，让未读角标读取最新 snapshot。
+
+### 四、测试覆盖（仅编写，未执行）
+- [ ] `local_comic_repository_test.dart` 覆盖无状态章节默认未读。
+- [ ] `local_comic_repository_test.dart` 覆盖未读筛选包含无状态章节。
+- [ ] `comic_detail_adapter_test.dart` 覆盖继续阅读优先级：reading progress -> work state -> first unread。
+- [ ] `comic_shelf_adapter_test.dart` 覆盖非 snapshot fallback 使用仓储统计。
+
+### 五、待你本地回归
+1. `flutter test`
+2. `flutter analyze`
+
+说明：本轮按要求未执行 `flutter test`、`flutter analyze`、`dart format`。
+
+---
+
 ## 漫画阅读器 Phase 0/1 Review 记录（2026-05-12）
 ### Review 范围
 - `lib/features/comic/domain/services/comic_reader_events.dart`

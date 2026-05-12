@@ -78,6 +78,86 @@ void main() {
     expect(repository.lastCoverLocalPath, isNull);
     expect(repository.lastCustomCoverLocalPath, '/cache/custom-cover.jpg');
   });
+
+  test('getReaderRouteTarget continues from reading progress first', () async {
+    final repository = _FakeComicRepository(
+      progress: ComicReadingProgress(
+        comicId: 'comic:1',
+        episodeId: 'comic:1:90',
+        imageIndex: 2,
+        scrollOffset: 120,
+        updatedAt: DateTime(2026, 5, 12),
+      ),
+    );
+    final adapter = ComicDetailAdapter(
+      repository,
+      stateRepository: _FakeLibraryStateRepository(
+        workState: LibraryWorkState(
+          moduleKey: LibraryModuleKey.comic,
+          workId: 'comic:1',
+          lastReadEpisodeId: 'comic:1:120',
+          lastReadAt: DateTime(2026, 5, 12),
+          createdAt: DateTime(2026, 5, 12),
+          updatedAt: DateTime(2026, 5, 12),
+        ),
+      ),
+    );
+
+    final target = await adapter.getReaderRouteTarget(
+      workId: 'comic:1',
+      preferContinue: true,
+    );
+
+    expect(target?.episodeId, 'comic:1:90');
+  });
+
+  test('getReaderRouteTarget falls back to library work state', () async {
+    final repository = _FakeComicRepository();
+    final adapter = ComicDetailAdapter(
+      repository,
+      stateRepository: _FakeLibraryStateRepository(
+        workState: LibraryWorkState(
+          moduleKey: LibraryModuleKey.comic,
+          workId: 'comic:1',
+          lastReadEpisodeId: 'comic:1:120',
+          lastReadAt: DateTime(2026, 5, 12),
+          createdAt: DateTime(2026, 5, 12),
+          updatedAt: DateTime(2026, 5, 12),
+        ),
+      ),
+    );
+
+    final target = await adapter.getReaderRouteTarget(
+      workId: 'comic:1',
+      preferContinue: true,
+    );
+
+    expect(target?.episodeId, 'comic:1:120');
+  });
+
+  test('getReaderRouteTarget starts from first unread chapter without progress', () async {
+    final repository = _FakeComicRepository();
+    final adapter = ComicDetailAdapter(
+      repository,
+      stateRepository: _FakeLibraryStateRepository(
+        episodeStates: <String, LibraryEpisodeState>{
+          'comic:1:120': LibraryEpisodeState(
+            moduleKey: LibraryModuleKey.comic,
+            episodeId: 'comic:1:120',
+            workId: 'comic:1',
+            isRead: true,
+          ),
+        },
+      ),
+    );
+
+    final target = await adapter.getReaderRouteTarget(
+      workId: 'comic:1',
+      preferContinue: true,
+    );
+
+    expect(target?.episodeId, 'comic:1:90');
+  });
 }
 
 class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
@@ -94,6 +174,9 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
 }
 
 class _FakeComicRepository implements ComicRepository {
+  _FakeComicRepository({this.progress});
+
+  final ComicReadingProgress? progress;
   bool mergeCalled = false;
   List<ComicEpisodeLink> lastMergedLinks = const [];
   String? lastFallbackTid;
@@ -179,7 +262,7 @@ class _FakeComicRepository implements ComicRepository {
     ];
   }
   @override
-  Future<ComicReadingProgress?> getLastReadProgress({required String comicId}) async => null;
+  Future<ComicReadingProgress?> getLastReadProgress({required String comicId}) async => progress;
   @override
   Future<List<ComicShelfItem>> getShelfItems({String categoryId = 'default'}) async => const [];
   @override
@@ -287,6 +370,14 @@ class _FakeImageCacheService implements ImageCacheService {
 }
 
 class _FakeLibraryStateRepository implements LibraryStateRepository {
+  _FakeLibraryStateRepository({
+    this.workState,
+    this.episodeStates = const <String, LibraryEpisodeState>{},
+  });
+
+  final LibraryWorkState? workState;
+  final Map<String, LibraryEpisodeState> episodeStates;
+
   @override
   Future<void> bindTagToWork({required LibraryModuleKey moduleKey, required String workId, required String tagId}) async {}
   @override
@@ -303,11 +394,11 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
   Future<LibraryModuleDisplaySettings> getDisplaySettings({required LibraryModuleKey moduleKey, required LibraryDisplayMode defaultDisplayMode}) async =>
       LibraryModuleDisplaySettings(moduleKey: moduleKey, displayMode: defaultDisplayMode, gridColumns: 3, updatedAt: DateTime(2026, 1, 1));
   @override
-  Future<LibraryEpisodeState?> getEpisodeState({required LibraryModuleKey moduleKey, required String episodeId}) async => null;
+  Future<LibraryEpisodeState?> getEpisodeState({required LibraryModuleKey moduleKey, required String episodeId}) async => episodeStates[episodeId];
   @override
   Future<List<LibraryTag>> getTags() async => const [];
   @override
-  Future<LibraryWorkState?> getWorkState({required LibraryModuleKey moduleKey, required String workId}) async => null;
+  Future<LibraryWorkState?> getWorkState({required LibraryModuleKey moduleKey, required String workId}) async => workState;
   @override
   Future<List<LibraryTag>> getWorkTags({required LibraryModuleKey moduleKey, required String workId}) async => const [];
   @override

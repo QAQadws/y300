@@ -223,18 +223,27 @@ class ComicShelfAdapter
   }
 
   Future<LibraryWorkItem> _mapWork(ComicShelfItem source) async {
-    final unread = await _stateRepository.countUnreadEpisodes(
-      moduleKey: LibraryModuleKey.comic,
-      workId: source.comicId,
-    );
-    final read = await _stateRepository.countReadEpisodes(
-      moduleKey: LibraryModuleKey.comic,
-      workId: source.comicId,
-    );
-    final downloaded = await _stateRepository.countDownloadedEpisodes(
-      moduleKey: LibraryModuleKey.comic,
-      workId: source.comicId,
-    );
+    final statsRepository = _repository is ComicShelfStatsRepository
+        ? _repository as ComicShelfStatsRepository
+        : null;
+    final stats = statsRepository == null
+        ? null
+        : await statsRepository.getShelfWorkStats(comicId: source.comicId);
+    final unread = stats?.unreadCount ??
+        await _stateRepository.countUnreadEpisodes(
+          moduleKey: LibraryModuleKey.comic,
+          workId: source.comicId,
+        );
+    final read = stats?.readCount ??
+        await _stateRepository.countReadEpisodes(
+          moduleKey: LibraryModuleKey.comic,
+          workId: source.comicId,
+        );
+    final downloaded = stats?.downloadedCount ??
+        await _stateRepository.countDownloadedEpisodes(
+          moduleKey: LibraryModuleKey.comic,
+          workId: source.comicId,
+        );
     final hasTags = await _stateRepository.hasAnyTag(
       moduleKey: LibraryModuleKey.comic,
       workId: source.comicId,
@@ -256,7 +265,7 @@ class ComicShelfAdapter
       coverLocalPath: hasPendingCustomCover ? null : source.coverLocalPath,
       customCoverLocalPath: source.customCoverLocalPath,
       unreadCount: unread,
-      totalChapterCount: unread + read,
+      totalChapterCount: stats?.totalCount ?? unread + read,
       readChapterCount: read,
       addedAt: source.addedAt,
       hasTags: hasTags,

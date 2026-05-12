@@ -324,6 +324,13 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
             return;
           }
           await widget.onOpenReader(context, target);
+          if (!context.mounted) {
+            return;
+          }
+          await _controller.reload();
+          if (mounted) {
+            setState(() {});
+          }
         },
         icon: const Icon(Icons.play_arrow),
         label: const Text('继续'),

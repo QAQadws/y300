@@ -19,6 +19,7 @@ class LocalComicRepository
     implements
         ComicRepository,
         ComicShelfSnapshotRepository,
+        ComicShelfStatsRepository,
         ComicCoverCacheWriter,
         ComicEpisodeImageCacheMetadataWriter {
   LocalComicRepository(
@@ -477,21 +478,19 @@ class LocalComicRepository
     final db = await _dbFuture;
     final categories = await _loadLibraryCategories(db);
     final rows = await db.rawQuery('''
-      WITH episode_stats AS (
+      WITH chapter_stats AS (
         SELECT
-          work_id,
-          COUNT(*) AS state_count,
-          SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END) AS unread_count,
-          SUM(CASE WHEN is_read = 1 THEN 1 ELSE 0 END) AS read_count,
-          SUM(CASE WHEN is_downloaded = 1 THEN 1 ELSE 0 END) AS downloaded_count
-        FROM ${ComicLocalDb.libraryEpisodeStateTable}
-        WHERE content_type = 'comic'
-        GROUP BY work_id
-      ),
-      chapter_stats AS (
-        SELECT comic_id AS work_id, COUNT(*) AS total_count
-        FROM ${ComicLocalDb.episodesTable}
-        GROUP BY comic_id
+          e.comic_id AS work_id,
+          COUNT(*) AS total_count,
+          SUM(CASE WHEN COALESCE(s.is_read, 0) = 0 THEN 1 ELSE 0 END) AS unread_count,
+          SUM(CASE WHEN COALESCE(s.is_read, 0) = 1 THEN 1 ELSE 0 END) AS read_count,
+          SUM(CASE WHEN COALESCE(s.is_downloaded, 0) = 1 THEN 1 ELSE 0 END) AS downloaded_count
+        FROM ${ComicLocalDb.episodesTable} e
+        LEFT JOIN ${ComicLocalDb.libraryEpisodeStateTable} s
+          ON s.content_type = 'comic'
+         AND s.work_id = e.comic_id
+         AND s.episode_id = e.episode_id
+        GROUP BY e.comic_id
       ),
       tag_stats AS (
         SELECT work_id, 1 AS has_tags
@@ -522,10 +521,10 @@ class LocalComicRepository
         c.cover_local_path,
         c.custom_cover_local_path,
         c.updated_at AS work_updated_at,
-        COALESCE(es.unread_count, 0) AS unread_count,
-        COALESCE(es.read_count, 0) AS read_count,
-        COALESCE(es.downloaded_count, 0) AS downloaded_count,
-        COALESCE(cs.total_count, es.state_count, 0) AS total_count,
+        COALESCE(cs.total_count, 0) AS total_count,
+        COALESCE(cs.unread_count, 0) AS unread_count,
+        COALESCE(cs.read_count, 0) AS read_count,
+        COALESCE(cs.downloaded_count, 0) AS downloaded_count,
         COALESCE(ts.has_tags, 0) AS has_tags,
         ws.last_read_at,
         ws.check_updated_at,
@@ -533,8 +532,6 @@ class LocalComicRepository
       FROM ${ComicLocalDb.shelfItemsTable} si
       INNER JOIN ${ComicLocalDb.comicsTable} c
         ON si.comic_id = c.comic_id
-      LEFT JOIN episode_stats es
-        ON es.work_id = c.comic_id
       LEFT JOIN chapter_stats cs
         ON cs.work_id = c.comic_id
       LEFT JOIN tag_stats ts
@@ -562,6 +559,34 @@ class LocalComicRepository
       categories: categories,
       itemsByCategory: queried,
       visibleMatchCountByCategory: LibraryShelfQueryUtils.countByCategory(queried),
+    );
+  }
+
+  @override
+  Future<ComicShelfWorkStats> getShelfWorkStats({
+    required String comicId,
+  }) async {
+    final db = await _dbFuture;
+    final rows = await db.rawQuery('''
+      SELECT
+        COUNT(e.episode_id) AS total_count,
+        SUM(CASE WHEN COALESCE(s.is_read, 0) = 0 THEN 1 ELSE 0 END) AS unread_count,
+        SUM(CASE WHEN COALESCE(s.is_read, 0) = 1 THEN 1 ELSE 0 END) AS read_count,
+        SUM(CASE WHEN COALESCE(s.is_downloaded, 0) = 1 THEN 1 ELSE 0 END) AS downloaded_count
+      FROM ${ComicLocalDb.episodesTable} e
+      LEFT JOIN ${ComicLocalDb.libraryEpisodeStateTable} s
+        ON s.content_type = 'comic'
+       AND s.work_id = e.comic_id
+       AND s.episode_id = e.episode_id
+      WHERE e.comic_id = ?
+    ''', <Object>[comicId]);
+
+    final row = rows.isEmpty ? null : rows.first;
+    return ComicShelfWorkStats(
+      totalCount: row?['total_count'] as int? ?? 0,
+      unreadCount: row?['unread_count'] as int? ?? 0,
+      readCount: row?['read_count'] as int? ?? 0,
+      downloadedCount: row?['downloaded_count'] as int? ?? 0,
     );
   }
 

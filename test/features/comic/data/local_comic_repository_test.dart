@@ -292,7 +292,7 @@ void main() {
         fid: '30',
         title: '聚合漫画',
         parsedPost: const ParsedComicPost(
-          imageUrls: <String>['https://img.test/snapshot-cover.jpg'],
+          imageUrls: <String>[],
           episodeLinks: <ComicEpisodeLink>[
             ComicEpisodeLink(url: 'thread-901-1-1.html', rawText: '1', episodeTitle: '第1话'),
             ComicEpisodeLink(url: 'thread-902-1-1.html', rawText: '2', episodeTitle: '第2话'),
@@ -337,6 +337,68 @@ void main() {
       expect(item.totalChapterCount, greaterThanOrEqualTo(2));
       expect(item.isDownloaded, isTrue);
       expect(item.hasTags, isTrue);
+    });
+
+    test('queryShelfSnapshot treats episodes without state rows as unread', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:910',
+        tid: '910',
+        fid: '30',
+        title: '无状态漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>[],
+          episodeLinks: <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-911-1-1.html', rawText: '1', episodeTitle: '第1话'),
+            ComicEpisodeLink(url: 'thread-912-1-1.html', rawText: '2', episodeTitle: '第2话'),
+            ComicEpisodeLink(url: 'thread-913-1-1.html', rawText: '3', episodeTitle: '第3话'),
+          ],
+          plainTextSummary: '摘要',
+        ),
+      );
+
+      final stateRepository = LocalLibraryStateRepository(dbFuture);
+      await stateRepository.upsertEpisodeState(
+        moduleKey: LibraryModuleKey.comic,
+        episodeId: 'yamibo:910:911',
+        workId: 'yamibo:910',
+        isRead: true,
+      );
+
+      final snapshot = await repository.queryShelfSnapshot(
+        filters: LibraryFilterSet.defaults,
+        sortOption: LibraryShelfSortOption.defaults,
+        keyword: '',
+      );
+      final item = snapshot.itemsByCategory['default']!.single;
+
+      expect(item.totalChapterCount, 3);
+      expect(item.readChapterCount, 1);
+      expect(item.unreadCount, 2);
+    });
+
+    test('queryShelfSnapshot unread filter includes works with missing episode state', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:920',
+        tid: '920',
+        fid: '30',
+        title: '未初始化未读',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>[],
+          episodeLinks: <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-921-1-1.html', rawText: '1', episodeTitle: '第1话'),
+          ],
+          plainTextSummary: '摘要',
+        ),
+      );
+
+      final snapshot = await repository.queryShelfSnapshot(
+        filters: const LibraryFilterSet(unread: TriStateFilterValue.include),
+        sortOption: LibraryShelfSortOption.defaults,
+        keyword: '',
+      );
+
+      expect(snapshot.itemsByCategory['default']!.single.workId, 'yamibo:920');
+      expect(snapshot.itemsByCategory['default']!.single.unreadCount, 1);
     });
 
     test('can persist reading progress and image cache status', () async {

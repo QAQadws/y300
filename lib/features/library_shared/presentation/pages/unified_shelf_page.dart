@@ -166,7 +166,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                                     gridColumns: liveState.gridColumnCount,
                                     imageHeaderBuilder: imageHeaderBuilder,
                                     useShelfCoverImage: widget.featureFlags.useShelfCoverImage,
-                                    onTapItem: (workId) => widget.onOpenWork(context, workId),
+                                    onTapItem: _openWorkAndRefreshShelf,
                                     onVisibleRangeChanged: ({
                                       required firstIndex,
                                       required lastIndex,
@@ -419,7 +419,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
         );
         return;
       }
-      await widget.onOpenWork(context, workId);
+      await _openWorkAndRefreshShelf(workId);
       return;
     }
 
@@ -533,6 +533,17 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
     );
   }
 
+  Future<void> _openWorkAndRefreshShelf(String workId) async {
+    await widget.onOpenWork(context, workId);
+    if (!mounted) {
+      return;
+    }
+    await _controller.refresh();
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   int _resolveSelectedIndex(List<LibraryCategory> categories, String selectedId) {
     if (categories.isEmpty) {
       return 0;
@@ -569,7 +580,7 @@ class _ShelfCategoryPage extends StatefulWidget {
   final int gridColumns;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final bool useShelfCoverImage;
-  final ValueChanged<String> onTapItem;
+  final Future<void> Function(String workId) onTapItem;
   final void Function({
     required int firstIndex,
     required int lastIndex,
@@ -695,7 +706,7 @@ class _WorkGrid extends StatelessWidget {
   final int gridColumns;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final bool useShelfCoverImage;
-  final ValueChanged<String> onTapItem;
+  final Future<void> Function(String workId) onTapItem;
 
   @override
   Widget build(BuildContext context) {
@@ -726,7 +737,7 @@ class _WorkGrid extends StatelessWidget {
             customCoverLocalPath: item.customCoverLocalPath,
             imageHeaderBuilder: imageHeaderBuilder,
             coverLayerBuilder: useShelfCoverImage ? null : _legacyCoverLayerBuilder,
-            onTap: () => onTapItem(item.workId),
+            onTap: () async => onTapItem(item.workId),
             topLeftBadge: _UnreadBadge(count: item.unreadCount),
             showTwoLineCustomEllipsis: true,
           );
@@ -821,7 +832,7 @@ class _WorkList extends StatelessWidget {
   final List<LibraryWorkItem> items;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final bool useShelfCoverImage;
-  final ValueChanged<String> onTapItem;
+  final Future<void> Function(String workId) onTapItem;
 
   @override
   Widget build(BuildContext context) {
@@ -840,7 +851,7 @@ class _WorkList extends StatelessWidget {
           final item = items[index];
           return ListTile(
             key: ValueKey<String>('unified-shelf-list-item-${item.workId}'),
-            onTap: () => onTapItem(item.workId),
+            onTap: () async => onTapItem(item.workId),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             tileColor: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(64),
             leading: ClipRRect(

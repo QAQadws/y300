@@ -258,8 +258,48 @@ class ComicDetailAdapter implements DetailModuleAdapter {
     if (episodes.isEmpty) {
       return null;
     }
-    final target = preferContinue ? episodes.last : episodes.first;
-    return ReaderRouteTarget(workId: workId, episodeId: target.episodeId);
+    final targetEpisodeId = preferContinue
+        ? await _resolveContinueEpisodeId(
+            workId: workId,
+            episodes: episodes,
+          )
+        : episodes.first.episodeId;
+    return ReaderRouteTarget(workId: workId, episodeId: targetEpisodeId);
+  }
+
+  Future<String> _resolveContinueEpisodeId({
+    required String workId,
+    required List<ComicEpisodeItem> episodes,
+  }) async {
+    final validEpisodeIds = episodes.map((episode) => episode.episodeId).toSet();
+
+    final progress = await _repository.getLastReadProgress(comicId: workId);
+    if (progress != null && validEpisodeIds.contains(progress.episodeId)) {
+      return progress.episodeId;
+    }
+
+    final workState = await _stateRepository.getWorkState(
+      moduleKey: LibraryModuleKey.comic,
+      workId: workId,
+    );
+    final stateEpisodeId = workState?.lastReadEpisodeId;
+    if (stateEpisodeId != null && validEpisodeIds.contains(stateEpisodeId)) {
+      return stateEpisodeId;
+    }
+
+    // 没有历史进度时，优先从第一章未读章节开始。无状态章节按未读处理，
+    // 与详情列表和书架角标的 Phase 2 语义保持一致。
+    for (final episode in episodes) {
+      final state = await _stateRepository.getEpisodeState(
+        moduleKey: LibraryModuleKey.comic,
+        episodeId: episode.episodeId,
+      );
+      if (!(state?.isRead ?? false)) {
+        return episode.episodeId;
+      }
+    }
+
+    return episodes.first.episodeId;
   }
 
   @override
