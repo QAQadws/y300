@@ -202,6 +202,8 @@ class _ComicDownloadRepositoryFake implements ComicRepository, ComicEpisodeImage
   @override
   Future<String> createCategory({required String name}) async => 'c1';
   @override
+  Future<void> clearEpisodeImageCache({required String episodeId}) async {}
+  @override
   Future<void> deleteCategory({required String categoryId}) async {}
   @override
   Future<List<ComicShelfCategory>> getCategories() async => const <ComicShelfCategory>[];

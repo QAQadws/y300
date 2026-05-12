@@ -10,6 +10,7 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/comic_detail_page.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
@@ -26,6 +27,8 @@ void main() {
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
           comicEpisodeRefreshServiceProvider.overrideWithValue(_FakeComicEpisodeRefreshService()),
           comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
+          comicReaderServiceProvider.overrideWith((ref) async => _FakeComicReaderService()),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
           libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
         ],
@@ -44,6 +47,110 @@ void main() {
     expect(find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')), findsOneWidget);
     expect(find.byIcon(Icons.file_download), findsOneWidget);
   });
+
+  testWidgets('ComicDetailPage can open reader from chapter row', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+          comicEpisodeRefreshServiceProvider.overrideWithValue(_FakeComicEpisodeRefreshService()),
+          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
+          comicReaderServiceProvider.overrideWith((ref) async => _FakeComicReaderService()),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+        ],
+        child: const MaterialApp(home: ComicDetailPage(comicId: 'comic:1')),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')));
+    // Reader content can keep an animated image placeholder alive while the
+    // network image is unresolved in widget tests, so wait only for the route
+    // transition frames instead of waiting for the whole tree to settle.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byKey(const Key('comic-reader-image-list')), findsOneWidget);
+  });
+}
+
+class _FakeComicReaderService implements ComicReaderService {
+  @override
+  Future<ComicImageCacheResult> cacheImage({
+    required String imageUrl,
+    String? cacheKey,
+    ImageCacheOwnerType? ownerType,
+    String? ownerId,
+    ImageCacheRole role = ImageCacheRole.comicPage,
+    String? episodeId,
+    int? imageIndex,
+    bool protected = false,
+  }) async {
+    return ComicImageCacheResult(success: true, localPath: '/cache/mock.jpg', cacheKey: cacheKey);
+  }
+
+  @override
+  Future<List<String>> fetchEpisodeImagesByTid(String tid) async => const <String>[];
+
+  @override
+  Future<void> prefetchImages({required List<String> imageUrls}) async {}
+}
+
+class _NoopReadingStateWriter implements ComicReadingStateWriter {
+  @override
+  Future<bool> isEpisodeRead({
+    required String comicId,
+    required String episodeId,
+  }) async {
+    return false;
+  }
+
+  @override
+  Future<bool> isEpisodeBookmarked({
+    required String comicId,
+    required String episodeId,
+  }) async {
+    return false;
+  }
+
+  @override
+  Future<void> markEpisodeCompleted({
+    required String comicId,
+    required String episodeId,
+    required int imageIndex,
+    required double scrollOffset,
+    required DateTime completedAt,
+  }) async {}
+
+  @override
+  Future<void> saveProgress({
+    required String comicId,
+    required String episodeId,
+    required int imageIndex,
+    required double scrollOffset,
+  }) async {}
+
+  @override
+  Future<void> setEpisodeBookmarked({
+    required String comicId,
+    required String episodeId,
+    required bool isBookmarked,
+  }) async {}
+
+  @override
+  Future<void> setEpisodeRead({
+    required String comicId,
+    required String episodeId,
+    required bool isRead,
+    DateTime? readAt,
+  }) async {}
 }
 
 class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
@@ -126,6 +233,9 @@ class _FakeComicRepository implements ComicRepository {
   Future<String> createCategory({required String name}) async => 'created';
 
   @override
+  Future<void> clearEpisodeImageCache({required String episodeId}) async {}
+
+  @override
   Future<void> deleteCategory({required String categoryId}) async {}
 
   @override
@@ -168,7 +278,16 @@ class _FakeComicRepository implements ComicRepository {
       const ComicShelfDisplaySettings(gridColumnCount: 3);
 
   @override
-  Future<List<ComicEpisodeImageItem>> getEpisodeImages({required String episodeId}) async => const [];
+  Future<List<ComicEpisodeImageItem>> getEpisodeImages({required String episodeId}) async {
+    return const <ComicEpisodeImageItem>[
+      ComicEpisodeImageItem(
+        episodeId: 'comic:1:e1',
+        imageUrl: 'https://img.test/e1-1.jpg',
+        imageIndex: 0,
+        cacheStatus: 'none',
+      ),
+    ];
+  }
 
   @override
   Future<ComicReadingProgress?> getLastReadProgress({required String comicId}) async => null;

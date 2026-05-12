@@ -78,6 +78,10 @@ abstract class ComicRepository {
     String? cacheLocalPath,
   });
 
+  Future<void> clearEpisodeImageCache({
+    required String episodeId,
+  });
+
   Future<void> updateLastReadProgress({
     required String comicId,
     required String episodeId,

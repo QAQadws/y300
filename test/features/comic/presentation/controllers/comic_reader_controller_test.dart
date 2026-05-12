@@ -1,7 +1,9 @@
 ﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/comic_download_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
@@ -39,6 +41,7 @@ void main() {
         comicReadingStateWriterProvider.overrideWithValue(writer),
         comicReaderServiceProvider.overrideWith((ref) async => service),
         comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
       ],
     );
     addTearDown(container.dispose);
@@ -68,6 +71,7 @@ void main() {
         comicReadingStateWriterProvider.overrideWithValue(writer),
         comicReaderServiceProvider.overrideWith((ref) async => service),
         comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
       ],
     );
     addTearDown(container.dispose);
@@ -104,6 +108,7 @@ void main() {
         comicReadingStateWriterProvider.overrideWithValue(writer),
         comicReaderServiceProvider.overrideWith((ref) async => service),
         comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
       ],
     );
     addTearDown(container.dispose);
@@ -141,6 +146,7 @@ void main() {
         comicReadingStateWriterProvider.overrideWithValue(writer),
         comicReaderServiceProvider.overrideWith((ref) async => service),
         comicDownloadServiceProvider.overrideWithValue(downloadService),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
       ],
     );
     addTearDown(container.dispose);
@@ -163,6 +169,7 @@ void main() {
         comicReadingStateWriterProvider.overrideWithValue(writer),
         comicReaderServiceProvider.overrideWith((ref) async => service),
         comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
       ],
     );
     addTearDown(container.dispose);
@@ -191,6 +198,7 @@ void main() {
         comicReadingStateWriterProvider.overrideWithValue(writer),
         comicReaderServiceProvider.overrideWith((ref) async => service),
         comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
       ],
     );
     addTearDown(container.dispose);
@@ -202,6 +210,106 @@ void main() {
     await container.read(comicReaderControllerProvider(args).notifier).onImageVisible(0);
 
     expect(writer.completedEpisodeIds, <String>['yamibo:100:101']);
+  });
+
+  test('toggleBookmark persists bookmark state', () async {
+    final repository = _ReaderRepoForControllerTest();
+    final service = _ReaderServiceSpy();
+    final writer = _ReadingStateWriterSpy(repository);
+    final container = ProviderContainer(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(repository),
+        comicReadingStateWriterProvider.overrideWithValue(writer),
+        comicReaderServiceProvider.overrideWith((ref) async => service),
+        comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final args = const ComicReaderArgs(comicId: 'yamibo:100', episodeId: 'yamibo:100:101');
+    await container.read(comicReaderControllerProvider(args).future);
+
+    await container.read(comicReaderControllerProvider(args).notifier).toggleBookmark();
+
+    final state = container.read(comicReaderControllerProvider(args)).value!;
+    expect(state.isBookmarked, isTrue);
+    expect(writer.bookmarkedEpisodeIds, contains('yamibo:100:101'));
+  });
+
+  test('setCurrentEpisodeRead updates current chapter state', () async {
+    final repository = _ReaderRepoForControllerTest();
+    final service = _ReaderServiceSpy();
+    final writer = _ReadingStateWriterSpy(repository);
+    final container = ProviderContainer(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(repository),
+        comicReadingStateWriterProvider.overrideWithValue(writer),
+        comicReaderServiceProvider.overrideWith((ref) async => service),
+        comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final args = const ComicReaderArgs(comicId: 'yamibo:100', episodeId: 'yamibo:100:101');
+    await container.read(comicReaderControllerProvider(args).future);
+
+    await container.read(comicReaderControllerProvider(args).notifier).setCurrentEpisodeRead(true);
+
+    final state = container.read(comicReaderControllerProvider(args)).value!;
+    expect(state.isCurrentEpisodeRead, isTrue);
+    expect(state.chapters.first.isRead, isTrue);
+  });
+
+  test('clearCurrentEpisodeCache resets image cache summary', () async {
+    final repository = _ReaderRepoForControllerTest(cachedFirstImage: true);
+    final service = _ReaderServiceSpy();
+    final writer = _ReadingStateWriterSpy(repository);
+    final container = ProviderContainer(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(repository),
+        comicReadingStateWriterProvider.overrideWithValue(writer),
+        comicReaderServiceProvider.overrideWith((ref) async => service),
+        comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final args = const ComicReaderArgs(comicId: 'yamibo:100', episodeId: 'yamibo:100:101');
+    await container.read(comicReaderControllerProvider(args).future);
+
+    await container.read(comicReaderControllerProvider(args).notifier).clearCurrentEpisodeCache();
+
+    final state = container.read(comicReaderControllerProvider(args)).value!;
+    expect(state.cacheSummary.cachedCount, 0);
+    expect(repository.clearedEpisodeIds, <String>['yamibo:100:101']);
+  });
+
+  test('setCurrentImageAsCover copies current page into protected cover cache', () async {
+    final repository = _ReaderRepoForControllerTest();
+    final service = _ReaderServiceSpy();
+    final writer = _ReadingStateWriterSpy(repository);
+    final imageCache = _FakeImageCacheService();
+    final container = ProviderContainer(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(repository),
+        comicReadingStateWriterProvider.overrideWithValue(writer),
+        comicReaderServiceProvider.overrideWith((ref) async => service),
+        comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+        imageCacheServiceProvider.overrideWithValue(imageCache),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final args = const ComicReaderArgs(comicId: 'yamibo:100', episodeId: 'yamibo:100:101');
+    await container.read(comicReaderControllerProvider(args).future);
+
+    await container.read(comicReaderControllerProvider(args).notifier).setCurrentImageAsCover();
+
+    expect(imageCache.lastLocalCopyRequest?.role, ImageCacheRole.customCover);
+    expect(repository.lastCustomCoverLocalPath, '/protected/cover.jpg');
   });
 }
 
@@ -267,6 +375,43 @@ class _ReaderServiceSpy implements ComicReaderService {
   }
 }
 
+class _FakeImageCacheService implements ImageCacheService {
+  ImageCacheLocalCopyRequest? lastLocalCopyRequest;
+
+  @override
+  Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
+
+  @override
+  Future<void> clearUnprotected() async {}
+
+  @override
+  Future<CachedImageResult> copyProtectedLocalFile(
+    ImageCacheLocalCopyRequest request,
+  ) async {
+    lastLocalCopyRequest = request;
+    return CachedImageResult(
+      success: true,
+      cacheKey: request.cacheKey,
+      localPath: '/protected/cover.jpg',
+    );
+  }
+
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    return CachedImageResult(
+      success: true,
+      cacheKey: request.cacheKey,
+      localPath: '/cache/mock.jpg',
+    );
+  }
+
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async => null;
+
+  @override
+  Future<void> pruneToLimit({required int maxBytes}) async {}
+}
+
 class _ProgressWrite {
   const _ProgressWrite({
     required this.imageIndex,
@@ -297,6 +442,7 @@ class _ReadingStateWriterSpy implements ComicReadingStateWriter {
   final _ReaderRepoForControllerTest repository;
   final List<String> completedEpisodeIds = <String>[];
   final Set<String> initiallyReadEpisodeIds = <String>{};
+  final Set<String> bookmarkedEpisodeIds = <String>{};
 
   @override
   Future<bool> isEpisodeRead({
@@ -304,6 +450,14 @@ class _ReadingStateWriterSpy implements ComicReadingStateWriter {
     required String episodeId,
   }) async {
     return initiallyReadEpisodeIds.contains(episodeId);
+  }
+
+  @override
+  Future<bool> isEpisodeBookmarked({
+    required String comicId,
+    required String episodeId,
+  }) async {
+    return bookmarkedEpisodeIds.contains(episodeId);
   }
 
   @override
@@ -337,15 +491,48 @@ class _ReadingStateWriterSpy implements ComicReadingStateWriter {
       scrollOffset: scrollOffset,
     );
   }
+
+  @override
+  Future<void> setEpisodeRead({
+    required String comicId,
+    required String episodeId,
+    required bool isRead,
+    DateTime? readAt,
+  }) async {
+    if (isRead) {
+      initiallyReadEpisodeIds.add(episodeId);
+    } else {
+      initiallyReadEpisodeIds.remove(episodeId);
+    }
+  }
+
+  @override
+  Future<void> setEpisodeBookmarked({
+    required String comicId,
+    required String episodeId,
+    required bool isBookmarked,
+  }) async {
+    if (isBookmarked) {
+      bookmarkedEpisodeIds.add(episodeId);
+    } else {
+      bookmarkedEpisodeIds.remove(episodeId);
+    }
+  }
 }
 
 /// Lightweight fake to document expected episode ordering in controller tests.
-class _ReaderRepoForControllerTest implements ComicRepository {
-  _ReaderRepoForControllerTest({this.singlePage = false});
+class _ReaderRepoForControllerTest implements ComicRepository, ComicCoverCacheWriter {
+  _ReaderRepoForControllerTest({
+    this.singlePage = false,
+    this.cachedFirstImage = false,
+  });
 
   final bool singlePage;
+  final bool cachedFirstImage;
   final List<_ProgressWrite> progressWrites = <_ProgressWrite>[];
   final List<_CacheStatusWrite> cacheStatusWrites = <_CacheStatusWrite>[];
+  final List<String> clearedEpisodeIds = <String>[];
+  String? lastCustomCoverLocalPath;
 
   @override
   Future<void> addToShelf({
@@ -365,10 +552,37 @@ class _ReaderRepoForControllerTest implements ComicRepository {
   Future<String> createCategory({required String name}) async => 'mock';
 
   @override
+  Future<void> clearEpisodeImageCache({required String episodeId}) async {
+    clearedEpisodeIds.add(episodeId);
+  }
+
+  @override
+  Future<void> updateCoverCache({
+    required String comicId,
+    String? coverImageUrl,
+    String? coverLocalPath,
+    String? customCoverLocalPath,
+  }) async {
+    lastCustomCoverLocalPath = customCoverLocalPath;
+  }
+
+  @override
   Future<void> deleteCategory({required String categoryId}) async {}
 
   @override
-  Future<ComicDetail?> getComicDetail({required String comicId}) async => null;
+  Future<ComicDetail?> getComicDetail({required String comicId}) async {
+    return ComicDetail(
+      comicId: comicId,
+      sourceTid: '100',
+      sourceFid: '30',
+      title: '测试漫画',
+      author: null,
+      translationGroup: null,
+      coverImageUrl: null,
+      updatedAt: DateTime(2026, 1, 1),
+      episodeCount: 3,
+    );
+  }
 
   @override
   Future<List<ComicEpisodeItem>> getComicEpisodes({required String comicId, bool descending = true}) async {
@@ -417,32 +631,33 @@ class _ReaderRepoForControllerTest implements ComicRepository {
         ),
       ];
     }
-    return const <ComicEpisodeImageItem>[
+    return <ComicEpisodeImageItem>[
       ComicEpisodeImageItem(
         episodeId: 'yamibo:100:101',
         imageUrl: 'https://img.test/101-1.jpg',
         imageIndex: 0,
-        cacheStatus: 'none',
+        cacheStatus: cachedFirstImage ? 'done' : 'none',
+        cacheLocalPath: cachedFirstImage ? '/cache/101-1.jpg' : null,
       ),
-      ComicEpisodeImageItem(
+      const ComicEpisodeImageItem(
         episodeId: 'yamibo:100:101',
         imageUrl: 'https://img.test/101-2.jpg',
         imageIndex: 1,
         cacheStatus: 'none',
       ),
-      ComicEpisodeImageItem(
+      const ComicEpisodeImageItem(
         episodeId: 'yamibo:100:101',
         imageUrl: 'https://img.test/101-3.jpg',
         imageIndex: 2,
         cacheStatus: 'none',
       ),
-      ComicEpisodeImageItem(
+      const ComicEpisodeImageItem(
         episodeId: 'yamibo:100:101',
         imageUrl: 'https://img.test/101-4.jpg',
         imageIndex: 3,
         cacheStatus: 'none',
       ),
-      ComicEpisodeImageItem(
+      const ComicEpisodeImageItem(
         episodeId: 'yamibo:100:101',
         imageUrl: 'https://img.test/101-5.jpg',
         imageIndex: 4,

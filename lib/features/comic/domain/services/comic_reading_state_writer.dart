@@ -13,11 +13,29 @@ abstract class ComicReadingStateWriter {
     required String episodeId,
   });
 
+  Future<bool> isEpisodeBookmarked({
+    required String comicId,
+    required String episodeId,
+  });
+
   Future<void> saveProgress({
     required String comicId,
     required String episodeId,
     required int imageIndex,
     required double scrollOffset,
+  });
+
+  Future<void> setEpisodeRead({
+    required String comicId,
+    required String episodeId,
+    required bool isRead,
+    DateTime? readAt,
+  });
+
+  Future<void> setEpisodeBookmarked({
+    required String comicId,
+    required String episodeId,
+    required bool isBookmarked,
   });
 
   Future<void> markEpisodeCompleted({
@@ -52,6 +70,18 @@ class DefaultComicReadingStateWriter implements ComicReadingStateWriter {
   }
 
   @override
+  Future<bool> isEpisodeBookmarked({
+    required String comicId,
+    required String episodeId,
+  }) async {
+    final state = await _libraryStateRepository.getEpisodeState(
+      moduleKey: LibraryModuleKey.comic,
+      episodeId: episodeId,
+    );
+    return state?.isBookmarked ?? false;
+  }
+
+  @override
   Future<void> saveProgress({
     required String comicId,
     required String episodeId,
@@ -63,6 +93,46 @@ class DefaultComicReadingStateWriter implements ComicReadingStateWriter {
       episodeId: episodeId,
       imageIndex: imageIndex,
       scrollOffset: scrollOffset,
+    );
+  }
+
+  @override
+  Future<void> setEpisodeRead({
+    required String comicId,
+    required String episodeId,
+    required bool isRead,
+    DateTime? readAt,
+  }) async {
+    final effectiveReadAt = isRead ? (readAt ?? DateTime.now()) : null;
+    await _libraryStateRepository.upsertEpisodeState(
+      moduleKey: LibraryModuleKey.comic,
+      episodeId: episodeId,
+      workId: comicId,
+      isRead: isRead,
+      readAt: effectiveReadAt,
+    );
+    if (!isRead) {
+      return;
+    }
+    await _libraryStateRepository.upsertWorkState(
+      moduleKey: LibraryModuleKey.comic,
+      workId: comicId,
+      lastReadEpisodeId: episodeId,
+      lastReadAt: effectiveReadAt,
+    );
+  }
+
+  @override
+  Future<void> setEpisodeBookmarked({
+    required String comicId,
+    required String episodeId,
+    required bool isBookmarked,
+  }) {
+    return _libraryStateRepository.upsertEpisodeState(
+      moduleKey: LibraryModuleKey.comic,
+      episodeId: episodeId,
+      workId: comicId,
+      isBookmarked: isBookmarked,
     );
   }
 
@@ -80,18 +150,11 @@ class DefaultComicReadingStateWriter implements ComicReadingStateWriter {
       imageIndex: imageIndex,
       scrollOffset: scrollOffset,
     );
-    await _libraryStateRepository.upsertEpisodeState(
-      moduleKey: LibraryModuleKey.comic,
+    await setEpisodeRead(
+      comicId: comicId,
       episodeId: episodeId,
-      workId: comicId,
       isRead: true,
       readAt: completedAt,
-    );
-    await _libraryStateRepository.upsertWorkState(
-      moduleKey: LibraryModuleKey.comic,
-      workId: comicId,
-      lastReadEpisodeId: episodeId,
-      lastReadAt: completedAt,
     );
   }
 }

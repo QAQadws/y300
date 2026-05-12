@@ -488,7 +488,6 @@ class LocalComicRepository
         FROM ${ComicLocalDb.episodesTable} e
         LEFT JOIN ${ComicLocalDb.libraryEpisodeStateTable} s
           ON s.content_type = 'comic'
-         AND s.work_id = e.comic_id
          AND s.episode_id = e.episode_id
         GROUP BY e.comic_id
       ),
@@ -576,7 +575,6 @@ class LocalComicRepository
       FROM ${ComicLocalDb.episodesTable} e
       LEFT JOIN ${ComicLocalDb.libraryEpisodeStateTable} s
         ON s.content_type = 'comic'
-       AND s.work_id = e.comic_id
        AND s.episode_id = e.episode_id
       WHERE e.comic_id = ?
     ''', <Object>[comicId]);
@@ -751,6 +749,26 @@ class LocalComicRepository
       },
       where: 'episode_id = ? AND image_url = ?',
       whereArgs: <Object>[episodeId, imageUrl],
+    );
+  }
+
+  @override
+  Future<void> clearEpisodeImageCache({
+    required String episodeId,
+  }) async {
+    final db = await _dbFuture;
+    await db.update(
+      ComicLocalDb.episodeImagesTable,
+      <String, Object?>{
+        'cache_status': 'none',
+        'cache_local_path': null,
+        'local_path': null,
+        'bytes': 0,
+        'last_accessed_at': null,
+        'protected': 0,
+      },
+      where: 'episode_id = ? AND protected = 0',
+      whereArgs: <Object>[episodeId],
     );
   }
 

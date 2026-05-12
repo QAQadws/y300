@@ -814,6 +814,7 @@ class _HeroInfoSection extends StatelessWidget {
           _DetailHeaderBackground(
             title: title,
             coverImageUrl: header.coverImageUrl,
+            customCoverImageUrl: header.customCoverImageUrl,
             coverLocalPath: header.coverLocalPath,
             customCoverLocalPath: header.customCoverLocalPath,
             hasCover: _hasCover(header),
@@ -825,7 +826,7 @@ class _HeroInfoSection extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 _CoverImage(
-                  url: header.coverImageUrl,
+                  url: _preferredRemoteUrl(header),
                   localPath: _preferredLocalPath(header),
                   moduleKey: moduleKey,
                   imageHeaderBuilder: imageHeaderBuilder,
@@ -870,6 +871,7 @@ class _HeroInfoSection extends StatelessWidget {
 
   bool _hasCover(LibraryDetailHeader header) {
     return _preferredLocalPath(header) != null ||
+        header.customCoverImageUrl?.trim().isNotEmpty == true ||
         header.coverImageUrl?.trim().isNotEmpty == true;
   }
 
@@ -879,6 +881,15 @@ class _HeroInfoSection extends StatelessWidget {
       return custom;
     }
     final cover = header.coverLocalPath?.trim();
+    return cover == null || cover.isEmpty ? null : cover;
+  }
+
+  String? _preferredRemoteUrl(LibraryDetailHeader header) {
+    final custom = header.customCoverImageUrl?.trim();
+    if (custom != null && custom.isNotEmpty) {
+      return custom;
+    }
+    final cover = header.coverImageUrl?.trim();
     return cover == null || cover.isEmpty ? null : cover;
   }
 }
@@ -957,6 +968,7 @@ class _DetailHeaderBackground extends StatelessWidget {
   const _DetailHeaderBackground({
     required this.title,
     required this.coverImageUrl,
+    required this.customCoverImageUrl,
     required this.coverLocalPath,
     required this.customCoverLocalPath,
     required this.hasCover,
@@ -968,6 +980,7 @@ class _DetailHeaderBackground extends StatelessWidget {
 
   final String title;
   final String? coverImageUrl;
+  final String? customCoverImageUrl;
   final String? coverLocalPath;
   final String? customCoverLocalPath;
   final bool hasCover;
@@ -992,7 +1005,7 @@ class _DetailHeaderBackground extends StatelessWidget {
             imageFilter: ImageFilter.blur(sigmaX: _blurSigma, sigmaY: _blurSigma),
             child: LibraryCachedImage(
               localPath: _preferredLocalPath,
-              imageUrl: coverImageUrl,
+              imageUrl: _preferredRemoteUrl,
               fit: BoxFit.cover,
               placeholder: Container(color: Theme.of(context).colorScheme.surfaceContainerHighest),
               headerBuilder: imageHeaderBuilder,
@@ -1024,6 +1037,15 @@ class _DetailHeaderBackground extends StatelessWidget {
       return custom;
     }
     final cover = coverLocalPath?.trim();
+    return cover == null || cover.isEmpty ? null : cover;
+  }
+
+  String? get _preferredRemoteUrl {
+    final custom = customCoverImageUrl?.trim();
+    if (custom != null && custom.isNotEmpty) {
+      return custom;
+    }
+    final cover = coverImageUrl?.trim();
     return cover == null || cover.isEmpty ? null : cover;
   }
 }

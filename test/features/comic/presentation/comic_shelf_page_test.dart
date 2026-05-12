@@ -51,6 +51,9 @@ class _FakeComicRepository implements ComicRepository {
   Future<String> createCategory({required String name}) async => 'created';
 
   @override
+  Future<void> clearEpisodeImageCache({required String episodeId}) async {}
+
+  @override
   Future<void> deleteCategory({required String categoryId}) async {}
 
   @override

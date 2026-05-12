@@ -654,5 +654,46 @@ void main() {
       expect(episodes.length, 1);
       expect(episodes.first.episodeTitle, '第1.1话');
     });
+
+    test('clearEpisodeImageCache resets unprotected cache metadata', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:clear-cache',
+        tid: '800',
+        fid: '30',
+        title: '清理缓存漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>['https://img.test/clear-cover.jpg'],
+          episodeLinks: <ComicEpisodeLink>[
+            ComicEpisodeLink(
+              url: 'thread-801-1-1.html',
+              rawText: '第1话',
+              episodeTitle: '第1话',
+            ),
+          ],
+          plainTextSummary: '摘要',
+        ),
+      );
+      final episodes = await repository.getComicEpisodes(
+        comicId: 'yamibo:clear-cache',
+        descending: false,
+      );
+      final episodeId = episodes.first.episodeId;
+      await repository.saveEpisodeImages(
+        episodeId: episodeId,
+        imageUrls: const <String>['https://img.test/page-1.jpg'],
+      );
+      await repository.updateEpisodeImageCacheStatus(
+        episodeId: episodeId,
+        imageUrl: 'https://img.test/page-1.jpg',
+        cacheStatus: 'done',
+        cacheLocalPath: '/cache/page-1.jpg',
+      );
+
+      await repository.clearEpisodeImageCache(episodeId: episodeId);
+
+      final images = await repository.getEpisodeImages(episodeId: episodeId);
+      expect(images.single.cacheStatus, 'none');
+      expect(images.single.effectiveLocalPath, isNull);
+    });
   });
 }

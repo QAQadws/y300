@@ -1932,6 +1932,63 @@
 
 ---
 
+## 漫画阅读器 Phase 3 Review 清单（2026-05-12）
+### 一、上下菜单
+- [ ] 顶栏展示作品标题和章节标题，长标题省略不溢出。
+- [ ] 点击顶栏标题返回详情页并触发 reader 退出进度保存。
+- [ ] 顶栏书签按钮调用 `ComicReadingStateWriter.setEpisodeBookmarked()`。
+- [ ] 顶栏打开原帖按钮使用当前章节 `sourceTid` 进入 `ThreadDetailPage`。
+- [ ] 更多菜单包含标记已读/未读、设当前页为封面、缓存本章、缓存未读、清除本章缓存、重试失败图片。
+
+### 二、底部面板
+- [ ] 第一行保留上一章、当前页、Slider、总页、下一章。
+- [ ] 阅读模式改为图标入口 + bottom sheet，不再使用占高的大号分段控件作为主面板。
+- [ ] 章节列表入口可打开章节 sheet，当前章节有选中态。
+- [ ] 显示设置入口可打开设置 sheet。
+- [ ] 缓存入口可触发当前章节缓存。
+
+### 三、页码浮层与交互
+- [ ] 菜单隐藏且偏好开启时显示 `current / total` 页码浮层。
+- [ ] 翻页/滚动时页码浮层短暂高亮。
+- [ ] 内容滚动或翻页自动隐藏菜单。
+- [ ] Slider 拖动/提交期间不触发自动隐藏。
+- [ ] 图片缩放状态下 tap zone 不误触菜单或翻页。
+
+### 四、当前页设为封面
+- [ ] 操作入口在阅读器顶部更多菜单。
+- [ ] 使用当前 `currentImageIndex` 对应图片，不使用详情封面 URL 或章节首图替代。
+- [ ] 当前页已有本地路径时直接复制该文件到受保护封面缓存。
+- [ ] 当前页只有远程 URL 时先通过 reader cache 缓存，再复制受保护封面。
+- [ ] 写入 `customCoverLocalPath` 后，详情页和书架优先展示该本地文件。
+- [ ] 清除本章缓存不会清理受保护自定义封面。
+
+### 五、设置偏好
+- [ ] `ReaderPreferences` 持久化阅读模式、页面适配、背景色、页间距、页码浮层、裁边开关。
+- [ ] 裁边当前仅作为偏好入口保留，未与图片处理逻辑耦合。
+- [ ] 页面适配和页间距能影响 reader 图片布局。
+
+### 六、架构边界
+- [ ] Reader 页面只编排 UI 与导航，不直接写统一状态表。
+- [ ] 书签/已读/完成状态通过 `ComicReadingStateWriter` 统一写入。
+- [ ] 封面文件复制通过 `ImageCacheService.copyProtectedLocalFile()`。
+- [ ] 章节图片缓存元数据清理通过 `ComicRepository.clearEpisodeImageCache()`。
+
+### 七、测试覆盖（仅编写，未执行）
+- [ ] `comic_reader_controller_test.dart` 覆盖书签、已读、清缓存、设封面。
+- [ ] `comic_reader_page_test.dart` 覆盖菜单/sheet/设封面入口。
+- [ ] `reader_top_bar_test.dart` 覆盖顶栏双行标题与更多菜单。
+- [ ] `reader_bottom_panel_test.dart` 覆盖底部工具入口。
+- [ ] `reader_page_indicator_overlay_test.dart` 覆盖页码浮层。
+- [ ] `local_comic_repository_test.dart` 覆盖章节缓存元数据清理。
+
+### 八、待你本地回归
+1. `flutter test`
+2. `flutter analyze`
+
+说明：`dart format` 按本轮要求未执行，也不作为本轮回归项。
+
+---
+
 ## Shelf 性能优化 Milestone A Review 记录（2026-05-10）
 ### Review 范围
 - `lib/features/library_shared/domain/services/shelf_cover_warmup_service.dart`

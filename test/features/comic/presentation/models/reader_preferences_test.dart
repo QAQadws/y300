@@ -6,7 +6,11 @@ void main() {
     final value = ReaderPreferences.defaults();
 
     expect(value.readerMode, ReaderModePreference.vertical);
+    expect(value.pageFit, ReaderPageFitPreference.fitWidth);
+    expect(value.background, ReaderBackgroundPreference.followTheme);
+    expect(value.pageSpacing, 8);
     expect(value.showPageIndicator, isTrue);
+    expect(value.cropBorders, isFalse);
     expect(value.fullscreenOnOpen, isFalse);
     expect(value.cacheDirectoryPath, isNull);
   });
@@ -21,4 +25,3 @@ void main() {
     expect(cleared.cacheDirectoryPath, isNull);
   });
 }
-

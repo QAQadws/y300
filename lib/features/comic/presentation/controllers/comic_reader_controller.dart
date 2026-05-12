@@ -1,8 +1,10 @@
 ﻿import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/comic_download_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
@@ -62,70 +64,144 @@ class ComicReaderImageState {
     return legacy == null || legacy.isEmpty ? null : legacy;
   }
 
+  bool get hasCachedLocalFile {
+    return cacheStatus == 'done' && effectiveLocalPath != null;
+  }
+
   ComicReaderImageState copyWith({
     String? cacheStatus,
     String? cacheKey,
     String? localPath,
     String? cacheLocalPath,
     bool? failed,
+    bool clearLocalPath = false,
+    bool clearCacheLocalPath = false,
   }) {
     return ComicReaderImageState(
       imageUrl: imageUrl,
       imageIndex: imageIndex,
       cacheStatus: cacheStatus ?? this.cacheStatus,
       cacheKey: cacheKey ?? this.cacheKey,
-      localPath: localPath ?? this.localPath,
-      cacheLocalPath: cacheLocalPath ?? this.cacheLocalPath,
+      localPath: clearLocalPath ? null : (localPath ?? this.localPath),
+      cacheLocalPath: clearCacheLocalPath ? null : (cacheLocalPath ?? this.cacheLocalPath),
       failed: failed ?? this.failed,
     );
   }
+}
+
+class ComicReaderCacheSummary {
+  const ComicReaderCacheSummary({
+    required this.totalCount,
+    required this.doneCount,
+    required this.downloadedCount,
+    required this.failedCount,
+  });
+
+  final int totalCount;
+  final int doneCount;
+  final int downloadedCount;
+  final int failedCount;
+
+  int get cachedCount => doneCount + downloadedCount;
+}
+
+class ComicReaderChapterEntry {
+  const ComicReaderChapterEntry({
+    required this.episodeId,
+    required this.title,
+    required this.orderIndex,
+    required this.sourceTid,
+    required this.isCurrent,
+    required this.isRead,
+  });
+
+  final String episodeId;
+  final String title;
+  final int orderIndex;
+  final String sourceTid;
+  final bool isCurrent;
+  final bool isRead;
 }
 
 class ComicReaderViewState {
   const ComicReaderViewState({
     required this.comicId,
     required this.episodeId,
+    required this.comicTitle,
     required this.episodeTitle,
+    required this.sourceTid,
     required this.images,
+    required this.chapters,
     required this.currentImageIndex,
     required this.lastScrollOffset,
     required this.hasPreviousEpisode,
     required this.hasNextEpisode,
     this.isCurrentEpisodeRead = false,
+    this.isBookmarked = false,
+    this.failedImageCount = 0,
+    this.cacheSummary = const ComicReaderCacheSummary(
+      totalCount: 0,
+      doneCount: 0,
+      downloadedCount: 0,
+      failedCount: 0,
+    ),
     this.hint,
   });
 
   final String comicId;
   final String episodeId;
+  final String comicTitle;
   final String episodeTitle;
+  final String sourceTid;
   final List<ComicReaderImageState> images;
+  final List<ComicReaderChapterEntry> chapters;
   final int currentImageIndex;
   final double lastScrollOffset;
   final bool hasPreviousEpisode;
   final bool hasNextEpisode;
   final bool isCurrentEpisodeRead;
+  final bool isBookmarked;
+  final int failedImageCount;
+  final ComicReaderCacheSummary cacheSummary;
   final String? hint;
+
+  ComicReaderImageState? get currentImage {
+    if (images.isEmpty) {
+      return null;
+    }
+    return images[currentImageIndex.clamp(0, images.length - 1).toInt()];
+  }
 
   ComicReaderViewState copyWith({
     List<ComicReaderImageState>? images,
+    List<ComicReaderChapterEntry>? chapters,
     int? currentImageIndex,
     double? lastScrollOffset,
     bool? hasPreviousEpisode,
     bool? hasNextEpisode,
     bool? isCurrentEpisodeRead,
+    bool? isBookmarked,
+    int? failedImageCount,
+    ComicReaderCacheSummary? cacheSummary,
     String? hint,
     bool clearHint = false,
   }) {
     return ComicReaderViewState(
       comicId: comicId,
       episodeId: episodeId,
+      comicTitle: comicTitle,
       episodeTitle: episodeTitle,
+      sourceTid: sourceTid,
       images: images ?? this.images,
+      chapters: chapters ?? this.chapters,
       currentImageIndex: currentImageIndex ?? this.currentImageIndex,
       lastScrollOffset: lastScrollOffset ?? this.lastScrollOffset,
       hasPreviousEpisode: hasPreviousEpisode ?? this.hasPreviousEpisode,
       hasNextEpisode: hasNextEpisode ?? this.hasNextEpisode,
       isCurrentEpisodeRead: isCurrentEpisodeRead ?? this.isCurrentEpisodeRead,
+      isBookmarked: isBookmarked ?? this.isBookmarked,
+      failedImageCount: failedImageCount ?? this.failedImageCount,
+      cacheSummary: cacheSummary ?? this.cacheSummary,
       hint: clearHint ? null : (hint ?? this.hint),
     );
   }
@@ -144,6 +220,8 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   late final ComicReaderService _readerService;
   late final ComicDownloadService _downloadService;
   late final ComicReadingStateWriter _readingStateWriter;
+  late final ImageCacheService _imageCacheService;
+  late final ComicCoverCacheWriter? _coverCacheWriter;
   late final ComicReaderEventLogger _eventLogger;
   Timer? _progressPersistDebounceTimer;
   int _persistVersion = 0;
@@ -160,6 +238,10 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     _readerService = await ref.read(comicReaderServiceProvider.future);
     _downloadService = ref.read(comicDownloadServiceProvider);
     _readingStateWriter = ref.read(comicReadingStateWriterProvider);
+    _imageCacheService = ref.read(imageCacheServiceProvider);
+    _coverCacheWriter = _repository is ComicCoverCacheWriter
+        ? _repository as ComicCoverCacheWriter
+        : ref.read(comicCoverCacheWriterProvider);
     _eventLogger = ref.read(comicReaderEventLoggerProvider);
     _openedAt = DateTime.now();
     ref.onDispose(() {
@@ -214,7 +296,14 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (!ref.mounted) {
       return;
     }
-    state = AsyncData(current.copyWith(images: refreshed, hint: done ? '图片重试成功' : '图片重试失败'));
+    state = AsyncData(
+      current.copyWith(
+        images: refreshed,
+        failedImageCount: _countFailedImages(refreshed),
+        cacheSummary: _buildCacheSummary(refreshed),
+        hint: done ? '图片重试成功' : '图片重试失败',
+      ),
+    );
   }
 
   Future<void> cacheCurrentEpisode() async {
@@ -248,12 +337,34 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         bytes: done ? cacheResult.bytes : null,
         lastAccessedAt: done ? DateTime.now() : null,
       );
+      final latest = state.value;
+      if (latest != null) {
+        final updatedImages = latest.images
+            .map(
+              (item) => item.imageUrl == image.imageUrl
+                  ? item.copyWith(
+                      cacheStatus: done ? 'done' : 'failed',
+                      localPath: done ? cacheResult.localPath : null,
+                      cacheLocalPath: done ? cacheResult.localPath : null,
+                      failed: !done,
+                    )
+                  : item,
+            )
+            .toList(growable: false);
+        state = AsyncData(
+          latest.copyWith(
+            images: updatedImages,
+            failedImageCount: _countFailedImages(updatedImages),
+            cacheSummary: _buildCacheSummary(updatedImages),
+          ),
+        );
+      }
     }
-    final nextState = await _loadState();
     if (!ref.mounted) {
       return;
     }
-    state = AsyncData(nextState.copyWith(hint: '本话缓存完成'));
+    final latest = state.value ?? current;
+    state = AsyncData(latest.copyWith(hint: '本话缓存完成'));
   }
 
   Future<void> cacheAllUnread() async {
@@ -294,6 +405,28 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
           bytes: done ? cacheResult.bytes : null,
           lastAccessedAt: done ? DateTime.now() : null,
         );
+        final latest = state.value;
+        if (latest != null && latest.episodeId == episode.episodeId) {
+          final updatedImages = latest.images
+              .map(
+                (item) => item.imageUrl == image.imageUrl
+                    ? item.copyWith(
+                        cacheStatus: done ? 'done' : 'failed',
+                        localPath: done ? cacheResult.localPath : null,
+                        cacheLocalPath: done ? cacheResult.localPath : null,
+                        failed: !done,
+                      )
+                    : item,
+              )
+              .toList(growable: false);
+          state = AsyncData(
+            latest.copyWith(
+              images: updatedImages,
+              failedImageCount: _countFailedImages(updatedImages),
+              cacheSummary: _buildCacheSummary(updatedImages),
+            ),
+          );
+        }
       }
     }
     final nextState = await _loadState();
@@ -301,6 +434,161 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       return;
     }
     state = AsyncData(nextState.copyWith(hint: '未读章节缓存完成'));
+  }
+
+  Future<void> retryFailedImages() async {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    final failedImages = current.images
+        .where((image) => image.failed || image.cacheStatus == 'failed')
+        .toList(growable: false);
+    if (failedImages.isEmpty) {
+      state = AsyncData(current.copyWith(hint: '没有需要重试的图片'));
+      return;
+    }
+    for (final image in failedImages) {
+      await retryImage(image.imageUrl);
+      if (!ref.mounted) {
+        return;
+      }
+    }
+  }
+
+  Future<void> clearCurrentEpisodeCache() async {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    await _repository.clearEpisodeImageCache(episodeId: _args.episodeId);
+    final clearedImages = current.images
+        .map(
+          (image) => image.copyWith(
+            cacheStatus: 'none',
+            failed: false,
+            clearLocalPath: true,
+            clearCacheLocalPath: true,
+          ),
+        )
+        .toList(growable: false);
+    if (!ref.mounted) {
+      return;
+    }
+    state = AsyncData(
+      current.copyWith(
+        images: clearedImages,
+        failedImageCount: 0,
+        cacheSummary: _buildCacheSummary(clearedImages),
+        hint: '本话缓存记录已清除',
+      ),
+    );
+  }
+
+  Future<void> toggleBookmark() async {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    final next = !current.isBookmarked;
+    await _readingStateWriter.setEpisodeBookmarked(
+      comicId: _args.comicId,
+      episodeId: _args.episodeId,
+      isBookmarked: next,
+    );
+    if (!ref.mounted) {
+      return;
+    }
+    state = AsyncData(
+      current.copyWith(
+        isBookmarked: next,
+        hint: next ? '已添加书签' : '已取消书签',
+      ),
+    );
+  }
+
+  Future<void> setCurrentEpisodeRead(bool isRead) async {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    await _readingStateWriter.setEpisodeRead(
+      comicId: _args.comicId,
+      episodeId: _args.episodeId,
+      isRead: isRead,
+    );
+    if (isRead) {
+      _completedEpisodeIds.add(_args.episodeId);
+    } else {
+      _completedEpisodeIds.remove(_args.episodeId);
+    }
+    if (!ref.mounted) {
+      return;
+    }
+    state = AsyncData(
+      current.copyWith(
+        isCurrentEpisodeRead: isRead,
+        chapters: _markChapterRead(
+          current.chapters,
+          episodeId: _args.episodeId,
+          isRead: isRead,
+        ),
+        hint: isRead ? '本章已标记为已读' : '本章已标记为未读',
+      ),
+    );
+  }
+
+  Future<void> setCurrentImageAsCover() async {
+    final current = state.value;
+    final image = current?.currentImage;
+    if (current == null || image == null) {
+      return;
+    }
+
+    state = AsyncData(current.copyWith(hint: '正在设置封面'));
+    final localPath = await _ensureCurrentImageLocalFile(image);
+    if (localPath == null || localPath.trim().isEmpty) {
+      if (!ref.mounted) {
+        return;
+      }
+      final latest = state.value ?? current;
+      state = AsyncData(latest.copyWith(hint: '当前页图片缓存失败，无法设为封面'));
+      return;
+    }
+
+    final result = await _imageCacheService.copyProtectedLocalFile(
+      ImageCacheLocalCopyRequest(
+        cacheKey: ImageCacheKeys.customCover(
+          ownerType: ImageCacheOwnerType.comic.dbValue,
+          ownerId: _args.comicId,
+        ),
+        sourcePath: localPath,
+        ownerType: ImageCacheOwnerType.comic,
+        ownerId: _args.comicId,
+        role: ImageCacheRole.customCover,
+        episodeId: _args.episodeId,
+        imageIndex: image.imageIndex,
+      ),
+    );
+    final protectedPath = result.localPath?.trim();
+    final writer = _coverCacheWriter;
+    if (!result.success || protectedPath == null || protectedPath.isEmpty || writer == null) {
+      if (!ref.mounted) {
+        return;
+      }
+      final latest = state.value ?? current;
+      state = AsyncData(latest.copyWith(hint: '封面更新失败，请稍后重试'));
+      return;
+    }
+    await writer.updateCoverCache(
+      comicId: _args.comicId,
+      customCoverLocalPath: protectedPath,
+    );
+    if (!ref.mounted) {
+      return;
+    }
+    final latest = state.value ?? current;
+    state = AsyncData(latest.copyWith(hint: '封面已更新'));
   }
 
   Future<void> onScrollProgress({
@@ -333,7 +621,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (current == null || current.images.isEmpty) {
       return;
     }
-    final clampedIndex = index.clamp(0, current.images.length - 1);
+    final clampedIndex = index.clamp(0, current.images.length - 1).toInt();
     final nextOffset = scrollOffset ?? current.lastScrollOffset;
     _cancelScheduledProgressPersistence();
     _visibleImageIndexes.add(clampedIndex);
@@ -367,7 +655,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (current == null || current.images.isEmpty) {
       return;
     }
-    final clampedIndex = imageIndex.clamp(0, current.images.length - 1);
+    final clampedIndex = imageIndex.clamp(0, current.images.length - 1).toInt();
     _recordVisiblePage(
       currentIndex: clampedIndex,
       scrollOffset: current.lastScrollOffset,
@@ -533,6 +821,11 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         currentImageIndex: lastIndex,
         lastScrollOffset: scrollOffset,
         isCurrentEpisodeRead: true,
+        chapters: _markChapterRead(
+          latest.chapters,
+          episodeId: _args.episodeId,
+          isRead: true,
+        ),
       ),
     );
   }
@@ -544,13 +837,68 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     }
 
     const radius = 2;
-    final start = (centerIndex - radius).clamp(0, current.images.length - 1);
-    final end = (centerIndex + radius).clamp(0, current.images.length - 1);
+    final start = (centerIndex - radius).clamp(0, current.images.length - 1).toInt();
+    final end = (centerIndex + radius).clamp(0, current.images.length - 1).toInt();
     final futures = <Future<ComicImageCacheResult>>[];
     for (var i = start; i <= end; i++) {
       futures.add(_cacheReaderImage(current.images[i]));
     }
     await Future.wait(futures);
+  }
+
+  Future<String?> _ensureCurrentImageLocalFile(ComicReaderImageState image) async {
+    final existing = image.effectiveLocalPath?.trim();
+    if (existing != null && existing.isNotEmpty) {
+      return existing;
+    }
+    final result = await _cacheReaderImage(image);
+    if (!result.success) {
+      return null;
+    }
+    final localPath = result.localPath?.trim();
+    if (localPath == null || localPath.isEmpty) {
+      return null;
+    }
+    await _repository.updateEpisodeImageCacheStatus(
+      episodeId: _args.episodeId,
+      imageUrl: image.imageUrl,
+      cacheStatus: 'done',
+      cacheLocalPath: localPath,
+    );
+    await _updateImageCacheMetadata(
+      episodeId: _args.episodeId,
+      imageUrl: image.imageUrl,
+      stableCacheKey: result.cacheKey ?? image.cacheKey,
+      lastSourceUrl: image.imageUrl,
+      localPath: localPath,
+      bytes: result.bytes,
+      lastAccessedAt: DateTime.now(),
+    );
+    if (!ref.mounted) {
+      return localPath;
+    }
+    final current = state.value;
+    if (current == null) {
+      return localPath;
+    }
+    final images = [...current.images];
+    final idx = images.indexWhere((item) => item.imageIndex == image.imageIndex);
+    if (idx >= 0) {
+      images[idx] = images[idx].copyWith(
+        cacheStatus: 'done',
+        localPath: localPath,
+        cacheLocalPath: localPath,
+        failed: false,
+      );
+      state = AsyncData(
+        current.copyWith(
+          images: images,
+          failedImageCount: _countFailedImages(images),
+          cacheSummary: _buildCacheSummary(images),
+        ),
+      );
+    }
+    return localPath;
   }
 
   /// Returns previous episode id if available.
@@ -594,6 +942,8 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     final progress = await _repository.getLastReadProgress(comicId: _args.comicId);
     final currentImageIndex = progress != null && progress.episodeId == _args.episodeId
         ? progress.imageIndex
+            .clamp(0, images.isEmpty ? 0 : images.length - 1)
+            .toInt()
         : 0;
     final scrollOffset = progress != null && progress.episodeId == _args.episodeId
         ? progress.scrollOffset
@@ -602,33 +952,63 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       comicId: _args.comicId,
       episodeId: _args.episodeId,
     );
+    final isBookmarked = await _readingStateWriter.isEpisodeBookmarked(
+      comicId: _args.comicId,
+      episodeId: _args.episodeId,
+    );
     if (isRead) {
       _completedEpisodeIds.add(_args.episodeId);
     }
 
     _preloadFirstBatch(images);
+    final detail = await _repository.getComicDetail(comicId: _args.comicId);
+    final imageStates = images
+        .map(
+          (image) => ComicReaderImageState(
+            imageUrl: image.imageUrl,
+            imageIndex: image.imageIndex,
+            cacheStatus: image.cacheStatus,
+            cacheKey: _stableKeyForEpisodeImage(image),
+            localPath: image.effectiveLocalPath,
+            cacheLocalPath: image.cacheLocalPath,
+            failed: image.cacheStatus == 'failed',
+          ),
+        )
+        .toList(growable: false);
+    final chapters = <ComicReaderChapterEntry>[];
+    for (final item in episodes) {
+      final read = await _readingStateWriter.isEpisodeRead(
+        comicId: _args.comicId,
+        episodeId: item.episodeId,
+      );
+      chapters.add(
+        ComicReaderChapterEntry(
+          episodeId: item.episodeId,
+          title: item.episodeTitle ?? '章节 ${item.sourceTid}',
+          orderIndex: item.orderIndex,
+          sourceTid: item.sourceTid,
+          isCurrent: item.episodeId == _args.episodeId,
+          isRead: read,
+        ),
+      );
+    }
 
     final viewState = ComicReaderViewState(
       comicId: _args.comicId,
       episodeId: _args.episodeId,
+      comicTitle: detail?.title ?? '漫画',
       episodeTitle: episode.episodeTitle ?? '章节 ${episode.sourceTid}',
-      images: images
-          .map(
-            (image) => ComicReaderImageState(
-              imageUrl: image.imageUrl,
-              imageIndex: image.imageIndex,
-              cacheStatus: image.cacheStatus,
-              cacheKey: _stableKeyForEpisodeImage(image),
-              localPath: image.effectiveLocalPath,
-              cacheLocalPath: image.cacheLocalPath,
-            ),
-          )
-          .toList(growable: false),
+      sourceTid: episode.sourceTid,
+      images: imageStates,
+      chapters: List<ComicReaderChapterEntry>.unmodifiable(chapters),
       currentImageIndex: currentImageIndex,
       lastScrollOffset: scrollOffset,
       hasPreviousEpisode: episodeIndex > 0,
       hasNextEpisode: episodeIndex < episodes.length - 1,
       isCurrentEpisodeRead: isRead,
+      isBookmarked: isBookmarked,
+      failedImageCount: _countFailedImages(imageStates),
+      cacheSummary: _buildCacheSummary(imageStates),
     );
     _logReaderEvent(
       'open',
@@ -675,7 +1055,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   }
 
   Future<ComicImageCacheResult> _cacheReaderImage(ComicReaderImageState image) {
-    if (_isDownloadedReaderImage(image)) {
+    if (_isDownloadedReaderImage(image) || image.hasCachedLocalFile) {
       return Future<ComicImageCacheResult>.value(
         ComicImageCacheResult(
           success: true,
@@ -709,6 +1089,17 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         ),
       );
     }
+    if (image.cacheStatus == 'done' && image.effectiveLocalPath != null) {
+      return Future<ComicImageCacheResult>.value(
+        ComicImageCacheResult(
+          success: true,
+          localPath: image.effectiveLocalPath,
+          cacheKey: image.stableCacheKey,
+          bytes: image.bytes,
+          fromCache: true,
+        ),
+      );
+    }
     final key = _stableKeyForEpisodeImage(image);
     return _readerService.cacheImage(
       imageUrl: image.effectiveSourceUrl,
@@ -727,6 +1118,54 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
 
   bool _isDownloadedEpisodeImage(ComicEpisodeImageItem image) {
     return image.cacheStatus == 'downloaded' && image.effectiveLocalPath != null;
+  }
+
+  int _countFailedImages(List<ComicReaderImageState> images) {
+    return images
+        .where((image) => image.failed || image.cacheStatus == 'failed')
+        .length;
+  }
+
+  ComicReaderCacheSummary _buildCacheSummary(List<ComicReaderImageState> images) {
+    var done = 0;
+    var downloaded = 0;
+    var failed = 0;
+    for (final image in images) {
+      if (image.cacheStatus == 'downloaded') {
+        downloaded++;
+      } else if (image.hasCachedLocalFile) {
+        done++;
+      } else if (image.failed || image.cacheStatus == 'failed') {
+        failed++;
+      }
+    }
+    return ComicReaderCacheSummary(
+      totalCount: images.length,
+      doneCount: done,
+      downloadedCount: downloaded,
+      failedCount: failed,
+    );
+  }
+
+  List<ComicReaderChapterEntry> _markChapterRead(
+    List<ComicReaderChapterEntry> chapters, {
+    required String episodeId,
+    required bool isRead,
+  }) {
+    return chapters
+        .map(
+          (chapter) => chapter.episodeId == episodeId
+              ? ComicReaderChapterEntry(
+                  episodeId: chapter.episodeId,
+                  title: chapter.title,
+                  orderIndex: chapter.orderIndex,
+                  sourceTid: chapter.sourceTid,
+                  isCurrent: chapter.isCurrent,
+                  isRead: isRead,
+                )
+              : chapter,
+        )
+        .toList(growable: false);
   }
 
   String _stableKeyForEpisodeImage(ComicEpisodeImageItem image) {

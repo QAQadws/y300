@@ -4,21 +4,27 @@ import 'package:y300/features/comic/presentation/models/reader_preferences.dart'
 import 'package:y300/features/comic/presentation/widgets/reader_bottom_panel.dart';
 
 void main() {
-  testWidgets('mode switch triggers callback with selected mode', (tester) async {
-    ReaderModePreference? selected;
+  testWidgets('toolbar buttons trigger reader actions', (tester) async {
+    var modeOpened = false;
+    var chapterOpened = false;
+    var settingsOpened = false;
+    var cacheTapped = false;
 
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: ReaderBottomPanel(
             currentMode: ReaderModePreference.vertical,
-            onModeChanged: (mode) => selected = mode,
             currentPage: 1,
             totalPages: 12,
             hasPreviousEpisode: true,
             hasNextEpisode: true,
             onPreviousEpisode: () {},
             onNextEpisode: () {},
+            onOpenModeSheet: () => modeOpened = true,
+            onOpenChapterList: () => chapterOpened = true,
+            onOpenDisplaySettings: () => settingsOpened = true,
+            onCacheEpisode: () => cacheTapped = true,
             onProgressChangeStart: (_) {},
             onProgressChanged: (_) {},
             onProgressChangeEnd: (_) {},
@@ -27,9 +33,15 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('右到左'));
+    await tester.tap(find.byKey(const Key('comic-reader-mode-switch')));
+    await tester.tap(find.byKey(const Key('comic-reader-chapter-list-button')));
+    await tester.tap(find.byKey(const Key('comic-reader-display-settings-button')));
+    await tester.tap(find.byKey(const Key('comic-reader-bottom-cache-button')));
     await tester.pumpAndSettle();
 
-    expect(selected, ReaderModePreference.rtl);
+    expect(modeOpened, isTrue);
+    expect(chapterOpened, isTrue);
+    expect(settingsOpened, isTrue);
+    expect(cacheTapped, isTrue);
   });
 }
