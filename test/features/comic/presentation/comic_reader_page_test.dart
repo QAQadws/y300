@@ -1,4 +1,6 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -71,6 +73,34 @@ void main() {
     expect(find.byKey(const Key('comic-reader-progress-slider')), findsOneWidget);
     expect(find.byKey(const Key('comic-reader-current-page-label')), findsOneWidget);
     expect(find.byKey(const Key('comic-reader-total-page-label')), findsOneWidget);
+  });
+
+  testWidgets('ComicReaderPage does not flash image loading copy while opening', (tester) async {
+    await prepareLargeViewport(tester);
+    final repository = _ReaderBlockingRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(repository),
+          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
+          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
+          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+        ],
+        child: const MaterialApp(
+          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.byKey(const Key('comic-reader-page-opening')), findsOneWidget);
+    expect(find.text('图片加载中'), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 161));
+
+    expect(find.text('正在打开章节'), findsOneWidget);
   });
 
   testWidgets('ComicReaderPage uses paged renderer when persisted mode is ltr', (tester) async {
@@ -647,5 +677,18 @@ class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
       scrollOffset: scrollOffset,
       updatedAt: DateTime(2026, 1, 1),
     );
+  }
+}
+
+class _ReaderBlockingRepository extends _ReaderFakeRepository {
+  final Completer<List<ComicEpisodeItem>> _episodesCompleter =
+      Completer<List<ComicEpisodeItem>>();
+
+  @override
+  Future<List<ComicEpisodeItem>> getComicEpisodes({
+    required String comicId,
+    bool descending = true,
+  }) {
+    return _episodesCompleter.future;
   }
 }

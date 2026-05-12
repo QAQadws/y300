@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/image_request_headers.dart';
@@ -30,6 +32,31 @@ void main() {
     });
   });
 
+  testWidgets('network image keeps one placeholder while waiting for headers and first frame', (tester) async {
+    final headerBuilder = _DeferredImageHeaderBuilder();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LibraryCachedImage(
+          imageUrl: 'https://bbs.yamibo.com/data/attachment/test.jpg',
+          fit: BoxFit.cover,
+          placeholder: const SizedBox(key: Key('placeholder')),
+          headerBuilder: headerBuilder,
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key('placeholder')), findsOneWidget);
+    expect(find.byType(Image), findsNothing);
+
+    headerBuilder.complete(const <String, String>{
+      'Referer': 'https://bbs.yamibo.com/',
+    });
+    await tester.pump();
+
+    expect(find.byKey(const Key('placeholder')), findsOneWidget);
+    expect(find.byType(Image), findsOneWidget);
+  });
+
   testWidgets('network image normalizes relative Yamibo attachment urls', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
@@ -60,4 +87,18 @@ class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
 
   @override
   Future<Map<String, String>> buildHeaders(String imageUrl) async => headers;
+}
+
+class _DeferredImageHeaderBuilder implements ImageRequestHeaderBuilder {
+  final Completer<Map<String, String>> _completer =
+      Completer<Map<String, String>>();
+
+  @override
+  Future<Map<String, String>> buildHeaders(String imageUrl) {
+    return _completer.future;
+  }
+
+  void complete(Map<String, String> headers) {
+    _completer.complete(headers);
+  }
 }

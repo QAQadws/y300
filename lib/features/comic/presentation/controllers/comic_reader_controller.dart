@@ -10,6 +10,7 @@ import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_events.dart';
+import 'package:y300/features/comic/domain/services/comic_reader_preload_queue.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 
@@ -223,11 +224,13 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   late final ImageCacheService _imageCacheService;
   late final ComicCoverCacheWriter? _coverCacheWriter;
   late final ComicReaderEventLogger _eventLogger;
+  late final ComicReaderPreloadQueue _preloadQueue;
   Timer? _progressPersistDebounceTimer;
   int _persistVersion = 0;
   final Set<String> _completedEpisodeIds = <String>{};
   final Set<String> _completingEpisodeIds = <String>{};
   final Set<int> _visibleImageIndexes = <int>{};
+  int _lastPreloadCenterIndex = 0;
   DateTime? _openedAt;
 
   @override
@@ -243,11 +246,25 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         ? _repository as ComicCoverCacheWriter
         : ref.read(comicCoverCacheWriterProvider);
     _eventLogger = ref.read(comicReaderEventLoggerProvider);
+    _preloadQueue = ComicReaderPreloadQueue(
+      runner: _runPreloadTask,
+      onStart: _handlePreloadStart,
+      onResult: _handlePreloadResult,
+      onSnapshot: _logPreloadSnapshot,
+    );
     _openedAt = DateTime.now();
     ref.onDispose(() {
       _progressPersistDebounceTimer?.cancel();
+      _preloadQueue.dispose();
     });
-    return _loadState();
+    final viewState = await _loadState();
+    scheduleMicrotask(() {
+      if (!ref.mounted) {
+        return;
+      }
+      _enqueueInitialWindow(viewState.currentImageIndex, viewState.images);
+    });
+    return viewState;
   }
 
   Future<void> retryImage(String imageUrl) async {
@@ -259,50 +276,18 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (idx < 0) {
       return;
     }
-
-    final updatedImages = [...current.images];
-    updatedImages[idx] = updatedImages[idx].copyWith(failed: false, cacheStatus: 'downloading');
-    state = AsyncData(current.copyWith(images: updatedImages, clearHint: true));
-
-    final targetImage = updatedImages[idx];
-    final cacheResult = await _cacheReaderImage(targetImage);
-    final done = cacheResult.success;
-    if (!ref.mounted) {
+    final task = _readerTaskForImage(
+      current.images[idx],
+      priority: ComicReaderPreloadPriority.retry,
+      force: true,
+    );
+    if (task == null) {
       return;
     }
-    await _repository.updateEpisodeImageCacheStatus(
-      episodeId: _args.episodeId,
-      imageUrl: imageUrl,
-      cacheStatus: done ? 'done' : 'failed',
-      cacheLocalPath: done ? cacheResult.localPath : null,
-    );
-    await _updateImageCacheMetadata(
-      episodeId: _args.episodeId,
-      imageUrl: imageUrl,
-      stableCacheKey: done ? cacheResult.cacheKey : targetImage.cacheKey,
-      lastSourceUrl: imageUrl,
-      localPath: done ? cacheResult.localPath : null,
-      bytes: done ? cacheResult.bytes : null,
-      lastAccessedAt: done ? DateTime.now() : null,
-    );
-
-    final refreshed = [...updatedImages];
-    refreshed[idx] = refreshed[idx].copyWith(
-      failed: !done,
-      cacheStatus: done ? 'done' : 'failed',
-      localPath: done ? cacheResult.localPath : null,
-      cacheLocalPath: done ? cacheResult.localPath : null,
-    );
-    if (!ref.mounted) {
-      return;
-    }
-    state = AsyncData(
-      current.copyWith(
-        images: refreshed,
-        failedImageCount: _countFailedImages(refreshed),
-        cacheSummary: _buildCacheSummary(refreshed),
-        hint: done ? '图片重试成功' : '图片重试失败',
-      ),
+    await _enqueuePreloadTasks(
+      <ComicReaderPreloadTask>[task],
+      cancelOldWindow: false,
+      hint: '图片已加入重试队列',
     );
   }
 
@@ -311,6 +296,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (current == null || current.images.isEmpty) {
       return;
     }
+    _preloadQueue.cancelExcept(const <String>{});
     for (final image in current.images) {
       await _repository.updateEpisodeImageCacheStatus(
         episodeId: _args.episodeId,
@@ -368,6 +354,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   }
 
   Future<void> cacheAllUnread() async {
+    _preloadQueue.cancelExcept(const <String>{});
     final episodes = await _repository.getComicEpisodes(comicId: _args.comicId, descending: false);
     final currentIndex = episodes.indexWhere((e) => e.episodeId == _args.episodeId);
     if (currentIndex < 0) {
@@ -461,6 +448,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (current == null) {
       return;
     }
+    _preloadQueue.cancelExcept(const <String>{});
     await _repository.clearEpisodeImageCache(episodeId: _args.episodeId);
     final clearedImages = current.images
         .map(
@@ -641,8 +629,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       scrollOffset: nextOffset,
       source: ComicReaderProgressSource.jump,
     );
-    // Warm up images around the jump target to improve immediate readability.
-    unawaited(_prefetchAroundIndex(clampedIndex));
+    unawaited(_enqueueJumpWindow(clampedIndex));
   }
 
   /// Records that an image slot reached the reader viewport.
@@ -662,6 +649,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       source: ComicReaderProgressSource.initialVisible,
       checkCompletion: false,
     );
+    unawaited(_enqueueReadingWindow(clampedIndex));
     await _markEpisodeCompletedIfNeeded(
       currentIndex: clampedIndex,
       scrollOffset: current.lastScrollOffset,
@@ -723,6 +711,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     bool checkCompletion = true,
   }) {
     _visibleImageIndexes.add(currentIndex);
+    unawaited(_enqueueReadingWindow(currentIndex));
     _scheduleProgressPersistence(
       currentIndex: currentIndex,
       scrollOffset: scrollOffset,
@@ -830,20 +819,381 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     );
   }
 
-  Future<void> _prefetchAroundIndex(int centerIndex) async {
+  void _enqueueInitialWindow(
+    int centerIndex,
+    List<ComicReaderImageState> images,
+  ) {
+    if (images.isEmpty) {
+      return;
+    }
+    final end = (centerIndex + 4).clamp(0, images.length - 1).toInt();
+    final tasks = <ComicReaderPreloadTask>[];
+    _addReaderTask(
+      tasks,
+      images[centerIndex.clamp(0, images.length - 1).toInt()],
+      priority: ComicReaderPreloadPriority.visible,
+    );
+    for (var i = centerIndex + 1; i <= end; i++) {
+      _addReaderTask(
+        tasks,
+        images[i],
+        priority: ComicReaderPreloadPriority.adjacentForward,
+      );
+    }
+    unawaited(_enqueuePreloadTasks(tasks, cancelOldWindow: false));
+  }
+
+  Future<void> _enqueueReadingWindow(int centerIndex) async {
     final current = state.value;
     if (current == null || current.images.isEmpty) {
       return;
     }
-
-    const radius = 2;
-    final start = (centerIndex - radius).clamp(0, current.images.length - 1).toInt();
-    final end = (centerIndex + radius).clamp(0, current.images.length - 1).toInt();
-    final futures = <Future<ComicImageCacheResult>>[];
-    for (var i = start; i <= end; i++) {
-      futures.add(_cacheReaderImage(current.images[i]));
+    if (centerIndex == _lastPreloadCenterIndex &&
+        _preloadQueue.snapshot.pendingCount > 0) {
+      return;
     }
-    await Future.wait(futures);
+    final movingForward = centerIndex >= _lastPreloadCenterIndex;
+    _lastPreloadCenterIndex = centerIndex;
+    final tasks = _buildDirectionalWindowTasks(
+      current.images,
+      centerIndex: centerIndex,
+      movingForward: movingForward,
+    );
+    await _enqueuePreloadTasks(tasks, cancelOldWindow: false);
+    if (centerIndex >= current.images.length - 2) {
+      unawaited(_enqueueNextChapterPreview());
+    }
+  }
+
+  Future<void> _enqueueJumpWindow(int centerIndex) async {
+    final current = state.value;
+    if (current == null || current.images.isEmpty) {
+      return;
+    }
+    _lastPreloadCenterIndex = centerIndex;
+    final start = (centerIndex - 2).clamp(0, current.images.length - 1).toInt();
+    final end = (centerIndex + 2).clamp(0, current.images.length - 1).toInt();
+    final tasks = <ComicReaderPreloadTask>[];
+    _addReaderTask(
+      tasks,
+      current.images[centerIndex],
+      priority: ComicReaderPreloadPriority.jumpTarget,
+    );
+    for (var i = centerIndex + 1; i <= end; i++) {
+      _addReaderTask(
+        tasks,
+        current.images[i],
+        priority: ComicReaderPreloadPriority.adjacentForward,
+      );
+    }
+    for (var i = centerIndex - 1; i >= start; i--) {
+      _addReaderTask(
+        tasks,
+        current.images[i],
+        priority: ComicReaderPreloadPriority.adjacentBackward,
+      );
+    }
+    await _enqueuePreloadTasks(tasks, cancelOldWindow: true);
+  }
+
+  List<ComicReaderPreloadTask> _buildDirectionalWindowTasks(
+    List<ComicReaderImageState> images, {
+    required int centerIndex,
+    required bool movingForward,
+  }) {
+    final clampedCenter = centerIndex.clamp(0, images.length - 1).toInt();
+    final tasks = <ComicReaderPreloadTask>[];
+    _addReaderTask(
+      tasks,
+      images[clampedCenter],
+      priority: ComicReaderPreloadPriority.visible,
+    );
+    final forwardEnd = (clampedCenter + 4).clamp(0, images.length - 1).toInt();
+    final backwardStart = (clampedCenter - 2).clamp(0, images.length - 1).toInt();
+    if (movingForward) {
+      for (var i = clampedCenter + 1; i <= forwardEnd; i++) {
+        _addReaderTask(
+          tasks,
+          images[i],
+          priority: ComicReaderPreloadPriority.adjacentForward,
+        );
+      }
+      for (var i = clampedCenter - 1; i >= backwardStart; i--) {
+        _addReaderTask(
+          tasks,
+          images[i],
+          priority: ComicReaderPreloadPriority.adjacentBackward,
+        );
+      }
+      return tasks;
+    }
+    for (var i = clampedCenter - 1; i >= backwardStart; i--) {
+      _addReaderTask(
+        tasks,
+        images[i],
+        priority: ComicReaderPreloadPriority.adjacentForward,
+      );
+    }
+    for (var i = clampedCenter + 1; i <= forwardEnd; i++) {
+      _addReaderTask(
+        tasks,
+        images[i],
+        priority: ComicReaderPreloadPriority.adjacentBackward,
+      );
+    }
+    return tasks;
+  }
+
+  Future<void> _enqueueNextChapterPreview() async {
+    final episodes = await _repository.getComicEpisodes(
+      comicId: _args.comicId,
+      descending: false,
+    );
+    final currentIndex = episodes.indexWhere((e) => e.episodeId == _args.episodeId);
+    if (currentIndex < 0 || currentIndex + 1 >= episodes.length) {
+      return;
+    }
+    final nextEpisode = episodes[currentIndex + 1];
+    final images = await _ensureEpisodeImages(nextEpisode);
+    if (!ref.mounted || images.isEmpty) {
+      return;
+    }
+    final limit = images.length < 3 ? images.length : 3;
+    final tasks = <ComicReaderPreloadTask>[];
+    for (var i = 0; i < limit; i++) {
+      _addEpisodeTask(
+        tasks,
+        images[i],
+        priority: ComicReaderPreloadPriority.nextChapter,
+      );
+    }
+    await _enqueuePreloadTasks(tasks, cancelOldWindow: false);
+  }
+
+  Future<void> _enqueuePreloadTasks(
+    List<ComicReaderPreloadTask> tasks, {
+    required bool cancelOldWindow,
+    String? hint,
+  }) async {
+    if (tasks.isEmpty) {
+      return;
+    }
+    if (cancelOldWindow) {
+      _preloadQueue.cancelExcept(
+        tasks.map((task) => task.dedupeKey).toSet(),
+      );
+    }
+    final accepted = _preloadQueue.enqueueAll(tasks, schedule: false);
+    if (accepted.isEmpty && hint == null) {
+      return;
+    }
+    for (final task in accepted) {
+      await _repository.updateEpisodeImageCacheStatus(
+        episodeId: task.episodeId,
+        imageUrl: task.storageImageUrl,
+        cacheStatus: 'queued',
+      );
+    }
+    if (!ref.mounted) {
+      return;
+    }
+    _patchCurrentEpisodeImageStates(
+      accepted,
+      cacheStatus: 'queued',
+      failed: false,
+      hint: hint,
+      clearHint: hint == null,
+    );
+    _preloadQueue.schedule();
+  }
+
+  void _addReaderTask(
+    List<ComicReaderPreloadTask> tasks,
+    ComicReaderImageState image, {
+    required ComicReaderPreloadPriority priority,
+  }) {
+    final task = _readerTaskForImage(image, priority: priority);
+    if (task != null) {
+      tasks.add(task);
+    }
+  }
+
+  void _addEpisodeTask(
+    List<ComicReaderPreloadTask> tasks,
+    ComicEpisodeImageItem image, {
+    required ComicReaderPreloadPriority priority,
+  }) {
+    final task = _episodeTaskForImage(image, priority: priority);
+    if (task != null) {
+      tasks.add(task);
+    }
+  }
+
+  ComicReaderPreloadTask? _readerTaskForImage(
+    ComicReaderImageState image, {
+    required ComicReaderPreloadPriority priority,
+    bool force = false,
+  }) {
+    if (!force && (_isDownloadedReaderImage(image) || image.hasCachedLocalFile)) {
+      return null;
+    }
+    return ComicReaderPreloadTask(
+      episodeId: _args.episodeId,
+      imageUrl: image.imageUrl,
+      storageImageUrl: image.imageUrl,
+      imageIndex: image.imageIndex,
+      cacheKey: image.cacheKey ?? _stableKeyForIndex(image.imageIndex),
+      priority: priority,
+      ownerId: _args.comicId,
+      lastSourceUrl: image.imageUrl,
+    );
+  }
+
+  ComicReaderPreloadTask? _episodeTaskForImage(
+    ComicEpisodeImageItem image, {
+    required ComicReaderPreloadPriority priority,
+  }) {
+    if (_isDownloadedEpisodeImage(image) ||
+        (image.cacheStatus == 'done' && image.effectiveLocalPath != null)) {
+      return null;
+    }
+    return ComicReaderPreloadTask(
+      episodeId: image.episodeId,
+      imageUrl: image.effectiveSourceUrl,
+      storageImageUrl: image.imageUrl,
+      imageIndex: image.imageIndex,
+      cacheKey: _stableKeyForEpisodeImage(image),
+      priority: priority,
+      ownerId: _args.comicId,
+      lastSourceUrl: image.effectiveSourceUrl,
+    );
+  }
+
+  Future<ComicImageCacheResult> _runPreloadTask(
+    ComicReaderPreloadTask task,
+  ) {
+    return _readerService.cacheImage(
+      imageUrl: task.imageUrl,
+      cacheKey: task.cacheKey,
+      ownerType: ImageCacheOwnerType.comic,
+      ownerId: task.ownerId ?? _args.comicId,
+      role: ImageCacheRole.comicPage,
+      episodeId: task.episodeId,
+      imageIndex: task.imageIndex,
+    );
+  }
+
+  Future<void> _handlePreloadStart(ComicReaderPreloadTask task) async {
+    if (!ref.mounted) {
+      return;
+    }
+    await _repository.updateEpisodeImageCacheStatus(
+      episodeId: task.episodeId,
+      imageUrl: task.storageImageUrl,
+      cacheStatus: 'downloading',
+    );
+    _patchCurrentEpisodeImageStates(
+      <ComicReaderPreloadTask>[task],
+      cacheStatus: 'downloading',
+      failed: false,
+      clearHint: true,
+    );
+  }
+
+  Future<void> _handlePreloadResult(
+    ComicReaderPreloadResult preloadResult,
+  ) async {
+    final task = preloadResult.task;
+    final cacheResult = preloadResult.cacheResult;
+    final done = cacheResult.success;
+    final localPath = done ? cacheResult.localPath : null;
+    if (!ref.mounted) {
+      return;
+    }
+    await _repository.updateEpisodeImageCacheStatus(
+      episodeId: task.episodeId,
+      imageUrl: task.storageImageUrl,
+      cacheStatus: done ? 'done' : 'failed',
+      cacheLocalPath: localPath,
+    );
+    await _updateImageCacheMetadata(
+      episodeId: task.episodeId,
+      imageUrl: task.storageImageUrl,
+      stableCacheKey: cacheResult.cacheKey ?? task.cacheKey,
+      lastSourceUrl: task.lastSourceUrl ?? task.imageUrl,
+      localPath: localPath,
+      bytes: done ? cacheResult.bytes : null,
+      lastAccessedAt: done ? DateTime.now() : null,
+    );
+    _patchCurrentEpisodeImageStates(
+      <ComicReaderPreloadTask>[task],
+      cacheStatus: done ? 'done' : 'failed',
+      localPath: localPath,
+      cacheLocalPath: localPath,
+      failed: !done,
+      hint: task.priority == ComicReaderPreloadPriority.retry
+          ? (done ? '图片重试成功' : '图片重试失败')
+          : null,
+      clearHint: task.priority != ComicReaderPreloadPriority.retry,
+    );
+  }
+
+  void _patchCurrentEpisodeImageStates(
+    List<ComicReaderPreloadTask> tasks, {
+    required String cacheStatus,
+    String? localPath,
+    String? cacheLocalPath,
+    bool? failed,
+    String? hint,
+    bool clearHint = false,
+  }) {
+    final current = state.value;
+    if (current == null || tasks.isEmpty) {
+      return;
+    }
+    final byIndex = {
+      for (final task in tasks.where((task) => task.episodeId == current.episodeId))
+        task.imageIndex: task,
+    };
+    if (byIndex.isEmpty) {
+      return;
+    }
+    final patched = current.images.map((image) {
+      if (!byIndex.containsKey(image.imageIndex)) {
+        return image;
+      }
+      if (image.cacheStatus == 'downloaded') {
+        return image;
+      }
+      return image.copyWith(
+        cacheStatus: cacheStatus,
+        localPath: localPath,
+        cacheLocalPath: cacheLocalPath,
+        failed: failed,
+      );
+    }).toList(growable: false);
+    state = AsyncData(
+      current.copyWith(
+        images: patched,
+        failedImageCount: _countFailedImages(patched),
+        cacheSummary: _buildCacheSummary(patched),
+        hint: hint,
+        clearHint: clearHint,
+      ),
+    );
+  }
+
+  void _logPreloadSnapshot(ComicReaderPreloadQueueSnapshot snapshot) {
+    _logReaderEvent(
+      'preload_queue',
+      extra: <String, Object?>{
+        'pending': snapshot.pendingCount,
+        'running': snapshot.runningCount,
+        'success': snapshot.successCount,
+        'failed': snapshot.failureCount,
+        'cancelled': snapshot.cancelledCount,
+      },
+    );
   }
 
   Future<String?> _ensureCurrentImageLocalFile(ComicReaderImageState image) async {
@@ -960,7 +1310,6 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       _completedEpisodeIds.add(_args.episodeId);
     }
 
-    _preloadFirstBatch(images);
     final detail = await _repository.getComicDetail(comicId: _args.comicId);
     final imageStates = images
         .map(
@@ -1042,16 +1391,6 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     await _repository.saveEpisodeImages(episodeId: episode.episodeId, imageUrls: fetched);
     images = await _repository.getEpisodeImages(episodeId: episode.episodeId);
     return images;
-  }
-
-  void _preloadFirstBatch(List<ComicEpisodeImageItem> images) {
-    final limit = images.length < 3 ? images.length : 3;
-    for (var i = 0; i < limit; i++) {
-      if (_isDownloadedEpisodeImage(images[i])) {
-        continue;
-      }
-      unawaited(_cacheEpisodeImage(images[i]));
-    }
   }
 
   Future<ComicImageCacheResult> _cacheReaderImage(ComicReaderImageState image) {
@@ -1220,6 +1559,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     int? totalPages,
     double? scrollOffset,
     int? elapsedMs,
+    Map<String, Object?> extra = const <String, Object?>{},
   }) {
     final openedAt = _openedAt;
     _eventLogger.log(
@@ -1234,6 +1574,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       sinceOpenMs: openedAt == null
           ? null
           : DateTime.now().difference(openedAt).inMilliseconds,
+      extra: extra,
     );
   }
 }

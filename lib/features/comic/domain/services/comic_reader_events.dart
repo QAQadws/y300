@@ -30,6 +30,7 @@ class ComicReaderEventLogger {
     double? scrollOffset,
     int? elapsedMs,
     int? sinceOpenMs,
+    Map<String, Object?> extra = const <String, Object?>{},
   }) {
     developer.log(
       [
@@ -42,6 +43,8 @@ class ComicReaderEventLogger {
         if (scrollOffset != null) 'scrollOffset=${scrollOffset.toStringAsFixed(1)}',
         if (elapsedMs != null) 'elapsedMs=$elapsedMs',
         if (sinceOpenMs != null) 'sinceOpenMs=$sinceOpenMs',
+        for (final entry in extra.entries)
+          if (entry.value != null) '${entry.key}=${entry.value}',
       ].join(' '),
       name: 'ComicReader',
     );

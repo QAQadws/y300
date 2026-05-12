@@ -41,14 +41,20 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
   Future<Map<String, String>>? _headersFuture;
   String? _headersUrl;
   ImageRequestHeaderBuilder? _headersBuilder;
+  bool _remoteResolved = false;
+  bool _remoteResolveScheduled = false;
 
   @override
   void didUpdateWidget(covariant LibraryCachedImage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.imageUrl != widget.imageUrl || oldWidget.headerBuilder != widget.headerBuilder) {
+    if (oldWidget.imageUrl != widget.imageUrl ||
+        oldWidget.localPath != widget.localPath ||
+        oldWidget.headerBuilder != widget.headerBuilder) {
       _headersFuture = null;
       _headersUrl = null;
       _headersBuilder = null;
+      _remoteResolved = false;
+      _remoteResolveScheduled = false;
     }
   }
 
@@ -63,6 +69,7 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
           fit: widget.fit,
           width: widget.width,
           height: widget.height,
+          gaplessPlayback: true,
           errorBuilder: (context, error, stackTrace) => _errorPlaceholder,
         );
       }
@@ -72,15 +79,15 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
     if (remote != null && remote.isNotEmpty) {
       final builder = widget.headerBuilder;
       if (builder == null) {
-        return _buildNetworkImage(remote, const <String, String>{});
+        return _buildRemoteImageShell(remote, const <String, String>{});
       }
       return FutureBuilder<Map<String, String>>(
         future: _headersFor(remote, builder),
         builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return widget.placeholder;
-          }
-          return _buildNetworkImage(remote, snapshot.data ?? const <String, String>{});
+          final headers = snapshot.connectionState == ConnectionState.done
+              ? snapshot.data ?? const <String, String>{}
+              : null;
+          return _buildRemoteImageShell(remote, headers);
         },
       );
     }
@@ -101,6 +108,20 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
     return _headersFuture!;
   }
 
+  Widget _buildRemoteImageShell(
+    String remote,
+    Map<String, String>? headers,
+  ) {
+    final children = <Widget>[
+      if (!_remoteResolved) widget.placeholder,
+      if (headers != null) _buildNetworkImage(remote, headers),
+    ];
+    return Stack(
+      fit: StackFit.passthrough,
+      children: children,
+    );
+  }
+
   Widget _buildNetworkImage(String remote, Map<String, String> headers) {
     final provider = NetworkImage(
       remote,
@@ -111,14 +132,35 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
       fit: widget.fit,
       width: widget.width,
       height: widget.height,
+      gaplessPlayback: true,
       loadingBuilder: (context, child, loadingProgress) {
         if (loadingProgress == null) {
+          _markRemoteResolved();
           return child;
         }
-        return widget.placeholder;
+        return const SizedBox.shrink();
       },
-      errorBuilder: (context, error, stackTrace) => _errorPlaceholder,
+      errorBuilder: (context, error, stackTrace) {
+        _markRemoteResolved();
+        return _errorPlaceholder;
+      },
     );
+  }
+
+  void _markRemoteResolved() {
+    if (_remoteResolved || _remoteResolveScheduled) {
+      return;
+    }
+    _remoteResolveScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _remoteResolved = true;
+        _remoteResolveScheduled = false;
+      });
+    });
   }
 
   Widget get _errorPlaceholder => widget.errorPlaceholder ?? widget.placeholder;

@@ -117,7 +117,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
 
     return Scaffold(
       body: state.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => _buildReaderLoadingState(preferences),
         error: (error, stackTrace) => Center(child: Text('加载阅读器失败：$error')),
         data: (viewState) {
           if (viewState.images.isEmpty) {
@@ -158,6 +158,12 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
           );
         },
       ),
+    );
+  }
+
+  Widget _buildReaderLoadingState(ReaderPreferences preferences) {
+    return _ReaderOpeningPlaceholder(
+      background: _readerBackgroundColor(preferences),
     );
   }
 
@@ -1284,8 +1290,89 @@ class _ReaderImageLoadingPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final content = Column(
+    final content = _ReaderLoadingIndicator(
       key: ValueKey<String>('comic-reader-image-loading-$imageIndex'),
+      text: '图片加载中',
+    );
+
+    if (paged) {
+      return Center(child: content);
+    }
+    return ColoredBox(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(96),
+      child: Center(child: content),
+    );
+  }
+}
+
+class _ReaderOpeningPlaceholder extends StatefulWidget {
+  const _ReaderOpeningPlaceholder({
+    required this.background,
+  });
+
+  final Color background;
+
+  @override
+  State<_ReaderOpeningPlaceholder> createState() =>
+      _ReaderOpeningPlaceholderState();
+}
+
+class _ReaderOpeningPlaceholderState extends State<_ReaderOpeningPlaceholder> {
+  static const Duration _revealDelay = Duration(milliseconds: 160);
+
+  Timer? _timer;
+  bool _showCopy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Most chapter metadata loads within a frame or two.  Holding the visible
+    // opening copy briefly prevents a transient page-level placeholder from
+    // flashing before the real image placeholder takes over.
+    _timer = Timer(_revealDelay, () {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _showCopy = true;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      key: const Key('comic-reader-page-opening'),
+      color: widget.background,
+      child: Center(
+        child: _showCopy
+            ? Text(
+                '正在打开章节',
+                style: Theme.of(context).textTheme.bodySmall,
+              )
+            : const SizedBox.shrink(),
+      ),
+    );
+  }
+}
+
+class _ReaderLoadingIndicator extends StatelessWidget {
+  const _ReaderLoadingIndicator({
+    super.key,
+    required this.text,
+  });
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -1296,18 +1383,10 @@ class _ReaderImageLoadingPlaceholder extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Text(
-          '图片加载中',
+          text,
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
-    );
-
-    if (paged) {
-      return Center(child: content);
-    }
-    return ColoredBox(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(96),
-      child: Center(child: content),
     );
   }
 }

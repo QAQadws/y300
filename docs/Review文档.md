@@ -1989,6 +1989,56 @@
 
 ---
 
+## 漫画阅读器 Phase 4 Review 清单（2026-05-12）
+### 一、预加载队列边界
+- [ ] `ComicReaderPreloadQueue` 位于 domain service 层，不依赖 Riverpod、repository 或 UI。
+- [ ] 队列只负责优先级、去重、并发上限、取消和 snapshot，不直接写数据库。
+- [ ] 同一 `episodeId:imageIndex` 不重复入队。
+- [ ] pending 任务允许被更高优先级任务升级。
+- [ ] `maxConcurrent` 默认 2，并被约束在 1~4。
+
+### 二、取消与跳页行为
+- [ ] Slider/显式跳页会调用 `cancelExcept()` 清理旧窗口外任务。
+- [ ] 已运行但被取消的旧任务结果不会触发 `onResult` 回写。
+- [ ] 保留窗口内的运行任务结果仍可正常回写。
+- [ ] provider dispose 会释放队列，避免页面销毁后继续调度。
+
+### 三、缓存状态回写
+- [ ] 入队成功写 `queued`。
+- [ ] 任务开始写 `downloading`。
+- [ ] 任务成功写 `done` 和本地路径/缓存元数据。
+- [ ] 任务失败写 `failed`，且不打断阅读器状态流。
+- [ ] `downloaded` 图片不会被预加载任务降级覆盖。
+- [ ] `storageImageUrl` 用于定位数据库行，`imageUrl` 用于实际下载。
+
+### 四、阅读器集成
+- [ ] 打开章节后优先入队当前页和后续 4 页。
+- [ ] 滚动/页可见时按方向入队后续 4 页、前序 2 页。
+- [ ] 跳页时目标页使用 `jumpTarget` 优先级。
+- [ ] 图片重试使用 `retry` 优先级。
+- [ ] 靠近章节末尾时仅预取下一章前 3 页，不提前改变当前章节 UI。
+
+### 五、日志与可观测性
+- [ ] `ComicReaderEventLogger` 支持 `extra` 字段。
+- [ ] 队列 snapshot 日志包含 pending/running/success/failed/cancelled。
+- [ ] 日志仍保持轻量，不引入额外 telemetry 依赖。
+
+### 六、测试覆盖（仅编写，未执行）
+- [ ] `comic_reader_preload_queue_test.dart` 覆盖优先级顺序。
+- [ ] `comic_reader_preload_queue_test.dart` 覆盖去重与优先级升级。
+- [ ] `comic_reader_preload_queue_test.dart` 覆盖并发上限。
+- [ ] `comic_reader_preload_queue_test.dart` 覆盖取消旧运行任务结果。
+- [ ] `comic_reader_controller_test.dart` 覆盖跳页窗口预加载和 `queued/downloading/done` 回写。
+- [ ] `comic_reader_controller_test.dart` 覆盖失败图片 retry 入队与状态回写。
+
+### 七、待你本地回归
+1. `flutter test`
+2. `flutter analyze`
+
+说明：`dart format` 按本轮要求未执行，也不作为本轮回归项。
+
+---
+
 ## Shelf 性能优化 Milestone A Review 记录（2026-05-10）
 ### Review 范围
 - `lib/features/library_shared/domain/services/shelf_cover_warmup_service.dart`
