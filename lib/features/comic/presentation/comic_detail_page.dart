@@ -47,6 +47,7 @@ class ComicDetailPage extends ConsumerWidget {
             ),
           );
           if (result is! ComicReaderExitResult ||
+              !result.shouldOpenEpisode ||
               result.lastReadEpisodeId == nextTarget.episodeId) {
             break;
           }

@@ -1963,8 +1963,8 @@
 - [ ] 清除本章缓存不会清理受保护自定义封面。
 
 ### 五、设置偏好
-- [ ] `ReaderPreferences` 持久化阅读模式、页面适配、背景色、页间距、页码浮层、裁边开关。
-- [ ] 裁边当前仅作为偏好入口保留，未与图片处理逻辑耦合。
+- [ ] `ReaderPreferences` 持久化阅读模式、页面适配、背景色、页间距、页码浮层。
+- [ ] 已删除 Phase 6 裁边入口和未接入图片处理管线的预留偏好接口。
 - [ ] 页面适配和页间距能影响 reader 图片布局。
 
 ### 六、架构边界
@@ -2032,6 +2032,68 @@
 - [ ] `comic_reader_controller_test.dart` 覆盖失败图片 retry 入队与状态回写。
 
 ### 七、待你本地回归
+1. `flutter test`
+2. `flutter analyze`
+
+说明：`dart format` 按本轮要求未执行，也不作为本轮回归项。
+
+---
+
+## 漫画阅读器 Phase 5 Review 清单（2026-05-12）
+### 一、章节预加载策略
+- [ ] `ComicReaderChapterPreloadPolicy` 独立于 UI 和 Riverpod。
+- [ ] 总页数 `<= 6` 时最后 2 页触发下一章预加载。
+- [ ] 总页数 `> 6` 时最后 4 页触发下一章预加载。
+- [ ] 下一章只预加载前 3 页，不自动拼接当前阅读流。
+
+### 二、Controller 行为
+- [ ] `ensureNextChapterPreloaded()` 可重复调用且复用进行中的 future。
+- [ ] 下一章已 ready 时重复调用不重新入队。
+- [ ] 下一章图片列表获取失败或为空不会影响当前章节阅读。
+- [ ] 最后一章进入 unavailable 状态，不反复请求下一章。
+- [ ] `goToEpisode()` 在当前 reader 内切换章节，并重置可见页、进度窗口和预加载状态。
+- [ ] `goToEpisode()` 加载目标章节失败时恢复当前章节状态并给出提示。
+- [ ] 章节切换后阅读进度、书签、已读状态属于目标章节。
+- [ ] reader 正常退出时不会因为 `lastReadEpisodeId` 变化而触发详情页循环再次打开。
+
+### 三、缓存与日志
+- [ ] 下一章前 3 页任务使用 `ComicReaderPreloadPriority.nextChapter`。
+- [ ] 下一章任务只回写仓储和下一章预加载状态，不污染当前章节图片状态。
+- [ ] 日志包含 `next_chapter_preload_start`、`next_chapter_preload_ready`、`next_chapter_preload_failed` 或最后一章不可用事件。
+- [ ] provider dispose 后队列仍由既有 dispose 流程释放。
+
+### 四、转场 UI
+- [ ] 垂直连续模式末尾显示“下一章：xxx”转场块。
+- [ ] 已预加载时转场块显示已预加载页数。
+- [ ] 点击转场块切换到下一章，不返回详情页重新打开。
+- [ ] 垂直模式 tap zone 不覆盖转场块所在的底部安全区。
+- [ ] tap zone 作为内容层父级 raw pointer 监听点击，滚动/拖动手势仍可传递给 `ListView/PageView`。
+- [ ] tap zone 的单击延迟不会破坏图片双击缩放。
+- [ ] 底部下一章按钮按 idle/loading/ready/failed 显示对应状态图标或 tooltip。
+
+### 五、Phase 6 跳过范围
+- [ ] `comic_reader_page.dart` 中不再出现“裁边”开关。
+- [ ] `ReaderPreferences` 不再包含 `cropBorders`。
+- [ ] `ReaderPreferencesController` 不再暴露 `setCropBorders()`。
+- [ ] 未实际接入 UI 的 `fullscreenOnOpen/cacheDirectoryPath` 预留偏好接口已删除。
+- [ ] 页面适配、背景色、页间距、页码浮层等已完成功能保留。
+
+### 六、测试覆盖（仅编写，未执行）
+- [ ] `comic_reader_chapter_preload_test.dart` 覆盖阈值策略。
+- [ ] `comic_reader_controller_test.dart` 覆盖下一章预加载和当前 reader 内切换章节。
+- [ ] `comic_reader_page_test.dart` 覆盖下一章转场块。
+- [ ] `comic_detail_page_test.dart` 覆盖 reader 正常退出不触发详情页再次打开。
+- [ ] `reader_tap_zones_test.dart` 覆盖底部安全区、拖动手势穿透和双击保护。
+- [ ] 偏好相关测试删除裁边/预留接口断言。
+
+### 七、本轮回归修复关注点（2026-05-12）
+- [ ] `comic_reader_controller_test.dart` 中下一章预加载用例不再直接对短暂 loading 状态执行 `value!`。
+- [ ] `comic_reader_controller_test.dart` 对 `autoDispose` reader provider 持有订阅，异步队列期间不会被释放重建。
+- [ ] `comic_reader_page_test.dart` 对尾部下一章转场块先滚动到可见区域再断言。
+- [ ] 菜单、章节列表、更多菜单、Slider 用例不再通过 `ensureVisible()` 滚动固定底部 overlay。
+- [ ] 阅读器正文滚动后，底部控制层仍位于视口内且可点击。
+
+### 八、待你本地回归
 1. `flutter test`
 2. `flutter analyze`
 

@@ -10,18 +10,19 @@ void main() {
     expect(value.background, ReaderBackgroundPreference.followTheme);
     expect(value.pageSpacing, 8);
     expect(value.showPageIndicator, isTrue);
-    expect(value.cropBorders, isFalse);
-    expect(value.fullscreenOnOpen, isFalse);
-    expect(value.cacheDirectoryPath, isNull);
   });
 
-  test('ReaderPreferences.copyWith supports clearCacheDirectoryPath', () {
+  test('ReaderPreferences.copyWith updates supported reader preferences', () {
     final value = ReaderPreferences.defaults().copyWith(
-      cacheDirectoryPath: 'C:/tmp/comic',
+      pageFit: ReaderPageFitPreference.contain,
+      background: ReaderBackgroundPreference.black,
+      pageSpacing: 16,
+      showPageIndicator: false,
     );
-    expect(value.cacheDirectoryPath, 'C:/tmp/comic');
 
-    final cleared = value.copyWith(clearCacheDirectoryPath: true);
-    expect(cleared.cacheDirectoryPath, isNull);
+    expect(value.pageFit, ReaderPageFitPreference.contain);
+    expect(value.background, ReaderBackgroundPreference.black);
+    expect(value.pageSpacing, 16);
+    expect(value.showPageIndicator, isFalse);
   });
 }

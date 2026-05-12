@@ -8,6 +8,7 @@ import 'package:y300/features/comic/data/comic_download_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
+import 'package:y300/features/comic/domain/models/comic_reader_exit_result.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
@@ -79,6 +80,60 @@ void main() {
 
     expect(find.byKey(const Key('comic-reader-image-list')), findsOneWidget);
   });
+
+  testWidgets('ComicDetailPage does not reopen reader on normal reader exit', (tester) async {
+    final observer = _CountingNavigatorObserver();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+          comicEpisodeRefreshServiceProvider.overrideWithValue(_FakeComicEpisodeRefreshService()),
+          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
+          comicReaderServiceProvider.overrideWith((ref) async => _FakeComicReaderService()),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+        ],
+        child: MaterialApp(
+          navigatorObservers: [observer],
+          home: const ComicDetailPage(comicId: 'comic:1'),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(observer.pushCount, 2);
+
+    Navigator.of(tester.element(find.byKey(const Key('comic-reader-image-list')))).pop(
+      const ComicReaderExitResult(
+        comicId: 'comic:1',
+        lastReadEpisodeId: 'comic:1:e2',
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(observer.pushCount, 2);
+    expect(find.byType(ComicDetailPage), findsOneWidget);
+  });
+}
+
+class _CountingNavigatorObserver extends NavigatorObserver {
+  int pushCount = 0;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    pushCount++;
+    super.didPush(route, previousRoute);
+  }
 }
 
 class _FakeComicReaderService implements ComicReaderService {

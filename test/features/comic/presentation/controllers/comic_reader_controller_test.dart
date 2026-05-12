@@ -391,6 +391,104 @@ void main() {
     expect(imageCache.lastLocalCopyRequest?.role, ImageCacheRole.customCover);
     expect(repository.lastCustomCoverLocalPath, '/protected/cover.jpg');
   });
+
+  test('near chapter end preloads next episode image list and first pages', () async {
+    final repository = _ReaderRepoForControllerTest(imageCount: 10);
+    final service = _ReaderServiceSpy();
+    final writer = _ReadingStateWriterSpy(repository);
+    final container = ProviderContainer(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(repository),
+        comicReadingStateWriterProvider.overrideWithValue(writer),
+        comicReaderServiceProvider.overrideWith((ref) async => service),
+        comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final args = const ComicReaderArgs(comicId: 'yamibo:100', episodeId: 'yamibo:100:101');
+    final subscription = container.listen<AsyncValue<ComicReaderViewState>>(
+      comicReaderControllerProvider(args),
+      (previous, next) {},
+      fireImmediately: true,
+    );
+    addTearDown(subscription.close);
+    await container.read(comicReaderControllerProvider(args).future);
+    service.cachedImageUrls.clear();
+    repository.cacheStatusWrites.clear();
+
+    await container
+        .read(comicReaderControllerProvider(args).notifier)
+        .onImageVisible(6);
+    await _waitForCondition(
+      () {
+        final nextDoneUrls = repository.cacheStatusWrites
+            .where(
+              (item) =>
+                  item.episodeId == 'yamibo:100:102' &&
+                  item.cacheStatus == 'done',
+            )
+            .map((item) => item.imageUrl)
+            .toSet();
+        return nextDoneUrls.contains('https://img.test/102-1.jpg') &&
+            nextDoneUrls.contains('https://img.test/102-3.jpg');
+      },
+      label: 'next chapter first pages preload',
+    );
+
+    final state = await _waitForReaderState(
+      container,
+      args,
+      (state) =>
+          state.nextChapterPreload.episodeId == 'yamibo:100:102' &&
+          state.nextChapterPreload.hasLoadedImageList,
+      label: 'next chapter preload state',
+    );
+    expect(state.nextChapterPreload.episodeId, 'yamibo:100:102');
+    expect(state.nextChapterPreload.hasLoadedImageList, isTrue);
+    expect(service.cachedImageUrls, contains('https://img.test/102-1.jpg'));
+    expect(service.cachedImageUrls, contains('https://img.test/102-3.jpg'));
+  });
+
+  test('goToEpisode switches reader state without rebuilding provider args', () async {
+    final repository = _ReaderRepoForControllerTest();
+    final service = _ReaderServiceSpy();
+    final writer = _ReadingStateWriterSpy(repository);
+    final container = ProviderContainer(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(repository),
+        comicReadingStateWriterProvider.overrideWithValue(writer),
+        comicReaderServiceProvider.overrideWith((ref) async => service),
+        comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final args = const ComicReaderArgs(comicId: 'yamibo:100', episodeId: 'yamibo:100:101');
+    final subscription = container.listen<AsyncValue<ComicReaderViewState>>(
+      comicReaderControllerProvider(args),
+      (previous, next) {},
+      fireImmediately: true,
+    );
+    addTearDown(subscription.close);
+    await container.read(comicReaderControllerProvider(args).future);
+
+    final switched = await container
+        .read(comicReaderControllerProvider(args).notifier)
+        .goToEpisode('yamibo:100:102');
+
+    final state = container.read(comicReaderControllerProvider(args)).value!;
+    expect(switched, isTrue);
+    expect(state.episodeId, 'yamibo:100:102');
+    expect(state.episodeTitle, '第2话');
+    expect(state.images.first.imageUrl, 'https://img.test/102-1.jpg');
+    expect(
+      state.chapters.singleWhere((chapter) => chapter.episodeId == 'yamibo:100:102').isCurrent,
+      isTrue,
+    );
+  });
 }
 
 class _NoopComicDownloadService implements ComicDownloadService {
@@ -715,16 +813,20 @@ class _ReaderRepoForControllerTest implements ComicRepository, ComicCoverCacheWr
         ),
       ];
     }
+    final sourceTid = episodeId.split(':').last;
     return List<ComicEpisodeImageItem>.generate(imageCount, (index) {
       final page = index + 1;
       return ComicEpisodeImageItem(
-        episodeId: 'yamibo:100:101',
-        imageUrl: 'https://img.test/101-$page.jpg',
+        episodeId: episodeId,
+        imageUrl: 'https://img.test/$sourceTid-$page.jpg',
         imageIndex: index,
-        cacheStatus: index == 0 && cachedFirstImage
+        cacheStatus: episodeId == 'yamibo:100:101' && index == 0 && cachedFirstImage
             ? 'done'
-            : (failedImageIndex == index ? 'failed' : 'none'),
-        cacheLocalPath: index == 0 && cachedFirstImage ? '/cache/101-1.jpg' : null,
+            : (episodeId == 'yamibo:100:101' && failedImageIndex == index ? 'failed' : 'none'),
+        cacheLocalPath:
+            episodeId == 'yamibo:100:101' && index == 0 && cachedFirstImage
+                ? '/cache/101-1.jpg'
+                : null,
       );
     });
   }
@@ -837,6 +939,23 @@ Future<void> _waitForCondition(
   for (var i = 0; i < attempts; i++) {
     if (isReady()) {
       return;
+    }
+    await Future<void>.delayed(Duration.zero);
+  }
+  fail('Timed out waiting for $label');
+}
+
+Future<ComicReaderViewState> _waitForReaderState(
+  ProviderContainer container,
+  ComicReaderArgs args,
+  bool Function(ComicReaderViewState state) isReady, {
+  required String label,
+  int attempts = 80,
+}) async {
+  for (var i = 0; i < attempts; i++) {
+    final value = container.read(comicReaderControllerProvider(args)).value;
+    if (value != null && isReady(value)) {
+      return value;
     }
     await Future<void>.delayed(Duration.zero);
   }

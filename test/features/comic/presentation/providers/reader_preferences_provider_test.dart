@@ -26,15 +26,16 @@ void main() {
     await container.read(readerPreferencesControllerProvider.notifier).setReaderMode(
           ReaderModePreference.rtl,
         );
-    await container.read(readerPreferencesControllerProvider.notifier).setCacheDirectoryPath(
-          'D:/comic-cache',
+    await container.read(readerPreferencesControllerProvider.notifier).setPageFit(
+          ReaderPageFitPreference.contain,
         );
+    await container.read(readerPreferencesControllerProvider.notifier).setShowPageIndicator(false);
 
     final freshContainer = ProviderContainer();
     addTearDown(freshContainer.dispose);
     final value = await freshContainer.read(readerPreferencesControllerProvider.future);
     expect(value.readerMode, ReaderModePreference.rtl);
-    expect(value.cacheDirectoryPath, 'D:/comic-cache');
+    expect(value.pageFit, ReaderPageFitPreference.contain);
+    expect(value.showPageIndicator, isFalse);
   });
 }
-

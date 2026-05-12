@@ -6,6 +6,7 @@ import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/comic/domain/models/comic_reader_exit_result.dart';
+import 'package:y300/features/comic/domain/services/comic_reader_chapter_preload.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/comic/presentation/models/reader_preferences.dart';
 import 'package:y300/features/comic/presentation/providers/reader_preferences_provider.dart';
@@ -130,12 +131,6 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
 
           return Stack(
             children: [
-              _buildReaderContentLayer(
-                viewState: viewState,
-                mode: mode,
-                preferences: preferences,
-                imageHeaderBuilder: imageHeaderBuilder,
-              ),
               ReaderTapZones(
                 onCenterTap: _toggleReaderMenu,
                 onLeftTap: mode == ReaderModePreference.vertical
@@ -144,7 +139,14 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
                 onRightTap: mode == ReaderModePreference.vertical
                     ? null
                     : () => _turnPageByTap(mode: mode, viewState: viewState, isLeftTap: false),
+                bottomSafeFraction: mode == ReaderModePreference.vertical ? 0.2 : 0,
                 enabled: !_isAnyImageZoomed,
+                child: _buildReaderContentLayer(
+                  viewState: viewState,
+                  mode: mode,
+                  preferences: preferences,
+                  imageHeaderBuilder: imageHeaderBuilder,
+                ),
               ),
               ReaderPageIndicatorOverlay(
                 visible: !_isMenuVisible && preferences.showPageIndicator,
@@ -524,8 +526,19 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
       key: const Key('comic-reader-image-list'),
       controller: _scrollController,
       padding: EdgeInsets.zero,
-      itemCount: viewState.images.length,
+      itemCount: viewState.images.length + 1,
       itemBuilder: (context, index) {
+        if (index == viewState.images.length) {
+          return _ReaderNextChapterTransition(
+            preload: viewState.nextChapterPreload,
+            hasNextEpisode: viewState.hasNextEpisode,
+            isSwitchingEpisode: viewState.isSwitchingEpisode,
+            onOpenNext: () => _openAdjacentEpisode(
+              viewState,
+              previous: false,
+            ),
+          );
+        }
         final image = viewState.images[index];
         return _buildReaderImage(
           viewState: viewState,
@@ -727,6 +740,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
             totalPages: total,
             hasPreviousEpisode: viewState.hasPreviousEpisode,
             hasNextEpisode: viewState.hasNextEpisode,
+            nextChapterPreload: viewState.nextChapterPreload,
             onPreviousEpisode: () => _openAdjacentEpisode(
               viewState,
               previous: true,
@@ -794,21 +808,44 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     ComicReaderViewState viewState, {
     required bool previous,
   }) async {
+    if (viewState.isSwitchingEpisode) {
+      return;
+    }
     final targetEpisodeId = previous
         ? await _controller().goToPreviousEpisode()
         : await _controller().goToNextEpisode();
     if (targetEpisodeId == null || !mounted) {
       return;
     }
-    await _popReader(
-      ComicReaderExitResult(
-        comicId: viewState.comicId,
-        lastReadEpisodeId: targetEpisodeId,
-        completedEpisodeIds: viewState.isCurrentEpisodeRead
-            ? <String>[viewState.episodeId]
-            : const <String>[],
-      ),
-    );
+    if (!previous) {
+      await _controller().ensureNextChapterPreloaded();
+      if (!mounted) {
+        return;
+      }
+    }
+    final switched = await _controller().goToEpisode(targetEpisodeId);
+    if (!switched || !mounted) {
+      return;
+    }
+    _resetReaderPositionForEpisodeSwitch();
+    _hideReaderMenuForContentMotion();
+  }
+
+  void _resetReaderPositionForEpisodeSwitch() {
+    _reportedVisibleImageIndexes.clear();
+    _zoomedStateByIndex.clear();
+    _lastKnownIndex = 0;
+    _sliderPreviewIndex = null;
+    _pendingCommittedIndex = null;
+    _isSliderCommitInFlight = false;
+    _lastPagedRestoreKey = null;
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
+    final pageController = _pageController;
+    if (pageController != null && pageController.hasClients) {
+      pageController.jumpToPage(0);
+    }
   }
 
   Future<void> _showModeSheet(ComicReaderViewState viewState) async {
@@ -887,15 +924,17 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     if (selected == null || selected.isCurrent || !mounted) {
       return;
     }
-    await _popReader(
-      ComicReaderExitResult(
-        comicId: viewState.comicId,
-        lastReadEpisodeId: selected.episodeId,
-        completedEpisodeIds: viewState.isCurrentEpisodeRead
-            ? <String>[viewState.episodeId]
-            : const <String>[],
-      ),
-    );
+    if (selected.episodeId == viewState.nextChapterPreload.episodeId) {
+      await _controller().ensureNextChapterPreloaded();
+      if (!mounted) {
+        return;
+      }
+    }
+    final switched = await _controller().goToEpisode(selected.episodeId);
+    if (!switched || !mounted) {
+      return;
+    }
+    _resetReaderPositionForEpisodeSwitch();
   }
 
   void _showDisplaySettingsSheet(
@@ -918,7 +957,6 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
           onShowPageIndicatorChanged: (value) => unawaited(
             preferencesController.setShowPageIndicator(value),
           ),
-          onCropBordersChanged: (value) => unawaited(preferencesController.setCropBorders(value)),
         ),
       ),
     );
@@ -991,6 +1029,131 @@ class _ReaderImageSlot extends StatelessWidget {
   }
 }
 
+class _ReaderNextChapterTransition extends StatelessWidget {
+  const _ReaderNextChapterTransition({
+    required this.preload,
+    required this.hasNextEpisode,
+    required this.isSwitchingEpisode,
+    required this.onOpenNext,
+  });
+
+  final ComicReaderChapterPreloadState preload;
+  final bool hasNextEpisode;
+  final bool isSwitchingEpisode;
+  final VoidCallback onOpenNext;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!hasNextEpisode) {
+      return const SizedBox.shrink(
+        key: Key('comic-reader-next-chapter-transition-empty'),
+      );
+    }
+    final scheme = Theme.of(context).colorScheme;
+    final canOpen = preload.canOpen && !isSwitchingEpisode;
+    return Padding(
+      key: const Key('comic-reader-next-chapter-transition'),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 56),
+      child: Material(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.88),
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          key: const Key('comic-reader-next-chapter-transition-button'),
+          borderRadius: BorderRadius.circular(8),
+          onTap: canOpen ? onOpenNext : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Icon(_iconFor(preload.status), color: scheme.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        hasNextEpisode ? '下一章：${preload.displayTitle}' : '已是最后一章',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        _subtitle(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (isSwitchingEpisode)
+                  const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  Icon(
+                    Icons.chevron_right,
+                    color: canOpen ? scheme.primary : scheme.onSurfaceVariant,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  IconData _iconFor(ComicReaderChapterPreloadStatus status) {
+    switch (status) {
+      case ComicReaderChapterPreloadStatus.loadingImages:
+      case ComicReaderChapterPreloadStatus.preloadingPages:
+        return Icons.downloading_outlined;
+      case ComicReaderChapterPreloadStatus.ready:
+        return Icons.offline_bolt_outlined;
+      case ComicReaderChapterPreloadStatus.failed:
+        return Icons.error_outline;
+      case ComicReaderChapterPreloadStatus.unavailable:
+        return Icons.done_all;
+      case ComicReaderChapterPreloadStatus.idle:
+      case ComicReaderChapterPreloadStatus.imagesReady:
+        return Icons.skip_next;
+    }
+  }
+
+  String _subtitle() {
+    if (!hasNextEpisode) {
+      return preload.message ?? '没有更多章节';
+    }
+    if (isSwitchingEpisode) {
+      return '正在切换章节';
+    }
+    switch (preload.status) {
+      case ComicReaderChapterPreloadStatus.loadingImages:
+        return '正在获取图片列表';
+      case ComicReaderChapterPreloadStatus.imagesReady:
+        return '图片列表已就绪';
+      case ComicReaderChapterPreloadStatus.preloadingPages:
+        return '正在缓存下一章前几页';
+      case ComicReaderChapterPreloadStatus.ready:
+        return preload.cachedPageCount > 0
+            ? '已预加载 ${preload.cachedPageCount} 页'
+            : '已准备好';
+      case ComicReaderChapterPreloadStatus.failed:
+        return preload.message ?? '预加载失败，点击后重新加载';
+      case ComicReaderChapterPreloadStatus.unavailable:
+        return preload.message ?? '没有更多章节';
+      case ComicReaderChapterPreloadStatus.idle:
+        return '点击进入下一章';
+    }
+  }
+}
+
 class _ReaderSheetTitle extends StatelessWidget {
   const _ReaderSheetTitle({required this.title});
 
@@ -1039,7 +1202,6 @@ class _ReaderDisplaySettingsSheet extends StatelessWidget {
     required this.onBackgroundChanged,
     required this.onPageSpacingChanged,
     required this.onShowPageIndicatorChanged,
-    required this.onCropBordersChanged,
   });
 
   final ReaderPreferences preferences;
@@ -1048,7 +1210,6 @@ class _ReaderDisplaySettingsSheet extends StatelessWidget {
   final ValueChanged<ReaderBackgroundPreference> onBackgroundChanged;
   final ValueChanged<double> onPageSpacingChanged;
   final ValueChanged<bool> onShowPageIndicatorChanged;
-  final ValueChanged<bool> onCropBordersChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1060,7 +1221,6 @@ class _ReaderDisplaySettingsSheet extends StatelessWidget {
         onBackgroundChanged: onBackgroundChanged,
         onPageSpacingChanged: onPageSpacingChanged,
         onShowPageIndicatorChanged: onShowPageIndicatorChanged,
-        onCropBordersChanged: onCropBordersChanged,
       ),
     );
   }
@@ -1074,7 +1234,6 @@ class _ReaderDisplaySettingsContent extends StatefulWidget {
     required this.onBackgroundChanged,
     required this.onPageSpacingChanged,
     required this.onShowPageIndicatorChanged,
-    required this.onCropBordersChanged,
   });
 
   final ReaderPreferences preferences;
@@ -1083,7 +1242,6 @@ class _ReaderDisplaySettingsContent extends StatefulWidget {
   final ValueChanged<ReaderBackgroundPreference> onBackgroundChanged;
   final ValueChanged<double> onPageSpacingChanged;
   final ValueChanged<bool> onShowPageIndicatorChanged;
-  final ValueChanged<bool> onCropBordersChanged;
 
   @override
   State<_ReaderDisplaySettingsContent> createState() =>
@@ -1179,16 +1337,6 @@ class _ReaderDisplaySettingsContentState
           onChanged: (value) {
             setState(() => _current = _current.copyWith(showPageIndicator: value));
             widget.onShowPageIndicatorChanged(value);
-          },
-        ),
-        SwitchListTile(
-          key: const Key('comic-reader-crop-borders-switch'),
-          title: const Text('裁边'),
-          subtitle: const Text('后续阶段接入图片处理管线'),
-          value: _current.cropBorders,
-          onChanged: (value) {
-            setState(() => _current = _current.copyWith(cropBorders: value));
-            widget.onCropBordersChanged(value);
           },
         ),
       ],

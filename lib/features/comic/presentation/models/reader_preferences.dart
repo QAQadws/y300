@@ -34,9 +34,6 @@ class ReaderPreferences {
     required this.background,
     required this.pageSpacing,
     required this.showPageIndicator,
-    required this.cropBorders,
-    required this.fullscreenOnOpen,
-    this.cacheDirectoryPath,
   });
 
   /// Default value used when no persisted data exists.
@@ -47,9 +44,6 @@ class ReaderPreferences {
       background: ReaderBackgroundPreference.followTheme,
       pageSpacing: 8,
       showPageIndicator: true,
-      cropBorders: false,
-      fullscreenOnOpen: false,
-      cacheDirectoryPath: null,
     );
   }
 
@@ -61,9 +55,6 @@ class ReaderPreferences {
   /// before persisting so render code can use it directly.
   final double pageSpacing;
   final bool showPageIndicator;
-  final bool cropBorders;
-  final bool fullscreenOnOpen;
-  final String? cacheDirectoryPath;
 
   ReaderPreferences copyWith({
     ReaderModePreference? readerMode,
@@ -71,10 +62,6 @@ class ReaderPreferences {
     ReaderBackgroundPreference? background,
     double? pageSpacing,
     bool? showPageIndicator,
-    bool? cropBorders,
-    bool? fullscreenOnOpen,
-    String? cacheDirectoryPath,
-    bool clearCacheDirectoryPath = false,
   }) {
     return ReaderPreferences(
       readerMode: readerMode ?? this.readerMode,
@@ -82,11 +69,6 @@ class ReaderPreferences {
       background: background ?? this.background,
       pageSpacing: pageSpacing ?? this.pageSpacing,
       showPageIndicator: showPageIndicator ?? this.showPageIndicator,
-      cropBorders: cropBorders ?? this.cropBorders,
-      fullscreenOnOpen: fullscreenOnOpen ?? this.fullscreenOnOpen,
-      cacheDirectoryPath: clearCacheDirectoryPath
-          ? null
-          : (cacheDirectoryPath ?? this.cacheDirectoryPath),
     );
   }
 }

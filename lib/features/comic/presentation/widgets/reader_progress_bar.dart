@@ -1,5 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 
+import 'package:y300/features/comic/domain/services/comic_reader_chapter_preload.dart';
+
 /// Reusable reader progress control.
 ///
 /// Layout contract:
@@ -12,6 +14,7 @@ class ReaderProgressBar extends StatelessWidget {
     required this.totalPages,
     required this.hasPreviousEpisode,
     required this.hasNextEpisode,
+    required this.nextChapterPreload,
     required this.onPreviousEpisode,
     required this.onNextEpisode,
     required this.onChanged,
@@ -24,6 +27,7 @@ class ReaderProgressBar extends StatelessWidget {
   final int totalPages;
   final bool hasPreviousEpisode;
   final bool hasNextEpisode;
+  final ComicReaderChapterPreloadState nextChapterPreload;
   final VoidCallback onPreviousEpisode;
   final VoidCallback onNextEpisode;
   final ValueChanged<double> onChanged;
@@ -89,11 +93,46 @@ class ReaderProgressBar extends StatelessWidget {
         ),
         IconButton(
           key: const Key('comic-reader-next-episode-button'),
-          tooltip: '下一话',
+          tooltip: _nextEpisodeTooltip(),
           onPressed: hasNextEpisode ? onNextEpisode : null,
-          icon: const Icon(Icons.skip_next),
+          icon: Icon(_nextEpisodeIcon()),
         ),
       ],
     );
+  }
+
+  IconData _nextEpisodeIcon() {
+    switch (nextChapterPreload.status) {
+      case ComicReaderChapterPreloadStatus.loadingImages:
+      case ComicReaderChapterPreloadStatus.preloadingPages:
+        return Icons.downloading_outlined;
+      case ComicReaderChapterPreloadStatus.ready:
+        return Icons.offline_bolt_outlined;
+      case ComicReaderChapterPreloadStatus.failed:
+        return Icons.error_outline;
+      case ComicReaderChapterPreloadStatus.unavailable:
+      case ComicReaderChapterPreloadStatus.idle:
+      case ComicReaderChapterPreloadStatus.imagesReady:
+        return Icons.skip_next;
+    }
+  }
+
+  String _nextEpisodeTooltip() {
+    if (!hasNextEpisode) {
+      return '已是最后一话';
+    }
+    switch (nextChapterPreload.status) {
+      case ComicReaderChapterPreloadStatus.loadingImages:
+      case ComicReaderChapterPreloadStatus.preloadingPages:
+        return '下一话预加载中';
+      case ComicReaderChapterPreloadStatus.ready:
+        return '下一话已预加载';
+      case ComicReaderChapterPreloadStatus.failed:
+        return '下一话预加载失败，点击加载';
+      case ComicReaderChapterPreloadStatus.unavailable:
+      case ComicReaderChapterPreloadStatus.idle:
+      case ComicReaderChapterPreloadStatus.imagesReady:
+        return '下一话';
+    }
   }
 }

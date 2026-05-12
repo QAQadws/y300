@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/features/comic/domain/services/comic_reader_chapter_preload.dart';
 import 'package:y300/features/comic/presentation/models/reader_preferences.dart';
 import 'package:y300/features/comic/presentation/widgets/reader_progress_bar.dart';
 
@@ -10,6 +11,7 @@ class ReaderBottomPanel extends StatelessWidget {
     required this.totalPages,
     required this.hasPreviousEpisode,
     required this.hasNextEpisode,
+    required this.nextChapterPreload,
     required this.onPreviousEpisode,
     required this.onNextEpisode,
     required this.onOpenModeSheet,
@@ -27,6 +29,7 @@ class ReaderBottomPanel extends StatelessWidget {
   final int totalPages;
   final bool hasPreviousEpisode;
   final bool hasNextEpisode;
+  final ComicReaderChapterPreloadState nextChapterPreload;
   final VoidCallback onPreviousEpisode;
   final VoidCallback onNextEpisode;
   final VoidCallback onOpenModeSheet;
@@ -54,6 +57,7 @@ class ReaderBottomPanel extends StatelessWidget {
                 totalPages: totalPages,
                 hasPreviousEpisode: hasPreviousEpisode,
                 hasNextEpisode: hasNextEpisode,
+                nextChapterPreload: nextChapterPreload,
                 onPreviousEpisode: onPreviousEpisode,
                 onNextEpisode: onNextEpisode,
                 onChangeStart: onProgressChangeStart,

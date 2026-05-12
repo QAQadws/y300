@@ -16,9 +16,6 @@ class SharedPrefsReaderPreferencesRepository
   static const String _backgroundKey = 'reader_pref_background';
   static const String _pageSpacingKey = 'reader_pref_page_spacing';
   static const String _showPageIndicatorKey = 'reader_pref_show_page_indicator';
-  static const String _cropBordersKey = 'reader_pref_crop_borders';
-  static const String _fullscreenOnOpenKey = 'reader_pref_fullscreen_on_open';
-  static const String _cacheDirectoryPathKey = 'reader_pref_cache_directory';
 
   @override
   Future<ReaderPreferences> load() async {
@@ -32,9 +29,6 @@ class SharedPrefsReaderPreferencesRepository
       background: _parseBackground(prefs.getString(_backgroundKey)),
       pageSpacing: _normalizePageSpacing(prefs.getDouble(_pageSpacingKey)),
       showPageIndicator: prefs.getBool(_showPageIndicatorKey) ?? true,
-      cropBorders: prefs.getBool(_cropBordersKey) ?? false,
-      fullscreenOnOpen: prefs.getBool(_fullscreenOnOpenKey) ?? false,
-      cacheDirectoryPath: prefs.getString(_cacheDirectoryPathKey),
     );
   }
 
@@ -49,14 +43,6 @@ class SharedPrefsReaderPreferencesRepository
       _normalizePageSpacing(preferences.pageSpacing),
     );
     await prefs.setBool(_showPageIndicatorKey, preferences.showPageIndicator);
-    await prefs.setBool(_cropBordersKey, preferences.cropBorders);
-    await prefs.setBool(_fullscreenOnOpenKey, preferences.fullscreenOnOpen);
-    final cacheDirectoryPath = preferences.cacheDirectoryPath;
-    if (cacheDirectoryPath == null || cacheDirectoryPath.isEmpty) {
-      await prefs.remove(_cacheDirectoryPathKey);
-      return;
-    }
-    await prefs.setString(_cacheDirectoryPathKey, cacheDirectoryPath);
   }
 
   static ReaderModePreference _parseMode(String? raw) {
@@ -133,26 +119,6 @@ class ReaderPreferencesController extends AsyncNotifier<ReaderPreferences> {
   Future<void> setShowPageIndicator(bool value) async {
     final current = state.value ?? ReaderPreferences.defaults();
     await _persist(current.copyWith(showPageIndicator: value));
-  }
-
-  Future<void> setCropBorders(bool value) async {
-    final current = state.value ?? ReaderPreferences.defaults();
-    await _persist(current.copyWith(cropBorders: value));
-  }
-
-  Future<void> setFullscreenOnOpen(bool value) async {
-    final current = state.value ?? ReaderPreferences.defaults();
-    await _persist(current.copyWith(fullscreenOnOpen: value));
-  }
-
-  Future<void> setCacheDirectoryPath(String? path) async {
-    final current = state.value ?? ReaderPreferences.defaults();
-    final normalized = path?.trim();
-    if (normalized == null || normalized.isEmpty) {
-      await _persist(current.copyWith(clearCacheDirectoryPath: true));
-      return;
-    }
-    await _persist(current.copyWith(cacheDirectoryPath: normalized));
   }
 
   Future<void> _persist(ReaderPreferences next) async {

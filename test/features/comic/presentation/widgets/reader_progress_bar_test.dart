@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/comic/domain/services/comic_reader_chapter_preload.dart';
 import 'package:y300/features/comic/presentation/widgets/reader_progress_bar.dart';
 
 void main() {
@@ -17,6 +18,11 @@ void main() {
             totalPages: 5,
             hasPreviousEpisode: true,
             hasNextEpisode: true,
+            nextChapterPreload: const ComicReaderChapterPreloadState(
+              status: ComicReaderChapterPreloadStatus.idle,
+              episodeId: 'next',
+              title: '第2话',
+            ),
             onPreviousEpisode: () => previousTapped = true,
             onNextEpisode: () => nextTapped = true,
             onChanged: (_) => changed = true,
@@ -57,6 +63,12 @@ void main() {
             totalPages: 8,
             hasPreviousEpisode: true,
             hasNextEpisode: true,
+            nextChapterPreload: const ComicReaderChapterPreloadState(
+              status: ComicReaderChapterPreloadStatus.ready,
+              episodeId: 'next',
+              title: '第2话',
+              cachedPageCount: 3,
+            ),
             onPreviousEpisode: () {},
             onNextEpisode: () {},
             onChanged: (_) => changed = true,

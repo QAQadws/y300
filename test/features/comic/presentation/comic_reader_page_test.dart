@@ -33,6 +33,59 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
   }
 
+  Future<void> openReaderMenu(WidgetTester tester) async {
+    // The tap-zone keys are geometry anchors; tapping coordinates keeps the
+    // test aligned with the pass-through gesture layer.
+    final center = tester.getCenter(
+      find.byKey(const Key('comic-reader-center-tap-zone')),
+    );
+    await tester.tapAt(center);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 360));
+    await tester.pump(const Duration(milliseconds: 300));
+  }
+
+  Future<void> revealNextChapterTransition(WidgetTester tester) async {
+    final listFinder = find.byKey(const Key('comic-reader-image-list'));
+    for (var i = 0; i < 4; i++) {
+      if (find.byKey(const Key('comic-reader-next-chapter-transition')).evaluate().isNotEmpty) {
+        return;
+      }
+      await tester.drag(listFinder, const Offset(0, -1000));
+      await tester.pump();
+    }
+  }
+
+  Future<void> tapVisibleByKey(WidgetTester tester, Key key) async {
+    final finder = find.byKey(key);
+    expect(finder, findsOneWidget);
+    final center = tester.getCenter(finder);
+    final size = tester.view.physicalSize / tester.view.devicePixelRatio;
+    expect(
+      Rect.fromLTWH(0, 0, size.width, size.height).contains(center),
+      isTrue,
+      reason: '$key should be inside the test viewport before tapping',
+    );
+    await tester.tapAt(center);
+  }
+
+  Future<void> dragVisibleByKey(
+    WidgetTester tester,
+    Key key,
+    Offset offset,
+  ) async {
+    final finder = find.byKey(key);
+    expect(finder, findsOneWidget);
+    final center = tester.getCenter(finder);
+    final size = tester.view.physicalSize / tester.view.devicePixelRatio;
+    expect(
+      Rect.fromLTWH(0, 0, size.width, size.height).contains(center),
+      isTrue,
+      reason: '$key should be inside the test viewport before dragging',
+    );
+    await tester.dragFrom(center, offset);
+  }
+
   testWidgets('ComicReaderPage renders images and cache actions', (tester) async {
     await prepareLargeViewport(tester);
     await tester.pumpWidget(
@@ -57,9 +110,9 @@ void main() {
     expect(find.byKey(const Key('comic-reader-top-overlay')), findsOneWidget);
     expect(find.byKey(const Key('comic-reader-bottom-overlay')), findsOneWidget);
     expect(find.byKey(const Key('comic-reader-page-indicator-overlay')), findsOneWidget);
+    expect(find.byKey(const Key('comic-reader-next-chapter-transition')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('comic-reader-center-tap-zone')));
-    await tester.pumpAndSettle();
+    await openReaderMenu(tester);
 
     expect(find.byKey(const Key('comic-reader-top-comic-title')), findsOneWidget);
     expect(find.byKey(const Key('comic-reader-bookmark-button')), findsOneWidget);
@@ -73,6 +126,31 @@ void main() {
     expect(find.byKey(const Key('comic-reader-progress-slider')), findsOneWidget);
     expect(find.byKey(const Key('comic-reader-current-page-label')), findsOneWidget);
     expect(find.byKey(const Key('comic-reader-total-page-label')), findsOneWidget);
+  });
+
+  testWidgets('ComicReaderPage shows next chapter transition for vertical mode', (tester) async {
+    await prepareLargeViewport(tester);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository(includeNextEpisode: true)),
+          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
+          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
+          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+        ],
+        child: const MaterialApp(
+          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    await revealNextChapterTransition(tester);
+
+    expect(find.byKey(const Key('comic-reader-next-chapter-transition')), findsOneWidget);
+    expect(find.textContaining('下一章：第2话'), findsOneWidget);
   });
 
   testWidgets('ComicReaderPage does not flash image loading copy while opening', (tester) async {
@@ -150,9 +228,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('comic-reader-image-list')), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('comic-reader-center-tap-zone')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('comic-reader-mode-switch')));
+    await openReaderMenu(tester);
+    await tapVisibleByKey(tester, const Key('comic-reader-mode-switch'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey<String>('comic-reader-mode-rtl')));
     await tester.pumpAndSettle();
@@ -178,9 +255,8 @@ void main() {
     );
 
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('comic-reader-center-tap-zone')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('comic-reader-chapter-list-button')));
+    await openReaderMenu(tester);
+    await tapVisibleByKey(tester, const Key('comic-reader-chapter-list-button'));
     await tester.pumpAndSettle();
 
     expect(find.text('章节列表'), findsOneWidget);
@@ -214,9 +290,8 @@ void main() {
     );
 
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('comic-reader-center-tap-zone')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('comic-reader-more-button')));
+    await openReaderMenu(tester);
+    await tapVisibleByKey(tester, const Key('comic-reader-more-button'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('comic-reader-set-cover')));
     await tester.pumpAndSettle();
@@ -243,15 +318,14 @@ void main() {
     );
 
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('comic-reader-center-tap-zone')));
-    await tester.pumpAndSettle();
+    await openReaderMenu(tester);
 
     expect(find.byKey(const Key('comic-reader-current-page-label')), findsOneWidget);
     expect(find.byKey(const Key('comic-reader-total-page-label')), findsOneWidget);
 
-    await tester.ensureVisible(find.byKey(const Key('comic-reader-progress-slider')));
-    await tester.drag(
-      find.byKey(const Key('comic-reader-progress-slider')),
+    await dragVisibleByKey(
+      tester,
+      const Key('comic-reader-progress-slider'),
       const Offset(300, 0),
     );
     await tester.pumpAndSettle();
@@ -330,14 +404,16 @@ void main() {
     );
 
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('comic-reader-center-tap-zone')));
-    await tester.pumpAndSettle();
+    await openReaderMenu(tester);
 
     final sliderFinder = find.byKey(const Key('comic-reader-progress-slider'));
     expect(sliderFinder, findsOneWidget);
 
-    await tester.ensureVisible(sliderFinder);
-    await tester.drag(sliderFinder, const Offset(280, 0));
+    await dragVisibleByKey(
+      tester,
+      const Key('comic-reader-progress-slider'),
+      const Offset(280, 0),
+    );
     await tester.pump();
 
     // During commit phase, slider and labels should remain stable and visible.
@@ -480,6 +556,9 @@ class _NoopReadingStateWriter implements ComicReadingStateWriter {
 }
 
 class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
+  _ReaderFakeRepository({this.includeNextEpisode = false});
+
+  final bool includeNextEpisode;
   ComicReadingProgress? _progress;
   String? lastCustomCoverLocalPath;
   final Map<String, List<ComicEpisodeImageItem>> _episodeImages =
@@ -494,6 +573,20 @@ class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
           ComicEpisodeImageItem(
             episodeId: 'yamibo:100:101',
             imageUrl: 'https://img.test/101-2.jpg',
+            imageIndex: 1,
+            cacheStatus: 'none',
+          ),
+        ],
+        'yamibo:100:102': const <ComicEpisodeImageItem>[
+          ComicEpisodeImageItem(
+            episodeId: 'yamibo:100:102',
+            imageUrl: 'https://img.test/102-1.jpg',
+            imageIndex: 0,
+            cacheStatus: 'none',
+          ),
+          ComicEpisodeImageItem(
+            episodeId: 'yamibo:100:102',
+            imageUrl: 'https://img.test/102-2.jpg',
             imageIndex: 1,
             cacheStatus: 'none',
           ),
@@ -561,7 +654,7 @@ class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
 
   @override
   Future<List<ComicEpisodeItem>> getComicEpisodes({required String comicId, bool descending = true}) async {
-    return const <ComicEpisodeItem>[
+    final episodes = <ComicEpisodeItem>[
       ComicEpisodeItem(
         episodeId: 'yamibo:100:101',
         comicId: 'yamibo:100',
@@ -572,6 +665,25 @@ class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
         publishTimeText: null,
       ),
     ];
+    if (includeNextEpisode) {
+      episodes.add(
+        const ComicEpisodeItem(
+          episodeId: 'yamibo:100:102',
+          comicId: 'yamibo:100',
+          episodeTitle: '第2话',
+          sourceTid: '102',
+          sourceUrl: 'thread-102-1-1.html',
+          orderIndex: 1,
+          publishTimeText: null,
+        ),
+      );
+    }
+    episodes.sort(
+      (a, b) => descending
+          ? b.orderIndex.compareTo(a.orderIndex)
+          : a.orderIndex.compareTo(b.orderIndex),
+    );
+    return episodes;
   }
 
   @override

@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/comic/domain/services/comic_reader_chapter_preload.dart';
 import 'package:y300/features/comic/presentation/models/reader_preferences.dart';
 import 'package:y300/features/comic/presentation/widgets/reader_bottom_panel.dart';
 
@@ -19,6 +20,11 @@ void main() {
             totalPages: 12,
             hasPreviousEpisode: true,
             hasNextEpisode: true,
+            nextChapterPreload: const ComicReaderChapterPreloadState(
+              status: ComicReaderChapterPreloadStatus.idle,
+              episodeId: 'next',
+              title: '第2话',
+            ),
             onPreviousEpisode: () {},
             onNextEpisode: () {},
             onOpenModeSheet: () => modeOpened = true,
