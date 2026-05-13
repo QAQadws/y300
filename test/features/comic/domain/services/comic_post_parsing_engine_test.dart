@@ -28,6 +28,15 @@ void main() {
       expect(result.catalogLinks.first, 'https://bbs.yamibo.com/misc.php?mod=tag&id=21137');
     });
 
+    test('marks Yamibo tag elevator links as catalog links', () {
+      final engine = ComicPostParsingEngine();
+      final result = engine.parse(
+        messageHtml: '<a href="https://bbs.yamibo.com/misc.php?mod=tag&amp;amp;id=18235">電梯</a>',
+      );
+
+      expect(result.catalogLinks, <String>['https://bbs.yamibo.com/misc.php?mod=tag&id=18235']);
+    });
+
     test('cluster rule promotes sequential numeric links', () {
       final engine = ComicPostParsingEngine();
       final result = engine.parse(

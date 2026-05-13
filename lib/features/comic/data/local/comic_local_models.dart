@@ -158,6 +158,8 @@ class EpisodeImageRecord {
     this.stableCacheKey,
     this.lastSourceUrl,
     this.localPath,
+    this.width,
+    this.height,
     this.bytes = 0,
     this.mimeType,
     this.lastAccessedAt,
@@ -172,6 +174,8 @@ class EpisodeImageRecord {
   final String? stableCacheKey;
   final String? lastSourceUrl;
   final String? localPath;
+  final int? width;
+  final int? height;
   final int bytes;
   final String? mimeType;
   final int? lastAccessedAt;
@@ -187,6 +191,8 @@ class EpisodeImageRecord {
       'stable_cache_key': stableCacheKey,
       'last_source_url': lastSourceUrl ?? imageUrl,
       'local_path': localPath,
+      'width': width,
+      'height': height,
       'bytes': bytes,
       'mime_type': mimeType,
       'last_accessed_at': lastAccessedAt,

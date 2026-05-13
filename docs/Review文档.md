@@ -1647,6 +1647,117 @@
 
 ---
 
+## 漫画电梯目录解析修复 Review 记录（2026-05-13）
+### Review 范围
+- `lib/features/comic/domain/services/comic_post_parsing_engine.dart`
+- `test/features/comic/domain/services/comic_post_parsing_engine_test.dart`
+- `test/features/comic/domain/services/comic_episode_discovery_service_test.dart`
+- `test/features/thread/domain/services/forum_post_dom_extractor_test.dart`
+
+### 一、目录入口规则
+- [ ] `目录/目錄` 仍可识别为 catalog。
+- [ ] `电梯/電梯` 可识别为 catalog。
+- [ ] `catalog/contents` 可识别为 catalog。
+- [ ] `misc.php?mod=tag&id=...` 即使文案不标准，也会作为 Yamibo tag catalog 候选。
+- [ ] 普通外链不会因为本次扩展被误识别为章节链接。
+
+### 二、刷新链路
+- [ ] `tid=476059` 风格的首楼 `電梯` 链接会进入 `ComicEpisodeDiscoveryService` 的 catalog 策略。
+- [ ] catalog URL 会标准化为 `type=thread&page=1` 后再抓取。
+- [ ] 搜索 fallback 命中的同系列候选帖若使用 `電梯`，也能产出章节列表。
+
+### 三、图片提取确认
+- [ ] `<div class="img"><img src="...data/attachment..." attach="..."></div>` 可被提取为漫画图片。
+- [ ] 表情、头像等 forum chrome 图片过滤规则不受影响。
+
+### 四、测试覆盖（仅编写，未执行）
+- [ ] `comic_post_parsing_engine_test.dart` 覆盖电梯目录入口。
+- [ ] `comic_episode_discovery_service_test.dart` 覆盖电梯入口走 catalog 策略。
+- [ ] `forum_post_dom_extractor_test.dart` 覆盖 Yamibo 附件图片结构。
+
+### 执行声明
+本轮按约定未执行：
+1. `flutter test`
+2. `flutter analyze`
+3. `dart format`
+
+---
+
+## 漫画搜索兜底章节化 Review 记录（2026-05-13）
+### Review 范围
+- `lib/features/comic/domain/services/comic_services_impl.dart`
+- `lib/features/comic/domain/services/comic_subject_parser.dart`
+- `test/features/comic/domain/services/network_comic_episode_refresh_service_test.dart`
+- `test/features/comic/domain/services/comic_subject_parser_test.dart`
+
+### 一、搜索兜底行为
+- [ ] 搜索 fallback 命中同系列帖子后，不再只把候选当作二次解析入口。
+- [ ] 候选详情解析为空时，搜索结果本身会转换为 `ComicEpisodeLink`。
+- [ ] 候选详情解析只产出部分章节时，会与搜索候选按 tid 去重合并。
+- [ ] 目录/递归解析结果仍优先于搜索候选，避免降低高置信目录结果质量。
+
+### 二、章节排序与标题
+- [ ] 搜索候选可按 `第81话 -> 第82话上 -> 第82话下` 排序。
+- [ ] 支持繁体 `話` 与 `上/中/下/前/后/後` 后缀。
+- [ ] `RuleBasedComicSubjectParser` 保留 `第82話下` 作为完整 episode label。
+- [ ] 重复 tid 时保留搜索候选侧较完整标题。
+
+### 三、测试覆盖（仅编写，未执行）
+- [ ] `network_comic_episode_refresh_service_test.dart` 覆盖搜索结果章节化兜底。
+- [ ] `comic_subject_parser_test.dart` 覆盖上下篇后缀不丢失。
+
+### 执行声明
+本轮按约定未执行：
+1. `flutter test`
+2. `flutter analyze`
+3. `dart format`
+
+---
+
+## 漫画阅读器 Phase 9 Review 清单（2026-05-13）
+### 一、图片尺寸与布局稳定
+- [ ] `LibraryCachedImage` 的 `onImageResolved/onImageFailed` 为可选回调，不影响书架封面等既有调用方。
+- [ ] 成功解码后上报真实图片宽高，回调在 post-frame 执行，不在 build 同步更新父级状态。
+- [ ] 本地图片和远程图片都能触发尺寸上报；解码失败能触发失败回调。
+- [ ] `_ReaderImageSlot` 在存在 `width/height` 时按真实比例预留高度，未知尺寸时继续使用 `width * 4 / 3` fallback。
+- [ ] 长图使用 `fitWidth` 自然撑开，不强制固定高度裁切。
+
+### 二、数据库与仓储边界
+- [ ] `ComicLocalDb.dbVersion` 已升级到 `15`。
+- [ ] `episode_images` 最新 schema 包含 `width`、`height`。
+- [ ] `ComicEpisodeImageItem` 和 `EpisodeImageRecord` 均透出宽高字段。
+- [ ] `ComicEpisodeImageCacheMetadataWriter` 继续作为窄接口使用，reader 不依赖本地仓储具体类型。
+- [ ] 本地仓储仅写入大于 0 的宽高，避免无效尺寸污染 metadata。
+
+### 三、失败恢复与已读完成
+- [ ] 图片显示失败会写入 `episode_images.cache_status = failed`。
+- [ ] 失败图片会清理当前 state 的本地路径，避免继续展示坏缓存。
+- [ ] 最后一页必须本次会话解码成功后才允许自动完成章节。
+- [ ] 持久化宽高只参与布局，不参与本次成功显示判定。
+- [ ] 普通预加载窗口不会静默覆盖显示失败页；只有 retry 任务可恢复失败状态。
+- [ ] 失败页重新解码成功后会清除 failed 状态并允许完成章节。
+
+### 四、可观测性与内存边界
+- [ ] `page_visible` 日志包含进度落库耗时。
+- [ ] 首图可见、图片显示失败、缓存命中/未命中、预加载成功/失败、跳页窗口取消均有 reader event。
+- [ ] 预加载队列仍只负责磁盘缓存调度，不主动扩大整章图片解码。
+- [ ] 快速跳页会取消旧窗口任务并记录取消日志。
+
+### 五、测试覆盖（仅编写，未执行）
+- [ ] `library_cached_image_test.dart` 覆盖本地图片尺寸上报。
+- [ ] `image_cache_phase4_db_migration_test.dart` 覆盖 `episode_images.width/height`。
+- [ ] `local_comic_repository_test.dart` 覆盖宽高 metadata 持久化。
+- [ ] `comic_reader_controller_test.dart` 覆盖解码成功前不完成、持久化宽高不完成、失败阻止完成、恢复成功后完成。
+- [ ] `comic_reader_page_test.dart` 覆盖垂直 slot 按图片真实比例预留高度。
+
+### 六、待你本地回归
+1. `flutter test`
+2. `flutter analyze`
+
+说明：本轮按要求未执行 `flutter test`、`flutter analyze`、`dart format`。
+
+---
+
 ## 漫画阅读器 Phase 7 自定义作品信息 Review 记录（2026-05-12）
 ### Review 范围
 - `lib/features/comic/data/comic_repository.dart`

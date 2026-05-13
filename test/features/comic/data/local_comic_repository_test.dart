@@ -803,5 +803,89 @@ void main() {
       expect(images.single.cacheStatus, 'none');
       expect(images.single.effectiveLocalPath, isNull);
     });
+
+    test('updateEpisodeImageCacheMetadata persists decoded image dimensions', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:image-size',
+        tid: '810',
+        fid: '30',
+        title: '图片尺寸漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>['https://img.test/size-cover.jpg'],
+          episodeLinks: <ComicEpisodeLink>[
+            ComicEpisodeLink(
+              url: 'thread-811-1-1.html',
+              rawText: '第1话',
+              episodeTitle: '第1话',
+            ),
+          ],
+          plainTextSummary: '摘要',
+        ),
+      );
+      final episodes = await repository.getComicEpisodes(
+        comicId: 'yamibo:image-size',
+        descending: false,
+      );
+      final episodeId = episodes.first.episodeId;
+      await repository.saveEpisodeImages(
+        episodeId: episodeId,
+        imageUrls: const <String>['https://img.test/size-page-1.jpg'],
+      );
+
+      await repository.updateEpisodeImageCacheMetadata(
+        episodeId: episodeId,
+        imageUrl: 'https://img.test/size-page-1.jpg',
+        width: 900,
+        height: 1800,
+      );
+
+      final images = await repository.getEpisodeImages(episodeId: episodeId);
+      expect(images.single.width, 900);
+      expect(images.single.height, 1800);
+    });
+
+    test('failed image cache status clears persisted local path', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:failed-local-path',
+        tid: '820',
+        fid: '30',
+        title: '失败缓存漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>['https://img.test/failed-cover.jpg'],
+          episodeLinks: <ComicEpisodeLink>[
+            ComicEpisodeLink(
+              url: 'thread-821-1-1.html',
+              rawText: '第1话',
+              episodeTitle: '第1话',
+            ),
+          ],
+          plainTextSummary: '摘要',
+        ),
+      );
+      final episodes = await repository.getComicEpisodes(
+        comicId: 'yamibo:failed-local-path',
+        descending: false,
+      );
+      final episodeId = episodes.first.episodeId;
+      await repository.saveEpisodeImages(
+        episodeId: episodeId,
+        imageUrls: const <String>['https://img.test/failed-page-1.jpg'],
+      );
+      await repository.updateEpisodeImageCacheMetadata(
+        episodeId: episodeId,
+        imageUrl: 'https://img.test/failed-page-1.jpg',
+        localPath: '/cache/failed-page-1.jpg',
+      );
+
+      await repository.updateEpisodeImageCacheStatus(
+        episodeId: episodeId,
+        imageUrl: 'https://img.test/failed-page-1.jpg',
+        cacheStatus: 'failed',
+      );
+
+      final images = await repository.getEpisodeImages(episodeId: episodeId);
+      expect(images.single.cacheStatus, 'failed');
+      expect(images.single.effectiveLocalPath, isNull);
+    });
   });
 }

@@ -22,5 +22,20 @@ void main() {
     expect(result.normalizedTitle, '邻座的大姐头');
     expect(result.episodeLabel, isNull);
   });
-}
 
+  test('keeps split episode suffix in episode label', () {
+    const subject = '[百合會]はなにあらし(好事多磨)第82話下';
+    final result = parser.parse(subject);
+
+    expect(result.normalizedTitle, 'はなにあらし(好事多磨)');
+    expect(result.episodeLabel, '第82話下');
+  });
+
+  test('keeps paired title brackets while trimming trailing separators', () {
+    const subject = '[百合會]作品名(副标题)_ 第3話';
+    final result = parser.parse(subject);
+
+    expect(result.normalizedTitle, '作品名(副标题)');
+    expect(result.episodeLabel, '第3話');
+  });
+}

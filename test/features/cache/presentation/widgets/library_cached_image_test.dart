@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/image_request_headers.dart';
@@ -78,6 +80,32 @@ void main() {
       ),
     );
   });
+
+  testWidgets('local image reports decoded dimensions', (tester) async {
+    final image = await tester.runAsync(
+      () => createTestImage(width: 3, height: 5, cache: false),
+    );
+    final testImage = image!;
+    addTearDown(testImage.dispose);
+    final provider = _SynchronousImageProvider(testImage);
+
+    Size? resolvedSize;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LibraryCachedImage(
+          imageProviderOverride: provider,
+          fit: BoxFit.cover,
+          placeholder: const SizedBox(key: Key('placeholder')),
+          onImageResolved: (size) => resolvedSize = size,
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump();
+
+    expect(resolvedSize, const Size(3, 5));
+  });
 }
 
 class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
@@ -100,5 +128,26 @@ class _DeferredImageHeaderBuilder implements ImageRequestHeaderBuilder {
 
   void complete(Map<String, String> headers) {
     _completer.complete(headers);
+  }
+}
+
+class _SynchronousImageProvider extends ImageProvider<_SynchronousImageProvider> {
+  const _SynchronousImageProvider(this.image);
+
+  final ui.Image image;
+
+  @override
+  Future<_SynchronousImageProvider> obtainKey(ImageConfiguration configuration) {
+    return SynchronousFuture<_SynchronousImageProvider>(this);
+  }
+
+  @override
+  ImageStreamCompleter loadImage(
+    _SynchronousImageProvider key,
+    ImageDecoderCallback decode,
+  ) {
+    return OneFrameImageStreamCompleter(
+      SynchronousFuture<ImageInfo>(ImageInfo(image: image)),
+    );
   }
 }

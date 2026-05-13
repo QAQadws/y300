@@ -147,16 +147,19 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
     }
 
     final currentScore = _scoreTitleSimilarity(thread.subject, keyword.value);
-    final candidates = search.items
-        .map(
-          (item) => _ScoredSearchItem(
-            item: item,
-            score: _scoreTitleSimilarity(item.title, keyword.value),
-          ),
-        )
-        .where((item) => item.score >= currentScore - 0.25)
-        .toList()
-      ..sort((a, b) => b.score.compareTo(a.score));
+    final candidates = <_ScoredSearchItem>[];
+    for (var index = 0; index < search.items.length; index++) {
+      final item = search.items[index];
+      final scored = _ScoredSearchItem(
+        item: item,
+        score: _scoreTitleSimilarity(item.title, keyword.value),
+        searchIndex: index,
+      );
+      if (scored.score >= currentScore - 0.25) {
+        candidates.add(scored);
+      }
+    }
+    candidates.sort((a, b) => b.score.compareTo(a.score));
     _logRefresh(
       request,
       'keyword=${keyword.value} candidates=${candidates.length} '
@@ -176,7 +179,23 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
         collectedLinks = _mergeEpisodeLinks(collectedLinks, result.episodeLinks);
       }
     }
-    return collectedLinks;
+    final searchCandidateLinks = _episodeLinksFromSearchCandidates(candidates);
+    if (collectedLinks.isEmpty) {
+      return searchCandidateLinks;
+    }
+    if (searchCandidateLinks.length > collectedLinks.length) {
+      // Discuz search results are themselves same-series thread entries. When
+      // catalog/recursive parsing only finds a partial set, preserve those
+      // matched entries instead of losing newer chapters from the search page.
+      return _sortEpisodeLinks(
+        _mergeEpisodeLinks(
+          collectedLinks,
+          searchCandidateLinks,
+          preferSupplement: true,
+        ),
+      );
+    }
+    return _sortEpisodeLinks(collectedLinks);
   }
 
   _RefreshKeyword _resolveSearchKeyword(
@@ -218,6 +237,96 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
       }
     }
     return merged.values.toList(growable: false);
+  }
+
+  List<ComicEpisodeLink> _episodeLinksFromSearchCandidates(
+    List<_ScoredSearchItem> candidates,
+  ) {
+    final sorted = candidates.toList()
+      ..sort((a, b) {
+        final episodeOrder = _compareSearchEpisodeOrder(a.item.title, b.item.title);
+        if (episodeOrder != 0) {
+          return episodeOrder;
+        }
+        final tidOrder = _compareTid(a.item.tid, b.item.tid);
+        if (tidOrder != 0) {
+          return tidOrder;
+        }
+        return a.searchIndex.compareTo(b.searchIndex);
+      });
+
+    return _mergeEpisodeLinks(
+      const <ComicEpisodeLink>[],
+      sorted.map(_episodeLinkFromSearchItem).toList(growable: false),
+    );
+  }
+
+  ComicEpisodeLink _episodeLinkFromSearchItem(_ScoredSearchItem candidate) {
+    final item = candidate.item;
+    final metadata = _subjectParser.parse(item.title);
+    final episodeLabel = metadata.episodeLabel?.trim();
+    return ComicEpisodeLink(
+      url: item.url.trim(),
+      rawText: item.title,
+      episodeTitle: episodeLabel == null || episodeLabel.isEmpty ? item.title : episodeLabel,
+    );
+  }
+
+  int _compareSearchEpisodeOrder(String a, String b) {
+    final aKey = _EpisodeSortKey.tryParse(a);
+    final bKey = _EpisodeSortKey.tryParse(b);
+    if (aKey != null && bKey != null) {
+      return aKey.compareTo(bKey);
+    }
+    if (aKey != null && bKey == null) {
+      return -1;
+    }
+    if (aKey == null && bKey != null) {
+      return 1;
+    }
+    return 0;
+  }
+
+  List<ComicEpisodeLink> _sortEpisodeLinks(List<ComicEpisodeLink> links) {
+    final sorted = links.toList()
+      ..sort((a, b) {
+        final episodeOrder = _compareSearchEpisodeOrder(
+          _linkTitleForSort(a),
+          _linkTitleForSort(b),
+        );
+        if (episodeOrder != 0) {
+          return episodeOrder;
+        }
+        final tidOrder = _compareTid(_linkIdentity(a), _linkIdentity(b));
+        if (tidOrder != 0) {
+          return tidOrder;
+        }
+        return _linkTitleForSort(a).compareTo(_linkTitleForSort(b));
+      });
+    return sorted;
+  }
+
+  String _linkTitleForSort(ComicEpisodeLink link) {
+    final episodeTitle = link.episodeTitle?.trim();
+    if (episodeTitle != null && episodeTitle.isNotEmpty) {
+      return episodeTitle;
+    }
+    return link.rawText.trim();
+  }
+
+  int _compareTid(String a, String b) {
+    final aTid = int.tryParse(a.replaceFirst('tid:', '').trim());
+    final bTid = int.tryParse(b.replaceFirst('tid:', '').trim());
+    if (aTid != null && bTid != null && aTid != bTid) {
+      return aTid.compareTo(bTid);
+    }
+    if (aTid != null && bTid == null) {
+      return -1;
+    }
+    if (aTid == null && bTid != null) {
+      return 1;
+    }
+    return a.trim().compareTo(b.trim());
   }
 
   String _linkIdentity(ComicEpisodeLink link) {
@@ -302,10 +411,63 @@ class _ScoredSearchItem {
   const _ScoredSearchItem({
     required this.item,
     required this.score,
+    required this.searchIndex,
   });
 
   final DiscuzSearchResultItem item;
   final double score;
+  final int searchIndex;
+}
+
+class _EpisodeSortKey implements Comparable<_EpisodeSortKey> {
+  const _EpisodeSortKey({
+    required this.number,
+    required this.suffixRank,
+  });
+
+  static final RegExp _episodePattern = RegExp(
+    r'第?\s*(\d+(?:\.\d+)?)\s*(?:话|話|卷|集|篇|章)\s*(上篇|下篇|前篇|后篇|後篇|上|中|下|前|后|後)?',
+    caseSensitive: false,
+  );
+
+  final double number;
+  final int suffixRank;
+
+  static _EpisodeSortKey? tryParse(String title) {
+    final match = _episodePattern.firstMatch(title);
+    if (match == null) {
+      return null;
+    }
+    final number = double.tryParse(match.group(1) ?? '');
+    if (number == null) {
+      return null;
+    }
+    return _EpisodeSortKey(
+      number: number,
+      suffixRank: _suffixRank(match.group(2)),
+    );
+  }
+
+  static int _suffixRank(String? suffix) {
+    return switch (suffix?.trim()) {
+      '前' || '前篇' => -30,
+      '上' || '上篇' => -20,
+      '中' => 0,
+      null || '' => 10,
+      '下' || '下篇' => 20,
+      '后' || '後' || '后篇' || '後篇' => 30,
+      _ => 10,
+    };
+  }
+
+  @override
+  int compareTo(_EpisodeSortKey other) {
+    final numberOrder = number.compareTo(other.number);
+    if (numberOrder != 0) {
+      return numberOrder;
+    }
+    return suffixRank.compareTo(other.suffixRank);
+  }
 }
 
 class ThreadSeed {

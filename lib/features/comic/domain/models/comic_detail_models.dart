@@ -122,6 +122,8 @@ class ComicEpisodeImageItem {
     this.stableCacheKey,
     this.lastSourceUrl,
     this.localPath,
+    this.width,
+    this.height,
     this.bytes = 0,
     this.mimeType,
     this.lastAccessedAt,
@@ -136,6 +138,8 @@ class ComicEpisodeImageItem {
   final String? stableCacheKey;
   final String? lastSourceUrl;
   final String? localPath;
+  final int? width;
+  final int? height;
   final int bytes;
   final String? mimeType;
   final DateTime? lastAccessedAt;

@@ -92,6 +92,42 @@ void main() {
       expect(result.episodeLinks.length, 2);
     });
 
+    test('uses catalog strategy for Yamibo elevator tag links', () async {
+      final service = ComicEpisodeDiscoveryService(
+        fetchThreadDetail: _fakeThreadFetcher(
+          detailsByTid: {
+            '476059': _thread(
+              tid: '476059',
+              subject: '[百合會]はなにあらし(好事多磨)第6話',
+              message: '<a href="https://bbs.yamibo.com/misc.php?mod=tag&amp;amp;id=18235">電梯</a>',
+            ),
+          },
+        ),
+        opPostParser: ComicConsecutiveOpPostParser(engine: ComicPostParsingEngine()),
+        catalogHtmlFetcher: _FakeCatalogHtmlFetcher({
+          'https://bbs.yamibo.com/misc.php?mod=tag&id=18235&type=thread&page=1': '''
+<html><body>
+<table>
+<tr><th><a href="thread-476059-1-1.html">[百合會]はなにあらし(好事多磨)第6話</a></th></tr>
+<tr><th><a href="thread-503102-1-1.html">[百合會]はなにあらし(好事多磨)第82話下</a></th></tr>
+</table>
+</body></html>
+''',
+        }),
+      );
+
+      final result = await service.discoverFromTidWithPreference(
+        tid: '476059',
+        preferCatalogFirst: true,
+      );
+
+      expect(result.strategy, EpisodeDiscoveryStrategy.catalog);
+      expect(result.episodeLinks.map((link) => link.url).toList(), <String>[
+        'https://bbs.yamibo.com/thread-476059-1-1.html',
+        'https://bbs.yamibo.com/thread-503102-1-1.html',
+      ]);
+    });
+
     test('catalog strategy follows type=thread pages until total pages', () async {
       final service = ComicEpisodeDiscoveryService(
         fetchThreadDetail: _fakeThreadFetcher(

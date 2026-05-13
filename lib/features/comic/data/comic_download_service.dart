@@ -450,6 +450,8 @@ class DefaultComicDownloadService implements ComicDownloadService {
       stableCacheKey: stableCacheKey,
       lastSourceUrl: image.effectiveSourceUrl,
       localPath: localPath,
+      width: image.width,
+      height: image.height,
       bytes: bytes,
       lastAccessedAt: DateTime.now(),
       protected: false,

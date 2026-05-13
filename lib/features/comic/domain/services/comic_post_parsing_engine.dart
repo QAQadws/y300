@@ -24,6 +24,10 @@ class ComicPostParsingEngine {
 
   static final RegExp _ordinalPattern = RegExp(r'(^\d+(\.\d+)?$|第\s*.+\s*话)', caseSensitive: false);
   static final RegExp _specialPattern = RegExp(r'(特典|附录|番外)', caseSensitive: false);
+  static final RegExp _catalogTextPattern = RegExp(
+    r'(目录|目錄|电梯|電梯|catalog|contents)',
+    caseSensitive: false,
+  );
 
   final ForumPostDomExtractor _domExtractor;
   final List<ComicPostParsingRule> _rules;
@@ -103,10 +107,14 @@ class ComicPostParsingEngine {
 
     for (final anchor in extracted) {
       final text = anchor.text;
+      final containsCatalog = _isCatalogAnchor(
+        text: text,
+        normalizedUrl: anchor.normalizedUrl,
+      );
       final features = ParsedAnchorFeatures(
         containsOrdinal: _ordinalPattern.hasMatch(text),
         containsSpecial: _specialPattern.hasMatch(text),
-        containsCatalog: text.contains('目录'),
+        containsCatalog: containsCatalog,
       );
       final kind = _inferKind(anchor.normalizedUrl, features, anchor.tid);
       anchors.add(
@@ -121,6 +129,25 @@ class ComicPostParsingEngine {
       );
     }
     return anchors;
+  }
+
+  bool _isCatalogAnchor({
+    required String text,
+    required String normalizedUrl,
+  }) {
+    if (_catalogTextPattern.hasMatch(text.trim())) {
+      return true;
+    }
+
+    final uri = Uri.tryParse(normalizedUrl);
+    if (uri == null) {
+      return false;
+    }
+    // Yamibo comic posts often label tag catalog links as "电梯/電梯".
+    // Treat tag pages as catalog candidates even if the visible text is terse.
+    return uri.path.toLowerCase().endsWith('misc.php') &&
+        uri.queryParameters['mod']?.toLowerCase() == 'tag' &&
+        (uri.queryParameters['id']?.trim().isNotEmpty ?? false);
   }
 
   List<int?> _detectSequentialGroups(List<ParsedAnchor> anchors) {

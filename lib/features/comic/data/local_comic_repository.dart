@@ -944,6 +944,8 @@ class LocalComicRepository
             stableCacheKey: row['stable_cache_key'] as String?,
             lastSourceUrl: row['last_source_url'] as String?,
             localPath: row['local_path'] as String?,
+            width: row['width'] as int?,
+            height: row['height'] as int?,
             bytes: row['bytes'] as int? ?? 0,
             mimeType: row['mime_type'] as String?,
             lastAccessedAt: _toDateTime(row['last_accessed_at']),
@@ -1002,6 +1004,7 @@ class LocalComicRepository
       <String, Object?>{
         'cache_status': cacheStatus,
         'cache_local_path': cacheLocalPath,
+        if (cacheStatus == 'failed' && cacheLocalPath == null) 'local_path': null,
       },
       where: 'episode_id = ? AND image_url = ?',
       whereArgs: <Object>[episodeId, imageUrl],
@@ -1035,6 +1038,8 @@ class LocalComicRepository
     String? stableCacheKey,
     String? lastSourceUrl,
     String? localPath,
+    int? width,
+    int? height,
     int? bytes,
     String? mimeType,
     DateTime? lastAccessedAt,
@@ -1051,6 +1056,12 @@ class LocalComicRepository
     if (localPath != null) {
       values['local_path'] = _normalizeNullable(localPath);
       values['cache_local_path'] = _normalizeNullable(localPath);
+    }
+    if (width != null && width > 0) {
+      values['width'] = width;
+    }
+    if (height != null && height > 0) {
+      values['height'] = height;
     }
     if (bytes != null) {
       values['bytes'] = bytes;

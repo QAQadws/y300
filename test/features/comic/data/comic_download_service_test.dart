@@ -189,6 +189,8 @@ class _ComicDownloadRepositoryFake implements ComicRepository, ComicEpisodeImage
     String? stableCacheKey,
     String? lastSourceUrl,
     String? localPath,
+    int? width,
+    int? height,
     int? bytes,
     String? mimeType,
     DateTime? lastAccessedAt,

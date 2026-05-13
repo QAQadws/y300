@@ -607,6 +607,16 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
           onRetry: () => _controller().retryImage(imageUrl),
         ),
         headerBuilder: imageHeaderBuilder,
+        onImageResolved: (size) => _controller().onImageResolved(
+          imageIndex: index,
+          imageUrl: imageUrl,
+          width: size.width.round(),
+          height: size.height.round(),
+        ),
+        onImageFailed: () => _controller().onImageDisplayFailed(
+          imageIndex: index,
+          imageUrl: imageUrl,
+        ),
       ),
     );
 
@@ -621,6 +631,8 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
       children: [
         _ReaderImageSlot(
           imageIndex: index,
+          imageWidth: image.width,
+          imageHeight: image.height,
           child: imageWidget,
         ),
         SizedBox(height: preferences.pageSpacing.clamp(0.0, 48.0).toDouble()),
@@ -1004,10 +1016,14 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
 class _ReaderImageSlot extends StatelessWidget {
   const _ReaderImageSlot({
     required this.imageIndex,
+    required this.imageWidth,
+    required this.imageHeight,
     required this.child,
   });
 
   final int imageIndex;
+  final int? imageWidth;
+  final int? imageHeight;
   final Widget child;
 
   @override
@@ -1018,14 +1034,25 @@ class _ReaderImageSlot extends StatelessWidget {
         final width = constraints.maxWidth.isFinite
             ? constraints.maxWidth
             : MediaQuery.sizeOf(context).width;
+        final expectedHeight = _expectedHeight(width);
         return ConstrainedBox(
-          // Reserve a portrait comic-page footprint while still allowing the
-          // loaded image to grow to its real fitWidth height.
-          constraints: BoxConstraints(minHeight: width * 4 / 3),
+          // Prefer decoded image dimensions once known. This makes reopening
+          // long chapters steadier while still letting first-open pages grow
+          // naturally after the image is resolved.
+          constraints: BoxConstraints(minHeight: expectedHeight),
           child: ClipRect(child: child),
         );
       },
     );
+  }
+
+  double _expectedHeight(double width) {
+    final sourceWidth = imageWidth;
+    final sourceHeight = imageHeight;
+    if (sourceWidth != null && sourceWidth > 0 && sourceHeight != null && sourceHeight > 0) {
+      return width * sourceHeight / sourceWidth;
+    }
+    return width * 4 / 3;
   }
 }
 

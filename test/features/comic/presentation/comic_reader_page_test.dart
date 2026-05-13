@@ -386,6 +386,47 @@ void main() {
     expect(slot.constraints.minHeight, greaterThan(0));
   });
 
+  testWidgets('ComicReaderPage uses decoded dimensions for vertical slot reservation', (tester) async {
+    await prepareLargeViewport(tester);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(
+            _ReaderFakeRepository(
+              images: const <ComicEpisodeImageItem>[
+                ComicEpisodeImageItem(
+                  episodeId: 'yamibo:100:101',
+                  imageUrl: 'https://img.test/tall.jpg',
+                  imageIndex: 0,
+                  cacheStatus: 'none',
+                  width: 600,
+                  height: 1800,
+                ),
+              ],
+            ),
+          ),
+          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
+          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
+          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+        ],
+        child: const MaterialApp(
+          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    final slot = tester.widget<ConstrainedBox>(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('comic-reader-image-slot-0')),
+        matching: find.byType(ConstrainedBox),
+      ).first,
+    );
+    expect(slot.constraints.minHeight, 3600);
+  });
+
   testWidgets('ComicReaderPage keeps slider stable during jump commit', (tester) async {
     await prepareLargeViewport(tester);
     await tester.pumpWidget(
@@ -556,7 +597,14 @@ class _NoopReadingStateWriter implements ComicReadingStateWriter {
 }
 
 class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
-  _ReaderFakeRepository({this.includeNextEpisode = false});
+  _ReaderFakeRepository({
+    this.includeNextEpisode = false,
+    List<ComicEpisodeImageItem>? images,
+  }) {
+    if (images != null) {
+      _episodeImages['yamibo:100:101'] = images;
+    }
+  }
 
   final bool includeNextEpisode;
   ComicReadingProgress? _progress;

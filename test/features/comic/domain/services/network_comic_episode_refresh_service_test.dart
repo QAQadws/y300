@@ -69,6 +69,72 @@ void main() {
       expect(discovery.requestedTids, containsAll(<String>['301']));
     });
 
+    test('uses matched search results when candidate discovery finds no links', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{
+          '476059': const <ComicEpisodeLink>[],
+          '503102': const <ComicEpisodeLink>[],
+          '502780': const <ComicEpisodeLink>[],
+          '502128': const <ComicEpisodeLink>[],
+        },
+      );
+      final searchService = _FakeDiscuzSearchService(
+        response: DiscuzSearchResponse(
+          items: const <DiscuzSearchResultItem>[
+            DiscuzSearchResultItem(
+              tid: '503102',
+              title: '[百合會][サンデーうぇぶり][古鉢るか]はなにあらし(好事多磨)第82話下',
+              url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=503102',
+              fid: '30',
+            ),
+            DiscuzSearchResultItem(
+              tid: '502780',
+              title: '[百合會][サンデーうぇぶり][古鉢るか]はなにあらし(好事多磨)第82話上',
+              url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=502780',
+              fid: '30',
+            ),
+            DiscuzSearchResultItem(
+              tid: '502128',
+              title: '[百合會][サンデーうぇぶり][古鉢るか]はなにあらし(好事多磨)第81話',
+              url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=502128',
+              fid: '30',
+            ),
+          ],
+          rateLimited: false,
+        ),
+      );
+      final service = NetworkComicEpisodeRefreshService(
+        discoveryService: discovery,
+        searchService: searchService,
+        subjectParser: const RuleBasedComicSubjectParser(),
+        threadSeedFetcher: (tid) async {
+          return const ThreadSeed(
+            subject: '[百合會][サンデーうぇぶり][古鉢るか]はなにあらし(好事多磨)第6話',
+          );
+        },
+      );
+
+      final links = await service.fetchEpisodeLinks(
+        const ComicEpisodeRefreshRequest(
+          comicId: 'yamibo:476059',
+          sourceTid: '476059',
+          customTitle: '好事多磨',
+        ),
+      );
+
+      expect(discovery.requestedTids, <String>['476059', '503102', '502780', '502128']);
+      expect(links.map((link) => link.url).toList(), <String>[
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=502128',
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=502780',
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=503102',
+      ]);
+      expect(links.map((link) => link.episodeTitle).toList(), <String>[
+        '第81話',
+        '第82話上',
+        '第82話下',
+      ]);
+    });
+
     test('returns empty when search is rate limited', () async {
       final discovery = _FakeDiscoveryService(byTid: <String, List<ComicEpisodeLink>>{
         '100': const <ComicEpisodeLink>[],

@@ -172,6 +172,8 @@ abstract class ComicEpisodeImageCacheMetadataWriter {
     String? stableCacheKey,
     String? lastSourceUrl,
     String? localPath,
+    int? width,
+    int? height,
     int? bytes,
     String? mimeType,
     DateTime? lastAccessedAt,

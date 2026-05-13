@@ -51,6 +51,20 @@ void main() {
       expect(images, <String>['https://img.test/content.jpg']);
     });
 
+    test('extracts Yamibo attachment images from post html fragments', () {
+      final images = extractor.extractImageSources('''
+<font color="#6e2b19">
+  <div class="img">
+    <img src="https://bbs.yamibo.com/data/attachment/forum/201801/06/120746m4incxj78sh7cjcn.jpg" attach="39074461" />
+  </div>
+</font>
+''');
+
+      expect(images, <String>[
+        'https://bbs.yamibo.com/data/attachment/forum/201801/06/120746m4incxj78sh7cjcn.jpg',
+      ]);
+    });
+
     test('extracts thread tids only from DOM anchors', () {
       final tids = extractor.extractThreadTids('''
 plain text thread-999-1-1.html should not count

@@ -13,10 +13,10 @@ abstract class ComicSubjectParser {
 class RuleBasedComicSubjectParser implements ComicSubjectParser {
   static final RegExp _leadingBracketToken = RegExp(r'^\s*[\[【]([^\]】]+)[\]】]\s*');
   static final RegExp _episodeToken = RegExp(
-    r'((第?\s*\d+(\.\d+)?\s*(话|話|卷|集|篇|章))|(\bEP\.?\s*\d+(\.\d+)?\b)|(\bS\d+\s*EP\d+\b)|(\s+\d+(\.\d+)?\s*$))',
+    r'((第?\s*\d+(\.\d+)?\s*(话|話|卷|集|篇|章)\s*(上篇|下篇|前篇|后篇|後篇|上|中|下|前|后|後)?)|(\bEP\.?\s*\d+(\.\d+)?\b)|(\bS\d+\s*EP\d+\b)|(\s+\d+(\.\d+)?\s*$))',
     caseSensitive: false,
   );
-  static final RegExp _trailingNoise = RegExp(r'[\s\-:：_（）\(\)\[\]【】]+$');
+  static final RegExp _trailingNoise = RegExp(r'[\s\-:：_]+$');
   static final RegExp _authorHint = RegExp(
     r'(原作|作画|作者)\s*[：:]\s*([^\]】\|/×xX]+)',
     caseSensitive: false,

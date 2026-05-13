@@ -39,6 +39,8 @@ void main() {
     expect(imageNames.contains('stable_cache_key'), isTrue);
     expect(imageNames.contains('last_source_url'), isTrue);
     expect(imageNames.contains('local_path'), isTrue);
+    expect(imageNames.contains('width'), isTrue);
+    expect(imageNames.contains('height'), isTrue);
     expect(imageNames.contains('protected'), isTrue);
 
     await db.close();
@@ -87,6 +89,8 @@ void main() {
     expect(imageNames.contains('stable_cache_key'), isTrue);
     expect(imageNames.contains('last_source_url'), isTrue);
     expect(imageNames.contains('local_path'), isTrue);
+    expect(imageNames.contains('width'), isTrue);
+    expect(imageNames.contains('height'), isTrue);
     expect(imageNames.contains('bytes'), isTrue);
     expect(imageNames.contains('mime_type'), isTrue);
     expect(imageNames.contains('last_accessed_at'), isTrue);
