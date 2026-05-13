@@ -5,9 +5,12 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/presentation/adapters/comic_shelf_adapter.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 
 void main() {
@@ -79,6 +82,88 @@ void main() {
     expect(requests.single.cacheKey, 'cover/custom/comic/comic-2');
   });
 
+  test('custom metadata flag hides custom cover from shelf item mapping', () async {
+    final adapter = ComicShelfAdapter(
+      _FakeComicRepository(
+        shelfItems: <ComicShelfItem>[
+          ComicShelfItem(
+            comicId: 'comic-2',
+            title: '自定义标题',
+            sourceTitle: '来源标题',
+            author: '自定义作者',
+            sourceAuthor: '来源作者',
+            translationGroup: '自定义组',
+            sourceTranslationGroup: '来源组',
+            coverImageUrl: 'https://img.test/ordinary.jpg',
+            customCoverImageUrl: 'https://img.test/custom.jpg',
+            coverLocalPath: '/cache/old-ordinary.jpg',
+            customCoverLocalPath: '/cache/custom.jpg',
+            categoryId: 'default',
+            addedAt: DateTime(2026, 1, 1),
+          ),
+        ],
+      ),
+      stateRepository: _FakeLibraryStateRepository(),
+      imageCacheService: _FakeImageCacheService(localPath: '/cache/custom.jpg'),
+      featureFlags: ComicReaderFeatureFlags.defaults.copyWith(
+        readerCustomMetadataEnabled: false,
+      ),
+    );
+
+    final items = await adapter.loadCategoryItems(categoryId: 'default');
+
+    expect(items.single.coverLocalPath, '/cache/old-ordinary.jpg');
+    expect(items.single.title, '来源标题');
+    expect(items.single.secondaryName, '来源作者 / 来源组');
+    expect(items.single.customCoverImageUrl, isNull);
+    expect(items.single.customCoverLocalPath, isNull);
+  });
+
+  test('custom metadata flag bypasses composed snapshot fields', () async {
+    final repository = _FakeSnapshotComicRepository(
+      shelfItems: <ComicShelfItem>[
+        ComicShelfItem(
+          comicId: 'comic-4',
+          title: '自定义标题',
+          sourceTitle: '来源标题',
+          author: '自定义作者',
+          sourceAuthor: '来源作者',
+          translationGroup: '自定义组',
+          sourceTranslationGroup: '来源组',
+          coverImageUrl: 'https://img.test/custom.jpg',
+          customCoverImageUrl: 'https://img.test/custom.jpg',
+          coverLocalPath: '/cache/custom.jpg',
+          customCoverLocalPath: '/cache/custom.jpg',
+          categoryId: 'default',
+          addedAt: DateTime(2026, 1, 1),
+        ),
+      ],
+    );
+    final adapter = ComicShelfAdapter(
+      repository,
+      stateRepository: _FakeLibraryStateRepository(),
+      featureFlags: ComicReaderFeatureFlags.defaults.copyWith(
+        readerCustomMetadataEnabled: false,
+      ),
+    );
+
+    final snapshot = await adapter.querySnapshot(
+      filters: LibraryFilterSet.defaults,
+      sortOption: LibraryShelfSortOption.defaults,
+      keyword: '',
+    );
+    final item = snapshot.itemsByCategory['default']!.single;
+
+    expect(repository.snapshotQueryCount, 0);
+    expect(snapshot.visibleMatchCountByCategory['default'], 1);
+    expect(item.title, '来源标题');
+    expect(item.secondaryName, '来源作者 / 来源组');
+    expect(item.coverImageUrl, isNull);
+    expect(item.coverLocalPath, isNull);
+    expect(item.customCoverImageUrl, isNull);
+    expect(item.customCoverLocalPath, isNull);
+  });
+
   test('ComicShelfAdapter fallback uses repository stats for missing state rows', () async {
     final adapter = ComicShelfAdapter(
       _FakeComicRepository(
@@ -111,6 +196,50 @@ void main() {
     expect(items.single.readChapterCount, 1);
     expect(items.single.isDownloaded, isTrue);
   });
+}
+
+class _FakeSnapshotComicRepository extends _FakeComicRepository
+    implements ComicShelfSnapshotRepository {
+  _FakeSnapshotComicRepository({
+    required super.shelfItems,
+  });
+
+  int snapshotQueryCount = 0;
+
+  @override
+  Future<LibraryShelfSnapshot> queryShelfSnapshot({
+    required LibraryFilterSet filters,
+    required LibraryShelfSortOption sortOption,
+    required String keyword,
+  }) async {
+    snapshotQueryCount++;
+    return LibraryShelfSnapshot(
+      categories: (await getCategories()).map((category) {
+        return LibraryCategory(
+          categoryId: category.categoryId,
+          name: category.name,
+          sortOrder: category.sortOrder,
+          createdAt: category.createdAt,
+        );
+      }).toList(growable: false),
+      itemsByCategory: <String, List<LibraryWorkItem>>{
+        'default': <LibraryWorkItem>[
+          LibraryWorkItem(
+            workId: 'snapshot-work',
+            categoryId: 'default',
+            title: 'Snapshot Custom',
+            customCoverImageUrl: 'https://img.test/snapshot-custom.jpg',
+            customCoverLocalPath: '/cache/snapshot-custom.jpg',
+            unreadCount: 0,
+            totalChapterCount: 0,
+            readChapterCount: 0,
+            addedAt: DateTime(2026, 1, 1),
+          ),
+        ],
+      },
+      visibleMatchCountByCategory: const <String, int>{'default': 1},
+    );
+  }
 }
 
 class _FakeComicRepository

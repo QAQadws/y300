@@ -20,6 +20,7 @@ class ComicShelfPage extends ConsumerWidget {
       ref.watch(comicRepositoryProvider),
       stateRepository: ref.watch(libraryStateRepositoryProvider),
       imageCacheServiceResolver: () => ref.read(imageCacheServiceProvider),
+      featureFlags: ref.watch(comicReaderFeatureFlagsProvider),
     );
     return UnifiedShelfPage(
       adapter: adapter,

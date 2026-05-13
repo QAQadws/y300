@@ -1647,6 +1647,59 @@
 
 ---
 
+## 漫画阅读器优化 Phase 10 Review 记录（2026-05-13）
+### Review 范围
+- `lib/features/comic/domain/services/comic_reader_feature_flags.dart`
+- `lib/features/comic/data/comic_providers.dart`
+- `lib/features/comic/domain/services/comic_services_impl.dart`
+- `lib/features/comic/presentation/controllers/comic_reader_controller.dart`
+- `lib/features/comic/presentation/controllers/comic_detail_controller.dart`
+- `lib/features/comic/presentation/adapters/comic_detail_adapter.dart`
+- `lib/features/comic/presentation/adapters/comic_shelf_adapter.dart`
+- `lib/features/comic/presentation/comic_detail_page.dart`
+- `lib/features/comic/presentation/comic_shelf_page.dart`
+- Phase 10 新增/更新的测试文件
+
+### 架构检查
+- [x] 灰度开关以独立值对象实现，不把 Riverpod、SharedPreferences 或 UI 细节写入 domain。
+- [x] Reader controller 只读取开关并保持原有职责：状态、进度、预加载编排。
+- [x] 自定义元数据开关同时覆盖详情页、书架、刷新请求，不出现展示与更新策略不一致。
+- [x] 自定义元数据关闭时书架绕开合成字段 snapshot，避免 source/custom 字段被仓储快照提前合并后无法回退。
+- [x] 刷新服务仍依赖 `ComicEpisodeDiscoveryService`、`ForumSearchService`、`ComicSubjectParser` 抽象，未耦合仓储或页面。
+
+### 行为检查
+- [x] 严格已读：最后页需要进入视口并完成解码，失败页不会自动已读。
+- [x] 单页章节：首图显示成功后可完成已读。
+- [x] 未读聚合：无状态章节计未读，新增章节默认进入未读角标。
+- [x] 合并更新：同 tid 更新标题不重复插入且不清阅读状态。
+- [x] 搜索兜底：低分候选被过滤，当前 tid 不作为搜索候选重复合并。
+- [x] 多关键词刷新：默认关闭，开启后按优先级尝试后续关键词；当前关键词只有当前 tid/空候选时继续降级尝试。
+- [x] 预加载队列：支持去重、retry 优先、dispose 后取消。
+
+### 测试覆盖（仅编写，未执行）
+- [ ] `comic_reader_feature_flags_test.dart` 覆盖默认开关和 copyWith。
+- [ ] `comic_reader_controller_test.dart` 覆盖严格已读降级、预加载队列禁用、下一章预加载禁用。
+- [ ] `comic_reader_preload_queue_test.dart` 覆盖 dispose 取消 pending/running 任务。
+- [ ] `network_comic_episode_refresh_service_test.dart` 覆盖低分过滤、多关键词开关、单关键词不重试、当前 tid 排除。
+- [ ] `local_comic_repository_test.dart` 覆盖同 tid 标题更新不丢状态。
+- [ ] `comic_detail_adapter_test.dart` 与 `comic_shelf_adapter_test.dart` 覆盖自定义元数据开关回退。
+- [ ] `comic_detail_page_test.dart` 覆盖读完后详情章节变淡。
+- [ ] `unified_shelf_page_test.dart` 覆盖未读角标。
+- [ ] `reader_bottom_panel_test.dart` 与 `reader_top_bar_test.dart` 覆盖窄屏与长标题。
+
+### 风险与后续
+1. `readerRefreshMultiKeywordEnabled` 默认关闭，避免宽关键词误合并；打开前应观察刷新日志中的 `refreshKeywordMode`、keyword source 与候选 top 分数。
+2. 自定义元数据开关当前为运行时注入值，后续若接入设置页，需要补持久化与 UI 文案测试。
+3. Phase 10 的完整结论依赖你本地执行 `flutter test` / `flutter analyze` 后的结果。
+
+### 执行声明
+本轮按约定未执行：
+1. `flutter test`
+2. `flutter analyze`
+3. `dart format`
+
+---
+
 ## 漫画电梯目录解析修复 Review 记录（2026-05-13）
 ### Review 范围
 - `lib/features/comic/domain/services/comic_post_parsing_engine.dart`

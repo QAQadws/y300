@@ -11,6 +11,7 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_chapter_preload.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_events.dart';
+import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_preload_queue.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
@@ -244,6 +245,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   late final ComicReadingStateWriter _readingStateWriter;
   late final ImageCacheService _imageCacheService;
   late final ComicReaderEventLogger _eventLogger;
+  late final ComicReaderFeatureFlags _featureFlags;
   late final ComicReaderPreloadQueue _preloadQueue;
   Timer? _progressPersistDebounceTimer;
   int _persistVersion = 0;
@@ -269,6 +271,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     _readingStateWriter = ref.read(comicReadingStateWriterProvider);
     _imageCacheService = ref.read(imageCacheServiceProvider);
     _eventLogger = ref.read(comicReaderEventLoggerProvider);
+    _featureFlags = ref.read(comicReaderFeatureFlagsProvider);
     _preloadQueue = ComicReaderPreloadQueue(
       runner: _runPreloadTask,
       onStart: _handlePreloadStart,
@@ -1028,17 +1031,19 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (_completingEpisodeIds.contains(episodeId)) {
       return;
     }
-    // The last page must have actually entered the viewport. This prevents
-    // automatic read completion from firing during chapter load.
-    if (!_visibleImageIndexes.contains(lastIndex)) {
-      return;
-    }
     final lastImage = current.images[lastIndex];
     if (lastImage.failed || lastImage.cacheStatus == 'failed') {
       return;
     }
-    if (!_isImageResolvedInCurrentSession(lastIndex)) {
-      return;
+    if (_featureFlags.readerStrictCompleteRead) {
+      // Strict rollout mode requires a real viewport hit and decode callback.
+      // This keeps preload/cache metadata from marking an unread chapter read.
+      if (!_visibleImageIndexes.contains(lastIndex)) {
+        return;
+      }
+      if (!_isImageResolvedInCurrentSession(lastIndex)) {
+        return;
+      }
     }
 
     final completedAt = DateTime.now();
@@ -1090,6 +1095,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     int centerIndex,
     List<ComicReaderImageState> images,
   ) {
+    if (!_featureFlags.readerPreloadQueueEnabled) {
+      return;
+    }
     if (images.isEmpty) {
       return;
     }
@@ -1111,6 +1119,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   }
 
   Future<void> _enqueueReadingWindow(int centerIndex) async {
+    if (!_featureFlags.readerPreloadQueueEnabled) {
+      return;
+    }
     final current = state.value;
     if (current == null || current.images.isEmpty) {
       return;
@@ -1127,7 +1138,8 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       movingForward: movingForward,
     );
     await _enqueuePreloadTasks(tasks, cancelOldWindow: false);
-    if (_chapterPreloadPolicy.shouldPreloadNextChapter(
+    if (_featureFlags.readerNextChapterPreloadEnabled &&
+        _chapterPreloadPolicy.shouldPreloadNextChapter(
       currentImageIndex: centerIndex,
       totalImages: current.images.length,
     )) {
@@ -1136,6 +1148,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   }
 
   Future<void> _enqueueJumpWindow(int centerIndex) async {
+    if (!_featureFlags.readerPreloadQueueEnabled) {
+      return;
+    }
     final current = state.value;
     if (current == null || current.images.isEmpty) {
       return;
@@ -1215,6 +1230,11 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   }
 
   Future<void> ensureNextChapterPreloaded({bool force = false}) {
+    if (!_featureFlags.readerPreloadQueueEnabled ||
+        !_featureFlags.readerNextChapterPreloadEnabled) {
+      _logReaderEvent('next_chapter_preload_disabled');
+      return Future<void>.value();
+    }
     final current = state.value;
     if (current == null || !current.hasNextEpisode) {
       _patchNextChapterPreload(ComicReaderChapterPreloadState.unavailable());
@@ -1377,6 +1397,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     required bool cancelOldWindow,
     String? hint,
   }) async {
+    if (!_featureFlags.readerPreloadQueueEnabled) {
+      return;
+    }
     if (tasks.isEmpty) {
       return;
     }

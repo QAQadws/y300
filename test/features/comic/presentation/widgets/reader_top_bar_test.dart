@@ -44,4 +44,41 @@ void main() {
     expect(threadTapped, isTrue);
     expect(selectedAction, ReaderMoreAction.setCurrentPageAsCover);
   });
+
+  testWidgets('long title keeps ellipsis on narrow screen', (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ReaderTopBar(
+            comicTitle: '这是一个非常非常非常非常长的漫画标题用于验证省略号',
+            episodeTitle: '这是一个非常非常非常长的章节标题用于验证省略号',
+            isBookmarked: true,
+            isCurrentEpisodeRead: true,
+            failedImageCount: 0,
+            onBack: () {},
+            onOpenDetail: () {},
+            onToggleBookmark: () {},
+            onOpenThread: () {},
+            onMoreActionSelected: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    final comicTitle = tester.widget<Text>(
+      find.byKey(const Key('comic-reader-top-comic-title')),
+    );
+    final episodeTitle = tester.widget<Text>(
+      find.byKey(const Key('comic-reader-top-episode-title')),
+    );
+    expect(comicTitle.maxLines, 1);
+    expect(comicTitle.overflow, TextOverflow.ellipsis);
+    expect(episodeTitle.maxLines, 1);
+    expect(episodeTitle.overflow, TextOverflow.ellipsis);
+  });
 }

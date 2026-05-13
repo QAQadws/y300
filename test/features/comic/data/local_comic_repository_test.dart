@@ -393,6 +393,59 @@ void main() {
       expect(episodes.any((e) => e.episodeTitle == '第1话-修订'), isTrue);
     });
 
+    test('mergeEpisodesFromLinks updates same tid title without losing read state', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:110',
+        tid: '110',
+        fid: '30',
+        title: '测试漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>[],
+          episodeLinks: <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-111-1-1.html', rawText: '1', episodeTitle: '第1话'),
+          ],
+          plainTextSummary: '摘要',
+        ),
+      );
+      final stateRepository = LocalLibraryStateRepository(dbFuture);
+      await stateRepository.upsertEpisodeState(
+        moduleKey: LibraryModuleKey.comic,
+        episodeId: 'yamibo:110:111',
+        workId: 'yamibo:110',
+        isRead: true,
+      );
+
+      final result = await repository.mergeEpisodesFromLinks(
+        comicId: 'yamibo:110',
+        fallbackSourceTid: '110',
+        episodeLinks: const <ComicEpisodeLink>[
+          ComicEpisodeLink(
+            url: 'thread-111-1-1.html',
+            rawText: '第1话 完整标题',
+            episodeTitle: '第1话 完整标题',
+          ),
+        ],
+      );
+
+      final episodes = await repository.getComicEpisodes(
+        comicId: 'yamibo:110',
+        descending: false,
+      );
+      final snapshot = await repository.queryShelfSnapshot(
+        filters: LibraryFilterSet.defaults,
+        sortOption: LibraryShelfSortOption.defaults,
+        keyword: '',
+      );
+      final item = snapshot.itemsByCategory['default']!.single;
+
+      expect(result.insertedCount, 0);
+      expect(result.updatedCount, 1);
+      expect(episodes, hasLength(1));
+      expect(episodes.single.episodeTitle, '第1话 完整标题');
+      expect(item.readChapterCount, 1);
+      expect(item.unreadCount, 0);
+    });
+
     test('queryShelfSnapshot aggregates episode state and tags', () async {
       await repository.addToShelf(
         comicId: 'yamibo:900',

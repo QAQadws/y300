@@ -50,4 +50,59 @@ void main() {
     expect(settingsOpened, isTrue);
     expect(cacheTapped, isTrue);
   });
+
+  testWidgets('narrow screen keeps controls within viewport', (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomCenter,
+            child: ReaderBottomPanel(
+              currentMode: ReaderModePreference.rtl,
+              currentPage: 88,
+              totalPages: 120,
+              hasPreviousEpisode: true,
+              hasNextEpisode: true,
+              nextChapterPreload: const ComicReaderChapterPreloadState(
+                status: ComicReaderChapterPreloadStatus.preloadingPages,
+                episodeId: 'next',
+                title: '很长很长很长的下一话标题',
+              ),
+              onPreviousEpisode: () {},
+              onNextEpisode: () {},
+              onOpenModeSheet: () {},
+              onOpenChapterList: () {},
+              onOpenDisplaySettings: () {},
+              onCacheEpisode: () {},
+              onProgressChangeStart: (_) {},
+              onProgressChanged: (_) {},
+              onProgressChangeEnd: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final viewport = Rect.fromLTWH(
+      0,
+      0,
+      tester.view.physicalSize.width,
+      tester.view.physicalSize.height,
+    );
+    for (final key in const <Key>[
+      Key('comic-reader-prev-episode-button'),
+      Key('comic-reader-next-episode-button'),
+      Key('comic-reader-mode-switch'),
+      Key('comic-reader-chapter-list-button'),
+      Key('comic-reader-display-settings-button'),
+      Key('comic-reader-bottom-cache-button'),
+    ]) {
+      expect(viewport.contains(tester.getCenter(find.byKey(key))), isTrue);
+    }
+  });
 }

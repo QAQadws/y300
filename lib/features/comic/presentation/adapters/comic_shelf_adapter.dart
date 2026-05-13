@@ -6,12 +6,14 @@ import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_query_utils.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
 
 /// 漫画书架适配器（Phase 0 骨架版）。
@@ -25,13 +27,16 @@ class ComicShelfAdapter
     required LibraryStateRepository stateRepository,
     ImageCacheService? imageCacheService,
     ImageCacheServiceResolver? imageCacheServiceResolver,
+    ComicReaderFeatureFlags featureFlags = ComicReaderFeatureFlags.defaults,
   })  : _stateRepository = stateRepository,
+        _featureFlags = featureFlags,
         _coverCacheService = imageCacheServiceResolver == null
             ? LibraryCoverCacheService(imageCacheService)
             : LibraryCoverCacheService.lazy(imageCacheServiceResolver);
 
   final ComicRepository _repository;
   final LibraryStateRepository _stateRepository;
+  final ComicReaderFeatureFlags _featureFlags;
   final LibraryCoverCacheService _coverCacheService;
 
   @override
@@ -62,21 +67,17 @@ class ComicShelfAdapter
   Future<Map<String, List<LibraryWorkItem>>> searchItemsByKeyword({
     required String keyword,
   }) async {
-    final normalized = keyword.trim().toLowerCase();
     final categories = await _repository.getCategories();
     final result = <String, List<LibraryWorkItem>>{};
     for (final category in categories) {
       final items = await _repository.getShelfItems(categoryId: category.categoryId);
       final mappedSource = await Future.wait(items.map(_mapWork));
-      final mapped = mappedSource.where((item) {
-        if (normalized.isEmpty) {
-          return true;
-        }
-        final title = item.title.toLowerCase();
-        final secondary = (item.secondaryName ?? '').toLowerCase();
-        return title.contains(normalized) || secondary.contains(normalized);
-      }).toList(growable: false);
-      result[category.categoryId] = mapped;
+      result[category.categoryId] = LibraryShelfQueryUtils.filterAndSort(
+        source: mappedSource,
+        filters: LibraryFilterSet.defaults,
+        sortOption: LibraryShelfSortOption.defaults,
+        keyword: keyword,
+      );
     }
     return result;
   }
@@ -88,12 +89,16 @@ class ComicShelfAdapter
     required LibraryShelfSortOption sortOption,
     required String keyword,
   }) async {
-    // Phase 0：筛选与排序先复用现有查询 + 本地搜索过滤，后续扩展状态表后再增强。
-    final source = await searchItemsByKeyword(keyword: keyword);
+    final source = await _loadMappedItemsByCategory(categories);
     final output = <String, List<LibraryWorkItem>>{};
     for (final category in categories) {
       var items = source[category.categoryId] ?? const <LibraryWorkItem>[];
-      items = _applyBasicSort(items, sortOption);
+      items = LibraryShelfQueryUtils.filterAndSort(
+        source: items,
+        filters: filters,
+        sortOption: sortOption,
+        keyword: keyword,
+      );
       output[category.categoryId] = items;
     }
     return output;
@@ -108,14 +113,19 @@ class ComicShelfAdapter
     final snapshotRepository = _repository is ComicShelfSnapshotRepository
         ? _repository as ComicShelfSnapshotRepository
         : null;
-    if (snapshotRepository != null) {
-      return snapshotRepository.queryShelfSnapshot(
+    if (snapshotRepository != null &&
+        _featureFlags.readerCustomMetadataEnabled) {
+      final snapshot = await snapshotRepository.queryShelfSnapshot(
         filters: filters,
         sortOption: sortOption,
         keyword: keyword,
       );
+      return snapshot;
     }
 
+    // Snapshot rows only expose the already-composed display fields. When
+    // custom metadata is disabled, use the item mapping path so source/custom
+    // columns can be separated before reaching shared shelf UI.
     final categories = await loadCategories();
     final itemsByCategory = await queryItems(
       categories: categories,
@@ -213,6 +223,19 @@ class ComicShelfAdapter
     return items[random.nextInt(items.length)].workId;
   }
 
+  Future<Map<String, List<LibraryWorkItem>>> _loadMappedItemsByCategory(
+    List<LibraryCategory> categories,
+  ) async {
+    final output = <String, List<LibraryWorkItem>>{};
+    for (final category in categories) {
+      final items = await _repository.getShelfItems(
+        categoryId: category.categoryId,
+      );
+      output[category.categoryId] = await Future.wait(items.map(_mapWork));
+    }
+    return output;
+  }
+
   LibraryCategory _mapCategory(ComicShelfCategory source) {
     return LibraryCategory(
       categoryId: source.categoryId,
@@ -248,25 +271,46 @@ class ComicShelfAdapter
       moduleKey: LibraryModuleKey.comic,
       workId: source.comicId,
     );
-    final customSource = source.customCoverImageUrl?.trim();
-    final customLocal = source.customCoverLocalPath?.trim();
+    final useCustomMetadata = _featureFlags.readerCustomMetadataEnabled;
+    final customSource =
+        useCustomMetadata ? source.customCoverImageUrl?.trim() : null;
+    final customLocal =
+        useCustomMetadata ? source.customCoverLocalPath?.trim() : null;
     final hasPendingCustomCover =
         customSource != null && customSource.isNotEmpty && (customLocal == null || customLocal.isEmpty);
     return LibraryWorkItem(
       workId: source.comicId,
       categoryId: source.categoryId,
-      title: source.title,
+      title: useCustomMetadata
+          ? source.title
+          : (source.sourceTitle ?? source.title),
       secondaryName: _shelfSecondaryName(
-        author: source.author,
-        translationGroup: source.translationGroup,
+        author: useCustomMetadata
+            ? source.author
+            : (source.sourceAuthor ?? source.author),
+        translationGroup: useCustomMetadata
+            ? source.translationGroup
+            : (source.sourceTranslationGroup ?? source.translationGroup),
       ),
-      coverImageUrl: source.coverImageUrl,
-      customCoverImageUrl: source.customCoverImageUrl,
+      coverImageUrl: useCustomMetadata
+          ? source.coverImageUrl
+          : _sourceCoverImageUrl(
+              coverImageUrl: source.coverImageUrl,
+              customCoverImageUrl: source.customCoverImageUrl,
+            ),
+      customCoverImageUrl: useCustomMetadata ? source.customCoverImageUrl : null,
       // If a remote custom cover exists but is not cached yet, keep the normal
       // local cover out of the preferred path so the UI does not flash an older
       // ordinary cover while the custom one warms in the background.
-      coverLocalPath: hasPendingCustomCover ? null : source.coverLocalPath,
-      customCoverLocalPath: source.customCoverLocalPath,
+      coverLocalPath: hasPendingCustomCover
+          ? null
+          : useCustomMetadata
+              ? source.coverLocalPath
+              : _sourceCoverLocalPath(
+                  coverLocalPath: source.coverLocalPath,
+                  customCoverLocalPath: source.customCoverLocalPath,
+                ),
+      customCoverLocalPath: useCustomMetadata ? source.customCoverLocalPath : null,
       unreadCount: unread,
       totalChapterCount: stats?.totalCount ?? unread + read,
       readChapterCount: read,
@@ -358,30 +402,28 @@ class ComicShelfAdapter
     );
   }
 
-  List<LibraryWorkItem> _applyBasicSort(
-    List<LibraryWorkItem> source,
-    LibraryShelfSortOption sortOption,
-  ) {
-    final list = List<LibraryWorkItem>.from(source);
-    list.sort((a, b) {
-      int cmp;
-      switch (sortOption.field) {
-        case LibraryShelfSortField.name:
-          cmp = a.title.toLowerCase().compareTo(b.title.toLowerCase());
-          break;
-        case LibraryShelfSortField.favoriteAddedAt:
-          cmp = a.addedAt.compareTo(b.addedAt);
-          break;
-        default:
-          cmp = a.addedAt.compareTo(b.addedAt);
-          break;
-      }
-      if (sortOption.direction == LibrarySortDirection.desc) {
-        return -cmp;
-      }
-      return cmp;
-    });
-    return list;
+  String? _sourceCoverImageUrl({
+    required String? coverImageUrl,
+    required String? customCoverImageUrl,
+  }) {
+    final custom = customCoverImageUrl?.trim();
+    final cover = coverImageUrl?.trim();
+    if (custom != null && custom.isNotEmpty && cover == custom) {
+      return null;
+    }
+    return cover == null || cover.isEmpty ? null : cover;
+  }
+
+  String? _sourceCoverLocalPath({
+    required String? coverLocalPath,
+    required String? customCoverLocalPath,
+  }) {
+    final custom = customCoverLocalPath?.trim();
+    final cover = coverLocalPath?.trim();
+    if (custom != null && custom.isNotEmpty && cover == custom) {
+      return null;
+    }
+    return cover == null || cover.isEmpty ? null : cover;
   }
 
   String? _shelfSecondaryName({

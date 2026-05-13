@@ -7,6 +7,7 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/local_comic_repository.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_events.dart';
+import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 
@@ -25,6 +26,10 @@ final comicCoverCacheWriterProvider = Provider<ComicCoverCacheWriter?>((ref) {
 
 final comicReaderEventLoggerProvider = Provider<ComicReaderEventLogger>((ref) {
   return const ComicReaderEventLogger();
+});
+
+final comicReaderFeatureFlagsProvider = Provider<ComicReaderFeatureFlags>((ref) {
+  return ComicReaderFeatureFlags.defaults;
 });
 
 final comicReadingStateWriterProvider = Provider<ComicReadingStateWriter>((ref) {

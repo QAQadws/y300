@@ -10,6 +10,8 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_reader_chapter_preload.dart';
+import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
@@ -413,7 +415,7 @@ void main() {
             .having((item) => item.cacheStatus, 'cacheStatus', 'failed'),
       ),
     );
-    final state = container.read(comicReaderControllerProvider(args)).value!;
+    final state = await container.read(comicReaderControllerProvider(args).future);
     expect(state.failedImageCount, greaterThanOrEqualTo(1));
   });
 
@@ -457,7 +459,7 @@ void main() {
             .having((item) => item.cacheStatus, 'cacheStatus', 'none'),
       ),
     );
-    final state = container.read(comicReaderControllerProvider(args)).value!;
+    final state = await container.read(comicReaderControllerProvider(args).future);
     expect(state.failedImageCount, 0);
   });
 
@@ -490,6 +492,119 @@ void main() {
     );
 
     expect(writer.completedEpisodeIds, <String>['yamibo:100:101']);
+  });
+
+  test('strict complete flag disabled allows last visible page without decode gate', () async {
+    final repository = _ReaderRepoForControllerTest();
+    final service = _ReaderServiceSpy();
+    final writer = _ReadingStateWriterSpy(repository);
+    final container = ProviderContainer(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(repository),
+        comicReadingStateWriterProvider.overrideWithValue(writer),
+        comicReaderFeatureFlagsProvider.overrideWithValue(
+          ComicReaderFeatureFlags.defaults.copyWith(
+            readerStrictCompleteRead: false,
+          ),
+        ),
+        comicReaderServiceProvider.overrideWith((ref) async => service),
+        comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final args = const ComicReaderArgs(comicId: 'yamibo:100', episodeId: 'yamibo:100:101');
+    await container.read(comicReaderControllerProvider(args).future);
+
+    await container
+        .read(comicReaderControllerProvider(args).notifier)
+        .onImageVisible(4);
+
+    expect(writer.completedEpisodeIds, <String>['yamibo:100:101']);
+  });
+
+  test('preload queue feature flag disables reader cache window', () async {
+    final repository = _ReaderRepoForControllerTest(imageCount: 10);
+    final service = _ReaderServiceSpy();
+    final writer = _ReadingStateWriterSpy(repository);
+    final container = ProviderContainer(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(repository),
+        comicReadingStateWriterProvider.overrideWithValue(writer),
+        comicReaderFeatureFlagsProvider.overrideWithValue(
+          ComicReaderFeatureFlags.defaults.copyWith(
+            readerPreloadQueueEnabled: false,
+          ),
+        ),
+        comicReaderServiceProvider.overrideWith((ref) async => service),
+        comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final args = const ComicReaderArgs(comicId: 'yamibo:100', episodeId: 'yamibo:100:101');
+    await container.read(comicReaderControllerProvider(args).future);
+
+    await container
+        .read(comicReaderControllerProvider(args).notifier)
+        .onImageVisible(6);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(service.cachedImageUrls, isEmpty);
+    expect(
+      repository.cacheStatusWrites.map((item) => item.cacheStatus),
+      isNot(contains('queued')),
+    );
+  });
+
+  test('next chapter feature flag keeps next episode idle near chapter end', () async {
+    final repository = _ReaderRepoForControllerTest(imageCount: 10);
+    final service = _ReaderServiceSpy();
+    final writer = _ReadingStateWriterSpy(repository);
+    final container = ProviderContainer(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(repository),
+        comicReadingStateWriterProvider.overrideWithValue(writer),
+        comicReaderFeatureFlagsProvider.overrideWithValue(
+          ComicReaderFeatureFlags.defaults.copyWith(
+            readerNextChapterPreloadEnabled: false,
+          ),
+        ),
+        comicReaderServiceProvider.overrideWith((ref) async => service),
+        comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final args = const ComicReaderArgs(comicId: 'yamibo:100', episodeId: 'yamibo:100:101');
+    await container.read(comicReaderControllerProvider(args).future);
+
+    await container
+        .read(comicReaderControllerProvider(args).notifier)
+        .onImageVisible(6);
+    await Future<void>.delayed(Duration.zero);
+
+    final state = await container.read(comicReaderControllerProvider(args).future);
+    expect(state.nextChapterPreload.episodeId, 'yamibo:100:102');
+    expect(
+      state.nextChapterPreload.status,
+      ComicReaderChapterPreloadStatus.idle,
+    );
+    await container
+        .read(comicReaderControllerProvider(args).notifier)
+        .ensureNextChapterPreloaded(force: true);
+    final forcedState = await container.read(comicReaderControllerProvider(args).future);
+    expect(
+      forcedState.nextChapterPreload.status,
+      ComicReaderChapterPreloadStatus.idle,
+    );
+    expect(
+      service.cachedImageUrls,
+      isNot(contains('https://img.test/102-1.jpg')),
+    );
   });
 
   test('toggleBookmark persists bookmark state', () async {

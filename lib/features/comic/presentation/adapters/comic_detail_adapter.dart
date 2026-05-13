@@ -4,6 +4,7 @@ import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/comic_download_service.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
+import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
@@ -22,16 +23,19 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
     ComicEpisodeRefreshService? refreshService,
     ComicDownloadService? downloadService,
     ImageCacheService? imageCacheService,
+    ComicReaderFeatureFlags featureFlags = ComicReaderFeatureFlags.defaults,
     required LibraryStateRepository stateRepository,
   })  : _refreshService = refreshService,
         _downloadService = downloadService,
         _imageCacheService = imageCacheService,
+        _featureFlags = featureFlags,
         _stateRepository = stateRepository;
 
   final ComicRepository _repository;
   final ComicEpisodeRefreshService? _refreshService;
   final ComicDownloadService? _downloadService;
   final ImageCacheService? _imageCacheService;
+  final ComicReaderFeatureFlags _featureFlags;
   final LibraryStateRepository _stateRepository;
 
   @override
@@ -52,10 +56,19 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
       workId: workId,
     );
     final inShelf = await _repository.isInShelf(comicId: workId);
-    final customCoverImageUrl = detail.customCoverImageUrl?.trim();
-    var coverImageUrl = detail.coverImageUrl;
-    var coverLocalPath = detail.coverLocalPath;
-    var customCoverLocalPath = detail.customCoverLocalPath;
+    final useCustomMetadata = _featureFlags.readerCustomMetadataEnabled;
+    final customCoverImageUrl =
+        useCustomMetadata ? detail.customCoverImageUrl?.trim() : null;
+    // Local repository returns `coverImageUrl` as custom-or-source for normal
+    // UI.  The feature flag must be able to suppress that custom layer fully.
+    var coverImageUrl = useCustomMetadata
+        ? detail.coverImageUrl
+        : _sourceCoverImageUrl(detail);
+    var coverLocalPath = useCustomMetadata
+        ? detail.coverLocalPath
+        : _sourceCoverLocalPath(detail);
+    var customCoverLocalPath =
+        useCustomMetadata ? detail.customCoverLocalPath : null;
     if (coverImageUrl == null || coverImageUrl.trim().isEmpty) {
       // 漫画初始封面使用“tid 最小的话的第一张图”。orderIndex 只代表
       // 当前解析顺序，遇到目录/补全章节时不一定等于真实首话。
@@ -109,20 +122,27 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
     }
     return LibraryDetailHeader(
       workId: detail.comicId,
-      title: detail.title,
+      title: useCustomMetadata
+          ? detail.title
+          : (detail.sourceTitle ?? detail.title),
       coverImageUrl: coverImageUrl,
-      customCoverImageUrl: customCoverImageUrl,
+      customCoverImageUrl: useCustomMetadata ? customCoverImageUrl : null,
       coverLocalPath: coverLocalPath,
-      customCoverLocalPath: customCoverLocalPath,
-      author: detail.author,
+      customCoverLocalPath: useCustomMetadata ? customCoverLocalPath : null,
+      author: useCustomMetadata
+          ? detail.author
+          : (detail.sourceAuthor ?? detail.author),
       sourceAuthor: detail.sourceAuthor,
-      customAuthor: detail.customAuthor,
-      translationGroup: detail.translationGroup,
+      customAuthor: useCustomMetadata ? detail.customAuthor : null,
+      translationGroup: useCustomMetadata
+          ? detail.translationGroup
+          : (detail.sourceTranslationGroup ?? detail.translationGroup),
       sourceTitle: detail.sourceTitle,
-      customTitle: detail.customTitle,
+      customTitle: useCustomMetadata ? detail.customTitle : null,
       sourceTranslationGroup: detail.sourceTranslationGroup,
-      customTranslationGroup: detail.customTranslationGroup,
-      customSearchTitle: detail.customSearchTitle,
+      customTranslationGroup:
+          useCustomMetadata ? detail.customTranslationGroup : null,
+      customSearchTitle: useCustomMetadata ? detail.customSearchTitle : null,
       sourceTid: detail.sourceTid,
       sourceTypeId: detail.sourceTypeId,
       sourceTagName: detail.sourceTagName,
@@ -274,6 +294,24 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
     return ReaderRouteTarget(workId: workId, episodeId: targetEpisodeId);
   }
 
+  String? _sourceCoverImageUrl(ComicDetail detail) {
+    final custom = detail.customCoverImageUrl?.trim();
+    final cover = detail.coverImageUrl?.trim();
+    if (custom != null && custom.isNotEmpty && cover == custom) {
+      return null;
+    }
+    return cover == null || cover.isEmpty ? null : cover;
+  }
+
+  String? _sourceCoverLocalPath(ComicDetail detail) {
+    final custom = detail.customCoverLocalPath?.trim();
+    final cover = detail.coverLocalPath?.trim();
+    if (custom != null && custom.isNotEmpty && cover == custom) {
+      return null;
+    }
+    return cover == null || cover.isEmpty ? null : cover;
+  }
+
   Future<String> _resolveContinueEpisodeId({
     required String workId,
     required List<ComicEpisodeItem> episodes,
@@ -384,8 +422,11 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
         sourceTid: detail.sourceTid,
         displayTitle: detail.displayTitle,
         sourceTitle: detail.sourceTitle,
-        customTitle: detail.customTitle,
-        customSearchTitle: detail.customSearchTitle,
+        customTitle:
+            _featureFlags.readerCustomMetadataEnabled ? detail.customTitle : null,
+        customSearchTitle: _featureFlags.readerCustomMetadataEnabled
+            ? detail.customSearchTitle
+            : null,
       ),
     );
     if (links.isEmpty) {

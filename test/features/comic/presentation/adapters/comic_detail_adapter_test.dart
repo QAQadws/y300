@@ -5,6 +5,7 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/adapters/comic_detail_adapter.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
@@ -28,6 +29,40 @@ void main() {
     expect(repository.mergeCalled, isTrue);
     expect(repository.lastMergedLinks.length, 2);
     expect(repository.lastFallbackTid, '100');
+  });
+
+  test('custom metadata feature flag can fall back to source fields', () async {
+    final repository = _FakeComicRepositoryWithCoverWriter(
+      customCoverImageUrl: 'https://img.test/custom-cover.jpg',
+    );
+    final cacheService = _FakeImageCacheService(localPath: '/cache/custom-cover.jpg');
+    final refreshService = _FakeComicEpisodeRefreshService();
+    final adapter = ComicDetailAdapter(
+      repository,
+      refreshService: refreshService,
+      imageCacheService: cacheService,
+      featureFlags: ComicReaderFeatureFlags.defaults.copyWith(
+        readerCustomMetadataEnabled: false,
+      ),
+      stateRepository: _FakeLibraryStateRepository(),
+    );
+
+    final header = await adapter.loadHeader(workId: 'comic:1');
+    await adapter.refreshWork(workId: 'comic:1');
+
+    expect(header.title, 'Source Test Comic');
+    expect(header.customTitle, isNull);
+    expect(header.coverImageUrl, 'https://img.test/90-1.jpg');
+    expect(header.customCoverImageUrl, isNull);
+    expect(header.customCoverLocalPath, isNull);
+    expect(repository.lastCustomCoverLocalPath, isNull);
+    expect(header.author, 'Source Author');
+    expect(header.customAuthor, isNull);
+    expect(header.translationGroup, 'Source Group');
+    expect(header.customTranslationGroup, isNull);
+    expect(header.customSearchTitle, isNull);
+    expect(refreshService.lastRequest?.customTitle, isNull);
+    expect(refreshService.lastRequest?.customSearchTitle, isNull);
   });
 
   test('loadHeader falls back to first image of smallest tid episode', () async {

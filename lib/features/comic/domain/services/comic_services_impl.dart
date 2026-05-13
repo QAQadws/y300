@@ -15,6 +15,7 @@ import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_pa
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
 import 'package:y300/features/comic/domain/services/comic_detector.dart';
+import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/data/discuz_search_service.dart';
@@ -64,15 +65,18 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
     required ComicEpisodeDiscoveryService discoveryService,
     required ForumSearchService searchService,
     required ComicSubjectParser subjectParser,
+    ComicReaderFeatureFlags featureFlags = ComicReaderFeatureFlags.defaults,
     ThreadSeedFetcher? threadSeedFetcher,
   }) : _discoveryService = discoveryService,
        _searchService = searchService,
        _subjectParser = subjectParser,
+       _featureFlags = featureFlags,
        _threadSeedFetcher = threadSeedFetcher;
 
   final ComicEpisodeDiscoveryService _discoveryService;
   final ForumSearchService _searchService;
   final ComicSubjectParser _subjectParser;
+  final ComicReaderFeatureFlags _featureFlags;
   final ThreadSeedFetcher? _threadSeedFetcher;
 
   @override
@@ -123,82 +127,91 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<List<ComicEpisodeLink>> _searchFallbackFromCurrentTid(
     ComicEpisodeRefreshRequest request,
   ) async {
+    final keywordMode =
+        _featureFlags.readerRefreshMultiKeywordEnabled ? 'multi' : 'single';
+    _logRefresh(request, 'refreshKeywordMode=$keywordMode');
     final thread = await _fetchThreadDetail(request.sourceTid);
     if (thread == null) {
       return const <ComicEpisodeLink>[];
     }
-    final keyword = _resolveSearchKeyword(request, thread.subject);
-    if (keyword.value.isEmpty) {
-      return const <ComicEpisodeLink>[];
-    }
-    _logRefresh(request, 'keyword=${keyword.value} source=${keyword.source}');
+    final keywords = _resolveSearchKeywords(request, thread.subject);
+    for (final keyword in keywords) {
+      _logRefresh(request, 'keyword=${keyword.value} source=${keyword.source}');
 
-    final search = await _searchService.searchForum(
-      keyword: keyword.value,
-      context: const DiscuzSearchContext.curForum(srhfid: '30'),
-      enforceRateLimit: true,
-    );
-    if (search.rateLimited || search.items.isEmpty) {
+      final search = await _searchService.searchForum(
+        keyword: keyword.value,
+        context: const DiscuzSearchContext.curForum(srhfid: '30'),
+        enforceRateLimit: true,
+      );
+      if (search.rateLimited || search.items.isEmpty) {
+        _logRefresh(
+          request,
+          'keyword=${keyword.value} candidates=0 rateLimited=${search.rateLimited}',
+        );
+        if (search.rateLimited) {
+          return const <ComicEpisodeLink>[];
+        }
+        continue;
+      }
+
+      final candidates = _scoreSearchCandidates(
+        threadSubject: thread.subject,
+        keyword: keyword,
+        items: search.items,
+      );
       _logRefresh(
         request,
-        'keyword=${keyword.value} candidates=0 rateLimited=${search.rateLimited}',
+        'keyword=${keyword.value} candidates=${candidates.length} '
+        'top=${candidates.take(3).map((item) => '${item.item.tid}:${item.score.toStringAsFixed(2)}').join(',')}',
       );
-      return const <ComicEpisodeLink>[];
-    }
-
-    final currentScore = _scoreTitleSimilarity(thread.subject, keyword.value);
-    final candidates = <_ScoredSearchItem>[];
-    for (var index = 0; index < search.items.length; index++) {
-      final item = search.items[index];
-      final scored = _ScoredSearchItem(
-        item: item,
-        score: _scoreTitleSimilarity(item.title, keyword.value),
-        searchIndex: index,
-      );
-      if (scored.score >= currentScore - 0.25) {
-        candidates.add(scored);
+      if (candidates.isEmpty) {
+        continue;
       }
-    }
-    candidates.sort((a, b) => b.score.compareTo(a.score));
-    _logRefresh(
-      request,
-      'keyword=${keyword.value} candidates=${candidates.length} '
-      'top=${candidates.take(3).map((item) => '${item.item.tid}:${item.score.toStringAsFixed(2)}').join(',')}',
-    );
 
-    const topK = 3;
-    var collectedLinks = const <ComicEpisodeLink>[];
-    for (final candidate in candidates
-        .where((item) => item.item.tid.trim() != request.sourceTid.trim())
-        .take(topK)) {
-      final result = await _discoveryService.discoverFromTidWithPreference(
-        tid: candidate.item.tid,
-        preferCatalogFirst: true,
-      );
-      if (result.episodeLinks.isNotEmpty) {
-        collectedLinks = _mergeEpisodeLinks(collectedLinks, result.episodeLinks);
+      const topK = 3;
+      var collectedLinks = const <ComicEpisodeLink>[];
+      final sourceTid = request.sourceTid.trim();
+      final candidateBatch = candidates
+          .where((item) => item.item.tid.trim() != sourceTid)
+          .take(topK)
+          .toList(growable: false);
+      for (final candidate in candidateBatch) {
+        final result = await _discoveryService.discoverFromTidWithPreference(
+          tid: candidate.item.tid,
+          preferCatalogFirst: true,
+        );
+        if (result.episodeLinks.isNotEmpty) {
+          collectedLinks = _mergeEpisodeLinks(collectedLinks, result.episodeLinks);
+        }
       }
-    }
-    final searchCandidateLinks = _episodeLinksFromSearchCandidates(candidates);
-    if (collectedLinks.isEmpty) {
-      return searchCandidateLinks;
-    }
-    if (searchCandidateLinks.length > collectedLinks.length) {
-      // Discuz search results are themselves same-series thread entries. When
-      // catalog/recursive parsing only finds a partial set, preserve those
-      // matched entries instead of losing newer chapters from the search page.
-      return _sortEpisodeLinks(
-        _mergeEpisodeLinks(
-          collectedLinks,
-          searchCandidateLinks,
-          preferSupplement: true,
-        ),
+      final searchCandidateLinks = _episodeLinksFromSearchCandidates(
+        candidates,
+        excludeTid: sourceTid,
       );
+      if (collectedLinks.isEmpty && searchCandidateLinks.isEmpty) {
+        continue;
+      }
+      if (collectedLinks.isEmpty) {
+        return searchCandidateLinks;
+      }
+      if (searchCandidateLinks.length > collectedLinks.length) {
+        // Discuz search results are themselves same-series thread entries. When
+        // catalog/recursive parsing only finds a partial set, preserve those
+        // matched entries instead of losing newer chapters from the search page.
+        return _sortEpisodeLinks(
+          _mergeEpisodeLinks(
+            collectedLinks,
+            searchCandidateLinks,
+            preferSupplement: true,
+          ),
+        );
+      }
+      return _sortEpisodeLinks(collectedLinks);
     }
-    return _sortEpisodeLinks(collectedLinks);
+    return const <ComicEpisodeLink>[];
   }
 
-  _RefreshKeyword _resolveSearchKeyword(
+  List<_RefreshKeyword> _resolveSearchKeywords(
     ComicEpisodeRefreshRequest request,
     String subject,
   ) {
@@ -209,13 +222,46 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
       _RefreshKeyword('sourceTitle', request.sourceTitle),
       _RefreshKeyword('subjectNormalized', _subjectParser.parse(subject).normalizedTitle),
     ];
+    final unique = <String, _RefreshKeyword>{};
     for (final choice in choices) {
       final value = choice.value.trim();
       if (value.isNotEmpty) {
-        return _RefreshKeyword(choice.source, value);
+        unique.putIfAbsent(value, () => _RefreshKeyword(choice.source, value));
+        if (!_featureFlags.readerRefreshMultiKeywordEnabled) {
+          break;
+        }
       }
     }
-    return const _RefreshKeyword('none', '');
+    return unique.values.toList(growable: false);
+  }
+
+  List<_ScoredSearchItem> _scoreSearchCandidates({
+    required String threadSubject,
+    required _RefreshKeyword keyword,
+    required List<DiscuzSearchResultItem> items,
+  }) {
+    final currentScore = _scoreTitleSimilarity(threadSubject, keyword.value);
+    final minScore = currentScore <= 0 ? 0.50 : currentScore - 0.25;
+    final candidates = <_ScoredSearchItem>[];
+    for (var index = 0; index < items.length; index++) {
+      final item = items[index];
+      final scored = _ScoredSearchItem(
+        item: item,
+        score: _scoreTitleSimilarity(item.title, keyword.value),
+        searchIndex: index,
+      );
+      if (scored.score >= minScore) {
+        candidates.add(scored);
+      }
+    }
+    candidates.sort((a, b) {
+      final scoreOrder = b.score.compareTo(a.score);
+      if (scoreOrder != 0) {
+        return scoreOrder;
+      }
+      return a.searchIndex.compareTo(b.searchIndex);
+    });
+    return candidates;
   }
 
   List<ComicEpisodeLink> _mergeEpisodeLinks(
@@ -240,8 +286,9 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   }
 
   List<ComicEpisodeLink> _episodeLinksFromSearchCandidates(
-    List<_ScoredSearchItem> candidates,
-  ) {
+    List<_ScoredSearchItem> candidates, {
+    required String excludeTid,
+  }) {
     final sorted = candidates.toList()
       ..sort((a, b) {
         final episodeOrder = _compareSearchEpisodeOrder(a.item.title, b.item.title);
@@ -257,7 +304,10 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
 
     return _mergeEpisodeLinks(
       const <ComicEpisodeLink>[],
-      sorted.map(_episodeLinkFromSearchItem).toList(growable: false),
+      sorted
+          .where((candidate) => candidate.item.tid.trim() != excludeTid)
+          .map(_episodeLinkFromSearchItem)
+          .toList(growable: false),
     );
   }
 
@@ -397,6 +447,7 @@ final comicEpisodeRefreshServiceProvider = Provider<ComicEpisodeRefreshService>(
     discoveryService: ref.read(comicEpisodeDiscoveryServiceProvider),
     searchService: ref.read(discuzSearchServiceProvider),
     subjectParser: ref.read(comicSubjectParserProvider),
+    featureFlags: ref.watch(comicReaderFeatureFlagsProvider),
     threadSeedFetcher: (tid) async {
       final result = await ref.read(threadRepositoryProvider).getThreadDetail(tid: tid, page: 1);
       return result.when(

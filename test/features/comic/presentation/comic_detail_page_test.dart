@@ -14,6 +14,7 @@ import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/comic_detail_page.dart';
+import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -123,6 +124,87 @@ void main() {
 
     expect(observer.pushCount, 2);
     expect(find.byType(ComicDetailPage), findsOneWidget);
+  });
+
+  testWidgets('ComicReaderPage completion reloads detail with read chapter dimmed', (tester) async {
+    final stateRepository = _MutableLibraryStateRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+          comicEpisodeRefreshServiceProvider.overrideWithValue(_FakeComicEpisodeRefreshService()),
+          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+          comicReadingStateWriterProvider.overrideWithValue(
+            _RecordingReadingStateWriter(stateRepository),
+          ),
+          comicReaderServiceProvider.overrideWith((ref) async => _FakeComicReaderService()),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+          libraryStateRepositoryProvider.overrideWithValue(stateRepository),
+        ],
+        child: const MaterialApp(home: ComicDetailPage(comicId: 'comic:1')),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(
+      tester
+          .widget<ListTile>(
+            find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')),
+          )
+          .textColor,
+      isNull,
+    );
+
+    await tester.tap(find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final readerElement = tester.element(find.byKey(const Key('comic-reader-image-list')));
+    final readerProviderContainer = ProviderScope.containerOf(readerElement);
+    const readerArgs = ComicReaderArgs(
+      comicId: 'comic:1',
+      episodeId: 'comic:1:e1',
+    );
+    await readerProviderContainer.read(comicReaderControllerProvider(readerArgs).future);
+    final readerController = readerProviderContainer.read(
+      comicReaderControllerProvider(readerArgs).notifier,
+    );
+    await readerController.onImageVisible(0);
+    await readerController.onImageResolved(
+      imageIndex: 0,
+      imageUrl: 'https://img.test/e1-1.jpg',
+      width: 900,
+      height: 1600,
+    );
+    Navigator.of(readerElement).pop(
+      const ComicReaderExitResult(
+        comicId: 'comic:1',
+        lastReadEpisodeId: 'comic:1:e1',
+        completedEpisodeIds: <String>['comic:1:e1'],
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(stateRepository.markedReadEpisodeIds, contains('comic:1:e1'));
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(
+      tester
+          .widget<ListTile>(
+            find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')),
+          )
+          .textColor,
+      isNotNull,
+    );
   });
 }
 
@@ -277,6 +359,8 @@ class _FakeImageCacheService implements ImageCacheService {
 }
 
 class _FakeComicRepository implements ComicRepository {
+  ComicReadingProgress? _progress;
+
   @override
   Future<void> addToShelf({
     required String comicId,
@@ -352,7 +436,7 @@ class _FakeComicRepository implements ComicRepository {
   }
 
   @override
-  Future<ComicReadingProgress?> getLastReadProgress({required String comicId}) async => null;
+  Future<ComicReadingProgress?> getLastReadProgress({required String comicId}) async => _progress;
 
   @override
   Future<List<ComicShelfItem>> getShelfItems({String categoryId = 'default'}) async => const [];
@@ -411,7 +495,15 @@ class _FakeComicRepository implements ComicRepository {
     required String episodeId,
     required int imageIndex,
     required double scrollOffset,
-  }) async {}
+  }) async {
+    _progress = ComicReadingProgress(
+      comicId: comicId,
+      episodeId: episodeId,
+      imageIndex: imageIndex,
+      scrollOffset: scrollOffset,
+      updatedAt: DateTime(2026, 1, 1),
+    );
+  }
 }
 
 class _FakeLibraryStateRepository implements LibraryStateRepository {
@@ -542,4 +634,130 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
     DateTime? fetchedUpdatedAt,
     String? introText,
   }) async {}
+}
+
+class _MutableLibraryStateRepository extends _FakeLibraryStateRepository {
+  final Map<String, LibraryEpisodeState> _states = <String, LibraryEpisodeState>{};
+  final Set<String> markedReadEpisodeIds = <String>{};
+
+  @override
+  Future<LibraryEpisodeState?> getEpisodeState({
+    required LibraryModuleKey moduleKey,
+    required String episodeId,
+  }) async {
+    return _states[episodeId];
+  }
+
+  @override
+  Future<void> upsertEpisodeState({
+    required LibraryModuleKey moduleKey,
+    required String episodeId,
+    required String workId,
+    bool? isRead,
+    bool? isDownloaded,
+    bool? isBookmarked,
+    DateTime? readAt,
+    DateTime? downloadedAt,
+  }) async {
+    final existing = _states[episodeId];
+    if (isRead == true) {
+      markedReadEpisodeIds.add(episodeId);
+    }
+    _states[episodeId] = LibraryEpisodeState(
+      moduleKey: moduleKey,
+      episodeId: episodeId,
+      workId: workId,
+      isRead: isRead ?? existing?.isRead ?? false,
+      isDownloaded: isDownloaded ?? existing?.isDownloaded ?? false,
+      isBookmarked: isBookmarked ?? existing?.isBookmarked ?? false,
+      readAt: readAt,
+      downloadedAt: downloadedAt,
+    );
+  }
+}
+
+class _RecordingReadingStateWriter implements ComicReadingStateWriter {
+  const _RecordingReadingStateWriter(this.stateRepository);
+
+  final _MutableLibraryStateRepository stateRepository;
+
+  @override
+  Future<bool> isEpisodeBookmarked({
+    required String comicId,
+    required String episodeId,
+  }) async {
+    return (await stateRepository.getEpisodeState(
+          moduleKey: LibraryModuleKey.comic,
+          episodeId: episodeId,
+        ))
+            ?.isBookmarked ??
+        false;
+  }
+
+  @override
+  Future<bool> isEpisodeRead({
+    required String comicId,
+    required String episodeId,
+  }) async {
+    return (await stateRepository.getEpisodeState(
+          moduleKey: LibraryModuleKey.comic,
+          episodeId: episodeId,
+        ))
+            ?.isRead ??
+        false;
+  }
+
+  @override
+  Future<void> markEpisodeCompleted({
+    required String comicId,
+    required String episodeId,
+    required int imageIndex,
+    required double scrollOffset,
+    required DateTime completedAt,
+  }) {
+    return setEpisodeRead(
+      comicId: comicId,
+      episodeId: episodeId,
+      isRead: true,
+      readAt: completedAt,
+    );
+  }
+
+  @override
+  Future<void> saveProgress({
+    required String comicId,
+    required String episodeId,
+    required int imageIndex,
+    required double scrollOffset,
+  }) async {}
+
+  @override
+  Future<void> setEpisodeBookmarked({
+    required String comicId,
+    required String episodeId,
+    required bool isBookmarked,
+  }) {
+    return stateRepository.upsertEpisodeState(
+      moduleKey: LibraryModuleKey.comic,
+      episodeId: episodeId,
+      workId: comicId,
+      isBookmarked: isBookmarked,
+    );
+  }
+
+  @override
+  Future<void> setEpisodeRead({
+    required String comicId,
+    required String episodeId,
+    required bool isRead,
+    DateTime? readAt,
+  }) {
+    return stateRepository.upsertEpisodeState(
+      moduleKey: LibraryModuleKey.comic,
+      episodeId: episodeId,
+      workId: comicId,
+      isRead: isRead,
+      readAt: isRead ? readAt ?? DateTime(2026, 1, 1) : null,
+    );
+  }
 }

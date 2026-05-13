@@ -165,6 +165,41 @@ void main() {
       completers[2]!.complete(_success(2));
       await _drainQueue();
     });
+
+    test('dispose cancels pending and suppresses later callbacks', () async {
+      final started = <int>[];
+      final results = <int>[];
+      final completers = <int, Completer<ComicImageCacheResult>>{};
+      final snapshots = <ComicReaderPreloadQueueSnapshot>[];
+      final queue = ComicReaderPreloadQueue(
+        maxConcurrent: 1,
+        runner: (task) {
+          started.add(task.imageIndex);
+          final completer = Completer<ComicImageCacheResult>();
+          completers[task.imageIndex] = completer;
+          return completer.future;
+        },
+        onResult: (result) async {
+          results.add(result.task.imageIndex);
+        },
+        onSnapshot: snapshots.add,
+      );
+
+      queue.enqueueAll(<ComicReaderPreloadTask>[
+        _task(0, ComicReaderPreloadPriority.visible),
+        _task(1, ComicReaderPreloadPriority.adjacentForward),
+      ]);
+      await _drainQueue(iterations: 2);
+
+      queue.dispose();
+      completers[0]!.complete(_success(0));
+      await _drainQueue();
+
+      expect(started, <int>[0]);
+      expect(results, isEmpty);
+      expect(queue.enqueue(_task(2, ComicReaderPreloadPriority.retry)), isFalse);
+      expect(snapshots.last.cancelledCount, greaterThanOrEqualTo(2));
+    });
   });
 }
 

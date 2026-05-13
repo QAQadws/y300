@@ -171,6 +171,48 @@ void main() {
     expect(find.byType(ShelfCoverImage), findsNothing);
   });
 
+  testWidgets('unread badge renders shelf aggregate count', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.list,
+            onQuery: ({
+              required List<LibraryCategory> categories,
+              required LibraryFilterSet filters,
+              required LibraryShelfSortOption sortOption,
+              required String keyword,
+            }) async {
+              return {
+                'default': [
+                  LibraryWorkItem(
+                    workId: 'badge-work',
+                    categoryId: 'default',
+                    title: 'Badge Comic',
+                    unreadCount: 7,
+                    totalChapterCount: 10,
+                    readChapterCount: 3,
+                    addedAt: DateTime(2026, 1, 1),
+                  ),
+                ],
+              };
+            },
+          ),
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('unified-shelf-list-item-badge-work')),
+        matching: find.text('7'),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('category pages keep stable PageStorage keys for scroll restoration', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

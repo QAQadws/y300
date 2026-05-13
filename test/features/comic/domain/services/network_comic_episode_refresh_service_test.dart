@@ -3,6 +3,7 @@ import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
+import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
@@ -162,6 +163,188 @@ void main() {
       final links = await service.fetchEpisodeLinksFromTid('100');
 
       expect(links, isEmpty);
+    });
+
+    test('does not merge low-score search candidates', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{
+          '100': const <ComicEpisodeLink>[],
+          '401': const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-401-1-1.html', rawText: '低分误匹配'),
+          ],
+        },
+      );
+      final searchService = _FakeDiscuzSearchService(
+        response: const DiscuzSearchResponse(
+          items: <DiscuzSearchResultItem>[
+            DiscuzSearchResultItem(
+              tid: '401',
+              title: '完全不同的作品 第1话',
+              url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=401',
+              fid: '30',
+            ),
+          ],
+          rateLimited: false,
+        ),
+      );
+      final service = NetworkComicEpisodeRefreshService(
+        discoveryService: discovery,
+        searchService: searchService,
+        subjectParser: const RuleBasedComicSubjectParser(),
+        threadSeedFetcher: (tid) async {
+          return const ThreadSeed(subject: '百合情结 第4话');
+        },
+      );
+
+      final links = await service.fetchEpisodeLinksFromTid('100');
+
+      expect(links, isEmpty);
+      expect(discovery.requestedTids, <String>['100']);
+    });
+
+    test('multi-keyword flag retries source title after custom keyword has no hits', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{
+          '100': const <ComicEpisodeLink>[],
+          '501': const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-501-1-1.html', rawText: '第1话'),
+          ],
+        },
+      );
+      final searchService = _SequencedDiscuzSearchService(
+        responses: <DiscuzSearchResponse>[
+          const DiscuzSearchResponse(
+            items: <DiscuzSearchResultItem>[],
+            rateLimited: false,
+          ),
+          const DiscuzSearchResponse(
+            items: <DiscuzSearchResultItem>[
+              DiscuzSearchResultItem(
+                tid: '501',
+                title: '来源标题 第1话',
+                url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=501',
+                fid: '30',
+              ),
+            ],
+            rateLimited: false,
+          ),
+        ],
+      );
+      final service = NetworkComicEpisodeRefreshService(
+        discoveryService: discovery,
+        searchService: searchService,
+        subjectParser: const RuleBasedComicSubjectParser(),
+        featureFlags: ComicReaderFeatureFlags.defaults.copyWith(
+          readerRefreshMultiKeywordEnabled: true,
+        ),
+        threadSeedFetcher: (tid) async {
+          return const ThreadSeed(subject: '来源标题 第1话');
+        },
+      );
+
+      final links = await service.fetchEpisodeLinks(
+        const ComicEpisodeRefreshRequest(
+          sourceTid: '100',
+          customSearchTitle: '错误关键词',
+          sourceTitle: '来源标题',
+        ),
+      );
+
+      expect(searchService.calledKeywords, <String>['错误关键词', '来源标题']);
+      expect(links.map((link) => link.url), <String>['thread-501-1-1.html']);
+    });
+
+    test('single keyword mode does not retry lower priority title', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{
+          '100': const <ComicEpisodeLink>[],
+          '501': const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-501-1-1.html', rawText: '第1话'),
+          ],
+        },
+      );
+      final searchService = _SequencedDiscuzSearchService(
+        responses: <DiscuzSearchResponse>[
+          const DiscuzSearchResponse(
+            items: <DiscuzSearchResultItem>[],
+            rateLimited: false,
+          ),
+          const DiscuzSearchResponse(
+            items: <DiscuzSearchResultItem>[
+              DiscuzSearchResultItem(
+                tid: '501',
+                title: '来源标题 第1话',
+                url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=501',
+                fid: '30',
+              ),
+            ],
+            rateLimited: false,
+          ),
+        ],
+      );
+      final service = NetworkComicEpisodeRefreshService(
+        discoveryService: discovery,
+        searchService: searchService,
+        subjectParser: const RuleBasedComicSubjectParser(),
+        threadSeedFetcher: (tid) async {
+          return const ThreadSeed(subject: '来源标题 第1话');
+        },
+      );
+
+      final links = await service.fetchEpisodeLinks(
+        const ComicEpisodeRefreshRequest(
+          sourceTid: '100',
+          customSearchTitle: '错误关键词',
+          sourceTitle: '来源标题',
+        ),
+      );
+
+      expect(searchService.calledKeywords, <String>['错误关键词']);
+      expect(links, isEmpty);
+      expect(discovery.requestedTids, <String>['100']);
+    });
+
+    test('search candidate links exclude current tid when discovery is empty', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{
+          '100': const <ComicEpisodeLink>[],
+          '601': const <ComicEpisodeLink>[],
+        },
+      );
+      final searchService = _FakeDiscuzSearchService(
+        response: const DiscuzSearchResponse(
+          items: <DiscuzSearchResultItem>[
+            DiscuzSearchResultItem(
+              tid: '100',
+              title: '测试漫画 第1话',
+              url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
+              fid: '30',
+            ),
+            DiscuzSearchResultItem(
+              tid: '601',
+              title: '测试漫画 第2话',
+              url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=601',
+              fid: '30',
+            ),
+          ],
+          rateLimited: false,
+        ),
+      );
+      final service = NetworkComicEpisodeRefreshService(
+        discoveryService: discovery,
+        searchService: searchService,
+        subjectParser: const RuleBasedComicSubjectParser(),
+        threadSeedFetcher: (tid) async {
+          return const ThreadSeed(subject: '测试漫画 第1话');
+        },
+      );
+
+      final links = await service.fetchEpisodeLinksFromTid('100');
+
+      expect(
+        links.map((link) => link.url).toList(),
+        <String>['https://bbs.yamibo.com/forum.php?mod=viewthread&tid=601'],
+      );
     });
 
     test('searches once and merges when current tid only has older direct links', () async {
@@ -409,6 +592,39 @@ class _FakeDiscuzSearchService implements ForumSearchService {
   }) async {
     calledKeywords.add(keyword);
     return _response;
+  }
+
+  @override
+  Future<DiscuzSearchResponse> fetchNextPage({
+    required String nextPageUrl,
+    DiscuzSearchContext context = const DiscuzSearchContext.forum(),
+  }) async {
+    return const DiscuzSearchResponse(
+      items: <DiscuzSearchResultItem>[],
+      rateLimited: false,
+    );
+  }
+}
+
+class _SequencedDiscuzSearchService implements ForumSearchService {
+  _SequencedDiscuzSearchService({
+    required List<DiscuzSearchResponse> responses,
+  }) : _responses = responses;
+
+  final List<DiscuzSearchResponse> _responses;
+  final List<String> calledKeywords = <String>[];
+  int _index = 0;
+
+  @override
+  Future<DiscuzSearchResponse> searchForum({
+    required String keyword,
+    DiscuzSearchContext context = const DiscuzSearchContext.forum(),
+    bool enforceRateLimit = true,
+  }) async {
+    calledKeywords.add(keyword);
+    final response = _responses[_index.clamp(0, _responses.length - 1).toInt()];
+    _index++;
+    return response;
   }
 
   @override
