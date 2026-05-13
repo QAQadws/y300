@@ -177,7 +177,14 @@ class LibraryDetailHeader {
     this.coverLocalPath,
     this.customCoverLocalPath,
     this.author,
+    this.sourceAuthor,
+    this.customAuthor,
     this.translationGroup,
+    this.sourceTitle,
+    this.customTitle,
+    this.sourceTranslationGroup,
+    this.customTranslationGroup,
+    this.customSearchTitle,
     this.intro,
     this.sourceTid,
     this.sourceTypeId,
@@ -193,7 +200,14 @@ class LibraryDetailHeader {
   final String? coverLocalPath;
   final String? customCoverLocalPath;
   final String? author;
+  final String? sourceAuthor;
+  final String? customAuthor;
   final String? translationGroup;
+  final String? sourceTitle;
+  final String? customTitle;
+  final String? sourceTranslationGroup;
+  final String? customTranslationGroup;
+  final String? customSearchTitle;
   final String? intro;
   final String? sourceTid;
   final String? sourceTypeId;

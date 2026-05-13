@@ -210,6 +210,13 @@ class _NoopReadingStateWriter implements ComicReadingStateWriter {
 
 class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   @override
+  Future<List<ComicEpisodeLink>> fetchEpisodeLinks(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    return const <ComicEpisodeLink>[];
+  }
+
+  @override
   Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
     return const <ComicEpisodeLink>[];
   }
@@ -380,6 +387,12 @@ class _FakeComicRepository implements ComicRepository {
 
   @override
   Future<void> updateCustomCover({required String comicId, required String? customCoverImageUrl}) async {}
+  @override
+  Future<void> updateCustomCoverFromLocalFile({required String comicId, required String localCoverPath, String? sourceEpisodeId, int? sourceImageIndex, String? sourceImageUrl}) async {}
+  @override
+  Future<void> updateCustomMetadata({required String comicId, String? customTitle, String? customAuthor, String? customTranslationGroup, String? customSearchTitle}) async {}
+  @override
+  Future<void> clearCustomMetadata({required String comicId, bool title = false, bool author = false, bool translationGroup = false, bool searchTitle = false}) async {}
 
   @override
   Future<void> updateEpisodeImageCacheStatus({

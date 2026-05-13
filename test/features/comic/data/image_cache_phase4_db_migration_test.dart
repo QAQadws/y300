@@ -24,6 +24,16 @@ void main() {
 
     expect(comicNames.contains('cover_local_path'), isTrue);
     expect(comicNames.contains('custom_cover_local_path'), isTrue);
+    expect(comicNames.contains('source_title'), isTrue);
+    expect(comicNames.contains('custom_title'), isTrue);
+    expect(comicNames.contains('source_author'), isTrue);
+    expect(comicNames.contains('custom_author'), isTrue);
+    expect(comicNames.contains('source_translation_group'), isTrue);
+    expect(comicNames.contains('custom_translation_group'), isTrue);
+    expect(comicNames.contains('custom_search_title'), isTrue);
+    expect(comicNames.contains('custom_cover_source_episode_id'), isTrue);
+    expect(comicNames.contains('custom_cover_source_image_index'), isTrue);
+    expect(comicNames.contains('custom_cover_source_image_url'), isTrue);
     expect(workNames.contains('cover_local_path'), isTrue);
     expect(workNames.contains('custom_cover_local_path'), isTrue);
     expect(imageNames.contains('stable_cache_key'), isTrue);

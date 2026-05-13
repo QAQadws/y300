@@ -250,11 +250,184 @@ class LocalComicRepository
             ? null
             : customCoverImageUrl!.trim(),
         'custom_cover_local_path': null,
+        'custom_cover_source_episode_id': null,
+        'custom_cover_source_image_index': null,
+        'custom_cover_source_image_url': null,
+        'metadata_updated_at': DateTime.now().millisecondsSinceEpoch,
         'updated_at': DateTime.now().millisecondsSinceEpoch,
       },
       where: 'comic_id = ?',
       whereArgs: <Object>[comicId],
     );
+  }
+
+  @override
+  Future<void> updateCustomCoverFromLocalFile({
+    required String comicId,
+    required String localCoverPath,
+    String? sourceEpisodeId,
+    int? sourceImageIndex,
+    String? sourceImageUrl,
+  }) async {
+    final normalizedPath = _normalizeNullable(localCoverPath);
+    if (normalizedPath == null) {
+      throw ArgumentError('自定义封面本地路径不能为空');
+    }
+
+    final db = await _dbFuture;
+    await db.update(
+      ComicLocalDb.comicsTable,
+      <String, Object?>{
+        // custom_cover_image_url 只作为来源追踪/远程兜底；主展示路径是本地保护封面。
+        'custom_cover_image_url': _normalizeNullable(sourceImageUrl),
+        'custom_cover_local_path': normalizedPath,
+        'custom_cover_source_episode_id': _normalizeNullable(sourceEpisodeId),
+        'custom_cover_source_image_index': sourceImageIndex,
+        'custom_cover_source_image_url': _normalizeNullable(sourceImageUrl),
+        'metadata_updated_at': DateTime.now().millisecondsSinceEpoch,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'comic_id = ?',
+      whereArgs: <Object>[comicId],
+    );
+  }
+
+  @override
+  Future<void> updateCustomMetadata({
+    required String comicId,
+    String? customTitle,
+    String? customAuthor,
+    String? customTranslationGroup,
+    String? customSearchTitle,
+  }) async {
+    final db = await _dbFuture;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        ComicLocalDb.comicsTable,
+        columns: const <String>[
+          'source_title',
+          'title',
+          'source_author',
+          'author',
+          'source_translation_group',
+          'translation_group',
+        ],
+        where: 'comic_id = ?',
+        whereArgs: <Object>[comicId],
+        limit: 1,
+      );
+      if (rows.isEmpty) {
+        return;
+      }
+      final row = rows.first;
+      final normalizedTitle = _normalizeNullable(customTitle);
+      final normalizedAuthor = _normalizeNullable(customAuthor);
+      final normalizedGroup = _normalizeNullable(customTranslationGroup);
+      await txn.update(
+        ComicLocalDb.comicsTable,
+        <String, Object?>{
+          'custom_title': normalizedTitle,
+          'custom_author': normalizedAuthor,
+          'custom_translation_group': normalizedGroup,
+          'custom_search_title': _normalizeNullable(customSearchTitle),
+          'title': _displayString(
+            customValue: normalizedTitle,
+            sourceValue: row['source_title'] as String?,
+            fallbackValue: row['title'] as String?,
+            emptyFallback: '未命名漫画',
+          ),
+          'author': _displayNullable(
+            customValue: normalizedAuthor,
+            sourceValue: row['source_author'] as String?,
+            fallbackValue: row['author'] as String?,
+          ),
+          'translation_group': _displayNullable(
+            customValue: normalizedGroup,
+            sourceValue: row['source_translation_group'] as String?,
+            fallbackValue: row['translation_group'] as String?,
+          ),
+          'metadata_updated_at': now,
+          'updated_at': now,
+        },
+        where: 'comic_id = ?',
+        whereArgs: <Object>[comicId],
+      );
+    });
+  }
+
+  @override
+  Future<void> clearCustomMetadata({
+    required String comicId,
+    bool title = false,
+    bool author = false,
+    bool translationGroup = false,
+    bool searchTitle = false,
+  }) async {
+    if (!title && !author && !translationGroup && !searchTitle) {
+      return;
+    }
+
+    final db = await _dbFuture;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        ComicLocalDb.comicsTable,
+        columns: const <String>[
+          'source_title',
+          'title',
+          'custom_title',
+          'source_author',
+          'author',
+          'custom_author',
+          'source_translation_group',
+          'translation_group',
+          'custom_translation_group',
+        ],
+        where: 'comic_id = ?',
+        whereArgs: <Object>[comicId],
+        limit: 1,
+      );
+      if (rows.isEmpty) {
+        return;
+      }
+      final row = rows.first;
+      final nextCustomTitle = title ? null : _normalizeNullable(row['custom_title'] as String?);
+      final nextCustomAuthor = author ? null : _normalizeNullable(row['custom_author'] as String?);
+      final nextCustomGroup = translationGroup
+          ? null
+          : _normalizeNullable(row['custom_translation_group'] as String?);
+      final values = <String, Object?>{
+        if (title) 'custom_title': null,
+        if (author) 'custom_author': null,
+        if (translationGroup) 'custom_translation_group': null,
+        if (searchTitle) 'custom_search_title': null,
+        'title': _displayString(
+          customValue: nextCustomTitle,
+          sourceValue: row['source_title'] as String?,
+          fallbackValue: row['title'] as String?,
+          emptyFallback: '未命名漫画',
+        ),
+        'author': _displayNullable(
+          customValue: nextCustomAuthor,
+          sourceValue: row['source_author'] as String?,
+          fallbackValue: row['author'] as String?,
+        ),
+        'translation_group': _displayNullable(
+          customValue: nextCustomGroup,
+          sourceValue: row['source_translation_group'] as String?,
+          fallbackValue: row['translation_group'] as String?,
+        ),
+        'metadata_updated_at': now,
+        'updated_at': now,
+      };
+      await txn.update(
+        ComicLocalDb.comicsTable,
+        values,
+        where: 'comic_id = ?',
+        whereArgs: <Object>[comicId],
+      );
+    });
   }
 
   @override
@@ -265,8 +438,9 @@ class LocalComicRepository
     String? customCoverLocalPath,
   }) async {
     final db = await _dbFuture;
+    final now = DateTime.now().millisecondsSinceEpoch;
     final values = <String, Object?>{
-      'updated_at': DateTime.now().millisecondsSinceEpoch,
+      'updated_at': now,
     };
     if (coverImageUrl != null) {
       values['cover_image_url'] = _normalizeNullable(coverImageUrl);
@@ -276,6 +450,7 @@ class LocalComicRepository
     }
     if (customCoverLocalPath != null) {
       values['custom_cover_local_path'] = _normalizeNullable(customCoverLocalPath);
+      values['metadata_updated_at'] = now;
     }
     await db.update(
       ComicLocalDb.comicsTable,
@@ -312,22 +487,59 @@ class LocalComicRepository
     final now = DateTime.now().millisecondsSinceEpoch;
 
     await db.transaction((txn) async {
+      final existingRows = await txn.query(
+        ComicLocalDb.comicsTable,
+        where: 'comic_id = ?',
+        whereArgs: <Object>[comicId],
+        limit: 1,
+      );
+      final existing = existingRows.isEmpty ? null : ComicRecord.fromMap(existingRows.first);
+      final sourceTitle = _resolveComicTitle(rawTitle: title, parsedPost: parsedPost);
+      final sourceAuthor = _resolveComicAuthor(parsedPost);
+      final sourceGroup = _normalizeNullable(parsedPost.subjectMetadata?.translationGroup);
+      final customTitle = _normalizeNullable(existing?.customTitle);
+      final customAuthor = _normalizeNullable(existing?.customAuthor);
+      final customGroup = _normalizeNullable(existing?.customTranslationGroup);
       final comic = ComicRecord(
         comicId: comicId,
         sourceTid: tid,
         sourceFid: fid,
         sourceTypeId: _normalizeNullable(sourceTypeId),
         sourceTagName: _normalizeNullable(sourceTagName),
-        title: _resolveComicTitle(rawTitle: title, parsedPost: parsedPost),
-        author: _resolveComicAuthor(parsedPost),
-        translationGroup: parsedPost.subjectMetadata?.translationGroup,
-        coverImageUrl: parsedPost.imageUrls.isEmpty ? null : parsedPost.imageUrls.first,
-        customCoverImageUrl: null,
-        coverLocalPath: null,
-        customCoverLocalPath: null,
-        createdAt: now,
+        title: _displayString(
+          customValue: customTitle,
+          sourceValue: sourceTitle,
+          fallbackValue: existing?.title,
+          emptyFallback: '未命名漫画',
+        ),
+        sourceTitle: sourceTitle,
+        customTitle: customTitle,
+        author: _displayNullable(
+          customValue: customAuthor,
+          sourceValue: sourceAuthor,
+          fallbackValue: existing?.author,
+        ),
+        sourceAuthor: sourceAuthor,
+        customAuthor: customAuthor,
+        translationGroup: _displayNullable(
+          customValue: customGroup,
+          sourceValue: sourceGroup,
+          fallbackValue: existing?.translationGroup,
+        ),
+        sourceTranslationGroup: sourceGroup,
+        customTranslationGroup: customGroup,
+        customSearchTitle: _normalizeNullable(existing?.customSearchTitle),
+        coverImageUrl: parsedPost.imageUrls.isEmpty ? existing?.coverImageUrl : parsedPost.imageUrls.first,
+        customCoverImageUrl: existing?.customCoverImageUrl,
+        coverLocalPath: parsedPost.imageUrls.isEmpty ? existing?.coverLocalPath : null,
+        customCoverLocalPath: existing?.customCoverLocalPath,
+        customCoverSourceEpisodeId: existing?.customCoverSourceEpisodeId,
+        customCoverSourceImageIndex: existing?.customCoverSourceImageIndex,
+        customCoverSourceImageUrl: existing?.customCoverSourceImageUrl,
+        metadataUpdatedAt: existing?.metadataUpdatedAt,
+        createdAt: existing?.createdAt ?? now,
         updatedAt: now,
-        lastReadEpisodeId: null,
+        lastReadEpisodeId: existing?.lastReadEpisodeId,
       );
 
       await txn.insert(
@@ -393,7 +605,7 @@ class LocalComicRepository
         }
       }
 
-      final existing = await txn.query(
+      final existingShelfRows = await txn.query(
         ComicLocalDb.shelfItemsTable,
         columns: <String>['id'],
         where: 'category_id = ? AND comic_id = ?',
@@ -401,7 +613,7 @@ class LocalComicRepository
         limit: 1,
       );
 
-      if (existing.isEmpty) {
+      if (existingShelfRows.isEmpty) {
         final sortOrder = await _nextSortOrder(txn, categoryId: _defaultCategoryId);
 
         await txn.insert(
@@ -438,7 +650,15 @@ class LocalComicRepository
         c.source_typeid,
         c.source_tag_name,
         c.title,
+        c.source_title,
+        c.custom_title,
         c.author,
+        c.source_author,
+        c.custom_author,
+        c.translation_group,
+        c.source_translation_group,
+        c.custom_translation_group,
+        c.custom_search_title,
         COALESCE(c.custom_cover_image_url, c.cover_image_url) AS cover_image_url,
         c.custom_cover_image_url,
         c.cover_local_path,
@@ -457,7 +677,15 @@ class LocalComicRepository
             sourceTypeId: row['source_typeid'] as String?,
             sourceTagName: row['source_tag_name'] as String?,
             title: row['title'] as String,
+            sourceTitle: row['source_title'] as String?,
+            customTitle: row['custom_title'] as String?,
             author: row['author'] as String?,
+            sourceAuthor: row['source_author'] as String?,
+            customAuthor: row['custom_author'] as String?,
+            translationGroup: row['translation_group'] as String?,
+            sourceTranslationGroup: row['source_translation_group'] as String?,
+            customTranslationGroup: row['custom_translation_group'] as String?,
+            customSearchTitle: row['custom_search_title'] as String?,
             coverImageUrl: row['cover_image_url'] as String?,
             customCoverImageUrl: row['custom_cover_image_url'] as String?,
             coverLocalPath: row['cover_local_path'] as String?,
@@ -514,7 +742,15 @@ class LocalComicRepository
         c.source_typeid,
         c.source_tag_name,
         c.title,
+        c.source_title,
+        c.custom_title,
         c.author,
+        c.source_author,
+        c.custom_author,
+        c.translation_group,
+        c.source_translation_group,
+        c.custom_translation_group,
+        c.custom_search_title,
         COALESCE(c.custom_cover_image_url, c.cover_image_url) AS cover_image_url,
         c.custom_cover_image_url,
         c.cover_local_path,
@@ -599,12 +835,22 @@ class LocalComicRepository
         c.source_typeid,
         c.source_tag_name,
         c.title,
+        c.source_title,
+        c.custom_title,
         c.author,
+        c.source_author,
+        c.custom_author,
         c.translation_group,
+        c.source_translation_group,
+        c.custom_translation_group,
+        c.custom_search_title,
         COALESCE(c.custom_cover_image_url, c.cover_image_url) AS cover_image_url,
         c.custom_cover_image_url,
         c.cover_local_path,
         c.custom_cover_local_path,
+        c.custom_cover_source_episode_id,
+        c.custom_cover_source_image_index,
+        c.custom_cover_source_image_url,
         c.updated_at,
         COUNT(e.episode_id) AS episode_count
       FROM ${ComicLocalDb.comicsTable} c
@@ -627,12 +873,22 @@ class LocalComicRepository
       sourceTypeId: row['source_typeid'] as String?,
       sourceTagName: row['source_tag_name'] as String?,
       title: row['title'] as String,
+      sourceTitle: row['source_title'] as String?,
+      customTitle: row['custom_title'] as String?,
       author: row['author'] as String?,
+      sourceAuthor: row['source_author'] as String?,
+      customAuthor: row['custom_author'] as String?,
       translationGroup: row['translation_group'] as String?,
+      sourceTranslationGroup: row['source_translation_group'] as String?,
+      customTranslationGroup: row['custom_translation_group'] as String?,
+      customSearchTitle: row['custom_search_title'] as String?,
       coverImageUrl: row['cover_image_url'] as String?,
       customCoverImageUrl: row['custom_cover_image_url'] as String?,
       coverLocalPath: row['cover_local_path'] as String?,
       customCoverLocalPath: row['custom_cover_local_path'] as String?,
+      customCoverSourceEpisodeId: row['custom_cover_source_episode_id'] as String?,
+      customCoverSourceImageIndex: row['custom_cover_source_image_index'] as int?,
+      customCoverSourceImageUrl: row['custom_cover_source_image_url'] as String?,
       updatedAt: DateTime.fromMillisecondsSinceEpoch(row['updated_at'] as int),
       episodeCount: row['episode_count'] as int? ?? 0,
     );
@@ -977,7 +1233,10 @@ class LocalComicRepository
       workId: row['comic_id'] as String,
       categoryId: row['category_id'] as String,
       title: row['title'] as String,
-      secondaryName: row['author'] as String?,
+      secondaryName: _shelfSecondaryName(
+        author: row['author'] as String?,
+        translationGroup: row['translation_group'] as String?,
+      ),
       coverImageUrl: row['cover_image_url'] as String?,
       customCoverImageUrl: customSource,
       // 自定义封面有远程源但还没缓存时，不暴露旧普通本地封面，避免 UI 闪回旧图。
@@ -1027,6 +1286,40 @@ class LocalComicRepository
   String? _normalizeNullable(String? value) {
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
+
+  String _displayString({
+    required String? customValue,
+    required String? sourceValue,
+    required String? fallbackValue,
+    required String emptyFallback,
+  }) {
+    return _normalizeNullable(customValue) ??
+        _normalizeNullable(sourceValue) ??
+        _normalizeNullable(fallbackValue) ??
+        emptyFallback;
+  }
+
+  String? _displayNullable({
+    required String? customValue,
+    required String? sourceValue,
+    required String? fallbackValue,
+  }) {
+    return _normalizeNullable(customValue) ??
+        _normalizeNullable(sourceValue) ??
+        _normalizeNullable(fallbackValue);
+  }
+
+  String? _shelfSecondaryName({
+    required String? author,
+    required String? translationGroup,
+  }) {
+    final normalizedAuthor = _normalizeNullable(author);
+    final normalizedGroup = _normalizeNullable(translationGroup);
+    if (normalizedAuthor != null && normalizedGroup != null) {
+      return '$normalizedAuthor / $normalizedGroup';
+    }
+    return normalizedGroup ?? normalizedAuthor;
   }
 
   DateTime? _toDateTime(Object? value) {

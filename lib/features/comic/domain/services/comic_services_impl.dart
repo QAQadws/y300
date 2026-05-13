@@ -1,4 +1,5 @@
-﻿import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+﻿import 'package:flutter/foundation.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
@@ -33,7 +34,29 @@ final comicSubjectParserProvider = Provider<ComicSubjectParser>((ref) {
 });
 
 abstract class ComicEpisodeRefreshService {
+  Future<List<ComicEpisodeLink>> fetchEpisodeLinks(
+    ComicEpisodeRefreshRequest request,
+  );
+
   Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid);
+}
+
+class ComicEpisodeRefreshRequest {
+  const ComicEpisodeRefreshRequest({
+    required this.sourceTid,
+    this.comicId,
+    this.displayTitle,
+    this.sourceTitle,
+    this.customTitle,
+    this.customSearchTitle,
+  });
+
+  final String? comicId;
+  final String sourceTid;
+  final String? displayTitle;
+  final String? sourceTitle;
+  final String? customTitle;
+  final String? customSearchTitle;
 }
 
 class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
@@ -53,64 +76,97 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   final ThreadSeedFetcher? _threadSeedFetcher;
 
   @override
-  Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
+  Future<List<ComicEpisodeLink>> fetchEpisodeLinks(
+    ComicEpisodeRefreshRequest request,
+  ) async {
     // 当前帖的连续跳转链接常只覆盖“上一话/历史话”，不能作为完整章节表。
     // 因此仅在目录解析成功时直接信任；否则继续走搜索补全，并按 tid 合并。
     final current = await _discoveryService.discoverFromTidWithPreference(
-      tid: tid,
+      tid: request.sourceTid,
       preferCatalogFirst: true,
     );
     if (current.strategy == EpisodeDiscoveryStrategy.catalog && current.episodeLinks.isNotEmpty) {
+      _logRefresh(
+        request,
+        'strategy=catalog links=${current.episodeLinks.length}',
+      );
       return current.episodeLinks;
     }
 
-    final searchLinks = await _searchFallbackFromCurrentTid(tid);
+    final searchLinks = await _searchFallbackFromCurrentTid(request);
     if (searchLinks.isNotEmpty) {
-      return _mergeEpisodeLinks(
+      final merged = _mergeEpisodeLinks(
         current.episodeLinks,
         searchLinks,
         preferSupplement: true,
       );
+      _logRefresh(
+        request,
+        'strategy=search current=${current.episodeLinks.length} '
+        'search=${searchLinks.length} merged=${merged.length}',
+      );
+      return merged;
     }
 
+    _logRefresh(
+      request,
+      'strategy=current-only links=${current.episodeLinks.length}',
+    );
     return current.episodeLinks;
   }
 
-  Future<List<ComicEpisodeLink>> _searchFallbackFromCurrentTid(String tid) async {
-    final thread = await _fetchThreadDetail(tid);
+  @override
+  Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) {
+    return fetchEpisodeLinks(ComicEpisodeRefreshRequest(sourceTid: tid));
+  }
+
+  Future<List<ComicEpisodeLink>> _searchFallbackFromCurrentTid(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    final thread = await _fetchThreadDetail(request.sourceTid);
     if (thread == null) {
       return const <ComicEpisodeLink>[];
     }
-    final keyword = _subjectParser.parse(thread.subject).normalizedTitle.trim();
-    if (keyword.isEmpty) {
+    final keyword = _resolveSearchKeyword(request, thread.subject);
+    if (keyword.value.isEmpty) {
       return const <ComicEpisodeLink>[];
     }
+    _logRefresh(request, 'keyword=${keyword.value} source=${keyword.source}');
 
     final search = await _searchService.searchForum(
-      keyword: keyword,
+      keyword: keyword.value,
       context: const DiscuzSearchContext.curForum(srhfid: '30'),
       enforceRateLimit: true,
     );
     if (search.rateLimited || search.items.isEmpty) {
+      _logRefresh(
+        request,
+        'keyword=${keyword.value} candidates=0 rateLimited=${search.rateLimited}',
+      );
       return const <ComicEpisodeLink>[];
     }
 
-    final currentScore = _scoreTitleSimilarity(thread.subject, keyword);
+    final currentScore = _scoreTitleSimilarity(thread.subject, keyword.value);
     final candidates = search.items
         .map(
           (item) => _ScoredSearchItem(
             item: item,
-            score: _scoreTitleSimilarity(item.title, keyword),
+            score: _scoreTitleSimilarity(item.title, keyword.value),
           ),
         )
         .where((item) => item.score >= currentScore - 0.25)
         .toList()
       ..sort((a, b) => b.score.compareTo(a.score));
+    _logRefresh(
+      request,
+      'keyword=${keyword.value} candidates=${candidates.length} '
+      'top=${candidates.take(3).map((item) => '${item.item.tid}:${item.score.toStringAsFixed(2)}').join(',')}',
+    );
 
     const topK = 3;
     var collectedLinks = const <ComicEpisodeLink>[];
     for (final candidate in candidates
-        .where((item) => item.item.tid.trim() != tid.trim())
+        .where((item) => item.item.tid.trim() != request.sourceTid.trim())
         .take(topK)) {
       final result = await _discoveryService.discoverFromTidWithPreference(
         tid: candidate.item.tid,
@@ -121,6 +177,26 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
       }
     }
     return collectedLinks;
+  }
+
+  _RefreshKeyword _resolveSearchKeyword(
+    ComicEpisodeRefreshRequest request,
+    String subject,
+  ) {
+    final choices = <_RefreshKeyword>[
+      _RefreshKeyword('customSearchTitle', request.customSearchTitle),
+      _RefreshKeyword('customTitle', request.customTitle),
+      _RefreshKeyword('displayTitle', request.displayTitle),
+      _RefreshKeyword('sourceTitle', request.sourceTitle),
+      _RefreshKeyword('subjectNormalized', _subjectParser.parse(subject).normalizedTitle),
+    ];
+    for (final choice in choices) {
+      final value = choice.value.trim();
+      if (value.isNotEmpty) {
+        return _RefreshKeyword(choice.source, value);
+      }
+    }
+    return const _RefreshKeyword('none', '');
   }
 
   List<ComicEpisodeLink> _mergeEpisodeLinks(
@@ -179,6 +255,22 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
     return overlap / normalizedKeyword.length;
   }
 
+  void _logRefresh(ComicEpisodeRefreshRequest request, String message) {
+    if (kReleaseMode) {
+      return;
+    }
+    debugPrint(
+      '[ComicRefresh][${request.comicId ?? request.sourceTid}] $message',
+    );
+  }
+
+}
+
+class _RefreshKeyword {
+  const _RefreshKeyword(this.source, String? value) : value = value ?? '';
+
+  final String source;
+  final String value;
 }
 
 final comicEpisodeDiscoveryServiceProvider = Provider<ComicEpisodeDiscoveryService>((ref) {

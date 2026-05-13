@@ -33,6 +33,30 @@ abstract class ComicRepository {
     required String? customCoverImageUrl,
   });
 
+  Future<void> updateCustomCoverFromLocalFile({
+    required String comicId,
+    required String localCoverPath,
+    String? sourceEpisodeId,
+    int? sourceImageIndex,
+    String? sourceImageUrl,
+  });
+
+  Future<void> updateCustomMetadata({
+    required String comicId,
+    String? customTitle,
+    String? customAuthor,
+    String? customTranslationGroup,
+    String? customSearchTitle,
+  });
+
+  Future<void> clearCustomMetadata({
+    required String comicId,
+    bool title = false,
+    bool author = false,
+    bool translationGroup = false,
+    bool searchTitle = false,
+  });
+
   Future<bool> isInShelf({required String comicId});
 
   Future<void> addToShelf({

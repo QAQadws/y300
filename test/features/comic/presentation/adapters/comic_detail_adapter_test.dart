@@ -24,6 +24,7 @@ void main() {
     await adapter.refreshWork(workId: 'comic:1');
 
     expect(refreshService.requestedTid, '100');
+    expect(refreshService.lastRequest?.customSearchTitle, 'Search Test Comic');
     expect(repository.mergeCalled, isTrue);
     expect(repository.lastMergedLinks.length, 2);
     expect(repository.lastFallbackTid, '100');
@@ -162,14 +163,23 @@ void main() {
 
 class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   String? requestedTid;
+  ComicEpisodeRefreshRequest? lastRequest;
 
   @override
-  Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
-    requestedTid = tid;
+  Future<List<ComicEpisodeLink>> fetchEpisodeLinks(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    lastRequest = request;
+    requestedTid = request.sourceTid;
     return const [
       ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: '第1话'),
       ComicEpisodeLink(url: 'thread-102-1-1.html', rawText: '第2话'),
     ];
+  }
+
+  @override
+  Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
+    return fetchEpisodeLinks(ComicEpisodeRefreshRequest(sourceTid: tid));
   }
 }
 
@@ -190,8 +200,15 @@ class _FakeComicRepository implements ComicRepository {
       sourceTypeId: '398',
       sourceTagName: '韩国漫画',
       title: 'Test Comic',
+      sourceTitle: 'Source Test Comic',
+      customTitle: 'Custom Test Comic',
       author: 'Author A',
+      sourceAuthor: 'Source Author',
+      customAuthor: 'Custom Author',
       translationGroup: 'Group A',
+      sourceTranslationGroup: 'Source Group',
+      customTranslationGroup: 'Custom Group',
+      customSearchTitle: 'Search Test Comic',
       coverImageUrl: null,
       updatedAt: DateTime(2026, 1, 1),
       episodeCount: 0,
@@ -278,6 +295,12 @@ class _FakeComicRepository implements ComicRepository {
   @override
   Future<void> updateCustomCover({required String comicId, required String? customCoverImageUrl}) async {}
   @override
+  Future<void> updateCustomCoverFromLocalFile({required String comicId, required String localCoverPath, String? sourceEpisodeId, int? sourceImageIndex, String? sourceImageUrl}) async {}
+  @override
+  Future<void> updateCustomMetadata({required String comicId, String? customTitle, String? customAuthor, String? customTranslationGroup, String? customSearchTitle}) async {}
+  @override
+  Future<void> clearCustomMetadata({required String comicId, bool title = false, bool author = false, bool translationGroup = false, bool searchTitle = false}) async {}
+  @override
   Future<void> updateEpisodeImageCacheStatus({required String episodeId, required String imageUrl, required String cacheStatus, String? cacheLocalPath}) async {}
   @override
   Future<void> updateGridColumnCount({required int columnCount}) async {}
@@ -307,8 +330,15 @@ class _FakeComicRepositoryWithCoverWriter extends _FakeComicRepository
       sourceTypeId: detail.sourceTypeId,
       sourceTagName: detail.sourceTagName,
       title: detail.title,
+      sourceTitle: detail.sourceTitle,
+      customTitle: detail.customTitle,
       author: detail.author,
+      sourceAuthor: detail.sourceAuthor,
+      customAuthor: detail.customAuthor,
       translationGroup: detail.translationGroup,
+      sourceTranslationGroup: detail.sourceTranslationGroup,
+      customTranslationGroup: detail.customTranslationGroup,
+      customSearchTitle: detail.customSearchTitle,
       coverImageUrl: customCoverImageUrl ?? detail.coverImageUrl,
       customCoverImageUrl: customCoverImageUrl,
       coverLocalPath: detail.coverLocalPath,

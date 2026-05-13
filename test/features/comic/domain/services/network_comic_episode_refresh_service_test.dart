@@ -198,6 +198,87 @@ void main() {
       expect(discovery.requestedTids, <String>['100', '301']);
       expect(links.map((link) => link.rawText), <String>['第13话', '第15话']);
     });
+
+    test('uses custom search title before custom and source titles', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{
+          '100': const <ComicEpisodeLink>[],
+          '301': const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-301-1-1.html', rawText: '第1话'),
+          ],
+        },
+      );
+      final searchService = _FakeDiscuzSearchService(
+        response: DiscuzSearchResponse(
+          items: const <DiscuzSearchResultItem>[
+            DiscuzSearchResultItem(
+              tid: '301',
+              title: '真正标题 第1话',
+              url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301',
+              fid: '30',
+            ),
+          ],
+          rateLimited: false,
+        ),
+      );
+      final service = NetworkComicEpisodeRefreshService(
+        discoveryService: discovery,
+        searchService: searchService,
+        subjectParser: const RuleBasedComicSubjectParser(),
+        threadSeedFetcher: (tid) async {
+          return const ThreadSeed(subject: '【错误组】错误标题 第1话');
+        },
+      );
+
+      final links = await service.fetchEpisodeLinks(
+        const ComicEpisodeRefreshRequest(
+          comicId: 'comic:100',
+          sourceTid: '100',
+          displayTitle: '展示标题',
+          sourceTitle: '来源标题',
+          customTitle: '自定义标题',
+          customSearchTitle: '真正标题',
+        ),
+      );
+
+      expect(links, isNotEmpty);
+      expect(searchService.calledKeywords, <String>['真正标题']);
+      expect(discovery.requestedTids, <String>['100', '301']);
+    });
+
+    test('falls back from empty custom search title to custom title', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{
+          '100': const <ComicEpisodeLink>[],
+        },
+      );
+      final searchService = _FakeDiscuzSearchService(
+        response: const DiscuzSearchResponse(
+          items: <DiscuzSearchResultItem>[],
+          rateLimited: false,
+        ),
+      );
+      final service = NetworkComicEpisodeRefreshService(
+        discoveryService: discovery,
+        searchService: searchService,
+        subjectParser: const RuleBasedComicSubjectParser(),
+        threadSeedFetcher: (tid) async {
+          return const ThreadSeed(subject: '来源标题 第1话');
+        },
+      );
+
+      await service.fetchEpisodeLinks(
+        const ComicEpisodeRefreshRequest(
+          sourceTid: '100',
+          customSearchTitle: '   ',
+          customTitle: '自定义标题',
+          displayTitle: '展示标题',
+          sourceTitle: '来源标题',
+        ),
+      );
+
+      expect(searchService.calledKeywords, <String>['自定义标题']);
+    });
   });
 }
 

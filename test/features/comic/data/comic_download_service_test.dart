@@ -226,6 +226,12 @@ class _ComicDownloadRepositoryFake implements ComicRepository, ComicEpisodeImage
   @override
   Future<void> updateCustomCover({required String comicId, required String? customCoverImageUrl}) async {}
   @override
+  Future<void> updateCustomCoverFromLocalFile({required String comicId, required String localCoverPath, String? sourceEpisodeId, int? sourceImageIndex, String? sourceImageUrl}) async {}
+  @override
+  Future<void> updateCustomMetadata({required String comicId, String? customTitle, String? customAuthor, String? customTranslationGroup, String? customSearchTitle}) async {}
+  @override
+  Future<void> clearCustomMetadata({required String comicId, bool title = false, bool author = false, bool translationGroup = false, bool searchTitle = false}) async {}
+  @override
   Future<void> updateGridColumnCount({required int columnCount}) async {}
   @override
   Future<void> updateLastReadProgress({required String comicId, required String episodeId, required int imageIndex, required double scrollOffset}) async {}

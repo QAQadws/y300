@@ -16,7 +16,7 @@ import 'package:y300/features/library_shared/domain/models/library_sort_models.d
 /// 负责把漫画仓储数据映射到统一详情模型，并接入章节状态筛选/排序。
 /// 刷新能力通过 ComicEpisodeRefreshService 下沉到漫画域 services，
 /// 保证统一详情页只保留编排，不耦合漫画刷新策略细节。
-class ComicDetailAdapter implements DetailModuleAdapter {
+class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
   ComicDetailAdapter(
     this._repository, {
     ComicEpisodeRefreshService? refreshService,
@@ -115,7 +115,14 @@ class ComicDetailAdapter implements DetailModuleAdapter {
       coverLocalPath: coverLocalPath,
       customCoverLocalPath: customCoverLocalPath,
       author: detail.author,
+      sourceAuthor: detail.sourceAuthor,
+      customAuthor: detail.customAuthor,
       translationGroup: detail.translationGroup,
+      sourceTitle: detail.sourceTitle,
+      customTitle: detail.customTitle,
+      sourceTranslationGroup: detail.sourceTranslationGroup,
+      customTranslationGroup: detail.customTranslationGroup,
+      customSearchTitle: detail.customSearchTitle,
       sourceTid: detail.sourceTid,
       sourceTypeId: detail.sourceTypeId,
       sourceTagName: detail.sourceTagName,
@@ -371,7 +378,16 @@ class ComicDetailAdapter implements DetailModuleAdapter {
     if (refreshService == null) {
       return;
     }
-    final links = await refreshService.fetchEpisodeLinksFromTid(detail.sourceTid);
+    final links = await refreshService.fetchEpisodeLinks(
+      ComicEpisodeRefreshRequest(
+        comicId: detail.comicId,
+        sourceTid: detail.sourceTid,
+        displayTitle: detail.displayTitle,
+        sourceTitle: detail.sourceTitle,
+        customTitle: detail.customTitle,
+        customSearchTitle: detail.customSearchTitle,
+      ),
+    );
     if (links.isEmpty) {
       return;
     }
@@ -391,6 +407,23 @@ class ComicDetailAdapter implements DetailModuleAdapter {
       moduleKey: LibraryModuleKey.comic,
       workId: workId,
       introText: intro,
+    );
+  }
+
+  @override
+  Future<void> updateCustomMetadata({
+    required String workId,
+    String? customTitle,
+    String? customAuthor,
+    String? customTranslationGroup,
+    String? customSearchTitle,
+  }) {
+    return _repository.updateCustomMetadata(
+      comicId: workId,
+      customTitle: customTitle,
+      customAuthor: customAuthor,
+      customTranslationGroup: customTranslationGroup,
+      customSearchTitle: customSearchTitle,
     );
   }
 

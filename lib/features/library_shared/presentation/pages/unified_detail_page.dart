@@ -135,12 +135,18 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'refresh', child: Text('刷新')),
-              PopupMenuItem(value: 'change-category', child: Text('修改分类')),
-              PopupMenuItem(value: 'edit-intro', child: Text('编辑简介')),
-              PopupMenuItem(value: 'add-tag', child: Text('添加标签')),
-              PopupMenuItem(value: 'remove-tag', child: Text('移除标签')),
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'refresh', child: Text('刷新')),
+              const PopupMenuItem(value: 'change-category', child: Text('修改分类')),
+              if (widget.adapter is DetailMetadataEditor)
+                const PopupMenuItem(
+                  key: Key('unified-detail-edit-metadata'),
+                  value: 'edit-metadata',
+                  child: Text('编辑作品信息'),
+                ),
+              const PopupMenuItem(value: 'edit-intro', child: Text('编辑简介')),
+              const PopupMenuItem(value: 'add-tag', child: Text('添加标签')),
+              const PopupMenuItem(value: 'remove-tag', child: Text('移除标签')),
             ],
             onSelected: (value) async {
               await _handleMoreAction(value);
@@ -526,6 +532,10 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       await _showMoveCategorySheet();
       return;
     }
+    if (value == 'edit-metadata') {
+      await _showEditMetadataSheet();
+      return;
+    }
     if (value == 'edit-intro') {
       await _showEditIntroDialog();
       return;
@@ -537,6 +547,65 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     if (value == 'remove-tag') {
       await _showRemoveTagSheet();
     }
+  }
+
+  Future<void> _showEditMetadataSheet() async {
+    final editor = widget.adapter is DetailMetadataEditor
+        ? widget.adapter as DetailMetadataEditor
+        : null;
+    final header = _controller.state.header;
+    if (editor == null || header == null) {
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return _EditMetadataSheet(
+          initialTitle: _metadataInitialValue(
+            customValue: header.customTitle,
+            displayValue: header.title,
+            sourceValue: header.sourceTitle,
+          ),
+          initialAuthor: _metadataInitialValue(
+            customValue: header.customAuthor,
+            displayValue: header.author,
+            sourceValue: header.sourceAuthor,
+          ),
+          initialTranslationGroup: _metadataInitialValue(
+            customValue: header.customTranslationGroup,
+            displayValue: header.translationGroup,
+            sourceValue: header.sourceTranslationGroup,
+          ),
+          initialSearchTitle: header.customSearchTitle ?? '',
+          titleSourceText: _sourceText('来源标题', header.sourceTitle ?? header.title),
+          authorSourceText: _sourceText('来源作者', header.sourceAuthor ?? header.author),
+          groupSourceText: _sourceText(
+            '来源汉化组',
+            header.sourceTranslationGroup ?? header.translationGroup,
+          ),
+          onSave: ({
+            customTitle,
+            customAuthor,
+            customTranslationGroup,
+            customSearchTitle,
+          }) async {
+            await editor.updateCustomMetadata(
+              workId: widget.workId,
+              customTitle: customTitle,
+              customAuthor: customAuthor,
+              customTranslationGroup: customTranslationGroup,
+              customSearchTitle: customSearchTitle,
+            );
+            await _controller.reload();
+            if (!mounted) {
+              return;
+            }
+            setState(() {});
+          },
+        );
+      },
+    );
   }
 
   Future<void> _showMoveCategorySheet() async {
@@ -731,6 +800,208 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
           ),
         );
       },
+    );
+  }
+
+}
+
+String _sourceText(String label, String? value) {
+  final normalized = value?.trim();
+  return '$label：${normalized == null || normalized.isEmpty ? '无' : normalized}';
+}
+
+String? _emptyToNull(String value) {
+  final trimmed = value.trim();
+  return trimmed.isEmpty ? null : trimmed;
+}
+
+String _metadataInitialValue({
+  required String? customValue,
+  required String? displayValue,
+  String? sourceValue,
+}) {
+  // 编辑框优先展示已保存的自定义值；未自定义时回填当前展示信息，
+  // 让用户只改需要调整的字段，仍可清空输入框来恢复来源值。
+  return _emptyToNull(customValue ?? '') ??
+      _emptyToNull(displayValue ?? '') ??
+      _emptyToNull(sourceValue ?? '') ??
+      '';
+}
+
+class _EditMetadataSheet extends StatefulWidget {
+  const _EditMetadataSheet({
+    required this.initialTitle,
+    required this.initialAuthor,
+    required this.initialTranslationGroup,
+    required this.initialSearchTitle,
+    required this.titleSourceText,
+    required this.authorSourceText,
+    required this.groupSourceText,
+    required this.onSave,
+  });
+
+  final String initialTitle;
+  final String initialAuthor;
+  final String initialTranslationGroup;
+  final String initialSearchTitle;
+  final String titleSourceText;
+  final String authorSourceText;
+  final String groupSourceText;
+  final Future<void> Function({
+    String? customTitle,
+    String? customAuthor,
+    String? customTranslationGroup,
+    String? customSearchTitle,
+  }) onSave;
+
+  @override
+  State<_EditMetadataSheet> createState() => _EditMetadataSheetState();
+}
+
+class _EditMetadataSheetState extends State<_EditMetadataSheet> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _authorController;
+  late final TextEditingController _groupController;
+  late final TextEditingController _searchController;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.initialTitle);
+    _authorController = TextEditingController(text: widget.initialAuthor);
+    _groupController = TextEditingController(text: widget.initialTranslationGroup);
+    _searchController = TextEditingController(text: widget.initialSearchTitle);
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _authorController.dispose();
+    _groupController.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 12,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            key: const Key('unified-detail-metadata-sheet'),
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('编辑作品信息', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 12),
+              _MetadataTextField(
+                fieldKey: const Key('unified-detail-custom-title-input'),
+                controller: _titleController,
+                label: '标题',
+                sourceText: widget.titleSourceText,
+              ),
+              const SizedBox(height: 10),
+              _MetadataTextField(
+                fieldKey: const Key('unified-detail-custom-author-input'),
+                controller: _authorController,
+                label: '作者',
+                sourceText: widget.authorSourceText,
+              ),
+              const SizedBox(height: 10),
+              _MetadataTextField(
+                fieldKey: const Key('unified-detail-custom-group-input'),
+                controller: _groupController,
+                label: '汉化组',
+                sourceText: widget.groupSourceText,
+              ),
+              const SizedBox(height: 10),
+              _MetadataTextField(
+                fieldKey: const Key('unified-detail-custom-search-title-input'),
+                controller: _searchController,
+                label: '更新搜索关键词',
+                sourceText: '留空时依次使用自定义标题、展示标题和来源标题',
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                      child: const Text('取消'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      key: const Key('unified-detail-save-metadata'),
+                      onPressed: _saving ? null : _save,
+                      child: const Text('保存'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _save() async {
+    setState(() {
+      _saving = true;
+    });
+    try {
+      await widget.onSave(
+        customTitle: _emptyToNull(_titleController.text),
+        customAuthor: _emptyToNull(_authorController.text),
+        customTranslationGroup: _emptyToNull(_groupController.text),
+        customSearchTitle: _emptyToNull(_searchController.text),
+      );
+      if (!mounted) {
+        return;
+      }
+      Navigator.of(context).pop();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+        });
+      }
+    }
+  }
+}
+
+class _MetadataTextField extends StatelessWidget {
+  const _MetadataTextField({
+    required this.fieldKey,
+    required this.controller,
+    required this.label,
+    required this.sourceText,
+  });
+
+  final Key fieldKey;
+  final TextEditingController controller;
+  final String label;
+  final String sourceText;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      key: fieldKey,
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        helperText: sourceText,
+        helperMaxLines: 2,
+      ),
     );
   }
 }

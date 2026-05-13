@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 13;
+  static const int dbVersion = 14;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -58,12 +58,23 @@ class ComicLocalDb {
         source_typeid TEXT,
         source_tag_name TEXT,
         title TEXT NOT NULL,
+        source_title TEXT,
+        custom_title TEXT,
         author TEXT,
+        source_author TEXT,
+        custom_author TEXT,
         cover_image_url TEXT,
         custom_cover_image_url TEXT,
         cover_local_path TEXT,
         custom_cover_local_path TEXT,
         translation_group TEXT,
+        source_translation_group TEXT,
+        custom_translation_group TEXT,
+        custom_cover_source_episode_id TEXT,
+        custom_cover_source_image_index INTEGER,
+        custom_cover_source_image_url TEXT,
+        custom_search_title TEXT,
+        metadata_updated_at INTEGER,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         last_read_episode_id TEXT

@@ -109,6 +109,20 @@ abstract class DetailModuleAdapter {
   });
 }
 
+/// 作品元数据编辑能力。
+///
+/// 这是漫画 Phase 7 的可选合同：统一详情页只在 adapter 实现该接口时显示
+/// “编辑作品信息”，小说/收藏无需感知漫画的自定义标题与搜索关键词语义。
+abstract class DetailMetadataEditor {
+  Future<void> updateCustomMetadata({
+    required String workId,
+    String? customTitle,
+    String? customAuthor,
+    String? customTranslationGroup,
+    String? customSearchTitle,
+  });
+}
+
 /// 原帖跳转目标。
 class ThreadRouteTarget {
   const ThreadRouteTarget({

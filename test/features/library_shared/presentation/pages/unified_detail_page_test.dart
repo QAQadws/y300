@@ -86,6 +86,81 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('删除该章节下载'), findsOneWidget);
   });
+
+  testWidgets('UnifiedDetailPage edits custom metadata through optional adapter', (tester) async {
+    final adapter = _EditableDetailAdapter();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('unified-detail-edit-metadata')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('unified-detail-metadata-sheet')), findsOneWidget);
+    expect(find.text('来源标题：来源标题'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const Key('unified-detail-custom-title-input')),
+          )
+          .controller
+          ?.text,
+      '测试作品',
+    );
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const Key('unified-detail-custom-author-input')),
+          )
+          .controller
+          ?.text,
+      '作者A',
+    );
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const Key('unified-detail-custom-group-input')),
+          )
+          .controller
+          ?.text,
+      '汉化组A',
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('unified-detail-custom-title-input')),
+      '新标题',
+    );
+    await tester.enterText(
+      find.byKey(const Key('unified-detail-custom-author-input')),
+      '新作者',
+    );
+    await tester.enterText(
+      find.byKey(const Key('unified-detail-custom-group-input')),
+      '',
+    );
+    await tester.enterText(
+      find.byKey(const Key('unified-detail-custom-search-title-input')),
+      '刷新关键词',
+    );
+    await tester.tap(find.byKey(const Key('unified-detail-save-metadata')));
+    await tester.pumpAndSettle();
+
+    expect(adapter.lastCustomTitle, '新标题');
+    expect(adapter.lastCustomAuthor, '新作者');
+    expect(adapter.lastCustomTranslationGroup, isNull);
+    expect(adapter.lastCustomSearchTitle, '刷新关键词');
+    expect(find.text('新标题'), findsWidgets);
+  });
 }
 
 class _FakeDetailAdapter implements DetailModuleAdapter {
@@ -232,5 +307,54 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
     required String workId,
     required String tagId,
   }) async {}
+}
+
+class _EditableDetailAdapter extends _FakeDetailAdapter implements DetailMetadataEditor {
+  String title = '测试作品';
+  String? author = '作者A';
+  String? translationGroup = '汉化组A';
+  String? lastCustomTitle;
+  String? lastCustomAuthor;
+  String? lastCustomTranslationGroup;
+  String? lastCustomSearchTitle;
+
+  @override
+  LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
+
+  @override
+  Future<LibraryDetailHeader> loadHeader({required String workId}) async {
+    return LibraryDetailHeader(
+      workId: 'work-1',
+      title: title,
+      sourceTitle: '来源标题',
+      customTitle: lastCustomTitle,
+      author: author,
+      sourceAuthor: '来源作者',
+      customAuthor: lastCustomAuthor,
+      translationGroup: translationGroup,
+      sourceTranslationGroup: '来源汉化组',
+      customTranslationGroup: lastCustomTranslationGroup,
+      customSearchTitle: lastCustomSearchTitle,
+      inShelf: true,
+      intro: '这是一段简介',
+    );
+  }
+
+  @override
+  Future<void> updateCustomMetadata({
+    required String workId,
+    String? customTitle,
+    String? customAuthor,
+    String? customTranslationGroup,
+    String? customSearchTitle,
+  }) async {
+    lastCustomTitle = customTitle;
+    lastCustomAuthor = customAuthor;
+    lastCustomTranslationGroup = customTranslationGroup;
+    lastCustomSearchTitle = customSearchTitle;
+    title = customTitle ?? '来源标题';
+    author = customAuthor ?? '来源作者';
+    translationGroup = customTranslationGroup ?? '来源汉化组';
+  }
 }
 

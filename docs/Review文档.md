@@ -1647,6 +1647,77 @@
 
 ---
 
+## 漫画阅读器 Phase 7 自定义作品信息 Review 记录（2026-05-12）
+### Review 范围
+- `lib/features/comic/data/comic_repository.dart`
+- `lib/features/comic/data/local/comic_local_db.dart`
+- `lib/features/comic/data/local/comic_local_models.dart`
+- `lib/features/comic/data/local_comic_repository.dart`
+- `lib/features/comic/domain/models/comic_detail_models.dart`
+- `lib/features/comic/domain/models/comic_shelf_models.dart`
+- `lib/features/comic/domain/services/comic_services_impl.dart`
+- `lib/features/comic/presentation/adapters/comic_detail_adapter.dart`
+- `lib/features/comic/presentation/adapters/comic_shelf_adapter.dart`
+- `lib/features/comic/presentation/controllers/comic_detail_controller.dart`
+- `lib/features/comic/presentation/controllers/comic_reader_controller.dart`
+- `lib/features/library_shared/domain/contracts/detail_module_adapter.dart`
+- `lib/features/library_shared/domain/models/library_models.dart`
+- `lib/features/library_shared/presentation/pages/unified_detail_page.dart`
+
+### 核对结论
+1. 数据分层
+- [ ] `comics` 表包含 `source_title/custom_title/custom_search_title`。
+- [ ] `comics` 表包含 `source_author/custom_author`。
+- [ ] `comics` 表包含 `source_translation_group/custom_translation_group`。
+- [ ] `title/author/translation_group` 是展示值，按自定义优先合成。
+- [ ] 来源刷新不会覆盖用户自定义字段。
+
+2. 自定义封面
+- [ ] 阅读器“将当前页设为封面”先复制到受保护封面缓存。
+- [ ] `custom_cover_local_path` 指向受保护本地文件，不直接指向普通页面缓存。
+- [ ] 写入来源章节、页码和图片 URL 追踪字段。
+- [ ] 清理普通页面缓存不影响 `custom_cover_local_path`。
+- [ ] 首话首图纠正不会覆盖已有自定义封面。
+
+3. 详情编辑
+- [ ] 只有实现 `DetailMetadataEditor` 的模块显示“编辑作品信息”。
+- [ ] Sheet 包含标题、作者、汉化组、更新搜索关键词。
+- [ ] 空白自定义字段保存后恢复来源值。
+- [ ] Sheet 显示来源值辅助文本。
+- [ ] 保存后只 reload 本地详情，不触发网络刷新。
+
+4. 书架/详情展示
+- [ ] 详情页展示自定义标题。
+- [ ] 详情页展示自定义作者和汉化组。
+- [ ] 书架展示自定义标题。
+- [ ] 书架副标题展示“作者 / 汉化组”，字段缺失时回退单项。
+
+5. 刷新关键词
+- [ ] 刷新请求携带 `comicId/sourceTid/displayTitle/sourceTitle/customTitle/customSearchTitle`。
+- [ ] 搜索关键词优先级：自定义搜索关键词 -> 自定义标题 -> 展示标题 -> 来源标题 -> 当前帖解析标题。
+- [ ] Debug/Profile 日志输出关键词来源、候选数量和合并数量。
+- [ ] 旧 `fetchEpisodeLinksFromTid` 仍保留兼容路径。
+
+### 测试覆盖（仅编写，未执行）
+- [ ] `local_comic_repository_test.dart` 覆盖自定义元数据写入、清空、来源刷新不覆盖自定义字段。
+- [ ] `network_comic_episode_refresh_service_test.dart` 覆盖自定义搜索关键词优先级。
+- [ ] `unified_detail_page_test.dart` 覆盖编辑作品信息 sheet 保存。
+- [ ] `image_cache_phase4_db_migration_test.dart` 覆盖 Phase 7 schema 字段。
+- [ ] 旧 fake repository 已补齐新增仓储/刷新接口。
+
+### 风险与后续
+1. `unified_detail_page.dart` 继续增长，后续建议拆出作品信息编辑 sheet 与 more action coordinator。
+2. 本轮保留 `title/author/translation_group` 作为展示值以降低改造面；若后续做严格领域建模，可再把 display 字段改为查询时计算。
+3. 刷新候选评分仍沿用现有阈值，Phase 8 可继续做多关键词评分与误匹配保护。
+
+### 执行声明
+本轮按约定未执行：
+1. `flutter test`
+2. `flutter analyze`
+3. `dart format`
+
+---
+
 ## 分阶段优化漫画阅读器 Phase 2 Review 清单（2026-05-12）
 
 ### 一、未读聚合语义

@@ -102,7 +102,16 @@ class ComicDetailController extends AsyncNotifier<ComicDetailViewState> {
     try {
       final refreshService = ref.read(comicEpisodeRefreshServiceProvider);
       final repository = ref.read(comicRepositoryProvider);
-      final links = await refreshService.fetchEpisodeLinksFromTid(current.detail.sourceTid);
+      final links = await refreshService.fetchEpisodeLinks(
+        ComicEpisodeRefreshRequest(
+          comicId: current.detail.comicId,
+          sourceTid: current.detail.sourceTid,
+          displayTitle: current.detail.displayTitle,
+          sourceTitle: current.detail.sourceTitle,
+          customTitle: current.detail.customTitle,
+          customSearchTitle: current.detail.customSearchTitle,
+        ),
+      );
 
       if (links.isEmpty) {
         state = AsyncData(

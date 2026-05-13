@@ -235,7 +235,6 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   late final ComicDownloadService _downloadService;
   late final ComicReadingStateWriter _readingStateWriter;
   late final ImageCacheService _imageCacheService;
-  late final ComicCoverCacheWriter? _coverCacheWriter;
   late final ComicReaderEventLogger _eventLogger;
   late final ComicReaderPreloadQueue _preloadQueue;
   Timer? _progressPersistDebounceTimer;
@@ -259,9 +258,6 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     _downloadService = ref.read(comicDownloadServiceProvider);
     _readingStateWriter = ref.read(comicReadingStateWriterProvider);
     _imageCacheService = ref.read(imageCacheServiceProvider);
-    _coverCacheWriter = _repository is ComicCoverCacheWriter
-        ? _repository as ComicCoverCacheWriter
-        : ref.read(comicCoverCacheWriterProvider);
     _eventLogger = ref.read(comicReaderEventLoggerProvider);
     _preloadQueue = ComicReaderPreloadQueue(
       runner: _runPreloadTask,
@@ -577,8 +573,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       ),
     );
     final protectedPath = result.localPath?.trim();
-    final writer = _coverCacheWriter;
-    if (!result.success || protectedPath == null || protectedPath.isEmpty || writer == null) {
+    if (!result.success || protectedPath == null || protectedPath.isEmpty) {
       if (!ref.mounted) {
         return;
       }
@@ -586,10 +581,22 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       state = AsyncData(latest.copyWith(hint: '封面更新失败，请稍后重试'));
       return;
     }
-    await writer.updateCoverCache(
-      comicId: _args.comicId,
-      customCoverLocalPath: protectedPath,
-    );
+    try {
+      await _repository.updateCustomCoverFromLocalFile(
+        comicId: _args.comicId,
+        localCoverPath: protectedPath,
+        sourceEpisodeId: current.episodeId,
+        sourceImageIndex: image.imageIndex,
+        sourceImageUrl: image.imageUrl,
+      );
+    } catch (_) {
+      if (!ref.mounted) {
+        return;
+      }
+      final latest = state.value ?? current;
+      state = AsyncData(latest.copyWith(hint: '封面更新失败，请稍后重试'));
+      return;
+    }
     if (!ref.mounted) {
       return;
     }

@@ -256,7 +256,10 @@ class ComicShelfAdapter
       workId: source.comicId,
       categoryId: source.categoryId,
       title: source.title,
-      secondaryName: source.author,
+      secondaryName: _shelfSecondaryName(
+        author: source.author,
+        translationGroup: source.translationGroup,
+      ),
       coverImageUrl: source.coverImageUrl,
       customCoverImageUrl: source.customCoverImageUrl,
       // If a remote custom cover exists but is not cached yet, keep the normal
@@ -379,5 +382,22 @@ class ComicShelfAdapter
       return cmp;
     });
     return list;
+  }
+
+  String? _shelfSecondaryName({
+    required String? author,
+    required String? translationGroup,
+  }) {
+    final normalizedAuthor = author?.trim();
+    final normalizedGroup = translationGroup?.trim();
+    final hasAuthor = normalizedAuthor != null && normalizedAuthor.isNotEmpty;
+    final hasGroup = normalizedGroup != null && normalizedGroup.isNotEmpty;
+    if (hasAuthor && hasGroup) {
+      return '$normalizedAuthor / $normalizedGroup';
+    }
+    if (hasGroup) {
+      return normalizedGroup;
+    }
+    return hasAuthor ? normalizedAuthor : null;
   }
 }

@@ -4,7 +4,15 @@
     this.sourceTypeId,
     this.sourceTagName,
     required this.title,
+    this.sourceTitle,
+    this.customTitle,
     required this.author,
+    this.sourceAuthor,
+    this.customAuthor,
+    this.translationGroup,
+    this.sourceTranslationGroup,
+    this.customTranslationGroup,
+    this.customSearchTitle,
     required this.coverImageUrl,
     this.customCoverImageUrl,
     this.coverLocalPath,
@@ -16,8 +24,18 @@
   final String comicId;
   final String? sourceTypeId;
   final String? sourceTagName;
+  /// 最终展示标题。自定义标题由仓储提前合成到这里。
   final String title;
+  final String? sourceTitle;
+  final String? customTitle;
+  /// 最终展示作者。自定义作者由仓储提前合成到这里。
   final String? author;
+  final String? sourceAuthor;
+  final String? customAuthor;
+  final String? translationGroup;
+  final String? sourceTranslationGroup;
+  final String? customTranslationGroup;
+  final String? customSearchTitle;
   final String? coverImageUrl;
   final String? customCoverImageUrl;
   final String? coverLocalPath;

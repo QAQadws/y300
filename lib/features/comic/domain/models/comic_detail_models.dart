@@ -6,12 +6,22 @@
     this.sourceTypeId,
     this.sourceTagName,
     required this.title,
+    this.sourceTitle,
+    this.customTitle,
     required this.author,
+    this.sourceAuthor,
+    this.customAuthor,
     required this.translationGroup,
+    this.sourceTranslationGroup,
+    this.customTranslationGroup,
+    this.customSearchTitle,
     required this.coverImageUrl,
     this.customCoverImageUrl,
     this.coverLocalPath,
     this.customCoverLocalPath,
+    this.customCoverSourceEpisodeId,
+    this.customCoverSourceImageIndex,
+    this.customCoverSourceImageUrl,
     required this.updatedAt,
     required this.episodeCount,
   });
@@ -21,15 +31,54 @@
   final String sourceFid;
   final String? sourceTypeId;
   final String? sourceTagName;
+  /// 最终展示标题。用户自定义标题存在时由仓储提前合成为该值。
   final String title;
+  /// 来源解析标题与用户覆盖标题分开保存，刷新来源信息时不能覆盖用户值。
+  final String? sourceTitle;
+  final String? customTitle;
+  /// 最终展示作者。用户自定义作者存在时由仓储提前合成为该值。
   final String? author;
+  final String? sourceAuthor;
+  final String? customAuthor;
+  /// 最终展示汉化组。用户自定义汉化组存在时由仓储提前合成为该值。
   final String? translationGroup;
+  final String? sourceTranslationGroup;
+  final String? customTranslationGroup;
+  /// 更新搜索关键词的用户覆盖值；为空时刷新链路按标题优先级兜底。
+  final String? customSearchTitle;
   final String? coverImageUrl;
   final String? customCoverImageUrl;
   final String? coverLocalPath;
   final String? customCoverLocalPath;
+  final String? customCoverSourceEpisodeId;
+  final int? customCoverSourceImageIndex;
+  final String? customCoverSourceImageUrl;
   final DateTime updatedAt;
   final int episodeCount;
+
+  String get displayTitle => title;
+  String? get displayAuthor => author;
+  String? get displayTranslationGroup => translationGroup;
+
+  String get effectiveSourceTitle {
+    final source = sourceTitle?.trim();
+    return source == null || source.isEmpty ? title : source;
+  }
+
+  String? get effectiveSourceAuthor => _firstNonBlank(sourceAuthor, author);
+
+  String? get effectiveSourceTranslationGroup {
+    return _firstNonBlank(sourceTranslationGroup, translationGroup);
+  }
+}
+
+String? _firstNonBlank(String? preferred, String? fallback) {
+  final first = preferred?.trim();
+  if (first != null && first.isNotEmpty) {
+    return first;
+  }
+  final second = fallback?.trim();
+  return second == null || second.isEmpty ? null : second;
 }
 
 class ComicEpisodeItem {

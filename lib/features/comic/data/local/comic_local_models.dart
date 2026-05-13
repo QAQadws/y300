@@ -6,12 +6,23 @@
     required this.sourceTypeId,
     required this.sourceTagName,
     required this.title,
+    required this.sourceTitle,
+    required this.customTitle,
     required this.author,
+    required this.sourceAuthor,
+    required this.customAuthor,
     required this.translationGroup,
+    required this.sourceTranslationGroup,
+    required this.customTranslationGroup,
+    required this.customSearchTitle,
     required this.coverImageUrl,
     required this.customCoverImageUrl,
     this.coverLocalPath,
     this.customCoverLocalPath,
+    this.customCoverSourceEpisodeId,
+    this.customCoverSourceImageIndex,
+    this.customCoverSourceImageUrl,
+    this.metadataUpdatedAt,
     required this.createdAt,
     required this.updatedAt,
     required this.lastReadEpisodeId,
@@ -23,12 +34,23 @@
   final String? sourceTypeId;
   final String? sourceTagName;
   final String title;
+  final String? sourceTitle;
+  final String? customTitle;
   final String? author;
+  final String? sourceAuthor;
+  final String? customAuthor;
   final String? translationGroup;
+  final String? sourceTranslationGroup;
+  final String? customTranslationGroup;
+  final String? customSearchTitle;
   final String? coverImageUrl;
   final String? customCoverImageUrl;
   final String? coverLocalPath;
   final String? customCoverLocalPath;
+  final String? customCoverSourceEpisodeId;
+  final int? customCoverSourceImageIndex;
+  final String? customCoverSourceImageUrl;
+  final int? metadataUpdatedAt;
   final int createdAt;
   final int updatedAt;
   final String? lastReadEpisodeId;
@@ -41,12 +63,23 @@
       'source_typeid': sourceTypeId,
       'source_tag_name': sourceTagName,
       'title': title,
+      'source_title': sourceTitle,
+      'custom_title': customTitle,
       'author': author,
+      'source_author': sourceAuthor,
+      'custom_author': customAuthor,
       'translation_group': translationGroup,
+      'source_translation_group': sourceTranslationGroup,
+      'custom_translation_group': customTranslationGroup,
+      'custom_search_title': customSearchTitle,
       'cover_image_url': coverImageUrl,
       'custom_cover_image_url': customCoverImageUrl,
       'cover_local_path': coverLocalPath,
       'custom_cover_local_path': customCoverLocalPath,
+      'custom_cover_source_episode_id': customCoverSourceEpisodeId,
+      'custom_cover_source_image_index': customCoverSourceImageIndex,
+      'custom_cover_source_image_url': customCoverSourceImageUrl,
+      'metadata_updated_at': metadataUpdatedAt,
       'created_at': createdAt,
       'updated_at': updatedAt,
       'last_read_episode_id': lastReadEpisodeId,
@@ -61,12 +94,23 @@
       sourceTypeId: map['source_typeid'] as String?,
       sourceTagName: map['source_tag_name'] as String?,
       title: map['title'] as String,
+      sourceTitle: map['source_title'] as String?,
+      customTitle: map['custom_title'] as String?,
       author: map['author'] as String?,
+      sourceAuthor: map['source_author'] as String?,
+      customAuthor: map['custom_author'] as String?,
       translationGroup: map['translation_group'] as String?,
+      sourceTranslationGroup: map['source_translation_group'] as String?,
+      customTranslationGroup: map['custom_translation_group'] as String?,
+      customSearchTitle: map['custom_search_title'] as String?,
       coverImageUrl: map['cover_image_url'] as String?,
       customCoverImageUrl: map['custom_cover_image_url'] as String?,
       coverLocalPath: map['cover_local_path'] as String?,
       customCoverLocalPath: map['custom_cover_local_path'] as String?,
+      customCoverSourceEpisodeId: map['custom_cover_source_episode_id'] as String?,
+      customCoverSourceImageIndex: map['custom_cover_source_image_index'] as int?,
+      customCoverSourceImageUrl: map['custom_cover_source_image_url'] as String?,
+      metadataUpdatedAt: map['metadata_updated_at'] as int?,
       createdAt: map['created_at'] as int,
       updatedAt: map['updated_at'] as int,
       lastReadEpisodeId: map['last_read_episode_id'] as String?,

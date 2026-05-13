@@ -220,6 +220,114 @@ void main() {
       expect(detail?.customCoverLocalPath, isNull);
     });
 
+    test('custom metadata overrides display and can be cleared to source values', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:102',
+        tid: '102',
+        fid: '30',
+        title: '【源组】[源作者]来源标题 第1话',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>['https://img.test/original.jpg'],
+          episodeLinks: <ComicEpisodeLink>[],
+          plainTextSummary: '摘要',
+          subjectMetadata: ComicSubjectMetadata(
+            normalizedTitle: '来源标题',
+            translationGroup: '源组',
+            inferredAuthor: '源作者',
+          ),
+        ),
+      );
+
+      await repository.updateCustomMetadata(
+        comicId: 'yamibo:102',
+        customTitle: '自定义标题',
+        customAuthor: '自定义作者',
+        customTranslationGroup: '自定义组',
+        customSearchTitle: '搜索关键词',
+      );
+
+      var detail = await repository.getComicDetail(comicId: 'yamibo:102');
+      var items = await repository.getShelfItems();
+      expect(detail?.title, '自定义标题');
+      expect(detail?.sourceTitle, '来源标题');
+      expect(detail?.customTitle, '自定义标题');
+      expect(detail?.author, '自定义作者');
+      expect(detail?.translationGroup, '自定义组');
+      expect(detail?.customSearchTitle, '搜索关键词');
+      expect(items.single.title, '自定义标题');
+      expect(items.single.translationGroup, '自定义组');
+
+      await repository.clearCustomMetadata(
+        comicId: 'yamibo:102',
+        title: true,
+        author: true,
+        translationGroup: true,
+        searchTitle: true,
+      );
+
+      detail = await repository.getComicDetail(comicId: 'yamibo:102');
+      items = await repository.getShelfItems();
+      expect(detail?.title, '来源标题');
+      expect(detail?.customTitle, isNull);
+      expect(detail?.author, '源作者');
+      expect(detail?.translationGroup, '源组');
+      expect(detail?.customSearchTitle, isNull);
+      expect(items.single.title, '来源标题');
+    });
+
+    test('refreshing source metadata keeps custom metadata and display values', () async {
+      const firstPost = ParsedComicPost(
+        imageUrls: <String>['https://img.test/original.jpg'],
+        episodeLinks: <ComicEpisodeLink>[],
+        plainTextSummary: '摘要',
+        subjectMetadata: ComicSubjectMetadata(
+          normalizedTitle: '旧来源',
+          translationGroup: '旧组',
+          inferredAuthor: '旧作者',
+        ),
+      );
+      await repository.addToShelf(
+        comicId: 'yamibo:103',
+        tid: '103',
+        fid: '30',
+        title: '旧来源',
+        parsedPost: firstPost,
+      );
+      await repository.updateCustomMetadata(
+        comicId: 'yamibo:103',
+        customTitle: '自定义标题',
+        customAuthor: '自定义作者',
+        customTranslationGroup: '自定义组',
+        customSearchTitle: '自定义搜索',
+      );
+
+      await repository.addToShelf(
+        comicId: 'yamibo:103',
+        tid: '103',
+        fid: '30',
+        title: '新来源',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>['https://img.test/new.jpg'],
+          episodeLinks: <ComicEpisodeLink>[],
+          plainTextSummary: '摘要',
+          subjectMetadata: ComicSubjectMetadata(
+            normalizedTitle: '新来源',
+            translationGroup: '新组',
+            inferredAuthor: '新作者',
+          ),
+        ),
+      );
+
+      final detail = await repository.getComicDetail(comicId: 'yamibo:103');
+      expect(detail?.sourceTitle, '新来源');
+      expect(detail?.title, '自定义标题');
+      expect(detail?.sourceAuthor, '新作者');
+      expect(detail?.author, '自定义作者');
+      expect(detail?.sourceTranslationGroup, '新组');
+      expect(detail?.translationGroup, '自定义组');
+      expect(detail?.customSearchTitle, '自定义搜索');
+    });
+
     test('can query comic detail and episodes descending', () async {
       await repository.addToShelf(
         comicId: 'yamibo:100',
