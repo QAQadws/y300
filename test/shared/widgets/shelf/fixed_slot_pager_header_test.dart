@@ -3,6 +3,39 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/shared/widgets/shelf/fixed_slot_pager_header.dart';
 
 void main() {
+  testWidgets('FixedSlotPagerHeader paints an opaque surface background', (tester) async {
+    final pageController = PageController();
+    const surface = Color(0xFF102030);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue).copyWith(surface: surface)),
+        home: Scaffold(
+          body: FixedSlotPagerHeader(
+            pageController: pageController,
+            tabs: const [
+              FixedSlotHeaderTab(id: 'a', label: 'A'),
+            ],
+            selectedIndex: 0,
+            onTap: (_) {},
+            indicatorKey: const Key('fixed-header-indicator'),
+            tabKeyBuilder: (id) => ValueKey<String>('fixed-header-tab-$id'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    final material = tester.widget<Material>(
+      find.descendant(
+        of: find.byType(FixedSlotPagerHeader),
+        matching: find.byType(Material),
+      ),
+    );
+    expect(material.color, surface);
+  });
+
   testWidgets('FixedSlotPagerHeader uses fixed quarter width slots', (tester) async {
     final pageController = PageController();
 

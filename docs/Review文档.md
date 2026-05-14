@@ -3014,3 +3014,31 @@
 2. `flutter analyze`
 
 说明：`dart format` 按本轮要求未执行。
+
+---
+
+## 漫画解析与书架问题修复 Phase 6 Review 清单（2026-05-14）
+
+### 一、分类头背景
+- [ ] `FixedSlotPagerHeader` 自身提供不透明 `Material` 背景。
+- [ ] 背景色使用 `Theme.of(context).colorScheme.surface`。
+- [ ] 空 tab 场景仍保持不透明 56 高度占位。
+- [ ] 原有固定 4 槽位宽度、超过 4 项横向滚动和指示器逻辑不变。
+
+### 二、列表模式无封面行为
+- [ ] `_WorkList` 只在存在封面来源时构建 `leading`。
+- [ ] 封面来源包含 `customCoverLocalPath`、`coverLocalPath`、`customCoverImageUrl`、`coverImageUrl`。
+- [ ] 完全无封面来源时不显示 `Icons.image_not_supported_outlined`。
+- [ ] 有封面来源但加载失败的场景仍可由图片组件显示错误兜底。
+- [ ] 网格模式保持原有卡片封面兜底行为。
+
+### 三、测试覆盖（仅编写，未执行）
+- [ ] `fixed_slot_pager_header_test.dart` 覆盖 header surface 背景。
+- [ ] `unified_shelf_page_test.dart` 覆盖列表无封面不渲染占位图标。
+- [ ] `unified_shelf_page_test.dart` 覆盖列表有封面来源时仍渲染 leading 封面。
+
+### 四、待本地回归
+1. `flutter test`
+2. `flutter analyze`
+
+说明：`dart format` 按本轮要求未执行。

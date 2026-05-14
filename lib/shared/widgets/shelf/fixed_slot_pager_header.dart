@@ -54,30 +54,65 @@ class _FixedSlotPagerHeaderState extends State<FixedSlotPagerHeader> {
   @override
   Widget build(BuildContext context) {
     if (widget.tabs.isEmpty) {
-      return const SizedBox(height: 56);
+      return Material(
+        color: Theme.of(context).colorScheme.surface,
+        child: const SizedBox(height: 56),
+      );
     }
 
-    return SizedBox(
-      height: 56,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final slotWidth = constraints.maxWidth / 4;
-          final useScrollable = widget.tabs.length > 4;
+    return Material(
+      // Header 会覆盖在可滚动书架内容上方，组件自身提供不透明背景，
+      // 避免列表模式滚动时下方 item 透出。
+      color: Theme.of(context).colorScheme.surface,
+      child: SizedBox(
+        height: 56,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final slotWidth = constraints.maxWidth / 4;
+            final useScrollable = widget.tabs.length > 4;
 
-          return Stack(
-            children: [
-              if (useScrollable)
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  controller: _scrollController,
-                  child: Row(
-                    children: List.generate(widget.tabs.length, (index) {
-                      final tab = widget.tabs[index];
+            return Stack(
+              children: [
+                if (useScrollable)
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    controller: _scrollController,
+                    child: Row(
+                      children: List.generate(widget.tabs.length, (index) {
+                        final tab = widget.tabs[index];
+                        return SizedBox(
+                          width: slotWidth,
+                          child: InkWell(
+                            key: widget.tabKeyBuilder(tab.id),
+                            onTap: () => widget.onTap(index),
+                            child: Center(
+                              child: Text(
+                                tab.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                if (!useScrollable)
+                  Row(
+                    children: List.generate(4, (slotIndex) {
+                      final hasTab = slotIndex < widget.tabs.length;
+                      if (!hasTab) {
+                        return SizedBox(width: slotWidth);
+                      }
+                      final tab = widget.tabs[slotIndex];
                       return SizedBox(
                         width: slotWidth,
                         child: InkWell(
                           key: widget.tabKeyBuilder(tab.id),
-                          onTap: () => widget.onTap(index),
+                          onTap: () => widget.onTap(slotIndex),
                           child: Center(
                             child: Text(
                               tab.label,
@@ -92,60 +127,33 @@ class _FixedSlotPagerHeaderState extends State<FixedSlotPagerHeader> {
                       );
                     }),
                   ),
-                ),
-              if (!useScrollable)
-                Row(
-                  children: List.generate(4, (slotIndex) {
-                    final hasTab = slotIndex < widget.tabs.length;
-                    if (!hasTab) {
-                      return SizedBox(width: slotWidth);
-                    }
-                    final tab = widget.tabs[slotIndex];
-                    return SizedBox(
-                      width: slotWidth,
-                      child: InkWell(
-                        key: widget.tabKeyBuilder(tab.id),
-                        onTap: () => widget.onTap(slotIndex),
-                        child: Center(
-                          child: Text(
-                            tab.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                          ),
+                AnimatedBuilder(
+                  animation: Listenable.merge(<Listenable>[widget.pageController, _scrollController]),
+                  builder: (context, child) {
+                    final page = widget.pageController.hasClients ? (widget.pageController.page ?? 0) : 0;
+                    final clampedPage = page.clamp(0, (widget.tabs.length - 1).toDouble());
+                    final scrollOffset = useScrollable && _scrollController.hasClients ? _scrollController.offset : 0;
+                    final left = clampedPage * slotWidth - scrollOffset + slotWidth * 0.2;
+
+                    return Positioned(
+                      key: widget.indicatorKey,
+                      left: left,
+                      bottom: 6,
+                      child: Container(
+                        width: slotWidth * 0.6,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary,
+                          borderRadius: BorderRadius.circular(999),
                         ),
                       ),
                     );
-                  }),
+                  },
                 ),
-              AnimatedBuilder(
-                animation: Listenable.merge(<Listenable>[widget.pageController, _scrollController]),
-                builder: (context, child) {
-                  final page = widget.pageController.hasClients ? (widget.pageController.page ?? 0) : 0;
-                  final clampedPage = page.clamp(0, (widget.tabs.length - 1).toDouble());
-                  final scrollOffset = useScrollable && _scrollController.hasClients ? _scrollController.offset : 0;
-                  final left = clampedPage * slotWidth - scrollOffset + slotWidth * 0.2;
-
-                  return Positioned(
-                    key: widget.indicatorKey,
-                    left: left,
-                    bottom: 6,
-                    child: Container(
-                      width: slotWidth * 0.6,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }

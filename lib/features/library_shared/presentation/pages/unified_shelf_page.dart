@@ -849,19 +849,22 @@ class _WorkList extends StatelessWidget {
         separatorBuilder: (context, index) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
           final item = items[index];
+          final leading = _hasCoverSource(item)
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: SizedBox(
+                    width: 52,
+                    height: 52,
+                    child: _buildLeadingCover(context, item),
+                  ),
+                )
+              : null;
           return ListTile(
             key: ValueKey<String>('unified-shelf-list-item-${item.workId}'),
             onTap: () async => onTapItem(item.workId),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             tileColor: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(64),
-            leading: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: SizedBox(
-                width: 52,
-                height: 52,
-                child: _buildLeadingCover(context, item),
-              ),
-            ),
+            leading: leading,
             title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
             trailing: _UnreadBadge(count: item.unreadCount),
           );
@@ -878,7 +881,7 @@ class _WorkList extends StatelessWidget {
     if (!useShelfCoverImage) {
       return LibraryCachedImage(
         localPath: _preferredLocalPath(item),
-        imageUrl: item.coverImageUrl,
+        imageUrl: _preferredRemoteUrl(item),
         fit: BoxFit.cover,
         placeholder: placeholder,
         headerBuilder: imageHeaderBuilder,
@@ -887,10 +890,16 @@ class _WorkList extends StatelessWidget {
     return ShelfCoverImage(
       coverKey: item.workId,
       localPath: _preferredLocalPath(item),
-      remoteUrl: item.coverImageUrl,
+      remoteUrl: _preferredRemoteUrl(item),
       fit: BoxFit.cover,
       placeholder: placeholder,
     );
+  }
+
+  bool _hasCoverSource(LibraryWorkItem item) {
+    // 区分“作品没有配置封面”和“封面配置存在但加载失败”：
+    // 前者在列表模式不占 leading，后者仍交给图片组件显示兜底。
+    return _preferredLocalPath(item) != null || _preferredRemoteUrl(item) != null;
   }
 
   String? _preferredLocalPath(LibraryWorkItem item) {
@@ -899,6 +908,15 @@ class _WorkList extends StatelessWidget {
       return custom;
     }
     final cover = item.coverLocalPath?.trim();
+    return cover == null || cover.isEmpty ? null : cover;
+  }
+
+  String? _preferredRemoteUrl(LibraryWorkItem item) {
+    final custom = item.customCoverImageUrl?.trim();
+    if (custom != null && custom.isNotEmpty) {
+      return custom;
+    }
+    final cover = item.coverImageUrl?.trim();
     return cover == null || cover.isEmpty ? null : cover;
   }
 }

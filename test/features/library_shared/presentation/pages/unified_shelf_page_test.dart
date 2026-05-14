@@ -171,6 +171,72 @@ void main() {
     expect(find.byType(ShelfCoverImage), findsNothing);
   });
 
+  testWidgets('list mode hides cover placeholder when item has no cover source', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeShelfAdapter(initialDisplayMode: LibraryDisplayMode.list),
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final listItem = find.byKey(const ValueKey<String>('unified-shelf-list-item-1'));
+    expect(
+      find.descendant(
+        of: listItem,
+        matching: find.byIcon(Icons.image_not_supported_outlined),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: listItem,
+        matching: find.byType(ShelfCoverImage),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('list mode keeps leading cover when item has cover source', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.list,
+            onQuery: ({
+              required List<LibraryCategory> categories,
+              required LibraryFilterSet filters,
+              required LibraryShelfSortOption sortOption,
+              required String keyword,
+            }) async {
+              return {
+                'default': [
+                  _item(
+                    workId: 'covered',
+                    title: 'Covered Comic',
+                    coverImageUrl: 'https://example.com/covered.jpg',
+                  ),
+                ],
+              };
+            },
+          ),
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('unified-shelf-list-item-covered')),
+        matching: find.byType(ShelfCoverImage),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('unread badge renders shelf aggregate count', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -301,11 +367,13 @@ void main() {
 LibraryWorkItem _item({
   required String workId,
   required String title,
+  String? coverImageUrl,
 }) {
   return LibraryWorkItem(
     workId: workId,
     categoryId: 'default',
     title: title,
+    coverImageUrl: coverImageUrl,
     unreadCount: 1,
     totalChapterCount: 3,
     readChapterCount: 2,
