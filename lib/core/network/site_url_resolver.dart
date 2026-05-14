@@ -25,6 +25,10 @@ class SiteUrlResolver {
     if (uri == null) {
       return null;
     }
+    final pseudoAttachmentPath = _pseudoAttachmentPath(uri);
+    if (pseudoAttachmentPath != null) {
+      return _originUri().resolve(pseudoAttachmentPath).toString();
+    }
     if (uri.hasScheme) {
       return uri.toString();
     }
@@ -37,6 +41,22 @@ class SiteUrlResolver {
           .toString();
     }
     return origin.resolveUri(uri).toString();
+  }
+
+  String? _pseudoAttachmentPath(Uri uri) {
+    if ((uri.scheme != 'http' && uri.scheme != 'https') || uri.host.toLowerCase() != 'data') {
+      return null;
+    }
+    final normalizedPath = uri.path.startsWith('/') ? uri.path.substring(1) : uri.path;
+    if (!normalizedPath.toLowerCase().startsWith('attachment/')) {
+      return null;
+    }
+    final resolved = Uri(
+      path: 'data/$normalizedPath',
+      query: uri.hasQuery ? uri.query : null,
+      fragment: uri.hasFragment ? uri.fragment : null,
+    );
+    return resolved.toString();
   }
 
   Uri _originUri() {

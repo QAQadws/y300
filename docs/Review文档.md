@@ -2964,3 +2964,53 @@
 本轮按约定未执行：
 1. `flutter test`
 2. `flutter analyze`
+---
+
+## 漫画解析与书架问题修复 Phase 1-3 Review 清单（2026-05-14）
+
+### 一、URL 规范化
+- [ ] `SiteUrlResolver.resolve()` 将 `http://data/attachment/...` 改写为站内附件 URL。
+- [ ] `https://data/attachment/...` 同样被兼容。
+- [ ] 正常第三方绝对 URL 不被改写。
+- [ ] query 和 fragment 在改写后仍保留。
+
+### 二、附件图片模型
+- [ ] `ThreadPost` 保留 `attachmentImages`，默认空列表，不破坏旧构造。
+- [ ] `ThreadPost.fromJson` 能解析 Discuz `attachments` map。
+- [ ] 非图片附件不会进入 `attachmentImages`。
+- [ ] `attachimg == '1'`、`ext` 白名单、附件路径扩展名三种图片判断路径均被覆盖。
+
+### 三、图片来源服务
+- [ ] `ForumAttachmentImageExtractor` 只负责附件 URL 拼接、规范化、去重。
+- [ ] `ForumPostImageSourceCollector` 统一合并 DOM 图片和附件图片。
+- [ ] 合并顺序保持 DOM 图片在前、附件图片在后。
+- [ ] 重复 URL 只保留第一次出现。
+
+### 四、漫画解析入口
+- [ ] `ComicParserService.parseInput()` 是新的上下文解析入口。
+- [ ] `parse(message:)` 保留兼容，并委托到 `parseInput()`。
+- [ ] `HtmlComicParserService` debug signal 能区分 DOM 图片数、附件图片数、最终接受图片数。
+- [ ] 详情页加入书架走 `parseInput()`。
+- [ ] 收藏同步入库走 `parseInput()`。
+- [ ] 阅读器缺图补拉走 `parseInput()`。
+- [ ] 连续楼主楼层解析使用统一图片来源收集器。
+
+### 五、附件主导楼层
+- [ ] 楼主二楼只有附件图片时，也能被识别为图片主导楼层。
+- [ ] 首楼 message 为空但附件图片存在时，漫画解析不会被短路为空。
+
+### 六、测试覆盖（仅编写，未执行）
+- [ ] `site_url_resolver_test.dart` 覆盖伪绝对附件 URL。
+- [ ] `forum_post_dom_extractor_test.dart` 覆盖 sinaimg `<img>`。
+- [ ] `thread_detail_models_test.dart` 覆盖 attachments 解析。
+- [ ] `forum_attachment_image_extractor_test.dart` 覆盖附件图片提取。
+- [ ] `forum_post_image_source_collector_test.dart` 覆盖图片来源合并。
+- [ ] `comic_parser_service_test.dart` 覆盖 `parseInput()`。
+- [ ] `comic_post_aggregation_service_test.dart` 覆盖附件楼层聚合。
+- [ ] `comic_consecutive_op_post_parser_test.dart` 覆盖连续楼主附件图片。
+
+### 七、待本地回归
+1. `flutter test`
+2. `flutter analyze`
+
+说明：`dart format` 按本轮要求未执行。

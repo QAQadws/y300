@@ -65,6 +65,18 @@ void main() {
       ]);
     });
 
+    test('normalizes Discuz pseudo absolute sinaimg image sources', () {
+      final images = extractor.extractImageSources('''
+<div class="img">
+  <img src="http://data/attachment/sinaimg/tid503019/pid39465469/uid365616/63c446acd7a9d.jpg" />
+</div>
+''');
+
+      expect(images, <String>[
+        'https://bbs.yamibo.com/data/attachment/sinaimg/tid503019/pid39465469/uid365616/63c446acd7a9d.jpg',
+      ]);
+    });
+
     test('extracts thread tids only from DOM anchors', () {
       final tids = extractor.extractThreadTids('''
 plain text thread-999-1-1.html should not count

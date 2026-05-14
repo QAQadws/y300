@@ -2,6 +2,7 @@
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/comic/data/comic_parser_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
@@ -290,6 +291,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         isComic: contentKind == ThreadContentKind.comic,
         subject: data.subject.isNotEmpty ? data.subject : _args.subject,
         parseMessage: aggregation.parseMessage,
+        attachmentImageUrls: aggregation.attachmentImageUrls,
       );
       // 内容类型由 fid + typeid + 来源标签统一判定，避免漫画/小说入口各自维护规则。
       final comicCandidate = contentKind == ThreadContentKind.comic;
@@ -368,14 +370,20 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     required bool isComic,
     required String subject,
     required String parseMessage,
+    required List<String> attachmentImageUrls,
   }) {
-    if (!isComic || parseMessage.isEmpty) {
+    if (!isComic || (parseMessage.isEmpty && attachmentImageUrls.isEmpty)) {
       return (ComicCandidateInfo.notCandidate, ParsedComicPost.empty);
     }
 
     final parser = ref.read(comicParserServiceProvider);
     final subjectParser = ref.read(comicSubjectParserProvider);
-    final parsed = parser.parse(message: parseMessage).copyWith(
+    final parsed = parser.parseInput(
+      ComicPostParseInput(
+        messageHtml: parseMessage,
+        attachmentImageUrls: attachmentImageUrls,
+      ),
+    ).copyWith(
           subjectMetadata: subjectParser.parse(subject),
         );
     return (

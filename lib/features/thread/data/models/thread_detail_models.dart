@@ -1,5 +1,34 @@
 import 'package:y300/core/utils/parse_utils.dart';
 
+class ForumPostAttachmentImage {
+  const ForumPostAttachmentImage({
+    required this.aid,
+    required this.url,
+    required this.attachment,
+    required this.filename,
+    required this.attachimg,
+    required this.ext,
+  });
+
+  final String aid;
+  final String url;
+  final String attachment;
+  final String filename;
+  final String attachimg;
+  final String ext;
+
+  factory ForumPostAttachmentImage.fromJson(JsonMap json) {
+    return ForumPostAttachmentImage(
+      aid: ParseUtils.asString(json['aid']),
+      url: ParseUtils.asString(json['url']),
+      attachment: ParseUtils.asString(json['attachment']),
+      filename: ParseUtils.asString(json['filename']),
+      attachimg: ParseUtils.asString(json['attachimg']),
+      ext: ParseUtils.asString(json['ext']),
+    );
+  }
+}
+
 class ThreadPost {
   ThreadPost({
     required this.pid,
@@ -9,6 +38,7 @@ class ThreadPost {
     required this.number,
     required this.isFirst,
     required this.dateline,
+    this.attachmentImages = const <ForumPostAttachmentImage>[],
   });
 
   final String pid;
@@ -18,6 +48,7 @@ class ThreadPost {
   final int number;
   final bool isFirst;
   final String dateline;
+  final List<ForumPostAttachmentImage> attachmentImages;
 
   factory ThreadPost.fromJson(JsonMap json) {
     return ThreadPost(
@@ -28,8 +59,47 @@ class ThreadPost {
       number: ParseUtils.asInt(json['number']),
       isFirst: ParseUtils.asString(json['first']) == '1',
       dateline: ParseUtils.asString(json['dateline']),
+      attachmentImages: _parseAttachmentImages(json['attachments']),
     );
   }
+
+  static List<ForumPostAttachmentImage> _parseAttachmentImages(dynamic value) {
+    final attachments = ParseUtils.asMap(value);
+    if (attachments.isEmpty) {
+      return const <ForumPostAttachmentImage>[];
+    }
+    return attachments.values
+        .map(ParseUtils.asMap)
+        .where((item) => item.isNotEmpty)
+        .map(ForumPostAttachmentImage.fromJson)
+        .where((item) => item.attachment.trim().isNotEmpty)
+        .where(_isImageAttachment)
+        .toList(growable: false);
+  }
+
+  static bool _isImageAttachment(ForumPostAttachmentImage attachment) {
+    if (attachment.attachimg.trim() == '1') {
+      return true;
+    }
+    final ext = attachment.ext.trim().toLowerCase();
+    if (_imageExtensions.contains(ext)) {
+      return true;
+    }
+    final path = attachment.attachment.split('?').first.split('#').first;
+    final dot = path.lastIndexOf('.');
+    if (dot < 0 || dot == path.length - 1) {
+      return false;
+    }
+    return _imageExtensions.contains(path.substring(dot + 1).toLowerCase());
+  }
+
+  static const Set<String> _imageExtensions = <String>{
+    'jpg',
+    'jpeg',
+    'png',
+    'gif',
+    'webp',
+  };
 }
 
 class ThreadDetailData {

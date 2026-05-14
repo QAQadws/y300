@@ -4,6 +4,7 @@ import 'package:y300/features/comic/domain/models/comic_post_parsing_models.dart
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
+import 'package:y300/features/thread/domain/services/forum_post_image_source_collector.dart';
 
 /// Parse consecutive OP posts from floor-1.
 ///
@@ -15,11 +16,15 @@ class ComicConsecutiveOpPostParser {
   ComicConsecutiveOpPostParser({
     required ComicPostParsingEngine engine,
     ForumPostDomExtractor? domExtractor,
+    ForumPostImageSourceCollector? imageSourceCollector,
   }) : _engine = engine,
-       _domExtractor = domExtractor ?? const ForumPostDomExtractor();
+       _imageSourceCollector = imageSourceCollector ??
+           ForumPostImageSourceCollector(
+             domExtractor: domExtractor ?? const ForumPostDomExtractor(),
+           );
 
   final ComicPostParsingEngine _engine;
-  final ForumPostDomExtractor _domExtractor;
+  final ForumPostImageSourceCollector _imageSourceCollector;
 
   ParsedComicPost parse({
     required String tid,
@@ -63,7 +68,7 @@ class ComicConsecutiveOpPostParser {
         messageText: '',
       );
       final result = _engine.parse(messageHtml: context.messageHtml);
-      final images = _extractImages(context.messageHtml);
+      final images = _extractImages(post);
       for (final image in images) {
         if (imageDedup.add(image)) {
           allImages.add(image);
@@ -98,8 +103,8 @@ class ComicConsecutiveOpPostParser {
     return null;
   }
 
-  List<String> _extractImages(String html) {
-    return _domExtractor.extractImageSources(html);
+  List<String> _extractImages(ThreadPost post) {
+    return _imageSourceCollector.collect(post);
   }
 
   List<ComicEpisodeLink> _toEpisodeLinks(List<EpisodeLinkCandidate> candidates) {

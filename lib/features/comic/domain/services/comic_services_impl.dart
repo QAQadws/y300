@@ -20,7 +20,9 @@ import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/data/discuz_search_service.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
+import 'package:y300/features/thread/domain/services/forum_attachment_image_extractor.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
+import 'package:y300/features/thread/domain/services/forum_post_image_source_collector.dart';
 
 final comicDetectorProvider = Provider<ComicDetector>((ref) {
   return RuleBasedComicDetector();
@@ -574,12 +576,14 @@ class NetworkComicReaderService implements ComicReaderService {
     BaseCacheManager? cacheManager,
     ImageRequestHeaderBuilder? headerBuilder,
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
+    ForumAttachmentImageExtractor attachmentImageExtractor = const ForumAttachmentImageExtractor(),
   })  : _threadRepository = threadRepository,
         _parserService = parserService,
         _imageCacheService = imageCacheService,
         _cacheManager = cacheManager ?? DefaultCacheManager(),
         _headerBuilder = headerBuilder,
-        _urlResolver = urlResolver;
+        _urlResolver = urlResolver,
+        _attachmentImageExtractor = attachmentImageExtractor;
 
   final ThreadRepository _threadRepository;
   final ComicParserService _parserService;
@@ -587,6 +591,7 @@ class NetworkComicReaderService implements ComicReaderService {
   final BaseCacheManager _cacheManager;
   final ImageRequestHeaderBuilder? _headerBuilder;
   final SiteUrlResolver _urlResolver;
+  final ForumAttachmentImageExtractor _attachmentImageExtractor;
 
   @override
   Future<List<String>> fetchEpisodeImagesByTid(String tid) async {
@@ -597,7 +602,14 @@ class NetworkComicReaderService implements ComicReaderService {
         if (firstPost == null) {
           return const <String>[];
         }
-        return _parserService.parse(message: firstPost.message).imageUrls;
+        return _parserService
+            .parseInput(
+              ComicPostParseInput(
+                messageHtml: firstPost.message,
+                attachmentImageUrls: _attachmentImageExtractor.extractImageUrls(firstPost),
+              ),
+            )
+            .imageUrls;
       },
       failure: (_) => const <String>[],
     );
@@ -758,20 +770,45 @@ class HtmlComicParserService implements ComicParserService {
   );
   final ComicPostParsingEngine _engine;
   final ForumPostDomExtractor _domExtractor;
+  final ForumPostImageSourceCollector _imageSourceCollector;
 
   HtmlComicParserService({
     ComicPostParsingEngine? engine,
     ForumPostDomExtractor? domExtractor,
-  }) : _domExtractor = domExtractor ?? const ForumPostDomExtractor(),
+    ForumPostImageSourceCollector imageSourceCollector = const ForumPostImageSourceCollector(),
+  }) : this._(
+         engine: engine,
+         domExtractor: domExtractor ?? const ForumPostDomExtractor(),
+         imageSourceCollector: imageSourceCollector,
+       );
+
+  HtmlComicParserService._({
+    required ComicPostParsingEngine? engine,
+    required ForumPostDomExtractor domExtractor,
+    required ForumPostImageSourceCollector imageSourceCollector,
+  }) : _domExtractor = domExtractor,
+       _imageSourceCollector = imageSourceCollector,
        _engine = engine ?? ComicPostParsingEngine(domExtractor: domExtractor);
 
   @override
   ParsedComicPost parse({required String message}) {
-    final signals = <ComicParsingSignal>[];
-    final imageUrls = _domExtractor.extractImageSources(message);
-    signals.add(ComicParsingSignal(stage: 'image', message: 'accepted images=${imageUrls.length}'));
+    return parseInput(ComicPostParseInput(messageHtml: message));
+  }
 
-    final parsedByEngine = _engine.parse(messageHtml: message);
+  @override
+  ParsedComicPost parseInput(ComicPostParseInput input) {
+    final signals = <ComicParsingSignal>[];
+    final domImageUrls = _domExtractor.extractImageSources(input.messageHtml);
+    final imageUrls = _imageSourceCollector.merge(
+      domImageUrls: domImageUrls,
+      attachmentImageUrls: input.attachmentImageUrls,
+    );
+    signals
+      ..add(ComicParsingSignal(stage: 'image', message: 'dom images=${domImageUrls.length}'))
+      ..add(ComicParsingSignal(stage: 'image', message: 'attachment images=${input.attachmentImageUrls.length}'))
+      ..add(ComicParsingSignal(stage: 'image', message: 'accepted images=${imageUrls.length}'));
+
+    final parsedByEngine = _engine.parse(messageHtml: input.messageHtml);
     final episodeLinks = parsedByEngine.episodes
         .map(
           (episode) => ComicEpisodeLink(
@@ -784,11 +821,11 @@ class HtmlComicParserService implements ComicParserService {
     final catalogUrl = parsedByEngine.catalogLinks.isEmpty ? null : parsedByEngine.catalogLinks.first;
     signals.addAll(parsedByEngine.debugSignals);
 
-    final plainText = _domExtractor.extractPlainText(message).replaceAll(RegExp(r'\s+'), ' ').trim();
+    final plainText = _domExtractor.extractPlainText(input.messageHtml).replaceAll(RegExp(r'\s+'), ' ').trim();
 
     final debugInfo = ComicParsingDebugInfo(
       signals: signals,
-      totalAnchors: _domExtractor.extractAnchors(message).length,
+      totalAnchors: _domExtractor.extractAnchors(input.messageHtml).length,
       totalEpisodeLinks: episodeLinks.length,
       catalogUrl: catalogUrl,
     );

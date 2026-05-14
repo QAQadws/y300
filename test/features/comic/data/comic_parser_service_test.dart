@@ -1,4 +1,5 @@
 ﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/comic/data/comic_parser_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 
 void main() {
@@ -88,6 +89,32 @@ void main() {
       expect(
         debug.signals.any((s) => s.message.contains('catalog hit')),
         true,
+      );
+    });
+
+    test('parseInput merges DOM and attachment images with stable deduplication', () {
+      final parser = HtmlComicParserService();
+      final result = parser.parseInput(
+        const ComicPostParseInput(
+          messageHtml: '''
+<img src="https://img.test/dom-1.jpg" />
+<img src="https://img.test/shared.jpg" />
+''',
+          attachmentImageUrls: <String>[
+            'https://img.test/shared.jpg',
+            'https://bbs.yamibo.com/data/attachment/forum/201802/16/attachment.jpg',
+          ],
+        ),
+      );
+
+      expect(result.imageUrls, <String>[
+        'https://img.test/dom-1.jpg',
+        'https://img.test/shared.jpg',
+        'https://bbs.yamibo.com/data/attachment/forum/201802/16/attachment.jpg',
+      ]);
+      expect(
+        result.parsingDebug!.signals.any((signal) => signal.message == 'attachment images=2'),
+        isTrue,
       );
     });
   });

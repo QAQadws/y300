@@ -80,5 +80,44 @@ void main() {
 
       expect(result.imageUrls, <String>['https://img.test/lazy.jpg', 'https://img.test/file.jpg']);
     });
+
+    test('includes attachment images from consecutive OP posts', () {
+      final parser = ComicConsecutiveOpPostParser(
+        engine: ComicPostParsingEngine(),
+      );
+      final posts = <ThreadPost>[
+        ThreadPost(
+          pid: '1',
+          author: 'op',
+          authorId: '100',
+          message: '<img src="https://img.test/dom.jpg" />',
+          number: 1,
+          isFirst: true,
+          dateline: '',
+          attachmentImages: const <ForumPostAttachmentImage>[
+            ForumPostAttachmentImage(
+              aid: '1',
+              url: 'data/attachment/forum/',
+              attachment: 'attachment.jpg',
+              filename: 'attachment.jpg',
+              attachimg: '1',
+              ext: 'jpg',
+            ),
+          ],
+        ),
+      ];
+
+      final result = parser.parse(
+        tid: '500000',
+        fid: '30',
+        subject: 'subject',
+        posts: posts,
+      );
+
+      expect(result.imageUrls, <String>[
+        'https://img.test/dom.jpg',
+        'https://bbs.yamibo.com/data/attachment/forum/attachment.jpg',
+      ]);
+    });
   });
 }
