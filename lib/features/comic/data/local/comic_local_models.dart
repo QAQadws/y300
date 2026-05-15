@@ -15,7 +15,6 @@
     required this.sourceTranslationGroup,
     required this.customTranslationGroup,
     required this.customSearchTitle,
-    required this.processingLevel,
     required this.coverImageUrl,
     required this.customCoverImageUrl,
     this.coverLocalPath,
@@ -44,7 +43,6 @@
   final String? sourceTranslationGroup;
   final String? customTranslationGroup;
   final String? customSearchTitle;
-  final String processingLevel;
   final String? coverImageUrl;
   final String? customCoverImageUrl;
   final String? coverLocalPath;
@@ -74,7 +72,6 @@
       'source_translation_group': sourceTranslationGroup,
       'custom_translation_group': customTranslationGroup,
       'custom_search_title': customSearchTitle,
-      'processing_level': processingLevel,
       'cover_image_url': coverImageUrl,
       'custom_cover_image_url': customCoverImageUrl,
       'cover_local_path': coverLocalPath,
@@ -106,7 +103,6 @@
       sourceTranslationGroup: map['source_translation_group'] as String?,
       customTranslationGroup: map['custom_translation_group'] as String?,
       customSearchTitle: map['custom_search_title'] as String?,
-      processingLevel: map['processing_level'] as String? ?? 'full',
       coverImageUrl: map['cover_image_url'] as String?,
       customCoverImageUrl: map['custom_cover_image_url'] as String?,
       coverLocalPath: map['cover_local_path'] as String?,

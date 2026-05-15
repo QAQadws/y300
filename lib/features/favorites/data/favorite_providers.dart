@@ -47,9 +47,6 @@ final favoriteSyncServiceProvider = Provider<FavoriteSyncService>((ref) {
     comicIngestService: ref.watch(comicFavoriteIngestServiceProvider),
     novelIngestService: ref.watch(novelFavoriteIngestServiceProvider),
     downloadStorageService: ref.watch(downloadStorageServiceProvider),
-    detailBatchLimit: 20,
-    // 每摄入 3 个作品通知 UI 增量刷新一次，平衡进度感知与网络效率。
-    ingestNotifyBatchSize: 3,
   );
 });
 

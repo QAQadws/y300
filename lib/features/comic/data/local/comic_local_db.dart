@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 16;
+  static const int dbVersion = 15;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -74,7 +74,6 @@ class ComicLocalDb {
         custom_cover_source_image_index INTEGER,
         custom_cover_source_image_url TEXT,
         custom_search_title TEXT,
-        processing_level TEXT NOT NULL DEFAULT 'full',
         metadata_updated_at INTEGER,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
@@ -449,7 +448,6 @@ class ComicLocalDb {
         content_kind TEXT NOT NULL DEFAULT 'unknown',
         work_id TEXT,
         detail_loaded_at INTEGER,
-        processing_level TEXT NOT NULL DEFAULT 'full',
         first_seen_at INTEGER NOT NULL,
         last_seen_at INTEGER NOT NULL,
         removed_at INTEGER

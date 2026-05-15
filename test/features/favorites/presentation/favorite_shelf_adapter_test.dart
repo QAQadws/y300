@@ -310,14 +310,6 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
 
   @override
   Future<int> upsertRemotePage({required FavoriteThreadsPage page, required int pageStartOrder}) async => page.items.length;
-
-  @override
-  Future<List<FavoriteThreadCacheRecord>> getClassifiedModuleRecords() async {
-    return const <FavoriteThreadCacheRecord>[];
-  }
-
-  @override
-  Future<void> updateThreadWorkId({required String tid, required String? workId}) async {}
 }
 
 class _FakeImageCacheService implements ImageCacheService {

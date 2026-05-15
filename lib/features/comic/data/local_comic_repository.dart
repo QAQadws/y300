@@ -9,7 +9,6 @@ import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
-import 'package:y300/features/favorites/domain/favorite_pipeline_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
@@ -483,29 +482,6 @@ class LocalComicRepository
     String? sourceTagName,
     required String title,
     required ParsedComicPost parsedPost,
-  }) {
-    return addToShelfWithLevel(
-      comicId: comicId,
-      tid: tid,
-      fid: fid,
-      sourceTypeId: sourceTypeId,
-      sourceTagName: sourceTagName,
-      title: title,
-      parsedPost: parsedPost,
-      processingLevel: FavoriteProcessingLevel.full.name,
-    );
-  }
-
-  @override
-  Future<void> addToShelfWithLevel({
-    required String comicId,
-    required String tid,
-    required String fid,
-    String? sourceTypeId,
-    String? sourceTagName,
-    required String title,
-    required ParsedComicPost parsedPost,
-    required String processingLevel,
   }) async {
     final db = await _dbFuture;
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -553,10 +529,6 @@ class LocalComicRepository
         sourceTranslationGroup: sourceGroup,
         customTranslationGroup: customGroup,
         customSearchTitle: _normalizeNullable(existing?.customSearchTitle),
-        processingLevel: _resolveProcessingLevel(
-          paramLevel: processingLevel,
-          existingLevel: existing?.processingLevel,
-        ),
         coverImageUrl: parsedPost.imageUrls.isEmpty ? existing?.coverImageUrl : parsedPost.imageUrls.first,
         customCoverImageUrl: existing?.customCoverImageUrl,
         coverLocalPath: parsedPost.imageUrls.isEmpty ? existing?.coverLocalPath : null,
@@ -597,9 +569,7 @@ class LocalComicRepository
         );
       }
 
-      // 轻量摄入阶段跳过封面图提取，避免网络请求阻塞管道。
-      final skipImages = processingLevel == FavoriteProcessingLevel.light.name;
-      if (parsedPost.imageUrls.isNotEmpty && !skipImages) {
+      if (parsedPost.imageUrls.isNotEmpty) {
         final defaultEpisodeId = '$comicId:$tid';
         await txn.insert(
           ComicLocalDb.episodesTable,
@@ -1480,18 +1450,6 @@ class LocalComicRepository
       return order;
     }
     return (a['episode_id'] as String? ?? '').compareTo(b['episode_id'] as String? ?? '');
-  }
-
-  /// 解析最终 processingLevel：已有记录且已充分解析时保留 full。
-  String _resolveProcessingLevel({
-    required String paramLevel,
-    String? existingLevel,
-  }) {
-    // 已有记录是 full → 保留 full，不降级
-    if (existingLevel == FavoriteProcessingLevel.full.name) {
-      return FavoriteProcessingLevel.full.name;
-    }
-    return paramLevel;
   }
 
   String _resolveComicTitle({

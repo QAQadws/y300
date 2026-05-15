@@ -38,24 +38,12 @@ abstract class LocalFavoriteRepository {
     Set<String> excludedTids = const <String>{},
   });
 
-  /// 获取已分类的漫画/小说记录，用于渐进摄入阶段。
-  ///
-  /// 返回 contentKind 为 comic 或 novel 且未移除的记录，
-  /// 按 remote_order ASC（最新收藏在前）排序。
-  Future<List<FavoriteThreadCacheRecord>> getClassifiedModuleRecords();
-
   Future<void> updateThreadDetailMeta({
     required String tid,
     required String fid,
     required String typeid,
     required String? tagName,
     required ThreadContentKind contentKind,
-    required String? workId,
-  });
-
-  /// 更新收藏记录的模块 workId（渐进摄入完成后回填）。
-  Future<void> updateThreadWorkId({
-    required String tid,
     required String? workId,
   });
 
@@ -314,41 +302,6 @@ class SqfliteLocalFavoriteRepository
         .where((record) => !excludedTids.contains(record.tid))
         .take(limit)
         .toList(growable: false);
-  }
-
-  @override
-  Future<List<FavoriteThreadCacheRecord>> getClassifiedModuleRecords() async {
-    final db = await _dbFuture;
-    final rows = await db.rawQuery(
-      '''
-      SELECT ft.*, fc.category_id AS custom_category_id
-      FROM ${ComicLocalDb.favoriteThreadsTable} ft
-      LEFT JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
-        ON fc.tid = ft.tid
-      WHERE ft.removed_at IS NULL
-        AND ft.detail_loaded_at IS NOT NULL
-        AND ft.work_id IS NULL
-        AND ft.content_kind IN ('comic', 'novel')
-      ORDER BY ft.remote_order ASC, ft.dateline DESC
-      ''',
-    );
-    return rows.map(_recordFromRow).toList(growable: false);
-  }
-
-  @override
-  Future<void> updateThreadWorkId({
-    required String tid,
-    required String? workId,
-  }) async {
-    final db = await _dbFuture;
-    await db.update(
-      ComicLocalDb.favoriteThreadsTable,
-      <String, Object?>{
-        'work_id': _normalizeNullable(workId),
-      },
-      where: 'tid = ?',
-      whereArgs: <Object>[tid.trim()],
-    );
   }
 
   @override
