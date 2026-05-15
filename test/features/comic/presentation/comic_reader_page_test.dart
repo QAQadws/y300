@@ -653,6 +653,29 @@ class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
   }) async {}
 
   @override
+  Future<void> addToShelfWithLevel({
+    required String comicId,
+    required String tid,
+    required String fid,
+    String? sourceTypeId,
+    String? sourceTagName,
+    required String title,
+    required ParsedComicPost parsedPost,
+    required String processingLevel,
+  }) async {
+    // Delegate to addToShelf for backward compat in tests
+    await addToShelf(
+      comicId: comicId,
+      tid: tid,
+      fid: fid,
+      sourceTypeId: sourceTypeId,
+      sourceTagName: sourceTagName,
+      title: title,
+      parsedPost: parsedPost,
+    );
+  }
+
+  @override
   Future<void> removeFromShelf({required String comicId}) async {}
 
   @override

@@ -3017,6 +3017,96 @@
 
 ---
 
+## 收藏解析管道优化 — 阶段 1 Review（2026-05-15）
+
+### 一、基本信息
+- Review 日期：2026-05-15
+- 分支：main
+- 执行结果：
+  - `dart analyze lib/ test/` → No issues found
+  - `flutter test` → 365/365 passed
+
+### 二、文件审查
+
+#### 新增文件
+- [x] `lib/features/favorites/domain/favorite_pipeline_models.dart` — 管道模型清晰，三个级别（bare/light/full）职责明确，`FavoritePipelineProgress` 提供 UI 友好的分数计算。
+- [x] `test/features/favorites/domain/favorite_pipeline_models_test.dart` — 14 个测试覆盖边界条件（分母为 0、clamp 到 1.0、isActive 各种状态）。
+- [x] `test/features/favorites/data/favorite_pipeline_progression_test.dart` — 3 个测试覆盖阶段顺序、批量通知频率、纯论坛帖跳过 ingest。
+
+#### 修改文件（核心）
+- [x] `lib/features/favorites/data/favorite_sync_service.dart`
+  **审查要点**：
+  - `_syncInternal()` 拆分为 `_lightClassify()` + `_progressiveIngest()` 两阶段。
+  - 阶段 A 只分类不摄入：`_classifyOnly()` 调用 `updateThreadDetailMeta` 写入 contentKind，但 workId 为空。
+  - 阶段 B 查询 `getClassifiedModuleRecords()` 获取 comic/novel 记录，逐个调用 `_syncModuleLight()`。
+  - 每 `_ingestNotifyBatchSize` 个（默认 3）发出一次 `ingesting` 进度。
+  - `classified` 阶段 `isActive=false` 使进度条消失，UI 展示分类后的完整列表。
+  - `ingesting` 阶段 `isActive=true` 使进度条出现，UI 增量更新。
+  - 旧方法 `_fillMissingDetails`、`_fillOneDetail`、`_syncModule` 已安全移除（无外部调用者）。
+  **评价**：拆分清晰，无死代码残留，每个方法单一职责。
+
+- [x] `lib/features/comic/data/comic_favorite_ingest_service.dart`
+  **审查要点**：
+  - `lightUpsertFromThreadDetail()` 跳过附件图片（传空列表），减少 I/O。
+  - `_isLongSerialTag()` 独立方法，检测 `長篇連載` 或 `长篇连载` 标签。
+  - 長篇連載且无目录 → `processingLevel: 'light'`；否则 → `'full'`。
+  **评价**：逻辑简洁，边界清晰。
+
+- [x] `lib/features/novel/data/novel_favorite_ingest_service.dart`
+  **审查要点**：
+  - `lightUpsertFromThreadDetail()` 只 `upsertNovelBySeed`，不 `refreshEpisodes`。
+  - 章节内容延迟到用户打开小说详情时按需加载。
+  **评价**：正确实现了"不急把小说每个章节解析出来"的设计意图。
+
+- [x] `lib/features/comic/data/comic_repository.dart` — 新增 `addToShelfWithLevel()` 抽象方法，`processingLevel` 使用 String 类型避免 comic 层反向依赖 favorites domain。
+- [x] `lib/features/comic/data/local_comic_repository.dart`
+  **审查要点**：
+  - `addToShelf()` 委托到 `addToShelfWithLevel(processingLevel: 'full')`，保持向后兼容。
+  - light 级别跳过 `parsedPost.imageUrls` 的 episode_images 写入。
+  - `_resolveProcessingLevel()`：已有 full → 保留 full（不降级）。
+  **评价**：委托模式优雅，降级防护到位。
+
+- [x] `lib/features/comic/data/local/comic_local_db.dart` — dbVersion 15→16，两表新增 `processing_level` 列。索引与升级/降级策略不变。
+- [x] `lib/features/comic/data/local/comic_local_models.dart` — `ComicRecord.processingLevel` 新增字段，toMap/fromMap 包含映射，fromMap 默认 `'full'` 兼容旧数据。
+- [x] `lib/features/favorites/data/local_favorite_repository.dart`
+  **审查要点**：
+  - `getClassifiedModuleRecords()` SQL 正确过滤 `removed_at IS NULL` + `detail_loaded_at IS NOT NULL` + `content_kind IN ('comic','novel')`。
+  - `updateThreadWorkId()` 简洁地更新 work_id。
+  **评价**：SQL 安全，无注入风险。
+
+- [x] `lib/features/favorites/data/favorite_providers.dart` — 注入 `ingestNotifyBatchSize: 3`。其他参数不变。
+
+#### 修改文件（测试 fake 补齐）
+- [x] 10 个测试文件的 `FakeComicRepository` 补齐 `addToShelfWithLevel`（委托到 `addToShelf`）。
+- [x] 3 个测试文件的 `FakeLocalFavoriteRepository` 补齐 `getClassifiedModuleRecords` + `updateThreadWorkId`。
+- [x] `test/features/favorites/data/favorite_sync_service_test.dart` — 5 个测试更新为使用 `lightUpsertedTids` 和新的阶段顺序。
+
+### 三、架构评价
+
+**优点**：
+1. 管道解耦：分类与摄入分阶段执行，每个阶段独立可测试。
+2. 渐进刷新：`ingesting` 阶段每 N 个通知 UI，收藏页不会长时间卡住。
+3. light/full 分离：轻量摄入不拉封面和章节，网络效率和 UI 响应速度双提升。
+4. 向后兼容：`addToShelf()` 保持原行为，fake 默认实现委托到旧方法。
+5. 排序保持：SQL 查询保持 `remote_order ASC`，新收藏自动排最前。
+
+**注意事项**：
+1. 两阶段加载带来的 comic/novel 双重网络请求是刻意取舍——UX 收益 > 网络开销。
+2. `processingLevel` 当前仅由 comic ingest service 写入 light，其他路径（手动加入书架等）默认 full。
+3. 阶段 2（搜索队列）尚未实现，light 级别的漫画后续需要通过 `ComicDeepParseScheduler` 补全。
+
+### 四、测试覆盖
+- [x] `favorite_pipeline_models_test.dart`（14 个测试）：枚举值、进度分数、isActive 状态。
+- [x] `favorite_pipeline_progression_test.dart`（3 个测试）：阶段顺序、批量通知、论坛帖跳过。
+- [x] `favorite_sync_service_test.dart`（5 个测试）：已更新适配轻量摄入 API。
+- [x] 全量 365 个测试通过，无回归。
+
+### 五、本地回归
+1. [x] `dart analyze lib/ test/` → No issues found
+2. [x] `flutter test` → 365/365 passed
+
+---
+
 ## 漫画解析与书架问题修复 Phase 6 Review 清单（2026-05-14）
 
 ### 一、分类头背景
@@ -3042,3 +3132,93 @@
 2. `flutter analyze`
 
 说明：`dart format` 按本轮要求未执行。
+
+---
+
+## 收藏解析管道优化 — 阶段 1 Review（2026-05-15）
+
+### 一、基本信息
+- Review 日期：2026-05-15
+- 分支：main
+- 执行结果：
+  - `dart analyze lib/ test/` → No issues found
+  - `flutter test` → 365/365 passed
+
+### 二、文件审查
+
+#### 新增文件
+- [x] `lib/features/favorites/domain/favorite_pipeline_models.dart` — 管道模型清晰，三个级别（bare/light/full）职责明确，`FavoritePipelineProgress` 提供 UI 友好的分数计算。
+- [x] `test/features/favorites/domain/favorite_pipeline_models_test.dart` — 14 个测试覆盖边界条件（分母为 0、clamp 到 1.0、isActive 各种状态）。
+- [x] `test/features/favorites/data/favorite_pipeline_progression_test.dart` — 3 个测试覆盖阶段顺序、批量通知频率、纯论坛帖跳过 ingest。
+
+#### 修改文件（核心）
+- [x] `lib/features/favorites/data/favorite_sync_service.dart`
+  **审查要点**：
+  - `_syncInternal()` 拆分为 `_lightClassify()` + `_progressiveIngest()` 两阶段。
+  - 阶段 A 只分类不摄入：`_classifyOnly()` 调用 `updateThreadDetailMeta` 写入 contentKind，但 workId 为空。
+  - 阶段 B 查询 `getClassifiedModuleRecords()` 获取 comic/novel 记录，逐个调用 `_syncModuleLight()`。
+  - 每 `_ingestNotifyBatchSize` 个（默认 3）发出一次 `ingesting` 进度。
+  - `classified` 阶段 `isActive=false` 使进度条消失，UI 展示分类后的完整列表。
+  - `ingesting` 阶段 `isActive=true` 使进度条出现，UI 增量更新。
+  - 旧方法 `_fillMissingDetails`、`_fillOneDetail`、`_syncModule` 已安全移除（无外部调用者）。
+  **评价**：拆分清晰，无死代码残留，每个方法单一职责。
+
+- [x] `lib/features/comic/data/comic_favorite_ingest_service.dart`
+  **审查要点**：
+  - `lightUpsertFromThreadDetail()` 跳过附件图片（传空列表），减少 I/O。
+  - `_isLongSerialTag()` 独立方法，检测 `長篇連載` 或 `长篇连载` 标签。
+  - 長篇連載且无目录 → `processingLevel: 'light'`；否则 → `'full'`。
+  **评价**：逻辑简洁，边界清晰。
+
+- [x] `lib/features/novel/data/novel_favorite_ingest_service.dart`
+  **审查要点**：
+  - `lightUpsertFromThreadDetail()` 只 `upsertNovelBySeed`，不 `refreshEpisodes`。
+  - 章节内容延迟到用户打开小说详情时按需加载。
+  **评价**：正确实现了"不急把小说每个章节解析出来"的设计意图。
+
+- [x] `lib/features/comic/data/comic_repository.dart` — 新增 `addToShelfWithLevel()` 抽象方法，`processingLevel` 使用 String 类型避免 comic 层反向依赖 favorites domain。
+- [x] `lib/features/comic/data/local_comic_repository.dart`
+  **审查要点**：
+  - `addToShelf()` 委托到 `addToShelfWithLevel(processingLevel: 'full')`，保持向后兼容。
+  - light 级别跳过 `parsedPost.imageUrls` 的 episode_images 写入。
+  - `_resolveProcessingLevel()`：已有 full → 保留 full（不降级）。
+  **评价**：委托模式优雅，降级防护到位。
+
+- [x] `lib/features/comic/data/local/comic_local_db.dart` — dbVersion 15→16，两表新增 `processing_level` 列。索引与升级/降级策略不变。
+- [x] `lib/features/comic/data/local/comic_local_models.dart` — `ComicRecord.processingLevel` 新增字段，toMap/fromMap 包含映射，fromMap 默认 `'full'` 兼容旧数据。
+- [x] `lib/features/favorites/data/local_favorite_repository.dart`
+  **审查要点**：
+  - `getClassifiedModuleRecords()` SQL 正确过滤 `removed_at IS NULL` + `detail_loaded_at IS NOT NULL` + `content_kind IN ('comic','novel')`。
+  - `updateThreadWorkId()` 简洁地更新 work_id。
+  **评价**：SQL 安全，无注入风险。
+
+- [x] `lib/features/favorites/data/favorite_providers.dart` — 注入 `ingestNotifyBatchSize: 3`。其他参数不变。
+
+#### 修改文件（测试 fake 补齐）
+- [x] 10 个测试文件的 `FakeComicRepository` 补齐 `addToShelfWithLevel`（委托到 `addToShelf`）。
+- [x] 3 个测试文件的 `FakeLocalFavoriteRepository` 补齐 `getClassifiedModuleRecords` + `updateThreadWorkId`。
+- [x] `test/features/favorites/data/favorite_sync_service_test.dart` — 5 个测试更新为使用 `lightUpsertedTids` 和新的阶段顺序。
+
+### 三、架构评价
+
+**优点**：
+1. 管道解耦：分类与摄入分阶段执行，每个阶段独立可测试。
+2. 渐进刷新：`ingesting` 阶段每 N 个通知 UI，收藏页不会长时间卡住。
+3. light/full 分离：轻量摄入不拉封面和章节，网络效率和 UI 响应速度双提升。
+4. 向后兼容：`addToShelf()` 保持原行为，fake 默认实现委托到旧方法。
+5. 排序保持：SQL 查询保持 `remote_order ASC`，新收藏自动排最前。
+
+**注意事项**：
+1. 两阶段加载带来的 comic/novel 双重网络请求是刻意取舍——UX 收益 > 网络开销。
+2. `processingLevel` 当前仅由 comic ingest service 写入 light，其他路径（手动加入书架等）默认 full。
+3. 阶段 2（搜索队列）尚未实现，light 级别的漫画后续需要通过 `ComicDeepParseScheduler` 补全。
+
+### 四、测试覆盖
+- [x] `favorite_pipeline_models_test.dart`（14 个测试）：枚举值、进度分数、isActive 状态。
+- [x] `favorite_pipeline_progression_test.dart`（3 个测试）：阶段顺序、批量通知、论坛帖跳过。
+- [x] `favorite_sync_service_test.dart`（5 个测试）：已更新适配轻量摄入 API。
+- [x] 全量 365 个测试通过，无回归。
+
+### 五、本地回归
+1. [x] `dart analyze lib/ test/` → No issues found
+2. [x] `flutter test` → 365/365 passed

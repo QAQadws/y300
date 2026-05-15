@@ -18,7 +18,10 @@ enum FavoriteSyncProgressPhase {
   idle,
   fetchingList,
   savingList,
-  loadingDetails,
+  classifying,     // 快速分类中：加载详情 + contentKind 判定（不摄入模块）
+  classified,      // 快速分类完成：收藏页此时已可按分类展示
+  ingesting,       // 渐进摄入中：逐个摄入漫画/小说模块
+  loadingDetails,  // 向后兼容旧阶段
   finishing,
   completed,
   failed,
@@ -41,10 +44,13 @@ class FavoriteSyncProgress {
     return switch (phase) {
       FavoriteSyncProgressPhase.fetchingList ||
       FavoriteSyncProgressPhase.savingList ||
+      FavoriteSyncProgressPhase.classifying ||
+      FavoriteSyncProgressPhase.ingesting ||
       FavoriteSyncProgressPhase.loadingDetails ||
       FavoriteSyncProgressPhase.finishing =>
         true,
       FavoriteSyncProgressPhase.idle ||
+      FavoriteSyncProgressPhase.classified ||
       FavoriteSyncProgressPhase.completed ||
       FavoriteSyncProgressPhase.failed =>
         false,
@@ -82,6 +88,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     required NovelFavoriteIngestService novelIngestService,
     DownloadStorageService? downloadStorageService,
     int detailBatchLimit = 20,
+    int ingestNotifyBatchSize = 3,
   })  : _remoteRepository = remoteRepository,
         _localRepository = localRepository,
         _loadThreadDetail = loadThreadDetail,
@@ -90,7 +97,8 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         _comicIngestService = comicIngestService,
         _novelIngestService = novelIngestService,
         _downloadStorageService = downloadStorageService,
-        _detailBatchLimit = detailBatchLimit;
+        _detailBatchLimit = detailBatchLimit,
+        _ingestNotifyBatchSize = ingestNotifyBatchSize;
 
   final FavoriteRepository _remoteRepository;
   final LocalFavoriteRepository _localRepository;
@@ -101,6 +109,10 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   final NovelFavoriteIngestService _novelIngestService;
   final DownloadStorageService? _downloadStorageService;
   final int _detailBatchLimit;
+
+  /// 每摄入多少条后通知 UI 刷新一次。
+  final int _ingestNotifyBatchSize;
+
   final ValueNotifier<FavoriteSyncProgress> _progress = ValueNotifier<FavoriteSyncProgress>(
     FavoriteSyncProgress.idle,
   );
@@ -207,20 +219,34 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         : const <FavoriteThreadCacheRecord>[];
     await _removeModuleShelfItems(removedRecords);
 
-    final detailResult = await _fillMissingDetails();
+    // 阶段 A：快速分类 — 加载详情 + contentKind 判定，不摄入模块。
+    final classifyResult = await _lightClassify();
+    final classifyTotal = classifyResult.loadedCount + classifyResult.failedTids.length;
+    _emitProgress(
+      FavoriteSyncProgress(
+        phase: FavoriteSyncProgressPhase.classified,
+        message: '已完成快速分类',
+        current: classifyResult.loadedCount,
+        total: classifyTotal,
+      ),
+    );
+
+    // 阶段 B：渐进摄入 — 逐个摄入漫画/小说模块，按 remote_order ASC。
+    final ingestResult = await _progressiveIngest();
+
     _emitProgress(
       const FavoriteSyncProgress(
         phase: FavoriteSyncProgressPhase.finishing,
         message: '正在整理收藏同步结果',
       ),
     );
+    final allFailedTids = [...classifyResult.failedTids, ...ingestResult.failedTids];
+    final allErrors = {...classifyResult.errors, ...ingestResult.errors};
     await _localRepository.finishSync(
       mode: mode,
       remoteCount: firstPage.totalCount,
-      status: detailResult.failedTids.isEmpty ? 'ok' : 'partial',
-      message: detailResult.failedTids.isEmpty
-          ? null
-          : _buildPartialFailureMessage(detailResult.errors),
+      status: allFailedTids.isEmpty ? 'ok' : 'partial',
+      message: allFailedTids.isEmpty ? null : _buildPartialFailureMessage(allErrors),
     );
     await _writeFavoritesSnapshot(remoteCount: firstPage.totalCount);
 
@@ -230,8 +256,8 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       fetchedPages: pages.length,
       upsertedCount: upsertedCount,
       removedRecords: removedRecords,
-      detailLoadedCount: detailResult.loadedCount,
-      failedDetailTids: detailResult.failedTids,
+      detailLoadedCount: classifyResult.loadedCount + ingestResult.loadedCount,
+      failedDetailTids: allFailedTids,
     );
   }
 
@@ -326,90 +352,75 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         .every(activeBefore.contains);
   }
 
-  Future<_DetailFillResult> _fillMissingDetails() async {
+  /// 阶段 A：快速分类。
+  ///
+  /// 加载未分类线程的详情，通过 ThreadContentClassifier 判定
+  /// contentKind 并写入 DB。此阶段不摄入漫画/小说模块，确保
+  /// 收藏页在最短时间内显示分类后的列表。
+  Future<_DetailFillResult> _lightClassify() async {
     final failedTids = <String>[];
     final failedTidSet = <String>{};
     final errors = <String, String>{};
-    var loadedCount = 0;
+    var classifiedCount = 0;
 
     while (true) {
       final records = await _localRepository.getMissingDetailRecords(
         limit: _detailBatchLimit,
         excludedTids: failedTidSet,
       );
-      if (records.isEmpty) {
-        break;
-      }
+      if (records.isEmpty) break;
 
       var madeProgress = false;
       final failedCountBefore = failedTidSet.length;
       for (final record in records) {
         _emitProgress(
           FavoriteSyncProgress(
-            phase: FavoriteSyncProgressPhase.loadingDetails,
-            message: '正在解析收藏详情 ${loadedCount + failedTids.length + 1}',
-            current: loadedCount + failedTids.length,
+            phase: FavoriteSyncProgressPhase.classifying,
+            message: '正在快速分类 ${classifiedCount + failedTidSet.length + 1}',
+            current: classifiedCount + failedTidSet.length,
           ),
         );
         try {
-          final loaded = await _fillOneDetail(record);
+          final loaded = await _classifyOnly(record);
           if (loaded) {
-            loadedCount++;
+            classifiedCount++;
             madeProgress = true;
           } else {
             failedTidSet.add(record.tid);
             failedTids.add(record.tid);
-            errors[record.tid] = '加载帖子详情失败';
+            errors[record.tid] = '分类失败';
           }
         } catch (error) {
           failedTidSet.add(record.tid);
           failedTids.add(record.tid);
           errors[record.tid] = '$error';
         }
-        _emitProgress(
-          FavoriteSyncProgress(
-            phase: FavoriteSyncProgressPhase.loadingDetails,
-            message: '已解析收藏详情 ${loadedCount + failedTids.length}',
-            current: loadedCount + failedTids.length,
-          ),
-        );
       }
 
-      // 如果一批全部失败，失败 tid 会被本轮同步临时排除，继续处理后续收藏；
-      // 只有既没有成功也没有新增失败时才退出，避免仓储实现异常导致死循环。
-      if (!madeProgress && failedTidSet.length == failedCountBefore) {
-        break;
-      }
+      if (!madeProgress && failedTidSet.length == failedCountBefore) break;
     }
 
     return _DetailFillResult(
-      loadedCount: loadedCount,
+      loadedCount: classifiedCount,
       failedTids: failedTids,
       errors: errors,
     );
   }
 
-  Future<bool> _fillOneDetail(FavoriteThreadCacheRecord record) async {
+  /// 仅分类一条收藏记录，不摄入模块。
+  Future<bool> _classifyOnly(FavoriteThreadCacheRecord record) async {
     final result = await _loadThreadDetail(record.tid);
-    if (result is ApiFailure<ThreadDetailData>) {
-      return false;
-    }
+    if (result is ApiFailure<ThreadDetailData>) return false;
 
     final detail = result.dataOrNull;
-    if (detail == null) {
-      return false;
-    }
+    if (detail == null) return false;
 
-    final tagName = await _findTagName(
-      fid: detail.fid,
-      typeid: detail.typeid,
-    );
+    final tagName = await _findTagName(fid: detail.fid, typeid: detail.typeid);
     final kind = _classifier.classify(
       fid: detail.fid,
       typeid: detail.typeid,
       tagName: tagName,
     );
-    final workId = await _syncModule(detail: detail, kind: kind, tagName: tagName);
 
     await _localRepository.updateThreadDetailMeta(
       tid: record.tid,
@@ -417,9 +428,116 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       typeid: detail.typeid,
       tagName: tagName,
       contentKind: kind,
-      workId: workId,
+      workId: null, // 先不关联模块 workId
     );
     return true;
+  }
+
+  /// 阶段 B：渐进摄入。
+  ///
+  /// 按 remote_order ASC（最新收藏在前）逐个处理已分类的漫画/小说
+  /// 记录，使用轻量摄入（只做直接解析，不搜索、不提取封面）。
+  /// 每 [_ingestNotifyBatchSize] 个发出进度通知 UI 增量刷新。
+  Future<_DetailFillResult> _progressiveIngest() async {
+    final failedTids = <String>[];
+    final errors = <String, String>{};
+    var ingestedCount = 0;
+
+    // 获取所有已分类的漫画/小说记录，按 remote_order ASC 排序
+    final records = await _localRepository.getClassifiedModuleRecords();
+    final totalIngest = records.length;
+
+    if (totalIngest == 0) {
+      return _DetailFillResult(
+        loadedCount: 0,
+        failedTids: const <String>[],
+        errors: const <String, String>{},
+      );
+    }
+
+    for (final record in records) {
+      try {
+        // 重新加载详情以获取完整帖子数据用于摄入。
+        final result = await _loadThreadDetail(record.tid);
+        if (result is ApiFailure ||
+            result.dataOrNull == null) {
+          failedTids.add(record.tid);
+          errors[record.tid] = '摄入时加载详情失败';
+          continue;
+        }
+        final detail = result.dataOrNull!;
+
+        final workId = await _syncModuleLight(
+          detail: detail,
+          kind: record.contentKind,
+          tagName: record.sourceTagName,
+        );
+
+        // 回填 workId
+        await _localRepository.updateThreadWorkId(
+          tid: record.tid,
+          workId: workId,
+        );
+        ingestedCount++;
+
+        // 每 N 个或最后一个时发出进度 → 触发 UI 增量刷新。
+        if (ingestedCount % _ingestNotifyBatchSize == 0 ||
+            ingestedCount == totalIngest) {
+          _emitProgress(
+            FavoriteSyncProgress(
+              phase: FavoriteSyncProgressPhase.ingesting,
+              message: '已更新 $ingestedCount/$totalIngest 部作品',
+              current: ingestedCount,
+              total: totalIngest,
+            ),
+          );
+        }
+      } catch (error) {
+        failedTids.add(record.tid);
+        errors[record.tid] = '$error';
+      }
+    }
+
+    // 最终刷新确保所有模块 UI 一致。
+    if (ingestedCount > 0) {
+      _emitProgress(
+        FavoriteSyncProgress(
+          phase: FavoriteSyncProgressPhase.ingesting,
+          message: '已更新 $ingestedCount/$totalIngest 部作品',
+          current: ingestedCount,
+          total: totalIngest,
+        ),
+      );
+    }
+
+    return _DetailFillResult(
+      loadedCount: ingestedCount,
+      failedTids: failedTids,
+      errors: errors,
+    );
+  }
+
+  /// 轻量摄入：根据内容类型路由到对应的轻量摄入服务。
+  Future<String?> _syncModuleLight({
+    required ThreadDetailData detail,
+    required ThreadContentKind kind,
+    required String? tagName,
+  }) async {
+    switch (kind) {
+      case ThreadContentKind.comic:
+        return _comicIngestService.lightUpsertFromThreadDetail(
+          detail: detail,
+          sourceTagName: tagName,
+        );
+      case ThreadContentKind.novel:
+        return _novelIngestService.lightUpsertFromThreadDetail(
+          detail: detail,
+          sourceTagName: tagName,
+        );
+      case ThreadContentKind.unknown:
+      case ThreadContentKind.forum:
+        return 'thread:${detail.tid}';
+    }
   }
 
   Future<String?> _findTagName({
@@ -434,28 +552,6 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       return lookup.findName(fid: fid, typeid: typeid);
     } catch (_) {
       return null;
-    }
-  }
-
-  Future<String?> _syncModule({
-    required ThreadDetailData detail,
-    required ThreadContentKind kind,
-    required String? tagName,
-  }) async {
-    switch (kind) {
-      case ThreadContentKind.comic:
-        return _comicIngestService.upsertFromThreadDetail(
-          detail: detail,
-          sourceTagName: tagName,
-        );
-      case ThreadContentKind.novel:
-        return _novelIngestService.upsertFromThreadDetail(
-          detail: detail,
-          sourceTagName: tagName,
-        );
-      case ThreadContentKind.unknown:
-      case ThreadContentKind.forum:
-        return 'thread:${detail.tid}';
     }
   }
 

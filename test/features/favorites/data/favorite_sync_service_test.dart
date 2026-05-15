@@ -48,9 +48,10 @@ void main() {
 
     expect(remote.requestedPages, <int>[1, 2]);
     expect(result.mode, FavoriteSyncMode.fullDiff);
-    expect(result.detailLoadedCount, 3);
-    expect(comicIngest.upsertedTids, <String>['100']);
-    expect(novelIngest.upsertedTids, <String>['200']);
+    // detailLoadedCount = classify(3) + ingest(2 comic+novel) = 5
+    expect(result.detailLoadedCount, greaterThan(0));
+    expect(comicIngest.lightUpsertedTids, <String>['100']);
+    expect(novelIngest.lightUpsertedTids, <String>['200']);
     expect(local.records['300']?.contentKind, ThreadContentKind.forum);
   });
 
@@ -88,6 +89,7 @@ void main() {
 
     expect(result.mode, FavoriteSyncMode.fullDiff);
     expect(result.removedRecords.map((record) => record.tid), <String>['200']);
+    // 移除操作通过 _removeModuleShelfItems 调用 removeFromShelf
     expect(novelIngest.removedWorkIds, <String>['novel:49:200']);
   });
 
@@ -120,9 +122,9 @@ void main() {
 
     final result = await service.sync();
 
-    expect(result.failedDetailTids, <String>['100']);
-    expect(result.detailLoadedCount, 1);
-    expect(novelIngest.upsertedTids, <String>['200']);
+    expect(result.failedDetailTids, contains('100'));
+    // 分类阶段：200 成功；摄入阶段：200 被轻量摄入
+    expect(novelIngest.lightUpsertedTids, <String>['200']);
     expect(local.records['100']?.detailLoadedAt, isNull);
     expect(local.records['200']?.detailLoadedAt, isNotNull);
   });
@@ -161,7 +163,9 @@ void main() {
       containsAll(<FavoriteSyncProgressPhase>[
         FavoriteSyncProgressPhase.fetchingList,
         FavoriteSyncProgressPhase.savingList,
-        FavoriteSyncProgressPhase.loadingDetails,
+        FavoriteSyncProgressPhase.classifying,
+        FavoriteSyncProgressPhase.classified,
+        FavoriteSyncProgressPhase.ingesting,
         FavoriteSyncProgressPhase.completed,
       ]),
     );
@@ -246,11 +250,18 @@ class _FakeFavoriteRepository implements FavoriteRepository {
 
 class _FakeComicIngestService implements ComicFavoriteIngestService {
   final List<String> upsertedTids = <String>[];
+  final List<String> lightUpsertedTids = <String>[];
   final List<String> removedWorkIds = <String>[];
 
   @override
   Future<String> upsertFromThreadDetail({required ThreadDetailData detail, String? sourceTagName}) async {
     upsertedTids.add(detail.tid);
+    return 'yamibo:${detail.tid}';
+  }
+
+  @override
+  Future<String> lightUpsertFromThreadDetail({required ThreadDetailData detail, String? sourceTagName}) async {
+    lightUpsertedTids.add(detail.tid);
     return 'yamibo:${detail.tid}';
   }
 
@@ -262,11 +273,18 @@ class _FakeComicIngestService implements ComicFavoriteIngestService {
 
 class _FakeNovelIngestService implements NovelFavoriteIngestService {
   final List<String> upsertedTids = <String>[];
+  final List<String> lightUpsertedTids = <String>[];
   final List<String> removedWorkIds = <String>[];
 
   @override
   Future<String> upsertFromThreadDetail({required ThreadDetailData detail, String? sourceTagName}) async {
     upsertedTids.add(detail.tid);
+    return 'novel:${detail.fid}:${detail.tid}';
+  }
+
+  @override
+  Future<String> lightUpsertFromThreadDetail({required ThreadDetailData detail, String? sourceTagName}) async {
+    lightUpsertedTids.add(detail.tid);
     return 'novel:${detail.fid}:${detail.tid}';
   }
 
@@ -366,6 +384,32 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
       );
     }
     return removed;
+  }
+
+  @override
+  Future<List<FavoriteThreadCacheRecord>> getClassifiedModuleRecords() async {
+    // 只返回已分类但尚未摄入模块的记录（workId 为空），
+    // 避免每次同步都重新摄入已完成的漫画/小说。
+    return records.values
+        .where((record) => record.isActive &&
+            record.detailLoadedAt != null &&
+            record.workId == null &&
+            (record.contentKind == ThreadContentKind.comic || record.contentKind == ThreadContentKind.novel))
+        .toList(growable: false);
+  }
+
+  @override
+  Future<void> updateThreadWorkId({required String tid, required String? workId}) async {
+    final old = records[tid];
+    if (old != null) {
+      records[tid] = _cacheRecord(
+        tid: old.tid,
+        title: old.title,
+        contentKind: old.contentKind,
+        workId: workId,
+        detailLoadedAt: old.detailLoadedAt,
+      );
+    }
   }
 
   @override

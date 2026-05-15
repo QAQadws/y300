@@ -69,6 +69,22 @@ abstract class ComicRepository {
     required ParsedComicPost parsedPost,
   });
 
+  /// 带处理级别的书架上架。
+  ///
+  /// [processingLevel] 控制后续深度解析策略：
+  /// - [FavoriteProcessingLevel.light]：只做直接链接解析，不搜索、不提取封面图
+  /// - [FavoriteProcessingLevel.full]：完全解析
+  Future<void> addToShelfWithLevel({
+    required String comicId,
+    required String tid,
+    required String fid,
+    String? sourceTypeId,
+    String? sourceTagName,
+    required String title,
+    required ParsedComicPost parsedPost,
+    required String processingLevel,
+  });
+
   /// 从漫画书架移除作品，但保留作品、章节和阅读缓存。
   ///
   /// 收藏同步取消收藏时只改变“是否在书架”，不应静默删除用户已产生的
