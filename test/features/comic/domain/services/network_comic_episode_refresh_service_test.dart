@@ -448,6 +448,49 @@ void main() {
       expect(links.map((link) => link.rawText), <String>['第13话', '第15话']);
     });
 
+    test('normalizes display title before using it as search keyword', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{
+          '100': const <ComicEpisodeLink>[],
+          '301': const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-301-1-1.html', rawText: 'EP 03'),
+          ],
+        },
+      );
+      final searchService = _FakeDiscuzSearchService(
+        response: const DiscuzSearchResponse(
+          items: <DiscuzSearchResultItem>[
+            DiscuzSearchResultItem(
+              tid: '301',
+              title: '[Scan] Parsed Display Comic EP 03',
+              url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301',
+              fid: '30',
+            ),
+          ],
+          rateLimited: false,
+        ),
+      );
+      final service = NetworkComicEpisodeRefreshService(
+        discoveryService: discovery,
+        searchService: searchService,
+        subjectParser: const RuleBasedComicSubjectParser(),
+        threadSeedFetcher: (_) async {
+          return const ThreadSeed(subject: '[Scan] Current Thread EP 01');
+        },
+      );
+
+      final links = await service.fetchEpisodeLinks(
+        const ComicEpisodeRefreshRequest(
+          sourceTid: '100',
+          displayTitle: '[Favorite] Parsed Display Comic EP 02',
+        ),
+      );
+
+      expect(links, isNotEmpty);
+      expect(searchService.calledKeywords, <String>['Parsed Display Comic']);
+      expect(discovery.requestedTids, <String>['100', '301']);
+    });
+
     test('uses custom search title before custom and source titles', () async {
       final discovery = _FakeDiscoveryService(
         byTid: <String, List<ComicEpisodeLink>>{

@@ -6,9 +6,18 @@ import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 
 class LocalComicSearchRefreshQueueRepository
     implements ComicSearchRefreshQueueRepository {
-  LocalComicSearchRefreshQueueRepository(this._dbFuture);
+  LocalComicSearchRefreshQueueRepository(Future<Database> dbFuture)
+      : _openDb = (() => dbFuture),
+        _dbFuture = dbFuture;
 
-  final Future<Database> _dbFuture;
+  LocalComicSearchRefreshQueueRepository.lazy(this._openDb);
+
+  final Future<Database> Function() _openDb;
+  Future<Database>? _dbFuture;
+
+  Future<Database> get _db async {
+    return _dbFuture ??= _openDb();
+  }
 
   static const List<String> _activeStatuses = <String>[
     'pending',
@@ -21,7 +30,7 @@ class LocalComicSearchRefreshQueueRepository
     required DateTime now,
   }) async {
     final comicId = _requiredComicId(draft.request);
-    final db = await _dbFuture;
+    final db = await _db;
     return db.transaction<ComicSearchRefreshQueueUpsertResult>((txn) async {
       final active = await txn.query(
         ComicLocalDb.comicSearchRefreshQueueTable,
@@ -74,7 +83,7 @@ class LocalComicSearchRefreshQueueRepository
   Future<void> resetRunningToPending({
     required DateTime now,
   }) async {
-    final db = await _dbFuture;
+    final db = await _db;
     await db.update(
       ComicLocalDb.comicSearchRefreshQueueTable,
       <String, Object?>{
@@ -92,7 +101,7 @@ class LocalComicSearchRefreshQueueRepository
   Future<ComicSearchRefreshQueueEntry?> claimNextPending({
     required DateTime now,
   }) async {
-    final db = await _dbFuture;
+    final db = await _db;
     return db.transaction<ComicSearchRefreshQueueEntry?>((txn) async {
       final rows = await txn.query(
         ComicLocalDb.comicSearchRefreshQueueTable,
@@ -127,7 +136,7 @@ class LocalComicSearchRefreshQueueRepository
     required int id,
     required DateTime now,
   }) async {
-    final db = await _dbFuture;
+    final db = await _db;
     await db.update(
       ComicLocalDb.comicSearchRefreshQueueTable,
       <String, Object?>{
@@ -149,7 +158,7 @@ class LocalComicSearchRefreshQueueRepository
     required DateTime availableAt,
     required DateTime now,
   }) async {
-    final db = await _dbFuture;
+    final db = await _db;
     await db.update(
       ComicLocalDb.comicSearchRefreshQueueTable,
       <String, Object?>{
@@ -172,7 +181,7 @@ class LocalComicSearchRefreshQueueRepository
     required String lastError,
     required DateTime now,
   }) async {
-    final db = await _dbFuture;
+    final db = await _db;
     await db.update(
       ComicLocalDb.comicSearchRefreshQueueTable,
       <String, Object?>{
@@ -189,7 +198,7 @@ class LocalComicSearchRefreshQueueRepository
 
   @override
   Future<List<ComicSearchRefreshQueueEntry>> loadActiveEntries() async {
-    final db = await _dbFuture;
+    final db = await _db;
     final rows = await db.query(
       ComicLocalDb.comicSearchRefreshQueueTable,
       where: 'status IN (?, ?)',

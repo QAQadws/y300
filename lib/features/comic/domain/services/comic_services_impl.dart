@@ -349,9 +349,9 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
     final choices = <_RefreshKeyword>[
       _RefreshKeyword('customSearchTitle', request.customSearchTitle),
       _RefreshKeyword('customTitle', request.customTitle),
-      _RefreshKeyword('displayTitle', request.displayTitle),
-      _RefreshKeyword('sourceTitle', request.sourceTitle),
-      _RefreshKeyword('subjectNormalized', _subjectParser.parse(subject).normalizedTitle),
+      _RefreshKeyword('displayTitle', _parseSearchTitle(request.displayTitle)),
+      _RefreshKeyword('sourceTitle', _parseSearchTitle(request.sourceTitle)),
+      _RefreshKeyword('subjectNormalized', _parseSearchTitle(subject)),
     ];
     final unique = <String, _RefreshKeyword>{};
     for (final choice in choices) {
@@ -364,6 +364,15 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
       }
     }
     return unique.values.toList(growable: false);
+  }
+
+  String? _parseSearchTitle(String? title) {
+    final raw = title?.trim();
+    if (raw == null || raw.isEmpty) {
+      return null;
+    }
+    final normalized = _subjectParser.parse(raw).normalizedTitle.trim();
+    return normalized.isEmpty ? raw : normalized;
   }
 
   List<_ScoredSearchItem> _scoreSearchCandidates({

@@ -7,6 +7,7 @@ import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapt
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_feature_flags.dart';
 import 'package:y300/features/library_shared/presentation/controllers/unified_shelf_controller.dart';
@@ -562,6 +563,55 @@ void main() {
       controller.dispose();
       progress.dispose();
     });
+
+    test('shelf refresh signal reloads matching module only', () async {
+      final bus = LibraryShelfRefreshBus();
+      addTearDown(bus.dispose);
+      final adapter = _FakeShelfAdapter(
+        categories: [
+          LibraryCategory(
+            categoryId: 'default',
+            name: 'default',
+            sortOrder: 0,
+            createdAt: DateTime(2026, 1, 1),
+          ),
+        ],
+        queriedItems: {
+          'default': [_workItem('w1')],
+        },
+        shelfRefreshSignals: bus.signal,
+      );
+      final stateChanged = Completer<void>();
+      final controller = UnifiedShelfController(
+        adapter: adapter,
+        onStateChanged: () {
+          if (!stateChanged.isCompleted) {
+            stateChanged.complete();
+          }
+        },
+      );
+
+      await controller.initialize();
+      adapter.queriedItems = {
+        'default': [_workItem('w2')],
+      };
+
+      bus.notify(
+        modules: const <LibraryModuleKey>{LibraryModuleKey.favorite},
+        reason: 'other_module',
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(controller.state.itemsByCategory['default']?.single.workId, 'w1');
+
+      bus.notify(
+        modules: const <LibraryModuleKey>{LibraryModuleKey.comic},
+        reason: 'comic_updated',
+      );
+      await stateChanged.future;
+
+      expect(controller.state.itemsByCategory['default']?.single.workId, 'w2');
+      controller.dispose();
+    });
   });
 }
 
@@ -570,12 +620,15 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
     required this.categories,
     required this.queriedItems,
     this.taskProgress,
+    this.shelfRefreshSignals,
   });
 
   final List<LibraryCategory> categories;
   Map<String, List<LibraryWorkItem>> queriedItems;
   @override
   final ValueListenable<LibraryShelfTaskProgress?>? taskProgress;
+  @override
+  final ValueListenable<LibraryShelfRefreshSignal?>? shelfRefreshSignals;
 
   String? lastQueryKeyword;
   LibraryDisplayMode? lastDisplayMode;

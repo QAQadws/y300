@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
+import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
+import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
@@ -38,6 +40,28 @@ void main() {
     expect(categories.single.categoryId, favoriteDefaultCategoryId);
     expect(sync.hasPendingSync, isTrue);
     sync.completePausedSync();
+  });
+
+  test('FavoriteShelfAdapter runs maintenance when cache snapshot already exists', () async {
+    final local = _FakeLocalFavoriteRepository()
+      ..snapshot = FavoriteSyncSnapshot(
+        syncKey: favoriteSyncKey,
+        remoteCount: 1,
+        localActiveCount: 1,
+        lastSyncedAt: DateTime(2026, 1, 1),
+      );
+    final sync = _FakeFavoriteSyncService();
+    final adapter = FavoriteShelfAdapter(
+      local,
+      syncService: sync,
+      stateRepository: _FakeLibraryStateRepository(),
+    );
+
+    await adapter.loadCategories();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(sync.syncCount, 0);
+    expect(sync.maintenanceCount, 1);
   });
 
   test('FavoriteShelfAdapter returns metadata before warming comic cover, then writes local path back', () async {
@@ -152,6 +176,67 @@ void main() {
     expect(writer.lastCoverLocalPath, isNull);
     expect(writer.lastCustomCoverLocalPath, '/cache/custom-cover.jpg');
   });
+
+  test('FavoriteShelfAdapter task progress falls back to comic search queue waiting message', () {
+    final sync = _FakeFavoriteSyncService();
+    sync.markSynced();
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot(
+        entries: <ComicSearchRefreshQueueEntry>[
+          _queueEntry(id: 1, title: '排队漫画'),
+        ],
+        cadence: const Duration(milliseconds: 10500),
+      ),
+    );
+    addTearDown(queueSnapshot.dispose);
+    final adapter = FavoriteShelfAdapter(
+      _FakeLocalFavoriteRepository(),
+      syncService: sync,
+      stateRepository: _FakeLibraryStateRepository(),
+      searchQueueSnapshot: queueSnapshot,
+    );
+
+    expect(
+      adapter.taskProgress.value?.message,
+      '排队漫画 正在等待搜索 预计耗时10.5s',
+    );
+
+    queueSnapshot.value = ComicSearchRefreshQueueSnapshot(
+      entries: <ComicSearchRefreshQueueEntry>[
+        _queueEntry(id: 1, title: '排队漫画'),
+        _queueEntry(id: 2, title: '下一部'),
+      ],
+      cadence: const Duration(milliseconds: 10500),
+    );
+
+    expect(
+      adapter.taskProgress.value?.message,
+      '排队漫画 正在等待搜索 预计耗时21s',
+    );
+  });
+}
+
+ComicSearchRefreshQueueEntry _queueEntry({
+  required int id,
+  required String title,
+}) {
+  return ComicSearchRefreshQueueEntry(
+    id: id,
+    comicId: 'comic:$id',
+    title: title,
+    request: ComicEpisodeRefreshRequest(
+      comicId: 'comic:$id',
+      sourceTid: '$id',
+      displayTitle: title,
+      sourceTitle: title,
+    ),
+    origin: ComicSearchRefreshOrigin.favoriteSync,
+    status: ComicSearchRefreshQueueStatus.pending,
+    attempts: 0,
+    availableAt: DateTime(2026, 5, 16),
+    createdAt: DateTime(2026, 5, 16),
+    updatedAt: DateTime(2026, 5, 16),
+  );
 }
 
 class _FakeFavoriteSyncService implements FavoriteSyncService {
@@ -159,9 +244,15 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
   Completer<void>? _pausedSync;
   Completer<void>? _syncStarted;
   int syncCount = 0;
+  int maintenanceCount = 0;
 
   @override
   ValueListenable<FavoriteSyncProgress> get progress => _progress;
+
+  @override
+  Future<void> runBackgroundMaintenance() async {
+    maintenanceCount++;
+  }
 
   @override
   Future<FavoriteSyncResult> sync() async {
@@ -217,6 +308,9 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   Future<int> countActiveThreads() async => 1;
 
   @override
+  Future<int> countMissingDetailRecords() async => 0;
+
+  @override
   Future<String> createCategory({required String name}) async => 'custom';
 
   @override
@@ -239,10 +333,25 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   Future<List<FavoriteThreadCacheRecord>> getActiveThreadsForSnapshot() async => const <FavoriteThreadCacheRecord>[];
 
   @override
+  Future<bool> hasCompletedComicAutoRefreshBackfill() async => true;
+
+  @override
+  Future<void> markComicAutoRefreshBackfillCompleted({
+    required int checkedCount,
+    String? message,
+  }) async {}
+
+  @override
   Future<FavoriteThreadCacheRecord?> getActiveThreadByTid(String tid) async => null;
 
   @override
   Future<List<FavoriteThreadCacheRecord>> getMissingDetailRecords({
+    int limit = 20,
+    Set<String> excludedTids = const <String>{},
+  }) async => const <FavoriteThreadCacheRecord>[];
+
+  @override
+  Future<List<FavoriteThreadCacheRecord>> getComicAutoRefreshBackfillCandidates({
     int limit = 20,
     Set<String> excludedTids = const <String>{},
   }) async => const <FavoriteThreadCacheRecord>[];

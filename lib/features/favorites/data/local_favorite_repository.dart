@@ -15,9 +15,18 @@ abstract class LocalFavoriteRepository {
 
   Future<int> countActiveThreads();
 
+  Future<int> countMissingDetailRecords();
+
   Future<Set<String>> getActiveTids();
 
   Future<List<FavoriteThreadCacheRecord>> getActiveThreadsForSnapshot();
+
+  Future<bool> hasCompletedComicAutoRefreshBackfill();
+
+  Future<void> markComicAutoRefreshBackfillCompleted({
+    required int checkedCount,
+    String? message,
+  });
 
   Future<void> finishSync({
     required FavoriteSyncMode mode,
@@ -34,6 +43,11 @@ abstract class LocalFavoriteRepository {
   });
 
   Future<List<FavoriteThreadCacheRecord>> getMissingDetailRecords({
+    int limit = 20,
+    Set<String> excludedTids = const <String>{},
+  });
+
+  Future<List<FavoriteThreadCacheRecord>> getComicAutoRefreshBackfillCandidates({
     int limit = 20,
     Set<String> excludedTids = const <String>{},
   });
@@ -132,6 +146,20 @@ class SqfliteLocalFavoriteRepository
   }
 
   @override
+  Future<int> countMissingDetailRecords() async {
+    final db = await _dbFuture;
+    final rows = await db.rawQuery(
+      '''
+      SELECT COUNT(*) AS count
+      FROM ${ComicLocalDb.favoriteThreadsTable}
+      WHERE removed_at IS NULL
+        AND detail_loaded_at IS NULL
+      ''',
+    );
+    return rows.first['count'] as int? ?? 0;
+  }
+
+  @override
   Future<Set<String>> getActiveTids() async {
     final db = await _dbFuture;
     final rows = await db.query(
@@ -151,6 +179,41 @@ class SqfliteLocalFavoriteRepository
       orderBy: 'remote_order ASC, last_seen_at DESC',
     );
     return rows.map(_recordFromRow).toList(growable: false);
+  }
+
+  @override
+  Future<bool> hasCompletedComicAutoRefreshBackfill() async {
+    final db = await _dbFuture;
+    final rows = await db.query(
+      ComicLocalDb.favoriteSyncStateTable,
+      columns: const <String>['status'],
+      where: 'sync_key = ?',
+      whereArgs: const <Object>[favoriteComicAutoRefreshBackfillSyncKey],
+      limit: 1,
+    );
+    return rows.isNotEmpty && rows.first['status'] == 'ok';
+  }
+
+  @override
+  Future<void> markComicAutoRefreshBackfillCompleted({
+    required int checkedCount,
+    String? message,
+  }) async {
+    final db = await _dbFuture;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.insert(
+      ComicLocalDb.favoriteSyncStateTable,
+      <String, Object?>{
+        'sync_key': favoriteComicAutoRefreshBackfillSyncKey,
+        'remote_count': checkedCount,
+        'local_active_count': await countActiveThreads(),
+        'last_synced_at': now,
+        'last_full_synced_at': now,
+        'status': 'ok',
+        'message': message,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   @override
@@ -292,6 +355,44 @@ class SqfliteLocalFavoriteRepository
         ON fc.tid = ft.tid
       WHERE ft.removed_at IS NULL
         AND ft.detail_loaded_at IS NULL
+      ORDER BY ft.remote_order ASC, ft.last_seen_at DESC
+      LIMIT ?
+      ''',
+      <Object>[queryLimit],
+    );
+    return rows
+        .map(_recordFromRow)
+        .where((record) => !excludedTids.contains(record.tid))
+        .take(limit)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<List<FavoriteThreadCacheRecord>> getComicAutoRefreshBackfillCandidates({
+    int limit = 20,
+    Set<String> excludedTids = const <String>{},
+  }) async {
+    final db = await _dbFuture;
+    final queryLimit = limit + excludedTids.length;
+    final rows = await db.rawQuery(
+      '''
+      SELECT
+        ft.*,
+        fc.category_id AS custom_category_id,
+        COUNT(e.episode_id) AS episode_count,
+        SUM(CASE WHEN e.source_tid = ft.tid THEN 1 ELSE 0 END) AS current_tid_count
+      FROM ${ComicLocalDb.favoriteThreadsTable} ft
+      LEFT JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
+        ON fc.tid = ft.tid
+      LEFT JOIN ${ComicLocalDb.episodesTable} e
+        ON e.comic_id = ft.work_id
+      WHERE ft.removed_at IS NULL
+        AND ft.content_kind = 'comic'
+        AND ft.work_id IS NOT NULL
+        AND TRIM(ft.work_id) <> ''
+      GROUP BY ft.tid
+      HAVING episode_count = 0
+        OR (episode_count = 1 AND current_tid_count = 1)
       ORDER BY ft.remote_order ASC, ft.last_seen_at DESC
       LIMIT ?
       ''',

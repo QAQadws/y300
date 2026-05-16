@@ -2,7 +2,16 @@ import 'dart:io' as io;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/comic/data/comic_favorite_auto_refresh_coordinator.dart';
 import 'package:y300/features/comic/data/comic_favorite_ingest_service.dart';
+import 'package:y300/features/comic/data/comic_repository.dart';
+import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
+import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
+import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
+import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
+import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/favorites/data/favorite_repository.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
@@ -11,6 +20,7 @@ import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/novel/data/novel_favorite_ingest_service.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
@@ -169,7 +179,137 @@ void main() {
       emitted.any((progress) => progress.phase == FavoriteSyncProgressPhase.fetchingList && progress.total == 2),
       isTrue,
     );
+    final parsingProgress = emitted
+        .where((progress) =>
+            progress.phase == FavoriteSyncProgressPhase.loadingDetails &&
+            progress.message.startsWith('正在解析: '))
+        .toList(growable: false);
+    expect(parsingProgress.first.message, '正在解析: 漫画');
+    expect(parsingProgress.first.current, 1);
+    expect(parsingProgress.first.total, 3);
     expect(service.progress.value.isActive, isFalse);
+  });
+
+  test('novel detail ingest notifies novel and favorite shelves after existing refresh path', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(page: 1, totalCount: 1, items: <FavoriteThread>[
+        _favoriteThread(tid: '200', title: '小说'),
+      ]),
+    });
+    final novelIngest = _FakeNovelIngestService();
+    final bus = LibraryShelfRefreshBus();
+    addTearDown(bus.dispose);
+    final service = NetworkFavoriteSyncService(
+      remoteRepository: remote,
+      localRepository: _MemoryLocalFavoriteRepository(),
+      loadThreadDetail: (tid) async => ApiSuccess(_detailForTid(tid)),
+      loadTagLookup: () async => _lookup(),
+      classifier: const ThreadContentClassifier(),
+      comicIngestService: _FakeComicIngestService(),
+      novelIngestService: novelIngest,
+      shelfRefreshBus: bus,
+      detailBatchLimit: 10,
+    );
+
+    await service.sync();
+
+    expect(novelIngest.upsertedTids, <String>['200']);
+    expect(bus.signal.value?.modules, contains(LibraryModuleKey.novel));
+    expect(bus.signal.value?.modules, contains(LibraryModuleKey.favorite));
+    expect(bus.signal.value?.reason, 'favorite_novel_refresh_completed');
+  });
+
+  test('first sync queues catalog miss only when comic tag is long-running', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(page: 1, totalCount: 1, items: <FavoriteThread>[
+        _favoriteThread(tid: '100', title: '[Fav] Long Comic EP 02'),
+      ]),
+    });
+    final queue = _RecordingSearchQueue();
+    final bus = LibraryShelfRefreshBus();
+    addTearDown(bus.dispose);
+    final coordinator = ComicFavoriteAutoRefreshCoordinator(
+      repository: _RecordingComicRepository(),
+      refreshService: _BackfillRefreshService(
+        catalogOutcome: const ComicEpisodeRefreshOutcome(
+          source: ComicEpisodeRefreshSource.empty,
+          links: <ComicEpisodeLink>[],
+        ),
+      ),
+      searchQueue: queue,
+      firstEpisodeCoverPromoter: _RecordingCoverPromoter(),
+      shelfRefreshBus: bus,
+      subjectParser: const RuleBasedComicSubjectParser(),
+    );
+    final service = NetworkFavoriteSyncService(
+      remoteRepository: remote,
+      localRepository: _MemoryLocalFavoriteRepository(),
+      loadThreadDetail: (tid) async => ApiSuccess(_detailForTid(tid)),
+      loadTagLookup: () async => _lookup(
+        comicTagName: ComicFavoriteAutoRefreshCoordinator.longRunningTagName,
+      ),
+      classifier: const ThreadContentClassifier(),
+      comicIngestService: _FakeComicIngestService(),
+      novelIngestService: _FakeNovelIngestService(),
+      comicAutoRefreshCoordinator: coordinator,
+      detailBatchLimit: 10,
+    );
+
+    await service.sync();
+
+    expect(queue.enqueuedTitles, <String>['[Fav] Long Comic EP 02']);
+    expect(queue.enqueuedRequests.single.comicId, 'yamibo:100');
+    expect(queue.enqueuedRequests.single.sourceTid, '100');
+  });
+
+  test('background maintenance queues already-loaded comic favorites for auto refresh', () async {
+    final local = _MemoryLocalFavoriteRepository(
+      seedRecords: <FavoriteThreadCacheRecord>[
+        _cacheRecord(
+          tid: '100',
+          title: '[Fav] Backfill Comic EP 02',
+          contentKind: ThreadContentKind.comic,
+          workId: 'yamibo:100',
+          detailLoadedAt: DateTime(2026, 1, 1),
+          sourceTagName: ComicFavoriteAutoRefreshCoordinator.longRunningTagName,
+        ),
+      ],
+    );
+    final queue = _RecordingSearchQueue();
+    final bus = LibraryShelfRefreshBus();
+    addTearDown(bus.dispose);
+    final coordinator = ComicFavoriteAutoRefreshCoordinator(
+      repository: _RecordingComicRepository(),
+      refreshService: _BackfillRefreshService(
+        catalogOutcome: const ComicEpisodeRefreshOutcome(
+          source: ComicEpisodeRefreshSource.empty,
+          links: <ComicEpisodeLink>[],
+        ),
+      ),
+      searchQueue: queue,
+      firstEpisodeCoverPromoter: _RecordingCoverPromoter(),
+      shelfRefreshBus: bus,
+      subjectParser: const RuleBasedComicSubjectParser(),
+    );
+    final service = NetworkFavoriteSyncService(
+      remoteRepository: _FakeFavoriteRepository(const <int, FavoriteThreadsPage>{}),
+      localRepository: local,
+      loadThreadDetail: (tid) => throw StateError('detail should not be loaded'),
+      loadTagLookup: () async => _lookup(),
+      classifier: const ThreadContentClassifier(),
+      comicIngestService: _FakeComicIngestService(),
+      novelIngestService: _FakeNovelIngestService(),
+      comicAutoRefreshCoordinator: coordinator,
+    );
+
+    await service.runBackgroundMaintenance();
+
+    expect(queue.enqueuedTitles, <String>['[Fav] Backfill Comic EP 02']);
+    expect(queue.enqueuedRequests.single.comicId, 'yamibo:100');
+    expect(queue.enqueuedRequests.single.sourceTid, '100');
+    expect(queue.enqueuedRequests.single.displayTitle, 'Backfill Comic');
+    expect(queue.enqueuedRequests.single.sourceTitle, 'Backfill Comic');
+    expect(await local.hasCompletedComicAutoRefreshBackfill(), isTrue);
   });
 
   test('writes favorites snapshot to download storage after sync', () async {
@@ -276,6 +416,102 @@ class _FakeNovelIngestService implements NovelFavoriteIngestService {
   }
 }
 
+class _BackfillRefreshService implements ComicEpisodeRefreshService {
+  _BackfillRefreshService({required ComicEpisodeRefreshOutcome catalogOutcome})
+      : _catalogOutcome = catalogOutcome;
+
+  final ComicEpisodeRefreshOutcome _catalogOutcome;
+
+  @override
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    return _catalogOutcome;
+  }
+
+  @override
+  Future<List<ComicEpisodeLink>> fetchEpisodeLinks(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    return _catalogOutcome.links;
+  }
+
+  @override
+  Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
+    return _catalogOutcome.links;
+  }
+
+  @override
+  Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    return const ComicEpisodeRefreshOutcome(
+      source: ComicEpisodeRefreshSource.empty,
+      links: <ComicEpisodeLink>[],
+    );
+  }
+}
+
+class _RecordingSearchQueue implements ComicSearchRefreshQueueEnqueuer {
+  final List<ComicEpisodeRefreshRequest> enqueuedRequests =
+      <ComicEpisodeRefreshRequest>[];
+  final List<String> enqueuedTitles = <String>[];
+
+  @override
+  Future<ComicSearchRefreshEnqueueResult> enqueue({
+    required ComicEpisodeRefreshRequest request,
+    required String title,
+    required ComicSearchRefreshOrigin origin,
+  }) async {
+    enqueuedRequests.add(request);
+    enqueuedTitles.add(title);
+    return ComicSearchRefreshEnqueueResult(
+      entry: ComicSearchRefreshQueueEntry(
+        id: enqueuedRequests.length,
+        comicId: request.comicId ?? '',
+        title: title,
+        request: request,
+        origin: origin,
+        status: ComicSearchRefreshQueueStatus.pending,
+        attempts: 0,
+        availableAt: DateTime(2026, 5, 16),
+        createdAt: DateTime(2026, 5, 16),
+        updatedAt: DateTime(2026, 5, 16),
+      ),
+      position: enqueuedRequests.length,
+      estimatedDuration: Duration(milliseconds: 10500 * enqueuedRequests.length),
+      deduplicated: false,
+    );
+  }
+}
+
+class _RecordingCoverPromoter implements ComicFirstEpisodeCoverPromoter {
+  @override
+  Future<bool> promoteIfPossible({required String comicId}) async {
+    return true;
+  }
+}
+
+class _RecordingComicRepository implements ComicRepository {
+  @override
+  Future<ComicEpisodeRefreshResult> mergeEpisodesFromLinks({
+    required String comicId,
+    required List<ComicEpisodeLink> episodeLinks,
+    required String fallbackSourceTid,
+  }) async {
+    return ComicEpisodeRefreshResult(
+      insertedCount: episodeLinks.length,
+      updatedCount: 0,
+      totalCount: episodeLinks.length,
+    );
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    return super.noSuchMethod(invocation);
+  }
+}
+
 class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
   _MemoryLocalFavoriteRepository({
     FavoriteSyncSnapshot? snapshot,
@@ -286,10 +522,18 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
         };
 
   FavoriteSyncSnapshot? _snapshot;
+  bool _comicBackfillCompleted = false;
   final Map<String, FavoriteThreadCacheRecord> records;
 
   @override
   Future<int> countActiveThreads() async => records.values.where((record) => record.isActive).length;
+
+  @override
+  Future<int> countMissingDetailRecords() async {
+    return records.values
+        .where((record) => record.isActive && record.detailLoadedAt == null)
+        .length;
+  }
 
   @override
   Future<String> createCategory({required String name}) async => 'custom';
@@ -320,6 +564,19 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
   }
 
   @override
+  Future<bool> hasCompletedComicAutoRefreshBackfill() async {
+    return _comicBackfillCompleted;
+  }
+
+  @override
+  Future<void> markComicAutoRefreshBackfillCompleted({
+    required int checkedCount,
+    String? message,
+  }) async {
+    _comicBackfillCompleted = true;
+  }
+
+  @override
   Future<FavoriteThreadCacheRecord?> getActiveThreadByTid(String tid) async => records[tid];
 
   @override
@@ -331,6 +588,22 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
         .where((record) =>
             record.isActive &&
             record.detailLoadedAt == null &&
+            !excludedTids.contains(record.tid))
+        .take(limit)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<List<FavoriteThreadCacheRecord>> getComicAutoRefreshBackfillCandidates({
+    int limit = 20,
+    Set<String> excludedTids = const <String>{},
+  }) async {
+    return records.values
+        .where((record) =>
+            record.isActive &&
+            record.contentKind == ThreadContentKind.comic &&
+            record.workId != null &&
+            record.workId!.trim().isNotEmpty &&
             !excludedTids.contains(record.tid))
         .take(limit)
         .toList(growable: false);
@@ -362,6 +635,7 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
         title: record.title,
         contentKind: record.contentKind,
         workId: record.workId,
+        sourceTagName: record.sourceTagName,
         removedAt: DateTime(2026, 1, 2),
       );
     }
@@ -400,6 +674,7 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
       title: old.title,
       contentKind: contentKind,
       workId: workId,
+      sourceTagName: tagName,
       detailLoadedAt: DateTime(2026, 1, 1),
     );
   }
@@ -444,6 +719,7 @@ FavoriteThreadCacheRecord _cacheRecord({
   required String title,
   required ThreadContentKind contentKind,
   String? workId,
+  String? sourceTagName,
   DateTime? detailLoadedAt,
   DateTime? removedAt,
 }) {
@@ -452,6 +728,7 @@ FavoriteThreadCacheRecord _cacheRecord({
     favid: 'fav-$tid',
     title: title,
     replies: 0,
+    sourceTagName: sourceTagName,
     contentKind: contentKind,
     workId: workId,
     detailLoadedAt: detailLoadedAt,
@@ -496,17 +773,17 @@ ThreadDetailData _detailForTid(String tid) {
   );
 }
 
-ForumTagLookup _lookup() {
+ForumTagLookup _lookup({String comicTagName = '韩国漫画'}) {
   return ForumTagLookup(
-    const <ForumBoardTagSet>[
+    <ForumBoardTagSet>[
       ForumBoardTagSet(
         fid: '30',
         name: '漫画区',
         tags: <ForumTagDefinition>[
-          ForumTagDefinition(fid: '30', typeid: '398', name: '韩国漫画'),
+          ForumTagDefinition(fid: '30', typeid: '398', name: comicTagName),
         ],
       ),
-      ForumBoardTagSet(
+      const ForumBoardTagSet(
         fid: '49',
         name: '文学区',
         tags: <ForumTagDefinition>[

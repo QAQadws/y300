@@ -5,6 +5,7 @@ import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapt
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_snapshot_diff.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_feature_flags.dart';
@@ -117,6 +118,7 @@ class UnifiedShelfController {
         _featureFlags = featureFlags,
         _onStateChanged = onStateChanged,
         _taskProgressListenable = adapter.taskProgress,
+        _shelfRefreshSignals = adapter.shelfRefreshSignals,
         _state = _initialState(adapter),
         _stateListenable = ValueNotifier<UnifiedShelfState>(
           _initialState(adapter),
@@ -124,6 +126,7 @@ class UnifiedShelfController {
     final taskProgressListenable = _taskProgressListenable;
     _taskProgressWasActive = taskProgressListenable?.value?.active ?? false;
     taskProgressListenable?.addListener(_handleTaskProgressChanged);
+    _shelfRefreshSignals?.addListener(_handleShelfRefreshSignalChanged);
   }
 
   final ShelfModuleAdapter _adapter;
@@ -132,6 +135,7 @@ class UnifiedShelfController {
   final LibraryShelfSnapshotDiffer _snapshotDiffer = const LibraryShelfSnapshotDiffer();
   final void Function()? _onStateChanged;
   final ValueListenable<LibraryShelfTaskProgress?>? _taskProgressListenable;
+  final ValueListenable<LibraryShelfRefreshSignal?>? _shelfRefreshSignals;
   UnifiedShelfState _state;
   final ValueNotifier<UnifiedShelfState> _stateListenable;
   static const Duration _keywordDebounceDuration = Duration(milliseconds: 250);
@@ -163,6 +167,7 @@ class UnifiedShelfController {
     _coverWarmupToken?.cancel();
     _coverWarmupToken = null;
     _taskProgressListenable?.removeListener(_handleTaskProgressChanged);
+    _shelfRefreshSignals?.removeListener(_handleShelfRefreshSignalChanged);
     _stateListenable.dispose();
     _keywordDebounceTimer?.cancel();
     _keywordDebounceTimer = null;
@@ -453,6 +458,22 @@ class UnifiedShelfController {
     // Background tasks such as the first favorite sync can populate a local
     // snapshot after the page has already rendered. Reload metadata once the
     // task settles so the visible shelf catches up without user intervention.
+    unawaited(() async {
+      await _reload();
+      if (!_disposed) {
+        _onStateChanged?.call();
+      }
+    }());
+  }
+
+  void _handleShelfRefreshSignalChanged() {
+    final signal = _shelfRefreshSignals?.value;
+    if (signal == null ||
+        !signal.modules.contains(_adapter.moduleKey) ||
+        _disposed ||
+        _adapterRefreshInProgress) {
+      return;
+    }
     unawaited(() async {
       await _reload();
       if (!_disposed) {

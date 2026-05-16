@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
 /// 统一书架页模块适配合同。
 ///
@@ -21,6 +22,10 @@ abstract class ShelfModuleAdapter {
 
   /// 可选的长任务进度。默认没有进度源，收藏等模块可按需接入。
   ValueListenable<LibraryShelfTaskProgress?>? get taskProgress => null;
+
+  /// 可选的后台数据刷新信号。后台服务写入章节、封面或收藏分类后，
+  /// 统一控制器据此重新读取本地快照。
+  ValueListenable<LibraryShelfRefreshSignal?>? get shelfRefreshSignals => null;
 
   /// 加载分类列表。
   Future<List<LibraryCategory>> loadCategories();

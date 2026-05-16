@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/comic/data/comic_search_refresh_queue_providers.dart';
+import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/favorites/data/favorite_providers.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
@@ -20,12 +22,17 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
   testWidgets('FavoriteShelfPage builds unified shelf in list mode', (tester) async {
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    addTearDown(queueSnapshot.dispose);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository()),
           favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
           libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
         ],
         child: const MaterialApp(home: FavoriteShelfPage()),
       ),
@@ -40,12 +47,17 @@ void main() {
 
   testWidgets('FavoriteShelfPage shows first-sync progress while cache is building', (tester) async {
     final sync = _FakeFavoriteSyncService(autoComplete: false);
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    addTearDown(queueSnapshot.dispose);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository(hasSnapshot: false)),
           favoriteSyncServiceProvider.overrideWith((ref) => sync),
           libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
         ],
         child: const MaterialApp(home: FavoriteShelfPage()),
       ),
@@ -53,7 +65,7 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('unified-shelf-task-progress-bar')), findsOneWidget);
-    expect(find.text('正在解析收藏详情'), findsOneWidget);
+    expect(find.text('正在解析: 收藏帖'), findsOneWidget);
     sync.completePendingSync();
     await tester.pumpAndSettle();
   });
@@ -70,10 +82,13 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
   ValueListenable<FavoriteSyncProgress> get progress => _progress;
 
   @override
+  Future<void> runBackgroundMaintenance() async {}
+
+  @override
   Future<FavoriteSyncResult> sync() async {
     _progress.value = const FavoriteSyncProgress(
       phase: FavoriteSyncProgressPhase.loadingDetails,
-      message: '正在解析收藏详情',
+      message: '正在解析: 收藏帖',
       current: 1,
       total: 10,
     );
@@ -137,6 +152,10 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
 
   @override
   Future<int> countActiveThreads() async => 1;
+
+  @override
+  Future<int> countMissingDetailRecords() async => 0;
+
   @override
   Future<String> createCategory({required String name}) async => 'custom';
   @override
@@ -148,9 +167,18 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   @override
   Future<List<FavoriteThreadCacheRecord>> getActiveThreadsForSnapshot() async => const <FavoriteThreadCacheRecord>[];
   @override
+  Future<bool> hasCompletedComicAutoRefreshBackfill() async => true;
+  @override
+  Future<void> markComicAutoRefreshBackfillCompleted({required int checkedCount, String? message}) async {}
+  @override
   Future<FavoriteThreadCacheRecord?> getActiveThreadByTid(String tid) async => null;
   @override
   Future<List<FavoriteThreadCacheRecord>> getMissingDetailRecords({
+    int limit = 20,
+    Set<String> excludedTids = const <String>{},
+  }) async => const <FavoriteThreadCacheRecord>[];
+  @override
+  Future<List<FavoriteThreadCacheRecord>> getComicAutoRefreshBackfillCandidates({
     int limit = 20,
     Set<String> excludedTids = const <String>{},
   }) async => const <FavoriteThreadCacheRecord>[];

@@ -25,6 +25,14 @@ class ComicSearchRefreshRetryPolicy {
   }
 }
 
+abstract class ComicSearchRefreshQueueEnqueuer {
+  Future<ComicSearchRefreshEnqueueResult> enqueue({
+    required ComicEpisodeRefreshRequest request,
+    required String title,
+    required ComicSearchRefreshOrigin origin,
+  });
+}
+
 /// Background worker for comics that missed catalog refresh and must use
 /// search/current-only fallback.
 ///
@@ -32,7 +40,7 @@ class ComicSearchRefreshRetryPolicy {
 /// persists queue state, delegates actual search throttling to
 /// [ForumSearchScheduler] through [ComicEpisodeRefreshService], and emits a
 /// shared shelf refresh signal after local data changes.
-class ComicSearchRefreshQueueService {
+class ComicSearchRefreshQueueService implements ComicSearchRefreshQueueEnqueuer {
   ComicSearchRefreshQueueService({
     required ComicSearchRefreshQueueRepository queueRepository,
     required ComicRepository comicRepository,
@@ -76,6 +84,7 @@ class ComicSearchRefreshQueueService {
 
   ValueListenable<ComicSearchRefreshQueueSnapshot> get snapshot => _snapshot;
 
+  @override
   Future<ComicSearchRefreshEnqueueResult> enqueue({
     required ComicEpisodeRefreshRequest request,
     required String title,

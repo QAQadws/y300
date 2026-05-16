@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
+import 'package:y300/features/comic/data/comic_search_refresh_queue_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/favorites/data/favorite_providers.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
@@ -26,6 +28,10 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
   testWidgets('MainShellPage can switch between forum/comic/novel/more tabs', (tester) async {
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    addTearDown(queueSnapshot.dispose);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -34,6 +40,7 @@ void main() {
           libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
           localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository()),
           favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
           mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
         ],
         child: const MaterialApp(home: MainShellPage()),
@@ -64,6 +71,10 @@ void main() {
   });
 
   testWidgets('Novel tab icon changes after tap', (tester) async {
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    addTearDown(queueSnapshot.dispose);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -72,6 +83,7 @@ void main() {
           libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
           localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository()),
           favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
           mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
         ],
         child: const MaterialApp(home: MainShellPage()),
@@ -292,6 +304,9 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
   ValueListenable<FavoriteSyncProgress> get progress => _progress;
 
   @override
+  Future<void> runBackgroundMaintenance() async {}
+
+  @override
   Future<FavoriteSyncResult> sync() async {
     return const FavoriteSyncResult(
       mode: FavoriteSyncMode.incremental,
@@ -328,6 +343,9 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   Future<int> countActiveThreads() async => 1;
 
   @override
+  Future<int> countMissingDetailRecords() async => 0;
+
+  @override
   Future<String> createCategory({required String name}) async => 'fav-custom';
 
   @override
@@ -348,10 +366,27 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   Future<List<FavoriteThreadCacheRecord>> getActiveThreadsForSnapshot() async => const <FavoriteThreadCacheRecord>[];
 
   @override
+  Future<bool> hasCompletedComicAutoRefreshBackfill() async => true;
+
+  @override
+  Future<void> markComicAutoRefreshBackfillCompleted({
+    required int checkedCount,
+    String? message,
+  }) async {}
+
+  @override
   Future<FavoriteThreadCacheRecord?> getActiveThreadByTid(String tid) async => null;
 
   @override
   Future<List<FavoriteThreadCacheRecord>> getMissingDetailRecords({
+    int limit = 20,
+    Set<String> excludedTids = const <String>{},
+  }) async {
+    return const <FavoriteThreadCacheRecord>[];
+  }
+
+  @override
+  Future<List<FavoriteThreadCacheRecord>> getComicAutoRefreshBackfillCandidates({
     int limit = 20,
     Set<String> excludedTids = const <String>{},
   }) async {

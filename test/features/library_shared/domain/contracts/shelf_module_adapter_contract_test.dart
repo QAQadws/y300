@@ -4,6 +4,7 @@ import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapt
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
 void main() {
   test('LibraryDisplayPreference defaults should be grid 3 columns', () {
@@ -32,6 +33,9 @@ class _FakeShelfModuleAdapter implements ShelfModuleAdapter {
 
   @override
   ValueListenable<LibraryShelfTaskProgress?>? get taskProgress => null;
+
+  @override
+  ValueListenable<LibraryShelfRefreshSignal?>? get shelfRefreshSignals => null;
 
   @override
   Future<Object> buildDetailRouteArgument({required String workId}) async => workId;

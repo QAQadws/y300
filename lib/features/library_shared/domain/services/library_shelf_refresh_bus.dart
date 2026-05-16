@@ -18,9 +18,9 @@ class LibraryShelfRefreshSignal {
 
 /// Small shared event bus for background shelf mutations.
 ///
-/// Stage 3 only emits these signals from the search queue worker.  Later UI
-/// phases can subscribe and refresh the relevant shelf controllers without
-/// making comic/favorite services know about pages.
+/// Background services emit these signals after module data changes. UI phases
+/// can subscribe and refresh the relevant shelf controllers without making
+/// comic/favorite services know about pages.
 class LibraryShelfRefreshBus {
   final ValueNotifier<LibraryShelfRefreshSignal?> _signal =
       ValueNotifier<LibraryShelfRefreshSignal?>(null);

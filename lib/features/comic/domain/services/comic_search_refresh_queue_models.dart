@@ -167,7 +167,15 @@ class ComicSearchRefreshQueueSnapshot {
     if (title == null || title.isEmpty) {
       return null;
     }
-    return '$title 正在等待搜索 预计耗时${estimatedDuration.inSeconds}s';
+    return '$title 正在等待搜索 预计耗时${_formatSeconds(estimatedDuration)}s';
+  }
+
+  String _formatSeconds(Duration duration) {
+    final tenths = (duration.inMilliseconds / 100).round();
+    if (tenths % 10 == 0) {
+      return '${tenths ~/ 10}';
+    }
+    return (tenths / 10).toStringAsFixed(1);
   }
 
   static const empty = ComicSearchRefreshQueueSnapshot(

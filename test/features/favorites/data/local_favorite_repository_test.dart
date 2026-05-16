@@ -132,6 +132,111 @@ void main() {
       expect(active, <String>{'100'});
     });
 
+    test('countMissingDetailRecords ignores loaded and removed favorites', () async {
+      await repository.upsertRemotePage(
+        page: FavoriteThreadsPage(
+          page: 1,
+          perPage: 20,
+          totalCount: 3,
+          items: <FavoriteThread>[
+            _thread(tid: '100', title: '已解析'),
+            _thread(tid: '200', title: '待解析'),
+            _thread(tid: '300', title: '已移除'),
+          ],
+        ),
+        pageStartOrder: 0,
+      );
+      await repository.updateThreadDetailMeta(
+        tid: '100',
+        fid: '30',
+        typeid: '398',
+        tagName: '韩国漫画',
+        contentKind: ThreadContentKind.comic,
+        workId: 'yamibo:100',
+      );
+      await repository.markRemovedTids(const <String>{'100', '200'});
+
+      expect(await repository.countMissingDetailRecords(), 1);
+    });
+
+    test('comic auto refresh backfill selects active comics with empty or current-only episodes', () async {
+      final db = await ComicLocalDb.open(databaseName: dbName);
+      await repository.upsertRemotePage(
+        page: FavoriteThreadsPage(
+          page: 1,
+          perPage: 20,
+          totalCount: 3,
+          items: <FavoriteThread>[
+            _thread(tid: '100', title: '空章节漫画'),
+            _thread(tid: '200', title: '当前帖漫画'),
+            _thread(tid: '300', title: '已补全漫画'),
+          ],
+        ),
+        pageStartOrder: 0,
+      );
+      for (final tid in <String>['100', '200', '300']) {
+        await repository.updateThreadDetailMeta(
+          tid: tid,
+          fid: '30',
+          typeid: '398',
+          tagName: '韩国漫画',
+          contentKind: ThreadContentKind.comic,
+          workId: 'yamibo:$tid',
+        );
+        await db.insert(
+          ComicLocalDb.comicsTable,
+          <String, Object?>{
+            'comic_id': 'yamibo:$tid',
+            'source_tid': tid,
+            'source_fid': '30',
+            'title': '漫画$tid',
+            'created_at': DateTime(2026, 1, 1).millisecondsSinceEpoch,
+            'updated_at': DateTime(2026, 1, 1).millisecondsSinceEpoch,
+          },
+        );
+      }
+      await db.insert(
+        ComicLocalDb.episodesTable,
+        <String, Object?>{
+          'episode_id': 'yamibo:200:200',
+          'comic_id': 'yamibo:200',
+          'episode_title': '当前帖',
+          'source_tid': '200',
+          'source_url': 'thread-200-1-1.html',
+          'order_index': 0,
+        },
+      );
+      await db.insert(
+        ComicLocalDb.episodesTable,
+        <String, Object?>{
+          'episode_id': 'yamibo:300:301',
+          'comic_id': 'yamibo:300',
+          'episode_title': '第1话',
+          'source_tid': '301',
+          'source_url': 'thread-301-1-1.html',
+          'order_index': 0,
+        },
+      );
+      await db.insert(
+        ComicLocalDb.episodesTable,
+        <String, Object?>{
+          'episode_id': 'yamibo:300:302',
+          'comic_id': 'yamibo:300',
+          'episode_title': '第2话',
+          'source_tid': '302',
+          'source_url': 'thread-302-1-1.html',
+          'order_index': 1,
+        },
+      );
+
+      final candidates = await repository.getComicAutoRefreshBackfillCandidates();
+
+      expect(candidates.map((record) => record.tid), <String>['100', '200']);
+      expect(await repository.hasCompletedComicAutoRefreshBackfill(), isFalse);
+      await repository.markComicAutoRefreshBackfillCompleted(checkedCount: candidates.length);
+      expect(await repository.hasCompletedComicAutoRefreshBackfill(), isTrue);
+    });
+
     test('favorite shelf item reuses comic and novel module covers', () async {
       final db = await ComicLocalDb.open(databaseName: dbName);
       await db.insert(

@@ -1,3 +1,118 @@
+# 收藏漫画自动刷新搜索标题修复 Review 补充
+
+## 文件范围
+
+- [ ] `lib/features/comic/data/comic_favorite_auto_refresh_coordinator.dart`
+- [ ] `lib/features/comic/domain/services/comic_services_impl.dart`
+- [ ] `lib/features/favorites/data/favorite_providers.dart`
+- [ ] `test/features/comic/data/comic_favorite_auto_refresh_coordinator_test.dart`
+- [ ] `test/features/comic/domain/services/network_comic_episode_refresh_service_test.dart`
+- [ ] `test/features/favorites/data/favorite_sync_service_test.dart`
+
+## Review 重点
+
+- [ ] 自动刷新协调器通过注入的 `ComicSubjectParser` 解析搜索标题，不在协调器内复制正则规则。
+- [ ] 新增收藏优先使用详情页 `subject` 的 `normalizedTitle` 作为 `displayTitle/sourceTitle`。
+- [ ] 历史回填没有 detail 时，使用收藏缓存标题解析出的 `normalizedTitle`。
+- [ ] 刷新服务执行搜索前会再次规范化 `displayTitle/sourceTitle/subject`，兼容旧队列里已经保存的原始标题。
+- [ ] 搜索等待队列的 UI `title` 仍保留收藏列表标题，但真正的搜索请求不再优先使用收藏原始标题。
+- [ ] 本轮未执行测试、分析或格式化，需由 reviewer 本地执行。
+
+---
+
+# 收藏漫画搜索等待队列入队标签门控 Review 补充
+
+## 文件范围
+
+- [ ] `lib/features/comic/data/comic_favorite_auto_refresh_coordinator.dart`
+- [ ] `lib/features/favorites/data/favorite_sync_service.dart`
+- [ ] `test/features/comic/data/comic_favorite_auto_refresh_coordinator_test.dart`
+- [ ] `test/features/favorites/data/favorite_sync_service_test.dart`
+
+## Review 重点
+
+- [ ] catalog 命中仍不看标签，继续合并章节、提升封面并刷新书架。
+- [ ] catalog 未命中且 `sourceTagName == 長篇連載` 时才进入搜索等待队列。
+- [ ] catalog 未命中但非 `長篇連載` 时返回 skipped，不调用搜索队列。
+- [ ] skipped 分支仍通知 `comic` 与 `favorite` 书架刷新，避免新增收藏不可见。
+- [ ] 收藏首次同步传入当前详情识别出的 `tagName`，历史回填传入缓存的 `sourceTagName`。
+- [ ] 本轮未执行测试、分析或格式化，需由 reviewer 本地执行。
+
+---
+
+# 收藏自动刷新回填修复 Review 补充
+
+## 文件范围
+
+- [ ] `lib/features/comic/data/comic_favorite_auto_refresh_coordinator.dart`
+- [ ] `lib/features/favorites/data/favorite_sync_service.dart`
+- [ ] `lib/features/favorites/data/local_favorite_repository.dart`
+- [ ] `lib/features/favorites/domain/favorite_cache_models.dart`
+- [ ] `lib/features/favorites/presentation/adapters/favorite_shelf_adapter.dart`
+- [ ] `lib/features/library_shared/domain/contracts/shelf_module_adapter.dart`
+- [ ] `lib/features/library_shared/presentation/controllers/unified_shelf_controller.dart`
+- [ ] `lib/features/comic/presentation/adapters/comic_shelf_adapter.dart`
+- [ ] `lib/features/comic/presentation/comic_shelf_page.dart`
+- [ ] `lib/features/novel/presentation/adapters/novel_shelf_adapter.dart`
+- [ ] `lib/features/novel/presentation/novel_shelf_page.dart`
+- [ ] `test/features/favorites/data/local_favorite_repository_test.dart`
+- [ ] `test/features/favorites/data/favorite_sync_service_test.dart`
+- [ ] `test/features/favorites/presentation/favorite_shelf_adapter_test.dart`
+- [ ] `test/features/library_shared/presentation/controllers/unified_shelf_controller_test.dart`
+
+## Review 重点
+
+- [ ] 已有 sync snapshot 的收藏页首次加载会执行 `runBackgroundMaintenance()`，不再直接跳过历史维护。
+- [ ] 若 snapshot 存在但仍有缺失详情，收藏页会触发一次同步补全。
+- [ ] 历史漫画回填只选择 active comic 且章节为空/仅当前 tid 的记录。
+- [ ] 回填使用收藏缓存中的 `tid/title/workId`，不重新拉 detail 页。
+- [ ] catalog 命中仍立即合并章节和提升封面；catalog 未命中仅在 `長篇連載` 标签下进入搜索等待队列。
+- [ ] 回填完成状态写入独立 `favorite_sync_state` key，避免每次启动重复扫描。
+- [ ] `UnifiedShelfController` 只响应包含当前模块的刷新信号。
+- [ ] 漫画、小说、收藏书架 adapter 都能注入同一个 `LibraryShelfRefreshBus`。
+- [ ] 本轮未执行测试、分析或格式化，需由 reviewer 本地执行。
+
+---
+
+# 收藏自动刷新与搜索等待队列：阶段 4 Review 补充
+
+## 文件范围
+
+- [ ] `lib/features/comic/data/comic_favorite_auto_refresh_coordinator.dart`
+- [ ] `lib/features/comic/data/comic_search_refresh_queue_providers.dart`
+- [ ] `lib/features/comic/data/local_comic_search_refresh_queue_repository.dart`
+- [ ] `lib/features/comic/domain/services/comic_search_refresh_queue_models.dart`
+- [ ] `lib/features/favorites/data/favorite_providers.dart`
+- [ ] `lib/features/favorites/data/favorite_sync_service.dart`
+- [ ] `lib/features/favorites/data/local_favorite_repository.dart`
+- [ ] `lib/features/favorites/presentation/adapters/favorite_shelf_adapter.dart`
+- [ ] `lib/features/library_shared/domain/services/library_shelf_refresh_bus.dart`
+- [ ] `test/features/comic/data/comic_favorite_auto_refresh_coordinator_test.dart`
+- [ ] `test/features/favorites/data/favorite_sync_service_test.dart`
+- [ ] `test/features/favorites/data/local_favorite_repository_test.dart`
+- [ ] `test/features/favorites/presentation/favorite_shelf_adapter_test.dart`
+- [ ] `test/features/favorites/presentation/favorite_shelf_page_test.dart`
+- [ ] `test/features/library_shared/presentation/pages/unified_shelf_page_test.dart`
+- [ ] `test/features/startup/presentation/main_shell_page_test.dart`
+
+## Review 重点
+
+- [ ] `countMissingDetailRecords()` 只统计 active 且 `detail_loaded_at IS NULL` 的收藏记录。
+- [ ] 收藏详情解析阶段 UI 文案来自收藏列表标题，格式为 `正在解析: {title}`。
+- [ ] 解析进度通过 `current/total` 继续展示右侧 `n/total`。
+- [ ] 漫画收藏入库后先执行 `fetchCatalogOnly()`，catalog 命中才立即合并章节。
+- [ ] catalog 命中后会调用首集封面提升，并通知 `comic` 与 `favorite` 书架。
+- [ ] catalog 未命中不会直接搜索；仅 `長篇連載` 标签漫画进入搜索等待队列。
+- [ ] catalog 未命中但漫画已入库时也会通知书架刷新，使新增条目先出现。
+- [ ] 入队时队列 title 保留收藏列表标题；搜索请求的 displayTitle/sourceTitle 使用漫画 subject 解析后的标题。
+- [ ] 小说收藏仍走原有 `NovelFavoriteIngestService` 逻辑，成功后通知 `novel` 与 `favorite`。
+- [ ] `FavoriteShelfAdapter.taskProgress` 在收藏同步 active 时优先展示同步进度，同步 inactive 后才展示搜索等待队列。
+- [ ] 搜索等待文案按 10.5 秒节奏格式化，例如 `10.5s`、`21s`。
+- [ ] `comicSearchRefreshQueueSnapshotProvider` 可被 widget 测试覆盖，收藏页不应被真实队列依赖拖住。
+- [ ] 本轮未执行测试、分析或格式化，需由 reviewer 本地执行。
+
+---
+
 # 收藏自动刷新与搜索等待队列：阶段 3 Review 补充
 
 ## 文件范围

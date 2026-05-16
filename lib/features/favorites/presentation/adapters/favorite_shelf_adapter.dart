@@ -5,6 +5,7 @@ import 'package:y300/features/cache/domain/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
+import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
@@ -14,6 +15,7 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
@@ -37,8 +39,11 @@ class FavoriteShelfAdapter
     ComicCoverCacheWriterResolver? comicCoverCacheWriterResolver,
     NovelCoverCacheWriter? novelCoverCacheWriter,
     NovelCoverCacheWriterResolver? novelCoverCacheWriterResolver,
+    ValueListenable<ComicSearchRefreshQueueSnapshot>? searchQueueSnapshot,
+    LibraryShelfRefreshBus? shelfRefreshBus,
   })  : _syncService = syncService,
         _stateRepository = stateRepository,
+        _shelfRefreshBus = shelfRefreshBus,
         _coverCacheService = imageCacheServiceResolver == null
             ? LibraryCoverCacheService(imageCacheService)
             : LibraryCoverCacheService.lazy(imageCacheServiceResolver),
@@ -46,11 +51,15 @@ class FavoriteShelfAdapter
             (() => comicCoverCacheWriter),
         _novelCoverCacheWriterResolver = novelCoverCacheWriterResolver ??
             (() => novelCoverCacheWriter),
-        _taskProgress = _FavoriteShelfTaskProgressListenable(syncService.progress);
+        _taskProgress = _FavoriteShelfTaskProgressListenable(
+          syncService.progress,
+          searchQueueSnapshot,
+        );
 
   final LocalFavoriteRepository _repository;
   final FavoriteSyncService _syncService;
   final LibraryStateRepository _stateRepository;
+  final LibraryShelfRefreshBus? _shelfRefreshBus;
   final LibraryCoverCacheService _coverCacheService;
   final ComicCoverCacheWriterResolver _comicCoverCacheWriterResolver;
   final NovelCoverCacheWriterResolver _novelCoverCacheWriterResolver;
@@ -59,6 +68,11 @@ class FavoriteShelfAdapter
 
   @override
   ValueListenable<LibraryShelfTaskProgress?> get taskProgress => _taskProgress;
+
+  @override
+  ValueListenable<LibraryShelfRefreshSignal?>? get shelfRefreshSignals {
+    return _shelfRefreshBus?.signal;
+  }
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.favorite;
@@ -256,8 +270,9 @@ class FavoriteShelfAdapter
       return;
     }
     _initialSyncAttempted = true;
-    // The first favorite sync may load remote list/detail data. Fire it in the
-    // background so the shelf chrome and progress banner can render immediately.
+    // First entry may either sync remote data or run a one-shot local
+    // maintenance backfill. Keep both off the metadata critical path so the
+    // shelf chrome and progress banner can render immediately.
     unawaited(_syncIfNoSnapshot());
   }
 
@@ -265,6 +280,12 @@ class FavoriteShelfAdapter
     try {
       final snapshot = await _repository.getSyncSnapshot();
       if (snapshot != null) {
+        final missingDetails = await _repository.countMissingDetailRecords();
+        if (missingDetails > 0) {
+          await _syncService.sync();
+        } else {
+          await _syncService.runBackgroundMaintenance();
+        }
         return;
       }
       await _syncService.sync();
@@ -444,16 +465,25 @@ class _FavoriteCoverCacheTarget {
 }
 
 class _FavoriteShelfTaskProgressListenable implements ValueListenable<LibraryShelfTaskProgress?> {
-  const _FavoriteShelfTaskProgressListenable(this._source);
+  const _FavoriteShelfTaskProgressListenable(
+    this._source,
+    this._searchQueueSnapshot,
+  );
 
   final ValueListenable<FavoriteSyncProgress> _source;
+  final ValueListenable<ComicSearchRefreshQueueSnapshot>? _searchQueueSnapshot;
 
   @override
   LibraryShelfTaskProgress? get value {
     // 把收藏同步内部阶段翻译成 shared 层通用进度，避免 UnifiedShelfPage 依赖 favorites 包。
     final progress = _source.value;
     if (!progress.isActive) {
-      return null;
+      final snapshot = _searchQueueSnapshot?.value;
+      final message = snapshot?.waitingMessage;
+      if (snapshot == null || !snapshot.active || message == null) {
+        return null;
+      }
+      return LibraryShelfTaskProgress(message: message);
     }
     return LibraryShelfTaskProgress(
       message: progress.message,
@@ -465,10 +495,12 @@ class _FavoriteShelfTaskProgressListenable implements ValueListenable<LibraryShe
   @override
   void addListener(VoidCallback listener) {
     _source.addListener(listener);
+    _searchQueueSnapshot?.addListener(listener);
   }
 
   @override
   void removeListener(VoidCallback listener) {
     _source.removeListener(listener);
+    _searchQueueSnapshot?.removeListener(listener);
   }
 }

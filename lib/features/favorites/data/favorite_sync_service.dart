@@ -1,10 +1,13 @@
 import 'package:flutter/foundation.dart';
+import 'package:y300/features/comic/data/comic_favorite_auto_refresh_coordinator.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/comic/data/comic_favorite_ingest_service.dart';
 import 'package:y300/features/favorites/data/favorite_repository.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/novel/data/novel_favorite_ingest_service.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
@@ -68,6 +71,8 @@ class FavoriteSyncProgress {
 abstract class FavoriteSyncService {
   Future<FavoriteSyncResult> sync();
 
+  Future<void> runBackgroundMaintenance();
+
   ValueListenable<FavoriteSyncProgress> get progress;
 }
 
@@ -80,6 +85,8 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     required ThreadContentClassifier classifier,
     required ComicFavoriteIngestService comicIngestService,
     required NovelFavoriteIngestService novelIngestService,
+    ComicFavoriteAutoRefreshCoordinator? comicAutoRefreshCoordinator,
+    LibraryShelfRefreshBus? shelfRefreshBus,
     DownloadStorageService? downloadStorageService,
     int detailBatchLimit = 20,
   })  : _remoteRepository = remoteRepository,
@@ -89,6 +96,8 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         _classifier = classifier,
         _comicIngestService = comicIngestService,
         _novelIngestService = novelIngestService,
+        _comicAutoRefreshCoordinator = comicAutoRefreshCoordinator,
+        _shelfRefreshBus = shelfRefreshBus,
         _downloadStorageService = downloadStorageService,
         _detailBatchLimit = detailBatchLimit;
 
@@ -99,6 +108,8 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   final ThreadContentClassifier _classifier;
   final ComicFavoriteIngestService _comicIngestService;
   final NovelFavoriteIngestService _novelIngestService;
+  final ComicFavoriteAutoRefreshCoordinator? _comicAutoRefreshCoordinator;
+  final LibraryShelfRefreshBus? _shelfRefreshBus;
   final DownloadStorageService? _downloadStorageService;
   final int _detailBatchLimit;
   final ValueNotifier<FavoriteSyncProgress> _progress = ValueNotifier<FavoriteSyncProgress>(
@@ -107,6 +118,16 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
 
   @override
   ValueListenable<FavoriteSyncProgress> get progress => _progress;
+
+  @override
+  Future<void> runBackgroundMaintenance() async {
+    try {
+      await _backfillExistingComicAutoRefreshIfNeeded();
+    } catch (_) {
+      // 后台维护不改变收藏同步主状态；失败时保留全局 marker 为空，
+      // 下一次进入收藏页或手动同步仍可继续尝试。
+    }
+  }
 
   @override
   Future<FavoriteSyncResult> sync() async {
@@ -207,6 +228,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         : const <FavoriteThreadCacheRecord>[];
     await _removeModuleShelfItems(removedRecords);
 
+    await runBackgroundMaintenance();
     final detailResult = await _fillMissingDetails();
     _emitProgress(
       const FavoriteSyncProgress(
@@ -327,10 +349,12 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   }
 
   Future<_DetailFillResult> _fillMissingDetails() async {
+    final totalMissingDetails = await _localRepository.countMissingDetailRecords();
     final failedTids = <String>[];
     final failedTidSet = <String>{};
     final errors = <String, String>{};
     var loadedCount = 0;
+    var processedCount = 0;
 
     while (true) {
       final records = await _localRepository.getMissingDetailRecords(
@@ -347,8 +371,9 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         _emitProgress(
           FavoriteSyncProgress(
             phase: FavoriteSyncProgressPhase.loadingDetails,
-            message: '正在解析收藏详情 ${loadedCount + failedTids.length + 1}',
-            current: loadedCount + failedTids.length,
+            message: '正在解析: ${record.title}',
+            current: processedCount + 1,
+            total: totalMissingDetails,
           ),
         );
         try {
@@ -366,13 +391,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
           failedTids.add(record.tid);
           errors[record.tid] = '$error';
         }
-        _emitProgress(
-          FavoriteSyncProgress(
-            phase: FavoriteSyncProgressPhase.loadingDetails,
-            message: '已解析收藏详情 ${loadedCount + failedTids.length}',
-            current: loadedCount + failedTids.length,
-          ),
-        );
+        processedCount++;
       }
 
       // 如果一批全部失败，失败 tid 会被本轮同步临时排除，继续处理后续收藏；
@@ -409,7 +428,12 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       typeid: detail.typeid,
       tagName: tagName,
     );
-    final workId = await _syncModule(detail: detail, kind: kind, tagName: tagName);
+    final workId = await _syncModule(
+      detail: detail,
+      kind: kind,
+      tagName: tagName,
+      favoriteTitle: record.title,
+    );
 
     await _localRepository.updateThreadDetailMeta(
       tid: record.tid,
@@ -441,22 +465,120 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     required ThreadDetailData detail,
     required ThreadContentKind kind,
     required String? tagName,
+    required String favoriteTitle,
   }) async {
     switch (kind) {
       case ThreadContentKind.comic:
-        return _comicIngestService.upsertFromThreadDetail(
+        final workId = await _comicIngestService.upsertFromThreadDetail(
           detail: detail,
           sourceTagName: tagName,
         );
+        await _runComicAutoRefresh(
+          comicId: workId,
+          detail: detail,
+          favoriteTitle: favoriteTitle,
+          sourceTagName: tagName,
+        );
+        return workId;
       case ThreadContentKind.novel:
-        return _novelIngestService.upsertFromThreadDetail(
+        final workId = await _novelIngestService.upsertFromThreadDetail(
           detail: detail,
           sourceTagName: tagName,
         );
+        _shelfRefreshBus?.notify(
+          modules: const <LibraryModuleKey>{
+            LibraryModuleKey.novel,
+            LibraryModuleKey.favorite,
+          },
+          reason: 'favorite_novel_refresh_completed',
+        );
+        return workId;
       case ThreadContentKind.unknown:
       case ThreadContentKind.forum:
         return 'thread:${detail.tid}';
     }
+  }
+
+  Future<void> _runComicAutoRefresh({
+    required String comicId,
+    required ThreadDetailData detail,
+    required String favoriteTitle,
+    String? sourceTagName,
+  }) async {
+    final coordinator = _comicAutoRefreshCoordinator;
+    if (coordinator == null) {
+      return;
+    }
+    try {
+      await coordinator.refreshAfterFavoriteIngest(
+        comicId: comicId,
+        detail: detail,
+        favoriteTitle: favoriteTitle,
+        sourceTagName: sourceTagName,
+      );
+    } catch (_) {
+      // 收藏详情已经入库；catalog 引导/队列入队失败不应让本条收藏反复
+      // 停留在 detail_loaded_at 为空的状态。后续手动刷新或搜索队列可继续补偿。
+    }
+  }
+
+  Future<void> _backfillExistingComicAutoRefreshIfNeeded() async {
+    final coordinator = _comicAutoRefreshCoordinator;
+    if (coordinator == null) {
+      return;
+    }
+    if (await _localRepository.hasCompletedComicAutoRefreshBackfill()) {
+      return;
+    }
+
+    final checkedTids = <String>{};
+    final failedTids = <String>[];
+    var checkedCount = 0;
+
+    while (true) {
+      final records = await _localRepository.getComicAutoRefreshBackfillCandidates(
+        limit: _detailBatchLimit,
+        excludedTids: checkedTids,
+      );
+      if (records.isEmpty) {
+        break;
+      }
+
+      final checkedBefore = checkedTids.length;
+      for (final record in records) {
+        checkedTids.add(record.tid);
+        final comicId = record.workId?.trim();
+        if (comicId == null || comicId.isEmpty) {
+          failedTids.add(record.tid);
+          continue;
+        }
+        try {
+          await coordinator.refreshFavoriteComic(
+            comicId: comicId,
+            sourceTid: record.tid,
+            favoriteTitle: record.title,
+            sourceTitle: record.title,
+            sourceTagName: record.sourceTagName,
+          );
+          checkedCount++;
+        } catch (_) {
+          failedTids.add(record.tid);
+        }
+      }
+
+      // Defensive break: if a repository implementation returns only already
+      // excluded records, avoid spinning forever in background maintenance.
+      if (checkedTids.length == checkedBefore) {
+        break;
+      }
+    }
+
+    await _localRepository.markComicAutoRefreshBackfillCompleted(
+      checkedCount: checkedCount,
+      message: failedTids.isEmpty
+          ? null
+          : '部分历史漫画自动刷新检查失败：${failedTids.join(',')}',
+    );
   }
 
   Future<void> _removeModuleShelfItems(

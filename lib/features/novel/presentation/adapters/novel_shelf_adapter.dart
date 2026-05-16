@@ -10,6 +10,7 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
@@ -22,13 +23,16 @@ class NovelShelfAdapter
     required LibraryStateRepository stateRepository,
     ImageCacheService? imageCacheService,
     ImageCacheServiceResolver? imageCacheServiceResolver,
+    LibraryShelfRefreshBus? shelfRefreshBus,
   })  : _stateRepository = stateRepository,
+        _shelfRefreshBus = shelfRefreshBus,
         _coverCacheService = imageCacheServiceResolver == null
             ? LibraryCoverCacheService(imageCacheService)
             : LibraryCoverCacheService.lazy(imageCacheServiceResolver);
 
   final NovelRepository _repository;
   final LibraryStateRepository _stateRepository;
+  final LibraryShelfRefreshBus? _shelfRefreshBus;
   final LibraryCoverCacheService _coverCacheService;
 
   @override
@@ -42,6 +46,11 @@ class NovelShelfAdapter
 
   @override
   ValueListenable<LibraryShelfTaskProgress?>? get taskProgress => null;
+
+  @override
+  ValueListenable<LibraryShelfRefreshSignal?>? get shelfRefreshSignals {
+    return _shelfRefreshBus?.signal;
+  }
 
   @override
   Future<List<LibraryCategory>> loadCategories() async {

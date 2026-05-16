@@ -6,6 +6,7 @@ import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapt
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_feature_flags.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_shelf_page.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
@@ -303,7 +304,7 @@ void main() {
   testWidgets('optional task progress renders above shelf content', (tester) async {
     final progress = ValueNotifier<LibraryShelfTaskProgress?>(
       const LibraryShelfTaskProgress(
-        message: '正在解析收藏详情',
+        message: '正在解析: 收藏帖',
         current: 3,
         total: 10,
       ),
@@ -322,7 +323,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('unified-shelf-task-progress-bar')), findsOneWidget);
-    expect(find.text('正在解析收藏详情'), findsOneWidget);
+    expect(find.text('正在解析: 收藏帖'), findsOneWidget);
     expect(find.text('3/10'), findsOneWidget);
 
     progress.value = null;
@@ -391,6 +392,9 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
   final LibraryDisplayMode initialDisplayMode;
   @override
   final ValueListenable<LibraryShelfTaskProgress?>? taskProgress;
+  @override
+  ValueListenable<LibraryShelfRefreshSignal?>? get shelfRefreshSignals => null;
+
   int refreshCalls = 0;
   final Future<Map<String, List<LibraryWorkItem>>> Function({
     required List<LibraryCategory> categories,

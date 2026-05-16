@@ -6,6 +6,7 @@ import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/presentation/adapters/comic_shelf_adapter.dart';
 import 'package:y300/features/comic/presentation/comic_detail_page.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_shelf_page.dart';
 
 /// 漫画书架页（Phase 3）。
@@ -21,6 +22,7 @@ class ComicShelfPage extends ConsumerWidget {
       stateRepository: ref.watch(libraryStateRepositoryProvider),
       imageCacheServiceResolver: () => ref.read(imageCacheServiceProvider),
       featureFlags: ref.watch(comicReaderFeatureFlagsProvider),
+      shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
     );
     return UnifiedShelfPage(
       adapter: adapter,
