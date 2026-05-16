@@ -5,44 +5,12 @@ import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/profile/data/profile_repository.dart';
 import 'package:y300/features/search/data/discuz_search_html_parser.dart';
+import 'package:y300/features/search/data/forum_search_service.dart';
+import 'package:y300/features/search/data/forum_search_scheduler.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/data/search_rate_limiter.dart';
 
-class DiscuzSearchServiceException implements Exception {
-  const DiscuzSearchServiceException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => message;
-}
-
-class DiscuzSearchResponse {
-  const DiscuzSearchResponse({
-    required this.items,
-    required this.rateLimited,
-    this.retryAfter = Duration.zero,
-    this.nextPageUrl,
-  });
-
-  final List<DiscuzSearchResultItem> items;
-  final bool rateLimited;
-  final Duration retryAfter;
-  final String? nextPageUrl;
-}
-
-abstract class ForumSearchService {
-  Future<DiscuzSearchResponse> searchForum({
-    required String keyword,
-    DiscuzSearchContext context = const DiscuzSearchContext.forum(),
-    bool enforceRateLimit = true,
-  });
-
-  Future<DiscuzSearchResponse> fetchNextPage({
-    required String nextPageUrl,
-    DiscuzSearchContext context = const DiscuzSearchContext.forum(),
-  });
-}
+export 'package:y300/features/search/data/forum_search_service.dart';
 
 class DiscuzSearchService implements ForumSearchService {
   DiscuzSearchService({
@@ -270,10 +238,22 @@ final searchRateLimiterProvider = Provider<SearchRateLimiter>((ref) {
   return SearchRateLimiter();
 });
 
-final discuzSearchServiceProvider = Provider<ForumSearchService>((ref) {
+final rawDiscuzSearchServiceProvider = Provider<ForumSearchService>((ref) {
   return DiscuzSearchService(
     profileRepository: ref.read(profileRepositoryProvider),
     rateLimiter: ref.read(searchRateLimiterProvider),
     cookieStore: ref.read(cookieStoreProvider),
   );
+});
+
+final forumSearchSchedulerProvider = Provider<ForumSearchScheduler>((ref) {
+  final scheduler = ForumSearchScheduler(
+    rawService: ref.read(rawDiscuzSearchServiceProvider),
+  );
+  ref.onDispose(scheduler.dispose);
+  return scheduler;
+});
+
+final discuzSearchServiceProvider = Provider<ForumSearchService>((ref) {
+  return ref.watch(forumSearchSchedulerProvider);
 });

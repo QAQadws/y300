@@ -1,3 +1,41 @@
+# 收藏自动刷新与搜索等待队列：阶段 3 Review 补充
+
+## 文件范围
+
+- [ ] `lib/features/search/data/forum_search_service.dart`
+- [ ] `lib/features/search/data/forum_search_scheduler.dart`
+- [ ] `lib/features/search/data/discuz_search_service.dart`
+- [ ] `lib/features/search/data/search_rate_limiter.dart`
+- [ ] `lib/features/comic/data/local/comic_local_db.dart`
+- [ ] `lib/features/comic/data/comic_search_refresh_queue_repository.dart`
+- [ ] `lib/features/comic/data/local_comic_search_refresh_queue_repository.dart`
+- [ ] `lib/features/comic/data/comic_search_refresh_queue_providers.dart`
+- [ ] `lib/features/comic/domain/services/comic_search_refresh_queue_models.dart`
+- [ ] `lib/features/comic/domain/services/comic_search_refresh_queue_service.dart`
+- [ ] `lib/features/library_shared/domain/services/library_shelf_refresh_bus.dart`
+- [ ] `lib/features/startup/presentation/main_shell_page.dart`
+- [ ] `test/features/search/data/forum_search_scheduler_test.dart`
+- [ ] `test/features/comic/data/comic_search_refresh_queue_repository_test.dart`
+- [ ] `test/features/comic/domain/services/comic_search_refresh_queue_service_test.dart`
+- [ ] `test/features/startup/presentation/main_shell_page_test.dart`
+- [ ] `test/features/startup/presentation/startup_page_test.dart`
+
+## Review 重点
+
+- [ ] `discuzSearchServiceProvider` 仍兼容旧调用方，但真实搜索请求会经过 `ForumSearchScheduler`。
+- [ ] 调度器连续两次 `searchForum(enforceRateLimit: true)` 至少间隔 10.5 秒。
+- [ ] `rawDiscuzSearchServiceProvider` 只用于真实网络搜索，不承载队列状态。
+- [ ] `comic_search_refresh_queue` 表存在，并包含 active 查询与 comic 去重索引。
+- [ ] 同一漫画重复入队时 active 任务只有一条。
+- [ ] `start()` 会把 running 任务恢复为 pending。
+- [ ] worker 成功后调用 `fetchSearchAndCurrentOnly()`、合并章节、提升首集封面，并发出书架刷新信号。
+- [ ] worker 异常会写入 `last_error`，增加 `attempts`，并按 retry policy 延后。
+- [ ] `MainShellPage` 启动后台任务的 provider 可被测试覆盖，不应强迫 widget 测试打开真实数据库或网络依赖。
+- [ ] 本轮未接入收藏同步、详情页手动更新提示、搜索页队列提示和书架 UI 自动订阅，这些属于后续阶段。
+- [ ] 本轮未执行测试、分析或格式化，需由 reviewer 本地执行。
+
+---
+
 # 收藏自动刷新与搜索等待队列：阶段 1/2 Review 补充
 
 ## 文件范围

@@ -3,12 +3,13 @@ import 'package:y300/features/search/data/models/discuz_search_models.dart';
 
 class SearchRateLimiter {
   SearchRateLimiter({
-    this.cooldown = const Duration(seconds: 10),
+    this.cooldown = defaultCooldown,
     SharedPreferences? sharedPreferences,
     DateTime Function()? nowProvider,
   }) : _sharedPreferences = sharedPreferences,
        _nowProvider = nowProvider ?? DateTime.now;
 
+  static const Duration defaultCooldown = Duration(milliseconds: 10500);
   static const String _lastSearchAtKey = 'search.last_search_at_ms';
 
   final Duration cooldown;
@@ -35,4 +36,3 @@ class SearchRateLimiter {
     await prefs.setInt(_lastSearchAtKey, _nowProvider().millisecondsSinceEpoch);
   }
 }
-

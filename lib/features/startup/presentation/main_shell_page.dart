@@ -1,19 +1,27 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/comic/data/comic_search_refresh_queue_providers.dart';
 import 'package:y300/features/comic/presentation/comic_tab_page.dart';
 import 'package:y300/features/favorites/presentation/favorite_shelf_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_page.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/features/novel/presentation/novel_tab_page.dart';
 
+final mainShellBackgroundTaskStarterProvider = Provider<Future<void> Function()>((ref) {
+  return () => ref.read(comicSearchRefreshQueueServiceProvider).start();
+});
+
 /// 应用主壳：承载论坛、收藏、漫画、小说、更多五栏 Tab，避免业务页面相互耦合。
-class MainShellPage extends StatefulWidget {
+class MainShellPage extends ConsumerStatefulWidget {
   const MainShellPage({super.key});
 
   @override
-  State<MainShellPage> createState() => _MainShellPageState();
+  ConsumerState<MainShellPage> createState() => _MainShellPageState();
 }
 
-class _MainShellPageState extends State<MainShellPage> {
+class _MainShellPageState extends ConsumerState<MainShellPage> {
   int _currentIndex = 0;
   final Set<int> _builtIndexes = <int>{0};
 
@@ -24,6 +32,13 @@ class _MainShellPageState extends State<MainShellPage> {
     NovelTabPage(),
     MorePage(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // 主壳创建后恢复搜索刷新队列，确保用户离开详情页或收藏页后任务仍继续。
+    unawaited(ref.read(mainShellBackgroundTaskStarterProvider).call());
+  }
 
   @override
   Widget build(BuildContext context) {

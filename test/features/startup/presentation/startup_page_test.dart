@@ -47,6 +47,7 @@ void main() {
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
           libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+          mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
         ],
         child: const MaterialApp(home: StartupPage()),
       ),

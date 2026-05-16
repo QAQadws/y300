@@ -3,10 +3,16 @@ import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 
 typedef ComicEpisodeImageFetcher = Future<List<String>> Function(String tid);
 
+abstract class ComicFirstEpisodeCoverPromoter {
+  Future<bool> promoteIfPossible({
+    required String comicId,
+  });
+}
+
 /// Promotes the first image of the lowest-tid episode to the normal comic
 /// cover. The service stays storage-agnostic: SQLite-specific write details
 /// remain behind [ComicFirstEpisodeCoverWriter] or [ComicRepository].
-class ComicFirstEpisodeCoverService {
+class ComicFirstEpisodeCoverService implements ComicFirstEpisodeCoverPromoter {
   const ComicFirstEpisodeCoverService({
     required ComicRepository repository,
     ComicEpisodeImageFetcher? fetchEpisodeImagesByTid,
@@ -16,6 +22,7 @@ class ComicFirstEpisodeCoverService {
   final ComicRepository _repository;
   final ComicEpisodeImageFetcher? _fetchEpisodeImagesByTid;
 
+  @override
   Future<bool> promoteIfPossible({
     required String comicId,
   }) async {

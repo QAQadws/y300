@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 15;
+  static const int dbVersion = 16;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -31,6 +31,7 @@ class ComicLocalDb {
   static const String favoriteCategoriesTable = 'favorite_categories';
   static const String favoriteThreadCategoryTable = 'favorite_thread_category';
   static const String cachedImagesTable = 'cached_images';
+  static const String comicSearchRefreshQueueTable = 'comic_search_refresh_queue';
 
   static Future<Database> open({String? databaseName}) {
     final targetDbName = databaseName ?? dbName;
@@ -164,6 +165,7 @@ class ComicLocalDb {
     await _createPhase7PerformanceIndexes(db);
     await _createFavoriteTables(db);
     await _createImageCacheTables(db);
+    await _createComicSearchRefreshQueueTable(db);
   }
 
   static Future<void> _createSettingsTable(Database db) async {
@@ -530,6 +532,43 @@ class ComicLocalDb {
     );
   }
 
+  /// 收藏自动刷新阶段 3：漫画搜索等待队列。
+  ///
+  /// 队列表只保存“需要走搜索/当前帖回退”的后台刷新任务；catalog-only
+  /// 成功的作品不进入这里，避免把立即刷新和搜索冷却调度混在一起。
+  static Future<void> _createComicSearchRefreshQueueTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $comicSearchRefreshQueueTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        comic_id TEXT NOT NULL,
+        source_tid TEXT NOT NULL,
+        title TEXT NOT NULL,
+        display_title TEXT,
+        source_title TEXT,
+        custom_title TEXT,
+        custom_search_title TEXT,
+        origin TEXT NOT NULL,
+        status TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        available_at INTEGER NOT NULL,
+        started_at INTEGER,
+        completed_at INTEGER,
+        last_error TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_comic_search_refresh_queue_active ON '
+      '$comicSearchRefreshQueueTable(status, available_at, created_at)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_comic_search_refresh_queue_comic ON '
+      '$comicSearchRefreshQueueTable(comic_id, status)',
+    );
+  }
+
   /// 开发期数据库策略：不维护复杂的历史兼容迁移。
   ///
   /// 当前 App 仍处于开发阶段，旧本地库可以安全丢弃。升级/降级时先删除
@@ -543,6 +582,7 @@ class ComicLocalDb {
   }
 
   static const List<String> _managedTablesInDropOrder = <String>[
+    comicSearchRefreshQueueTable,
     favoriteThreadCategoryTable,
     favoriteCategoriesTable,
     favoriteThreadsTable,
