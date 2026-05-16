@@ -1,34 +1,124 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+﻿import 'package:flutter/foundation.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
+import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/adapters/comic_detail_adapter.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
 void main() {
-  test('refreshWork delegates to comic domain refresh service and merges episodes', () async {
+  test('refreshWork merges catalog result without running search fallback', () async {
     final repository = _FakeComicRepository();
     final refreshService = _FakeComicEpisodeRefreshService();
+    final queue = _RecordingSearchQueue();
+    final bus = LibraryShelfRefreshBus();
+    addTearDown(bus.dispose);
     final adapter = ComicDetailAdapter(
       repository,
       refreshService: refreshService,
+      searchQueue: queue,
       stateRepository: _FakeLibraryStateRepository(),
+      shelfRefreshBus: bus,
     );
 
-    await adapter.refreshWork(workId: 'comic:1');
+    final result = await adapter.refreshWork(workId: 'comic:1');
 
+    expect(result.status, DetailRefreshStatus.immediate);
     expect(refreshService.requestedTid, '100');
+    expect(refreshService.catalogOnlyCalls, 1);
+    expect(refreshService.fetchEpisodeLinksCalls, 0);
     expect(refreshService.lastRequest?.customSearchTitle, 'Search Test Comic');
     expect(repository.mergeCalled, isTrue);
     expect(repository.lastMergedLinks.length, 2);
     expect(repository.lastFallbackTid, '100');
+    expect(queue.enqueuedRequests, isEmpty);
+    expect(bus.signal.value?.modules, contains(LibraryModuleKey.comic));
+    expect(bus.signal.value?.modules, contains(LibraryModuleKey.favorite));
+  });
+
+  test('refreshWork runs search fallback immediately when catalog misses and queue is empty', () async {
+    final repository = _FakeComicRepository();
+    final refreshService = _FakeComicEpisodeRefreshService(
+      catalogOutcome: const ComicEpisodeRefreshOutcome(
+        source: ComicEpisodeRefreshSource.empty,
+        links: <ComicEpisodeLink>[],
+      ),
+      searchOutcome: const ComicEpisodeRefreshOutcome(
+        source: ComicEpisodeRefreshSource.search,
+        links: <ComicEpisodeLink>[
+          ComicEpisodeLink(url: 'thread-201-1-1.html', rawText: '第1话'),
+        ],
+        usedSearch: true,
+      ),
+    );
+    final queue = _RecordingSearchQueue();
+    final queueState = _FakeSearchQueueStateReader();
+    addTearDown(queueState.snapshot.dispose);
+    final bus = LibraryShelfRefreshBus();
+    addTearDown(bus.dispose);
+    final adapter = ComicDetailAdapter(
+      repository,
+      refreshService: refreshService,
+      searchQueue: queue,
+      searchQueueState: queueState,
+      stateRepository: _FakeLibraryStateRepository(),
+      shelfRefreshBus: bus,
+    );
+
+    final result = await adapter.refreshWork(workId: 'comic:1');
+
+    expect(result.status, DetailRefreshStatus.immediate);
+    expect(refreshService.catalogOnlyCalls, 1);
+    expect(refreshService.searchAndCurrentOnlyCalls, 1);
+    expect(repository.mergeCalled, isTrue);
+    expect(repository.lastMergedLinks.single.url, 'thread-201-1-1.html');
+    expect(queue.enqueuedRequests, isEmpty);
+    expect(bus.signal.value?.reason, 'comic_detail_search_refresh_completed');
+  });
+
+  test('refreshWork queues search fallback when catalog misses and queue has backlog', () async {
+    final repository = _FakeComicRepository();
+    final refreshService = _FakeComicEpisodeRefreshService(
+      catalogOutcome: const ComicEpisodeRefreshOutcome(
+        source: ComicEpisodeRefreshSource.empty,
+        links: <ComicEpisodeLink>[],
+      ),
+    );
+    final queue = _RecordingSearchQueue();
+    final queueState = _FakeSearchQueueStateReader(active: true);
+    addTearDown(queueState.snapshot.dispose);
+    final adapter = ComicDetailAdapter(
+      repository,
+      refreshService: refreshService,
+      searchQueue: queue,
+      searchQueueState: queueState,
+      stateRepository: _FakeLibraryStateRepository(),
+    );
+
+    final result = await adapter.refreshWork(workId: 'comic:1');
+
+    expect(result.status, DetailRefreshStatus.queued);
+    expect(result.message, '更新预计耗时21s');
+    expect(refreshService.searchAndCurrentOnlyCalls, 0);
+    expect(repository.mergeCalled, isFalse);
+    expect(queue.enqueuedOrigins, <ComicSearchRefreshOrigin>[
+      ComicSearchRefreshOrigin.detailManual,
+    ]);
+    expect(queue.enqueuedRequests.single.comicId, 'comic:1');
+    expect(queue.enqueuedRequests.single.sourceTid, '100');
+    expect(queue.enqueuedRequests.single.customSearchTitle, 'Search Test Comic');
+    expect(queue.enqueuedTitles, <String>['Search Test Comic']);
   });
 
   test('custom metadata feature flag can fall back to source fields', () async {
@@ -197,13 +287,25 @@ void main() {
 }
 
 class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
+  _FakeComicEpisodeRefreshService({
+    ComicEpisodeRefreshOutcome? catalogOutcome,
+    ComicEpisodeRefreshOutcome? searchOutcome,
+  })  : _catalogOutcome = catalogOutcome,
+        _searchOutcome = searchOutcome;
+
   String? requestedTid;
   ComicEpisodeRefreshRequest? lastRequest;
+  int catalogOnlyCalls = 0;
+  int fetchEpisodeLinksCalls = 0;
+  int searchAndCurrentOnlyCalls = 0;
+  final ComicEpisodeRefreshOutcome? _catalogOutcome;
+  final ComicEpisodeRefreshOutcome? _searchOutcome;
 
   @override
   Future<List<ComicEpisodeLink>> fetchEpisodeLinks(
     ComicEpisodeRefreshRequest request,
   ) async {
+    fetchEpisodeLinksCalls++;
     lastRequest = request;
     requestedTid = request.sourceTid;
     return const [
@@ -216,10 +318,19 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
     ComicEpisodeRefreshRequest request,
   ) async {
-    final links = await fetchEpisodeLinks(request);
-    return ComicEpisodeRefreshOutcome(
+    catalogOnlyCalls++;
+    lastRequest = request;
+    requestedTid = request.sourceTid;
+    final outcome = _catalogOutcome;
+    if (outcome != null) {
+      return outcome;
+    }
+    return const ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.catalog,
-      links: links,
+      links: [
+        ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: '第1话'),
+        ComicEpisodeLink(url: 'thread-102-1-1.html', rawText: '第2话'),
+      ],
       catalogMatched: true,
     );
   }
@@ -228,6 +339,13 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request,
   ) async {
+    searchAndCurrentOnlyCalls++;
+    lastRequest = request;
+    requestedTid = request.sourceTid;
+    final outcome = _searchOutcome;
+    if (outcome != null) {
+      return outcome;
+    }
     final links = await fetchEpisodeLinks(request);
     return ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.search,
@@ -240,6 +358,73 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
     return fetchEpisodeLinks(ComicEpisodeRefreshRequest(sourceTid: tid));
   }
+}
+
+class _RecordingSearchQueue implements ComicSearchRefreshQueueEnqueuer {
+  final List<ComicEpisodeRefreshRequest> enqueuedRequests =
+      <ComicEpisodeRefreshRequest>[];
+  final List<String> enqueuedTitles = <String>[];
+  final List<ComicSearchRefreshOrigin> enqueuedOrigins =
+      <ComicSearchRefreshOrigin>[];
+
+  @override
+  Future<ComicSearchRefreshEnqueueResult> enqueue({
+    required ComicEpisodeRefreshRequest request,
+    required String title,
+    required ComicSearchRefreshOrigin origin,
+  }) async {
+    enqueuedRequests.add(request);
+    enqueuedTitles.add(title);
+    enqueuedOrigins.add(origin);
+    return ComicSearchRefreshEnqueueResult(
+      entry: ComicSearchRefreshQueueEntry(
+        id: enqueuedRequests.length,
+        comicId: request.comicId ?? '',
+        title: title,
+        request: request,
+        origin: origin,
+        status: ComicSearchRefreshQueueStatus.pending,
+        attempts: 0,
+        availableAt: DateTime(2026, 5, 16),
+        createdAt: DateTime(2026, 5, 16),
+        updatedAt: DateTime(2026, 5, 16),
+      ),
+      position: 2,
+      estimatedDuration: const Duration(seconds: 21),
+      deduplicated: false,
+    );
+  }
+}
+
+class _FakeSearchQueueStateReader implements ComicSearchRefreshQueueStateReader {
+  _FakeSearchQueueStateReader({bool active = false})
+      : snapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+          ComicSearchRefreshQueueSnapshot(
+            entries: active
+                ? <ComicSearchRefreshQueueEntry>[
+                    ComicSearchRefreshQueueEntry(
+                      id: 1,
+                      comicId: 'comic:queued',
+                      title: 'Queued Comic',
+                      request: const ComicEpisodeRefreshRequest(
+                        comicId: 'comic:queued',
+                        sourceTid: '200',
+                      ),
+                      origin: ComicSearchRefreshOrigin.favoriteSync,
+                      status: ComicSearchRefreshQueueStatus.pending,
+                      attempts: 0,
+                      availableAt: DateTime(2026, 5, 16),
+                      createdAt: DateTime(2026, 5, 16),
+                      updatedAt: DateTime(2026, 5, 16),
+                    ),
+                  ]
+                : const <ComicSearchRefreshQueueEntry>[],
+            cadence: const Duration(milliseconds: 10500),
+          ),
+        );
+
+  @override
+  final ValueNotifier<ComicSearchRefreshQueueSnapshot> snapshot;
 }
 
 class _FakeComicRepository implements ComicRepository {

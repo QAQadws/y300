@@ -161,11 +161,36 @@ void main() {
     expect(adapter.lastCustomSearchTitle, '刷新关键词');
     expect(find.text('新标题'), findsWidgets);
   });
+
+  testWidgets('UnifiedDetailPage shows refresh queue snackbar', (tester) async {
+    final adapter = _FakeDetailAdapter()
+      ..refreshResult = DetailRefreshResult.queued(
+        estimatedDuration: const Duration(milliseconds: 10500),
+        queuePosition: 1,
+      );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('更新').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('更新预计耗时10.5s'), findsOneWidget);
+  });
 }
 
 class _FakeDetailAdapter implements DetailModuleAdapter {
   int markReadCallCount = 0;
   int loadChaptersCallCount = 0;
+  DetailRefreshResult refreshResult = DetailRefreshResult.immediate;
 
   @override
   Future<void> clearAllReadState({required String workId}) async {}
@@ -261,7 +286,9 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
   LibraryModuleKey get moduleKey => LibraryModuleKey.novel;
 
   @override
-  Future<void> refreshWork({required String workId}) async {}
+  Future<DetailRefreshResult> refreshWork({required String workId}) async {
+    return refreshResult;
+  }
 
   @override
   Future<void> updateIntro({

@@ -4,12 +4,14 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/comic/data/comic_download_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
+import 'package:y300/features/comic/data/comic_search_refresh_queue_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_reader_exit_result.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/adapters/comic_detail_adapter.dart';
 import 'package:y300/features/comic/presentation/comic_reader_page.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
@@ -24,14 +26,18 @@ class ComicDetailPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final searchQueue = ref.watch(comicSearchRefreshQueueServiceProvider);
     final adapter = ComicDetailAdapter(
       ref.watch(comicRepositoryProvider),
       refreshService: ref.watch(comicEpisodeRefreshServiceProvider),
+      searchQueue: searchQueue,
+      searchQueueState: searchQueue,
       firstEpisodeCoverService: ref.watch(comicFirstEpisodeCoverServiceProvider),
       downloadService: ref.watch(comicDownloadServiceProvider),
       imageCacheService: ref.watch(imageCacheServiceProvider),
       featureFlags: ref.watch(comicReaderFeatureFlagsProvider),
       stateRepository: ref.watch(libraryStateRepositoryProvider),
+      shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
     );
     return UnifiedDetailPage(
       adapter: adapter,

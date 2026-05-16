@@ -4,7 +4,10 @@ import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/comic_download_service.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
+import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
+import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
+import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
@@ -12,6 +15,7 @@ import 'package:y300/features/library_shared/domain/contracts/detail_module_adap
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
 /// 漫画详情适配器（Phase 6）。
 ///
@@ -22,25 +26,34 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
   ComicDetailAdapter(
     this._repository, {
     ComicEpisodeRefreshService? refreshService,
+    ComicSearchRefreshQueueEnqueuer? searchQueue,
+    ComicSearchRefreshQueueStateReader? searchQueueState,
     ComicFirstEpisodeCoverService? firstEpisodeCoverService,
     ComicDownloadService? downloadService,
     ImageCacheService? imageCacheService,
     ComicReaderFeatureFlags featureFlags = ComicReaderFeatureFlags.defaults,
     required LibraryStateRepository stateRepository,
+    LibraryShelfRefreshBus? shelfRefreshBus,
   })  : _refreshService = refreshService,
+        _searchQueue = searchQueue,
+        _searchQueueState = searchQueueState,
         _firstEpisodeCoverService = firstEpisodeCoverService,
         _downloadService = downloadService,
         _imageCacheService = imageCacheService,
         _featureFlags = featureFlags,
-        _stateRepository = stateRepository;
+        _stateRepository = stateRepository,
+        _shelfRefreshBus = shelfRefreshBus;
 
   final ComicRepository _repository;
   final ComicEpisodeRefreshService? _refreshService;
+  final ComicSearchRefreshQueueEnqueuer? _searchQueue;
+  final ComicSearchRefreshQueueStateReader? _searchQueueState;
   final ComicFirstEpisodeCoverService? _firstEpisodeCoverService;
   final ComicDownloadService? _downloadService;
   final ImageCacheService? _imageCacheService;
   final ComicReaderFeatureFlags _featureFlags;
   final LibraryStateRepository _stateRepository;
+  final LibraryShelfRefreshBus? _shelfRefreshBus;
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
@@ -429,37 +442,111 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
   }
 
   @override
-  Future<void> refreshWork({required String workId}) async {
+  Future<DetailRefreshResult> refreshWork({required String workId}) async {
     final detail = await _repository.getComicDetail(comicId: workId);
     if (detail == null) {
-      return;
+      return DetailRefreshResult.skipped;
     }
     final refreshService = _refreshService;
     if (refreshService == null) {
-      return;
+      return DetailRefreshResult.skipped;
     }
-    final links = await refreshService.fetchEpisodeLinks(
-      ComicEpisodeRefreshRequest(
-        comicId: detail.comicId,
+    final request = _buildRefreshRequest(detail);
+    final catalog = await refreshService.fetchCatalogOnly(request);
+    if (catalog.catalogMatched && catalog.links.isNotEmpty) {
+      await _applyRefreshOutcome(
+        comicId: workId,
         sourceTid: detail.sourceTid,
-        displayTitle: detail.displayTitle,
-        sourceTitle: detail.sourceTitle,
-        customTitle:
-            _featureFlags.readerCustomMetadataEnabled ? detail.customTitle : null,
-        customSearchTitle: _featureFlags.readerCustomMetadataEnabled
-            ? detail.customSearchTitle
-            : null,
-      ),
-    );
-    if (links.isEmpty) {
-      return;
+        links: catalog.links,
+        reason: 'comic_detail_catalog_refresh_completed',
+      );
+      return DetailRefreshResult.immediate;
     }
-    await _repository.mergeEpisodesFromLinks(
+
+    if (_searchQueueHasBacklog) {
+      final searchQueue = _searchQueue;
+      if (searchQueue != null) {
+        final queued = await searchQueue.enqueue(
+          request: request,
+          title: _queueTitle(detail),
+          origin: ComicSearchRefreshOrigin.detailManual,
+        );
+        return DetailRefreshResult.queued(
+          queuePosition: queued.position,
+          estimatedDuration: queued.estimatedDuration,
+        );
+      }
+    }
+
+    // 队列为空时，详情页手动更新应立即消费一次搜索/当前帖策略。
+    // 只有已有队列积压时才入队，避免空队列也显示“更新预计耗时10.5s”。
+    final fallback = await refreshService.fetchSearchAndCurrentOnly(request);
+    if (!fallback.hasLinks) {
+      return const DetailRefreshResult(
+        status: DetailRefreshStatus.skipped,
+        message: '未提取到新的章节链接',
+      );
+    }
+    await _applyRefreshOutcome(
       comicId: workId,
-      episodeLinks: links,
-      fallbackSourceTid: detail.sourceTid,
+      sourceTid: detail.sourceTid,
+      links: fallback.links,
+      reason: 'comic_detail_search_refresh_completed',
     );
-    await _firstEpisodeCoverService?.promoteIfPossible(comicId: workId);
+    return DetailRefreshResult.immediate;
+  }
+
+  bool get _searchQueueHasBacklog {
+    return _searchQueueState?.snapshot.value.active ?? false;
+  }
+
+  Future<void> _applyRefreshOutcome({
+    required String comicId,
+    required String sourceTid,
+    required List<ComicEpisodeLink> links,
+    required String reason,
+  }) async {
+    await _repository.mergeEpisodesFromLinks(
+      comicId: comicId,
+      episodeLinks: links,
+      fallbackSourceTid: sourceTid,
+    );
+    await _firstEpisodeCoverService?.promoteIfPossible(comicId: comicId);
+    _shelfRefreshBus?.notify(
+      modules: const <LibraryModuleKey>{
+        LibraryModuleKey.comic,
+        LibraryModuleKey.favorite,
+      },
+      reason: reason,
+    );
+  }
+
+  ComicEpisodeRefreshRequest _buildRefreshRequest(ComicDetail detail) {
+    return ComicEpisodeRefreshRequest(
+      comicId: detail.comicId,
+      sourceTid: detail.sourceTid,
+      displayTitle: detail.displayTitle,
+      sourceTitle: detail.sourceTitle,
+      customTitle:
+          _featureFlags.readerCustomMetadataEnabled ? detail.customTitle : null,
+      customSearchTitle: _featureFlags.readerCustomMetadataEnabled
+          ? detail.customSearchTitle
+          : null,
+    );
+  }
+
+  String _queueTitle(ComicDetail detail) {
+    final customSearchTitle = _featureFlags.readerCustomMetadataEnabled
+        ? detail.customSearchTitle?.trim()
+        : null;
+    if (customSearchTitle != null && customSearchTitle.isNotEmpty) {
+      return customSearchTitle;
+    }
+    final displayTitle = detail.displayTitle.trim();
+    if (displayTitle.isNotEmpty) {
+      return displayTitle;
+    }
+    return detail.sourceTid;
   }
 
   @override

@@ -161,13 +161,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
               edgeOffset: 0,
               displacement: 28,
               elevation: 0,
-              onRefresh: () async {
-                await _controller.refresh();
-                if (!mounted) {
-                  return;
-                }
-                setState(() {});
-              },
+              onRefresh: _refreshAndShowFeedback,
               child: CustomScrollView(
                 controller: _scrollController,
                 physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
@@ -180,13 +174,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         topInset: topInset,
                         imageHeaderBuilder: widget.imageHeaderBuilder,
                         onToggleShelf: () => _showMoveCategorySheet(),
-                        onRefresh: () async {
-                          await _controller.refresh();
-                          if (!mounted) {
-                            return;
-                          }
-                          setState(() {});
-                        },
+                        onRefresh: _refreshAndShowFeedback,
                         onOpenThread: () async {
                           final target = await widget.adapter.getThreadRouteTarget(workId: widget.workId);
                           if (!context.mounted || target == null) {
@@ -521,11 +509,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
 
   Future<void> _handleMoreAction(String value) async {
     if (value == 'refresh') {
-      await _controller.refresh();
-      if (!mounted) {
-        return;
-      }
-      setState(() {});
+      await _refreshAndShowFeedback();
       return;
     }
     if (value == 'change-category') {
@@ -547,6 +531,20 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     if (value == 'remove-tag') {
       await _showRemoveTagSheet();
     }
+  }
+
+  Future<void> _refreshAndShowFeedback() async {
+    final result = await _controller.refresh();
+    if (!mounted) {
+      return;
+    }
+    final message = result.message?.trim();
+    if (message != null && message.isNotEmpty) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(message)));
+    }
+    setState(() {});
   }
 
   Future<void> _showEditMetadataSheet() async {

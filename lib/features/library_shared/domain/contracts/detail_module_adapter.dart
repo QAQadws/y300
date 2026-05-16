@@ -2,6 +2,57 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 
+enum DetailRefreshStatus {
+  immediate,
+  queued,
+  skipped,
+}
+
+class DetailRefreshResult {
+  const DetailRefreshResult({
+    required this.status,
+    this.message,
+    this.queuePosition,
+    this.estimatedDuration,
+  });
+
+  final DetailRefreshStatus status;
+  final String? message;
+  final int? queuePosition;
+  final Duration? estimatedDuration;
+
+  bool get shouldReload => status == DetailRefreshStatus.immediate;
+
+  static const immediate = DetailRefreshResult(
+    status: DetailRefreshStatus.immediate,
+  );
+
+  static const skipped = DetailRefreshResult(
+    status: DetailRefreshStatus.skipped,
+  );
+
+  factory DetailRefreshResult.queued({
+    required Duration estimatedDuration,
+    int? queuePosition,
+    String? message,
+  }) {
+    return DetailRefreshResult(
+      status: DetailRefreshStatus.queued,
+      message: message ?? '更新预计耗时${_formatSeconds(estimatedDuration)}s',
+      queuePosition: queuePosition,
+      estimatedDuration: estimatedDuration,
+    );
+  }
+
+  static String _formatSeconds(Duration duration) {
+    final tenths = (duration.inMilliseconds / 100).round();
+    if (tenths % 10 == 0) {
+      return '${tenths ~/ 10}';
+    }
+    return (tenths / 10).toStringAsFixed(1);
+  }
+}
+
 /// 统一详情页模块适配合同。
 ///
 /// 该合同用于承接漫画/小说在详情页上的字段与行为差异。
@@ -55,7 +106,7 @@ abstract class DetailModuleAdapter {
   Future<void> downloadAll({required String workId});
 
   /// 作品级动作。
-  Future<void> refreshWork({required String workId});
+  Future<DetailRefreshResult> refreshWork({required String workId});
 
   Future<void> updateIntro({
     required String workId,

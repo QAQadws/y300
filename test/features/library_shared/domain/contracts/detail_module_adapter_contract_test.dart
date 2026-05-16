@@ -94,7 +94,9 @@ class _FakeDetailModuleAdapter implements DetailModuleAdapter {
   }) async {}
 
   @override
-  Future<void> refreshWork({required String workId}) async {}
+  Future<DetailRefreshResult> refreshWork({required String workId}) async {
+    return DetailRefreshResult.immediate;
+  }
 
   @override
   Future<void> updateIntro({

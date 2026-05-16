@@ -48,6 +48,28 @@ void main() {
     expect(adapter.refreshWorkCount, 0);
   });
 
+  test('refresh stores queued result without reloading local chapters', () async {
+    final adapter = _FakeDetailAdapter()
+      ..refreshResult = DetailRefreshResult.queued(
+        estimatedDuration: const Duration(milliseconds: 10500),
+        queuePosition: 1,
+      );
+    final controller = UnifiedDetailController(
+      adapter: adapter,
+      workId: 'work-1',
+    );
+
+    await controller.initialize();
+    final beforeLoadCount = adapter.loadHeaderCount;
+    final result = await controller.refresh();
+
+    expect(result.status, DetailRefreshStatus.queued);
+    expect(controller.state.lastRefreshResult?.message, '更新预计耗时10.5s');
+    expect(adapter.refreshWorkCount, 1);
+    expect(adapter.loadHeaderCount, beforeLoadCount);
+    expect(controller.state.isRefreshing, isFalse);
+  });
+
   test('updateFilters and chapter actions update state', () async {
     final adapter = _FakeDetailAdapter();
     final controller = UnifiedDetailController(
@@ -97,6 +119,7 @@ void main() {
 class _FakeDetailAdapter implements DetailModuleAdapter {
   int loadHeaderCount = 0;
   int refreshWorkCount = 0;
+  DetailRefreshResult refreshResult = DetailRefreshResult.immediate;
 
   final Map<String, bool> _read = <String, bool>{
     'e1': false,
@@ -241,8 +264,9 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
   LibraryModuleKey get moduleKey => LibraryModuleKey.novel;
 
   @override
-  Future<void> refreshWork({required String workId}) async {
+  Future<DetailRefreshResult> refreshWork({required String workId}) async {
     refreshWorkCount++;
+    return refreshResult;
   }
 
   @override

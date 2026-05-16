@@ -33,6 +33,10 @@ abstract class ComicSearchRefreshQueueEnqueuer {
   });
 }
 
+abstract class ComicSearchRefreshQueueStateReader {
+  ValueListenable<ComicSearchRefreshQueueSnapshot> get snapshot;
+}
+
 /// Background worker for comics that missed catalog refresh and must use
 /// search/current-only fallback.
 ///
@@ -40,7 +44,10 @@ abstract class ComicSearchRefreshQueueEnqueuer {
 /// persists queue state, delegates actual search throttling to
 /// [ForumSearchScheduler] through [ComicEpisodeRefreshService], and emits a
 /// shared shelf refresh signal after local data changes.
-class ComicSearchRefreshQueueService implements ComicSearchRefreshQueueEnqueuer {
+class ComicSearchRefreshQueueService
+    implements
+        ComicSearchRefreshQueueEnqueuer,
+        ComicSearchRefreshQueueStateReader {
   ComicSearchRefreshQueueService({
     required ComicSearchRefreshQueueRepository queueRepository,
     required ComicRepository comicRepository,
@@ -82,6 +89,7 @@ class ComicSearchRefreshQueueService implements ComicSearchRefreshQueueEnqueuer 
   Timer? _wakeTimer;
   Future<void>? _pumpFuture;
 
+  @override
   ValueListenable<ComicSearchRefreshQueueSnapshot> get snapshot => _snapshot;
 
   @override

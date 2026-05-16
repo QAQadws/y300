@@ -13,6 +13,7 @@ class UnifiedDetailState {
     required this.filters,
     required this.errorMessage,
     required this.isRefreshing,
+    this.lastRefreshResult,
   });
 
   final bool isLoading;
@@ -22,6 +23,7 @@ class UnifiedDetailState {
   final LibraryFilterSet filters;
   final String? errorMessage;
   final bool isRefreshing;
+  final DetailRefreshResult? lastRefreshResult;
 
   factory UnifiedDetailState.initial() {
     return const UnifiedDetailState(
@@ -32,6 +34,7 @@ class UnifiedDetailState {
       filters: LibraryFilterSet.defaults,
       errorMessage: null,
       isRefreshing: false,
+      lastRefreshResult: null,
     );
   }
 
@@ -44,6 +47,8 @@ class UnifiedDetailState {
     String? errorMessage,
     bool clearError = false,
     bool? isRefreshing,
+    DetailRefreshResult? lastRefreshResult,
+    bool clearRefreshResult = false,
   }) {
     return UnifiedDetailState(
       isLoading: isLoading ?? this.isLoading,
@@ -53,6 +58,9 @@ class UnifiedDetailState {
       filters: filters ?? this.filters,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       isRefreshing: isRefreshing ?? this.isRefreshing,
+      lastRefreshResult: clearRefreshResult
+          ? null
+          : (lastRefreshResult ?? this.lastRefreshResult),
     );
   }
 }
@@ -81,11 +89,20 @@ class UnifiedDetailController {
     await _load();
   }
 
-  Future<void> refresh() async {
-    _state = _state.copyWith(isRefreshing: true, clearError: true);
+  Future<DetailRefreshResult> refresh() async {
+    _state = _state.copyWith(
+      isRefreshing: true,
+      clearError: true,
+      clearRefreshResult: true,
+    );
+    late final DetailRefreshResult result;
     try {
-      await _adapter.refreshWork(workId: _workId);
-      await _load();
+      result = await _adapter.refreshWork(workId: _workId);
+      if (result.shouldReload) {
+        await _load();
+      }
+      _state = _state.copyWith(lastRefreshResult: result);
+      return result;
     } finally {
       _state = _state.copyWith(isRefreshing: false);
     }

@@ -1,3 +1,50 @@
+# 漫画详情手动更新空队列即时刷新修复 Review 补充
+
+## 文件范围
+
+- [ ] `lib/features/comic/domain/services/comic_search_refresh_queue_service.dart`
+- [ ] `lib/features/comic/presentation/adapters/comic_detail_adapter.dart`
+- [ ] `lib/features/comic/presentation/comic_detail_page.dart`
+- [ ] `test/features/comic/presentation/adapters/comic_detail_adapter_test.dart`
+
+## Review 重点
+
+- [ ] `ComicSearchRefreshQueueStateReader` 只暴露队列 snapshot，不把详情适配器耦合到具体 worker。
+- [ ] catalog 命中仍立即合并章节、提升封面并通知 `comic/favorite` 书架。
+- [ ] catalog 未命中且队列 snapshot 为空时，详情手动更新会立即调用 `fetchSearchAndCurrentOnly()`，不会显示 `更新预计耗时10.5s`。
+- [ ] catalog 未命中且队列已有积压时，详情手动更新才以 `detailManual` 入队并展示 ETA。
+- [ ] 即时搜索刷新返回 `DetailRefreshStatus.immediate`，统一详情页会 reload 当前 header/chapters，不需要返回书架再进入详情。
+- [ ] 本轮未执行测试、分析或格式化，需要 reviewer 本地执行。
+
+---
+
+# 收藏自动刷新与搜索等待队列：阶段 5 Review 补充
+
+## 文件范围
+
+- [ ] `lib/features/library_shared/domain/contracts/detail_module_adapter.dart`
+- [ ] `lib/features/library_shared/presentation/controllers/unified_detail_controller.dart`
+- [ ] `lib/features/library_shared/presentation/pages/unified_detail_page.dart`
+- [ ] `lib/features/comic/presentation/adapters/comic_detail_adapter.dart`
+- [ ] `lib/features/comic/presentation/comic_detail_page.dart`
+- [ ] `lib/features/novel/presentation/adapters/novel_detail_adapter.dart`
+- [ ] `test/features/comic/presentation/adapters/comic_detail_adapter_test.dart`
+- [ ] `test/features/library_shared/domain/contracts/detail_module_adapter_contract_test.dart`
+- [ ] `test/features/library_shared/presentation/controllers/unified_detail_controller_test.dart`
+- [ ] `test/features/library_shared/presentation/pages/unified_detail_page_test.dart`
+
+## Review 重点
+
+- [ ] `DetailRefreshResult` 能区分 immediate、queued、skipped，且 queued ETA 文案格式为 `更新预计耗时10.5s/21s`。
+- [ ] `UnifiedDetailController.refresh()` 只在 immediate 时重新加载本地详情和章节，queued 不制造额外本地刷新。
+- [ ] 统一详情页所有刷新入口都能显示 queued message。
+- [ ] 漫画详情手动更新 catalog 命中时仍立即合并章节、提升封面、通知 `comic/favorite`。
+- [ ] 漫画详情手动更新 catalog 未命中且队列已有积压时才以 `ComicSearchRefreshOrigin.detailManual` 入队；队列为空时立即调用 search/current-only。
+- [ ] 小说详情刷新仍保持原有 `refreshEpisodes()` 行为，并返回 immediate。
+- [ ] 本轮未执行测试、分析或格式化，需由 reviewer 本地执行。
+
+---
+
 # 收藏漫画自动刷新搜索标题修复 Review 补充
 
 ## 文件范围

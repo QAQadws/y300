@@ -221,8 +221,9 @@ class NovelDetailAdapter implements DetailModuleAdapter {
   }
 
   @override
-  Future<void> refreshWork({required String workId}) async {
+  Future<DetailRefreshResult> refreshWork({required String workId}) async {
     await _repository.refreshEpisodes(novelId: workId);
+    return DetailRefreshResult.immediate;
   }
 
   @override
