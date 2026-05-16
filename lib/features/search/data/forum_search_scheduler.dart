@@ -26,6 +26,10 @@ class ForumSearchSchedulerSnapshot {
   );
 }
 
+abstract class ForumSearchQueueStateReader {
+  ValueListenable<ForumSearchSchedulerSnapshot> get snapshot;
+}
+
 class _ForumSearchJob {
   const _ForumSearchJob({
     required this.id,
@@ -41,7 +45,7 @@ class _ForumSearchJob {
 /// `DiscuzSearchService` still owns Discuz-specific HTTP/parsing details; this
 /// scheduler owns only timing and queue observation.  Callers that need raw
 /// network access can depend on `rawDiscuzSearchServiceProvider` explicitly.
-class ForumSearchScheduler implements ForumSearchService {
+class ForumSearchScheduler implements ForumSearchService, ForumSearchQueueStateReader {
   ForumSearchScheduler({
     required ForumSearchService rawService,
     this.interval = SearchRateLimiter.defaultCooldown,
@@ -69,6 +73,7 @@ class ForumSearchScheduler implements ForumSearchService {
   bool _disposed = false;
   final List<_ForumSearchJob> _jobs = <_ForumSearchJob>[];
 
+  @override
   ValueListenable<ForumSearchSchedulerSnapshot> get snapshot => _snapshot;
 
   void dispose() {

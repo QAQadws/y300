@@ -13,7 +13,12 @@ import 'package:y300/features/library_shared/presentation/pages/unified_shelf_pa
 ///
 /// 当前页面只负责注入漫画适配器和详情跳转，通用交互由 [UnifiedShelfPage] 统一承载。
 class ComicShelfPage extends ConsumerWidget {
-  const ComicShelfPage({super.key});
+  const ComicShelfPage({
+    super.key,
+    this.isActive = true,
+  });
+
+  final bool isActive;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -27,6 +32,7 @@ class ComicShelfPage extends ConsumerWidget {
     return UnifiedShelfPage(
       adapter: adapter,
       imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
+      isActive: isActive,
       onOpenWork: (context, workId) async {
         await Navigator.of(context).push(
           MaterialPageRoute<void>(

@@ -113,10 +113,12 @@ class UnifiedShelfController {
     ShelfCoverWarmupService? coverWarmupService,
     ShelfFeatureFlags featureFlags = ShelfFeatureFlags.defaults,
     void Function()? onStateChanged,
+    bool backgroundReloadEnabled = true,
   })  : _adapter = adapter,
         _coverWarmupService = coverWarmupService ?? ShelfCoverWarmupService(),
         _featureFlags = featureFlags,
         _onStateChanged = onStateChanged,
+        _backgroundReloadEnabled = backgroundReloadEnabled,
         _taskProgressListenable = adapter.taskProgress,
         _shelfRefreshSignals = adapter.shelfRefreshSignals,
         _state = _initialState(adapter),
@@ -139,12 +141,18 @@ class UnifiedShelfController {
   UnifiedShelfState _state;
   final ValueNotifier<UnifiedShelfState> _stateListenable;
   static const Duration _keywordDebounceDuration = Duration(milliseconds: 250);
+  static const Duration _backgroundReloadThrottleDuration =
+      Duration(seconds: 1);
   Timer? _keywordDebounceTimer;
+  Timer? _backgroundReloadTimer;
   Completer<void>? _pendingKeywordCompleter;
   final Map<String, ShelfCoverVisibleRange> _visibleRangesByCategory = <String, ShelfCoverVisibleRange>{};
   ShelfCoverWarmupToken? _coverWarmupToken;
   bool _taskProgressWasActive = false;
   bool _adapterRefreshInProgress = false;
+  bool _backgroundReloadInProgress = false;
+  bool _backgroundReloadRequested = false;
+  bool _backgroundReloadEnabled;
   var _disposed = false;
   var _reloadGeneration = 0;
 
@@ -171,6 +179,8 @@ class UnifiedShelfController {
     _stateListenable.dispose();
     _keywordDebounceTimer?.cancel();
     _keywordDebounceTimer = null;
+    _backgroundReloadTimer?.cancel();
+    _backgroundReloadTimer = null;
     if (_pendingKeywordCompleter != null && !_pendingKeywordCompleter!.isCompleted) {
       _pendingKeywordCompleter!.complete();
     }
@@ -183,6 +193,21 @@ class UnifiedShelfController {
 
   Future<void> refresh() async {
     await _reload();
+  }
+
+  void setBackgroundReloadEnabled(bool enabled) {
+    if (_backgroundReloadEnabled == enabled) {
+      return;
+    }
+    _backgroundReloadEnabled = enabled;
+    if (!enabled) {
+      _backgroundReloadTimer?.cancel();
+      _backgroundReloadTimer = null;
+      return;
+    }
+    if (_backgroundReloadRequested) {
+      _requestBackgroundReload();
+    }
   }
 
   Future<void> enterSearchMode() async {
@@ -458,12 +483,7 @@ class UnifiedShelfController {
     // Background tasks such as the first favorite sync can populate a local
     // snapshot after the page has already rendered. Reload metadata once the
     // task settles so the visible shelf catches up without user intervention.
-    unawaited(() async {
-      await _reload();
-      if (!_disposed) {
-        _onStateChanged?.call();
-      }
-    }());
+    _requestBackgroundReload();
   }
 
   void _handleShelfRefreshSignalChanged() {
@@ -474,10 +494,44 @@ class UnifiedShelfController {
         _adapterRefreshInProgress) {
       return;
     }
+    _requestBackgroundReload();
+  }
+
+  void _requestBackgroundReload() {
+    if (_disposed || _adapterRefreshInProgress) {
+      return;
+    }
+    _backgroundReloadRequested = true;
+    if (!_backgroundReloadEnabled) {
+      return;
+    }
+    if (_backgroundReloadInProgress || _backgroundReloadTimer != null) {
+      return;
+    }
+    _backgroundReloadTimer = Timer(
+      _backgroundReloadThrottleDuration,
+      _runRequestedBackgroundReload,
+    );
+  }
+
+  void _runRequestedBackgroundReload() {
+    _backgroundReloadTimer = null;
+    if (_disposed || _adapterRefreshInProgress || !_backgroundReloadRequested) {
+      return;
+    }
+    _backgroundReloadRequested = false;
+    _backgroundReloadInProgress = true;
     unawaited(() async {
-      await _reload();
-      if (!_disposed) {
-        _onStateChanged?.call();
+      try {
+        await _reload();
+        if (!_disposed) {
+          _onStateChanged?.call();
+        }
+      } finally {
+        _backgroundReloadInProgress = false;
+        if (!_disposed && _backgroundReloadRequested) {
+          _requestBackgroundReload();
+        }
       }
     }());
   }

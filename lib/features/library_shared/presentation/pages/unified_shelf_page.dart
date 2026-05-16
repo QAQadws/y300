@@ -19,12 +19,14 @@ class UnifiedShelfPage extends StatefulWidget {
     required this.onOpenWork,
     this.imageHeaderBuilder,
     this.featureFlags = ShelfFeatureFlags.defaults,
+    this.isActive = true,
   });
 
   final ShelfModuleAdapter adapter;
   final Future<void> Function(BuildContext context, String workId) onOpenWork;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ShelfFeatureFlags featureFlags;
+  final bool isActive;
 
   @override
   State<UnifiedShelfPage> createState() => _UnifiedShelfPageState();
@@ -42,6 +44,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
       adapter: widget.adapter,
       featureFlags: widget.featureFlags,
       onStateChanged: _handleControllerStateChanged,
+      backgroundReloadEnabled: widget.isActive,
     );
     _pageController = PageController();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -58,6 +61,14 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
       return;
     }
     setState(() {});
+  }
+
+  @override
+  void didUpdateWidget(covariant UnifiedShelfPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive != widget.isActive) {
+      _controller.setBackgroundReloadEnabled(widget.isActive);
+    }
   }
 
   @override

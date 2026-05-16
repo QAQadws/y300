@@ -10,7 +10,12 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
 class FavoriteShelfPage extends ConsumerWidget {
-  const FavoriteShelfPage({super.key});
+  const FavoriteShelfPage({
+    super.key,
+    this.isActive = true,
+  });
+
+  final bool isActive;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -19,6 +24,7 @@ class FavoriteShelfPage extends ConsumerWidget {
     return UnifiedShelfPage(
       adapter: adapter,
       imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
+      isActive: isActive,
       onOpenWork: (context, workId) async {
         final target = await repository.getRouteTargetByShelfWorkId(workId);
         if (!context.mounted || target == null) {

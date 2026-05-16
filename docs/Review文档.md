@@ -1,3 +1,28 @@
+# 收藏自动刷新与搜索等待队列：阶段 6-8 Review 补充
+
+## 文件范围
+
+- [ ] `lib/features/search/presentation/forum_search_page.dart`
+- [ ] `lib/features/search/data/forum_search_scheduler.dart`
+- [ ] `lib/features/comic/domain/services/comic_search_refresh_queue_service.dart`
+- [ ] `test/features/search/presentation/forum_search_page_test.dart`
+- [ ] `test/features/library_shared/presentation/pages/unified_shelf_page_test.dart`
+- [ ] `docs/开发文档.md`
+- [ ] `docs/Review文档.md`
+
+## Review 重点
+
+- [ ] 论坛搜索页在漫画搜索等待队列非空时只显示等待文案，不调用 `ForumSearchService.searchForum()`。
+- [ ] `ForumSearchQueueStateReader` 只暴露 scheduler snapshot，论坛搜索页不依赖 scheduler 的内部队列实现。
+- [ ] 等待文案来自队列 snapshot，格式为 `{title} 正在等待搜索 预计耗时{seconds}s`，输入框内容保持不变。
+- [ ] 漫画队列为空时论坛搜索行为不变，仍通过 `discuzSearchServiceProvider` 进入 `ForumSearchScheduler`。
+- [ ] 当当前搜索服务实现 `ForumSearchQueueStateReader` 且已有搜索排队/运行时，论坛搜索页会提示 scheduler 等待状态，不绕过调度器。
+- [ ] `ComicSearchRefreshQueueService` debug 日志覆盖 enqueue/run/done/retry/failed，release 模式不输出。
+- [ ] 搜索等待类 `LibraryShelfTaskProgress` 没有 total 时，banner 进度条为 indeterminate，且不显示右侧 `current/total`。
+- [ ] 本轮未执行测试、分析或格式化，需要 reviewer 本地执行。
+
+---
+
 # 漫画详情手动更新空队列即时刷新修复 Review 补充
 
 ## 文件范围

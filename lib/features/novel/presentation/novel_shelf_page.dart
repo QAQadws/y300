@@ -13,7 +13,12 @@ import 'package:y300/features/novel/presentation/novel_detail_page.dart';
 ///
 /// 仅保留模块级依赖注入，通用书架交互完全复用统一页面。
 class NovelShelfPage extends ConsumerWidget {
-  const NovelShelfPage({super.key});
+  const NovelShelfPage({
+    super.key,
+    this.isActive = true,
+  });
+
+  final bool isActive;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -26,6 +31,7 @@ class NovelShelfPage extends ConsumerWidget {
     return UnifiedShelfPage(
       adapter: adapter,
       imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
+      isActive: isActive,
       onOpenWork: (context, workId) async {
         await Navigator.of(context).push(
           MaterialPageRoute<void>(

@@ -57,7 +57,7 @@ class ApiClient {
           if (_enableLog) {
             _logger.i(
               '[HTTP ${response.statusCode}] ${response.requestOptions.uri}\\n'
-              'body=${response.data}',
+              'body=${_describeLogBody(response.data)}',
             );
           }
 
@@ -71,6 +71,35 @@ class ApiClient {
   final CookieStore _cookieStore;
   final Logger _logger;
   final bool _enableLog;
+
+  static const int _maxLoggedStringLength = 1200;
+  static const int _maxLoggedMapKeys = 12;
+
+  String _describeLogBody(Object? body) {
+    if (body == null) {
+      return 'null';
+    }
+    if (body is String) {
+      return _truncateLogString(body);
+    }
+    if (body is Map) {
+      final keys = body.keys.take(_maxLoggedMapKeys).map((key) => '$key').join(', ');
+      final suffix = body.length > _maxLoggedMapKeys ? ', ...' : '';
+      return 'Map(length=${body.length}, keys=[$keys$suffix])';
+    }
+    if (body is Iterable) {
+      return '${body.runtimeType}(length=${body.length})';
+    }
+    return body.runtimeType.toString();
+  }
+
+  String _truncateLogString(String value) {
+    if (value.length <= _maxLoggedStringLength) {
+      return value;
+    }
+    return '${value.substring(0, _maxLoggedStringLength)}... '
+        '(truncated, length=${value.length})';
+  }
 
   Future<void> clearSession() async {
     await _cookieStore.clear();

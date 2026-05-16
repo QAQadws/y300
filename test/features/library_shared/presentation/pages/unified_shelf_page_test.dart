@@ -332,6 +332,35 @@ void main() {
     expect(find.byKey(const Key('unified-shelf-task-progress-bar')), findsNothing);
   });
 
+  testWidgets('task progress without total keeps banner indeterminate', (tester) async {
+    final progress = ValueNotifier<LibraryShelfTaskProgress?>(
+      const LibraryShelfTaskProgress(
+        message: '排队漫画 正在等待搜索 预计耗时21s',
+      ),
+    );
+    addTearDown(progress.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.list,
+            taskProgress: progress,
+          ),
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+
+    final bar = tester.widget<LinearProgressIndicator>(
+      find.byKey(const Key('unified-shelf-task-progress-bar')),
+    );
+    expect(bar.value, isNull);
+    expect(find.byKey(const Key('unified-shelf-task-progress-count')), findsNothing);
+    expect(find.text('排队漫画 正在等待搜索 预计耗时21s'), findsOneWidget);
+  });
+
   testWidgets('initial loading does not flash empty shelf state', (tester) async {
     final adapter = _FakeShelfAdapter(
       initialDisplayMode: LibraryDisplayMode.grid,

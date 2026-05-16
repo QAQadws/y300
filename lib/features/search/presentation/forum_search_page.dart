@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/comic/data/comic_search_refresh_queue_providers.dart';
+import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/search/data/discuz_search_service.dart';
+import 'package:y300/features/search/data/forum_search_scheduler.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
@@ -35,12 +38,19 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
     if (keyword.isEmpty || _loading) {
       return;
     }
+    final service = ref.read(discuzSearchServiceProvider);
+    final waitingMessage = _searchWaitingMessage(service);
+    if (waitingMessage != null) {
+      setState(() {
+        _hint = waitingMessage;
+      });
+      return;
+    }
     setState(() {
       _loading = true;
       _hint = null;
     });
     try {
-      final service = ref.read(discuzSearchServiceProvider);
       final result = await service.searchForum(
         keyword: keyword,
         context: widget.context,
@@ -73,6 +83,47 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
         _nextPageUrl = null;
       });
     }
+  }
+
+  String? _searchWaitingMessage(ForumSearchService service) {
+    final comicQueue = ref.read(comicSearchRefreshQueueSnapshotProvider).value;
+    final comicQueueMessage = _comicQueueWaitingMessage(comicQueue);
+    if (comicQueueMessage != null) {
+      return comicQueueMessage;
+    }
+    final Object serviceObject = service;
+    if (serviceObject is! ForumSearchQueueStateReader) {
+      return null;
+    }
+    return _schedulerWaitingMessage(serviceObject.snapshot.value);
+  }
+
+  String? _comicQueueWaitingMessage(ComicSearchRefreshQueueSnapshot snapshot) {
+    if (!snapshot.active) {
+      return null;
+    }
+    final message = snapshot.waitingMessage?.trim();
+    if (message != null && message.isNotEmpty) {
+      return message;
+    }
+    return '正在等待搜索 预计耗时${_formatSeconds(snapshot.estimatedDuration)}s';
+  }
+
+  String? _schedulerWaitingMessage(ForumSearchSchedulerSnapshot snapshot) {
+    if (!snapshot.active) {
+      return null;
+    }
+    final keyword = snapshot.headKeyword?.trim();
+    final title = keyword == null || keyword.isEmpty ? '论坛搜索' : keyword;
+    return '$title 正在等待搜索 预计耗时${_formatSeconds(snapshot.estimatedWait)}s';
+  }
+
+  String _formatSeconds(Duration duration) {
+    final tenths = (duration.inMilliseconds / 100).round();
+    if (tenths % 10 == 0) {
+      return '${tenths ~/ 10}';
+    }
+    return (tenths / 10).toStringAsFixed(1);
   }
 
   Future<void> _loadMore() async {

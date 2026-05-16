@@ -25,14 +25,6 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
   int _currentIndex = 0;
   final Set<int> _builtIndexes = <int>{0};
 
-  final _pages = const <Widget>[
-    ForumHomePage(),
-    FavoriteShelfPage(),
-    ComicTabPage(),
-    NovelTabPage(),
-    MorePage(),
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -95,11 +87,28 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
   }
 
   List<Widget> _buildIndexedPages() {
-    return List<Widget>.generate(_pages.length, (index) {
+    return List<Widget>.generate(_pageCount, (index) {
       if (_builtIndexes.contains(index)) {
-        return _pages[index];
+        final isActive = index == _currentIndex;
+        return TickerMode(
+          enabled: isActive,
+          child: _buildPage(index, isActive: isActive),
+        );
       }
       return const SizedBox.shrink();
     });
+  }
+
+  int get _pageCount => 5;
+
+  Widget _buildPage(int index, {required bool isActive}) {
+    return switch (index) {
+      0 => const ForumHomePage(),
+      1 => FavoriteShelfPage(isActive: isActive),
+      2 => ComicTabPage(isActive: isActive),
+      3 => NovelTabPage(isActive: isActive),
+      4 => const MorePage(),
+      _ => const SizedBox.shrink(),
+    };
   }
 }

@@ -113,6 +113,10 @@ class ComicSearchRefreshQueueService
     );
     final entries = await _refreshSnapshot();
     final position = _positionOf(result.entry, entries);
+    _logQueue(
+      'enqueue comicId=$comicId title=$title position=$position '
+      'deduplicated=${result.deduplicated}',
+    );
     if (!_started) {
       unawaited(start());
     } else {
@@ -226,10 +230,14 @@ class ComicSearchRefreshQueueService
   }
 
   Future<void> _runTask(ComicSearchRefreshQueueEntry task) async {
+    _logQueue(
+      'run task=${task.id} comicId=${task.comicId} '
+      'sourceTid=${task.request.sourceTid}',
+    );
     try {
       final outcome = await _refreshService.fetchSearchAndCurrentOnly(task.request);
       if (outcome.hasLinks) {
-        await _comicRepository.mergeEpisodesFromLinks(
+        final merge = await _comicRepository.mergeEpisodesFromLinks(
           comicId: task.comicId,
           episodeLinks: outcome.links,
           fallbackSourceTid: task.request.sourceTid,
@@ -241,6 +249,15 @@ class ComicSearchRefreshQueueService
             LibraryModuleKey.favorite,
           },
           reason: 'comic_search_refresh_completed',
+        );
+        _logQueue(
+          'done task=${task.id} comicId=${task.comicId} '
+          'links=${outcome.links.length} inserted=${merge.insertedCount} '
+          'updated=${merge.updatedCount}',
+        );
+      } else {
+        _logQueue(
+          'done task=${task.id} comicId=${task.comicId} links=0',
         );
       }
       await _queueRepository.markCompleted(
@@ -260,6 +277,10 @@ class ComicSearchRefreshQueueService
     final now = _nowProvider();
     final message = error.toString();
     if (attempts >= _retryPolicy.maxAttempts) {
+      _logQueue(
+        'failed task=${task.id} comicId=${task.comicId} '
+        'attempts=$attempts error=$message',
+      );
       await _queueRepository.markFailed(
         id: task.id,
         attempts: attempts,
@@ -268,6 +289,10 @@ class ComicSearchRefreshQueueService
       );
       return;
     }
+    _logQueue(
+      'retry task=${task.id} comicId=${task.comicId} '
+      'attempts=$attempts error=$message',
+    );
     await _queueRepository.markRetry(
       id: task.id,
       attempts: attempts,
@@ -325,5 +350,12 @@ class ComicSearchRefreshQueueService
         ? nextAvailableAt.difference(now)
         : Duration.zero;
     _wakeTimer = Timer(wait, _schedulePump);
+  }
+
+  void _logQueue(String message) {
+    if (kReleaseMode) {
+      return;
+    }
+    debugPrint('[ComicSearchQueue] $message');
   }
 }
