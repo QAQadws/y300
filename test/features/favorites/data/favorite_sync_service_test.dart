@@ -7,6 +7,7 @@ import 'package:y300/features/comic/data/comic_favorite_ingest_service.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
 import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
@@ -338,6 +339,98 @@ void main() {
     expect(threads.single['tid'], '100');
     expect(threads.single['contentKind'], 'comic');
   });
+
+  test('first full sync runs comic duplicate merge once after details load', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(page: 1, totalCount: 1, items: <FavoriteThread>[
+        _favoriteThread(tid: '100', title: '漫画'),
+      ]),
+    });
+    final duplicateRepository = _FakeDuplicateMergeRepository(
+      groups: const <ComicDuplicateGroup>[
+        ComicDuplicateGroup(
+          comicIds: <String>{'yamibo:100', 'yamibo:old'},
+          sharedTids: <String>{'100'},
+        ),
+      ],
+    );
+    final bus = LibraryShelfRefreshBus();
+    addTearDown(bus.dispose);
+    final service = NetworkFavoriteSyncService(
+      remoteRepository: remote,
+      localRepository: _MemoryLocalFavoriteRepository(),
+      loadThreadDetail: (tid) async => ApiSuccess(_detailForTid(tid)),
+      loadTagLookup: () async => _lookup(),
+      classifier: const ThreadContentClassifier(),
+      comicIngestService: _FakeComicIngestService(),
+      novelIngestService: _FakeNovelIngestService(),
+      comicDuplicateMergeService: ComicDuplicateMergeService(
+        repository: duplicateRepository,
+      ),
+      shelfRefreshBus: bus,
+      detailBatchLimit: 10,
+    );
+
+    await service.sync();
+
+    expect(duplicateRepository.mergeAllCallCount, 2);
+    expect(duplicateRepository.mergeComicIds, isEmpty);
+    expect(bus.signal.value?.reason, 'favorite_first_sync_comic_duplicate_merge_completed');
+  });
+
+  test('incremental comic detail stores merged target work id', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(page: 1, totalCount: 2, items: <FavoriteThread>[
+        _favoriteThread(tid: '100', title: '新增漫画'),
+        _favoriteThread(tid: '999', title: '旧收藏'),
+      ]),
+    });
+    final local = _MemoryLocalFavoriteRepository(
+      snapshot: FavoriteSyncSnapshot(
+        syncKey: favoriteSyncKey,
+        remoteCount: 1,
+        localActiveCount: 1,
+        lastSyncedAt: DateTime(2026, 1, 1),
+      ),
+      seedRecords: <FavoriteThreadCacheRecord>[
+        _cacheRecord(
+          tid: '999',
+          title: '旧收藏',
+          contentKind: ThreadContentKind.forum,
+          workId: 'thread:999',
+          detailLoadedAt: DateTime(2026, 1, 1),
+        ),
+      ],
+    );
+    final duplicateRepository = _FakeDuplicateMergeRepository(
+      groups: const <ComicDuplicateGroup>[
+        ComicDuplicateGroup(
+          comicIds: <String>{'yamibo:100', 'yamibo:old'},
+          sharedTids: <String>{'100'},
+        ),
+      ],
+    );
+    final service = NetworkFavoriteSyncService(
+      remoteRepository: remote,
+      localRepository: local,
+      loadThreadDetail: (tid) async => ApiSuccess(_detailForTid(tid)),
+      loadTagLookup: () async => _lookup(),
+      classifier: const ThreadContentClassifier(),
+      comicIngestService: _FakeComicIngestService(),
+      novelIngestService: _FakeNovelIngestService(),
+      comicDuplicateMergeService: ComicDuplicateMergeService(
+        repository: duplicateRepository,
+      ),
+      detailBatchLimit: 10,
+    );
+
+    final result = await service.sync();
+
+    expect(result.mode, FavoriteSyncMode.incremental);
+    expect(duplicateRepository.mergeAllCallCount, 0);
+    expect(duplicateRepository.mergeComicIds, <String>['yamibo:100']);
+    expect(local.records['100']?.workId, 'yamibo:old');
+  });
 }
 
 class _FavoriteSnapshotStorageSpy implements DownloadStorageService {
@@ -509,6 +602,46 @@ class _RecordingComicRepository implements ComicRepository {
   @override
   dynamic noSuchMethod(Invocation invocation) {
     return super.noSuchMethod(invocation);
+  }
+}
+
+class _FakeDuplicateMergeRepository implements ComicDuplicateMergeRepository {
+  _FakeDuplicateMergeRepository({
+    required List<ComicDuplicateGroup> groups,
+  }) : _groups = groups.toList(growable: true);
+
+  final List<ComicDuplicateGroup> _groups;
+  final List<String> mergeComicIds = <String>[];
+  int mergeAllCallCount = 0;
+
+  @override
+  Future<List<ComicDuplicateGroup>> findDuplicateGroups({String? comicId}) async {
+    if (comicId == null || comicId.trim().isEmpty) {
+      mergeAllCallCount++;
+      return List<ComicDuplicateGroup>.unmodifiable(_groups);
+    }
+    mergeComicIds.add(comicId.trim());
+    return _groups
+        .where((group) => group.comicIds.contains(comicId.trim()))
+        .toList(growable: false);
+  }
+
+  @override
+  Future<ComicDuplicateMergeResult> mergeDuplicateGroup({
+    required Set<String> comicIds,
+  }) async {
+    _groups.removeWhere((group) => group.comicIds.containsAll(comicIds));
+    final target = comicIds.contains('yamibo:old') ? 'yamibo:old' : comicIds.first;
+    final removed = comicIds.where((comicId) => comicId != target).toSet();
+    return ComicDuplicateMergeResult(
+      targetComicId: target,
+      targetTitle: '短标题',
+      mergedComicIds: removed,
+      replacements: <String, String>{
+        for (final comicId in removed) comicId: target,
+      },
+      movedEpisodeCount: 1,
+    );
   }
 }
 

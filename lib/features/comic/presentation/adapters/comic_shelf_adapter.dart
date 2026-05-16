@@ -6,6 +6,7 @@ import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
@@ -22,7 +23,11 @@ import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_
 /// 目标：先把“统一接口 -> 现有仓储”的映射打通，后续 Phase 1/2 再逐步填充
 /// 筛选、排序、状态位（未读/已下载/标签）等增强能力。
 class ComicShelfAdapter
-    implements ShelfModuleAdapter, ShelfSnapshotAdapter, ShelfCoverWarmupAdapter {
+    implements
+        ShelfModuleAdapter,
+        ShelfSnapshotAdapter,
+        ShelfCoverWarmupAdapter,
+        ShelfModuleActionAdapter {
   ComicShelfAdapter(
     this._repository, {
     required LibraryStateRepository stateRepository,
@@ -30,8 +35,10 @@ class ComicShelfAdapter
     ImageCacheServiceResolver? imageCacheServiceResolver,
     ComicReaderFeatureFlags featureFlags = ComicReaderFeatureFlags.defaults,
     LibraryShelfRefreshBus? shelfRefreshBus,
+    ComicDuplicateMergeService? duplicateMergeService,
   })  : _stateRepository = stateRepository,
         _featureFlags = featureFlags,
+        _duplicateMergeService = duplicateMergeService,
         _shelfRefreshBus = shelfRefreshBus,
         _coverCacheService = imageCacheServiceResolver == null
             ? LibraryCoverCacheService(imageCacheService)
@@ -40,8 +47,11 @@ class ComicShelfAdapter
   final ComicRepository _repository;
   final LibraryStateRepository _stateRepository;
   final ComicReaderFeatureFlags _featureFlags;
+  final ComicDuplicateMergeService? _duplicateMergeService;
   final LibraryShelfRefreshBus? _shelfRefreshBus;
   final LibraryCoverCacheService _coverCacheService;
+
+  static const String _mergeDuplicatesActionId = 'merge-duplicates';
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
@@ -54,6 +64,19 @@ class ComicShelfAdapter
 
   @override
   ValueListenable<LibraryShelfTaskProgress?>? get taskProgress => null;
+
+  @override
+  List<LibraryShelfMenuAction> get menuActions {
+    if (_duplicateMergeService == null) {
+      return const <LibraryShelfMenuAction>[];
+    }
+    return const <LibraryShelfMenuAction>[
+      LibraryShelfMenuAction(
+        id: _mergeDuplicatesActionId,
+        label: '合并重复',
+      ),
+    ];
+  }
 
   @override
   ValueListenable<LibraryShelfRefreshSignal?>? get shelfRefreshSignals {
@@ -230,6 +253,38 @@ class ComicShelfAdapter
     }
     final random = Random();
     return items[random.nextInt(items.length)].workId;
+  }
+
+  @override
+  Future<ShelfModuleActionResult> runMenuAction(String actionId) async {
+    if (actionId != _mergeDuplicatesActionId) {
+      return const ShelfModuleActionResult(
+        message: '未知漫画操作',
+      );
+    }
+    final service = _duplicateMergeService;
+    if (service == null) {
+      return const ShelfModuleActionResult(
+        message: '当前漫画仓库不支持重复合并',
+      );
+    }
+    final summary = await service.mergeAllDuplicates();
+    if (!summary.changed) {
+      return const ShelfModuleActionResult(
+        message: '没有发现可合并的重复漫画',
+      );
+    }
+    _shelfRefreshBus?.notify(
+      modules: const <LibraryModuleKey>{
+        LibraryModuleKey.comic,
+        LibraryModuleKey.favorite,
+      },
+      reason: 'comic_duplicate_merge_completed',
+    );
+    return ShelfModuleActionResult(
+      message: '已合并 ${summary.removedComicCount} 个重复漫画',
+      changed: true,
+    );
   }
 
   Future<Map<String, List<LibraryWorkItem>>> _loadMappedItemsByCategory(

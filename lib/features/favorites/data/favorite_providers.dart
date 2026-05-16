@@ -62,6 +62,7 @@ final favoriteSyncServiceProvider = Provider<FavoriteSyncService>((ref) {
     comicIngestService: ref.watch(comicFavoriteIngestServiceProvider),
     novelIngestService: ref.watch(novelFavoriteIngestServiceProvider),
     comicAutoRefreshCoordinator: ref.watch(comicFavoriteAutoRefreshCoordinatorProvider),
+    comicDuplicateMergeService: ref.watch(comicDuplicateMergeServiceProvider),
     shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
     downloadStorageService: ref.watch(downloadStorageServiceProvider),
   );

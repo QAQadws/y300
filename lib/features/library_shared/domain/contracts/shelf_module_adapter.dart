@@ -100,6 +100,32 @@ abstract class ShelfSnapshotAdapter {
   });
 }
 
+class ShelfModuleActionResult {
+  const ShelfModuleActionResult({
+    required this.message,
+    this.changed = false,
+  });
+
+  final String message;
+  final bool changed;
+}
+
+abstract class ShelfModuleActionAdapter {
+  List<LibraryShelfMenuAction> get menuActions;
+
+  Future<ShelfModuleActionResult> runMenuAction(String actionId);
+}
+
+class LibraryShelfMenuAction {
+  const LibraryShelfMenuAction({
+    required this.id,
+    required this.label,
+  });
+
+  final String id;
+  final String label;
+}
+
 class LibraryShelfTaskProgress {
   const LibraryShelfTaskProgress({
     required this.message,

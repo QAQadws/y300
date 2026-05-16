@@ -33,6 +33,8 @@ class UnifiedShelfPage extends StatefulWidget {
 }
 
 class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
+  static const String _moduleActionPrefix = 'module-action:';
+
   late final UnifiedShelfController _controller;
   late final PageController _pageController;
   final TextEditingController _searchController = TextEditingController();
@@ -236,6 +238,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
   }
 
   PreferredSizeWidget _buildAppBar(UnifiedShelfState state) {
+    final moduleActions = _moduleMenuActions();
     if (!state.isSearchMode) {
       return AppBar(
         title: Text(state.moduleTitle),
@@ -256,13 +259,17 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
           ),
           PopupMenuButton<String>(
             onSelected: _handleMenuAction,
-            itemBuilder: (context) => const [
-              PopupMenuItem<String>(value: 'add-category', child: Text('新建分类')),
-              PopupMenuItem<String>(value: 'rename-category', child: Text('重命名当前分类')),
-              PopupMenuItem<String>(value: 'delete-category', child: Text('删除当前分类')),
-              PopupMenuDivider(),
-              PopupMenuItem<String>(value: 'refresh-shelf', child: Text('更新书架')),
-              PopupMenuItem<String>(value: 'random-open', child: Text('随机打开作品')),
+            itemBuilder: (context) => [
+              const PopupMenuItem<String>(value: 'add-category', child: Text('新建分类')),
+              const PopupMenuItem<String>(value: 'rename-category', child: Text('重命名当前分类')),
+              const PopupMenuItem<String>(value: 'delete-category', child: Text('删除当前分类')),
+              if (moduleActions.isNotEmpty) ...[
+                const PopupMenuDivider(),
+                ..._moduleActionItems(moduleActions),
+              ],
+              const PopupMenuDivider(),
+              const PopupMenuItem<String>(value: 'refresh-shelf', child: Text('更新书架')),
+              const PopupMenuItem<String>(value: 'random-open', child: Text('随机打开作品')),
             ],
           ),
         ],
@@ -305,9 +312,13 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
         ),
         PopupMenuButton<String>(
           onSelected: _handleMenuAction,
-          itemBuilder: (context) => const [
-            PopupMenuItem<String>(value: 'refresh-shelf', child: Text('更新书架')),
-            PopupMenuItem<String>(value: 'random-open', child: Text('随机打开作品')),
+          itemBuilder: (context) => [
+            if (moduleActions.isNotEmpty) ...[
+              ..._moduleActionItems(moduleActions),
+              const PopupMenuDivider(),
+            ],
+            const PopupMenuItem<String>(value: 'refresh-shelf', child: Text('更新书架')),
+            const PopupMenuItem<String>(value: 'random-open', child: Text('随机打开作品')),
           ],
         ),
       ],
@@ -407,8 +418,56 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
     );
   }
 
+  List<LibraryShelfMenuAction> _moduleMenuActions() {
+    final Object adapter = widget.adapter;
+    if (adapter is! ShelfModuleActionAdapter) {
+      return const <LibraryShelfMenuAction>[];
+    }
+    return adapter.menuActions;
+  }
+
+  List<PopupMenuEntry<String>> _moduleActionItems(
+    List<LibraryShelfMenuAction> actions,
+  ) {
+    return actions
+        .map(
+          (action) => PopupMenuItem<String>(
+            value: _moduleActionMenuValue(action.id),
+            child: Text(action.label),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  String _moduleActionMenuValue(String id) {
+    return '$_moduleActionPrefix$id';
+  }
+
   Future<void> _handleMenuAction(String value) async {
     final messenger = ScaffoldMessenger.of(context);
+
+    if (value.startsWith(_moduleActionPrefix)) {
+      final Object adapter = widget.adapter;
+      if (adapter is! ShelfModuleActionAdapter) {
+        return;
+      }
+      final actionId = value.substring(_moduleActionPrefix.length);
+      final result = await adapter.runMenuAction(actionId);
+      if (!mounted) {
+        return;
+      }
+      if (result.changed) {
+        await _controller.refresh();
+        if (!mounted) {
+          return;
+        }
+        setState(() {});
+      }
+      if (result.message.trim().isNotEmpty) {
+        messenger.showSnackBar(SnackBar(content: Text(result.message)));
+      }
+      return;
+    }
 
     if (value == 'refresh-shelf') {
       await _controller.refreshFromSource();

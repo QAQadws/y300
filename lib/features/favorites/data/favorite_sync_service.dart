@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:y300/features/comic/data/comic_favorite_auto_refresh_coordinator.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/comic/data/comic_favorite_ingest_service.dart';
+import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
 import 'package:y300/features/favorites/data/favorite_repository.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
@@ -86,6 +87,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     required ComicFavoriteIngestService comicIngestService,
     required NovelFavoriteIngestService novelIngestService,
     ComicFavoriteAutoRefreshCoordinator? comicAutoRefreshCoordinator,
+    ComicDuplicateMergeService? comicDuplicateMergeService,
     LibraryShelfRefreshBus? shelfRefreshBus,
     DownloadStorageService? downloadStorageService,
     int detailBatchLimit = 20,
@@ -97,6 +99,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         _comicIngestService = comicIngestService,
         _novelIngestService = novelIngestService,
         _comicAutoRefreshCoordinator = comicAutoRefreshCoordinator,
+        _comicDuplicateMergeService = comicDuplicateMergeService,
         _shelfRefreshBus = shelfRefreshBus,
         _downloadStorageService = downloadStorageService,
         _detailBatchLimit = detailBatchLimit;
@@ -109,6 +112,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   final ComicFavoriteIngestService _comicIngestService;
   final NovelFavoriteIngestService _novelIngestService;
   final ComicFavoriteAutoRefreshCoordinator? _comicAutoRefreshCoordinator;
+  final ComicDuplicateMergeService? _comicDuplicateMergeService;
   final LibraryShelfRefreshBus? _shelfRefreshBus;
   final DownloadStorageService? _downloadStorageService;
   final int _detailBatchLimit;
@@ -228,8 +232,14 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         : const <FavoriteThreadCacheRecord>[];
     await _removeModuleShelfItems(removedRecords);
 
+    final firstFullSync = snapshot == null && mode == FavoriteSyncMode.fullDiff;
     await runBackgroundMaintenance();
-    final detailResult = await _fillMissingDetails();
+    final detailResult = await _fillMissingDetails(
+      mergeIngestedComics: !firstFullSync,
+    );
+    if (firstFullSync) {
+      await _mergeAllComicDuplicatesAfterFirstSync();
+    }
     _emitProgress(
       const FavoriteSyncProgress(
         phase: FavoriteSyncProgressPhase.finishing,
@@ -348,7 +358,9 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         .every(activeBefore.contains);
   }
 
-  Future<_DetailFillResult> _fillMissingDetails() async {
+  Future<_DetailFillResult> _fillMissingDetails({
+    bool mergeIngestedComics = true,
+  }) async {
     final totalMissingDetails = await _localRepository.countMissingDetailRecords();
     final failedTids = <String>[];
     final failedTidSet = <String>{};
@@ -377,7 +389,10 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
           ),
         );
         try {
-          final loaded = await _fillOneDetail(record);
+          final loaded = await _fillOneDetail(
+            record,
+            mergeIngestedComics: mergeIngestedComics,
+          );
           if (loaded) {
             loadedCount++;
             madeProgress = true;
@@ -408,7 +423,10 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     );
   }
 
-  Future<bool> _fillOneDetail(FavoriteThreadCacheRecord record) async {
+  Future<bool> _fillOneDetail(
+    FavoriteThreadCacheRecord record, {
+    required bool mergeIngestedComics,
+  }) async {
     final result = await _loadThreadDetail(record.tid);
     if (result is ApiFailure<ThreadDetailData>) {
       return false;
@@ -433,6 +451,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       kind: kind,
       tagName: tagName,
       favoriteTitle: record.title,
+      mergeIngestedComic: mergeIngestedComics,
     );
 
     await _localRepository.updateThreadDetailMeta(
@@ -466,6 +485,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     required ThreadContentKind kind,
     required String? tagName,
     required String favoriteTitle,
+    required bool mergeIngestedComic,
   }) async {
     switch (kind) {
       case ThreadContentKind.comic:
@@ -479,7 +499,10 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
           favoriteTitle: favoriteTitle,
           sourceTagName: tagName,
         );
-        return workId;
+        if (!mergeIngestedComic) {
+          return workId;
+        }
+        return _mergeIngestedComicIfNeeded(workId);
       case ThreadContentKind.novel:
         final workId = await _novelIngestService.upsertFromThreadDetail(
           detail: detail,
@@ -519,6 +542,51 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     } catch (_) {
       // 收藏详情已经入库；catalog 引导/队列入队失败不应让本条收藏反复
       // 停留在 detail_loaded_at 为空的状态。后续手动刷新或搜索队列可继续补偿。
+    }
+  }
+
+  Future<String> _mergeIngestedComicIfNeeded(String comicId) async {
+    final service = _comicDuplicateMergeService;
+    if (service == null) {
+      return comicId;
+    }
+    try {
+      final result = await service.mergeComic(comicId: comicId);
+      if (result.changed) {
+        _shelfRefreshBus?.notify(
+          modules: const <LibraryModuleKey>{
+            LibraryModuleKey.comic,
+            LibraryModuleKey.favorite,
+          },
+          reason: 'favorite_comic_duplicate_merge_completed',
+        );
+      }
+      return result.targetComicId.trim().isEmpty ? comicId : result.targetComicId;
+    } catch (_) {
+      // 合并是收藏入库后的维护步骤；失败不应让本条收藏回到“未补详情”
+      // 状态，后续手动“合并重复”或下一次增量仍可补偿。
+      return comicId;
+    }
+  }
+
+  Future<void> _mergeAllComicDuplicatesAfterFirstSync() async {
+    final service = _comicDuplicateMergeService;
+    if (service == null) {
+      return;
+    }
+    try {
+      final summary = await service.mergeAllDuplicates();
+      if (summary.changed) {
+        _shelfRefreshBus?.notify(
+          modules: const <LibraryModuleKey>{
+            LibraryModuleKey.comic,
+            LibraryModuleKey.favorite,
+          },
+          reason: 'favorite_first_sync_comic_duplicate_merge_completed',
+        );
+      }
+    } catch (_) {
+      // 首次同步的主结果优先；全量去重失败可由书架菜单或下一次同步补偿。
     }
   }
 

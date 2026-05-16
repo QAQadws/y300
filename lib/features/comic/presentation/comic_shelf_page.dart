@@ -28,6 +28,7 @@ class ComicShelfPage extends ConsumerWidget {
       imageCacheServiceResolver: () => ref.read(imageCacheServiceProvider),
       featureFlags: ref.watch(comicReaderFeatureFlagsProvider),
       shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
+      duplicateMergeService: ref.watch(comicDuplicateMergeServiceProvider),
     );
     return UnifiedShelfPage(
       adapter: adapter,

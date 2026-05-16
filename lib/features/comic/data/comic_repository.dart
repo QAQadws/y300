@@ -188,3 +188,85 @@ abstract class ComicEpisodeImageCacheMetadataWriter {
     bool? protected,
   });
 }
+
+class ComicDuplicateGroup {
+  const ComicDuplicateGroup({
+    required this.comicIds,
+    required this.sharedTids,
+  });
+
+  final Set<String> comicIds;
+  final Set<String> sharedTids;
+}
+
+class ComicDuplicateMergeResult {
+  const ComicDuplicateMergeResult({
+    required this.targetComicId,
+    required this.targetTitle,
+    required this.mergedComicIds,
+    required this.replacements,
+    required this.movedEpisodeCount,
+  });
+
+  const ComicDuplicateMergeResult.unchanged({
+    required this.targetComicId,
+  })  : targetTitle = null,
+        mergedComicIds = const <String>{},
+        replacements = const <String, String>{},
+        movedEpisodeCount = 0;
+
+  final String targetComicId;
+  final String? targetTitle;
+  final Set<String> mergedComicIds;
+  final Map<String, String> replacements;
+  final int movedEpisodeCount;
+
+  bool get changed => mergedComicIds.isNotEmpty;
+}
+
+class ComicDuplicateMergeSummary {
+  const ComicDuplicateMergeSummary({
+    required this.mergedGroupCount,
+    required this.removedComicCount,
+    required this.movedEpisodeCount,
+    required this.replacements,
+  });
+
+  const ComicDuplicateMergeSummary.empty()
+      : mergedGroupCount = 0,
+        removedComicCount = 0,
+        movedEpisodeCount = 0,
+        replacements = const <String, String>{};
+
+  final int mergedGroupCount;
+  final int removedComicCount;
+  final int movedEpisodeCount;
+  final Map<String, String> replacements;
+
+  bool get changed => removedComicCount > 0;
+
+  ComicDuplicateMergeSummary combine(ComicDuplicateMergeResult result) {
+    if (!result.changed) {
+      return this;
+    }
+    return ComicDuplicateMergeSummary(
+      mergedGroupCount: mergedGroupCount + 1,
+      removedComicCount: removedComicCount + result.mergedComicIds.length,
+      movedEpisodeCount: movedEpisodeCount + result.movedEpisodeCount,
+      replacements: <String, String>{
+        ...replacements,
+        ...result.replacements,
+      },
+    );
+  }
+}
+
+abstract class ComicDuplicateMergeRepository {
+  Future<List<ComicDuplicateGroup>> findDuplicateGroups({
+    String? comicId,
+  });
+
+  Future<ComicDuplicateMergeResult> mergeDuplicateGroup({
+    required Set<String> comicIds,
+  });
+}

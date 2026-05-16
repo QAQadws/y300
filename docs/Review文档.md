@@ -3268,6 +3268,54 @@
 
 ---
 
+## 漫画重复合并 Review 清单（2026-05-16）
+
+### 一、领域边界
+- [ ] `ComicDuplicateMergeRepository` 只暴露重复发现与合并事务，不把 SQLite 细节泄漏到 UI/收藏同步。
+- [ ] `ComicDuplicateMergeService.mergeAllDuplicates()` 可供菜单和首次同步后维护使用。
+- [ ] `ComicDuplicateMergeService.mergeComic(comicId:)` 可供增量同步、内部刷新链路和未来自定义标题刷新链路复用。
+- [ ] 重复合并能力只接入漫画模块，小说和普通帖子不受影响。
+
+### 二、本地合并事务
+- [ ] 重复发现同时检查漫画源帖 tid 与章节 tid。
+- [ ] 合并目标按 detail 展示标题最短选择，平局时有稳定排序。
+- [ ] 章节迁移先保证目标章节存在，再移动图片、状态和进度，避免外键悬空。
+- [ ] 相同 tid 章节合并时能保留较完整标题、来源 URL 和发布时间文本。
+- [ ] `library_episode_state` 合并已读、下载、书签与时间戳，不因唯一键冲突丢状态。
+- [ ] `library_work_state`、`library_work_tags`、`reading_progress` 采用合并后删除源行，不直接触发唯一键冲突。
+- [ ] `shelf_items` 多分类行被归并到目标漫画。
+- [ ] `favorite_threads.work_id` 指向合并后的目标漫画。
+- [ ] 搜索刷新队列和缓存 owner 引用被改写到目标漫画。
+- [ ] 源漫画删除后，不残留指向源漫画的书架行或收藏 workId。
+
+### 三、书架菜单
+- [ ] shared 书架通过 `ShelfModuleActionAdapter` 渲染模块动作。
+- [ ] 漫画书架 AppBar 菜单展示“合并重复”。
+- [ ] 执行动作后若有变更，刷新当前书架并通知漫画/收藏模块。
+- [ ] 无重复时给出“没有发现可合并的重复漫画”的反馈。
+
+### 四、收藏同步
+- [ ] 首次完整同步在详情补完后执行一次全量 `mergeAllDuplicates()`。
+- [ ] 首次完整同步期间不对每条漫画反复执行局部合并。
+- [ ] 增量漫画入库并完成自动刷新后执行 `mergeComic()`。
+- [ ] 增量收藏记录写入合并后的目标 `workId`。
+- [ ] 合并失败不会阻断收藏详情入库，后续可通过菜单或下次同步补偿。
+
+### 五、测试覆盖（仅编写，未执行）
+- [ ] `local_comic_repository_test.dart` 覆盖最短标题、章节并集、源漫画删除。
+- [ ] `local_comic_repository_test.dart` 覆盖阅读状态、标签、阅读进度和收藏 workId 合并。
+- [ ] `comic_duplicate_merge_service_test.dart` 覆盖全量与单本合并服务。
+- [ ] `comic_shelf_adapter_test.dart` 覆盖菜单动作和刷新通知。
+- [ ] `favorite_sync_service_test.dart` 覆盖首次全量合并与增量目标 workId。
+
+### 六、待本地回归
+1. `flutter test`
+2. `flutter analyze`
+
+说明：`dart format` 按本轮要求未执行。
+
+---
+
 ## 漫画解析与书架问题修复 Phase 6 Review 清单（2026-05-14）
 
 ### 一、分类头背景

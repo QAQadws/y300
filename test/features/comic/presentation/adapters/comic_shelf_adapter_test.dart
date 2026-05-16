@@ -5,6 +5,7 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/presentation/adapters/comic_shelf_adapter.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
@@ -12,6 +13,7 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
 void main() {
   test('ComicShelfAdapter returns metadata before cover warmup', () async {
@@ -196,6 +198,35 @@ void main() {
     expect(items.single.readChapterCount, 1);
     expect(items.single.isDownloaded, isTrue);
   });
+
+  test('ComicShelfAdapter exposes merge duplicates module action', () async {
+    final repository = _FakeDuplicateComicRepository(
+      mergeResult: const ComicDuplicateMergeResult(
+        targetComicId: 'comic-a',
+        targetTitle: '短标题',
+        mergedComicIds: <String>{'comic-b'},
+        replacements: <String, String>{'comic-b': 'comic-a'},
+        movedEpisodeCount: 2,
+      ),
+    );
+    final bus = LibraryShelfRefreshBus();
+    addTearDown(bus.dispose);
+    final adapter = ComicShelfAdapter(
+      repository,
+      stateRepository: _FakeLibraryStateRepository(),
+      duplicateMergeService: ComicDuplicateMergeService(repository: repository),
+      shelfRefreshBus: bus,
+    );
+
+    final result = await adapter.runMenuAction('merge-duplicates');
+
+    expect(adapter.menuActions.single.label, '合并重复');
+    expect(result.changed, isTrue);
+    expect(result.message, '已合并 1 个重复漫画');
+    expect(repository.mergeAllCallCount, 1);
+    expect(bus.signal.value?.modules, contains(LibraryModuleKey.comic));
+    expect(bus.signal.value?.modules, contains(LibraryModuleKey.favorite));
+  });
 }
 
 class _FakeSnapshotComicRepository extends _FakeComicRepository
@@ -378,6 +409,37 @@ class _FakeComicRepository
     required int imageIndex,
     required double scrollOffset,
   }) async {}
+}
+
+class _FakeDuplicateComicRepository extends _FakeComicRepository
+    implements ComicDuplicateMergeRepository {
+  _FakeDuplicateComicRepository({
+    required this.mergeResult,
+  }) : super(shelfItems: const <ComicShelfItem>[]);
+
+  final ComicDuplicateMergeResult mergeResult;
+  int mergeAllCallCount = 0;
+
+  @override
+  Future<List<ComicDuplicateGroup>> findDuplicateGroups({String? comicId}) async {
+    if (mergeAllCallCount > 0) {
+      return const <ComicDuplicateGroup>[];
+    }
+    return <ComicDuplicateGroup>[
+      ComicDuplicateGroup(
+        comicIds: <String>{mergeResult.targetComicId, ...mergeResult.mergedComicIds},
+        sharedTids: const <String>{'100'},
+      ),
+    ];
+  }
+
+  @override
+  Future<ComicDuplicateMergeResult> mergeDuplicateGroup({
+    required Set<String> comicIds,
+  }) async {
+    mergeAllCallCount++;
+    return mergeResult;
+  }
 }
 
 class _FakeImageCacheService implements ImageCacheService {

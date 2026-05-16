@@ -6,6 +6,7 @@ import 'package:y300/features/comic/data/comic_cache_manager_factory.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/local_comic_repository.dart';
+import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_events.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
@@ -15,6 +16,16 @@ final comicRepositoryProvider = Provider<ComicRepository>((ref) {
   return LocalComicRepository(
     ComicLocalDb.open(),
   );
+});
+
+final comicDuplicateMergeServiceProvider = Provider<ComicDuplicateMergeService?>((ref) {
+  final repository = ref.watch(comicRepositoryProvider);
+  if (repository is ComicDuplicateMergeRepository) {
+    return ComicDuplicateMergeService(
+      repository: repository as ComicDuplicateMergeRepository,
+    );
+  }
+  return null;
 });
 
 final comicCoverCacheWriterProvider = Provider<ComicCoverCacheWriter?>((ref) {
