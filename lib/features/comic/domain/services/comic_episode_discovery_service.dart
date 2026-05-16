@@ -110,6 +110,9 @@ class ComicEpisodeDiscoveryService {
   Future<EpisodeDiscoveryResult> discoverFromTidWithPreference({
     required String tid,
     required bool preferCatalogFirst,
+    // Search/current-only refresh needs current-post links without letting the
+    // same catalog fallback run twice. The default keeps legacy discovery.
+    bool allowCatalogFallback = true,
   }) async {
     final root = await _fetchAndParse(tid);
     if (root == null) {
@@ -119,7 +122,7 @@ class ComicEpisodeDiscoveryService {
       );
     }
 
-    if (preferCatalogFirst && root.parsed.catalogUrl != null) {
+    if (allowCatalogFallback && preferCatalogFirst && root.parsed.catalogUrl != null) {
       final catalogLinks = await _discoverFromCatalog(root.parsed.catalogUrl);
       if (catalogLinks.isNotEmpty) {
         return EpisodeDiscoveryResult(
@@ -144,12 +147,14 @@ class ComicEpisodeDiscoveryService {
       );
     }
 
-    final catalogLinks = await _discoverFromCatalog(root.parsed.catalogUrl);
-    if (catalogLinks.isNotEmpty) {
-      return EpisodeDiscoveryResult(
-        strategy: EpisodeDiscoveryStrategy.catalog,
-        episodeLinks: catalogLinks,
-      );
+    if (allowCatalogFallback) {
+      final catalogLinks = await _discoverFromCatalog(root.parsed.catalogUrl);
+      if (catalogLinks.isNotEmpty) {
+        return EpisodeDiscoveryResult(
+          strategy: EpisodeDiscoveryStrategy.catalog,
+          episodeLinks: catalogLinks,
+        );
+      }
     }
 
     return EpisodeDiscoveryResult(

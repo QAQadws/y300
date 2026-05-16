@@ -21,6 +21,7 @@ class LocalComicRepository
         ComicShelfSnapshotRepository,
         ComicShelfStatsRepository,
         ComicCoverCacheWriter,
+        ComicFirstEpisodeCoverWriter,
         ComicEpisodeImageCacheMetadataWriter {
   LocalComicRepository(
     this._dbFuture, {
@@ -458,6 +459,23 @@ class LocalComicRepository
       where: 'comic_id = ?',
       whereArgs: <Object>[comicId],
     );
+  }
+
+  @override
+  Future<bool> promoteFirstEpisodeCover({
+    required String comicId,
+    required String episodeId,
+    required String imageUrl,
+  }) async {
+    final db = await _dbFuture;
+    return db.transaction<bool>((txn) {
+      return _promoteFirstEpisodeCoverInTransaction(
+        txn,
+        comicId: comicId,
+        episodeId: episodeId,
+        imageUrl: imageUrl,
+      );
+    });
   }
 
   @override
@@ -1375,7 +1393,24 @@ class LocalComicRepository
     if (comicId == null) {
       return;
     }
+    await _promoteFirstEpisodeCoverInTransaction(
+      txn,
+      comicId: comicId,
+      episodeId: episodeId,
+      imageUrl: imageUrls.first,
+    );
+  }
 
+  Future<bool> _promoteFirstEpisodeCoverInTransaction(
+    Transaction txn, {
+    required String comicId,
+    required String episodeId,
+    required String imageUrl,
+  }) async {
+    final normalizedImageUrl = _normalizeNullable(imageUrl);
+    if (normalizedImageUrl == null) {
+      return false;
+    }
     final comics = await txn.query(
       ComicLocalDb.comicsTable,
       columns: const <String>[
@@ -1389,12 +1424,12 @@ class LocalComicRepository
       limit: 1,
     );
     if (comics.isEmpty) {
-      return;
+      return false;
     }
     final customCover = _normalizeNullable(comics.first['custom_cover_image_url'] as String?);
     final customCoverLocalPath = _normalizeNullable(comics.first['custom_cover_local_path'] as String?);
     if (customCover != null || customCoverLocalPath != null) {
-      return;
+      return false;
     }
 
     final episodes = await txn.query(
@@ -1404,19 +1439,20 @@ class LocalComicRepository
       whereArgs: <Object>[comicId],
     );
     if (episodes.isEmpty) {
-      return;
+      return false;
     }
     // sqflite 的查询结果在部分实现中是只读列表；排序前复制成普通 List，
     // 避免 ListBase.sort 交换元素时触发 Unsupported operation: read-only。
     final orderedEpisodes = episodes.toList(growable: true)
       ..sort(_compareEpisodeRowsByFirstTid);
     if (orderedEpisodes.first['episode_id'] != episodeId) {
-      return;
+      return false;
     }
 
     final currentCover = _normalizeNullable(comics.first['cover_image_url'] as String?);
-    if (currentCover == imageUrls.first) {
-      return;
+    final currentLocalPath = _normalizeNullable(comics.first['cover_local_path'] as String?);
+    if (currentCover == normalizedImageUrl && currentLocalPath == null) {
+      return false;
     }
 
     // 允许“首楼图片”纠正为真实首话首图；但用户自定义封面拥有最高优先级，
@@ -1424,13 +1460,14 @@ class LocalComicRepository
     await txn.update(
       ComicLocalDb.comicsTable,
       <String, Object?>{
-        'cover_image_url': imageUrls.first,
+        'cover_image_url': normalizedImageUrl,
         'cover_local_path': null,
         'updated_at': DateTime.now().millisecondsSinceEpoch,
       },
       where: 'comic_id = ?',
       whereArgs: <Object>[comicId],
     );
+    return true;
   }
 
   int _compareEpisodeRowsByFirstTid(Map<String, Object?> a, Map<String, Object?> b) {

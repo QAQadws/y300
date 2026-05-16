@@ -13,6 +13,7 @@ import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_parsing_debug_models.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
+import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
 import 'package:y300/features/comic/domain/services/comic_detector.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
@@ -41,7 +42,42 @@ abstract class ComicEpisodeRefreshService {
     ComicEpisodeRefreshRequest request,
   );
 
+  /// Runs only strategy 1. A miss intentionally returns an empty outcome so
+  /// callers can enqueue search without spending a search request here.
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
+    ComicEpisodeRefreshRequest request,
+  );
+
+  /// Runs strategy 2 and strategy 3 for callers that already decided catalog
+  /// refresh should not run immediately, such as the future search queue.
+  Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
+    ComicEpisodeRefreshRequest request,
+  );
+
   Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid);
+}
+
+enum ComicEpisodeRefreshSource {
+  catalog,
+  search,
+  currentOnly,
+  empty,
+}
+
+class ComicEpisodeRefreshOutcome {
+  const ComicEpisodeRefreshOutcome({
+    required this.source,
+    required this.links,
+    this.usedSearch = false,
+    this.catalogMatched = false,
+  });
+
+  final ComicEpisodeRefreshSource source;
+  final List<ComicEpisodeLink> links;
+  final bool usedSearch;
+  final bool catalogMatched;
+
+  bool get hasLinks => links.isNotEmpty;
 }
 
 class ComicEpisodeRefreshRequest {
@@ -87,10 +123,7 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   ) async {
     // 当前帖的连续跳转链接常只覆盖“上一话/历史话”，不能作为完整章节表。
     // 因此仅在目录解析成功时直接信任；否则继续走搜索补全，并按 tid 合并。
-    final current = await _discoveryService.discoverFromTidWithPreference(
-      tid: request.sourceTid,
-      preferCatalogFirst: true,
-    );
+    final current = await _discoverCatalogFirst(request);
     if (current.strategy == EpisodeDiscoveryStrategy.catalog && current.episodeLinks.isNotEmpty) {
       _logRefresh(
         request,
@@ -99,7 +132,75 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
       return current.episodeLinks;
     }
 
-    final searchLinks = await _searchFallbackFromCurrentTid(request);
+    final outcome = await _fetchSearchAndCurrentOnly(
+      request,
+      current: current,
+    );
+    return outcome.links;
+  }
+
+  @override
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    final current = await _discoverCatalogFirst(request);
+    final catalogMatched =
+        current.strategy == EpisodeDiscoveryStrategy.catalog &&
+        current.episodeLinks.isNotEmpty;
+    if (!catalogMatched) {
+      _logRefresh(
+        request,
+        'strategy=catalog-only miss current=${current.episodeLinks.length}',
+      );
+      return const ComicEpisodeRefreshOutcome(
+        source: ComicEpisodeRefreshSource.empty,
+        links: <ComicEpisodeLink>[],
+      );
+    }
+    _logRefresh(
+      request,
+      'strategy=catalog-only links=${current.episodeLinks.length}',
+    );
+    return ComicEpisodeRefreshOutcome(
+      source: ComicEpisodeRefreshSource.catalog,
+      links: current.episodeLinks,
+      catalogMatched: true,
+    );
+  }
+
+  @override
+  Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    final current = await _discoverCurrentOnly(request);
+    return _fetchSearchAndCurrentOnly(request, current: current);
+  }
+
+  Future<EpisodeDiscoveryResult> _discoverCatalogFirst(
+    ComicEpisodeRefreshRequest request,
+  ) {
+    return _discoveryService.discoverFromTidWithPreference(
+      tid: request.sourceTid,
+      preferCatalogFirst: true,
+    );
+  }
+
+  Future<EpisodeDiscoveryResult> _discoverCurrentOnly(
+    ComicEpisodeRefreshRequest request,
+  ) {
+    return _discoveryService.discoverFromTidWithPreference(
+      tid: request.sourceTid,
+      preferCatalogFirst: false,
+      allowCatalogFallback: false,
+    );
+  }
+
+  Future<ComicEpisodeRefreshOutcome> _fetchSearchAndCurrentOnly(
+    ComicEpisodeRefreshRequest request, {
+    required EpisodeDiscoveryResult current,
+  }) async {
+    final searchResult = await _searchFallbackFromCurrentTid(request);
+    final searchLinks = searchResult.links;
     if (searchLinks.isNotEmpty) {
       final merged = _mergeEpisodeLinks(
         current.episodeLinks,
@@ -111,14 +212,25 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
         'strategy=search current=${current.episodeLinks.length} '
         'search=${searchLinks.length} merged=${merged.length}',
       );
-      return merged;
+      return ComicEpisodeRefreshOutcome(
+        source: ComicEpisodeRefreshSource.search,
+        links: merged,
+        usedSearch: true,
+      );
     }
 
     _logRefresh(
       request,
-      'strategy=current-only links=${current.episodeLinks.length}',
+      'strategy=current-only links=${current.episodeLinks.length} '
+      'searched=${searchResult.usedSearch}',
     );
-    return current.episodeLinks;
+    return ComicEpisodeRefreshOutcome(
+      source: current.episodeLinks.isEmpty
+          ? ComicEpisodeRefreshSource.empty
+          : ComicEpisodeRefreshSource.currentOnly,
+      links: current.episodeLinks,
+      usedSearch: searchResult.usedSearch,
+    );
   }
 
   @override
@@ -126,7 +238,7 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
     return fetchEpisodeLinks(ComicEpisodeRefreshRequest(sourceTid: tid));
   }
 
-  Future<List<ComicEpisodeLink>> _searchFallbackFromCurrentTid(
+  Future<_SearchFallbackResult> _searchFallbackFromCurrentTid(
     ComicEpisodeRefreshRequest request,
   ) async {
     final keywordMode =
@@ -134,9 +246,10 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
     _logRefresh(request, 'refreshKeywordMode=$keywordMode');
     final thread = await _fetchThreadDetail(request.sourceTid);
     if (thread == null) {
-      return const <ComicEpisodeLink>[];
+      return const _SearchFallbackResult.empty();
     }
     final keywords = _resolveSearchKeywords(request, thread.subject);
+    var usedSearch = false;
     for (final keyword in keywords) {
       _logRefresh(request, 'keyword=${keyword.value} source=${keyword.source}');
 
@@ -145,13 +258,17 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
         context: const DiscuzSearchContext.curForum(srhfid: '30'),
         enforceRateLimit: true,
       );
+      usedSearch = true;
       if (search.rateLimited || search.items.isEmpty) {
         _logRefresh(
           request,
           'keyword=${keyword.value} candidates=0 rateLimited=${search.rateLimited}',
         );
         if (search.rateLimited) {
-          return const <ComicEpisodeLink>[];
+          return const _SearchFallbackResult(
+            links: <ComicEpisodeLink>[],
+            usedSearch: true,
+          );
         }
         continue;
       }
@@ -194,23 +311,35 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
         continue;
       }
       if (collectedLinks.isEmpty) {
-        return searchCandidateLinks;
+        return _SearchFallbackResult(
+          links: searchCandidateLinks,
+          usedSearch: true,
+        );
       }
       if (searchCandidateLinks.length > collectedLinks.length) {
         // Discuz search results are themselves same-series thread entries. When
         // catalog/recursive parsing only finds a partial set, preserve those
         // matched entries instead of losing newer chapters from the search page.
-        return _sortEpisodeLinks(
-          _mergeEpisodeLinks(
-            collectedLinks,
-            searchCandidateLinks,
-            preferSupplement: true,
+        return _SearchFallbackResult(
+          links: _sortEpisodeLinks(
+            _mergeEpisodeLinks(
+              collectedLinks,
+              searchCandidateLinks,
+              preferSupplement: true,
+            ),
           ),
+          usedSearch: true,
         );
       }
-      return _sortEpisodeLinks(collectedLinks);
+      return _SearchFallbackResult(
+        links: _sortEpisodeLinks(collectedLinks),
+        usedSearch: true,
+      );
     }
-    return const <ComicEpisodeLink>[];
+    return _SearchFallbackResult(
+      links: const <ComicEpisodeLink>[],
+      usedSearch: usedSearch,
+    );
   }
 
   List<_RefreshKeyword> _resolveSearchKeywords(
@@ -432,6 +561,20 @@ class _RefreshKeyword {
 
   final String source;
   final String value;
+}
+
+class _SearchFallbackResult {
+  const _SearchFallbackResult({
+    required this.links,
+    required this.usedSearch,
+  });
+
+  const _SearchFallbackResult.empty()
+      : links = const <ComicEpisodeLink>[],
+        usedSearch = false;
+
+  final List<ComicEpisodeLink> links;
+  final bool usedSearch;
 }
 
 final comicEpisodeDiscoveryServiceProvider = Provider<ComicEpisodeDiscoveryService>((ref) {
@@ -697,6 +840,16 @@ final comicReaderServiceProvider = FutureProvider<ComicReaderService>((ref) asyn
     imageCacheService: ref.read(imageCacheServiceProvider),
     cacheManager: await ref.read(comicCacheManagerProvider.future),
     headerBuilder: ref.read(imageRequestHeaderBuilderProvider),
+  );
+});
+
+final comicFirstEpisodeCoverServiceProvider = Provider<ComicFirstEpisodeCoverService>((ref) {
+  return ComicFirstEpisodeCoverService(
+    repository: ref.watch(comicRepositoryProvider),
+    fetchEpisodeImagesByTid: (tid) async {
+      final readerService = await ref.read(comicReaderServiceProvider.future);
+      return readerService.fetchEpisodeImagesByTid(tid);
+    },
   );
 });
 

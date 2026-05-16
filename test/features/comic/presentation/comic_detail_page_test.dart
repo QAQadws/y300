@@ -299,6 +299,26 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   }
 
   @override
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    return const ComicEpisodeRefreshOutcome(
+      source: ComicEpisodeRefreshSource.empty,
+      links: <ComicEpisodeLink>[],
+    );
+  }
+
+  @override
+  Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    return const ComicEpisodeRefreshOutcome(
+      source: ComicEpisodeRefreshSource.empty,
+      links: <ComicEpisodeLink>[],
+    );
+  }
+
+  @override
   Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
     return const <ComicEpisodeLink>[];
   }

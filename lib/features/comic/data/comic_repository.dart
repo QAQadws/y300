@@ -165,6 +165,14 @@ abstract class ComicCoverCacheWriter {
   });
 }
 
+abstract class ComicFirstEpisodeCoverWriter {
+  Future<bool> promoteFirstEpisodeCover({
+    required String comicId,
+    required String episodeId,
+    required String imageUrl,
+  });
+}
+
 abstract class ComicEpisodeImageCacheMetadataWriter {
   Future<void> updateEpisodeImageCacheMetadata({
     required String episodeId,

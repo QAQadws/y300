@@ -1,3 +1,29 @@
+# 收藏自动刷新与搜索等待队列：阶段 1/2 Review 补充
+
+## 文件范围
+
+- [ ] `lib/features/comic/domain/services/comic_services_impl.dart`
+- [ ] `lib/features/comic/domain/services/comic_episode_discovery_service.dart`
+- [ ] `lib/features/comic/domain/services/comic_first_episode_cover_service.dart`
+- [ ] `lib/features/comic/data/comic_repository.dart`
+- [ ] `lib/features/comic/data/local_comic_repository.dart`
+- [ ] `lib/features/comic/presentation/adapters/comic_detail_adapter.dart`
+- [ ] `lib/features/comic/presentation/comic_detail_page.dart`
+- [ ] `test/features/comic/domain/services/network_comic_episode_refresh_service_test.dart`
+- [ ] `test/features/comic/domain/services/comic_first_episode_cover_service_test.dart`
+
+## Review 重点
+
+- [ ] `fetchCatalogOnly()` 不触发 `ForumSearchService.searchForum()`。
+- [ ] `fetchSearchAndCurrentOnly()` 能跳过当前帖 catalog fallback，并保留搜索候选回探能力。
+- [ ] 旧 `fetchEpisodeLinks()` 调用方仍保持兼容。
+- [ ] 自动封面提升只写普通封面，不覆盖 `custom_cover_*`。
+- [ ] 封面提升服务不依赖 SQLite 细节，写回能力由 `ComicFirstEpisodeCoverWriter` 承担。
+- [ ] 本轮未实现搜索等待队列，后续阶段需要继续接入收藏同步和队列 worker。
+- [ ] 本轮未执行测试、分析或格式化，需由 reviewer 本地执行。
+
+---
+
 # MVP 页面实现 Review 打勾版模板
 
 > 用途：审查“第 1 批（MVP）”中新实现的 `forumdisplay`、`viewthread`、`登录页`。

@@ -4,6 +4,7 @@ import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/comic_download_service.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
+import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
@@ -21,11 +22,13 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
   ComicDetailAdapter(
     this._repository, {
     ComicEpisodeRefreshService? refreshService,
+    ComicFirstEpisodeCoverService? firstEpisodeCoverService,
     ComicDownloadService? downloadService,
     ImageCacheService? imageCacheService,
     ComicReaderFeatureFlags featureFlags = ComicReaderFeatureFlags.defaults,
     required LibraryStateRepository stateRepository,
   })  : _refreshService = refreshService,
+        _firstEpisodeCoverService = firstEpisodeCoverService,
         _downloadService = downloadService,
         _imageCacheService = imageCacheService,
         _featureFlags = featureFlags,
@@ -33,6 +36,7 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
 
   final ComicRepository _repository;
   final ComicEpisodeRefreshService? _refreshService;
+  final ComicFirstEpisodeCoverService? _firstEpisodeCoverService;
   final ComicDownloadService? _downloadService;
   final ImageCacheService? _imageCacheService;
   final ComicReaderFeatureFlags _featureFlags;
@@ -70,9 +74,27 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
     var customCoverLocalPath =
         useCustomMetadata ? detail.customCoverLocalPath : null;
     if (coverImageUrl == null || coverImageUrl.trim().isEmpty) {
+      final promoted = await _firstEpisodeCoverService?.promoteIfPossible(
+        comicId: workId,
+      );
+      if (promoted == true) {
+        final refreshed = await _repository.getComicDetail(comicId: workId);
+        if (refreshed != null) {
+          coverImageUrl = useCustomMetadata
+              ? refreshed.coverImageUrl
+              : _sourceCoverImageUrl(refreshed);
+          coverLocalPath = useCustomMetadata
+              ? refreshed.coverLocalPath
+              : _sourceCoverLocalPath(refreshed);
+          customCoverLocalPath =
+              useCustomMetadata ? refreshed.customCoverLocalPath : null;
+        }
+      }
       // 漫画初始封面使用“tid 最小的话的第一张图”。orderIndex 只代表
       // 当前解析顺序，遇到目录/补全章节时不一定等于真实首话。
-      coverImageUrl = await _loadFirstEpisodeImageUrl(workId);
+      if (coverImageUrl == null || coverImageUrl.trim().isEmpty) {
+        coverImageUrl = await _loadFirstEpisodeImageUrl(workId);
+      }
     }
     if (customCoverImageUrl != null &&
         customCoverImageUrl.isNotEmpty &&
@@ -437,6 +459,7 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
       episodeLinks: links,
       fallbackSourceTid: detail.sourceTid,
     );
+    await _firstEpisodeCoverService?.promoteIfPossible(comicId: workId);
   }
 
   @override

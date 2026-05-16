@@ -27,6 +27,7 @@ class ComicDetailPage extends ConsumerWidget {
     final adapter = ComicDetailAdapter(
       ref.watch(comicRepositoryProvider),
       refreshService: ref.watch(comicEpisodeRefreshServiceProvider),
+      firstEpisodeCoverService: ref.watch(comicFirstEpisodeCoverServiceProvider),
       downloadService: ref.watch(comicDownloadServiceProvider),
       imageCacheService: ref.watch(imageCacheServiceProvider),
       featureFlags: ref.watch(comicReaderFeatureFlagsProvider),
