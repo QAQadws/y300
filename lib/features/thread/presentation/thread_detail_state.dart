@@ -22,6 +22,9 @@ class ThreadDetailPageState {
     required this.isNovelCandidate,
     required this.isNovelInShelf,
     required this.isNovelActionLoading,
+    required this.isThreadFavorited,
+    required this.isThreadFavoriteActionLoading,
+    required this.threadFavoriteHint,
     required this.replyText,
     required this.isReplySubmitting,
     required this.replyHint,
@@ -46,6 +49,9 @@ class ThreadDetailPageState {
   final bool isNovelCandidate;
   final bool isNovelInShelf;
   final bool isNovelActionLoading;
+  final bool isThreadFavorited;
+  final bool isThreadFavoriteActionLoading;
+  final String? threadFavoriteHint;
   final String replyText;
   final bool isReplySubmitting;
   final String? replyHint;
@@ -74,6 +80,9 @@ class ThreadDetailPageState {
       isNovelCandidate: false,
       isNovelInShelf: false,
       isNovelActionLoading: false,
+      isThreadFavorited: false,
+      isThreadFavoriteActionLoading: false,
+      threadFavoriteHint: null,
       replyText: '',
       isReplySubmitting: false,
       replyHint: null,
@@ -100,11 +109,15 @@ class ThreadDetailPageState {
     bool? isNovelCandidate,
     bool? isNovelInShelf,
     bool? isNovelActionLoading,
+    bool? isThreadFavorited,
+    bool? isThreadFavoriteActionLoading,
+    String? threadFavoriteHint,
     String? replyText,
     bool? isReplySubmitting,
     String? replyHint,
     String? errorMessage,
     bool clearReplyHint = false,
+    bool clearThreadFavoriteHint = false,
     bool clearError = false,
     bool clearSourceTagName = false,
   }) {
@@ -129,6 +142,12 @@ class ThreadDetailPageState {
       isNovelCandidate: isNovelCandidate ?? this.isNovelCandidate,
       isNovelInShelf: isNovelInShelf ?? this.isNovelInShelf,
       isNovelActionLoading: isNovelActionLoading ?? this.isNovelActionLoading,
+      isThreadFavorited: isThreadFavorited ?? this.isThreadFavorited,
+      isThreadFavoriteActionLoading:
+          isThreadFavoriteActionLoading ?? this.isThreadFavoriteActionLoading,
+      threadFavoriteHint: clearThreadFavoriteHint
+          ? null
+          : (threadFavoriteHint ?? this.threadFavoriteHint),
       replyText: replyText ?? this.replyText,
       isReplySubmitting: isReplySubmitting ?? this.isReplySubmitting,
       replyHint: clearReplyHint ? null : (replyHint ?? this.replyHint),

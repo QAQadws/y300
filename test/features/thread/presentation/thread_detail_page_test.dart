@@ -19,7 +19,10 @@ import 'package:y300/features/tags/data/tag_providers.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/tags/domain/forum_tag_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/data/thread_favorite_providers.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
+import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
+import 'package:y300/features/thread/domain/services/thread_favorite_action_service.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
 void main() {
@@ -266,6 +269,52 @@ void main() {
       expect(find.byKey(const Key('thread-detail-search-button')), findsOneWidget);
     });
 
+    testWidgets('favorites thread from app bar action', (tester) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            subject: '测试主题',
+            author: 'alice',
+            replies: 0,
+            views: 1,
+            currentPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+      final favoriteActionService = _FakeThreadFavoriteActionService();
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          favoriteActionService: favoriteActionService,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('thread-detail-favorite-button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(favoriteActionService.called, isTrue);
+      expect(favoriteActionService.lastTid, '100');
+      expect(find.byIcon(Icons.favorite), findsOneWidget);
+      expect(find.text('收藏成功'), findsOneWidget);
+    });
+
     testWidgets('can input and submit reply via api repository abstraction', (tester) async {
       final repository = _FakeThreadRepository((tid, page) async {
         return ApiSuccess(
@@ -313,6 +362,7 @@ Widget _buildTestApp(
   ThreadRepository repository, {
   ReplyRepository? replyRepository,
   NovelRepository? novelRepository,
+  ThreadFavoriteActionService? favoriteActionService,
 }) {
   return ProviderScope(
     overrides: [
@@ -320,6 +370,9 @@ Widget _buildTestApp(
       comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
       novelRepositoryProvider.overrideWithValue(novelRepository ?? _FakeNovelRepository()),
       replyRepositoryProvider.overrideWithValue(replyRepository ?? _FakeReplyRepository()),
+      threadFavoriteActionServiceProvider.overrideWithValue(
+        favoriteActionService ?? _FakeThreadFavoriteActionService(),
+      ),
       forumTagRepositoryProvider.overrideWithValue(_FakeForumTagRepository()),
     ],
     child: const MaterialApp(
@@ -351,6 +404,28 @@ class _FakeForumTagRepository implements ForumTagRepository {
         ),
       ],
     );
+  }
+}
+
+class _FakeThreadFavoriteActionService implements ThreadFavoriteActionService {
+  final ApiResult<ThreadFavoriteActionResult> result =
+      const ApiSuccess<ThreadFavoriteActionResult>(
+    ThreadFavoriteActionResult(
+      message: '收藏成功',
+      refreshedFavoriteModule: true,
+      alreadyFavorited: false,
+    ),
+  );
+  bool called = false;
+  String? lastTid;
+
+  @override
+  Future<ApiResult<ThreadFavoriteActionResult>> favoriteThread({
+    required String tid,
+  }) async {
+    called = true;
+    lastTid = tid;
+    return result;
   }
 }
 

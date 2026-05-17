@@ -23,11 +23,42 @@ class ThreadDetailPage extends ConsumerWidget {
     final controller = ref.read(threadDetailControllerProvider(args).notifier);
     final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
     final state = asyncState.value ?? ThreadDetailPageState.initial(tid: tid, subject: subject);
+    ref.listen<AsyncValue<ThreadDetailPageState>>(
+      threadDetailControllerProvider(args),
+      (previous, next) {
+        final previousHint = previous?.value?.threadFavoriteHint;
+        final nextHint = next.value?.threadFavoriteHint;
+        if (nextHint == null || nextHint.trim().isEmpty || nextHint == previousHint) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(nextHint)),
+        );
+      },
+    );
 
     return Scaffold(
       appBar: AppBar(
         title: Text(state.subject.isNotEmpty ? state.subject : '帖子详情'),
         actions: [
+          IconButton(
+            key: const Key('thread-detail-favorite-button'),
+            tooltip: state.isThreadFavorited ? '已收藏' : '收藏帖子',
+            onPressed: asyncState.value == null ||
+                    state.isThreadFavoriteActionLoading ||
+                    state.isThreadFavorited
+                ? null
+                : controller.favoriteThread,
+            icon: state.isThreadFavoriteActionLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(
+                    state.isThreadFavorited ? Icons.favorite : Icons.favorite_border,
+                  ),
+          ),
           if (state.fid == '30')
             IconButton(
               key: const Key('thread-detail-search-button'),

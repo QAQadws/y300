@@ -3341,3 +3341,44 @@
 2. `flutter analyze`
 
 说明：`dart format` 按本轮要求未执行。
+## 论坛帖子收藏 Review 清单（2026-05-17）
+
+### 一、接口与鉴权
+- [ ] `DiscuzThreadFavoriteApiRepository` 使用 `favthread` + `version=4`。
+- [ ] 表单字段包含 `formhash`、`id`、`favoritesubmit`，其中 `id` 为帖子 `tid`。
+- [ ] 请求使用 `Headers.formUrlEncodedContentType`。
+- [ ] 请求携带 Cookie，并保存响应中的 `set-cookie`。
+- [ ] `referer` 指向当前帖子详情页。
+- [ ] `formhash` 为空时返回业务失败，不发起收藏请求。
+
+### 二、响应解析
+- [ ] `favorite_do_success`、`success/succeed` 和中文“成功”都视为收藏成功。
+- [ ] “已经收藏/重复收藏”按幂等成功处理，避免用户重复点击后误报失败。
+- [ ] Discuz `Message` 业务失败会保留 `messageval/messagestr` 到 `ApiError`。
+- [ ] Dio timeout、401/403、5xx 分别映射到现有 `ApiErrorType`。
+
+### 三、模块解耦
+- [ ] 线程详情页不直接拼装 Discuz 表单。
+- [ ] `ThreadFavoriteActionService` 只通过注入的刷新回调触发收藏模块刷新。
+- [ ] 刷新通知通过 `LibraryShelfRefreshBus` 面向 `LibraryModuleKey.favorite`，不直接依赖收藏页 widget。
+- [ ] 远端收藏成功但本地刷新失败时不回滚页面收藏状态。
+
+### 四、页面行为
+- [ ] `ThreadDetailPage` AppBar 有 `thread-detail-favorite-button`。
+- [ ] 收藏中按钮显示进度状态并阻止重复提交。
+- [ ] 收藏成功后按钮显示实心收藏图标。
+- [ ] 收藏成功或失败信息通过 SnackBar 反馈给用户。
+- [ ] 漫画/小说加入书架入口和论坛内搜索按钮不受影响。
+
+### 五、测试覆盖（仅编写，未执行）
+- [ ] `discuz_thread_favorite_api_repository_test.dart` 覆盖请求体和成功/重复收藏解析。
+- [ ] `thread_favorite_action_service_test.dart` 覆盖刷新成功、刷新失败、远端失败三条路径。
+- [ ] `thread_detail_page_test.dart` 覆盖 AppBar 收藏按钮行为。
+
+### 六、待本地回归
+1. `flutter test`
+2. `flutter analyze`
+
+说明：`dart format` 按本轮要求未执行。
+
+---

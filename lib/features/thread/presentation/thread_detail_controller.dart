@@ -13,6 +13,7 @@ import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/tags/data/tag_providers.dart';
+import 'package:y300/features/thread/data/thread_favorite_providers.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
@@ -195,6 +196,47 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     }
   }
 
+  Future<void> favoriteThread() async {
+    final current = state.value;
+    if (current == null ||
+        current.isThreadFavoriteActionLoading ||
+        current.isThreadFavorited) {
+      return;
+    }
+    final snapshot = current;
+
+    state = AsyncData(
+      snapshot.copyWith(
+        isThreadFavoriteActionLoading: true,
+        clearThreadFavoriteHint: true,
+        clearError: true,
+      ),
+    );
+
+    final result = await ref.read(threadFavoriteActionServiceProvider).favoriteThread(
+          tid: snapshot.tid,
+        );
+    if (!ref.mounted) {
+      return;
+    }
+    final afterAction = state.value ?? snapshot;
+    state = result.when(
+      success: (data) => AsyncData(
+        afterAction.copyWith(
+          isThreadFavoriteActionLoading: false,
+          isThreadFavorited: true,
+          threadFavoriteHint: data.message,
+        ),
+      ),
+      failure: (error) => AsyncData(
+        afterAction.copyWith(
+          isThreadFavoriteActionLoading: false,
+          threadFavoriteHint: error.message,
+        ),
+      ),
+    );
+  }
+
   void updateReplyText(String value) {
     final current = state.value;
     if (current == null) {
@@ -263,6 +305,8 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         reloaded.copyWith(
           replyHint: latest.replyHint,
           replyText: latest.replyText,
+          isThreadFavorited: latest.isThreadFavorited,
+          threadFavoriteHint: latest.threadFavoriteHint,
         ),
       );
     }
@@ -325,6 +369,9 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         isNovelCandidate: novelCandidate,
         isNovelInShelf: isNovelInShelf,
         isNovelActionLoading: false,
+        isThreadFavorited: false,
+        isThreadFavoriteActionLoading: false,
+        threadFavoriteHint: null,
         replyText: '',
         isReplySubmitting: false,
         replyHint: null,
@@ -351,6 +398,9 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       isNovelCandidate: false,
       isNovelInShelf: false,
       isNovelActionLoading: false,
+      isThreadFavorited: false,
+      isThreadFavoriteActionLoading: false,
+      threadFavoriteHint: null,
       replyText: '',
       isReplySubmitting: false,
       replyHint: null,
