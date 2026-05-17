@@ -1,3 +1,28 @@
+# 论坛收藏后定向同步与漫画自动更新 Review 补充
+
+## 文件范围
+
+- [ ] `lib/features/favorites/data/favorite_sync_service.dart`
+- [ ] `lib/features/comic/data/comic_favorite_auto_refresh_coordinator.dart`
+- [ ] `lib/features/thread/data/thread_favorite_providers.dart`
+- [ ] `lib/features/thread/domain/services/thread_favorite_action_service.dart`
+- [ ] `test/features/favorites/data/favorite_sync_service_test.dart`
+- [ ] `test/features/comic/data/comic_favorite_auto_refresh_coordinator_test.dart`
+- [ ] `test/features/thread/domain/services/thread_favorite_action_service_test.dart`
+- [ ] `docs/开发文档.md`
+- [ ] `docs/Review文档.md`
+
+## Review 重点
+
+- [ ] 论坛详情页收藏成功后调用 `syncRecentlyAddedThread(tid)`，不再只做无目标的通用收藏同步。
+- [ ] 定向同步能在收藏列表已包含目标 tid 时只补齐目标详情，并发出收藏书架刷新信号。
+- [ ] 定向同步能处理收藏列表接口短暂滞后：列表找不到目标 tid 时，会从帖子详情种入本地收藏缓存。
+- [ ] 新增漫画 catalog 未命中时会使用 `forceSearchOnCatalogMiss` 进入搜索刷新队列，普通历史同步仍保留长篇标签门控。
+- [ ] 成功入队或补齐详情后，`favorite` 书架一定能收到刷新信号，漫画/小说书架也保持各自模块信号。
+- [ ] 本轮未执行测试、分析或格式化，需要 reviewer 本地执行。
+
+---
+
 # 收藏自动刷新与搜索等待队列：阶段 6-8 Review 补充
 
 ## 文件范围
@@ -3374,6 +3399,44 @@
 - [ ] `discuz_thread_favorite_api_repository_test.dart` 覆盖请求体和成功/重复收藏解析。
 - [ ] `thread_favorite_action_service_test.dart` 覆盖刷新成功、刷新失败、远端失败三条路径。
 - [ ] `thread_detail_page_test.dart` 覆盖 AppBar 收藏按钮行为。
+
+### 六、待本地回归
+1. `flutter test`
+2. `flutter analyze`
+
+说明：`dart format` 按本轮要求未执行。
+
+---
+## 论坛收藏后定向同步与漫画自动更新 Review 清单（2026-05-17）
+
+### 一、收藏按钮链路
+- [ ] `ThreadFavoriteActionService` 远端收藏成功后把当前 `tid` 传给刷新层。
+- [ ] provider 使用 `FavoriteSyncService.syncRecentlyAddedThread(tid:)`，不再用无上下文全量同步作为按钮刷新路径。
+- [ ] 远端收藏失败时不触发本地收藏刷新。
+- [ ] 远端收藏成功但本地刷新失败时仍保持收藏成功状态，并给出刷新失败提示。
+
+### 二、收藏同步服务
+- [ ] `syncRecentlyAddedThread(tid:)` 在已有同步基线时只做定向增量，不无条件全量拉取所有收藏。
+- [ ] 目标 tid 不在第一页时，会在增量边界内继续查找，避免远端排序漂移。
+- [ ] 无同步基线时回退完整首次同步，保证本地收藏状态正确。
+- [ ] 普通增量同步能识别 `remoteTids - activeBefore`，仅对新增收藏启用强制漫画搜索入队。
+- [ ] 同步完成后通知 `LibraryModuleKey.favorite`，让已打开的收藏页自动 reload。
+
+### 三、漫画自动更新
+- [ ] catalog 命中时仍立即合并章节并尝试封面提升。
+- [ ] 历史/首次全量同步仍保留长篇标签门控，避免大量旧收藏触发搜索队列。
+- [ ] 新增收藏漫画在 catalog miss 时传入 `forceSearchOnCatalogMiss=true`，会进入搜索刷新队列。
+- [ ] 搜索队列完成后仍由原有 worker 合并章节、提升封面并通知漫画/收藏书架。
+
+### 四、书架刷新
+- [ ] 收藏同步服务自身发 `favorite_sync_completed` 或 `thread_favorite_recent_sync_completed`。
+- [ ] 小说/漫画模块内部刷新信号仍保留，测试应验证信号序列而不只看最后一个信号。
+- [ ] 重复刷新信号由 `UnifiedShelfController` 背景 reload 节流处理，不让页面直接耦合业务服务。
+
+### 五、测试覆盖（仅编写，未执行）
+- [ ] `comic_favorite_auto_refresh_coordinator_test.dart` 覆盖强制 catalog miss 入队。
+- [ ] `favorite_sync_service_test.dart` 覆盖定向新增收藏同步和新增漫画入队。
+- [ ] `thread_favorite_action_service_test.dart` 覆盖 tid 传递到刷新回调。
 
 ### 六、待本地回归
 1. `flutter test`

@@ -200,6 +200,13 @@ void main() {
     final novelIngest = _FakeNovelIngestService();
     final bus = LibraryShelfRefreshBus();
     addTearDown(bus.dispose);
+    final signals = <LibraryShelfRefreshSignal>[];
+    bus.signal.addListener(() {
+      final signal = bus.signal.value;
+      if (signal != null) {
+        signals.add(signal);
+      }
+    });
     final service = NetworkFavoriteSyncService(
       remoteRepository: remote,
       localRepository: _MemoryLocalFavoriteRepository(),
@@ -215,9 +222,16 @@ void main() {
     await service.sync();
 
     expect(novelIngest.upsertedTids, <String>['200']);
-    expect(bus.signal.value?.modules, contains(LibraryModuleKey.novel));
-    expect(bus.signal.value?.modules, contains(LibraryModuleKey.favorite));
-    expect(bus.signal.value?.reason, 'favorite_novel_refresh_completed');
+    expect(
+      signals.any(
+        (signal) =>
+            signal.reason == 'favorite_novel_refresh_completed' &&
+            signal.modules.contains(LibraryModuleKey.novel) &&
+            signal.modules.contains(LibraryModuleKey.favorite),
+      ),
+      isTrue,
+    );
+    expect(bus.signal.value?.reason, 'favorite_sync_completed');
   });
 
   test('first sync queues catalog miss only when comic tag is long-running', () async {
@@ -356,6 +370,13 @@ void main() {
     );
     final bus = LibraryShelfRefreshBus();
     addTearDown(bus.dispose);
+    final reasons = <String>[];
+    bus.signal.addListener(() {
+      final signal = bus.signal.value;
+      if (signal != null) {
+        reasons.add(signal.reason);
+      }
+    });
     final service = NetworkFavoriteSyncService(
       remoteRepository: remote,
       localRepository: _MemoryLocalFavoriteRepository(),
@@ -375,7 +396,8 @@ void main() {
 
     expect(duplicateRepository.mergeAllCallCount, 2);
     expect(duplicateRepository.mergeComicIds, isEmpty);
-    expect(bus.signal.value?.reason, 'favorite_first_sync_comic_duplicate_merge_completed');
+    expect(reasons, contains('favorite_first_sync_comic_duplicate_merge_completed'));
+    expect(bus.signal.value?.reason, 'favorite_sync_completed');
   });
 
   test('incremental comic detail stores merged target work id', () async {
@@ -430,6 +452,143 @@ void main() {
     expect(duplicateRepository.mergeAllCallCount, 0);
     expect(duplicateRepository.mergeComicIds, <String>['yamibo:100']);
     expect(local.records['100']?.workId, 'yamibo:old');
+  });
+
+  test('recently added comic sync refreshes target thread and queues search on catalog miss', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(page: 1, totalCount: 2, items: <FavoriteThread>[
+        _favoriteThread(tid: '100', title: '新收藏漫画'),
+        _favoriteThread(tid: '999', title: '旧收藏'),
+      ]),
+    });
+    final local = _MemoryLocalFavoriteRepository(
+      snapshot: FavoriteSyncSnapshot(
+        syncKey: favoriteSyncKey,
+        remoteCount: 1,
+        localActiveCount: 1,
+        lastSyncedAt: DateTime(2026, 1, 1),
+      ),
+      seedRecords: <FavoriteThreadCacheRecord>[
+        _cacheRecord(
+          tid: '999',
+          title: '旧收藏',
+          contentKind: ThreadContentKind.forum,
+          workId: 'thread:999',
+          detailLoadedAt: DateTime(2026, 1, 1),
+        ),
+      ],
+    );
+    final queue = _RecordingSearchQueue();
+    final bus = LibraryShelfRefreshBus();
+    addTearDown(bus.dispose);
+    final reasons = <String>[];
+    bus.signal.addListener(() {
+      final signal = bus.signal.value;
+      if (signal != null) {
+        reasons.add(signal.reason);
+      }
+    });
+    final coordinator = ComicFavoriteAutoRefreshCoordinator(
+      repository: _RecordingComicRepository(),
+      refreshService: _BackfillRefreshService(
+        catalogOutcome: const ComicEpisodeRefreshOutcome(
+          source: ComicEpisodeRefreshSource.empty,
+          links: <ComicEpisodeLink>[],
+        ),
+      ),
+      searchQueue: queue,
+      firstEpisodeCoverPromoter: _RecordingCoverPromoter(),
+      shelfRefreshBus: bus,
+      subjectParser: const RuleBasedComicSubjectParser(),
+    );
+    final service = NetworkFavoriteSyncService(
+      remoteRepository: remote,
+      localRepository: local,
+      loadThreadDetail: (tid) async => ApiSuccess(_detailForTid(tid)),
+      loadTagLookup: () async => _lookup(),
+      classifier: const ThreadContentClassifier(),
+      comicIngestService: _FakeComicIngestService(),
+      novelIngestService: _FakeNovelIngestService(),
+      comicAutoRefreshCoordinator: coordinator,
+      shelfRefreshBus: bus,
+      detailBatchLimit: 10,
+    );
+
+    final result = await service.syncRecentlyAddedThread(tid: '100');
+
+    expect(result.detailLoadedCount, 1);
+    expect(queue.enqueuedRequests.single.comicId, 'yamibo:100');
+    expect(local.records['100']?.contentKind, ThreadContentKind.comic);
+    expect(local.records['100']?.detailLoadedAt, isNotNull);
+    expect(reasons, contains('favorite_comic_search_refresh_queued'));
+    expect(reasons, contains('thread_favorite_recent_sync_completed'));
+  });
+
+  test('recently added sync seeds target from detail when favorite list lags', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(page: 1, totalCount: 1, items: <FavoriteThread>[
+        _favoriteThread(tid: '999', title: '旧收藏'),
+      ]),
+    });
+    final local = _MemoryLocalFavoriteRepository(
+      snapshot: FavoriteSyncSnapshot(
+        syncKey: favoriteSyncKey,
+        remoteCount: 1,
+        localActiveCount: 1,
+        lastSyncedAt: DateTime(2026, 1, 1),
+      ),
+      seedRecords: <FavoriteThreadCacheRecord>[
+        _cacheRecord(
+          tid: '999',
+          title: '旧收藏',
+          contentKind: ThreadContentKind.forum,
+          workId: 'thread:999',
+          detailLoadedAt: DateTime(2026, 1, 1),
+        ),
+      ],
+    );
+    final queue = _RecordingSearchQueue();
+    final bus = LibraryShelfRefreshBus();
+    addTearDown(bus.dispose);
+    final coordinator = ComicFavoriteAutoRefreshCoordinator(
+      repository: _RecordingComicRepository(),
+      refreshService: _BackfillRefreshService(
+        catalogOutcome: const ComicEpisodeRefreshOutcome(
+          source: ComicEpisodeRefreshSource.empty,
+          links: <ComicEpisodeLink>[],
+        ),
+      ),
+      searchQueue: queue,
+      firstEpisodeCoverPromoter: _RecordingCoverPromoter(),
+      shelfRefreshBus: bus,
+      subjectParser: const RuleBasedComicSubjectParser(),
+    );
+    var detailLoadCount = 0;
+    final service = NetworkFavoriteSyncService(
+      remoteRepository: remote,
+      localRepository: local,
+      loadThreadDetail: (tid) async {
+        detailLoadCount++;
+        return ApiSuccess(_detailForTid(tid));
+      },
+      loadTagLookup: () async => _lookup(),
+      classifier: const ThreadContentClassifier(),
+      comicIngestService: _FakeComicIngestService(),
+      novelIngestService: _FakeNovelIngestService(),
+      comicAutoRefreshCoordinator: coordinator,
+      shelfRefreshBus: bus,
+      detailBatchLimit: 10,
+    );
+
+    final result = await service.syncRecentlyAddedThread(tid: '100');
+
+    expect(remote.requestedPages, <int>[1]);
+    expect(detailLoadCount, 1);
+    expect(result.detailLoadedCount, 1);
+    expect(local.records['100']?.title, '主题100');
+    expect(local.records['100']?.contentKind, ThreadContentKind.comic);
+    expect(local.records['100']?.detailLoadedAt, isNotNull);
+    expect(queue.enqueuedRequests.single.comicId, 'yamibo:100');
   });
 }
 

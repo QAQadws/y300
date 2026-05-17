@@ -62,6 +62,7 @@ class ComicFavoriteAutoRefreshCoordinator {
     required ThreadDetailData detail,
     required String favoriteTitle,
     String? sourceTagName,
+    bool forceSearchOnCatalogMiss = false,
   }) async {
     return refreshFavoriteComic(
       comicId: comicId,
@@ -69,6 +70,7 @@ class ComicFavoriteAutoRefreshCoordinator {
       favoriteTitle: favoriteTitle,
       sourceTitle: detail.subject,
       sourceTagName: sourceTagName,
+      forceSearchOnCatalogMiss: forceSearchOnCatalogMiss,
     );
   }
 
@@ -78,6 +80,7 @@ class ComicFavoriteAutoRefreshCoordinator {
     required String favoriteTitle,
     String? sourceTitle,
     String? sourceTagName,
+    bool forceSearchOnCatalogMiss = false,
   }) async {
     final titles = _resolveTitles(
       favoriteTitle: favoriteTitle,
@@ -112,10 +115,11 @@ class ComicFavoriteAutoRefreshCoordinator {
       );
     }
 
-    if (!_shouldQueueSearchOnCatalogMiss(sourceTagName)) {
-      // Non-long-running favorite comics are already visible after ingest.
-      // Avoid spending a queued forum search unless the forum tag marks the
-      // work as a long serial that benefits from cross-thread discovery.
+    if (!forceSearchOnCatalogMiss && !_shouldQueueSearchOnCatalogMiss(sourceTagName)) {
+      // Historical/full sync keeps the conservative tag gate to avoid flooding
+      // search. Directly added favorites can set forceSearchOnCatalogMiss so
+      // the one comic the user just collected gets the same update treatment as
+      // a detail-page manual refresh.
       _shelfRefreshBus.notify(
         modules: const <LibraryModuleKey>{
           LibraryModuleKey.comic,

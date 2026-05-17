@@ -72,6 +72,10 @@ class FavoriteSyncProgress {
 abstract class FavoriteSyncService {
   Future<FavoriteSyncResult> sync();
 
+  Future<FavoriteSyncResult> syncRecentlyAddedThread({
+    required String tid,
+  });
+
   Future<void> runBackgroundMaintenance();
 
   ValueListenable<FavoriteSyncProgress> get progress;
@@ -135,8 +139,36 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
 
   @override
   Future<FavoriteSyncResult> sync() async {
+    return _runSync(() => _syncInternal());
+  }
+
+  @override
+  Future<FavoriteSyncResult> syncRecentlyAddedThread({
+    required String tid,
+  }) async {
+    final normalizedTid = tid.trim();
+    if (normalizedTid.isEmpty) {
+      throw StateError('收藏帖子 tid 不能为空');
+    }
+    return _runSync(() async {
+      final snapshot = await _localRepository.getSyncSnapshot();
+      if (snapshot == null) {
+        // No baseline exists yet, so keep correctness by doing the regular
+        // first sync while still forcing the just-favorited comic through the
+        // search queue if catalog discovery misses.
+        return _syncInternal(
+          forceComicSearchOnCatalogMissTids: <String>{normalizedTid},
+        );
+      }
+      return _syncRecentlyAddedThreadInternal(normalizedTid);
+    });
+  }
+
+  Future<FavoriteSyncResult> _runSync(
+    Future<FavoriteSyncResult> Function() body,
+  ) async {
     try {
-      final result = await _syncInternal();
+      final result = await body();
       _emitProgress(
         const FavoriteSyncProgress(
           phase: FavoriteSyncProgressPhase.completed,
@@ -165,7 +197,9 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     }
   }
 
-  Future<FavoriteSyncResult> _syncInternal() async {
+  Future<FavoriteSyncResult> _syncInternal({
+    Set<String> forceComicSearchOnCatalogMissTids = const <String>{},
+  }) async {
     _emitProgress(
       const FavoriteSyncProgress(
         phase: FavoriteSyncProgressPhase.fetchingList,
@@ -234,8 +268,15 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
 
     final firstFullSync = snapshot == null && mode == FavoriteSyncMode.fullDiff;
     await runBackgroundMaintenance();
+    final newlySeenTids = mode == FavoriteSyncMode.incremental
+        ? remoteTids.difference(activeBefore)
+        : const <String>{};
     final detailResult = await _fillMissingDetails(
       mergeIngestedComics: !firstFullSync,
+      forceComicSearchOnCatalogMissTids: <String>{
+        ...forceComicSearchOnCatalogMissTids,
+        ...newlySeenTids,
+      },
     );
     if (firstFullSync) {
       await _mergeAllComicDuplicatesAfterFirstSync();
@@ -255,6 +296,12 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
           : _buildPartialFailureMessage(detailResult.errors),
     );
     await _writeFavoritesSnapshot(remoteCount: firstPage.totalCount);
+    _notifyFavoriteShelfChanged(
+      reason: 'favorite_sync_completed',
+      upsertedCount: upsertedCount,
+      removedCount: removedRecords.length,
+      detailLoadedCount: detailResult.loadedCount,
+    );
 
     return FavoriteSyncResult(
       mode: mode,
@@ -264,6 +311,136 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       removedRecords: removedRecords,
       detailLoadedCount: detailResult.loadedCount,
       failedDetailTids: detailResult.failedTids,
+    );
+  }
+
+  Future<FavoriteSyncResult> _syncRecentlyAddedThreadInternal(String tid) async {
+    _emitProgress(
+      const FavoriteSyncProgress(
+        phase: FavoriteSyncProgressPhase.fetchingList,
+        message: '正在读取新增收藏列表 1/?',
+        current: 0,
+      ),
+    );
+    final firstPageResult = await _remoteRepository.getFavoriteThreads(page: 1);
+    if (firstPageResult is ApiFailure<FavoriteThreadsPage>) {
+      throw _FavoriteSyncFailure(firstPageResult.error.message);
+    }
+
+    final firstPage = firstPageResult.dataOrNull!;
+    final activeBefore = await _localRepository.getActiveTids();
+    final pages = <FavoriteThreadsPage>[firstPage];
+    var current = firstPage;
+    var foundTid = _pageContainsTid(current, tid);
+    // A newly favorited thread is normally on page one. Keep a bounded
+    // incremental scan for remote ordering drift without turning one button tap
+    // into an unconditional full favorite sync.
+    while (!foundTid && current.hasMore && !_pageAllKnown(current, activeBefore)) {
+      final nextPageNumber = current.page + 1;
+      _emitProgress(
+        FavoriteSyncProgress(
+          phase: FavoriteSyncProgressPhase.fetchingList,
+          message: '正在查找新增收藏第 $nextPageNumber 页',
+          current: pages.length,
+        ),
+      );
+      final result = await _remoteRepository.getFavoriteThreads(page: nextPageNumber);
+      if (result is ApiFailure<FavoriteThreadsPage>) {
+        throw _FavoriteSyncFailure(result.error.message);
+      }
+      current = result.dataOrNull!;
+      pages.add(current);
+      foundTid = _pageContainsTid(current, tid);
+    }
+
+    var upsertedCount = 0;
+    for (var index = 0; index < pages.length; index++) {
+      final page = pages[index];
+      _emitProgress(
+        FavoriteSyncProgress(
+          phase: FavoriteSyncProgressPhase.savingList,
+          message: '正在写入新增收藏 ${index + 1}/${pages.length}',
+          current: index + 1,
+          total: pages.length,
+        ),
+      );
+      upsertedCount += await _localRepository.upsertRemotePage(
+        page: page,
+        pageStartOrder: (page.page - 1) * page.perPage,
+      );
+    }
+
+    final failedTids = <String>[];
+    var detailLoadedCount = 0;
+    ThreadDetailData? preloadedDetail;
+    var record = await _localRepository.getActiveThreadByTid(tid);
+    if (record == null) {
+      // favthread may return before the favorite list endpoint exposes the new
+      // row. Seed the local cache from the thread detail so the shelf updates
+      // immediately, then let later list syncs fill favid/remote ordering.
+      try {
+        preloadedDetail = await _loadTargetDetailOrNull(tid);
+        if (preloadedDetail != null) {
+          upsertedCount += await _upsertRecentlyFavoritedThreadFromDetail(
+            tid: tid,
+            detail: preloadedDetail,
+            remoteCount: firstPage.totalCount,
+          );
+          record = await _localRepository.getActiveThreadByTid(tid);
+        }
+      } catch (_) {
+        preloadedDetail = null;
+      }
+    }
+    if (record == null) {
+      failedTids.add(tid);
+    } else {
+      _emitProgress(
+        FavoriteSyncProgress(
+          phase: FavoriteSyncProgressPhase.loadingDetails,
+          message: '正在解析: ${record.title}',
+          current: 1,
+          total: 1,
+        ),
+      );
+      try {
+        final loaded = await _fillOneDetail(
+          record,
+          mergeIngestedComics: true,
+          forceComicSearchOnCatalogMiss: true,
+          preloadedDetail: preloadedDetail,
+        );
+        if (loaded) {
+          detailLoadedCount = 1;
+        } else {
+          failedTids.add(tid);
+        }
+      } catch (_) {
+        failedTids.add(tid);
+      }
+    }
+
+    await _localRepository.finishSync(
+      mode: FavoriteSyncMode.incremental,
+      remoteCount: firstPage.totalCount,
+      status: failedTids.isEmpty ? 'ok' : 'partial',
+      message: failedTids.isEmpty ? null : '新增收藏详情补全失败：${failedTids.join(',')}',
+    );
+    await _writeFavoritesSnapshot(remoteCount: firstPage.totalCount);
+    _notifyFavoriteShelfChanged(
+      reason: 'thread_favorite_recent_sync_completed',
+      upsertedCount: upsertedCount,
+      detailLoadedCount: detailLoadedCount,
+    );
+
+    return FavoriteSyncResult(
+      mode: FavoriteSyncMode.incremental,
+      remoteCount: firstPage.totalCount,
+      fetchedPages: pages.length,
+      upsertedCount: upsertedCount,
+      removedRecords: const <FavoriteThreadCacheRecord>[],
+      detailLoadedCount: detailLoadedCount,
+      failedDetailTids: failedTids,
     );
   }
 
@@ -358,8 +535,54 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         .every(activeBefore.contains);
   }
 
+  bool _pageContainsTid(FavoriteThreadsPage page, String tid) {
+    return page.items.any((item) => item.tid.trim() == tid);
+  }
+
+  Future<ThreadDetailData?> _loadTargetDetailOrNull(String tid) async {
+    final result = await _loadThreadDetail(tid);
+    if (result is ApiFailure<ThreadDetailData>) {
+      return null;
+    }
+    return result.dataOrNull;
+  }
+
+  Future<int> _upsertRecentlyFavoritedThreadFromDetail({
+    required String tid,
+    required ThreadDetailData detail,
+    required int remoteCount,
+  }) {
+    final normalizedTid = tid.trim();
+    if (normalizedTid.isEmpty) {
+      return Future<int>.value(0);
+    }
+    final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final title = detail.subject.trim().isEmpty ? normalizedTid : detail.subject;
+    return _localRepository.upsertRemotePage(
+      page: FavoriteThreadsPage(
+        page: 1,
+        perPage: 1,
+        totalCount: remoteCount > 0 ? remoteCount : 1,
+        items: <FavoriteThread>[
+          FavoriteThread(
+            favid: '',
+            tid: normalizedTid,
+            title: title,
+            description: '',
+            author: detail.author,
+            replies: detail.replies,
+            url: 'thread-$normalizedTid-1-1.html',
+            dateline: nowSeconds,
+          ),
+        ],
+      ),
+      pageStartOrder: 0,
+    );
+  }
+
   Future<_DetailFillResult> _fillMissingDetails({
     bool mergeIngestedComics = true,
+    Set<String> forceComicSearchOnCatalogMissTids = const <String>{},
   }) async {
     final totalMissingDetails = await _localRepository.countMissingDetailRecords();
     final failedTids = <String>[];
@@ -392,6 +615,8 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
           final loaded = await _fillOneDetail(
             record,
             mergeIngestedComics: mergeIngestedComics,
+            forceComicSearchOnCatalogMiss:
+                forceComicSearchOnCatalogMissTids.contains(record.tid),
           );
           if (loaded) {
             loadedCount++;
@@ -426,13 +651,17 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   Future<bool> _fillOneDetail(
     FavoriteThreadCacheRecord record, {
     required bool mergeIngestedComics,
+    bool forceComicSearchOnCatalogMiss = false,
+    ThreadDetailData? preloadedDetail,
   }) async {
-    final result = await _loadThreadDetail(record.tid);
-    if (result is ApiFailure<ThreadDetailData>) {
-      return false;
+    ThreadDetailData? detail = preloadedDetail;
+    if (detail == null) {
+      final result = await _loadThreadDetail(record.tid);
+      if (result is ApiFailure<ThreadDetailData>) {
+        return false;
+      }
+      detail = result.dataOrNull;
     }
-
-    final detail = result.dataOrNull;
     if (detail == null) {
       return false;
     }
@@ -452,6 +681,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       tagName: tagName,
       favoriteTitle: record.title,
       mergeIngestedComic: mergeIngestedComics,
+      forceComicSearchOnCatalogMiss: forceComicSearchOnCatalogMiss,
     );
 
     await _localRepository.updateThreadDetailMeta(
@@ -486,6 +716,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     required String? tagName,
     required String favoriteTitle,
     required bool mergeIngestedComic,
+    required bool forceComicSearchOnCatalogMiss,
   }) async {
     switch (kind) {
       case ThreadContentKind.comic:
@@ -498,6 +729,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
           detail: detail,
           favoriteTitle: favoriteTitle,
           sourceTagName: tagName,
+          forceSearchOnCatalogMiss: forceComicSearchOnCatalogMiss,
         );
         if (!mergeIngestedComic) {
           return workId;
@@ -527,6 +759,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     required ThreadDetailData detail,
     required String favoriteTitle,
     String? sourceTagName,
+    bool forceSearchOnCatalogMiss = false,
   }) async {
     final coordinator = _comicAutoRefreshCoordinator;
     if (coordinator == null) {
@@ -538,6 +771,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         detail: detail,
         favoriteTitle: favoriteTitle,
         sourceTagName: sourceTagName,
+        forceSearchOnCatalogMiss: forceSearchOnCatalogMiss,
       );
     } catch (_) {
       // 收藏详情已经入库；catalog 引导/队列入队失败不应让本条收藏反复
@@ -685,6 +919,21 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
 
   void _emitProgress(FavoriteSyncProgress progress) {
     _progress.value = progress;
+  }
+
+  void _notifyFavoriteShelfChanged({
+    required String reason,
+    int upsertedCount = 0,
+    int removedCount = 0,
+    int detailLoadedCount = 0,
+  }) {
+    if (upsertedCount <= 0 && removedCount <= 0 && detailLoadedCount <= 0) {
+      return;
+    }
+    _shelfRefreshBus?.notify(
+      modules: const <LibraryModuleKey>{LibraryModuleKey.favorite},
+      reason: reason,
+    );
   }
 
   Future<void> _writeFavoritesSnapshot({required int remoteCount}) async {

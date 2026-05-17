@@ -2,7 +2,9 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/thread/data/thread_favorite_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 
-typedef ThreadFavoriteModuleRefresh = Future<void> Function();
+typedef ThreadFavoriteModuleRefresh = Future<void> Function({
+  required String tid,
+});
 typedef ThreadFavoriteModuleRefreshNotifier = void Function({
   required String reason,
 });
@@ -45,7 +47,7 @@ class DefaultThreadFavoriteActionService implements ThreadFavoriteActionService 
     Object? refreshError;
 
     try {
-      await _refreshFavoriteModule();
+      await _refreshFavoriteModule(tid: tid);
       refreshed = true;
     } catch (error) {
       refreshError = error;

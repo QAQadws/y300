@@ -273,6 +273,13 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
     );
   }
 
+  @override
+  Future<FavoriteSyncResult> syncRecentlyAddedThread({
+    required String tid,
+  }) {
+    return sync();
+  }
+
   void markSynced() {
     syncCount = 1;
   }

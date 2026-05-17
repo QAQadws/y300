@@ -318,6 +318,13 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
       failedDetailTids: <String>[],
     );
   }
+
+  @override
+  Future<FavoriteSyncResult> syncRecentlyAddedThread({
+    required String tid,
+  }) {
+    return sync();
+  }
 }
 
 class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {

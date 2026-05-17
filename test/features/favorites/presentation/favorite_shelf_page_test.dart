@@ -108,6 +108,13 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
     );
   }
 
+  @override
+  Future<FavoriteSyncResult> syncRecentlyAddedThread({
+    required String tid,
+  }) {
+    return sync();
+  }
+
   void completePendingSync() {
     final completer = _pendingCompleter;
     if (completer == null || completer.isCompleted) {

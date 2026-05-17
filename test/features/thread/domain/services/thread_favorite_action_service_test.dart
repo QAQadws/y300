@@ -12,8 +12,9 @@ void main() {
       final reasons = <String>[];
       final service = DefaultThreadFavoriteActionService(
         repository: repository,
-        refreshFavoriteModule: () async {
+        refreshFavoriteModule: ({required String tid}) async {
           refreshCalled = true;
+          expect(tid, '570617');
         },
         notifyFavoriteModule: ({required String reason}) {
           reasons.add(reason);
@@ -34,7 +35,7 @@ void main() {
       final reasons = <String>[];
       final service = DefaultThreadFavoriteActionService(
         repository: repository,
-        refreshFavoriteModule: () async {
+        refreshFavoriteModule: ({required String tid}) async {
           throw StateError('sync failed');
         },
         notifyFavoriteModule: ({required String reason}) {
@@ -60,7 +61,7 @@ void main() {
       final reasons = <String>[];
       final service = DefaultThreadFavoriteActionService(
         repository: repository,
-        refreshFavoriteModule: () async {
+        refreshFavoriteModule: ({required String tid}) async {
           refreshCalled = true;
         },
         notifyFavoriteModule: ({required String reason}) {

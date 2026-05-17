@@ -138,6 +138,43 @@ void main() {
       expect(bus.signal.value?.modules, contains(LibraryModuleKey.favorite));
       expect(bus.signal.value?.reason, 'favorite_comic_catalog_miss_search_skipped');
     });
+
+    test('forced catalog miss enqueues search queue for newly favorited comic', () async {
+      final repository = _RecordingComicRepository();
+      final refreshService = _FakeRefreshService(
+        catalogOutcome: const ComicEpisodeRefreshOutcome(
+          source: ComicEpisodeRefreshSource.empty,
+          links: <ComicEpisodeLink>[],
+        ),
+      );
+      final searchQueue = _RecordingSearchQueue();
+      final promoter = _RecordingCoverPromoter();
+      final bus = LibraryShelfRefreshBus();
+      addTearDown(bus.dispose);
+      final coordinator = ComicFavoriteAutoRefreshCoordinator(
+        repository: repository,
+        refreshService: refreshService,
+        searchQueue: searchQueue,
+        firstEpisodeCoverPromoter: promoter,
+        shelfRefreshBus: bus,
+        subjectParser: const RuleBasedComicSubjectParser(),
+      );
+
+      final result = await coordinator.refreshAfterFavoriteIngest(
+        comicId: 'comic:4',
+        detail: _detail(subject: '[Scan] Newly Favorited Comic EP 01'),
+        favoriteTitle: 'New Favorite Title',
+        sourceTagName: '韩国漫画',
+        forceSearchOnCatalogMiss: true,
+      );
+
+      expect(result.status, ComicFavoriteAutoRefreshStatus.queuedForSearch);
+      expect(repository.mergedComicId, isNull);
+      expect(searchQueue.enqueuedTitles, <String>['New Favorite Title']);
+      expect(searchQueue.enqueuedRequests.single.comicId, 'comic:4');
+      expect(searchQueue.enqueuedRequests.single.displayTitle, 'Newly Favorited Comic');
+      expect(bus.signal.value?.reason, 'favorite_comic_search_refresh_queued');
+    });
   });
 }
 

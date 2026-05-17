@@ -19,7 +19,9 @@ final threadFavoriteActionServiceProvider = Provider<ThreadFavoriteActionService
   final shelfRefreshBus = ref.watch(libraryShelfRefreshBusProvider);
   return DefaultThreadFavoriteActionService(
     repository: ref.watch(threadFavoriteRepositoryProvider),
-    refreshFavoriteModule: () => ref.read(favoriteSyncServiceProvider).sync(),
+    refreshFavoriteModule: ({required String tid}) async {
+      await ref.read(favoriteSyncServiceProvider).syncRecentlyAddedThread(tid: tid);
+    },
     notifyFavoriteModule: ({required String reason}) {
       shelfRefreshBus.notify(
         modules: const <LibraryModuleKey>{LibraryModuleKey.favorite},
