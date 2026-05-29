@@ -6,7 +6,6 @@ import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/discuz_response.dart';
-import 'package:y300/core/utils/parse_utils.dart';
 
 /// 统一网络入口：负责请求基础能力，不承担具体业务字段解析
 class ApiClient {
@@ -105,111 +104,12 @@ class ApiClient {
     await _cookieStore.clear();
   }
 
-  /// 通过 Discuz 网页登录入口完成鉴权。
-  ///
-  /// 流程：
-  /// 1) GET 登录页获取 formhash/loginhash 及初始 Cookie。
-  /// 2) POST 登录表单，服务端写入登录 Cookie。
-  /// 3) 由上层再调用 profile 校验登录态是否生效。
-  Future<ApiResult<void>> loginWithWebCredentials({
-    required String username,
-    required String password,
-    String questionId = '0',
-    String answer = '',
-  }) async {
-    if (username.trim().isEmpty || password.isEmpty) {
-      return ApiFailure(
-        ApiError(type: ApiErrorType.business, message: '用户名和密码不能为空'),
-      );
-    }
-
-    try {
-      final loginPageResponse = await _dio.get<String>(
-        '${AppConfig.siteBaseUrl}/member.php',
-        queryParameters: const {
-          'mod': 'logging',
-          'action': 'login',
-          'mobile': '2',
-        },
-        options: Options(responseType: ResponseType.plain),
-      );
-
-      final loginPageHtml = loginPageResponse.data ?? '';
-      final formhash = _extractInputValue(loginPageHtml, 'formhash');
-      final loginhash = _extractLoginHash(
-        loginPageResponse.requestOptions.uri,
-        loginPageHtml,
-      );
-
-      if (formhash.isEmpty || loginhash.isEmpty) {
-        return ApiFailure(
-          ApiError(
-            type: ApiErrorType.parse,
-            message: '无法从登录页提取必要参数(formhash/loginhash)',
-            raw: loginPageHtml,
-            statusCode: loginPageResponse.statusCode,
-          ),
-        );
-      }
-
-      final loginResponse = await _dio.post<String>(
-        '${AppConfig.siteBaseUrl}/member.php',
-        queryParameters: {
-          'mod': 'logging',
-          'action': 'login',
-          'loginsubmit': 'yes',
-          'loginhash': loginhash,
-          'inajax': '1',
-          'mobile': '2',
-        },
-        data: {
-          'formhash': formhash,
-          'referer': '${AppConfig.siteBaseUrl}/',
-          'loginfield': 'auto',
-          'username': username,
-          'password': password,
-          'questionid': questionId,
-          'answer': answer,
-          // 30 天免登录。
-          'cookietime': '2592000',
-        },
-        options: Options(
-          responseType: ResponseType.plain,
-          contentType: Headers.formUrlEncodedContentType,
-        ),
-      );
-
-      final loginBody = loginResponse.data ?? '';
-      if (_isLoginSuccess(loginBody)) {
-        return ApiSuccess<void>(null);
-      }
-
-      return ApiFailure(
-        ApiError(
-          type: ApiErrorType.business,
-          message: _extractLoginErrorMessage(loginBody),
-          raw: loginBody,
-          statusCode: loginResponse.statusCode,
-        ),
-      );
-    } on DioException catch (error) {
-      return ApiFailure(_mapDioError(error));
-    } catch (error) {
-      return ApiFailure(
-        ApiError(
-          type: ApiErrorType.unknown,
-          message: '网页登录失败: $error',
-          raw: error,
-        ),
-      );
-    }
-  }
-
   /// 返回 Discuz 原始通用结构，供上层按需二次解析
   Future<ApiResult<DiscuzResponse>> getDiscuz({
     required String module,
     Map<String, dynamic>? queryParameters,
     CancelToken? cancelToken,
+    bool treatMessageAsBusinessError = true,
   }) async {
     try {
       final response = await _dio.get<dynamic>(
@@ -220,7 +120,7 @@ class ApiClient {
 
       final json = _toJsonMap(response.data);
       final discuzResponse = DiscuzResponse.fromJson(json);
-      if (discuzResponse.hasBusinessError) {
+      if (treatMessageAsBusinessError && discuzResponse.hasBusinessError) {
         return ApiFailure(
           ApiError(
             type: ApiErrorType.business,
@@ -233,6 +133,52 @@ class ApiClient {
       }
 
       return ApiSuccess(discuzResponse);
+    } on DioException catch (error) {
+      return ApiFailure(_mapDioError(error));
+    } on FormatException catch (error) {
+      return ApiFailure(
+        ApiError(
+          type: ApiErrorType.parse,
+          message: '响应格式错误: ${error.message}',
+          raw: error.source,
+        ),
+      );
+    } catch (error) {
+      return ApiFailure(
+        ApiError(
+          type: ApiErrorType.unknown,
+          message: '未知错误: $error',
+          raw: error,
+        ),
+      );
+    }
+  }
+
+  /// 以 `application/x-www-form-urlencoded` 提交 Discuz 移动端表单。
+  ///
+  /// 该方法只提供通用 POST 能力：version 注入、Cookie 持久化和通用
+  /// JSON 解析仍由 ApiClient 负责，具体业务成功/失败由调用方判断。
+  Future<ApiResult<DiscuzResponse>> postDiscuzForm({
+    required String module,
+    required Map<String, String> data,
+    Map<String, dynamic>? queryParameters,
+    CancelToken? cancelToken,
+    Options? options,
+  }) async {
+    try {
+      final response = await _dio.post<dynamic>(
+        '',
+        queryParameters: {'module': module, ...?queryParameters},
+        data: data,
+        cancelToken: cancelToken,
+        options: (options ?? Options()).copyWith(
+          contentType:
+              options?.contentType ?? Headers.formUrlEncodedContentType,
+        ),
+      );
+
+      final json = _toJsonMap(response.data);
+      return ApiSuccess(DiscuzResponse.fromJson(json));
     } on DioException catch (error) {
       return ApiFailure(_mapDioError(error));
     } on FormatException catch (error) {
@@ -285,7 +231,7 @@ class ApiClient {
     );
   }
 
-  JsonMap _toJsonMap(dynamic data) {
+  Map<String, dynamic> _toJsonMap(dynamic data) {
     if (data is Map<String, dynamic>) {
       return data;
     }
@@ -353,74 +299,4 @@ class ApiClient {
     );
   }
 
-  static final RegExp _inputValuePattern = RegExp(
-    r'''<input[^>]*name=['"]([^'"]+)['"][^>]*value=['"]([^'"]*)['"]''',
-    caseSensitive: false,
-  );
-
-  static final RegExp _anchorHrefPattern = RegExp(
-    r'''href=['"]([^'"]+)['"]''',
-    caseSensitive: false,
-  );
-
-  static final RegExp _loginhashPattern = RegExp(
-    r'loginhash=([a-zA-Z0-9_]+)',
-    caseSensitive: false,
-  );
-
-  String _extractInputValue(String html, String name) {
-    for (final match in _inputValuePattern.allMatches(html)) {
-      if (match.group(1)?.trim().toLowerCase() == name.toLowerCase()) {
-        return match.group(2)?.trim() ?? '';
-      }
-    }
-    return '';
-  }
-
-  String _extractLoginHash(Uri loginPageUri, String html) {
-    final fromUri = loginPageUri.queryParameters['loginhash'];
-    if (fromUri != null && fromUri.isNotEmpty) {
-      return fromUri;
-    }
-
-    final pageMatch = _loginhashPattern.firstMatch(html);
-    if (pageMatch != null) {
-      return pageMatch.group(1)?.trim() ?? '';
-    }
-
-    final hrefMatch = _anchorHrefPattern.firstMatch(html);
-    if (hrefMatch == null) {
-      return '';
-    }
-
-    final href = hrefMatch.group(1) ?? '';
-    final hrefHashMatch = _loginhashPattern.firstMatch(href);
-    return hrefHashMatch?.group(1)?.trim() ?? '';
-  }
-
-  bool _isLoginSuccess(String body) {
-    final normalized = body.toLowerCase();
-    return normalized.contains('succeedhandle_login') ||
-        normalized.contains('欢迎您回来') ||
-        normalized.contains('欢迎回来') ||
-        normalized.contains('登录成功');
-  }
-
-  String _extractLoginErrorMessage(String body) {
-    // Discuz inajax 失败经常在CDATA中包含提示文案。
-    final cdataPattern = RegExp(r'<!\[CDATA\[(.*?)\]\]>', dotAll: true);
-    final cdataMatch = cdataPattern.firstMatch(body);
-    if (cdataMatch != null) {
-      final message = cdataMatch.group(1)?.trim() ?? '';
-      if (message.isNotEmpty) {
-        return message;
-      }
-    }
-
-    if (body.trim().isNotEmpty) {
-      return '网页登录失败: ${body.trim()}';
-    }
-
-    return '网页登录失败，请检查用户名或密码';
-  }
 }

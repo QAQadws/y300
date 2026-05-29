@@ -1,3 +1,54 @@
+# 登出 UI 接入 Review 清单（2026-05-29）
+
+## 文件范围
+
+- [ ] `lib/features/auth/presentation/auth_session_controller.dart`
+- [ ] `lib/features/more/presentation/more_page.dart`
+- [ ] `test/features/more/presentation/more_page_test.dart`
+- [ ] `test/features/startup/presentation/main_shell_page_test.dart`
+- [ ] `docs/开发文档.md`
+- [ ] `docs/Review文档.md`
+
+## Review 重点
+
+- [ ] “更多”页未登录时仍显示原登录入口。
+- [ ] “更多”页已登录时显示“退出登录”和当前用户名。
+- [ ] 退出前有确认弹窗，避免误触。
+- [ ] UI 不直接拼 API 参数，只调用 `AuthSessionController.logout()`。
+- [ ] 登出成功后刷新论坛首页登录态，并提示 `已退出登录`。
+- [ ] 登出失败时不清本地 Cookie，提示 repository 返回的失败原因。
+- [ ] 本轮未执行测试、分析或格式化。
+
+---
+
+# API 登录阶段 3-4 Review 清单（2026-05-29）
+
+## 文件范围
+
+- [ ] `lib/features/auth/data/auth_session_models.dart`
+- [ ] `lib/features/auth/data/auth_formhash_provider.dart`
+- [ ] `lib/features/auth/data/session_verifier.dart`
+- [ ] `lib/features/auth/data/auth_repository.dart`
+- [ ] `test/features/auth/auth_repository_test.dart`
+- [ ] `test/features/auth/data/discuz_mobile_auth_api_test.dart`
+- [ ] `docs/登录.md`
+- [ ] `docs/开发文档.md`
+- [ ] `docs/Review文档.md`
+
+## Review 重点
+
+- [ ] `AuthRepository.login()` 不再调用 `ApiClient.loginWithWebCredentials()`。
+- [ ] 登录流程先通过 `FormhashProvider` 获取游客态 formhash，formhash 为空时不提交密码。
+- [ ] 登录请求成功后仍通过 `forumindex.auth` 和 `profile.member_uid` 验证 Cookie 登录态。
+- [ ] `SessionInfo` 已拆到独立模型文件，并通过 `auth_repository.dart` 继续导出，旧调用方不需要改 import。
+- [ ] `AuthRepository.logout()` 先获取登录态 formhash，再调用 mobile API 登出。
+- [ ] 标准登出失败时会尝试 v4 `mlogout=1&hash=...` fallback。
+- [ ] 服务端登出失败时不会清理本地 Cookie。
+- [ ] 阶段 5 尚未清理网页登录代码，review 时不要误判为遗漏。
+- [ ] 本轮未执行测试、分析或格式化。
+
+---
+
 # 收藏、漫画更新与图片解析重构方案 Review 清单（2026-05-29）
 
 ## 文件范围

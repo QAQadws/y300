@@ -1,33 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/network/discuz_response.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/core/utils/parse_utils.dart';
+import 'package:y300/features/auth/data/auth_formhash_provider.dart';
+import 'package:y300/features/auth/data/auth_remote_data_source.dart';
+import 'package:y300/features/auth/data/auth_session_models.dart';
+import 'package:y300/features/auth/data/session_verifier.dart';
 
-/// 会话快照，来自 profile 接口可稳定获取的最小字段集。
-class SessionInfo {
-  SessionInfo({
-    required this.uid,
-    required this.username,
-    required this.formhash,
-    required this.isLoggedIn,
-  });
-
-  final String uid;
-  final String username;
-  final String formhash;
-  final bool isLoggedIn;
-
-  factory SessionInfo.fromVariables(Map<String, dynamic> variables) {
-    final uid = ParseUtils.asString(variables['member_uid']);
-    return SessionInfo(
-      uid: uid,
-      username: ParseUtils.asString(variables['member_username']),
-      formhash: ParseUtils.asString(variables['formhash']),
-      isLoggedIn: uid.isNotEmpty && uid != '0',
-    );
-  }
-}
+export 'package:y300/features/auth/data/auth_session_models.dart';
 
 abstract class AuthRepository {
   Future<ApiResult<SessionInfo>> refreshSession();
@@ -45,35 +26,34 @@ abstract class AuthRepository {
 }
 
 class ApiAuthRepository implements AuthRepository {
-  ApiAuthRepository(this._apiClient);
+  ApiAuthRepository(
+    this._apiClient, {
+    AuthRemoteDataSource? remoteDataSource,
+    FormhashProvider? formhashProvider,
+    SessionVerifier? sessionVerifier,
+  })  : _remoteDataSource = remoteDataSource ?? DiscuzMobileAuthApi(_apiClient),
+        _formhashProvider = formhashProvider ?? ApiFormhashProvider(_apiClient),
+        _sessionVerifier = sessionVerifier ?? ApiSessionVerifier(_apiClient);
 
   final ApiClient _apiClient;
+  final AuthRemoteDataSource _remoteDataSource;
+  final FormhashProvider _formhashProvider;
+  final SessionVerifier _sessionVerifier;
 
   /// 通过 profile 探活当前登录态。
   @override
   Future<ApiResult<SessionInfo>> refreshSession() {
-    return _apiClient.getParsed<SessionInfo>(
-      module: 'profile',
-      parser: (response) => SessionInfo.fromVariables(response.variables),
-    );
+    return _sessionVerifier.refreshSession();
   }
 
   /// 通过 forumindex 校验 cookie 中 auth 是否已经生效。
   /// Discuz 在未登录时通常返回 `auth: null`。
   @override
-  Future<ApiResult<bool>> verifyAuthByForumIndex() async {
-    final result = await _apiClient.getDiscuz(module: 'forumindex');
-    return result.when(
-      success: (response) {
-        final auth = response.variables['auth'];
-        final authText = ParseUtils.asString(auth);
-        return ApiSuccess<bool>(authText.isNotEmpty);
-      },
-      failure: ApiFailure.new,
-    );
+  Future<ApiResult<bool>> verifyAuthByForumIndex() {
+    return _sessionVerifier.verifyAuthByForumIndex();
   }
 
-  /// 通过 Discuz 网页表单登录，并在成功后立即校验会话是否生效。
+  /// 通过 Discuz 移动端 API 登录，并在成功后立即校验会话是否生效。
   @override
   Future<ApiResult<SessionInfo>> login({
     required String username,
@@ -81,61 +61,78 @@ class ApiAuthRepository implements AuthRepository {
     String questionId = '0',
     String answer = '',
   }) async {
-    final loginResult = await _apiClient.loginWithWebCredentials(
-      username: username,
-      password: password,
-      questionId: questionId,
-      answer: answer,
+    final normalizedUsername = username.trim();
+    if (normalizedUsername.isEmpty || password.isEmpty) {
+      return const ApiFailure<SessionInfo>(
+        ApiError(type: ApiErrorType.business, message: '用户名和密码不能为空'),
+      );
+    }
+
+    final formhashResult = await _formhashProvider.loadFormhash();
+    if (formhashResult case ApiFailure<String>(:final error)) {
+      return ApiFailure<SessionInfo>(error);
+    }
+
+    final loginResult = await _remoteDataSource.login(
+      LoginRequest(
+        username: normalizedUsername,
+        password: password,
+        formhash: (formhashResult as ApiSuccess<String>).data,
+        questionId: questionId,
+        answer: answer,
+      ),
     );
 
     if (loginResult.isFailure) {
       return ApiFailure(loginResult.errorOrNull!);
     }
 
-    // 登录后优先通过 forumindex 的 auth 字段校验会话是否真正生效。
-    final authResult = await verifyAuthByForumIndex();
-    final authValid = authResult.when(
-      success: (ok) => ok,
-      failure: (_) => false,
-    );
-    if (!authValid) {
-      return ApiFailure(
-        ApiError(
-          type: ApiErrorType.unauthorized,
-          message: '登录请求已发送，但 forumindex.auth 仍为空',
-        ),
-      );
-    }
-
-    final sessionResult = await refreshSession();
-    return sessionResult.when(
-      success: (session) {
-        if (session.isLoggedIn) {
-          return ApiSuccess(session);
-        }
-
-        return ApiFailure(
-          ApiError(
-            type: ApiErrorType.unauthorized,
-            message: '登录请求已发送，但会话未生效',
-            raw: {
-              'uid': session.uid,
-              'username': session.username,
-              'formhash': session.formhash,
-            },
-          ),
-        );
-      },
-      failure: ApiFailure.new,
-    );
+    return _sessionVerifier.verifyLoggedIn();
   }
 
   @override
-  Future<void> logout() {
-    return _apiClient.clearSession();
+  Future<void> logout() async {
+    final formhashResult = await _formhashProvider.loadFormhash(
+      preferProfile: true,
+    );
+    if (formhashResult case ApiFailure<String>(:final error)) {
+      throw StateError(error.message);
+    }
+
+    final formhash = (formhashResult as ApiSuccess<String>).data;
+    final standard = await _remoteDataSource.logout(formhash: formhash);
+    final logoutResult = standard.isSuccess
+        ? standard
+        : await _remoteDataSource.logout(
+            formhash: formhash,
+            mode: LogoutMode.mobileHash,
+          );
+    if (logoutResult case ApiFailure<DiscuzResponse>(:final error)) {
+      throw StateError(error.message);
+    }
+
+    await _apiClient.clearSession();
   }
 }
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  return ApiAuthRepository(ref.watch(apiClientProvider));
+  final apiClient = ref.watch(apiClientProvider);
+  return ApiAuthRepository(
+    apiClient,
+    remoteDataSource: ref.watch(authRemoteDataSourceProvider),
+    formhashProvider: ref.watch(formhashProvider),
+    sessionVerifier: ref.watch(sessionVerifierProvider),
+  );
+});
+
+final formhashProvider = Provider<FormhashProvider>((ref) {
+  return ApiFormhashProvider(ref.watch(apiClientProvider));
+});
+
+final sessionVerifierProvider = Provider<SessionVerifier>((ref) {
+  return ApiSessionVerifier(ref.watch(apiClientProvider));
+});
+
+final authRemoteDataSourceProvider = Provider<AuthRemoteDataSource>((ref) {
+  return DiscuzMobileAuthApi(ref.watch(apiClientProvider));
 });

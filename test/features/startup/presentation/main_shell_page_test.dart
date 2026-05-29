@@ -2,6 +2,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/auth/data/auth_repository.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/data/comic_search_refresh_queue_providers.dart';
@@ -42,6 +44,7 @@ void main() {
           favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
           comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
           mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
+          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
@@ -85,6 +88,7 @@ void main() {
           favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
           comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
           mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
+          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
@@ -324,6 +328,40 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
     required String tid,
   }) {
     return sync();
+  }
+}
+
+class _FakeAuthRepository implements AuthRepository {
+  @override
+  Future<ApiResult<SessionInfo>> login({
+    required String username,
+    required String password,
+    String questionId = '0',
+    String answer = '',
+  }) async {
+    return const ApiFailure(
+      ApiError(type: ApiErrorType.business, message: 'not implemented'),
+    );
+  }
+
+  @override
+  Future<void> logout() async {}
+
+  @override
+  Future<ApiResult<SessionInfo>> refreshSession() async {
+    return ApiSuccess(
+      SessionInfo(
+        uid: '0',
+        username: '',
+        formhash: 'fh_guest',
+        isLoggedIn: false,
+      ),
+    );
+  }
+
+  @override
+  Future<ApiResult<bool>> verifyAuthByForumIndex() async {
+    return const ApiSuccess(false);
   }
 }
 

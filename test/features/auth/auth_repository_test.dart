@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -11,15 +11,45 @@ import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/features/auth/data/auth_repository.dart';
 
 void main() {
-  group('AuthRepository web login flow', () {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('AuthRepository mobile API flow', () {
     setUp(() {
       SharedPreferences.setMockInitialValues(<String, Object>{});
     });
 
-    test('login success: should persist cookie and return logged-in session', () async {
-      final adapter = _DiscuzTestAdapter(
+    test('login loads formhash, posts mobile login, and verifies session', () async {
+      final adapter = _DiscuzAuthTestAdapter(
+        guestFormhash: 'fh_guest',
         loginSucceeds: true,
-        forumIndexAuth: 'token123',
+        forumIndexAuthAfterLogin: 'token123',
+        profileUid: '123',
+        profileUsername: 'tester',
+      );
+      final authRepository = _buildAuthRepository(adapter);
+
+      final result = await authRepository.login(
+        username: ' tester ',
+        password: 'pass123',
+      );
+
+      expect(result.isSuccess, isTrue);
+      final session = result.dataOrNull;
+      expect(session, isNotNull);
+      expect(session!.isLoggedIn, isTrue);
+      expect(session.uid, '123');
+      expect(session.username, 'tester');
+      expect(adapter.lastLoginBody, contains('formhash=fh_guest'));
+      expect(adapter.lastLoginBody, contains('loginsubmit=1'));
+      expect(adapter.lastLoginBody, contains('username=tester'));
+      expect(adapter.lastProfileCookieHeader, contains('auth=token123'));
+    });
+
+    test('login does not post password when formhash is empty', () async {
+      final adapter = _DiscuzAuthTestAdapter(
+        guestFormhash: '',
+        loginSucceeds: true,
+        forumIndexAuthAfterLogin: 'token123',
         profileUid: '123',
         profileUsername: 'tester',
       );
@@ -30,20 +60,16 @@ void main() {
         password: 'pass123',
       );
 
-      expect(result.isSuccess, isTrue);
-      final session = result.dataOrNull;
-      expect(session, isNotNull);
-      expect(session!.isLoggedIn, isTrue);
-      expect(session.uid, '123');
-      expect(session.username, 'tester');
-
-      expect(adapter.lastProfileCookieHeader, contains('auth=token123'));
+      expect(result.isFailure, isTrue);
+      expect(result.errorOrNull?.message, contains('formhash'));
+      expect(adapter.loginPostCount, 0);
     });
 
-    test('login failed on web form: should return business error', () async {
-      final adapter = _DiscuzTestAdapter(
+    test('login returns business failure from mobile login API', () async {
+      final adapter = _DiscuzAuthTestAdapter(
+        guestFormhash: 'fh_guest',
         loginSucceeds: false,
-        forumIndexAuth: null,
+        forumIndexAuthAfterLogin: null,
         profileUid: '0',
         profileUsername: '',
       );
@@ -61,10 +87,11 @@ void main() {
       expect(error.message, contains('密码错误'));
     });
 
-    test('web login success but forumindex auth is null: should be unauthorized', () async {
-      final adapter = _DiscuzTestAdapter(
+    test('mobile login success but forumindex auth is null returns unauthorized', () async {
+      final adapter = _DiscuzAuthTestAdapter(
+        guestFormhash: 'fh_guest',
         loginSucceeds: true,
-        forumIndexAuth: null,
+        forumIndexAuthAfterLogin: null,
         profileUid: '123',
         profileUsername: 'tester',
       );
@@ -82,15 +109,16 @@ void main() {
       expect(error.message, contains('forumindex.auth'));
     });
 
-    test('logout should clear persisted cookies', () async {
-      final adapter = _DiscuzTestAdapter(
+    test('logout calls mobile API and clears persisted cookies after success', () async {
+      final adapter = _DiscuzAuthTestAdapter(
+        guestFormhash: 'fh_guest',
         loginSucceeds: true,
-        forumIndexAuth: 'token123',
+        forumIndexAuthAfterLogin: 'token123',
         profileUid: '123',
         profileUsername: 'tester',
+        logoutSucceeds: true,
       );
       final authRepository = _buildAuthRepository(adapter);
-      final apiClient = _buildApiClient(adapter);
       final cookieStore = CookieStore();
 
       await authRepository.login(username: 'tester', password: 'pass123');
@@ -102,12 +130,36 @@ void main() {
 
       await authRepository.logout();
 
+      expect(adapter.logoutQuery?['action'], 'logout');
+      expect(adapter.logoutQuery?['formhash'], 'fh_after_login');
       final afterLogout = await cookieStore.readCookieHeader(
         Uri.parse('https://bbs.yamibo.com/api/mobile/index.php'),
       );
       expect(afterLogout, isNull);
+    });
 
-      expect(apiClient, isNotNull);
+    test('logout failure does not clear persisted cookies', () async {
+      final adapter = _DiscuzAuthTestAdapter(
+        guestFormhash: 'fh_guest',
+        loginSucceeds: true,
+        forumIndexAuthAfterLogin: 'token123',
+        profileUid: '123',
+        profileUsername: 'tester',
+        logoutSucceeds: false,
+      );
+      final authRepository = _buildAuthRepository(adapter);
+      final cookieStore = CookieStore();
+
+      await authRepository.login(username: 'tester', password: 'pass123');
+
+      await expectLater(
+        authRepository.logout(),
+        throwsA(isA<StateError>()),
+      );
+      final afterLogout = await cookieStore.readCookieHeader(
+        Uri.parse('https://bbs.yamibo.com/api/mobile/index.php'),
+      );
+      expect(afterLogout, contains('auth=token123'));
     });
   });
 }
@@ -124,8 +176,7 @@ ApiClient _buildApiClient(HttpClientAdapter adapter) {
       connectTimeout: const Duration(seconds: 3),
       receiveTimeout: const Duration(seconds: 3),
     ),
-  );
-  dio.httpClientAdapter = adapter;
+  )..httpClientAdapter = adapter;
 
   return ApiClient(
     cookieStore: CookieStore(),
@@ -135,20 +186,28 @@ ApiClient _buildApiClient(HttpClientAdapter adapter) {
   );
 }
 
-class _DiscuzTestAdapter implements HttpClientAdapter {
-  _DiscuzTestAdapter({
+class _DiscuzAuthTestAdapter implements HttpClientAdapter {
+  _DiscuzAuthTestAdapter({
+    required this.guestFormhash,
     required this.loginSucceeds,
-    required this.forumIndexAuth,
+    required this.forumIndexAuthAfterLogin,
     required this.profileUid,
     required this.profileUsername,
+    this.logoutSucceeds = true,
   });
 
+  final String guestFormhash;
   final bool loginSucceeds;
-  final String? forumIndexAuth;
+  final String? forumIndexAuthAfterLogin;
   final String profileUid;
   final String profileUsername;
+  final bool logoutSucceeds;
 
+  String lastLoginBody = '';
   String? lastProfileCookieHeader;
+  Map<String, String>? logoutQuery;
+  var loginPostCount = 0;
+  var _loggedIn = false;
 
   @override
   void close({bool force = false}) {}
@@ -163,52 +222,49 @@ class _DiscuzTestAdapter implements HttpClientAdapter {
     final uri = options.uri;
 
     if (options.method == 'GET' &&
-        uri.path.endsWith('/member.php') &&
-        uri.queryParameters['mod'] == 'logging' &&
-        uri.queryParameters['action'] == 'login') {
-      return ResponseBody.fromString(
-        _loginPageHtml(),
-        200,
-        headers: <String, List<String>>{
-          'set-cookie': <String>['prelogin=1; Path=/; HttpOnly'],
+        uri.path.endsWith('/api/mobile/index.php') &&
+        uri.queryParameters['module'] == 'forumindex') {
+      final auth = _loggedIn ? forumIndexAuthAfterLogin : null;
+      return _jsonResponse(
+        <String, dynamic>{
+          'Version': '4',
+          'Charset': 'utf-8',
+          'Variables': <String, dynamic>{
+            'auth': auth,
+            'member_uid': auth == null ? '0' : '123',
+            'formhash': _loggedIn ? 'fh_after_login' : guestFormhash,
+          },
+        },
+        headers: const <String, List<String>>{
+          'set-cookie': <String>['guest=1; Path=/; HttpOnly'],
         },
       );
     }
 
     if (options.method == 'POST' &&
-        uri.path.endsWith('/member.php') &&
-        uri.queryParameters['mod'] == 'logging' &&
-        uri.queryParameters['action'] == 'login' &&
-        uri.queryParameters['loginsubmit'] == 'yes') {
-      final body = loginSucceeds
-          ? '<root><![CDATA[succeedhandle_login]]></root>'
-          : '<root><![CDATA[密码错误]]></root>';
-
-      return ResponseBody.fromString(
-        body,
-        200,
-        headers: <String, List<String>>{
-          if (loginSucceeds) 'set-cookie': <String>['auth=token123; Path=/; HttpOnly'],
-        },
-      );
-    }
-
-    if (options.method == 'GET' &&
         uri.path.endsWith('/api/mobile/index.php') &&
-        uri.queryParameters['module'] == 'forumindex') {
-      final forumIndexResponse = <String, dynamic>{
-        'Version': '4',
-        'Charset': 'utf-8',
-        'Variables': <String, dynamic>{
-          'auth': forumIndexAuth,
-          'member_uid': forumIndexAuth == null ? '0' : '123',
+        uri.queryParameters['module'] == 'login' &&
+        uri.queryParameters['action'] == 'login') {
+      loginPostCount++;
+      lastLoginBody = requestBody;
+      _loggedIn = loginSucceeds;
+      return _jsonResponse(
+        <String, dynamic>{
+          'Version': '4',
+          'Charset': 'utf-8',
+          'Variables': <String, dynamic>{
+            'auth': loginSucceeds ? 'token123' : null,
+            'member_uid': loginSucceeds ? '123' : '0',
+          },
+          'Message': <String, dynamic>{
+            'messageval': loginSucceeds ? 'login_succeed' : 'login_failed',
+            'messagestr': loginSucceeds ? '登录成功' : '密码错误',
+          },
         },
-      };
-
-      return ResponseBody.fromString(
-        jsonEncode(forumIndexResponse),
-        200,
-        headers: <String, List<String>>{},
+        headers: <String, List<String>>{
+          if (loginSucceeds)
+            'set-cookie': <String>['auth=token123; Path=/; HttpOnly'],
+        },
       );
     }
 
@@ -216,21 +272,38 @@ class _DiscuzTestAdapter implements HttpClientAdapter {
         uri.path.endsWith('/api/mobile/index.php') &&
         uri.queryParameters['module'] == 'profile') {
       lastProfileCookieHeader = options.headers['cookie']?.toString();
-
-      final profileResponse = <String, dynamic>{
-        'Version': '4',
-        'Charset': 'utf-8',
-        'Variables': <String, dynamic>{
-          'member_uid': profileUid,
-          'member_username': profileUsername,
-          'formhash': 'fh_after_login',
+      return _jsonResponse(
+        <String, dynamic>{
+          'Version': '4',
+          'Charset': 'utf-8',
+          'Variables': <String, dynamic>{
+            'member_uid': _loggedIn ? profileUid : '0',
+            'member_username': _loggedIn ? profileUsername : '',
+            'formhash': _loggedIn ? 'fh_after_login' : guestFormhash,
+          },
         },
-      };
+      );
+    }
 
-      return ResponseBody.fromString(
-        jsonEncode(profileResponse),
-        200,
-        headers: <String, List<String>>{},
+    if (options.method == 'GET' &&
+        uri.path.endsWith('/api/mobile/index.php') &&
+        uri.queryParameters['module'] == 'login' &&
+        (uri.queryParameters['action'] == 'logout' ||
+            uri.queryParameters['mlogout'] == '1')) {
+      logoutQuery = Map<String, String>.from(uri.queryParameters);
+      if (logoutSucceeds) {
+        _loggedIn = false;
+      }
+      return _jsonResponse(
+        <String, dynamic>{
+          'Version': '4',
+          'Charset': 'utf-8',
+          'Variables': <String, dynamic>{},
+          'Message': <String, dynamic>{
+            'messageval': logoutSucceeds ? 'logout_succeed' : 'logout_failed',
+            'messagestr': logoutSucceeds ? '退出成功' : '退出失败',
+          },
+        },
       );
     }
 
@@ -238,6 +311,17 @@ class _DiscuzTestAdapter implements HttpClientAdapter {
       'Not Found: ${options.method} ${options.uri} body=$requestBody',
       404,
       headers: <String, List<String>>{},
+    );
+  }
+
+  ResponseBody _jsonResponse(
+    Map<String, dynamic> body, {
+    Map<String, List<String>> headers = const <String, List<String>>{},
+  }) {
+    return ResponseBody.fromString(
+      jsonEncode(body),
+      200,
+      headers: headers,
     );
   }
 
@@ -257,17 +341,5 @@ class _DiscuzTestAdapter implements HttpClientAdapter {
     }
 
     return utf8.decode(bytes, allowMalformed: true);
-  }
-
-  String _loginPageHtml() {
-    return '''
-<html>
-  <body>
-    <form action="member.php?mod=logging&action=login&loginsubmit=yes&loginhash=abc123&mobile=2" method="post">
-      <input type="hidden" name="formhash" value="fh_login" />
-    </form>
-  </body>
-</html>
-''';
   }
 }
