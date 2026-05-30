@@ -54,6 +54,10 @@ void main() {
       expect(applier.requests.single.links, links);
       expect(applier.requests.single.source, ComicEpisodeRefreshSource.catalog);
       expect(
+        applier.requests.single.mutationSource,
+        LibraryMutationSource.favoriteSync,
+      );
+      expect(
         applier.requests.single.reason,
         'favorite_comic_catalog_refresh_completed',
       );
@@ -105,6 +109,11 @@ void main() {
       expect(bus.signal.value?.modules, contains(LibraryModuleKey.comic));
       expect(bus.signal.value?.modules, contains(LibraryModuleKey.favorite));
       expect(bus.signal.value?.reason, 'favorite_comic_search_refresh_queued');
+      expect(bus.signal.value?.source, LibraryMutationSource.favoriteSync);
+      expect(bus.signal.value?.workId, 'comic:2');
+      expect(bus.signal.value?.tid, '100');
+      expect(bus.signal.value?.payload['queuePosition'], 2);
+      expect(bus.signal.value?.payload['estimatedDurationMs'], 21000);
     });
 
     test('catalog miss skips search queue when tag is not long-running', () async {
@@ -141,6 +150,9 @@ void main() {
         bus.signal.value?.reason,
         'favorite_comic_catalog_miss_search_skipped',
       );
+      expect(bus.signal.value?.source, LibraryMutationSource.favoriteSync);
+      expect(bus.signal.value?.workId, 'comic:3');
+      expect(bus.signal.value?.tid, '100');
     });
 
     test('forced catalog miss enqueues search queue for newly favorited comic', () async {
@@ -178,6 +190,9 @@ void main() {
         'Newly Favorited Comic',
       );
       expect(bus.signal.value?.reason, 'favorite_comic_search_refresh_queued');
+      expect(bus.signal.value?.source, LibraryMutationSource.favoriteSync);
+      expect(bus.signal.value?.workId, 'comic:4');
+      expect(bus.signal.value?.tid, '100');
     });
   });
 }

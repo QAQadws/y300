@@ -6,6 +6,7 @@ import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
 class ComicDetailArgs {
   const ComicDetailArgs({required this.comicId});
@@ -135,6 +136,7 @@ class ComicDetailController extends AsyncNotifier<ComicDetailViewState> {
           sourceTid: current.detail.sourceTid,
           links: outcome.links,
           source: outcome.source,
+          mutationSource: LibraryMutationSource.comicRefresh,
           reason: 'comic_detail_controller_refresh_completed',
         ),
       );

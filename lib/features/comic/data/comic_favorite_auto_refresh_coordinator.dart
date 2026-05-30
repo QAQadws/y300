@@ -100,6 +100,7 @@ class ComicFavoriteAutoRefreshCoordinator {
           sourceTid: sourceTid,
           links: catalog.links,
           source: catalog.source,
+          mutationSource: LibraryMutationSource.favoriteSync,
           reason: 'favorite_comic_catalog_refresh_completed',
         ),
       );
@@ -123,6 +124,9 @@ class ComicFavoriteAutoRefreshCoordinator {
           LibraryModuleKey.favorite,
         },
         reason: 'favorite_comic_catalog_miss_search_skipped',
+        source: LibraryMutationSource.favoriteSync,
+        workId: comicId,
+        tid: sourceTid,
       );
       return const ComicFavoriteAutoRefreshResult(
         status: ComicFavoriteAutoRefreshStatus.skipped,
@@ -143,6 +147,13 @@ class ComicFavoriteAutoRefreshCoordinator {
         LibraryModuleKey.favorite,
       },
       reason: 'favorite_comic_search_refresh_queued',
+      source: LibraryMutationSource.favoriteSync,
+      workId: comicId,
+      tid: sourceTid,
+      payload: <String, Object?>{
+        'queuePosition': queued.position,
+        'estimatedDurationMs': queued.estimatedDuration.inMilliseconds,
+      },
     );
     return ComicFavoriteAutoRefreshResult(
       status: ComicFavoriteAutoRefreshStatus.queuedForSearch,

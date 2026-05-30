@@ -3,9 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/comic/data/comic_task_progress.dart';
 import 'package:y300/features/comic/presentation/comic_detail_page.dart';
 import 'package:y300/features/favorites/data/favorite_providers.dart';
+import 'package:y300/features/favorites/data/favorite_task_progress.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
+import 'package:y300/features/library_shared/data/library_task_progress_providers.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_shelf_page.dart';
 import 'package:y300/features/novel/presentation/novel_detail_page.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
@@ -40,12 +43,16 @@ class _FavoriteShelfPageState extends ConsumerState<FavoriteShelfPage> {
   @override
   Widget build(BuildContext context) {
     final ref = this.ref;
+    ref.watch(favoriteSyncTaskProgressRegistrationProvider);
+    ref.watch(comicSearchQueueTaskProgressRegistrationProvider);
+    final taskProgressHub = ref.watch(libraryTaskProgressHubProvider);
     final adapter = ref.watch(favoriteShelfAdapterProvider);
     final repository = ref.watch(localFavoriteRepositoryProvider);
     return UnifiedShelfPage(
       adapter: adapter,
       imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
       isActive: widget.isActive,
+      taskProgressHub: taskProgressHub,
       onOpenWork: (context, workId) async {
         final target = await repository.getRouteTargetByShelfWorkId(workId);
         if (!context.mounted || target == null) {

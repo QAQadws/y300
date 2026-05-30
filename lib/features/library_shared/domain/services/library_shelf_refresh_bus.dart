@@ -2,18 +2,36 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 
+enum LibraryMutationSource {
+  favoriteSync,
+  threadFavoriteAction,
+  comicRefresh,
+  comicSearchQueue,
+  novelRefresh,
+  coverWarmup,
+  duplicateMerge,
+}
+
 class LibraryShelfRefreshSignal {
   const LibraryShelfRefreshSignal({
     required this.sequence,
     required this.modules,
     required this.reason,
+    required this.source,
     required this.createdAt,
+    this.workId,
+    this.tid,
+    this.payload = const <String, Object?>{},
   });
 
   final int sequence;
   final Set<LibraryModuleKey> modules;
   final String reason;
+  final LibraryMutationSource source;
   final DateTime createdAt;
+  final String? workId;
+  final String? tid;
+  final Map<String, Object?> payload;
 }
 
 /// Small shared event bus for background shelf mutations.
@@ -32,6 +50,10 @@ class LibraryShelfRefreshBus {
   void notify({
     required Set<LibraryModuleKey> modules,
     required String reason,
+    required LibraryMutationSource source,
+    String? workId,
+    String? tid,
+    Map<String, Object?> payload = const <String, Object?>{},
   }) {
     if (modules.isEmpty) {
       return;
@@ -41,7 +63,11 @@ class LibraryShelfRefreshBus {
       sequence: _sequence,
       modules: Set<LibraryModuleKey>.unmodifiable(modules),
       reason: reason,
+      source: source,
       createdAt: DateTime.now(),
+      workId: workId,
+      tid: tid,
+      payload: Map<String, Object?>.unmodifiable(payload),
     );
   }
 

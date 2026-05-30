@@ -6,6 +6,7 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
+import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_snapshot_diff.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_feature_flags.dart';
@@ -114,6 +115,7 @@ class UnifiedShelfController {
     ShelfFeatureFlags featureFlags = ShelfFeatureFlags.defaults,
     void Function()? onStateChanged,
     bool backgroundReloadEnabled = true,
+    LibraryTaskProgressHub? taskProgressHub,
   })  : _adapter = adapter,
         _coverWarmupService = coverWarmupService ?? ShelfCoverWarmupService(),
         _featureFlags = featureFlags,
@@ -125,8 +127,20 @@ class UnifiedShelfController {
         _stateListenable = ValueNotifier<UnifiedShelfState>(
           _initialState(adapter),
         ) {
+    final warmupAdapter = adapter is ShelfCoverWarmupAdapter
+        ? adapter as ShelfCoverWarmupAdapter
+        : null;
+    if (taskProgressHub != null && warmupAdapter != null) {
+      final progress = ValueNotifier<LibraryShelfTaskProgress?>(null);
+      _coverWarmupProgress = progress;
+      _coverWarmupProgressRegistration = taskProgressHub.registerSource(
+        modules: <LibraryModuleKey>{adapter.moduleKey},
+        progress: progress,
+        priority: LibraryTaskProgressPriority.low,
+      );
+    }
     final taskProgressListenable = _taskProgressListenable;
-    _taskProgressWasActive = taskProgressListenable?.value?.active ?? false;
+    _lastTaskProgress = taskProgressListenable?.value;
     taskProgressListenable?.addListener(_handleTaskProgressChanged);
     _shelfRefreshSignals?.addListener(_handleShelfRefreshSignalChanged);
   }
@@ -148,7 +162,9 @@ class UnifiedShelfController {
   Completer<void>? _pendingKeywordCompleter;
   final Map<String, ShelfCoverVisibleRange> _visibleRangesByCategory = <String, ShelfCoverVisibleRange>{};
   ShelfCoverWarmupToken? _coverWarmupToken;
-  bool _taskProgressWasActive = false;
+  ValueNotifier<LibraryShelfTaskProgress?>? _coverWarmupProgress;
+  LibraryTaskProgressRegistration? _coverWarmupProgressRegistration;
+  LibraryShelfTaskProgress? _lastTaskProgress;
   bool _adapterRefreshInProgress = false;
   bool _backgroundReloadInProgress = false;
   bool _backgroundReloadRequested = false;
@@ -174,6 +190,11 @@ class UnifiedShelfController {
     _reloadGeneration++;
     _coverWarmupToken?.cancel();
     _coverWarmupToken = null;
+    _coverWarmupProgress?.value = null;
+    _coverWarmupProgressRegistration?.dispose();
+    _coverWarmupProgressRegistration = null;
+    _coverWarmupProgress?.dispose();
+    _coverWarmupProgress = null;
     _taskProgressListenable?.removeListener(_handleTaskProgressChanged);
     _shelfRefreshSignals?.removeListener(_handleShelfRefreshSignalChanged);
     _stateListenable.dispose();
@@ -474,9 +495,13 @@ class UnifiedShelfController {
   }
 
   void _handleTaskProgressChanged() {
-    final active = _taskProgressListenable?.value?.active ?? false;
-    final completedBackgroundTask = _taskProgressWasActive && !active;
-    _taskProgressWasActive = active;
+    final nextProgress = _taskProgressListenable?.value;
+    final previousProgress = _lastTaskProgress;
+    final completedBackgroundTask =
+        (previousProgress?.active ?? false) &&
+        !(nextProgress?.active ?? false) &&
+        (previousProgress?.reloadOnCompletion ?? false);
+    _lastTaskProgress = nextProgress;
     if (!completedBackgroundTask || _disposed || _adapterRefreshInProgress) {
       return;
     }
@@ -541,6 +566,11 @@ class UnifiedShelfController {
         ? _adapter as ShelfCoverWarmupAdapter
         : null;
     if (!_featureFlags.useShelfCoverQueue || warmupAdapter == null) {
+      _setCoverWarmupProgress(
+        null,
+        generation: generation,
+        token: _coverWarmupToken,
+      );
       return;
     }
     final snapshot = _state;
@@ -565,9 +595,44 @@ class UnifiedShelfController {
           displayMode: snapshot.displayMode,
           gridColumnCount: snapshot.gridColumnCount,
         );
+        if (prioritized.isEmpty) {
+          _setCoverWarmupProgress(null, generation: generation, token: token);
+          return;
+        }
+        var processedCount = 0;
+        _setCoverWarmupProgress(
+          LibraryShelfTaskProgress(
+            message: '正在预热封面',
+            current: 0,
+            total: prioritized.length,
+            source: LibraryMutationSource.coverWarmup,
+            visible: false,
+            reloadOnCompletion: false,
+          ),
+          generation: generation,
+          token: token,
+        );
         await _coverWarmupService.warmCovers(
           requests: prioritized,
-          warmCover: warmupAdapter.warmCover,
+          warmCover: (request) async {
+            try {
+              return await warmupAdapter.warmCover(request);
+            } finally {
+              processedCount += 1;
+              _setCoverWarmupProgress(
+                LibraryShelfTaskProgress(
+                  message: '正在预热封面',
+                  current: processedCount,
+                  total: prioritized.length,
+                  source: LibraryMutationSource.coverWarmup,
+                  visible: false,
+                  reloadOnCompletion: false,
+                ),
+                generation: generation,
+                token: token,
+              );
+            }
+          },
           onResult: (result) {
             if (_disposed || generation != _reloadGeneration) {
               return;
@@ -579,8 +644,25 @@ class UnifiedShelfController {
       } catch (_) {
         // Cover warmup is an opportunistic background path. Request building
         // failures must not escape into Flutter's unawaited future handler.
+      } finally {
+        _setCoverWarmupProgress(null, generation: generation, token: token);
       }
     }());
+  }
+
+  void _setCoverWarmupProgress(
+    LibraryShelfTaskProgress? progress, {
+    required int generation,
+    required ShelfCoverWarmupToken? token,
+  }) {
+    final notifier = _coverWarmupProgress;
+    if (notifier == null || _disposed || generation != _reloadGeneration) {
+      return;
+    }
+    if (token != null && !identical(_coverWarmupToken, token)) {
+      return;
+    }
+    notifier.value = progress;
   }
 
   void _applyCoverWarmupResult(ShelfCoverWarmupResult result) {

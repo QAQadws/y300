@@ -7,6 +7,7 @@ import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applie
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -50,6 +51,10 @@ void main() {
         'comic_search_refresh_completed',
       );
       expect(applier.requests.single.source, ComicEpisodeRefreshSource.search);
+      expect(
+        applier.requests.single.mutationSource,
+        LibraryMutationSource.comicSearchQueue,
+      );
       expect(applier.requests.single.links, hasLength(1));
       expect(await queueRepository.loadActiveEntries(), isEmpty);
 

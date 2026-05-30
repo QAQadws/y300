@@ -1,6 +1,7 @@
 import 'package:y300/features/comic/data/comic_favorite_ingest_service.dart';
 import 'package:y300/features/favorites/domain/favorite_content_ingest.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/novel/data/novel_favorite_ingest_service.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
@@ -65,20 +66,24 @@ class NovelFavoriteContentIngestHandler
   Future<FavoriteContentIngestResult> ingest(
     FavoriteContentIngestRequest request,
   ) async {
+    final context = request.context;
     final workId = await _ingestService.upsertFromThreadDetail(
-      detail: request.context.detail,
-      sourceTagName: request.context.tagName,
+      detail: context.detail,
+      sourceTagName: context.tagName,
     );
     return FavoriteContentIngestResult(
       kind: kind,
       workId: workId,
-      postTasks: const <LibraryPostIngestTask>[
+      postTasks: <LibraryPostIngestTask>[
         ShelfRefreshTask(
           modules: <LibraryModuleKey>{
             LibraryModuleKey.novel,
             LibraryModuleKey.favorite,
           },
           reason: 'favorite_novel_refresh_completed',
+          source: LibraryMutationSource.novelRefresh,
+          workId: workId,
+          tid: context.detail.tid,
         ),
       ],
     );

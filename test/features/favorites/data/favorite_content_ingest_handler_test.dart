@@ -5,6 +5,7 @@ import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
 import 'package:y300/features/favorites/domain/favorite_content_ingest.dart';
 import 'package:y300/features/favorites/domain/favorite_detail_context.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/novel/data/novel_favorite_ingest_service.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
@@ -129,6 +130,9 @@ void main() {
         LibraryModuleKey.favorite,
       });
       expect(task.reason, 'favorite_novel_refresh_completed');
+      expect(task.source, LibraryMutationSource.novelRefresh);
+      expect(task.workId, 'novel:49:200');
+      expect(task.tid, '200');
     });
   });
 

@@ -1,11 +1,17 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/comic/data/comic_search_refresh_queue_providers.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
+import 'package:y300/features/favorites/data/favorite_providers.dart';
+import 'package:y300/features/favorites/data/favorite_sync_service.dart';
+import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -41,12 +47,18 @@ void main() {
   });
 
   testWidgets('StartupPage should navigate to MainShellPage by default', (tester) async {
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    addTearDown(queueSnapshot.dispose);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
           libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+          favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
           mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
         ],
         child: const MaterialApp(home: StartupPage()),
@@ -58,6 +70,36 @@ void main() {
 
     expect(find.byType(MainShellPage), findsOneWidget);
   });
+}
+
+class _FakeFavoriteSyncService implements FavoriteSyncService {
+  final _progress = ValueNotifier<FavoriteSyncProgress>(FavoriteSyncProgress.idle);
+
+  @override
+  ValueListenable<FavoriteSyncProgress> get progress => _progress;
+
+  @override
+  Future<void> runBackgroundMaintenance() async {}
+
+  @override
+  Future<FavoriteSyncResult> sync() async {
+    return const FavoriteSyncResult(
+      mode: FavoriteSyncMode.incremental,
+      remoteCount: 0,
+      fetchedPages: 0,
+      upsertedCount: 0,
+      removedRecords: <FavoriteThreadCacheRecord>[],
+      detailLoadedCount: 0,
+      failedDetailTids: <String>[],
+    );
+  }
+
+  @override
+  Future<FavoriteSyncResult> syncRecentlyAddedThread({
+    required String tid,
+  }) {
+    return sync();
+  }
 }
 
 class _FakeComicRepository implements ComicRepository {

@@ -16,6 +16,7 @@ class ComicRefreshApplyRequest {
     required this.sourceTid,
     required this.links,
     required this.source,
+    required this.mutationSource,
     required this.reason,
   });
 
@@ -23,6 +24,7 @@ class ComicRefreshApplyRequest {
   final String sourceTid;
   final List<ComicEpisodeLink> links;
   final ComicEpisodeRefreshSource source;
+  final LibraryMutationSource mutationSource;
   final String reason;
 }
 
@@ -89,6 +91,16 @@ class DefaultComicRefreshOutcomeApplier
         LibraryModuleKey.favorite,
       },
       reason: request.reason,
+      source: request.mutationSource,
+      workId: request.comicId,
+      tid: request.sourceTid,
+      payload: <String, Object?>{
+        'episodeSource': request.source.name,
+        'insertedCount': mergeResult.insertedCount,
+        'updatedCount': mergeResult.updatedCount,
+        'totalCount': mergeResult.totalCount,
+        'coverPromoted': coverPromoted,
+      },
     );
     return ComicRefreshApplyResult(
       status: ComicRefreshApplyStatus.applied,

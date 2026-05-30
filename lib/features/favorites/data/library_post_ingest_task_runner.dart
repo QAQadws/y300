@@ -137,14 +137,20 @@ class DefaultLibraryPostIngestTaskRunner implements LibraryPostIngestTaskRunner 
     if (!result.changed) {
       return null;
     }
+    final target = result.targetComicId.trim();
     _shelfRefreshBus?.notify(
       modules: const <LibraryModuleKey>{
         LibraryModuleKey.comic,
         LibraryModuleKey.favorite,
       },
       reason: 'favorite_comic_duplicate_merge_completed',
+      source: LibraryMutationSource.duplicateMerge,
+      workId: target.isEmpty ? null : target,
+      payload: <String, Object?>{
+        'sourceComicId': task.comicId,
+        'targetComicId': target,
+      },
     );
-    final target = result.targetComicId.trim();
     return target.isEmpty ? null : target;
   }
 
@@ -161,11 +167,22 @@ class DefaultLibraryPostIngestTaskRunner implements LibraryPostIngestTaskRunner 
           LibraryModuleKey.favorite,
         },
         reason: 'favorite_first_sync_comic_duplicate_merge_completed',
+        source: LibraryMutationSource.duplicateMerge,
+        payload: <String, Object?>{
+          'removedComicCount': summary.removedComicCount,
+        },
       );
     }
   }
 
   void _runShelfRefresh(ShelfRefreshTask task) {
-    _shelfRefreshBus?.notify(modules: task.modules, reason: task.reason);
+    _shelfRefreshBus?.notify(
+      modules: task.modules,
+      reason: task.reason,
+      source: task.source,
+      workId: task.workId,
+      tid: task.tid,
+      payload: task.payload,
+    );
   }
 }

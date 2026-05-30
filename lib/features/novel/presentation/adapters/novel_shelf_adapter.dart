@@ -11,6 +11,7 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
+import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
@@ -24,8 +25,10 @@ class NovelShelfAdapter
     ImageCacheService? imageCacheService,
     ImageCacheServiceResolver? imageCacheServiceResolver,
     LibraryShelfRefreshBus? shelfRefreshBus,
+    LibraryTaskProgressHub? taskProgressHub,
   })  : _stateRepository = stateRepository,
         _shelfRefreshBus = shelfRefreshBus,
+        _taskProgress = taskProgressHub?.progressFor(LibraryModuleKey.novel),
         _coverCacheService = imageCacheServiceResolver == null
             ? LibraryCoverCacheService(imageCacheService)
             : LibraryCoverCacheService.lazy(imageCacheServiceResolver);
@@ -33,6 +36,7 @@ class NovelShelfAdapter
   final NovelRepository _repository;
   final LibraryStateRepository _stateRepository;
   final LibraryShelfRefreshBus? _shelfRefreshBus;
+  final ValueListenable<LibraryShelfTaskProgress?>? _taskProgress;
   final LibraryCoverCacheService _coverCacheService;
 
   @override
@@ -45,7 +49,7 @@ class NovelShelfAdapter
   LibraryDisplayMode get defaultDisplayMode => LibraryDisplayMode.list;
 
   @override
-  ValueListenable<LibraryShelfTaskProgress?>? get taskProgress => null;
+  ValueListenable<LibraryShelfTaskProgress?>? get taskProgress => _taskProgress;
 
   @override
   ValueListenable<LibraryShelfRefreshSignal?>? get shelfRefreshSignals {

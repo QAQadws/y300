@@ -3,18 +3,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
-import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
-import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
 import 'package:y300/features/favorites/presentation/adapters/favorite_shelf_adapter.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
+import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
@@ -176,66 +177,38 @@ void main() {
     expect(writer.lastCustomCoverLocalPath, '/cache/custom-cover.jpg');
   });
 
-  test('FavoriteShelfAdapter task progress falls back to comic search queue waiting message', () {
+  test('FavoriteShelfAdapter exposes favorite progress from task progress hub', () {
     final sync = _FakeFavoriteSyncService();
-    sync.markSynced();
-    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
-      ComicSearchRefreshQueueSnapshot(
-        entries: <ComicSearchRefreshQueueEntry>[
-          _queueEntry(id: 1, title: '排队漫画'),
-        ],
-        cadence: const Duration(milliseconds: 10500),
+    final hub = DefaultLibraryTaskProgressHub();
+    final progress = ValueNotifier<LibraryShelfTaskProgress?>(
+      const LibraryShelfTaskProgress(
+        message: '正在解析: 收藏帖',
+        current: 1,
+        total: 3,
+        source: LibraryMutationSource.favoriteSync,
       ),
     );
-    addTearDown(queueSnapshot.dispose);
+    final registration = hub.registerSource(
+      modules: const <LibraryModuleKey>{LibraryModuleKey.favorite},
+      progress: progress,
+      priority: LibraryTaskProgressPriority.high,
+    );
+    addTearDown(progress.dispose);
+    addTearDown(registration.dispose);
+    addTearDown(hub.dispose);
     final adapter = FavoriteShelfAdapter(
       _FakeLocalFavoriteRepository(),
       syncService: sync,
       stateRepository: _FakeLibraryStateRepository(),
-      searchQueueSnapshot: queueSnapshot,
+      taskProgressHub: hub,
     );
 
+    expect(adapter.taskProgress?.value?.message, '正在解析: 收藏帖');
     expect(
-      adapter.taskProgress.value?.message,
-      '排队漫画 正在等待搜索 预计耗时10.5s',
-    );
-
-    queueSnapshot.value = ComicSearchRefreshQueueSnapshot(
-      entries: <ComicSearchRefreshQueueEntry>[
-        _queueEntry(id: 1, title: '排队漫画'),
-        _queueEntry(id: 2, title: '下一部'),
-      ],
-      cadence: const Duration(milliseconds: 10500),
-    );
-
-    expect(
-      adapter.taskProgress.value?.message,
-      '排队漫画 正在等待搜索 预计耗时21s',
+      adapter.taskProgress?.value?.source,
+      LibraryMutationSource.favoriteSync,
     );
   });
-}
-
-ComicSearchRefreshQueueEntry _queueEntry({
-  required int id,
-  required String title,
-}) {
-  return ComicSearchRefreshQueueEntry(
-    id: id,
-    comicId: 'comic:$id',
-    title: title,
-    request: ComicEpisodeRefreshRequest(
-      comicId: 'comic:$id',
-      sourceTid: '$id',
-      displayTitle: title,
-      sourceTitle: title,
-    ),
-    origin: ComicSearchRefreshOrigin.favoriteSync,
-    status: ComicSearchRefreshQueueStatus.pending,
-    attempts: 0,
-    availableAt: DateTime(2026, 5, 16),
-    createdAt: DateTime(2026, 5, 16),
-    updatedAt: DateTime(2026, 5, 16),
-  );
 }
 
 class _FakeFavoriteSyncService implements FavoriteSyncService {

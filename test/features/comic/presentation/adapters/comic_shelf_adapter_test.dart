@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
@@ -9,11 +10,13 @@ import 'package:y300/features/comic/domain/services/comic_duplicate_merge_servic
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/presentation/adapters/comic_shelf_adapter.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
+import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 
 void main() {
   test('ComicShelfAdapter returns metadata before cover warmup', () async {
@@ -226,6 +229,36 @@ void main() {
     expect(repository.mergeAllCallCount, 1);
     expect(bus.signal.value?.modules, contains(LibraryModuleKey.comic));
     expect(bus.signal.value?.modules, contains(LibraryModuleKey.favorite));
+    expect(bus.signal.value?.source, LibraryMutationSource.duplicateMerge);
+    expect(bus.signal.value?.payload['removedComicCount'], 1);
+  });
+
+  test('ComicShelfAdapter exposes comic progress from task progress hub', () {
+    final hub = DefaultLibraryTaskProgressHub();
+    final progress = ValueNotifier<LibraryShelfTaskProgress?>(
+      const LibraryShelfTaskProgress(
+        message: '漫画队列处理中',
+        source: LibraryMutationSource.comicSearchQueue,
+      ),
+    );
+    final registration = hub.registerSource(
+      modules: const <LibraryModuleKey>{LibraryModuleKey.comic},
+      progress: progress,
+    );
+    addTearDown(progress.dispose);
+    addTearDown(registration.dispose);
+    addTearDown(hub.dispose);
+    final adapter = ComicShelfAdapter(
+      _FakeComicRepository(shelfItems: const <ComicShelfItem>[]),
+      stateRepository: _FakeLibraryStateRepository(),
+      taskProgressHub: hub,
+    );
+
+    expect(adapter.taskProgress?.value?.message, '漫画队列处理中');
+    expect(
+      adapter.taskProgress?.value?.source,
+      LibraryMutationSource.comicSearchQueue,
+    );
   });
 }
 

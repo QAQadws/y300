@@ -15,6 +15,7 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
+import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_query_utils.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
 
@@ -35,11 +36,13 @@ class ComicShelfAdapter
     ImageCacheServiceResolver? imageCacheServiceResolver,
     ComicReaderFeatureFlags featureFlags = ComicReaderFeatureFlags.defaults,
     LibraryShelfRefreshBus? shelfRefreshBus,
+    LibraryTaskProgressHub? taskProgressHub,
     ComicDuplicateMergeService? duplicateMergeService,
   })  : _stateRepository = stateRepository,
         _featureFlags = featureFlags,
         _duplicateMergeService = duplicateMergeService,
         _shelfRefreshBus = shelfRefreshBus,
+        _taskProgress = taskProgressHub?.progressFor(LibraryModuleKey.comic),
         _coverCacheService = imageCacheServiceResolver == null
             ? LibraryCoverCacheService(imageCacheService)
             : LibraryCoverCacheService.lazy(imageCacheServiceResolver);
@@ -49,6 +52,7 @@ class ComicShelfAdapter
   final ComicReaderFeatureFlags _featureFlags;
   final ComicDuplicateMergeService? _duplicateMergeService;
   final LibraryShelfRefreshBus? _shelfRefreshBus;
+  final ValueListenable<LibraryShelfTaskProgress?>? _taskProgress;
   final LibraryCoverCacheService _coverCacheService;
 
   static const String _mergeDuplicatesActionId = 'merge-duplicates';
@@ -63,7 +67,7 @@ class ComicShelfAdapter
   LibraryDisplayMode get defaultDisplayMode => LibraryDisplayMode.grid;
 
   @override
-  ValueListenable<LibraryShelfTaskProgress?>? get taskProgress => null;
+  ValueListenable<LibraryShelfTaskProgress?>? get taskProgress => _taskProgress;
 
   @override
   List<LibraryShelfMenuAction> get menuActions {
@@ -280,6 +284,10 @@ class ComicShelfAdapter
         LibraryModuleKey.favorite,
       },
       reason: 'comic_duplicate_merge_completed',
+      source: LibraryMutationSource.duplicateMerge,
+      payload: <String, Object?>{
+        'removedComicCount': summary.removedComicCount,
+      },
     );
     return ShelfModuleActionResult(
       message: '已合并 ${summary.removedComicCount} 个重复漫画',

@@ -3,7 +3,6 @@ import 'package:y300/features/cache/domain/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
-import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
@@ -14,6 +13,7 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
+import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
@@ -37,7 +37,7 @@ class FavoriteShelfAdapter
     ComicCoverCacheWriterResolver? comicCoverCacheWriterResolver,
     NovelCoverCacheWriter? novelCoverCacheWriter,
     NovelCoverCacheWriterResolver? novelCoverCacheWriterResolver,
-    ValueListenable<ComicSearchRefreshQueueSnapshot>? searchQueueSnapshot,
+    LibraryTaskProgressHub? taskProgressHub,
     LibraryShelfRefreshBus? shelfRefreshBus,
   })  : _syncService = syncService,
         _stateRepository = stateRepository,
@@ -49,10 +49,7 @@ class FavoriteShelfAdapter
             (() => comicCoverCacheWriter),
         _novelCoverCacheWriterResolver = novelCoverCacheWriterResolver ??
             (() => novelCoverCacheWriter),
-        _taskProgress = _FavoriteShelfTaskProgressListenable(
-          syncService.progress,
-          searchQueueSnapshot,
-        );
+        _taskProgress = taskProgressHub?.progressFor(LibraryModuleKey.favorite);
 
   final LocalFavoriteRepository _repository;
   final FavoriteSyncService _syncService;
@@ -61,10 +58,10 @@ class FavoriteShelfAdapter
   final LibraryCoverCacheService _coverCacheService;
   final ComicCoverCacheWriterResolver _comicCoverCacheWriterResolver;
   final NovelCoverCacheWriterResolver _novelCoverCacheWriterResolver;
-  final ValueListenable<LibraryShelfTaskProgress?> _taskProgress;
+  final ValueListenable<LibraryShelfTaskProgress?>? _taskProgress;
 
   @override
-  ValueListenable<LibraryShelfTaskProgress?> get taskProgress => _taskProgress;
+  ValueListenable<LibraryShelfTaskProgress?>? get taskProgress => _taskProgress;
 
   @override
   ValueListenable<LibraryShelfRefreshSignal?>? get shelfRefreshSignals {
@@ -427,45 +424,4 @@ class _FavoriteCoverCacheTarget {
   final ImageCacheOwnerType ownerType;
   final ImageCacheRole role;
   final _FavoriteCoverWriteBack writeBack;
-}
-
-class _FavoriteShelfTaskProgressListenable implements ValueListenable<LibraryShelfTaskProgress?> {
-  const _FavoriteShelfTaskProgressListenable(
-    this._source,
-    this._searchQueueSnapshot,
-  );
-
-  final ValueListenable<FavoriteSyncProgress> _source;
-  final ValueListenable<ComicSearchRefreshQueueSnapshot>? _searchQueueSnapshot;
-
-  @override
-  LibraryShelfTaskProgress? get value {
-    // 把收藏同步内部阶段翻译成 shared 层通用进度，避免 UnifiedShelfPage 依赖 favorites 包。
-    final progress = _source.value;
-    if (!progress.isActive) {
-      final snapshot = _searchQueueSnapshot?.value;
-      final message = snapshot?.waitingMessage;
-      if (snapshot == null || !snapshot.active || message == null) {
-        return null;
-      }
-      return LibraryShelfTaskProgress(message: message);
-    }
-    return LibraryShelfTaskProgress(
-      message: progress.message,
-      current: progress.current,
-      total: progress.total,
-    );
-  }
-
-  @override
-  void addListener(VoidCallback listener) {
-    _source.addListener(listener);
-    _searchQueueSnapshot?.addListener(listener);
-  }
-
-  @override
-  void removeListener(VoidCallback listener) {
-    _source.removeListener(listener);
-    _searchQueueSnapshot?.removeListener(listener);
-  }
 }

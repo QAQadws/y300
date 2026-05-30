@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/comic/data/comic_task_progress.dart';
 import 'package:y300/features/comic/data/comic_search_refresh_queue_providers.dart';
 import 'package:y300/features/comic/presentation/comic_tab_page.dart';
+import 'package:y300/features/favorites/data/favorite_task_progress.dart';
 import 'package:y300/features/favorites/presentation/favorite_shelf_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_page.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
@@ -34,6 +36,8 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(favoriteSyncTaskProgressRegistrationProvider);
+    ref.watch(comicSearchQueueTaskProgressRegistrationProvider);
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,

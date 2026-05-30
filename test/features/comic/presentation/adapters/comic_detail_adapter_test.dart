@@ -16,6 +16,7 @@ import 'package:y300/features/library_shared/data/library_state_repository.dart'
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
 void main() {
   test('refreshWork applies catalog result without running search fallback', () async {
@@ -43,6 +44,10 @@ void main() {
     expect(applier.requests.single.sourceTid, '100');
     expect(applier.requests.single.links.length, 2);
     expect(applier.requests.single.source, ComicEpisodeRefreshSource.catalog);
+    expect(
+      applier.requests.single.mutationSource,
+      LibraryMutationSource.comicRefresh,
+    );
     expect(
       applier.requests.single.reason,
       'comic_detail_catalog_refresh_completed',
@@ -86,6 +91,10 @@ void main() {
     expect(applier.requests, hasLength(1));
     expect(applier.requests.single.links.single.url, 'thread-201-1-1.html');
     expect(applier.requests.single.source, ComicEpisodeRefreshSource.search);
+    expect(
+      applier.requests.single.mutationSource,
+      LibraryMutationSource.comicRefresh,
+    );
     expect(
       applier.requests.single.reason,
       'comic_detail_search_refresh_completed',

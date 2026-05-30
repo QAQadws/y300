@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
+import 'package:y300/features/library_shared/data/library_task_progress_providers.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_shelf_page.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
@@ -22,16 +23,19 @@ class NovelShelfPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final taskProgressHub = ref.watch(libraryTaskProgressHubProvider);
     final adapter = NovelShelfAdapter(
       ref.watch(novelRepositoryProvider),
       stateRepository: ref.watch(libraryStateRepositoryProvider),
       imageCacheServiceResolver: () => ref.read(imageCacheServiceProvider),
       shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
+      taskProgressHub: taskProgressHub,
     );
     return UnifiedShelfPage(
       adapter: adapter,
       imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
       isActive: isActive,
+      taskProgressHub: taskProgressHub,
       onOpenWork: (context, workId) async {
         await Navigator.of(context).push(
           MaterialPageRoute<void>(

@@ -153,6 +153,10 @@ void main() {
       expect(report.failures, isEmpty);
       expect(report.resolvedWorkId, 'yamibo:old');
       expect(reasons, contains('favorite_comic_duplicate_merge_completed'));
+      expect(bus.signal.value?.source, LibraryMutationSource.duplicateMerge);
+      expect(bus.signal.value?.workId, 'yamibo:old');
+      expect(bus.signal.value?.payload['sourceComicId'], 'yamibo:100');
+      expect(bus.signal.value?.payload['targetComicId'], 'yamibo:old');
     });
 
     test('ComicDuplicateMergeTask without changes leaves resolvedWorkId null', () async {
@@ -230,6 +234,8 @@ void main() {
         reasons,
         contains('favorite_first_sync_comic_duplicate_merge_completed'),
       );
+      expect(bus.signal.value?.source, LibraryMutationSource.duplicateMerge);
+      expect(bus.signal.value?.payload['removedComicCount'], 1);
     });
 
     test('ComicDuplicateMergeAllTask failure is recorded but does not throw', () async {
@@ -265,6 +271,9 @@ void main() {
             LibraryModuleKey.favorite,
           },
           reason: 'favorite_novel_refresh_completed',
+          source: LibraryMutationSource.novelRefresh,
+          workId: 'novel:49:200',
+          tid: '200',
         ),
       ]);
 
@@ -275,6 +284,9 @@ void main() {
         LibraryModuleKey.favorite,
       });
       expect(signals.single.reason, 'favorite_novel_refresh_completed');
+      expect(signals.single.source, LibraryMutationSource.novelRefresh);
+      expect(signals.single.workId, 'novel:49:200');
+      expect(signals.single.tid, '200');
     });
 
     test('runs multiple tasks even when a middle task fails', () async {
@@ -306,6 +318,7 @@ void main() {
         const ShelfRefreshTask(
           modules: <LibraryModuleKey>{LibraryModuleKey.favorite},
           reason: 'favorite_sync_completed',
+          source: LibraryMutationSource.favoriteSync,
         ),
       ]);
 
@@ -313,6 +326,7 @@ void main() {
       expect(report.failures, hasLength(1));
       expect(report.completed, hasLength(2));
       expect(signals.last.reason, 'favorite_sync_completed');
+      expect(signals.last.source, LibraryMutationSource.favoriteSync);
     });
 
     test('empty task list yields empty report without touching bus', () async {

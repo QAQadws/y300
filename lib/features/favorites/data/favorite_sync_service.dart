@@ -790,6 +790,12 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     _shelfRefreshBus?.notify(
       modules: const <LibraryModuleKey>{LibraryModuleKey.favorite},
       reason: reason,
+      source: LibraryMutationSource.favoriteSync,
+      payload: <String, Object?>{
+        'upsertedCount': upsertedCount,
+        'removedCount': removedCount,
+        'detailLoadedCount': detailLoadedCount,
+      },
     );
   }
 

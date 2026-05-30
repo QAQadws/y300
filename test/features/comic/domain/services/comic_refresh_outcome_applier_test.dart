@@ -26,6 +26,7 @@ void main() {
           sourceTid: '100',
           links: <ComicEpisodeLink>[],
           source: ComicEpisodeRefreshSource.empty,
+          mutationSource: LibraryMutationSource.comicRefresh,
           reason: 'comic_search_refresh_completed',
         ),
       );
@@ -55,6 +56,7 @@ void main() {
             ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: '第1话'),
           ],
           source: ComicEpisodeRefreshSource.catalog,
+          mutationSource: LibraryMutationSource.comicRefresh,
           reason: 'comic_detail_catalog_refresh_completed',
         ),
       );
@@ -69,6 +71,14 @@ void main() {
       expect(repository.lastLinks, hasLength(1));
       expect(promoter.promotedComicIds, <String>['comic:1']);
       expect(bus.signal.value?.reason, 'comic_detail_catalog_refresh_completed');
+      expect(bus.signal.value?.source, LibraryMutationSource.comicRefresh);
+      expect(bus.signal.value?.workId, 'comic:1');
+      expect(bus.signal.value?.tid, '100');
+      expect(bus.signal.value?.payload['episodeSource'], 'catalog');
+      expect(bus.signal.value?.payload['insertedCount'], 1);
+      expect(bus.signal.value?.payload['updatedCount'], 0);
+      expect(bus.signal.value?.payload['totalCount'], 1);
+      expect(bus.signal.value?.payload['coverPromoted'], true);
     });
 
     test('merge failure is rethrown and does not notify', () async {
@@ -91,6 +101,7 @@ void main() {
               ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: '第1话'),
             ],
             source: ComicEpisodeRefreshSource.search,
+            mutationSource: LibraryMutationSource.comicSearchQueue,
             reason: 'comic_search_refresh_completed',
           ),
         ),
@@ -121,6 +132,7 @@ void main() {
               ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: '第1话'),
             ],
             source: ComicEpisodeRefreshSource.currentOnly,
+            mutationSource: LibraryMutationSource.comicRefresh,
             reason: 'comic_detail_search_refresh_completed',
           ),
         ),

@@ -361,6 +361,32 @@ void main() {
     expect(find.text('排队漫画 正在等待搜索 预计耗时21s'), findsOneWidget);
   });
 
+  testWidgets('hidden task progress does not render banner', (tester) async {
+    final progress = ValueNotifier<LibraryShelfTaskProgress?>(
+      const LibraryShelfTaskProgress(
+        message: '正在预热封面',
+        source: LibraryMutationSource.coverWarmup,
+        visible: false,
+      ),
+    );
+    addTearDown(progress.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.list,
+            taskProgress: progress,
+          ),
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('unified-shelf-task-progress-bar')), findsNothing);
+    expect(find.text('正在预热封面'), findsNothing);
+  });
+
   testWidgets('initial loading does not flash empty shelf state', (tester) async {
     final adapter = _FakeShelfAdapter(
       initialDisplayMode: LibraryDisplayMode.grid,

@@ -132,12 +132,18 @@ class LibraryShelfTaskProgress {
     this.current = 0,
     this.total,
     this.active = true,
+    this.source,
+    this.visible = true,
+    this.reloadOnCompletion = true,
   });
 
   final String message;
   final int current;
   final int? total;
   final bool active;
+  final LibraryMutationSource? source;
+  final bool visible;
+  final bool reloadOnCompletion;
 
   double? get fraction {
     final resolvedTotal = total;

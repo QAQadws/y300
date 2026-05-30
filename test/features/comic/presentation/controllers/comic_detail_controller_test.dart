@@ -9,6 +9,7 @@ import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.d
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_detail_controller.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
 void main() {
   group('ComicDetailController', () {
@@ -62,6 +63,10 @@ void main() {
       expect(applier.requests, hasLength(1));
       expect(applier.requests.single.comicId, 'comic:1');
       expect(applier.requests.single.sourceTid, '100');
+      expect(
+        applier.requests.single.mutationSource,
+        LibraryMutationSource.comicRefresh,
+      );
       expect(
         applier.requests.single.reason,
         'comic_detail_controller_refresh_completed',

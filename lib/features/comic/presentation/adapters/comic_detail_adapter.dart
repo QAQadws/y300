@@ -16,6 +16,7 @@ import 'package:y300/features/library_shared/domain/contracts/detail_module_adap
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
 /// 漫画详情适配器（Phase 6）。
 ///
@@ -520,6 +521,7 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
         sourceTid: sourceTid,
         links: links,
         source: source,
+        mutationSource: LibraryMutationSource.comicRefresh,
         reason: reason,
       ),
     );

@@ -6,6 +6,7 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_feature_flags.dart';
+import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 import 'package:y300/features/library_shared/presentation/controllers/unified_shelf_controller.dart';
 import 'package:y300/shared/widgets/shelf/fixed_slot_pager_header.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
@@ -20,6 +21,7 @@ class UnifiedShelfPage extends StatefulWidget {
     this.imageHeaderBuilder,
     this.featureFlags = ShelfFeatureFlags.defaults,
     this.isActive = true,
+    this.taskProgressHub,
   });
 
   final ShelfModuleAdapter adapter;
@@ -27,6 +29,7 @@ class UnifiedShelfPage extends StatefulWidget {
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ShelfFeatureFlags featureFlags;
   final bool isActive;
+  final LibraryTaskProgressHub? taskProgressHub;
 
   @override
   State<UnifiedShelfPage> createState() => _UnifiedShelfPageState();
@@ -47,6 +50,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
       featureFlags: widget.featureFlags,
       onStateChanged: _handleControllerStateChanged,
       backgroundReloadEnabled: widget.isActive,
+      taskProgressHub: widget.taskProgressHub,
     );
     _pageController = PageController();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -229,7 +233,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
     return ValueListenableBuilder<LibraryShelfTaskProgress?>(
       valueListenable: progressListenable,
       builder: (context, progress, _) {
-        if (progress == null || !progress.active) {
+        if (progress == null || !progress.active || !progress.visible) {
           return const SizedBox.shrink();
         }
         return _ShelfTaskProgressBanner(progress: progress);

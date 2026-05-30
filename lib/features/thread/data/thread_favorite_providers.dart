@@ -22,10 +22,12 @@ final threadFavoriteActionServiceProvider = Provider<ThreadFavoriteActionService
     refreshFavoriteModule: ({required String tid}) async {
       await ref.read(favoriteSyncServiceProvider).syncRecentlyAddedThread(tid: tid);
     },
-    notifyFavoriteModule: ({required String reason}) {
+    notifyFavoriteModule: ({required String reason, required String tid}) {
       shelfRefreshBus.notify(
         modules: const <LibraryModuleKey>{LibraryModuleKey.favorite},
         reason: reason,
+        source: LibraryMutationSource.threadFavoriteAction,
+        tid: tid,
       );
     },
   );

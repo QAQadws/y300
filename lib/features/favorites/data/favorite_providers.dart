@@ -20,6 +20,7 @@ import 'package:y300/features/favorites/domain/favorite_shelf_bootstrapper.dart'
 import 'package:y300/features/favorites/domain/library_post_ingest_task_runner.dart';
 import 'package:y300/features/favorites/presentation/adapters/favorite_shelf_adapter.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
+import 'package:y300/features/library_shared/data/library_task_progress_providers.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/novel/data/novel_favorite_ingest_service.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
@@ -138,7 +139,7 @@ final favoriteShelfAdapterProvider = Provider<FavoriteShelfAdapter>((ref) {
     // 被漫画/小说模块的真实 provider 依赖拖住，也便于 widget 测试只覆盖收藏链路。
     comicCoverCacheWriterResolver: () => ref.read(comicCoverCacheWriterProvider),
     novelCoverCacheWriterResolver: () => ref.read(novelCoverCacheWriterProvider),
-    searchQueueSnapshot: ref.watch(comicSearchRefreshQueueSnapshotProvider),
+    taskProgressHub: ref.watch(libraryTaskProgressHubProvider),
     shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
   );
 });

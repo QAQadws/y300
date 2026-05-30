@@ -349,11 +349,18 @@ void main() {
         (signal) =>
             signal.reason == 'favorite_novel_refresh_completed' &&
             signal.modules.contains(LibraryModuleKey.novel) &&
-            signal.modules.contains(LibraryModuleKey.favorite),
+            signal.modules.contains(LibraryModuleKey.favorite) &&
+            signal.source == LibraryMutationSource.novelRefresh &&
+            signal.workId == 'novel:49:200' &&
+            signal.tid == '200',
       ),
       isTrue,
     );
     expect(bus.signal.value?.reason, 'favorite_sync_completed');
+    expect(bus.signal.value?.source, LibraryMutationSource.favoriteSync);
+    expect(bus.signal.value?.payload['upsertedCount'], 1);
+    expect(bus.signal.value?.payload['removedCount'], 0);
+    expect(bus.signal.value?.payload['detailLoadedCount'], 1);
   });
 
   test('first sync queues catalog miss only when comic tag is long-running', () async {
@@ -618,6 +625,7 @@ void main() {
     expect(duplicateRepository.mergeComicIds, isEmpty);
     expect(reasons, contains('favorite_first_sync_comic_duplicate_merge_completed'));
     expect(bus.signal.value?.reason, 'favorite_sync_completed');
+    expect(bus.signal.value?.source, LibraryMutationSource.favoriteSync);
   });
 
   test('incremental comic detail stores merged target work id', () async {
@@ -781,6 +789,9 @@ void main() {
     expect(local.records['100']?.detailLoadedAt, isNotNull);
     expect(reasons, contains('favorite_comic_search_refresh_queued'));
     expect(reasons, contains('thread_favorite_recent_sync_completed'));
+    expect(bus.signal.value?.source, LibraryMutationSource.favoriteSync);
+    expect(bus.signal.value?.payload['upsertedCount'], 2);
+    expect(bus.signal.value?.payload['detailLoadedCount'], 1);
   });
 
   test('recently added sync seeds target from detail when favorite list lags', () async {

@@ -1,5 +1,6 @@
 import 'package:y300/features/favorites/domain/favorite_detail_context.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
@@ -75,10 +76,18 @@ class ShelfRefreshTask extends LibraryPostIngestTask {
   const ShelfRefreshTask({
     required this.modules,
     required this.reason,
+    required this.source,
+    this.workId,
+    this.tid,
+    this.payload = const <String, Object?>{},
   });
 
   final Set<LibraryModuleKey> modules;
   final String reason;
+  final LibraryMutationSource source;
+  final String? workId;
+  final String? tid;
+  final Map<String, Object?> payload;
 }
 
 class FavoriteIngestOptions {

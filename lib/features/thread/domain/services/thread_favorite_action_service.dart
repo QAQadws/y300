@@ -7,6 +7,7 @@ typedef ThreadFavoriteModuleRefresh = Future<void> Function({
 });
 typedef ThreadFavoriteModuleRefreshNotifier = void Function({
   required String reason,
+  required String tid,
 });
 
 abstract class ThreadFavoriteActionService {
@@ -56,6 +57,7 @@ class DefaultThreadFavoriteActionService implements ThreadFavoriteActionService 
     // The favorite shelf listens to this signal and reloads its local snapshot.
     // We still emit it when sync fails so the page can retry from its adapter.
     _notifyFavoriteModule(
+      tid: tid,
       reason: refreshed ? 'thread_favorite_added' : 'thread_favorite_added_sync_failed',
     );
 

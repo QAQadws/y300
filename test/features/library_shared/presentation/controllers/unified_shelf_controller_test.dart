@@ -8,6 +8,7 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
+import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_feature_flags.dart';
 import 'package:y300/features/library_shared/presentation/controllers/unified_shelf_controller.dart';
@@ -599,6 +600,7 @@ void main() {
       bus.notify(
         modules: const <LibraryModuleKey>{LibraryModuleKey.favorite},
         reason: 'other_module',
+        source: LibraryMutationSource.favoriteSync,
       );
       await Future<void>.delayed(Duration.zero);
       expect(controller.state.itemsByCategory['default']?.single.workId, 'w1');
@@ -606,10 +608,79 @@ void main() {
       bus.notify(
         modules: const <LibraryModuleKey>{LibraryModuleKey.comic},
         reason: 'comic_updated',
+        source: LibraryMutationSource.comicRefresh,
       );
       await stateChanged.future;
 
       expect(controller.state.itemsByCategory['default']?.single.workId, 'w2');
+      controller.dispose();
+    });
+
+    test('background task with reloadOnCompletion false does not trigger reload', () async {
+      final progress = ValueNotifier<LibraryShelfTaskProgress?>(null);
+      final adapter = _FakeShelfAdapter(
+        categories: [
+          LibraryCategory(
+            categoryId: 'default',
+            name: 'default',
+            sortOrder: 0,
+            createdAt: DateTime(2026, 1, 1),
+          ),
+        ],
+        queriedItems: {
+          'default': [_workItem('w1')],
+        },
+        taskProgress: progress,
+      );
+      final controller = UnifiedShelfController(adapter: adapter);
+
+      await controller.initialize();
+      adapter.queryCallCount = 0;
+      progress.value = const LibraryShelfTaskProgress(
+        message: 'warming',
+        source: LibraryMutationSource.coverWarmup,
+        reloadOnCompletion: false,
+      );
+      progress.value = null;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(adapter.queryCallCount, 0);
+      controller.dispose();
+      progress.dispose();
+    });
+
+    test('hidden cover warmup progress is registered through task progress hub', () async {
+      final adapter = _WarmupShelfAdapter(
+        categories: [
+          LibraryCategory(
+            categoryId: 'default',
+            name: 'default',
+            sortOrder: 0,
+            createdAt: DateTime(2026, 1, 1),
+          ),
+        ],
+        queriedItems: {
+          'default': [_workItem('w1')],
+        },
+      );
+      final hub = DefaultLibraryTaskProgressHub();
+      addTearDown(hub.dispose);
+      final controller = UnifiedShelfController(
+        adapter: adapter,
+        coverWarmupService: ShelfCoverWarmupService(maxConcurrent: 1),
+        taskProgressHub: hub,
+      );
+
+      await controller.initialize();
+      await adapter.warmCoverStarted;
+
+      final progress = hub.progressFor(LibraryModuleKey.comic).value;
+      expect(progress?.source, LibraryMutationSource.coverWarmup);
+      expect(progress?.visible, isFalse);
+      expect(progress?.reloadOnCompletion, isFalse);
+
+      adapter.completeWarmup('/cache/w1.jpg');
+      await Future<void>.delayed(const Duration(milliseconds: 10));
       controller.dispose();
     });
   });

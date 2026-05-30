@@ -1,9 +1,13 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
+import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/presentation/adapters/novel_shelf_adapter.dart';
@@ -45,6 +49,34 @@ void main() {
     expect(result?.coverLocalPath, '/cache/novel-1.jpg');
     expect(cache.lastRequest?.cacheKey, 'cover/novel/novel-1');
     expect(repository.lastCoverLocalPath, '/cache/novel-1.jpg');
+  });
+
+  test('NovelShelfAdapter exposes novel progress from task progress hub', () {
+    final hub = DefaultLibraryTaskProgressHub();
+    final progress = ValueNotifier<LibraryShelfTaskProgress?>(
+      const LibraryShelfTaskProgress(
+        message: '小说刷新中',
+        source: LibraryMutationSource.novelRefresh,
+      ),
+    );
+    final registration = hub.registerSource(
+      modules: const <LibraryModuleKey>{LibraryModuleKey.novel},
+      progress: progress,
+    );
+    addTearDown(progress.dispose);
+    addTearDown(registration.dispose);
+    addTearDown(hub.dispose);
+    final adapter = NovelShelfAdapter(
+      _FakeNovelRepository(shelfItems: const <NovelItem>[]),
+      stateRepository: _FakeLibraryStateRepository(),
+      taskProgressHub: hub,
+    );
+
+    expect(adapter.taskProgress?.value?.message, '小说刷新中');
+    expect(
+      adapter.taskProgress?.value?.source,
+      LibraryMutationSource.novelRefresh,
+    );
   });
 }
 

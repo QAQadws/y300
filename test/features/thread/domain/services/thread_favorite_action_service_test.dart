@@ -10,14 +10,16 @@ void main() {
       final repository = _FakeThreadFavoriteRepository();
       var refreshCalled = false;
       final reasons = <String>[];
+      final tids = <String>[];
       final service = DefaultThreadFavoriteActionService(
         repository: repository,
         refreshFavoriteModule: ({required String tid}) async {
           refreshCalled = true;
           expect(tid, '570617');
         },
-        notifyFavoriteModule: ({required String reason}) {
+        notifyFavoriteModule: ({required String reason, required String tid}) {
           reasons.add(reason);
+          tids.add(tid);
         },
       );
 
@@ -28,18 +30,21 @@ void main() {
       expect(repository.lastTid, '570617');
       expect(refreshCalled, isTrue);
       expect(reasons, <String>['thread_favorite_added']);
+      expect(tids, <String>['570617']);
     });
 
     test('keeps remote favorite success when favorite module refresh fails', () async {
       final repository = _FakeThreadFavoriteRepository();
       final reasons = <String>[];
+      final tids = <String>[];
       final service = DefaultThreadFavoriteActionService(
         repository: repository,
         refreshFavoriteModule: ({required String tid}) async {
           throw StateError('sync failed');
         },
-        notifyFavoriteModule: ({required String reason}) {
+        notifyFavoriteModule: ({required String reason, required String tid}) {
           reasons.add(reason);
+          tids.add(tid);
         },
       );
 
@@ -49,6 +54,7 @@ void main() {
       expect(result.dataOrNull?.refreshedFavoriteModule, isFalse);
       expect(result.dataOrNull?.message, contains('收藏列表刷新失败'));
       expect(reasons, <String>['thread_favorite_added_sync_failed']);
+      expect(tids, <String>['570617']);
     });
 
     test('does not refresh favorite module when remote favorite fails', () async {
@@ -64,7 +70,7 @@ void main() {
         refreshFavoriteModule: ({required String tid}) async {
           refreshCalled = true;
         },
-        notifyFavoriteModule: ({required String reason}) {
+        notifyFavoriteModule: ({required String reason, required String tid}) {
           reasons.add(reason);
         },
       );
