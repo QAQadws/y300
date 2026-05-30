@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/data/comic_favorite_auto_refresh_coordinator.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/comic/domain/services/comic_catalog_miss_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
@@ -11,6 +12,8 @@ import 'package:y300/features/library_shared/domain/services/library_shelf_refre
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
 void main() {
+  const longRunningTagName = '長篇連載';
+
   group('ComicFavoriteAutoRefreshCoordinator', () {
     test('catalog hit delegates refresh application with catalog source', () async {
       const links = <ComicEpisodeLink>[
@@ -32,6 +35,7 @@ void main() {
         searchQueue: searchQueue,
         refreshOutcomeApplier: applier,
         shelfRefreshBus: bus,
+        catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
         subjectParser: const RuleBasedComicSubjectParser(),
       );
 
@@ -71,6 +75,7 @@ void main() {
         searchQueue: searchQueue,
         refreshOutcomeApplier: _RecordingRefreshOutcomeApplier(),
         shelfRefreshBus: bus,
+        catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
         subjectParser: const RuleBasedComicSubjectParser(),
       );
 
@@ -78,7 +83,7 @@ void main() {
         comicId: 'comic:2',
         detail: _detail(subject: '[Scan] Parsed Search Comic EP 02'),
         favoriteTitle: 'Favorite List Raw Title',
-        sourceTagName: ComicFavoriteAutoRefreshCoordinator.longRunningTagName,
+        sourceTagName: longRunningTagName,
       );
 
       expect(result.status, ComicFavoriteAutoRefreshStatus.queuedForSearch);
@@ -117,6 +122,7 @@ void main() {
         searchQueue: searchQueue,
         refreshOutcomeApplier: _RecordingRefreshOutcomeApplier(),
         shelfRefreshBus: bus,
+        catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
         subjectParser: const RuleBasedComicSubjectParser(),
       );
 
@@ -152,6 +158,7 @@ void main() {
         searchQueue: searchQueue,
         refreshOutcomeApplier: _RecordingRefreshOutcomeApplier(),
         shelfRefreshBus: bus,
+        catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
         subjectParser: const RuleBasedComicSubjectParser(),
       );
 

@@ -7,6 +7,7 @@ import 'package:y300/features/comic/data/comic_favorite_ingest_service.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/comic/domain/services/comic_catalog_miss_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
 import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
@@ -35,6 +36,8 @@ import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/tags/domain/forum_tag_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
+
+const _longRunningTagName = '長篇連載';
 
 void main() {
   test('first sync fetches all pages and ingests comic and novel details', () async {
@@ -372,6 +375,7 @@ void main() {
       searchQueue: queue,
       refreshOutcomeApplier: _defaultRefreshOutcomeApplier(bus),
       shelfRefreshBus: bus,
+      catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
       subjectParser: const RuleBasedComicSubjectParser(),
     );
     final service = _service(
@@ -379,7 +383,7 @@ void main() {
       localRepository: _MemoryLocalFavoriteRepository(),
       detailContextLoader: _contextLoader(
         loadTagLookup: () async => _lookup(
-          comicTagName: ComicFavoriteAutoRefreshCoordinator.longRunningTagName,
+          comicTagName: _longRunningTagName,
         ),
       ),
       comicIngestService: _FakeComicIngestService(),
@@ -414,6 +418,7 @@ void main() {
       searchQueue: queue,
       refreshOutcomeApplier: _defaultRefreshOutcomeApplier(bus),
       shelfRefreshBus: bus,
+      catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
       subjectParser: const RuleBasedComicSubjectParser(),
     );
     final service = _service(
@@ -444,6 +449,7 @@ void main() {
       searchQueue: _RecordingSearchQueue(),
       refreshOutcomeApplier: _defaultRefreshOutcomeApplier(bus),
       shelfRefreshBus: bus,
+      catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
       subjectParser: const RuleBasedComicSubjectParser(),
     );
     final local = _MemoryLocalFavoriteRepository();
@@ -474,7 +480,7 @@ void main() {
           contentKind: ThreadContentKind.comic,
           workId: 'yamibo:100',
           detailLoadedAt: DateTime(2026, 1, 1),
-          sourceTagName: ComicFavoriteAutoRefreshCoordinator.longRunningTagName,
+          sourceTagName: _longRunningTagName,
         ),
       ],
     );
@@ -491,6 +497,7 @@ void main() {
       searchQueue: queue,
       refreshOutcomeApplier: _defaultRefreshOutcomeApplier(bus),
       shelfRefreshBus: bus,
+      catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
       subjectParser: const RuleBasedComicSubjectParser(),
     );
     final service = _service(
@@ -523,7 +530,7 @@ void main() {
           contentKind: ThreadContentKind.comic,
           workId: 'yamibo:100',
           detailLoadedAt: DateTime(2026, 1, 1),
-          sourceTagName: ComicFavoriteAutoRefreshCoordinator.longRunningTagName,
+          sourceTagName: _longRunningTagName,
         ),
       ],
     );
@@ -752,6 +759,7 @@ void main() {
       searchQueue: queue,
       refreshOutcomeApplier: _defaultRefreshOutcomeApplier(bus),
       shelfRefreshBus: bus,
+      catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
       subjectParser: const RuleBasedComicSubjectParser(),
     );
     final service = _service(
@@ -811,6 +819,7 @@ void main() {
       searchQueue: queue,
       refreshOutcomeApplier: _defaultRefreshOutcomeApplier(bus),
       shelfRefreshBus: bus,
+      catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
       subjectParser: const RuleBasedComicSubjectParser(),
     );
     var detailLoadCount = 0;

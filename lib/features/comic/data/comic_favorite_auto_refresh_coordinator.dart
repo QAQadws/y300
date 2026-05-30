@@ -1,3 +1,4 @@
+import 'package:y300/features/comic/domain/services/comic_catalog_miss_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
@@ -33,24 +34,25 @@ class ComicFavoriteAutoRefreshResult {
 /// refresh stays immediate, while search/current-only work is delegated to the
 /// durable queue introduced in stage 3.
 class ComicFavoriteAutoRefreshCoordinator {
-  static const String longRunningTagName = '長篇連載';
-
   const ComicFavoriteAutoRefreshCoordinator({
     required ComicEpisodeRefreshService refreshService,
     required ComicSearchRefreshQueueEnqueuer searchQueue,
     required ComicRefreshOutcomeApplier refreshOutcomeApplier,
     required LibraryShelfRefreshBus shelfRefreshBus,
+    required ComicCatalogMissPolicy catalogMissPolicy,
     required ComicSubjectParser subjectParser,
   })  : _refreshService = refreshService,
         _searchQueue = searchQueue,
         _refreshOutcomeApplier = refreshOutcomeApplier,
         _shelfRefreshBus = shelfRefreshBus,
+        _catalogMissPolicy = catalogMissPolicy,
         _subjectParser = subjectParser;
 
   final ComicEpisodeRefreshService _refreshService;
   final ComicSearchRefreshQueueEnqueuer _searchQueue;
   final ComicRefreshOutcomeApplier _refreshOutcomeApplier;
   final LibraryShelfRefreshBus _shelfRefreshBus;
+  final ComicCatalogMissPolicy _catalogMissPolicy;
   final ComicSubjectParser _subjectParser;
 
   Future<ComicFavoriteAutoRefreshResult> refreshAfterFavoriteIngest({
@@ -107,7 +109,10 @@ class ComicFavoriteAutoRefreshCoordinator {
       );
     }
 
-    if (!forceSearchOnCatalogMiss && !_shouldQueueSearchOnCatalogMiss(sourceTagName)) {
+    if (!_catalogMissPolicy.shouldQueueSearchOnCatalogMiss(
+      sourceTagName: sourceTagName,
+      forceSearchOnCatalogMiss: forceSearchOnCatalogMiss,
+    )) {
       // Historical/full sync keeps the conservative tag gate to avoid flooding
       // search. Directly added favorites can set forceSearchOnCatalogMiss so
       // the one comic the user just collected gets the same update treatment as
@@ -181,10 +186,6 @@ class ComicFavoriteAutoRefreshCoordinator {
       return null;
     }
     return _nonEmptyOrNull(_subjectParser.parse(raw).normalizedTitle) ?? raw;
-  }
-
-  bool _shouldQueueSearchOnCatalogMiss(String? sourceTagName) {
-    return _nonEmptyOrNull(sourceTagName) == longRunningTagName;
   }
 }
 

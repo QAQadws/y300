@@ -2,8 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_link_merger.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
+import 'package:y300/features/comic/domain/services/comic_refresh_keyword_resolver.dart';
+import 'package:y300/features/comic/domain/services/comic_search_candidate_ranker.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
@@ -49,7 +52,7 @@ void main() {
           rateLimited: false,
         ),
       );
-      final service = NetworkComicEpisodeRefreshService(
+      final service = _buildService(
         discoveryService: discovery,
         searchService: searchService,
         subjectParser: const RuleBasedComicSubjectParser(),
@@ -104,7 +107,7 @@ void main() {
           rateLimited: false,
         ),
       );
-      final service = NetworkComicEpisodeRefreshService(
+      final service = _buildService(
         discoveryService: discovery,
         searchService: searchService,
         subjectParser: const RuleBasedComicSubjectParser(),
@@ -147,7 +150,7 @@ void main() {
           retryAfter: Duration(seconds: 6),
         ),
       );
-      final service = NetworkComicEpisodeRefreshService(
+      final service = _buildService(
         discoveryService: discovery,
         searchService: searchService,
         subjectParser: const RuleBasedComicSubjectParser(),
@@ -187,7 +190,7 @@ void main() {
           rateLimited: false,
         ),
       );
-      final service = NetworkComicEpisodeRefreshService(
+      final service = _buildService(
         discoveryService: discovery,
         searchService: searchService,
         subjectParser: const RuleBasedComicSubjectParser(),
@@ -230,7 +233,7 @@ void main() {
           ),
         ],
       );
-      final service = NetworkComicEpisodeRefreshService(
+      final service = _buildService(
         discoveryService: discovery,
         searchService: searchService,
         subjectParser: const RuleBasedComicSubjectParser(),
@@ -282,7 +285,7 @@ void main() {
           ),
         ],
       );
-      final service = NetworkComicEpisodeRefreshService(
+      final service = _buildService(
         discoveryService: discovery,
         searchService: searchService,
         subjectParser: const RuleBasedComicSubjectParser(),
@@ -330,7 +333,7 @@ void main() {
           rateLimited: false,
         ),
       );
-      final service = NetworkComicEpisodeRefreshService(
+      final service = _buildService(
         discoveryService: discovery,
         searchService: searchService,
         subjectParser: const RuleBasedComicSubjectParser(),
@@ -373,7 +376,7 @@ void main() {
           rateLimited: false,
         ),
       );
-      final service = NetworkComicEpisodeRefreshService(
+      final service = _buildService(
         discoveryService: discovery,
         searchService: searchService,
         subjectParser: const RuleBasedComicSubjectParser(),
@@ -429,7 +432,7 @@ void main() {
           rateLimited: false,
         ),
       );
-      final service = NetworkComicEpisodeRefreshService(
+      final service = _buildService(
         discoveryService: discovery,
         searchService: searchService,
         subjectParser: const RuleBasedComicSubjectParser(),
@@ -470,7 +473,7 @@ void main() {
           rateLimited: false,
         ),
       );
-      final service = NetworkComicEpisodeRefreshService(
+      final service = _buildService(
         discoveryService: discovery,
         searchService: searchService,
         subjectParser: const RuleBasedComicSubjectParser(),
@@ -513,7 +516,7 @@ void main() {
           rateLimited: false,
         ),
       );
-      final service = NetworkComicEpisodeRefreshService(
+      final service = _buildService(
         discoveryService: discovery,
         searchService: searchService,
         subjectParser: const RuleBasedComicSubjectParser(),
@@ -550,7 +553,7 @@ void main() {
           rateLimited: false,
         ),
       );
-      final service = NetworkComicEpisodeRefreshService(
+      final service = _buildService(
         discoveryService: discovery,
         searchService: searchService,
         subjectParser: const RuleBasedComicSubjectParser(),
@@ -589,7 +592,7 @@ void main() {
           rateLimited: false,
         ),
       );
-      final service = NetworkComicEpisodeRefreshService(
+      final service = _buildService(
         discoveryService: discovery,
         searchService: searchService,
         subjectParser: const RuleBasedComicSubjectParser(),
@@ -626,7 +629,7 @@ void main() {
           rateLimited: false,
         ),
       );
-      final service = NetworkComicEpisodeRefreshService(
+      final service = _buildService(
         discoveryService: discovery,
         searchService: searchService,
         subjectParser: const RuleBasedComicSubjectParser(),
@@ -666,7 +669,7 @@ void main() {
           rateLimited: false,
         ),
       );
-      final service = NetworkComicEpisodeRefreshService(
+      final service = _buildService(
         discoveryService: discovery,
         searchService: searchService,
         subjectParser: const RuleBasedComicSubjectParser(),
@@ -696,7 +699,7 @@ void main() {
           '100': EpisodeDiscoveryStrategy.catalog,
         },
       );
-      final service = NetworkComicEpisodeRefreshService(
+      final service = _buildService(
         discoveryService: discovery,
         searchService: _FakeDiscuzSearchService(
           response: const DiscuzSearchResponse(
@@ -738,7 +741,7 @@ void main() {
           rateLimited: false,
         ),
       );
-      final service = NetworkComicEpisodeRefreshService(
+      final service = _buildService(
         discoveryService: discovery,
         searchService: searchService,
         subjectParser: const RuleBasedComicSubjectParser(),
@@ -768,7 +771,7 @@ void main() {
           ],
         },
       );
-      final service = NetworkComicEpisodeRefreshService(
+      final service = _buildService(
         discoveryService: discovery,
         searchService: _FakeDiscuzSearchService(
           response: const DiscuzSearchResponse(
@@ -800,7 +803,7 @@ void main() {
           '100': const <ComicEpisodeLink>[],
         },
       );
-      final service = NetworkComicEpisodeRefreshService(
+      final service = _buildService(
         discoveryService: discovery,
         searchService: _FakeDiscuzSearchService(
           response: const DiscuzSearchResponse(
@@ -824,7 +827,151 @@ void main() {
       expect(outcome.source, ComicEpisodeRefreshSource.empty);
       expect(outcome.links, isEmpty);
     });
+
+    test('catalog hit does not consult extracted search strategies', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{
+          '100': const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: 'EP 01'),
+          ],
+        },
+        strategyByTid: const <String, EpisodeDiscoveryStrategy>{
+          '100': EpisodeDiscoveryStrategy.catalog,
+        },
+      );
+      final keywordResolver = _RecordingKeywordResolver();
+      final candidateRanker = _RecordingCandidateRanker();
+      final linkMerger = _RecordingEpisodeLinkMerger();
+      final service = _buildService(
+        discoveryService: discovery,
+        searchService: _FakeDiscuzSearchService(
+          response: const DiscuzSearchResponse(
+            items: <DiscuzSearchResultItem>[],
+            rateLimited: false,
+          ),
+        ),
+        keywordResolver: keywordResolver,
+        candidateRanker: candidateRanker,
+        episodeLinkMerger: linkMerger,
+      );
+
+      final outcome = await service.fetchCatalogThenFallback(
+        const ComicEpisodeRefreshRequest(sourceTid: '100'),
+      );
+
+      expect(outcome.source, ComicEpisodeRefreshSource.catalog);
+      expect(keywordResolver.callCount, 0);
+      expect(candidateRanker.callCount, 0);
+      expect(linkMerger.mergeCallCount, 0);
+      expect(linkMerger.fromSearchCandidatesCallCount, 0);
+      expect(linkMerger.sortCallCount, 0);
+    });
+
+    test('catalog miss delegates fallback to resolver ranker and merger', () async {
+      const searchItem = DiscuzSearchResultItem(
+        tid: '301',
+        title: '测试漫画 第2话',
+        url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301',
+        fid: '30',
+      );
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{
+          '100': const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-100-1-1.html', rawText: '第1话'),
+          ],
+          '301': const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-301-1-1.html', rawText: '第2话'),
+          ],
+        },
+      );
+      final keywordResolver = _RecordingKeywordResolver(
+        keywords: const <ComicRefreshKeyword>[
+          ComicRefreshKeyword(
+            source: ComicRefreshKeywordSource.customTitle,
+            value: '测试漫画',
+          ),
+        ],
+      );
+      final candidateRanker = _RecordingCandidateRanker(
+        candidates: const <ComicSearchCandidate>[
+          ComicSearchCandidate(
+            item: searchItem,
+            score: 1,
+            searchIndex: 0,
+          ),
+        ],
+      );
+      final linkMerger = _RecordingEpisodeLinkMerger();
+      final searchService = _FakeDiscuzSearchService(
+        response: const DiscuzSearchResponse(
+          items: <DiscuzSearchResultItem>[searchItem],
+          rateLimited: false,
+        ),
+      );
+      final service = _buildService(
+        discoveryService: discovery,
+        searchService: searchService,
+        keywordResolver: keywordResolver,
+        candidateRanker: candidateRanker,
+        episodeLinkMerger: linkMerger,
+        threadSeedFetcher: (_) async {
+          return const ThreadSeed(subject: '测试漫画 第1话');
+        },
+      );
+
+      final outcome = await service.fetchCatalogThenFallback(
+        const ComicEpisodeRefreshRequest(
+          sourceTid: '100',
+          customTitle: '测试漫画',
+        ),
+      );
+
+      expect(outcome.source, ComicEpisodeRefreshSource.search);
+      expect(searchService.calledKeywords, <String>['测试漫画']);
+      expect(keywordResolver.callCount, 1);
+      expect(keywordResolver.lastRequest?.sourceTid, '100');
+      expect(keywordResolver.lastSubject, '测试漫画 第1话');
+      expect(candidateRanker.callCount, 1);
+      expect(candidateRanker.lastThreadSubject, '测试漫画 第1话');
+      expect(candidateRanker.lastKeyword?.value, '测试漫画');
+      expect(
+        candidateRanker.lastItems.map((item) => item.tid).toList(),
+        <String>['301'],
+      );
+      expect(linkMerger.fromSearchCandidatesCallCount, 1);
+      expect(linkMerger.sortCallCount, 1);
+      expect(linkMerger.mergeCallCount, greaterThanOrEqualTo(2));
+    });
   });
+}
+
+NetworkComicEpisodeRefreshService _buildService({
+  required ComicEpisodeDiscoveryService discoveryService,
+  required ForumSearchService searchService,
+  ComicSubjectParser subjectParser = const RuleBasedComicSubjectParser(),
+  ComicReaderFeatureFlags featureFlags = ComicReaderFeatureFlags.defaults,
+  ThreadSeedFetcher? threadSeedFetcher,
+  ComicRefreshKeywordResolver? keywordResolver,
+  ComicSearchCandidateRanker? candidateRanker,
+  ComicEpisodeLinkMerger? episodeLinkMerger,
+}) {
+  final resolvedSubjectParser = subjectParser;
+  return NetworkComicEpisodeRefreshService(
+    discoveryService: discoveryService,
+    searchService: searchService,
+    keywordResolver: keywordResolver ??
+        DefaultComicRefreshKeywordResolver(
+          subjectParser: resolvedSubjectParser,
+          featureFlags: featureFlags,
+        ),
+    candidateRanker:
+        candidateRanker ?? const DefaultComicSearchCandidateRanker(),
+    episodeLinkMerger: episodeLinkMerger ??
+        DefaultComicEpisodeLinkMerger(
+          subjectParser: resolvedSubjectParser,
+        ),
+    threadSeedFetcher: threadSeedFetcher,
+  );
 }
 
 class _FakeDiscoveryService extends ComicEpisodeDiscoveryService {
@@ -937,5 +1084,97 @@ class _SequencedDiscuzSearchService implements ForumSearchService {
       items: <DiscuzSearchResultItem>[],
       rateLimited: false,
     );
+  }
+}
+
+class _RecordingKeywordResolver implements ComicRefreshKeywordResolver {
+  _RecordingKeywordResolver({
+    List<ComicRefreshKeyword> keywords = const <ComicRefreshKeyword>[],
+  }) : _keywords = keywords;
+
+  final List<ComicRefreshKeyword> _keywords;
+  int callCount = 0;
+  ComicEpisodeRefreshRequest? lastRequest;
+  String? lastSubject;
+
+  @override
+  List<ComicRefreshKeyword> resolve(
+    ComicEpisodeRefreshRequest request,
+    String subject,
+  ) {
+    callCount++;
+    lastRequest = request;
+    lastSubject = subject;
+    return _keywords;
+  }
+}
+
+class _RecordingCandidateRanker implements ComicSearchCandidateRanker {
+  _RecordingCandidateRanker({
+    this.candidates = const <ComicSearchCandidate>[],
+  });
+
+  final List<ComicSearchCandidate> candidates;
+
+  @override
+  int get discoveryTopK => 3;
+
+  int callCount = 0;
+  String? lastThreadSubject;
+  ComicRefreshKeyword? lastKeyword;
+  List<DiscuzSearchResultItem> lastItems = const <DiscuzSearchResultItem>[];
+
+  @override
+  List<ComicSearchCandidate> rank({
+    required String threadSubject,
+    required ComicRefreshKeyword keyword,
+    required List<DiscuzSearchResultItem> items,
+  }) {
+    callCount++;
+    lastThreadSubject = threadSubject;
+    lastKeyword = keyword;
+    lastItems = items;
+    return candidates;
+  }
+}
+
+class _RecordingEpisodeLinkMerger implements ComicEpisodeLinkMerger {
+  _RecordingEpisodeLinkMerger()
+      : _delegate = DefaultComicEpisodeLinkMerger(
+          subjectParser: const RuleBasedComicSubjectParser(),
+        );
+
+  final DefaultComicEpisodeLinkMerger _delegate;
+  int mergeCallCount = 0;
+  int sortCallCount = 0;
+  int fromSearchCandidatesCallCount = 0;
+
+  @override
+  List<ComicEpisodeLink> fromSearchCandidates(
+    List<ComicSearchCandidate> candidates, {
+    required String excludeTid,
+  }) {
+    fromSearchCandidatesCallCount++;
+    return _delegate.fromSearchCandidates(candidates, excludeTid: excludeTid);
+  }
+
+  @override
+  List<ComicEpisodeLink> merge(
+    List<ComicEpisodeLink> primary,
+    List<ComicEpisodeLink> supplement, {
+    bool preferSupplement = false,
+  }) {
+    mergeCallCount++;
+    return _delegate.merge(
+      primary,
+      supplement,
+      preferSupplement: preferSupplement,
+    );
+  }
+
+  @override
+  List<ComicEpisodeLink> sort(List<ComicEpisodeLink> links) {
+    sortCallCount++;
+    return _delegate.sort(links);
   }
 }

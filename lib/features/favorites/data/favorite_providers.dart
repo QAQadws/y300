@@ -50,6 +50,7 @@ final comicFavoriteAutoRefreshCoordinatorProvider =
     searchQueue: ref.watch(comicSearchRefreshQueueServiceProvider),
     refreshOutcomeApplier: ref.watch(comicRefreshOutcomeApplierProvider),
     shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
+    catalogMissPolicy: ref.watch(comicCatalogMissPolicyProvider),
     subjectParser: ref.watch(comicSubjectParserProvider),
   );
 });

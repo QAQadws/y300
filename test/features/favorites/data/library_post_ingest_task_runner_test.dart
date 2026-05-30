@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/data/comic_favorite_auto_refresh_coordinator.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/comic/domain/services/comic_catalog_miss_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
@@ -383,6 +384,7 @@ class _RecordingAutoRefreshCoordinator
           searchQueue: _NoopSearchQueue(),
           refreshOutcomeApplier: const _NoopRefreshOutcomeApplier(),
           shelfRefreshBus: _UnusedBus.instance,
+          catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
           subjectParser: const RuleBasedComicSubjectParser(),
         );
 
@@ -444,6 +446,7 @@ class _ThrowingAutoRefreshCoordinator
           searchQueue: _NoopSearchQueue(),
           refreshOutcomeApplier: const _NoopRefreshOutcomeApplier(),
           shelfRefreshBus: _UnusedBus.instance,
+          catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
           subjectParser: const RuleBasedComicSubjectParser(),
         );
 

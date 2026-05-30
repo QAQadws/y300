@@ -11,12 +11,16 @@ import 'package:y300/features/comic/data/comic_parser_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_parsing_debug_models.dart';
+import 'package:y300/features/comic/domain/services/comic_catalog_miss_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_link_merger.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_refresh_service.dart';
 import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
 import 'package:y300/features/comic/domain/services/comic_detector.dart';
-import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
+import 'package:y300/features/comic/domain/services/comic_refresh_keyword_resolver.dart';
+import 'package:y300/features/comic/domain/services/comic_search_candidate_ranker.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/data/discuz_search_service.dart';
@@ -24,6 +28,8 @@ import 'package:y300/features/thread/data/thread_repository.dart';
 import 'package:y300/features/thread/domain/services/forum_attachment_image_extractor.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 import 'package:y300/features/thread/domain/services/forum_post_image_source_collector.dart';
+
+export 'comic_episode_refresh_service.dart';
 
 final comicDetectorProvider = Provider<ComicDetector>((ref) {
   return RuleBasedComicDetector();
@@ -37,90 +43,26 @@ final comicSubjectParserProvider = Provider<ComicSubjectParser>((ref) {
   return const RuleBasedComicSubjectParser();
 });
 
-abstract class ComicEpisodeRefreshService {
-  Future<List<ComicEpisodeLink>> fetchEpisodeLinks(
-    ComicEpisodeRefreshRequest request,
-  );
-
-  /// Runs the full refresh decision tree: catalog first, then search/current
-  /// fallback when catalog misses.
-  Future<ComicEpisodeRefreshOutcome> fetchCatalogThenFallback(
-    ComicEpisodeRefreshRequest request,
-  );
-
-  /// Runs only strategy 1. A miss intentionally returns an empty outcome so
-  /// callers can enqueue search without spending a search request here.
-  Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
-    ComicEpisodeRefreshRequest request,
-  );
-
-  /// Runs strategy 2 and strategy 3 for callers that already decided catalog
-  /// refresh should not run immediately, such as the future search queue.
-  Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
-    ComicEpisodeRefreshRequest request,
-  );
-
-  Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid);
-}
-
-enum ComicEpisodeRefreshSource {
-  catalog,
-  search,
-  currentOnly,
-  empty,
-}
-
-class ComicEpisodeRefreshOutcome {
-  const ComicEpisodeRefreshOutcome({
-    required this.source,
-    required this.links,
-    this.usedSearch = false,
-    this.catalogMatched = false,
-  });
-
-  final ComicEpisodeRefreshSource source;
-  final List<ComicEpisodeLink> links;
-  final bool usedSearch;
-  final bool catalogMatched;
-
-  bool get hasLinks => links.isNotEmpty;
-}
-
-class ComicEpisodeRefreshRequest {
-  const ComicEpisodeRefreshRequest({
-    required this.sourceTid,
-    this.comicId,
-    this.displayTitle,
-    this.sourceTitle,
-    this.customTitle,
-    this.customSearchTitle,
-  });
-
-  final String? comicId;
-  final String sourceTid;
-  final String? displayTitle;
-  final String? sourceTitle;
-  final String? customTitle;
-  final String? customSearchTitle;
-}
-
 class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   NetworkComicEpisodeRefreshService({
     required ComicEpisodeDiscoveryService discoveryService,
     required ForumSearchService searchService,
-    required ComicSubjectParser subjectParser,
-    ComicReaderFeatureFlags featureFlags = ComicReaderFeatureFlags.defaults,
+    required ComicRefreshKeywordResolver keywordResolver,
+    required ComicSearchCandidateRanker candidateRanker,
+    required ComicEpisodeLinkMerger episodeLinkMerger,
     ThreadSeedFetcher? threadSeedFetcher,
   }) : _discoveryService = discoveryService,
        _searchService = searchService,
-       _subjectParser = subjectParser,
-       _featureFlags = featureFlags,
+       _keywordResolver = keywordResolver,
+       _candidateRanker = candidateRanker,
+       _episodeLinkMerger = episodeLinkMerger,
        _threadSeedFetcher = threadSeedFetcher;
 
   final ComicEpisodeDiscoveryService _discoveryService;
   final ForumSearchService _searchService;
-  final ComicSubjectParser _subjectParser;
-  final ComicReaderFeatureFlags _featureFlags;
+  final ComicRefreshKeywordResolver _keywordResolver;
+  final ComicSearchCandidateRanker _candidateRanker;
+  final ComicEpisodeLinkMerger _episodeLinkMerger;
   final ThreadSeedFetcher? _threadSeedFetcher;
 
   @override
@@ -222,7 +164,7 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
     final searchResult = await _searchFallbackFromCurrentTid(request);
     final searchLinks = searchResult.links;
     if (searchLinks.isNotEmpty) {
-      final merged = _mergeEpisodeLinks(
+      final merged = _episodeLinkMerger.merge(
         current.episodeLinks,
         searchLinks,
         preferSupplement: true,
@@ -261,17 +203,18 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<_SearchFallbackResult> _searchFallbackFromCurrentTid(
     ComicEpisodeRefreshRequest request,
   ) async {
-    final keywordMode =
-        _featureFlags.readerRefreshMultiKeywordEnabled ? 'multi' : 'single';
-    _logRefresh(request, 'refreshKeywordMode=$keywordMode');
     final thread = await _fetchThreadDetail(request.sourceTid);
     if (thread == null) {
       return const _SearchFallbackResult.empty();
     }
-    final keywords = _resolveSearchKeywords(request, thread.subject);
+    final keywords = _keywordResolver.resolve(request, thread.subject);
+    _logRefresh(request, 'refreshKeywords=${keywords.length}');
     var usedSearch = false;
     for (final keyword in keywords) {
-      _logRefresh(request, 'keyword=${keyword.value} source=${keyword.source}');
+      _logRefresh(
+        request,
+        'keyword=${keyword.value} source=${keyword.source.name}',
+      );
 
       final search = await _searchService.searchForum(
         keyword: keyword.value,
@@ -293,7 +236,7 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
         continue;
       }
 
-      final candidates = _scoreSearchCandidates(
+      final candidates = _candidateRanker.rank(
         threadSubject: thread.subject,
         keyword: keyword,
         items: search.items,
@@ -307,12 +250,11 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
         continue;
       }
 
-      const topK = 3;
       var collectedLinks = const <ComicEpisodeLink>[];
       final sourceTid = request.sourceTid.trim();
       final candidateBatch = candidates
           .where((item) => item.item.tid.trim() != sourceTid)
-          .take(topK)
+          .take(_candidateRanker.discoveryTopK)
           .toList(growable: false);
       for (final candidate in candidateBatch) {
         final result = await _discoveryService.discoverFromTidWithPreference(
@@ -320,10 +262,13 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
           preferCatalogFirst: true,
         );
         if (result.episodeLinks.isNotEmpty) {
-          collectedLinks = _mergeEpisodeLinks(collectedLinks, result.episodeLinks);
+          collectedLinks = _episodeLinkMerger.merge(
+            collectedLinks,
+            result.episodeLinks,
+          );
         }
       }
-      final searchCandidateLinks = _episodeLinksFromSearchCandidates(
+      final searchCandidateLinks = _episodeLinkMerger.fromSearchCandidates(
         candidates,
         excludeTid: sourceTid,
       );
@@ -341,8 +286,8 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
         // catalog/recursive parsing only finds a partial set, preserve those
         // matched entries instead of losing newer chapters from the search page.
         return _SearchFallbackResult(
-          links: _sortEpisodeLinks(
-            _mergeEpisodeLinks(
+          links: _episodeLinkMerger.sort(
+            _episodeLinkMerger.merge(
               collectedLinks,
               searchCandidateLinks,
               preferSupplement: true,
@@ -352,7 +297,7 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
         );
       }
       return _SearchFallbackResult(
-        links: _sortEpisodeLinks(collectedLinks),
+        links: _episodeLinkMerger.sort(collectedLinks),
         usedSearch: true,
       );
     }
@@ -360,197 +305,6 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
       links: const <ComicEpisodeLink>[],
       usedSearch: usedSearch,
     );
-  }
-
-  List<_RefreshKeyword> _resolveSearchKeywords(
-    ComicEpisodeRefreshRequest request,
-    String subject,
-  ) {
-    final choices = <_RefreshKeyword>[
-      _RefreshKeyword('customSearchTitle', request.customSearchTitle),
-      _RefreshKeyword('customTitle', request.customTitle),
-      _RefreshKeyword('displayTitle', _parseSearchTitle(request.displayTitle)),
-      _RefreshKeyword('sourceTitle', _parseSearchTitle(request.sourceTitle)),
-      _RefreshKeyword('subjectNormalized', _parseSearchTitle(subject)),
-    ];
-    final unique = <String, _RefreshKeyword>{};
-    for (final choice in choices) {
-      final value = choice.value.trim();
-      if (value.isNotEmpty) {
-        unique.putIfAbsent(value, () => _RefreshKeyword(choice.source, value));
-        if (!_featureFlags.readerRefreshMultiKeywordEnabled) {
-          break;
-        }
-      }
-    }
-    return unique.values.toList(growable: false);
-  }
-
-  String? _parseSearchTitle(String? title) {
-    final raw = title?.trim();
-    if (raw == null || raw.isEmpty) {
-      return null;
-    }
-    final normalized = _subjectParser.parse(raw).normalizedTitle.trim();
-    return normalized.isEmpty ? raw : normalized;
-  }
-
-  List<_ScoredSearchItem> _scoreSearchCandidates({
-    required String threadSubject,
-    required _RefreshKeyword keyword,
-    required List<DiscuzSearchResultItem> items,
-  }) {
-    final currentScore = _scoreTitleSimilarity(threadSubject, keyword.value);
-    final minScore = currentScore <= 0 ? 0.50 : currentScore - 0.25;
-    final candidates = <_ScoredSearchItem>[];
-    for (var index = 0; index < items.length; index++) {
-      final item = items[index];
-      final scored = _ScoredSearchItem(
-        item: item,
-        score: _scoreTitleSimilarity(item.title, keyword.value),
-        searchIndex: index,
-      );
-      if (scored.score >= minScore) {
-        candidates.add(scored);
-      }
-    }
-    candidates.sort((a, b) {
-      final scoreOrder = b.score.compareTo(a.score);
-      if (scoreOrder != 0) {
-        return scoreOrder;
-      }
-      return a.searchIndex.compareTo(b.searchIndex);
-    });
-    return candidates;
-  }
-
-  List<ComicEpisodeLink> _mergeEpisodeLinks(
-    List<ComicEpisodeLink> primary,
-    List<ComicEpisodeLink> supplement, {
-    bool preferSupplement = false,
-  }) {
-    final merged = <String, ComicEpisodeLink>{};
-    for (final link in primary) {
-      merged.putIfAbsent(_linkIdentity(link), () => link);
-    }
-    for (final link in supplement) {
-      final key = _linkIdentity(link);
-      if (preferSupplement) {
-        // 搜索/目录补全通常带有更完整的章节标题，重复 tid 时保留补全侧信息。
-        merged[key] = link;
-      } else {
-        merged.putIfAbsent(key, () => link);
-      }
-    }
-    return merged.values.toList(growable: false);
-  }
-
-  List<ComicEpisodeLink> _episodeLinksFromSearchCandidates(
-    List<_ScoredSearchItem> candidates, {
-    required String excludeTid,
-  }) {
-    final sorted = candidates.toList()
-      ..sort((a, b) {
-        final episodeOrder = _compareSearchEpisodeOrder(a.item.title, b.item.title);
-        if (episodeOrder != 0) {
-          return episodeOrder;
-        }
-        final tidOrder = _compareTid(a.item.tid, b.item.tid);
-        if (tidOrder != 0) {
-          return tidOrder;
-        }
-        return a.searchIndex.compareTo(b.searchIndex);
-      });
-
-    return _mergeEpisodeLinks(
-      const <ComicEpisodeLink>[],
-      sorted
-          .where((candidate) => candidate.item.tid.trim() != excludeTid)
-          .map(_episodeLinkFromSearchItem)
-          .toList(growable: false),
-    );
-  }
-
-  ComicEpisodeLink _episodeLinkFromSearchItem(_ScoredSearchItem candidate) {
-    final item = candidate.item;
-    final metadata = _subjectParser.parse(item.title);
-    final episodeLabel = metadata.episodeLabel?.trim();
-    return ComicEpisodeLink(
-      url: item.url.trim(),
-      rawText: item.title,
-      episodeTitle: episodeLabel == null || episodeLabel.isEmpty ? item.title : episodeLabel,
-    );
-  }
-
-  int _compareSearchEpisodeOrder(String a, String b) {
-    final aKey = _EpisodeSortKey.tryParse(a);
-    final bKey = _EpisodeSortKey.tryParse(b);
-    if (aKey != null && bKey != null) {
-      return aKey.compareTo(bKey);
-    }
-    if (aKey != null && bKey == null) {
-      return -1;
-    }
-    if (aKey == null && bKey != null) {
-      return 1;
-    }
-    return 0;
-  }
-
-  List<ComicEpisodeLink> _sortEpisodeLinks(List<ComicEpisodeLink> links) {
-    final sorted = links.toList()
-      ..sort((a, b) {
-        final episodeOrder = _compareSearchEpisodeOrder(
-          _linkTitleForSort(a),
-          _linkTitleForSort(b),
-        );
-        if (episodeOrder != 0) {
-          return episodeOrder;
-        }
-        final tidOrder = _compareTid(_linkIdentity(a), _linkIdentity(b));
-        if (tidOrder != 0) {
-          return tidOrder;
-        }
-        return _linkTitleForSort(a).compareTo(_linkTitleForSort(b));
-      });
-    return sorted;
-  }
-
-  String _linkTitleForSort(ComicEpisodeLink link) {
-    final episodeTitle = link.episodeTitle?.trim();
-    if (episodeTitle != null && episodeTitle.isNotEmpty) {
-      return episodeTitle;
-    }
-    return link.rawText.trim();
-  }
-
-  int _compareTid(String a, String b) {
-    final aTid = int.tryParse(a.replaceFirst('tid:', '').trim());
-    final bTid = int.tryParse(b.replaceFirst('tid:', '').trim());
-    if (aTid != null && bTid != null && aTid != bTid) {
-      return aTid.compareTo(bTid);
-    }
-    if (aTid != null && bTid == null) {
-      return -1;
-    }
-    if (aTid == null && bTid != null) {
-      return 1;
-    }
-    return a.trim().compareTo(b.trim());
-  }
-
-  String _linkIdentity(ComicEpisodeLink link) {
-    final uri = Uri.tryParse(link.url.trim());
-    final tid = uri?.queryParameters['tid']?.trim();
-    if (tid != null && tid.isNotEmpty) {
-      return 'tid:$tid';
-    }
-    final threadMatch = RegExp(r'thread-(\d+)-', caseSensitive: false).firstMatch(link.url);
-    final threadTid = threadMatch?.group(1)?.trim();
-    if (threadTid != null && threadTid.isNotEmpty) {
-      return 'tid:$threadTid';
-    }
-    return link.url.trim();
   }
 
   Future<ThreadSeed?> _fetchThreadDetail(String tid) async {
@@ -561,19 +315,6 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
     return null;
   }
 
-  double _scoreTitleSimilarity(String title, String keyword) {
-    final normalizedTitle = title.toLowerCase().replaceAll(RegExp(r'\s+'), '');
-    final normalizedKeyword = keyword.toLowerCase().replaceAll(RegExp(r'\s+'), '');
-    if (normalizedTitle.isEmpty || normalizedKeyword.isEmpty) {
-      return 0;
-    }
-    if (normalizedTitle.contains(normalizedKeyword)) {
-      return 1;
-    }
-    final overlap = normalizedKeyword.split('').where(normalizedTitle.contains).length;
-    return overlap / normalizedKeyword.length;
-  }
-
   void _logRefresh(ComicEpisodeRefreshRequest request, String message) {
     if (kReleaseMode) {
       return;
@@ -582,14 +323,6 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
       '[ComicRefresh][${request.comicId ?? request.sourceTid}] $message',
     );
   }
-
-}
-
-class _RefreshKeyword {
-  const _RefreshKeyword(this.source, String? value) : value = value ?? '';
-
-  final String source;
-  final String value;
 }
 
 class _SearchFallbackResult {
@@ -616,12 +349,36 @@ final comicEpisodeDiscoveryServiceProvider = Provider<ComicEpisodeDiscoveryServi
   );
 });
 
+final comicRefreshKeywordResolverProvider =
+    Provider<ComicRefreshKeywordResolver>((ref) {
+  return DefaultComicRefreshKeywordResolver(
+    subjectParser: ref.read(comicSubjectParserProvider),
+    featureFlags: ref.watch(comicReaderFeatureFlagsProvider),
+  );
+});
+
+final comicSearchCandidateRankerProvider =
+    Provider<ComicSearchCandidateRanker>((ref) {
+  return const DefaultComicSearchCandidateRanker();
+});
+
+final comicEpisodeLinkMergerProvider = Provider<ComicEpisodeLinkMerger>((ref) {
+  return DefaultComicEpisodeLinkMerger(
+    subjectParser: ref.read(comicSubjectParserProvider),
+  );
+});
+
+final comicCatalogMissPolicyProvider = Provider<ComicCatalogMissPolicy>((ref) {
+  return const DefaultComicCatalogMissPolicy();
+});
+
 final comicEpisodeRefreshServiceProvider = Provider<ComicEpisodeRefreshService>((ref) {
   return NetworkComicEpisodeRefreshService(
     discoveryService: ref.read(comicEpisodeDiscoveryServiceProvider),
     searchService: ref.read(discuzSearchServiceProvider),
-    subjectParser: ref.read(comicSubjectParserProvider),
-    featureFlags: ref.watch(comicReaderFeatureFlagsProvider),
+    keywordResolver: ref.watch(comicRefreshKeywordResolverProvider),
+    candidateRanker: ref.watch(comicSearchCandidateRankerProvider),
+    episodeLinkMerger: ref.watch(comicEpisodeLinkMergerProvider),
     threadSeedFetcher: (tid) async {
       final result = await ref.read(threadRepositoryProvider).getThreadDetail(tid: tid, page: 1);
       return result.when(
@@ -631,77 +388,6 @@ final comicEpisodeRefreshServiceProvider = Provider<ComicEpisodeRefreshService>(
     },
   );
 });
-
-class _ScoredSearchItem {
-  const _ScoredSearchItem({
-    required this.item,
-    required this.score,
-    required this.searchIndex,
-  });
-
-  final DiscuzSearchResultItem item;
-  final double score;
-  final int searchIndex;
-}
-
-class _EpisodeSortKey implements Comparable<_EpisodeSortKey> {
-  const _EpisodeSortKey({
-    required this.number,
-    required this.suffixRank,
-  });
-
-  static final RegExp _episodePattern = RegExp(
-    r'第?\s*(\d+(?:\.\d+)?)\s*(?:话|話|卷|集|篇|章)\s*(上篇|下篇|前篇|后篇|後篇|上|中|下|前|后|後)?',
-    caseSensitive: false,
-  );
-
-  final double number;
-  final int suffixRank;
-
-  static _EpisodeSortKey? tryParse(String title) {
-    final match = _episodePattern.firstMatch(title);
-    if (match == null) {
-      return null;
-    }
-    final number = double.tryParse(match.group(1) ?? '');
-    if (number == null) {
-      return null;
-    }
-    return _EpisodeSortKey(
-      number: number,
-      suffixRank: _suffixRank(match.group(2)),
-    );
-  }
-
-  static int _suffixRank(String? suffix) {
-    return switch (suffix?.trim()) {
-      '前' || '前篇' => -30,
-      '上' || '上篇' => -20,
-      '中' => 0,
-      null || '' => 10,
-      '下' || '下篇' => 20,
-      '后' || '後' || '后篇' || '後篇' => 30,
-      _ => 10,
-    };
-  }
-
-  @override
-  int compareTo(_EpisodeSortKey other) {
-    final numberOrder = number.compareTo(other.number);
-    if (numberOrder != 0) {
-      return numberOrder;
-    }
-    return suffixRank.compareTo(other.suffixRank);
-  }
-}
-
-class ThreadSeed {
-  const ThreadSeed({required this.subject});
-
-  final String subject;
-}
-
-typedef ThreadSeedFetcher = Future<ThreadSeed?> Function(String tid);
 
 abstract class ComicReaderService {
   Future<List<String>> fetchEpisodeImagesByTid(String tid);
