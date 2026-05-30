@@ -1,19 +1,17 @@
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/comic/data/comic_favorite_auto_refresh_coordinator.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/comic/data/comic_favorite_ingest_service.dart';
 import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
 import 'package:y300/features/favorites/data/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/favorite_repository.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
+import 'package:y300/features/favorites/domain/favorite_content_ingest.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
-import 'package:y300/features/novel/data/novel_favorite_ingest_service.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
-import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 enum FavoriteSyncProgressPhase {
   idle,
@@ -83,8 +81,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     required FavoriteRepository remoteRepository,
     required LocalFavoriteRepository localRepository,
     required FavoriteDetailContextLoader detailContextLoader,
-    required ComicFavoriteIngestService comicIngestService,
-    required NovelFavoriteIngestService novelIngestService,
+    required FavoriteContentIngestRegistry contentIngestRegistry,
     ComicFavoriteAutoRefreshCoordinator? comicAutoRefreshCoordinator,
     ComicDuplicateMergeService? comicDuplicateMergeService,
     LibraryShelfRefreshBus? shelfRefreshBus,
@@ -93,8 +90,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   })  : _remoteRepository = remoteRepository,
         _localRepository = localRepository,
         _detailContextLoader = detailContextLoader,
-        _comicIngestService = comicIngestService,
-        _novelIngestService = novelIngestService,
+        _contentIngestRegistry = contentIngestRegistry,
         _comicAutoRefreshCoordinator = comicAutoRefreshCoordinator,
         _comicDuplicateMergeService = comicDuplicateMergeService,
         _shelfRefreshBus = shelfRefreshBus,
@@ -104,8 +100,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   final FavoriteRepository _remoteRepository;
   final LocalFavoriteRepository _localRepository;
   final FavoriteDetailContextLoader _detailContextLoader;
-  final ComicFavoriteIngestService _comicIngestService;
-  final NovelFavoriteIngestService _novelIngestService;
+  final FavoriteContentIngestRegistry _contentIngestRegistry;
   final ComicFavoriteAutoRefreshCoordinator? _comicAutoRefreshCoordinator;
   final ComicDuplicateMergeService? _comicDuplicateMergeService;
   final LibraryShelfRefreshBus? _shelfRefreshBus;
@@ -651,13 +646,15 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     );
     return result.when(
       success: (context) async {
-        final workId = await _syncModule(
-          detail: context.detail,
-          kind: context.kind,
-          tagName: context.tagName,
-          favoriteTitle: context.record.title,
-          mergeIngestedComic: mergeIngestedComics,
-          forceComicSearchOnCatalogMiss: forceComicSearchOnCatalogMiss,
+        final ingestHandler = _contentIngestRegistry.handlerFor(context.kind);
+        final ingestResult = await ingestHandler.ingest(
+          FavoriteContentIngestRequest(
+            context: context,
+            options: FavoriteIngestOptions(
+              mergeIngestedComic: mergeIngestedComics,
+              forceComicSearchOnCatalogMiss: forceComicSearchOnCatalogMiss,
+            ),
+          ),
         );
 
         await _localRepository.updateThreadDetailMeta(
@@ -666,105 +663,12 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
           typeid: context.detail.typeid,
           tagName: context.tagName,
           contentKind: context.kind,
-          workId: workId,
+          workId: ingestResult.workId,
         );
         return true;
       },
       failure: (_) async => false,
     );
-  }
-
-  Future<String?> _syncModule({
-    required ThreadDetailData detail,
-    required ThreadContentKind kind,
-    required String? tagName,
-    required String favoriteTitle,
-    required bool mergeIngestedComic,
-    required bool forceComicSearchOnCatalogMiss,
-  }) async {
-    switch (kind) {
-      case ThreadContentKind.comic:
-        final workId = await _comicIngestService.upsertFromThreadDetail(
-          detail: detail,
-          sourceTagName: tagName,
-        );
-        await _runComicAutoRefresh(
-          comicId: workId,
-          detail: detail,
-          favoriteTitle: favoriteTitle,
-          sourceTagName: tagName,
-          forceSearchOnCatalogMiss: forceComicSearchOnCatalogMiss,
-        );
-        if (!mergeIngestedComic) {
-          return workId;
-        }
-        return _mergeIngestedComicIfNeeded(workId);
-      case ThreadContentKind.novel:
-        final workId = await _novelIngestService.upsertFromThreadDetail(
-          detail: detail,
-          sourceTagName: tagName,
-        );
-        _shelfRefreshBus?.notify(
-          modules: const <LibraryModuleKey>{
-            LibraryModuleKey.novel,
-            LibraryModuleKey.favorite,
-          },
-          reason: 'favorite_novel_refresh_completed',
-        );
-        return workId;
-      case ThreadContentKind.unknown:
-      case ThreadContentKind.forum:
-        return 'thread:${detail.tid}';
-    }
-  }
-
-  Future<void> _runComicAutoRefresh({
-    required String comicId,
-    required ThreadDetailData detail,
-    required String favoriteTitle,
-    String? sourceTagName,
-    bool forceSearchOnCatalogMiss = false,
-  }) async {
-    final coordinator = _comicAutoRefreshCoordinator;
-    if (coordinator == null) {
-      return;
-    }
-    try {
-      await coordinator.refreshAfterFavoriteIngest(
-        comicId: comicId,
-        detail: detail,
-        favoriteTitle: favoriteTitle,
-        sourceTagName: sourceTagName,
-        forceSearchOnCatalogMiss: forceSearchOnCatalogMiss,
-      );
-    } catch (_) {
-      // 收藏详情已经入库；catalog 引导/队列入队失败不应让本条收藏反复
-      // 停留在 detail_loaded_at 为空的状态。后续手动刷新或搜索队列可继续补偿。
-    }
-  }
-
-  Future<String> _mergeIngestedComicIfNeeded(String comicId) async {
-    final service = _comicDuplicateMergeService;
-    if (service == null) {
-      return comicId;
-    }
-    try {
-      final result = await service.mergeComic(comicId: comicId);
-      if (result.changed) {
-        _shelfRefreshBus?.notify(
-          modules: const <LibraryModuleKey>{
-            LibraryModuleKey.comic,
-            LibraryModuleKey.favorite,
-          },
-          reason: 'favorite_comic_duplicate_merge_completed',
-        );
-      }
-      return result.targetComicId.trim().isEmpty ? comicId : result.targetComicId;
-    } catch (_) {
-      // 合并是收藏入库后的维护步骤；失败不应让本条收藏回到“未补详情”
-      // 状态，后续手动“合并重复”或下一次增量仍可补偿。
-      return comicId;
-    }
   }
 
   Future<void> _mergeAllComicDuplicatesAfterFirstSync() async {
@@ -855,17 +759,8 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       if (workId == null || workId.isEmpty) {
         continue;
       }
-      switch (record.contentKind) {
-        case ThreadContentKind.comic:
-          await _comicIngestService.removeFromShelf(workId: workId);
-          break;
-        case ThreadContentKind.novel:
-          await _novelIngestService.removeFromShelf(workId: workId);
-          break;
-        case ThreadContentKind.unknown:
-        case ThreadContentKind.forum:
-          break;
-      }
+      final ingestHandler = _contentIngestRegistry.handlerFor(record.contentKind);
+      await ingestHandler.removeFromShelf(workId: workId);
     }
   }
 

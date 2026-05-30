@@ -7,10 +7,12 @@ import 'package:y300/features/comic/data/comic_search_refresh_queue_providers.da
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/domain/services/comic_post_aggregation_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/favorites/data/favorite_content_ingest_registry.dart';
 import 'package:y300/features/favorites/data/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/favorite_repository.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
+import 'package:y300/features/favorites/domain/favorite_content_ingest.dart';
 import 'package:y300/features/favorites/presentation/adapters/favorite_shelf_adapter.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
@@ -62,13 +64,46 @@ final favoriteDetailContextLoaderProvider =
   );
 });
 
+final comicFavoriteContentIngestHandlerProvider =
+    Provider<FavoriteContentIngestHandler>((ref) {
+  return ComicFavoriteContentIngestHandler(
+    ingestService: ref.watch(comicFavoriteIngestServiceProvider),
+    comicAutoRefreshCoordinator: ref.watch(
+      comicFavoriteAutoRefreshCoordinatorProvider,
+    ),
+    comicDuplicateMergeService: ref.watch(comicDuplicateMergeServiceProvider),
+    shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
+  );
+});
+
+final novelFavoriteContentIngestHandlerProvider =
+    Provider<FavoriteContentIngestHandler>((ref) {
+  return NovelFavoriteContentIngestHandler(
+    ingestService: ref.watch(novelFavoriteIngestServiceProvider),
+    shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
+  );
+});
+
+final forumFavoriteContentIngestHandlerProvider =
+    Provider<FavoriteContentIngestHandler>((ref) {
+  return const ForumFavoriteContentIngestHandler();
+});
+
+final favoriteContentIngestRegistryProvider =
+    Provider<FavoriteContentIngestRegistry>((ref) {
+  return DefaultFavoriteContentIngestRegistry(
+    comicHandler: ref.watch(comicFavoriteContentIngestHandlerProvider),
+    novelHandler: ref.watch(novelFavoriteContentIngestHandlerProvider),
+    forumHandler: ref.watch(forumFavoriteContentIngestHandlerProvider),
+  );
+});
+
 final favoriteSyncServiceProvider = Provider<FavoriteSyncService>((ref) {
   return NetworkFavoriteSyncService(
     remoteRepository: ref.watch(favoriteRepositoryProvider),
     localRepository: ref.watch(localFavoriteRepositoryProvider),
     detailContextLoader: ref.watch(favoriteDetailContextLoaderProvider),
-    comicIngestService: ref.watch(comicFavoriteIngestServiceProvider),
-    novelIngestService: ref.watch(novelFavoriteIngestServiceProvider),
+    contentIngestRegistry: ref.watch(favoriteContentIngestRegistryProvider),
     comicAutoRefreshCoordinator: ref.watch(comicFavoriteAutoRefreshCoordinatorProvider),
     comicDuplicateMergeService: ref.watch(comicDuplicateMergeServiceProvider),
     shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),

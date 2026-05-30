@@ -1,4 +1,4 @@
-import 'dart:io' as io;
+﻿import 'dart:io' as io;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -13,12 +13,14 @@ import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_m
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
+import 'package:y300/features/favorites/data/favorite_content_ingest_registry.dart';
 import 'package:y300/features/favorites/data/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/favorite_repository.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
+import 'package:y300/features/favorites/domain/favorite_content_ingest.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
@@ -45,7 +47,7 @@ void main() {
     final local = _MemoryLocalFavoriteRepository();
     final comicIngest = _FakeComicIngestService();
     final novelIngest = _FakeNovelIngestService();
-    final service = NetworkFavoriteSyncService(
+    final service = _service(
       remoteRepository: remote,
       localRepository: local,
       detailContextLoader: _contextLoader(),
@@ -69,7 +71,7 @@ void main() {
     final comicIngest = _FakeComicIngestService();
     final novelIngest = _FakeNovelIngestService();
     var detailLoadCount = 0;
-    final service = NetworkFavoriteSyncService(
+    final service = _service(
       remoteRepository: const _FailingFavoriteRepository('远端失败'),
       localRepository: local,
       detailContextLoader: _contextLoader(
@@ -118,7 +120,7 @@ void main() {
       ],
     );
     final novelIngest = _FakeNovelIngestService();
-    final service = NetworkFavoriteSyncService(
+    final service = _service(
       remoteRepository: remote,
       localRepository: local,
       detailContextLoader: _contextLoader(),
@@ -134,6 +136,92 @@ void main() {
     expect(novelIngest.removedWorkIds, <String>['novel:49:200']);
   });
 
+  test('removes disappeared shelf items via content ingest registry handlers', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(page: 1, totalCount: 0, items: const <FavoriteThread>[]),
+    });
+    final local = _MemoryLocalFavoriteRepository(
+      snapshot: FavoriteSyncSnapshot(
+        syncKey: favoriteSyncKey,
+        remoteCount: 1,
+        localActiveCount: 1,
+        lastSyncedAt: DateTime(2026, 1, 1),
+      ),
+      seedRecords: <FavoriteThreadCacheRecord>[
+        _cacheRecord(
+          tid: '100',
+          title: '移除漫画',
+          contentKind: ThreadContentKind.comic,
+          workId: 'yamibo:100',
+          detailLoadedAt: DateTime(2026, 1, 1),
+        ),
+      ],
+    );
+    final comicHandler = _SpyFavoriteContentIngestHandler(
+      kind: ThreadContentKind.comic,
+    );
+    final registry = _SpyFavoriteContentIngestRegistry(
+      comicHandler: comicHandler,
+      novelHandler: _SpyFavoriteContentIngestHandler(
+        kind: ThreadContentKind.novel,
+      ),
+      forumHandler: _SpyFavoriteContentIngestHandler(
+        kind: ThreadContentKind.forum,
+      ),
+    );
+    final service = _service(
+      remoteRepository: remote,
+      localRepository: local,
+      contentIngestRegistry: registry,
+      detailContextLoader: _contextLoader(
+        loadThreadDetail: (tid) =>
+            throw StateError('detail should not be loaded during removal'),
+      ),
+      detailBatchLimit: 10,
+    );
+
+    await service.sync();
+
+    expect(registry.requestedKinds, contains(ThreadContentKind.comic));
+    expect(comicHandler.removedWorkIds, <String>['yamibo:100']);
+  });
+
+  test('writes handler returned work id back to local favorite meta', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(page: 1, totalCount: 1, items: <FavoriteThread>[
+        _favoriteThread(tid: '100', title: '漫画'),
+      ]),
+    });
+    final local = _MemoryLocalFavoriteRepository();
+    final comicHandler = _SpyFavoriteContentIngestHandler(
+      kind: ThreadContentKind.comic,
+      ingestWorkIdBuilder: (request) => 'merged:${request.context.detail.tid}',
+    );
+    final registry = _SpyFavoriteContentIngestRegistry(
+      comicHandler: comicHandler,
+      novelHandler: _SpyFavoriteContentIngestHandler(
+        kind: ThreadContentKind.novel,
+      ),
+      forumHandler: _SpyFavoriteContentIngestHandler(
+        kind: ThreadContentKind.forum,
+      ),
+    );
+    final service = _service(
+      remoteRepository: remote,
+      localRepository: local,
+      contentIngestRegistry: registry,
+      detailContextLoader: _contextLoader(),
+      detailBatchLimit: 10,
+    );
+
+    final result = await service.sync();
+
+    expect(result.detailLoadedCount, 1);
+    expect(comicHandler.ingestedTids, <String>['100']);
+    expect(local.records['100']?.workId, 'merged:100');
+    expect(local.records['100']?.contentKind, ThreadContentKind.comic);
+  });
+
   test('detail failure does not block following missing records in same sync', () async {
     final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
       1: _page(page: 1, totalCount: 2, items: <FavoriteThread>[
@@ -143,7 +231,7 @@ void main() {
     });
     final local = _MemoryLocalFavoriteRepository();
     final novelIngest = _FakeNovelIngestService();
-    final service = NetworkFavoriteSyncService(
+    final service = _service(
       remoteRepository: remote,
       localRepository: local,
       detailContextLoader: _contextLoader(
@@ -180,7 +268,7 @@ void main() {
         _favoriteThread(tid: '300', title: '普通帖'),
       ]),
     });
-    final service = NetworkFavoriteSyncService(
+    final service = _service(
       remoteRepository: remote,
       localRepository: _MemoryLocalFavoriteRepository(),
       detailContextLoader: _contextLoader(),
@@ -237,7 +325,7 @@ void main() {
         signals.add(signal);
       }
     });
-    final service = NetworkFavoriteSyncService(
+    final service = _service(
       remoteRepository: remote,
       localRepository: _MemoryLocalFavoriteRepository(),
       detailContextLoader: _contextLoader(),
@@ -284,7 +372,7 @@ void main() {
       shelfRefreshBus: bus,
       subjectParser: const RuleBasedComicSubjectParser(),
     );
-    final service = NetworkFavoriteSyncService(
+    final service = _service(
       remoteRepository: remote,
       localRepository: _MemoryLocalFavoriteRepository(),
       detailContextLoader: _contextLoader(
@@ -327,7 +415,7 @@ void main() {
       shelfRefreshBus: bus,
       subjectParser: const RuleBasedComicSubjectParser(),
     );
-    final service = NetworkFavoriteSyncService(
+    final service = _service(
       remoteRepository: remote,
       localRepository: _MemoryLocalFavoriteRepository(),
       detailContextLoader: _contextLoader(),
@@ -359,7 +447,7 @@ void main() {
       subjectParser: const RuleBasedComicSubjectParser(),
     );
     final local = _MemoryLocalFavoriteRepository();
-    final service = NetworkFavoriteSyncService(
+    final service = _service(
       remoteRepository: remote,
       localRepository: local,
       detailContextLoader: _contextLoader(),
@@ -406,7 +494,7 @@ void main() {
       shelfRefreshBus: bus,
       subjectParser: const RuleBasedComicSubjectParser(),
     );
-    final service = NetworkFavoriteSyncService(
+    final service = _service(
       remoteRepository: _FakeFavoriteRepository(const <int, FavoriteThreadsPage>{}),
       localRepository: local,
       detailContextLoader: _contextLoader(
@@ -434,7 +522,7 @@ void main() {
       ]),
     });
     final storage = _FavoriteSnapshotStorageSpy();
-    final service = NetworkFavoriteSyncService(
+    final service = _service(
       remoteRepository: remote,
       localRepository: _MemoryLocalFavoriteRepository(),
       detailContextLoader: _contextLoader(),
@@ -475,7 +563,7 @@ void main() {
         reasons.add(signal.reason);
       }
     });
-    final service = NetworkFavoriteSyncService(
+    final service = _service(
       remoteRepository: remote,
       localRepository: _MemoryLocalFavoriteRepository(),
       detailContextLoader: _contextLoader(),
@@ -528,7 +616,7 @@ void main() {
         ),
       ],
     );
-    final service = NetworkFavoriteSyncService(
+    final service = _service(
       remoteRepository: remote,
       localRepository: local,
       detailContextLoader: _contextLoader(),
@@ -572,7 +660,7 @@ void main() {
         ),
       ],
     );
-    final service = NetworkFavoriteSyncService(
+    final service = _service(
       remoteRepository: remote,
       localRepository: local,
       detailContextLoader: _contextLoader(),
@@ -638,7 +726,7 @@ void main() {
       shelfRefreshBus: bus,
       subjectParser: const RuleBasedComicSubjectParser(),
     );
-    final service = NetworkFavoriteSyncService(
+    final service = _service(
       remoteRepository: remote,
       localRepository: local,
       detailContextLoader: _contextLoader(),
@@ -699,7 +787,7 @@ void main() {
       subjectParser: const RuleBasedComicSubjectParser(),
     );
     var detailLoadCount = 0;
-    final service = NetworkFavoriteSyncService(
+    final service = _service(
       remoteRepository: remote,
       localRepository: local,
       detailContextLoader: _contextLoader(
@@ -725,6 +813,65 @@ void main() {
     expect(local.records['100']?.detailLoadedAt, isNotNull);
     expect(queue.enqueuedRequests.single.comicId, 'yamibo:100');
   });
+}
+
+NetworkFavoriteSyncService _service({
+  required FavoriteRepository remoteRepository,
+  required LocalFavoriteRepository localRepository,
+  FavoriteDetailContextLoader? detailContextLoader,
+  ComicFavoriteIngestService? comicIngestService,
+  NovelFavoriteIngestService? novelIngestService,
+  FavoriteContentIngestRegistry? contentIngestRegistry,
+  ComicFavoriteAutoRefreshCoordinator? comicAutoRefreshCoordinator,
+  ComicDuplicateMergeService? comicDuplicateMergeService,
+  LibraryShelfRefreshBus? shelfRefreshBus,
+  DownloadStorageService? downloadStorageService,
+  int detailBatchLimit = 20,
+}) {
+  final resolvedComicIngestService =
+      comicIngestService ?? _FakeComicIngestService();
+  final resolvedNovelIngestService =
+      novelIngestService ?? _FakeNovelIngestService();
+  return NetworkFavoriteSyncService(
+    remoteRepository: remoteRepository,
+    localRepository: localRepository,
+    detailContextLoader: detailContextLoader ?? _contextLoader(),
+    contentIngestRegistry: contentIngestRegistry ??
+        _contentRegistry(
+          comicIngestService: resolvedComicIngestService,
+          novelIngestService: resolvedNovelIngestService,
+          comicAutoRefreshCoordinator: comicAutoRefreshCoordinator,
+          comicDuplicateMergeService: comicDuplicateMergeService,
+          shelfRefreshBus: shelfRefreshBus,
+        ),
+    comicAutoRefreshCoordinator: comicAutoRefreshCoordinator,
+    comicDuplicateMergeService: comicDuplicateMergeService,
+    shelfRefreshBus: shelfRefreshBus,
+    downloadStorageService: downloadStorageService,
+    detailBatchLimit: detailBatchLimit,
+  );
+}
+
+FavoriteContentIngestRegistry _contentRegistry({
+  ComicFavoriteIngestService? comicIngestService,
+  NovelFavoriteIngestService? novelIngestService,
+  ComicFavoriteAutoRefreshCoordinator? comicAutoRefreshCoordinator,
+  ComicDuplicateMergeService? comicDuplicateMergeService,
+  LibraryShelfRefreshBus? shelfRefreshBus,
+}) {
+  return DefaultFavoriteContentIngestRegistry(
+    comicHandler: ComicFavoriteContentIngestHandler(
+      ingestService: comicIngestService ?? _FakeComicIngestService(),
+      comicAutoRefreshCoordinator: comicAutoRefreshCoordinator,
+      comicDuplicateMergeService: comicDuplicateMergeService,
+      shelfRefreshBus: shelfRefreshBus,
+    ),
+    novelHandler: NovelFavoriteContentIngestHandler(
+      ingestService: novelIngestService ?? _FakeNovelIngestService(),
+      shelfRefreshBus: shelfRefreshBus,
+    ),
+    forumHandler: const ForumFavoriteContentIngestHandler(),
+  );
 }
 
 class _FavoriteSnapshotStorageSpy implements DownloadStorageService {
@@ -799,6 +946,61 @@ class _FakeComicIngestService implements ComicFavoriteIngestService {
   Future<String> upsertFromThreadDetail({required ThreadDetailData detail, String? sourceTagName}) async {
     upsertedTids.add(detail.tid);
     return 'yamibo:${detail.tid}';
+  }
+
+  @override
+  Future<void> removeFromShelf({required String workId}) async {
+    removedWorkIds.add(workId);
+  }
+}
+
+class _SpyFavoriteContentIngestRegistry implements FavoriteContentIngestRegistry {
+  _SpyFavoriteContentIngestRegistry({
+    required FavoriteContentIngestHandler comicHandler,
+    required FavoriteContentIngestHandler novelHandler,
+    required FavoriteContentIngestHandler forumHandler,
+  }) : _handlers = <ThreadContentKind, FavoriteContentIngestHandler>{
+         ThreadContentKind.comic: comicHandler,
+         ThreadContentKind.novel: novelHandler,
+         ThreadContentKind.forum: forumHandler,
+         ThreadContentKind.unknown: forumHandler,
+       };
+
+  final Map<ThreadContentKind, FavoriteContentIngestHandler> _handlers;
+  final List<ThreadContentKind> requestedKinds = <ThreadContentKind>[];
+
+  @override
+  FavoriteContentIngestHandler handlerFor(ThreadContentKind kind) {
+    requestedKinds.add(kind);
+    return _handlers[kind] ?? _handlers[ThreadContentKind.forum]!;
+  }
+}
+
+class _SpyFavoriteContentIngestHandler implements FavoriteContentIngestHandler {
+  _SpyFavoriteContentIngestHandler({
+    required this.kind,
+    this.ingestWorkIdBuilder,
+  });
+
+  @override
+  final ThreadContentKind kind;
+
+  final String Function(FavoriteContentIngestRequest request)?
+      ingestWorkIdBuilder;
+  final List<String> ingestedTids = <String>[];
+  final List<String> removedWorkIds = <String>[];
+
+  @override
+  Future<FavoriteContentIngestResult> ingest(
+    FavoriteContentIngestRequest request,
+  ) async {
+    ingestedTids.add(request.context.detail.tid);
+    return FavoriteContentIngestResult(
+      kind: kind,
+      workId:
+          ingestWorkIdBuilder?.call(request) ??
+          'work:${request.context.detail.tid}',
+    );
   }
 
   @override
