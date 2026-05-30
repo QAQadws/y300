@@ -3,6 +3,7 @@ import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/domain/services/novel_parsing_rule.dart';
 import 'package:y300/features/novel/domain/services/novel_same_thread_catalog_extractor.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 
 /// Builds a refresh plan from thread pages by applying small parsing rules.
@@ -15,13 +16,17 @@ class NovelEpisodeDiscoveryService {
   const NovelEpisodeDiscoveryService({
     List<NovelParsingRule>? rules,
     ForumPostDomExtractor? domExtractor,
+    ForumImageSourcePipeline imageSourcePipeline =
+        const DefaultForumImageSourcePipeline(),
     NovelSameThreadCatalogExtractor? catalogExtractor,
   }) : _rules = rules ?? NovelParsingRules.defaults,
        _domExtractor = domExtractor ?? const ForumPostDomExtractor(),
+       _imageSourcePipeline = imageSourcePipeline,
        _catalogExtractor = catalogExtractor ?? const NovelSameThreadCatalogExtractor();
 
   final List<NovelParsingRule> _rules;
   final ForumPostDomExtractor _domExtractor;
+  final ForumImageSourcePipeline _imageSourcePipeline;
   final NovelSameThreadCatalogExtractor _catalogExtractor;
 
   NovelRefreshPlan buildPlan({
@@ -66,7 +71,7 @@ class NovelEpisodeDiscoveryService {
             : _domExtractor.extractParagraphTexts(sourcePost.message);
         final imageUrls = sourcePost == null
             ? const <String>[]
-            : _domExtractor.extractImageSources(sourcePost.message);
+            : _collectImageUrls(sourcePost);
         builder.addInlineImages(imageUrls);
         builder.addEpisode(
           NovelEpisodeDraft(
@@ -103,7 +108,7 @@ class NovelEpisodeDiscoveryService {
           currentOrderIndex: builder.episodeCount,
           plainText: _domExtractor.extractPlainText(post.message),
           paragraphs: _domExtractor.extractParagraphTexts(post.message),
-          imageUrls: _domExtractor.extractImageSources(post.message),
+          imageUrls: _collectImageUrls(post),
           headingTexts: _domExtractor.extractHeadingTexts(post.message),
         );
         builder.addPostStats(
@@ -179,12 +184,19 @@ class NovelEpisodeDiscoveryService {
         currentOrderIndex: builder.episodeCount,
         plainText: _domExtractor.extractPlainText(post.message),
         paragraphs: _domExtractor.extractParagraphTexts(post.message),
-        imageUrls: _domExtractor.extractImageSources(post.message),
+        imageUrls: _collectImageUrls(post),
         headingTexts: _domExtractor.extractHeadingTexts(post.message),
       );
       final result = _applyRules(context);
       builder.acceptMeta(result);
     }
+  }
+
+  List<String> _collectImageUrls(ThreadPost post) {
+    return _imageSourcePipeline
+        .collectFromPost(post)
+        .map((source) => source.normalizedUrl)
+        .toList(growable: false);
   }
 
   NovelRuleResult _applyRules(NovelParsingContext context) {

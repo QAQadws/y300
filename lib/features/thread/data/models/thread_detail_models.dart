@@ -48,6 +48,7 @@ class ThreadPost {
   final int number;
   final bool isFirst;
   final String dateline;
+  /// Raw Discuz attachment metadata. Entries may be images or non-image files.
   final List<ForumPostAttachmentImage> attachmentImages;
 
   factory ThreadPost.fromJson(JsonMap json) {
@@ -73,33 +74,8 @@ class ThreadPost {
         .where((item) => item.isNotEmpty)
         .map(ForumPostAttachmentImage.fromJson)
         .where((item) => item.attachment.trim().isNotEmpty)
-        .where(_isImageAttachment)
         .toList(growable: false);
   }
-
-  static bool _isImageAttachment(ForumPostAttachmentImage attachment) {
-    if (attachment.attachimg.trim() == '1') {
-      return true;
-    }
-    final ext = attachment.ext.trim().toLowerCase();
-    if (_imageExtensions.contains(ext)) {
-      return true;
-    }
-    final path = attachment.attachment.split('?').first.split('#').first;
-    final dot = path.lastIndexOf('.');
-    if (dot < 0 || dot == path.length - 1) {
-      return false;
-    }
-    return _imageExtensions.contains(path.substring(dot + 1).toLowerCase());
-  }
-
-  static const Set<String> _imageExtensions = <String>{
-    'jpg',
-    'jpeg',
-    'png',
-    'gif',
-    'webp',
-  };
 }
 
 class ThreadDetailData {

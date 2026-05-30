@@ -25,7 +25,7 @@ import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/data/discuz_search_service.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
-import 'package:y300/features/thread/domain/services/forum_attachment_image_extractor.dart';
+import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 import 'package:y300/features/thread/domain/services/forum_post_image_source_collector.dart';
 
@@ -341,7 +341,10 @@ class _SearchFallbackResult {
 
 final comicEpisodeDiscoveryServiceProvider = Provider<ComicEpisodeDiscoveryService>((ref) {
   final engine = ComicPostParsingEngine();
-  final opPostParser = ComicConsecutiveOpPostParser(engine: engine);
+  final opPostParser = ComicConsecutiveOpPostParser(
+    engine: engine,
+    imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
+  );
   return ComicEpisodeDiscoveryService(
     fetchThreadDetail: (tid) => ref.read(threadRepositoryProvider).getThreadDetail(tid: tid, page: 1),
     opPostParser: opPostParser,
@@ -429,27 +432,25 @@ class ComicImageCacheResult {
 class NetworkComicReaderService implements ComicReaderService {
   NetworkComicReaderService({
     required ThreadRepository threadRepository,
-    required ComicParserService parserService,
     ImageCacheService? imageCacheService,
     BaseCacheManager? cacheManager,
     ImageRequestHeaderBuilder? headerBuilder,
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
-    ForumAttachmentImageExtractor attachmentImageExtractor = const ForumAttachmentImageExtractor(),
+    ForumImageSourcePipeline imageSourcePipeline =
+        const DefaultForumImageSourcePipeline(),
   })  : _threadRepository = threadRepository,
-        _parserService = parserService,
         _imageCacheService = imageCacheService,
         _cacheManager = cacheManager ?? DefaultCacheManager(),
         _headerBuilder = headerBuilder,
         _urlResolver = urlResolver,
-        _attachmentImageExtractor = attachmentImageExtractor;
+        _imageSourcePipeline = imageSourcePipeline;
 
   final ThreadRepository _threadRepository;
-  final ComicParserService _parserService;
   final ImageCacheService? _imageCacheService;
   final BaseCacheManager _cacheManager;
   final ImageRequestHeaderBuilder? _headerBuilder;
   final SiteUrlResolver _urlResolver;
-  final ForumAttachmentImageExtractor _attachmentImageExtractor;
+  final ForumImageSourcePipeline _imageSourcePipeline;
 
   @override
   Future<List<String>> fetchEpisodeImagesByTid(String tid) async {
@@ -460,14 +461,10 @@ class NetworkComicReaderService implements ComicReaderService {
         if (firstPost == null) {
           return const <String>[];
         }
-        return _parserService
-            .parseInput(
-              ComicPostParseInput(
-                messageHtml: firstPost.message,
-                attachmentImageUrls: _attachmentImageExtractor.extractImageUrls(firstPost),
-              ),
-            )
-            .imageUrls;
+        return _imageSourcePipeline
+            .collectFromPost(firstPost)
+            .map((source) => source.normalizedUrl)
+            .toList(growable: false);
       },
       failure: (_) => const <String>[],
     );
@@ -551,10 +548,10 @@ class NetworkComicReaderService implements ComicReaderService {
 final comicReaderServiceProvider = FutureProvider<ComicReaderService>((ref) async {
   return NetworkComicReaderService(
     threadRepository: ref.read(threadRepositoryProvider),
-    parserService: ref.read(comicParserServiceProvider),
     imageCacheService: ref.read(imageCacheServiceProvider),
     cacheManager: await ref.read(comicCacheManagerProvider.future),
     headerBuilder: ref.read(imageRequestHeaderBuilderProvider),
+    imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
   );
 });
 

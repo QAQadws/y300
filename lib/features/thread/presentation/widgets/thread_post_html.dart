@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
+import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 
 class ThreadPostHtml extends StatelessWidget {
@@ -76,13 +77,7 @@ class _ThreadPostImageExtension extends HtmlExtension {
   }
 
   String? _normalizedSource(Map<String, String> attributes) {
-    const sourceAttributes = <String>[
-      'src',
-      'data-src',
-      'data-original',
-      'file',
-    ];
-    for (final attribute in sourceAttributes) {
+    for (final attribute in ForumImageSourceOptions.defaultDomAttributes) {
       final raw = attributes[attribute]?.trim();
       if (raw == null || raw.isEmpty) {
         continue;

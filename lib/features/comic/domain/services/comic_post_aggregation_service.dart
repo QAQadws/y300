@@ -1,20 +1,24 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
-import 'package:y300/features/thread/domain/services/forum_attachment_image_extractor.dart';
+import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 
-final comicPostAggregationServiceProvider = Provider<ComicPostAggregationService>((ref) {
-  return const ComicPostAggregationService();
+final comicPostAggregationServiceProvider =
+    Provider<ComicPostAggregationService>((ref) {
+  return ComicPostAggregationService(
+    imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
+  );
 });
 
-/// 漫画候选聚合策略：
-/// 1. 始终纳入首楼。
-/// 2. 若二楼同为楼主且二楼“以图片为主”，则将二楼并入解析与判定输入。
+/// Comic candidate aggregation rules:
+/// 1. Always include floor 1.
+/// 2. Merge floor 2 only when it is from the OP and remains image-dominant.
 class ComicPostAggregationService {
   const ComicPostAggregationService({
-    ForumAttachmentImageExtractor attachmentImageExtractor = const ForumAttachmentImageExtractor(),
-  }) : _attachmentImageExtractor = attachmentImageExtractor;
+    ForumImageSourcePipeline imageSourcePipeline =
+        const DefaultForumImageSourcePipeline(),
+  }) : _imageSourcePipeline = imageSourcePipeline;
 
-  final ForumAttachmentImageExtractor _attachmentImageExtractor;
+  final ForumImageSourcePipeline _imageSourcePipeline;
 
   ComicPostAggregationResult build(List<ThreadPost> posts) {
     final first = _firstFloor(posts);
@@ -27,25 +31,23 @@ class ComicPostAggregationService {
     }
 
     final second = _secondFloor(posts);
-    final shouldMergeSecond =
-        second != null &&
+    final shouldMergeSecond = second != null &&
         second.authorId == first.authorId &&
         _isImageDominant(second);
 
-    final ThreadPost? mergedSecond = shouldMergeSecond ? second : null;
+    final mergedSecond = shouldMergeSecond ? second : null;
     final detectionMessage = mergedSecond != null
         ? '${first.message}\n${mergedSecond.message}'
         : first.message;
 
-    final parseMessage = detectionMessage;
-    final attachmentImageUrls = _mergeAttachmentImages(
-      mergedSecond == null ? <ThreadPost>[first] : <ThreadPost>[first, mergedSecond],
-    );
-
     return ComicPostAggregationResult(
       detectionMessage: detectionMessage,
-      parseMessage: parseMessage,
-      attachmentImageUrls: attachmentImageUrls,
+      parseMessage: detectionMessage,
+      attachmentImageUrls: _mergeAttachmentImages(
+        mergedSecond == null
+            ? <ThreadPost>[first]
+            : <ThreadPost>[first, mergedSecond],
+      ),
       usedSecondFloor: shouldMergeSecond,
       secondFloorPid: mergedSecond?.pid,
     );
@@ -69,23 +71,21 @@ class ComicPostAggregationService {
     return null;
   }
 
-  /// “多数图片”工程化定义：
-  /// - 图片至少 2 张；
-  /// - 图片标签数量 >= 链接标签数量。
   bool _isImageDominant(ThreadPost post) {
-    final message = post.message;
-    final imageCount = RegExp(r'<img\b', caseSensitive: false).allMatches(message).length;
-    final anchorCount = RegExp(r'<a\b', caseSensitive: false).allMatches(message).length;
-    final attachmentImageCount = _attachmentImageExtractor.extractImageUrls(post).length;
-    final totalImageCount = imageCount + attachmentImageCount;
-    return totalImageCount >= 2 && totalImageCount >= anchorCount;
+    final imageCount = _imageSourcePipeline.collectFromPost(post).length;
+    final anchorCount =
+        RegExp(r'<a\b', caseSensitive: false).allMatches(post.message).length;
+    return imageCount >= 2 && imageCount >= anchorCount;
   }
 
   List<String> _mergeAttachmentImages(List<ThreadPost> posts) {
     final urls = <String>[];
     final seen = <String>{};
     for (final post in posts) {
-      for (final imageUrl in _attachmentImageExtractor.extractImageUrls(post)) {
+      final sources = _imageSourcePipeline.collectFromPost(post);
+      for (final imageUrl in sources
+          .where((source) => source.origin == ForumImageSourceOrigin.attachment)
+          .map((source) => source.normalizedUrl)) {
         if (seen.add(imageUrl)) {
           urls.add(imageUrl);
         }

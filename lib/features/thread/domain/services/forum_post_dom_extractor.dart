@@ -1,6 +1,7 @@
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/core/network/site_url_resolver.dart';
+import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
 
 class ForumPostAnchor {
@@ -34,10 +35,6 @@ class ForumPostDomExtractor {
   final ForumThreadUrlParser _urlParser;
   final SiteUrlResolver _urlResolver;
 
-  static final RegExp forumChromeImagePattern = RegExp(
-    r'(smilies|static/image|emotion|avatar|uc_server/data/avatar)',
-    caseSensitive: false,
-  );
   static const Set<String> _paragraphBlockTags = <String>{
     'p',
     'div',
@@ -89,29 +86,18 @@ class ForumPostDomExtractor {
     String html, {
     bool ignoreForumChromeImages = true,
   }) {
-    final fragment = html_parser.parseFragment(html);
-    final images = <String>[];
-    final seen = <String>{};
-    for (final node in fragment.querySelectorAll('img')) {
-      final src = _firstImageSource(node);
-      if (src == null || src.isEmpty) {
-        continue;
-      }
-      final normalizedSrc = normalizeImageSource(src);
-      if (normalizedSrc == null || normalizedSrc.isEmpty) {
-        continue;
-      }
-      if (ignoreForumChromeImages && forumChromeImagePattern.hasMatch(normalizedSrc)) {
-        continue;
-      }
-      if (seen.add(normalizedSrc)) {
-        images.add(normalizedSrc);
-      }
-    }
-    return images;
+    return DefaultForumImageSourcePipeline.collectDomImageSources(
+      html,
+      urlResolver: _urlResolver,
+      includeForumChrome: !ignoreForumChromeImages,
+    ).map((source) => source.normalizedUrl).toList(growable: false);
   }
 
-  String? normalizeImageSource(String src) => _urlResolver.resolve(src);
+  String? normalizeImageSource(String src) =>
+      DefaultForumImageSourcePipeline.normalizeImageSource(
+        src,
+        urlResolver: _urlResolver,
+      );
 
   String extractPlainText(String html) {
     final fragment = html_parser.parseFragment(_preserveTextBreaks(html));
@@ -148,17 +134,6 @@ class ForumPostDomExtractor {
         .map((node) => _normalizeText(node.text))
         .where((text) => text.isNotEmpty)
         .toList(growable: false);
-  }
-
-  String? _firstImageSource(html_dom.Element node) {
-    const attrs = <String>['src', 'data-src', 'data-original', 'file'];
-    for (final attr in attrs) {
-      final value = node.attributes[attr]?.trim();
-      if (value != null && value.isNotEmpty) {
-        return value;
-      }
-    }
-    return null;
   }
 
   bool _hasNestedParagraphBlock(html_dom.Element node) {

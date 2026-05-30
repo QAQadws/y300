@@ -34,6 +34,28 @@ void main() {
       'Cookie': 'auth=token123',
     });
   });
+
+  testWidgets('ThreadPostHtml normalizes lazy-load attributes with shared defaults', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ThreadPostHtml(
+          data: '<img data-original="//bbs.yamibo.com/data/attachment/forum/page-2.jpg" />',
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    final image = tester.widget<Image>(find.byType(Image));
+    expect(
+      image.image,
+      isA<NetworkImage>().having(
+        (provider) => provider.url,
+        'url',
+        'https://bbs.yamibo.com/data/attachment/forum/page-2.jpg',
+      ),
+    );
+  });
 }
 
 class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {

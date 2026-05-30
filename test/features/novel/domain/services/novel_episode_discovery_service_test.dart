@@ -104,6 +104,53 @@ void main() {
     expect(plan.debugInfo, isNotNull);
   });
 
+  test('NovelEpisodeDiscoveryService includes attachment-only images in cover and inline images', () {
+    const service = NovelEpisodeDiscoveryService();
+
+    final page = ThreadDetailData(
+      tid: '101a',
+      fid: '49',
+      subject: '附件图小说',
+      author: '楼主A',
+      replies: 1,
+      views: 10,
+      currentPage: 1,
+      perPage: 20,
+      posts: <ThreadPost>[
+        ThreadPost(
+          pid: '6101',
+          author: '楼主A',
+          authorId: '1',
+          message: '<p>第十三章 开始</p><p>正文A</p>',
+          number: 1,
+          isFirst: true,
+          dateline: '2026-05-03',
+          attachmentImages: const <ForumPostAttachmentImage>[
+            ForumPostAttachmentImage(
+              aid: '1',
+              url: 'data/attachment/forum/',
+              attachment: 'cover.jpg',
+              filename: 'cover.jpg',
+              attachimg: '1',
+              ext: 'jpg',
+            ),
+          ],
+        ),
+      ],
+    );
+
+    final plan = service.buildPlan(novelId: 'novel:49:101a', pages: [page]);
+
+    expect(plan.episodes.length, 1);
+    expect(plan.coverImageUrl, 'https://bbs.yamibo.com/data/attachment/forum/cover.jpg');
+    expect(plan.inlineImageUrls, <String>[
+      'https://bbs.yamibo.com/data/attachment/forum/cover.jpg',
+    ]);
+    expect(plan.episodes.single.imageUrls, <String>[
+      'https://bbs.yamibo.com/data/attachment/forum/cover.jpg',
+    ]);
+  });
+
   test('NovelEpisodeDiscoveryService prefers same-thread pid catalog links', () {
     const service = NovelEpisodeDiscoveryService();
 

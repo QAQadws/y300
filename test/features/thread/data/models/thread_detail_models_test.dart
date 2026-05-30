@@ -42,7 +42,7 @@ void main() {
       expect(data.typeid, '293');
     });
 
-    test('keeps image attachment metadata from postlist', () {
+    test('keeps raw attachment metadata from postlist', () {
       final data = ThreadDetailData.fromVariables(
         <String, dynamic>{
           'fid': '30',
@@ -83,12 +83,16 @@ void main() {
         page: 1,
       );
 
-      final attachment = data.posts.single.attachmentImages.single;
-      expect(attachment.aid, '625902');
-      expect(attachment.url, 'data/attachment/forum/');
-      expect(attachment.attachment, '201802/16/002909v4kga3k6tkh4mlap.jpg');
-      expect(attachment.attachimg, '1');
-      expect(attachment.ext, 'jpg');
+      final attachments = data.posts.single.attachmentImages;
+      expect(attachments.length, 2);
+      expect(attachments.first.aid, '625902');
+      expect(attachments.first.url, 'data/attachment/forum/');
+      expect(attachments.first.attachment, '201802/16/002909v4kga3k6tkh4mlap.jpg');
+      expect(attachments.first.attachimg, '1');
+      expect(attachments.first.ext, 'jpg');
+      expect(attachments.last.aid, '625903');
+      expect(attachments.last.attachment, '201802/16/archive.zip');
+      expect(attachments.last.ext, 'zip');
     });
   });
 }

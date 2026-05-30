@@ -1,6 +1,5 @@
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
-import 'package:y300/features/thread/domain/services/forum_attachment_image_extractor.dart';
-import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
+import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 
 /// Collects all image URLs exposed by a Discuz post.
 ///
@@ -9,19 +8,17 @@ import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.da
 /// instead of re-implementing merge and de-duplication rules.
 class ForumPostImageSourceCollector {
   const ForumPostImageSourceCollector({
-    ForumPostDomExtractor domExtractor = const ForumPostDomExtractor(),
-    ForumAttachmentImageExtractor attachmentImageExtractor = const ForumAttachmentImageExtractor(),
-  })  : _domExtractor = domExtractor,
-        _attachmentImageExtractor = attachmentImageExtractor;
+    ForumImageSourcePipeline imageSourcePipeline =
+        const DefaultForumImageSourcePipeline(),
+  }) : _imageSourcePipeline = imageSourcePipeline;
 
-  final ForumPostDomExtractor _domExtractor;
-  final ForumAttachmentImageExtractor _attachmentImageExtractor;
+  final ForumImageSourcePipeline _imageSourcePipeline;
 
   List<String> collect(ThreadPost post) {
-    return merge(
-      domImageUrls: _domExtractor.extractImageSources(post.message),
-      attachmentImageUrls: _attachmentImageExtractor.extractImageUrls(post),
-    );
+    return _imageSourcePipeline
+        .collectFromPost(post)
+        .map((source) => source.normalizedUrl)
+        .toList(growable: false);
   }
 
   List<String> merge({
