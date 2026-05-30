@@ -1,13 +1,12 @@
 import 'package:flutter/foundation.dart';
-import 'package:y300/features/comic/data/comic_favorite_auto_refresh_coordinator.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
 import 'package:y300/features/favorites/data/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/favorite_repository.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
 import 'package:y300/features/favorites/domain/favorite_content_ingest.dart';
+import 'package:y300/features/favorites/domain/library_post_ingest_task_runner.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
@@ -82,8 +81,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     required LocalFavoriteRepository localRepository,
     required FavoriteDetailContextLoader detailContextLoader,
     required FavoriteContentIngestRegistry contentIngestRegistry,
-    ComicFavoriteAutoRefreshCoordinator? comicAutoRefreshCoordinator,
-    ComicDuplicateMergeService? comicDuplicateMergeService,
+    required LibraryPostIngestTaskRunner postIngestTaskRunner,
     LibraryShelfRefreshBus? shelfRefreshBus,
     DownloadStorageService? downloadStorageService,
     int detailBatchLimit = 20,
@@ -91,8 +89,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         _localRepository = localRepository,
         _detailContextLoader = detailContextLoader,
         _contentIngestRegistry = contentIngestRegistry,
-        _comicAutoRefreshCoordinator = comicAutoRefreshCoordinator,
-        _comicDuplicateMergeService = comicDuplicateMergeService,
+        _postIngestTaskRunner = postIngestTaskRunner,
         _shelfRefreshBus = shelfRefreshBus,
         _downloadStorageService = downloadStorageService,
         _detailBatchLimit = detailBatchLimit;
@@ -101,8 +98,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   final LocalFavoriteRepository _localRepository;
   final FavoriteDetailContextLoader _detailContextLoader;
   final FavoriteContentIngestRegistry _contentIngestRegistry;
-  final ComicFavoriteAutoRefreshCoordinator? _comicAutoRefreshCoordinator;
-  final ComicDuplicateMergeService? _comicDuplicateMergeService;
+  final LibraryPostIngestTaskRunner _postIngestTaskRunner;
   final LibraryShelfRefreshBus? _shelfRefreshBus;
   final DownloadStorageService? _downloadStorageService;
   final int _detailBatchLimit;
@@ -656,6 +652,13 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
             ),
           ),
         );
+        // 阶段 3：handler 只声明后处理任务（自动刷新、重复合并、书架通知），
+        // 由 runner 集中执行并捕获非关键失败。命中重复合并时 runner 会回传
+        // 合并目标 workId，写回收藏缓存的 work_id 字段。
+        final taskReport = await _postIngestTaskRunner.runAll(
+          ingestResult.postTasks,
+        );
+        final finalWorkId = taskReport.resolvedWorkId ?? ingestResult.workId;
 
         await _localRepository.updateThreadDetailMeta(
           tid: context.record.tid,
@@ -663,7 +666,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
           typeid: context.detail.typeid,
           tagName: context.tagName,
           contentKind: context.kind,
-          workId: ingestResult.workId,
+          workId: finalWorkId,
         );
         return true;
       },
@@ -672,31 +675,14 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   }
 
   Future<void> _mergeAllComicDuplicatesAfterFirstSync() async {
-    final service = _comicDuplicateMergeService;
-    if (service == null) {
-      return;
-    }
-    try {
-      final summary = await service.mergeAllDuplicates();
-      if (summary.changed) {
-        _shelfRefreshBus?.notify(
-          modules: const <LibraryModuleKey>{
-            LibraryModuleKey.comic,
-            LibraryModuleKey.favorite,
-          },
-          reason: 'favorite_first_sync_comic_duplicate_merge_completed',
-        );
-      }
-    } catch (_) {
-      // 首次同步的主结果优先；全量去重失败可由书架菜单或下一次同步补偿。
-    }
+    // 首次全量同步收尾的全量去重交给 runner，与单条入库后的合并共用同一执行器，
+    // 失败语义统一“不阻断收藏同步主结果”。
+    await _postIngestTaskRunner.runAll(
+      const <LibraryPostIngestTask>[ComicDuplicateMergeAllTask()],
+    );
   }
 
   Future<void> _backfillExistingComicAutoRefreshIfNeeded() async {
-    final coordinator = _comicAutoRefreshCoordinator;
-    if (coordinator == null) {
-      return;
-    }
     if (await _localRepository.hasCompletedComicAutoRefreshBackfill()) {
       return;
     }
@@ -722,17 +708,21 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
           failedTids.add(record.tid);
           continue;
         }
-        try {
-          await coordinator.refreshFavoriteComic(
-            comicId: comicId,
-            sourceTid: record.tid,
-            favoriteTitle: record.title,
-            sourceTitle: record.title,
-            sourceTagName: record.sourceTagName,
-          );
-          checkedCount++;
-        } catch (_) {
+        final report = await _postIngestTaskRunner.runAll(
+          <LibraryPostIngestTask>[
+            ComicAutoRefreshBackfillTask(
+              comicId: comicId,
+              sourceTid: record.tid,
+              favoriteTitle: record.title,
+              sourceTitle: record.title,
+              sourceTagName: record.sourceTagName,
+            ),
+          ],
+        );
+        if (report.failures.isNotEmpty) {
           failedTids.add(record.tid);
+        } else {
+          checkedCount++;
         }
       }
 

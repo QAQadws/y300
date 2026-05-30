@@ -11,8 +11,10 @@ import 'package:y300/features/favorites/data/favorite_content_ingest_registry.da
 import 'package:y300/features/favorites/data/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/favorite_repository.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
+import 'package:y300/features/favorites/data/library_post_ingest_task_runner.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/domain/favorite_content_ingest.dart';
+import 'package:y300/features/favorites/domain/library_post_ingest_task_runner.dart';
 import 'package:y300/features/favorites/presentation/adapters/favorite_shelf_adapter.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
@@ -64,15 +66,11 @@ final favoriteDetailContextLoaderProvider =
   );
 });
 
+// 阶段 3：handler 只声明后处理任务，不再耦合 coordinator/duplicate merge/bus。
 final comicFavoriteContentIngestHandlerProvider =
     Provider<FavoriteContentIngestHandler>((ref) {
   return ComicFavoriteContentIngestHandler(
     ingestService: ref.watch(comicFavoriteIngestServiceProvider),
-    comicAutoRefreshCoordinator: ref.watch(
-      comicFavoriteAutoRefreshCoordinatorProvider,
-    ),
-    comicDuplicateMergeService: ref.watch(comicDuplicateMergeServiceProvider),
-    shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
   );
 });
 
@@ -80,7 +78,6 @@ final novelFavoriteContentIngestHandlerProvider =
     Provider<FavoriteContentIngestHandler>((ref) {
   return NovelFavoriteContentIngestHandler(
     ingestService: ref.watch(novelFavoriteIngestServiceProvider),
-    shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
   );
 });
 
@@ -98,14 +95,23 @@ final favoriteContentIngestRegistryProvider =
   );
 });
 
+// 阶段 3：模块后处理任务统一在此组合，handler 不再亲自执行刷新/合并/通知。
+final libraryPostIngestTaskRunnerProvider =
+    Provider<LibraryPostIngestTaskRunner>((ref) {
+  return DefaultLibraryPostIngestTaskRunner(
+    comicAutoRefreshCoordinator: ref.watch(comicFavoriteAutoRefreshCoordinatorProvider),
+    comicDuplicateMergeService: ref.watch(comicDuplicateMergeServiceProvider),
+    shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
+  );
+});
+
 final favoriteSyncServiceProvider = Provider<FavoriteSyncService>((ref) {
   return NetworkFavoriteSyncService(
     remoteRepository: ref.watch(favoriteRepositoryProvider),
     localRepository: ref.watch(localFavoriteRepositoryProvider),
     detailContextLoader: ref.watch(favoriteDetailContextLoaderProvider),
     contentIngestRegistry: ref.watch(favoriteContentIngestRegistryProvider),
-    comicAutoRefreshCoordinator: ref.watch(comicFavoriteAutoRefreshCoordinatorProvider),
-    comicDuplicateMergeService: ref.watch(comicDuplicateMergeServiceProvider),
+    postIngestTaskRunner: ref.watch(libraryPostIngestTaskRunnerProvider),
     shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
     downloadStorageService: ref.watch(downloadStorageServiceProvider),
   );

@@ -1,9 +1,6 @@
-import 'package:y300/features/comic/data/comic_favorite_auto_refresh_coordinator.dart';
 import 'package:y300/features/comic/data/comic_favorite_ingest_service.dart';
-import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
 import 'package:y300/features/favorites/domain/favorite_content_ingest.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
-import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/novel/data/novel_favorite_ingest_service.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
@@ -11,18 +8,9 @@ class ComicFavoriteContentIngestHandler
     implements FavoriteContentIngestHandler {
   const ComicFavoriteContentIngestHandler({
     required ComicFavoriteIngestService ingestService,
-    ComicFavoriteAutoRefreshCoordinator? comicAutoRefreshCoordinator,
-    ComicDuplicateMergeService? comicDuplicateMergeService,
-    LibraryShelfRefreshBus? shelfRefreshBus,
-  })  : _ingestService = ingestService,
-        _comicAutoRefreshCoordinator = comicAutoRefreshCoordinator,
-        _comicDuplicateMergeService = comicDuplicateMergeService,
-        _shelfRefreshBus = shelfRefreshBus;
+  }) : _ingestService = ingestService;
 
   final ComicFavoriteIngestService _ingestService;
-  final ComicFavoriteAutoRefreshCoordinator? _comicAutoRefreshCoordinator;
-  final ComicDuplicateMergeService? _comicDuplicateMergeService;
-  final LibraryShelfRefreshBus? _shelfRefreshBus;
 
   @override
   ThreadContentKind get kind => ThreadContentKind.comic;
@@ -36,16 +24,23 @@ class ComicFavoriteContentIngestHandler
       detail: context.detail,
       sourceTagName: context.tagName,
     );
-    await _runComicAutoRefresh(
-      comicId: workId,
-      request: request,
-    );
-    final resolvedWorkId = request.options.mergeIngestedComic
-        ? await _mergeIngestedComicIfNeeded(workId)
-        : workId;
+    // 阶段 3：handler 只声明后处理任务，实际执行交给 LibraryPostIngestTaskRunner。
+    // 这样 handler 不再耦合 catalog/搜索队列、重复合并 SQL 与刷新事件总线。
+    final tasks = <LibraryPostIngestTask>[
+      ComicAutoRefreshTask(
+        comicId: workId,
+        detail: context.detail,
+        favoriteTitle: context.record.title,
+        sourceTagName: context.tagName,
+        forceSearchOnCatalogMiss: request.options.forceComicSearchOnCatalogMiss,
+      ),
+      if (request.options.mergeIngestedComic)
+        ComicDuplicateMergeTask(comicId: workId),
+    ];
     return FavoriteContentIngestResult(
       kind: kind,
-      workId: resolvedWorkId,
+      workId: workId,
+      postTasks: tasks,
     );
   }
 
@@ -53,66 +48,15 @@ class ComicFavoriteContentIngestHandler
   Future<void> removeFromShelf({required String workId}) {
     return _ingestService.removeFromShelf(workId: workId);
   }
-
-  Future<void> _runComicAutoRefresh({
-    required String comicId,
-    required FavoriteContentIngestRequest request,
-  }) async {
-    final coordinator = _comicAutoRefreshCoordinator;
-    if (coordinator == null) {
-      return;
-    }
-    try {
-      await coordinator.refreshAfterFavoriteIngest(
-        comicId: comicId,
-        detail: request.context.detail,
-        favoriteTitle: request.context.record.title,
-        sourceTagName: request.context.tagName,
-        forceSearchOnCatalogMiss: request.options.forceComicSearchOnCatalogMiss,
-      );
-    } catch (_) {
-      // 收藏详情已经入库；catalog 引导/队列入队失败不应让本条收藏反复
-      // 停留在 detail_loaded_at 为空的状态。后续手动刷新或搜索队列可继续补偿。
-    }
-  }
-
-  Future<String> _mergeIngestedComicIfNeeded(String comicId) async {
-    final service = _comicDuplicateMergeService;
-    if (service == null) {
-      return comicId;
-    }
-    try {
-      final result = await service.mergeComic(comicId: comicId);
-      if (result.changed) {
-        _shelfRefreshBus?.notify(
-          modules: const <LibraryModuleKey>{
-            LibraryModuleKey.comic,
-            LibraryModuleKey.favorite,
-          },
-          reason: 'favorite_comic_duplicate_merge_completed',
-        );
-      }
-      return result.targetComicId.trim().isEmpty
-          ? comicId
-          : result.targetComicId;
-    } catch (_) {
-      // 合并是收藏入库后的维护步骤；失败不应让本条收藏回到“未补详情”
-      // 状态，后续手动“合并重复”或下一次增量仍可补偿。
-      return comicId;
-    }
-  }
 }
 
 class NovelFavoriteContentIngestHandler
     implements FavoriteContentIngestHandler {
   const NovelFavoriteContentIngestHandler({
     required NovelFavoriteIngestService ingestService,
-    LibraryShelfRefreshBus? shelfRefreshBus,
-  })  : _ingestService = ingestService,
-        _shelfRefreshBus = shelfRefreshBus;
+  }) : _ingestService = ingestService;
 
   final NovelFavoriteIngestService _ingestService;
-  final LibraryShelfRefreshBus? _shelfRefreshBus;
 
   @override
   ThreadContentKind get kind => ThreadContentKind.novel;
@@ -125,16 +69,18 @@ class NovelFavoriteContentIngestHandler
       detail: request.context.detail,
       sourceTagName: request.context.tagName,
     );
-    _shelfRefreshBus?.notify(
-      modules: const <LibraryModuleKey>{
-        LibraryModuleKey.novel,
-        LibraryModuleKey.favorite,
-      },
-      reason: 'favorite_novel_refresh_completed',
-    );
     return FavoriteContentIngestResult(
       kind: kind,
       workId: workId,
+      postTasks: const <LibraryPostIngestTask>[
+        ShelfRefreshTask(
+          modules: <LibraryModuleKey>{
+            LibraryModuleKey.novel,
+            LibraryModuleKey.favorite,
+          },
+          reason: 'favorite_novel_refresh_completed',
+        ),
+      ],
     );
   }
 

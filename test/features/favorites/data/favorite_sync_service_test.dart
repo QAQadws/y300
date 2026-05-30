@@ -17,10 +17,12 @@ import 'package:y300/features/favorites/data/favorite_content_ingest_registry.da
 import 'package:y300/features/favorites/data/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/favorite_repository.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
+import 'package:y300/features/favorites/data/library_post_ingest_task_runner.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
 import 'package:y300/features/favorites/domain/favorite_content_ingest.dart';
+import 'package:y300/features/favorites/domain/library_post_ingest_task_runner.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
@@ -822,6 +824,7 @@ NetworkFavoriteSyncService _service({
   ComicFavoriteIngestService? comicIngestService,
   NovelFavoriteIngestService? novelIngestService,
   FavoriteContentIngestRegistry? contentIngestRegistry,
+  LibraryPostIngestTaskRunner? postIngestTaskRunner,
   ComicFavoriteAutoRefreshCoordinator? comicAutoRefreshCoordinator,
   ComicDuplicateMergeService? comicDuplicateMergeService,
   LibraryShelfRefreshBus? shelfRefreshBus,
@@ -840,12 +843,13 @@ NetworkFavoriteSyncService _service({
         _contentRegistry(
           comicIngestService: resolvedComicIngestService,
           novelIngestService: resolvedNovelIngestService,
+        ),
+    postIngestTaskRunner: postIngestTaskRunner ??
+        DefaultLibraryPostIngestTaskRunner(
           comicAutoRefreshCoordinator: comicAutoRefreshCoordinator,
           comicDuplicateMergeService: comicDuplicateMergeService,
           shelfRefreshBus: shelfRefreshBus,
         ),
-    comicAutoRefreshCoordinator: comicAutoRefreshCoordinator,
-    comicDuplicateMergeService: comicDuplicateMergeService,
     shelfRefreshBus: shelfRefreshBus,
     downloadStorageService: downloadStorageService,
     detailBatchLimit: detailBatchLimit,
@@ -855,20 +859,13 @@ NetworkFavoriteSyncService _service({
 FavoriteContentIngestRegistry _contentRegistry({
   ComicFavoriteIngestService? comicIngestService,
   NovelFavoriteIngestService? novelIngestService,
-  ComicFavoriteAutoRefreshCoordinator? comicAutoRefreshCoordinator,
-  ComicDuplicateMergeService? comicDuplicateMergeService,
-  LibraryShelfRefreshBus? shelfRefreshBus,
 }) {
   return DefaultFavoriteContentIngestRegistry(
     comicHandler: ComicFavoriteContentIngestHandler(
       ingestService: comicIngestService ?? _FakeComicIngestService(),
-      comicAutoRefreshCoordinator: comicAutoRefreshCoordinator,
-      comicDuplicateMergeService: comicDuplicateMergeService,
-      shelfRefreshBus: shelfRefreshBus,
     ),
     novelHandler: NovelFavoriteContentIngestHandler(
       ingestService: novelIngestService ?? _FakeNovelIngestService(),
-      shelfRefreshBus: shelfRefreshBus,
     ),
     forumHandler: const ForumFavoriteContentIngestHandler(),
   );
