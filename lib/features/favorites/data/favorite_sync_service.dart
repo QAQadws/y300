@@ -686,6 +686,14 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     if (await _localRepository.hasCompletedComicAutoRefreshBackfill()) {
       return;
     }
+    const capabilityProbe = ComicAutoRefreshBackfillTask(
+      comicId: '_',
+      sourceTid: '_',
+      favoriteTitle: '_',
+    );
+    if (!_postIngestTaskRunner.canRun(capabilityProbe)) {
+      return;
+    }
 
     final checkedTids = <String>{};
     final failedTids = <String>[];

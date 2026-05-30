@@ -1,8 +1,10 @@
 ﻿import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/comic/data/comic_refresh_outcome_providers.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
+import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 
 class ComicDetailArgs {
@@ -101,9 +103,9 @@ class ComicDetailController extends AsyncNotifier<ComicDetailViewState> {
 
     try {
       final refreshService = ref.read(comicEpisodeRefreshServiceProvider);
-      final repository = ref.read(comicRepositoryProvider);
+      final refreshOutcomeApplier = ref.read(comicRefreshOutcomeApplierProvider);
       final featureFlags = ref.read(comicReaderFeatureFlagsProvider);
-      final links = await refreshService.fetchEpisodeLinks(
+      final outcome = await refreshService.fetchCatalogThenFallback(
         ComicEpisodeRefreshRequest(
           comicId: current.detail.comicId,
           sourceTid: current.detail.sourceTid,
@@ -117,7 +119,7 @@ class ComicDetailController extends AsyncNotifier<ComicDetailViewState> {
         ),
       );
 
-      if (links.isEmpty) {
+      if (!outcome.hasLinks) {
         state = AsyncData(
           current.copyWith(
             isRefreshing: false,
@@ -127,10 +129,14 @@ class ComicDetailController extends AsyncNotifier<ComicDetailViewState> {
         return;
       }
 
-      final mergeResult = await repository.mergeEpisodesFromLinks(
-        comicId: current.detail.comicId,
-        episodeLinks: links,
-        fallbackSourceTid: current.detail.sourceTid,
+      final applyResult = await refreshOutcomeApplier.apply(
+        ComicRefreshApplyRequest(
+          comicId: current.detail.comicId,
+          sourceTid: current.detail.sourceTid,
+          links: outcome.links,
+          source: outcome.source,
+          reason: 'comic_detail_controller_refresh_completed',
+        ),
       );
 
       final refreshed = await _load(
@@ -140,7 +146,8 @@ class ComicDetailController extends AsyncNotifier<ComicDetailViewState> {
       state = AsyncData(
         refreshed.copyWith(
           isRefreshing: false,
-          refreshHint: '章节刷新完成：新增${mergeResult.insertedCount}，更新${mergeResult.updatedCount}',
+          refreshHint:
+              '章节刷新完成：新增${applyResult.insertedCount}，更新${applyResult.updatedCount}',
         ),
       );
     } catch (error) {

@@ -42,6 +42,12 @@ abstract class ComicEpisodeRefreshService {
     ComicEpisodeRefreshRequest request,
   );
 
+  /// Runs the full refresh decision tree: catalog first, then search/current
+  /// fallback when catalog misses.
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogThenFallback(
+    ComicEpisodeRefreshRequest request,
+  );
+
   /// Runs only strategy 1. A miss intentionally returns an empty outcome so
   /// callers can enqueue search without spending a search request here.
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
@@ -121,22 +127,36 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<List<ComicEpisodeLink>> fetchEpisodeLinks(
     ComicEpisodeRefreshRequest request,
   ) async {
+    final outcome = await fetchCatalogThenFallback(request);
+    return outcome.links;
+  }
+
+  @override
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogThenFallback(
+    ComicEpisodeRefreshRequest request,
+  ) async {
     // 当前帖的连续跳转链接常只覆盖“上一话/历史话”，不能作为完整章节表。
     // 因此仅在目录解析成功时直接信任；否则继续走搜索补全，并按 tid 合并。
     final current = await _discoverCatalogFirst(request);
-    if (current.strategy == EpisodeDiscoveryStrategy.catalog && current.episodeLinks.isNotEmpty) {
+    final catalogMatched =
+        current.strategy == EpisodeDiscoveryStrategy.catalog &&
+        current.episodeLinks.isNotEmpty;
+    if (catalogMatched) {
       _logRefresh(
         request,
         'strategy=catalog links=${current.episodeLinks.length}',
       );
-      return current.episodeLinks;
+      return ComicEpisodeRefreshOutcome(
+        source: ComicEpisodeRefreshSource.catalog,
+        links: current.episodeLinks,
+        catalogMatched: true,
+      );
     }
 
-    final outcome = await _fetchSearchAndCurrentOnly(
+    return _fetchSearchAndCurrentOnly(
       request,
       current: current,
     );
-    return outcome.links;
   }
 
   @override

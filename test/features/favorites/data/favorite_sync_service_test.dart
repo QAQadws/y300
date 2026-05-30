@@ -9,6 +9,7 @@ import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
 import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
+import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
@@ -362,7 +363,6 @@ void main() {
     final bus = LibraryShelfRefreshBus();
     addTearDown(bus.dispose);
     final coordinator = ComicFavoriteAutoRefreshCoordinator(
-      repository: _RecordingComicRepository(),
       refreshService: _BackfillRefreshService(
         catalogOutcome: const ComicEpisodeRefreshOutcome(
           source: ComicEpisodeRefreshSource.empty,
@@ -370,7 +370,7 @@ void main() {
         ),
       ),
       searchQueue: queue,
-      firstEpisodeCoverPromoter: _RecordingCoverPromoter(),
+      refreshOutcomeApplier: _defaultRefreshOutcomeApplier(bus),
       shelfRefreshBus: bus,
       subjectParser: const RuleBasedComicSubjectParser(),
     );
@@ -405,7 +405,6 @@ void main() {
     final bus = LibraryShelfRefreshBus();
     addTearDown(bus.dispose);
     final coordinator = ComicFavoriteAutoRefreshCoordinator(
-      repository: _RecordingComicRepository(),
       refreshService: _BackfillRefreshService(
         catalogOutcome: const ComicEpisodeRefreshOutcome(
           source: ComicEpisodeRefreshSource.empty,
@@ -413,7 +412,7 @@ void main() {
         ),
       ),
       searchQueue: queue,
-      firstEpisodeCoverPromoter: _RecordingCoverPromoter(),
+      refreshOutcomeApplier: _defaultRefreshOutcomeApplier(bus),
       shelfRefreshBus: bus,
       subjectParser: const RuleBasedComicSubjectParser(),
     );
@@ -441,10 +440,9 @@ void main() {
     final bus = LibraryShelfRefreshBus();
     addTearDown(bus.dispose);
     final coordinator = ComicFavoriteAutoRefreshCoordinator(
-      repository: _RecordingComicRepository(),
       refreshService: const _ThrowingRefreshService(),
       searchQueue: _RecordingSearchQueue(),
-      firstEpisodeCoverPromoter: _RecordingCoverPromoter(),
+      refreshOutcomeApplier: _defaultRefreshOutcomeApplier(bus),
       shelfRefreshBus: bus,
       subjectParser: const RuleBasedComicSubjectParser(),
     );
@@ -484,7 +482,6 @@ void main() {
     final bus = LibraryShelfRefreshBus();
     addTearDown(bus.dispose);
     final coordinator = ComicFavoriteAutoRefreshCoordinator(
-      repository: _RecordingComicRepository(),
       refreshService: _BackfillRefreshService(
         catalogOutcome: const ComicEpisodeRefreshOutcome(
           source: ComicEpisodeRefreshSource.empty,
@@ -492,7 +489,7 @@ void main() {
         ),
       ),
       searchQueue: queue,
-      firstEpisodeCoverPromoter: _RecordingCoverPromoter(),
+      refreshOutcomeApplier: _defaultRefreshOutcomeApplier(bus),
       shelfRefreshBus: bus,
       subjectParser: const RuleBasedComicSubjectParser(),
     );
@@ -515,6 +512,36 @@ void main() {
     expect(queue.enqueuedRequests.single.displayTitle, 'Backfill Comic');
     expect(queue.enqueuedRequests.single.sourceTitle, 'Backfill Comic');
     expect(await local.hasCompletedComicAutoRefreshBackfill(), isTrue);
+  });
+
+  test('background maintenance leaves backfill unfinished when runner cannot execute backfill task', () async {
+    final local = _MemoryLocalFavoriteRepository(
+      seedRecords: <FavoriteThreadCacheRecord>[
+        _cacheRecord(
+          tid: '100',
+          title: '[Fav] Backfill Comic EP 02',
+          contentKind: ThreadContentKind.comic,
+          workId: 'yamibo:100',
+          detailLoadedAt: DateTime(2026, 1, 1),
+          sourceTagName: ComicFavoriteAutoRefreshCoordinator.longRunningTagName,
+        ),
+      ],
+    );
+    final service = _service(
+      remoteRepository: _FakeFavoriteRepository(const <int, FavoriteThreadsPage>{}),
+      localRepository: local,
+      detailContextLoader: _contextLoader(
+        loadThreadDetail: (tid) => throw StateError('detail should not be loaded'),
+      ),
+      comicIngestService: _FakeComicIngestService(),
+      novelIngestService: _FakeNovelIngestService(),
+      // Intentionally omit comicAutoRefreshCoordinator so the default runner
+      // cannot execute ComicAutoRefreshBackfillTask.
+    );
+
+    await service.runBackgroundMaintenance();
+
+    expect(await local.hasCompletedComicAutoRefreshBackfill(), isFalse);
   });
 
   test('writes favorites snapshot to download storage after sync', () async {
@@ -716,7 +743,6 @@ void main() {
       }
     });
     final coordinator = ComicFavoriteAutoRefreshCoordinator(
-      repository: _RecordingComicRepository(),
       refreshService: _BackfillRefreshService(
         catalogOutcome: const ComicEpisodeRefreshOutcome(
           source: ComicEpisodeRefreshSource.empty,
@@ -724,7 +750,7 @@ void main() {
         ),
       ),
       searchQueue: queue,
-      firstEpisodeCoverPromoter: _RecordingCoverPromoter(),
+      refreshOutcomeApplier: _defaultRefreshOutcomeApplier(bus),
       shelfRefreshBus: bus,
       subjectParser: const RuleBasedComicSubjectParser(),
     );
@@ -776,7 +802,6 @@ void main() {
     final bus = LibraryShelfRefreshBus();
     addTearDown(bus.dispose);
     final coordinator = ComicFavoriteAutoRefreshCoordinator(
-      repository: _RecordingComicRepository(),
       refreshService: _BackfillRefreshService(
         catalogOutcome: const ComicEpisodeRefreshOutcome(
           source: ComicEpisodeRefreshSource.empty,
@@ -784,7 +809,7 @@ void main() {
         ),
       ),
       searchQueue: queue,
-      firstEpisodeCoverPromoter: _RecordingCoverPromoter(),
+      refreshOutcomeApplier: _defaultRefreshOutcomeApplier(bus),
       shelfRefreshBus: bus,
       subjectParser: const RuleBasedComicSubjectParser(),
     );
@@ -868,6 +893,16 @@ FavoriteContentIngestRegistry _contentRegistry({
       ingestService: novelIngestService ?? _FakeNovelIngestService(),
     ),
     forumHandler: const ForumFavoriteContentIngestHandler(),
+  );
+}
+
+ComicRefreshOutcomeApplier _defaultRefreshOutcomeApplier(
+  LibraryShelfRefreshBus bus,
+) {
+  return DefaultComicRefreshOutcomeApplier(
+    repository: _RecordingComicRepository(),
+    firstEpisodeCoverPromoter: _RecordingCoverPromoter(),
+    shelfRefreshBus: bus,
   );
 }
 
@@ -1043,6 +1078,13 @@ class _BackfillRefreshService implements ComicEpisodeRefreshService {
   }
 
   @override
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogThenFallback(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    return _catalogOutcome;
+  }
+
+  @override
   Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
     return _catalogOutcome.links;
   }
@@ -1070,6 +1112,13 @@ class _ThrowingRefreshService implements ComicEpisodeRefreshService {
 
   @override
   Future<List<ComicEpisodeLink>> fetchEpisodeLinks(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    throw StateError('refresh failed');
+  }
+
+  @override
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogThenFallback(
     ComicEpisodeRefreshRequest request,
   ) async {
     throw StateError('refresh failed');

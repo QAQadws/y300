@@ -1,29 +1,23 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/local_comic_search_refresh_queue_repository.dart';
-import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
-import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
+import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
-import 'package:y300/features/library_shared/domain/models/library_models.dart';
-import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
 void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
 
   group('ComicSearchRefreshQueueService', () {
-    test('worker merges search/current result, promotes cover, and completes task', () async {
+    test('worker applies search/current result and completes task', () async {
       const dbName = 'comic_search_refresh_queue_worker_success_test.db';
       await deleteDatabase(dbName);
       final dbFuture = ComicLocalDb.open(databaseName: dbName);
       final queueRepository = LocalComicSearchRefreshQueueRepository(dbFuture);
-      final comicRepository = _RecordingComicRepository();
-      final promoter = _RecordingCoverPromoter();
       final refreshService = _FakeRefreshService(
         outcome: const ComicEpisodeRefreshOutcome(
           source: ComicEpisodeRefreshSource.search,
@@ -33,13 +27,11 @@ void main() {
           ],
         ),
       );
-      final bus = LibraryShelfRefreshBus();
+      final applier = _RecordingRefreshOutcomeApplier();
       final service = ComicSearchRefreshQueueService(
         queueRepository: queueRepository,
-        comicRepository: comicRepository,
         refreshService: refreshService,
-        firstEpisodeCoverPromoter: promoter,
-        shelfRefreshBus: bus,
+        refreshOutcomeApplier: applier,
       );
 
       await service.start();
@@ -50,12 +42,51 @@ void main() {
       );
       await service.drainForTest();
 
-      expect(comicRepository.mergedComicId, 'comic:1');
-      expect(comicRepository.mergedLinks, hasLength(1));
-      expect(promoter.promotedComicIds, <String>['comic:1']);
+      expect(applier.requests, hasLength(1));
+      expect(applier.requests.single.comicId, 'comic:1');
+      expect(applier.requests.single.sourceTid, '100');
+      expect(
+        applier.requests.single.reason,
+        'comic_search_refresh_completed',
+      );
+      expect(applier.requests.single.source, ComicEpisodeRefreshSource.search);
+      expect(applier.requests.single.links, hasLength(1));
       expect(await queueRepository.loadActiveEntries(), isEmpty);
-      expect(bus.signal.value?.modules, contains(LibraryModuleKey.comic));
-      expect(bus.signal.value?.modules, contains(LibraryModuleKey.favorite));
+
+      service.dispose();
+      final db = await dbFuture;
+      await db.close();
+      await deleteDatabase(dbName);
+    });
+
+    test('worker skips applier when no links are found', () async {
+      const dbName = 'comic_search_refresh_queue_worker_empty_test.db';
+      await deleteDatabase(dbName);
+      final dbFuture = ComicLocalDb.open(databaseName: dbName);
+      final queueRepository = LocalComicSearchRefreshQueueRepository(dbFuture);
+      final refreshService = _FakeRefreshService(
+        outcome: const ComicEpisodeRefreshOutcome(
+          source: ComicEpisodeRefreshSource.empty,
+          links: <ComicEpisodeLink>[],
+        ),
+      );
+      final applier = _RecordingRefreshOutcomeApplier();
+      final service = ComicSearchRefreshQueueService(
+        queueRepository: queueRepository,
+        refreshService: refreshService,
+        refreshOutcomeApplier: applier,
+      );
+
+      await service.start();
+      await service.enqueue(
+        request: _request(),
+        title: '测试漫画',
+        origin: ComicSearchRefreshOrigin.favoriteSync,
+      );
+      await service.drainForTest();
+
+      expect(applier.requests, isEmpty);
+      expect(await queueRepository.loadActiveEntries(), isEmpty);
 
       service.dispose();
       final db = await dbFuture;
@@ -71,10 +102,8 @@ void main() {
       final now = DateTime(2026, 5, 16, 12, 0, 0);
       final service = ComicSearchRefreshQueueService(
         queueRepository: queueRepository,
-        comicRepository: _RecordingComicRepository(),
         refreshService: _ThrowingRefreshService(),
-        firstEpisodeCoverPromoter: _RecordingCoverPromoter(),
-        shelfRefreshBus: LibraryShelfRefreshBus(),
+        refreshOutcomeApplier: _RecordingRefreshOutcomeApplier(),
         retryPolicy: const ComicSearchRefreshRetryPolicy(
           maxAttempts: 3,
           initialDelay: Duration(seconds: 5),
@@ -121,13 +150,6 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
   final ComicEpisodeRefreshOutcome _outcome;
 
   @override
-  Future<List<ComicEpisodeLink>> fetchEpisodeLinks(
-    ComicEpisodeRefreshRequest request,
-  ) async {
-    return _outcome.links;
-  }
-
-  @override
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
     ComicEpisodeRefreshRequest request,
   ) async {
@@ -138,15 +160,29 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
   }
 
   @override
-  Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogThenFallback(
     ComicEpisodeRefreshRequest request,
   ) async {
     return _outcome;
   }
 
   @override
+  Future<List<ComicEpisodeLink>> fetchEpisodeLinks(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    return _outcome.links;
+  }
+
+  @override
   Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
     return _outcome.links;
+  }
+
+  @override
+  Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    return _outcome;
   }
 }
 
@@ -160,6 +196,13 @@ class _ThrowingRefreshService extends _FakeRefreshService {
         );
 
   @override
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogThenFallback(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    throw StateError('boom');
+  }
+
+  @override
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request,
   ) async {
@@ -167,37 +210,20 @@ class _ThrowingRefreshService extends _FakeRefreshService {
   }
 }
 
-class _RecordingCoverPromoter implements ComicFirstEpisodeCoverPromoter {
-  final List<String> promotedComicIds = <String>[];
+class _RecordingRefreshOutcomeApplier implements ComicRefreshOutcomeApplier {
+  final List<ComicRefreshApplyRequest> requests = <ComicRefreshApplyRequest>[];
 
   @override
-  Future<bool> promoteIfPossible({required String comicId}) async {
-    promotedComicIds.add(comicId);
-    return true;
-  }
-}
-
-class _RecordingComicRepository implements ComicRepository {
-  String? mergedComicId;
-  List<ComicEpisodeLink> mergedLinks = const <ComicEpisodeLink>[];
-
-  @override
-  Future<ComicEpisodeRefreshResult> mergeEpisodesFromLinks({
-    required String comicId,
-    required List<ComicEpisodeLink> episodeLinks,
-    required String fallbackSourceTid,
-  }) async {
-    mergedComicId = comicId;
-    mergedLinks = episodeLinks;
-    return ComicEpisodeRefreshResult(
-      insertedCount: episodeLinks.length,
+  Future<ComicRefreshApplyResult> apply(
+    ComicRefreshApplyRequest request,
+  ) async {
+    requests.add(request);
+    return ComicRefreshApplyResult(
+      status: ComicRefreshApplyStatus.applied,
+      insertedCount: request.links.length,
       updatedCount: 0,
-      totalCount: episodeLinks.length,
+      totalCount: request.links.length,
+      coverPromoted: false,
     );
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) {
-    return super.noSuchMethod(invocation);
   }
 }

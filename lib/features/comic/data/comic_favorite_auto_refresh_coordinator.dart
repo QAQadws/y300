@@ -1,5 +1,4 @@
-import 'package:y300/features/comic/data/comic_repository.dart';
-import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
+import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
@@ -37,23 +36,20 @@ class ComicFavoriteAutoRefreshCoordinator {
   static const String longRunningTagName = '長篇連載';
 
   const ComicFavoriteAutoRefreshCoordinator({
-    required ComicRepository repository,
     required ComicEpisodeRefreshService refreshService,
     required ComicSearchRefreshQueueEnqueuer searchQueue,
-    required ComicFirstEpisodeCoverPromoter firstEpisodeCoverPromoter,
+    required ComicRefreshOutcomeApplier refreshOutcomeApplier,
     required LibraryShelfRefreshBus shelfRefreshBus,
     required ComicSubjectParser subjectParser,
-  })  : _repository = repository,
-        _refreshService = refreshService,
+  })  : _refreshService = refreshService,
         _searchQueue = searchQueue,
-        _firstEpisodeCoverPromoter = firstEpisodeCoverPromoter,
+        _refreshOutcomeApplier = refreshOutcomeApplier,
         _shelfRefreshBus = shelfRefreshBus,
         _subjectParser = subjectParser;
 
-  final ComicRepository _repository;
   final ComicEpisodeRefreshService _refreshService;
   final ComicSearchRefreshQueueEnqueuer _searchQueue;
-  final ComicFirstEpisodeCoverPromoter _firstEpisodeCoverPromoter;
+  final ComicRefreshOutcomeApplier _refreshOutcomeApplier;
   final LibraryShelfRefreshBus _shelfRefreshBus;
   final ComicSubjectParser _subjectParser;
 
@@ -96,18 +92,14 @@ class ComicFavoriteAutoRefreshCoordinator {
 
     final catalog = await _refreshService.fetchCatalogOnly(request);
     if (catalog.catalogMatched && catalog.hasLinks) {
-      await _repository.mergeEpisodesFromLinks(
-        comicId: comicId,
-        episodeLinks: catalog.links,
-        fallbackSourceTid: sourceTid,
-      );
-      await _firstEpisodeCoverPromoter.promoteIfPossible(comicId: comicId);
-      _shelfRefreshBus.notify(
-        modules: const <LibraryModuleKey>{
-          LibraryModuleKey.comic,
-          LibraryModuleKey.favorite,
-        },
-        reason: 'favorite_comic_catalog_refresh_completed',
+      await _refreshOutcomeApplier.apply(
+        ComicRefreshApplyRequest(
+          comicId: comicId,
+          sourceTid: sourceTid,
+          links: catalog.links,
+          source: catalog.source,
+          reason: 'favorite_comic_catalog_refresh_completed',
+        ),
       );
       return ComicFavoriteAutoRefreshResult(
         status: ComicFavoriteAutoRefreshStatus.catalogMerged,

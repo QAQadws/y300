@@ -292,6 +292,16 @@ class _NoopReadingStateWriter implements ComicReadingStateWriter {
 
 class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   @override
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogThenFallback(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    return const ComicEpisodeRefreshOutcome(
+      source: ComicEpisodeRefreshSource.empty,
+      links: <ComicEpisodeLink>[],
+    );
+  }
+
+  @override
   Future<List<ComicEpisodeLink>> fetchEpisodeLinks(
     ComicEpisodeRefreshRequest request,
   ) async {

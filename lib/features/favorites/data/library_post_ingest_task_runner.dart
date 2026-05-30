@@ -33,6 +33,20 @@ class DefaultLibraryPostIngestTaskRunner implements LibraryPostIngestTaskRunner 
   final LibraryShelfRefreshBus? _shelfRefreshBus;
 
   @override
+  bool canRun(LibraryPostIngestTask task) {
+    if (task is ComicAutoRefreshTask || task is ComicAutoRefreshBackfillTask) {
+      return _comicAutoRefreshCoordinator != null;
+    }
+    if (task is ComicDuplicateMergeTask || task is ComicDuplicateMergeAllTask) {
+      return _comicDuplicateMergeService != null;
+    }
+    if (task is ShelfRefreshTask) {
+      return _shelfRefreshBus != null;
+    }
+    return false;
+  }
+
+  @override
   Future<LibraryPostIngestTaskReport> runAll(
     List<LibraryPostIngestTask> tasks,
   ) async {

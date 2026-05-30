@@ -6,6 +6,7 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
+import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
@@ -15,12 +16,12 @@ import 'package:y300/features/library_shared/domain/contracts/detail_module_adap
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
-import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
 /// 漫画详情适配器（Phase 6）。
 ///
 /// 负责把漫画仓储数据映射到统一详情模型，并接入章节状态筛选/排序。
-/// 刷新能力通过 ComicEpisodeRefreshService 下沉到漫画域 services，
+/// 刷新抓取通过 ComicEpisodeRefreshService 下沉到漫画域 services，
+/// 而“合并章节/提升封面/通知书架”则统一交给 ComicRefreshOutcomeApplier，
 /// 保证统一详情页只保留编排，不耦合漫画刷新策略细节。
 class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
   ComicDetailAdapter(
@@ -29,31 +30,31 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
     ComicSearchRefreshQueueEnqueuer? searchQueue,
     ComicSearchRefreshQueueStateReader? searchQueueState,
     ComicFirstEpisodeCoverService? firstEpisodeCoverService,
+    ComicRefreshOutcomeApplier? refreshOutcomeApplier,
     ComicDownloadService? downloadService,
     ImageCacheService? imageCacheService,
     ComicReaderFeatureFlags featureFlags = ComicReaderFeatureFlags.defaults,
     required LibraryStateRepository stateRepository,
-    LibraryShelfRefreshBus? shelfRefreshBus,
   })  : _refreshService = refreshService,
         _searchQueue = searchQueue,
         _searchQueueState = searchQueueState,
         _firstEpisodeCoverService = firstEpisodeCoverService,
+        _refreshOutcomeApplier = refreshOutcomeApplier,
         _downloadService = downloadService,
         _imageCacheService = imageCacheService,
         _featureFlags = featureFlags,
-        _stateRepository = stateRepository,
-        _shelfRefreshBus = shelfRefreshBus;
+        _stateRepository = stateRepository;
 
   final ComicRepository _repository;
   final ComicEpisodeRefreshService? _refreshService;
   final ComicSearchRefreshQueueEnqueuer? _searchQueue;
   final ComicSearchRefreshQueueStateReader? _searchQueueState;
   final ComicFirstEpisodeCoverService? _firstEpisodeCoverService;
+  final ComicRefreshOutcomeApplier? _refreshOutcomeApplier;
   final ComicDownloadService? _downloadService;
   final ImageCacheService? _imageCacheService;
   final ComicReaderFeatureFlags _featureFlags;
   final LibraryStateRepository _stateRepository;
-  final LibraryShelfRefreshBus? _shelfRefreshBus;
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
@@ -448,16 +449,19 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
       return DetailRefreshResult.skipped;
     }
     final refreshService = _refreshService;
-    if (refreshService == null) {
+    final refreshOutcomeApplier = _refreshOutcomeApplier;
+    if (refreshService == null || refreshOutcomeApplier == null) {
       return DetailRefreshResult.skipped;
     }
     final request = _buildRefreshRequest(detail);
     final catalog = await refreshService.fetchCatalogOnly(request);
     if (catalog.catalogMatched && catalog.links.isNotEmpty) {
       await _applyRefreshOutcome(
+        applier: refreshOutcomeApplier,
         comicId: workId,
         sourceTid: detail.sourceTid,
         links: catalog.links,
+        source: catalog.source,
         reason: 'comic_detail_catalog_refresh_completed',
       );
       return DetailRefreshResult.immediate;
@@ -488,9 +492,11 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
       );
     }
     await _applyRefreshOutcome(
+      applier: refreshOutcomeApplier,
       comicId: workId,
       sourceTid: detail.sourceTid,
       links: fallback.links,
+      source: fallback.source,
       reason: 'comic_detail_search_refresh_completed',
     );
     return DetailRefreshResult.immediate;
@@ -501,23 +507,21 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
   }
 
   Future<void> _applyRefreshOutcome({
+    required ComicRefreshOutcomeApplier applier,
     required String comicId,
     required String sourceTid,
     required List<ComicEpisodeLink> links,
+    required ComicEpisodeRefreshSource source,
     required String reason,
   }) async {
-    await _repository.mergeEpisodesFromLinks(
-      comicId: comicId,
-      episodeLinks: links,
-      fallbackSourceTid: sourceTid,
-    );
-    await _firstEpisodeCoverService?.promoteIfPossible(comicId: comicId);
-    _shelfRefreshBus?.notify(
-      modules: const <LibraryModuleKey>{
-        LibraryModuleKey.comic,
-        LibraryModuleKey.favorite,
-      },
-      reason: reason,
+    await applier.apply(
+      ComicRefreshApplyRequest(
+        comicId: comicId,
+        sourceTid: sourceTid,
+        links: links,
+        source: source,
+        reason: reason,
+      ),
     );
   }
 

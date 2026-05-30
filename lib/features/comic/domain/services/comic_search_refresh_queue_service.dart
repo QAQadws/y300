@@ -1,13 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/data/comic_search_refresh_queue_repository.dart';
-import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
+import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
-import 'package:y300/features/library_shared/domain/models/library_models.dart';
-import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/search/data/forum_search_scheduler.dart';
 
 class ComicSearchRefreshRetryPolicy {
@@ -42,27 +39,23 @@ abstract class ComicSearchRefreshQueueStateReader {
 ///
 /// The worker deliberately knows nothing about favorite/detail pages.  It
 /// persists queue state, delegates actual search throttling to
-/// [ForumSearchScheduler] through [ComicEpisodeRefreshService], and emits a
-/// shared shelf refresh signal after local data changes.
+/// [ForumSearchScheduler] through [ComicEpisodeRefreshService], and delegates
+/// local merge/cover/refresh application to [ComicRefreshOutcomeApplier].
 class ComicSearchRefreshQueueService
     implements
         ComicSearchRefreshQueueEnqueuer,
         ComicSearchRefreshQueueStateReader {
   ComicSearchRefreshQueueService({
     required ComicSearchRefreshQueueRepository queueRepository,
-    required ComicRepository comicRepository,
     required ComicEpisodeRefreshService refreshService,
-    required ComicFirstEpisodeCoverPromoter firstEpisodeCoverPromoter,
-    required LibraryShelfRefreshBus shelfRefreshBus,
+    required ComicRefreshOutcomeApplier refreshOutcomeApplier,
     this.cadence = ForumSearchScheduler.defaultInterval,
     ComicSearchRefreshRetryPolicy retryPolicy =
         const ComicSearchRefreshRetryPolicy(),
     DateTime Function()? nowProvider,
   })  : _queueRepository = queueRepository,
-        _comicRepository = comicRepository,
         _refreshService = refreshService,
-        _firstEpisodeCoverPromoter = firstEpisodeCoverPromoter,
-        _shelfRefreshBus = shelfRefreshBus,
+        _refreshOutcomeApplier = refreshOutcomeApplier,
         _retryPolicy = retryPolicy,
         _nowProvider = nowProvider ?? DateTime.now,
         _snapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
@@ -73,10 +66,8 @@ class ComicSearchRefreshQueueService
         );
 
   final ComicSearchRefreshQueueRepository _queueRepository;
-  final ComicRepository _comicRepository;
   final ComicEpisodeRefreshService _refreshService;
-  final ComicFirstEpisodeCoverPromoter _firstEpisodeCoverPromoter;
-  final LibraryShelfRefreshBus _shelfRefreshBus;
+  final ComicRefreshOutcomeApplier _refreshOutcomeApplier;
   final ComicSearchRefreshRetryPolicy _retryPolicy;
   final DateTime Function() _nowProvider;
   final ValueNotifier<ComicSearchRefreshQueueSnapshot> _snapshot;
@@ -237,23 +228,19 @@ class ComicSearchRefreshQueueService
     try {
       final outcome = await _refreshService.fetchSearchAndCurrentOnly(task.request);
       if (outcome.hasLinks) {
-        final merge = await _comicRepository.mergeEpisodesFromLinks(
-          comicId: task.comicId,
-          episodeLinks: outcome.links,
-          fallbackSourceTid: task.request.sourceTid,
-        );
-        await _firstEpisodeCoverPromoter.promoteIfPossible(comicId: task.comicId);
-        _shelfRefreshBus.notify(
-          modules: const <LibraryModuleKey>{
-            LibraryModuleKey.comic,
-            LibraryModuleKey.favorite,
-          },
-          reason: 'comic_search_refresh_completed',
+        final applied = await _refreshOutcomeApplier.apply(
+          ComicRefreshApplyRequest(
+            comicId: task.comicId,
+            sourceTid: task.request.sourceTid,
+            links: outcome.links,
+            source: outcome.source,
+            reason: 'comic_search_refresh_completed',
+          ),
         );
         _logQueue(
           'done task=${task.id} comicId=${task.comicId} '
-          'links=${outcome.links.length} inserted=${merge.insertedCount} '
-          'updated=${merge.updatedCount}',
+          'links=${outcome.links.length} inserted=${applied.insertedCount} '
+          'updated=${applied.updatedCount}',
         );
       } else {
         _logQueue(

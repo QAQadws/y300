@@ -3,6 +3,7 @@ import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/comic/data/comic_favorite_auto_refresh_coordinator.dart';
 import 'package:y300/features/comic/data/comic_favorite_ingest_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
+import 'package:y300/features/comic/data/comic_refresh_outcome_providers.dart';
 import 'package:y300/features/comic/data/comic_search_refresh_queue_providers.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/domain/services/comic_post_aggregation_service.dart';
@@ -45,10 +46,9 @@ final novelFavoriteIngestServiceProvider = Provider<NovelFavoriteIngestService>(
 final comicFavoriteAutoRefreshCoordinatorProvider =
     Provider<ComicFavoriteAutoRefreshCoordinator>((ref) {
   return ComicFavoriteAutoRefreshCoordinator(
-    repository: ref.watch(comicRepositoryProvider),
     refreshService: ref.watch(comicEpisodeRefreshServiceProvider),
     searchQueue: ref.watch(comicSearchRefreshQueueServiceProvider),
-    firstEpisodeCoverPromoter: ref.watch(comicFirstEpisodeCoverServiceProvider),
+    refreshOutcomeApplier: ref.watch(comicRefreshOutcomeApplierProvider),
     shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
     subjectParser: ref.watch(comicSubjectParserProvider),
   );

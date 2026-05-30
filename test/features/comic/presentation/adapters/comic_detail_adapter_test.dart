@@ -6,6 +6,7 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
@@ -15,21 +16,19 @@ import 'package:y300/features/library_shared/data/library_state_repository.dart'
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
-import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
 void main() {
-  test('refreshWork merges catalog result without running search fallback', () async {
+  test('refreshWork applies catalog result without running search fallback', () async {
     final repository = _FakeComicRepository();
     final refreshService = _FakeComicEpisodeRefreshService();
     final queue = _RecordingSearchQueue();
-    final bus = LibraryShelfRefreshBus();
-    addTearDown(bus.dispose);
+    final applier = _RecordingRefreshOutcomeApplier();
     final adapter = ComicDetailAdapter(
       repository,
       refreshService: refreshService,
       searchQueue: queue,
+      refreshOutcomeApplier: applier,
       stateRepository: _FakeLibraryStateRepository(),
-      shelfRefreshBus: bus,
     );
 
     final result = await adapter.refreshWork(workId: 'comic:1');
@@ -39,15 +38,19 @@ void main() {
     expect(refreshService.catalogOnlyCalls, 1);
     expect(refreshService.fetchEpisodeLinksCalls, 0);
     expect(refreshService.lastRequest?.customSearchTitle, 'Search Test Comic');
-    expect(repository.mergeCalled, isTrue);
-    expect(repository.lastMergedLinks.length, 2);
-    expect(repository.lastFallbackTid, '100');
+    expect(applier.requests, hasLength(1));
+    expect(applier.requests.single.comicId, 'comic:1');
+    expect(applier.requests.single.sourceTid, '100');
+    expect(applier.requests.single.links.length, 2);
+    expect(applier.requests.single.source, ComicEpisodeRefreshSource.catalog);
+    expect(
+      applier.requests.single.reason,
+      'comic_detail_catalog_refresh_completed',
+    );
     expect(queue.enqueuedRequests, isEmpty);
-    expect(bus.signal.value?.modules, contains(LibraryModuleKey.comic));
-    expect(bus.signal.value?.modules, contains(LibraryModuleKey.favorite));
   });
 
-  test('refreshWork runs search fallback immediately when catalog misses and queue is empty', () async {
+  test('refreshWork applies search fallback immediately when catalog misses and queue is empty', () async {
     final repository = _FakeComicRepository();
     final refreshService = _FakeComicEpisodeRefreshService(
       catalogOutcome: const ComicEpisodeRefreshOutcome(
@@ -65,15 +68,14 @@ void main() {
     final queue = _RecordingSearchQueue();
     final queueState = _FakeSearchQueueStateReader();
     addTearDown(queueState.snapshot.dispose);
-    final bus = LibraryShelfRefreshBus();
-    addTearDown(bus.dispose);
+    final applier = _RecordingRefreshOutcomeApplier();
     final adapter = ComicDetailAdapter(
       repository,
       refreshService: refreshService,
       searchQueue: queue,
       searchQueueState: queueState,
+      refreshOutcomeApplier: applier,
       stateRepository: _FakeLibraryStateRepository(),
-      shelfRefreshBus: bus,
     );
 
     final result = await adapter.refreshWork(workId: 'comic:1');
@@ -81,10 +83,14 @@ void main() {
     expect(result.status, DetailRefreshStatus.immediate);
     expect(refreshService.catalogOnlyCalls, 1);
     expect(refreshService.searchAndCurrentOnlyCalls, 1);
-    expect(repository.mergeCalled, isTrue);
-    expect(repository.lastMergedLinks.single.url, 'thread-201-1-1.html');
+    expect(applier.requests, hasLength(1));
+    expect(applier.requests.single.links.single.url, 'thread-201-1-1.html');
+    expect(applier.requests.single.source, ComicEpisodeRefreshSource.search);
+    expect(
+      applier.requests.single.reason,
+      'comic_detail_search_refresh_completed',
+    );
     expect(queue.enqueuedRequests, isEmpty);
-    expect(bus.signal.value?.reason, 'comic_detail_search_refresh_completed');
   });
 
   test('refreshWork queues search fallback when catalog misses and queue has backlog', () async {
@@ -103,6 +109,7 @@ void main() {
       refreshService: refreshService,
       searchQueue: queue,
       searchQueueState: queueState,
+      refreshOutcomeApplier: _RecordingRefreshOutcomeApplier(),
       stateRepository: _FakeLibraryStateRepository(),
     );
 
@@ -130,6 +137,7 @@ void main() {
     final adapter = ComicDetailAdapter(
       repository,
       refreshService: refreshService,
+      refreshOutcomeApplier: _RecordingRefreshOutcomeApplier(),
       imageCacheService: cacheService,
       featureFlags: ComicReaderFeatureFlags.defaults.copyWith(
         readerCustomMetadataEnabled: false,
@@ -315,6 +323,19 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   }
 
   @override
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogThenFallback(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    lastRequest = request;
+    requestedTid = request.sourceTid;
+    final catalog = await fetchCatalogOnly(request);
+    if (catalog.catalogMatched && catalog.hasLinks) {
+      return catalog;
+    }
+    return fetchSearchAndCurrentOnly(request);
+  }
+
+  @override
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
     ComicEpisodeRefreshRequest request,
   ) async {
@@ -357,6 +378,24 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   @override
   Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
     return fetchEpisodeLinks(ComicEpisodeRefreshRequest(sourceTid: tid));
+  }
+}
+
+class _RecordingRefreshOutcomeApplier implements ComicRefreshOutcomeApplier {
+  final List<ComicRefreshApplyRequest> requests = <ComicRefreshApplyRequest>[];
+
+  @override
+  Future<ComicRefreshApplyResult> apply(
+    ComicRefreshApplyRequest request,
+  ) async {
+    requests.add(request);
+    return ComicRefreshApplyResult(
+      status: ComicRefreshApplyStatus.applied,
+      insertedCount: request.links.length,
+      updatedCount: 0,
+      totalCount: request.links.length,
+      coverPromoted: false,
+    );
   }
 }
 

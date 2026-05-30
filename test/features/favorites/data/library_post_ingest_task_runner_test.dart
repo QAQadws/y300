@@ -3,7 +3,7 @@ import 'package:y300/features/comic/data/comic_favorite_auto_refresh_coordinator
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
-import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
+import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
@@ -16,6 +16,21 @@ import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
 void main() {
   group('DefaultLibraryPostIngestTaskRunner', () {
+    test('canRun returns false for backfill task when coordinator is missing', () {
+      const runner = DefaultLibraryPostIngestTaskRunner();
+
+      expect(
+        runner.canRun(
+          const ComicAutoRefreshBackfillTask(
+            comicId: 'comic:1',
+            sourceTid: '100',
+            favoriteTitle: 'Favorite',
+          ),
+        ),
+        isFalse,
+      );
+    });
+
     test('ComicAutoRefreshTask delegates to coordinator.refreshAfterFavoriteIngest', () async {
       final coordinator = _RecordingAutoRefreshCoordinator();
       final runner = DefaultLibraryPostIngestTaskRunner(
@@ -364,10 +379,9 @@ class _RecordingAutoRefreshCoordinator
     extends ComicFavoriteAutoRefreshCoordinator {
   _RecordingAutoRefreshCoordinator()
       : super(
-          repository: _NoopComicRepository(),
           refreshService: _NoopRefreshService(),
           searchQueue: _NoopSearchQueue(),
-          firstEpisodeCoverPromoter: _NoopCoverPromoter(),
+          refreshOutcomeApplier: const _NoopRefreshOutcomeApplier(),
           shelfRefreshBus: _UnusedBus.instance,
           subjectParser: const RuleBasedComicSubjectParser(),
         );
@@ -426,10 +440,9 @@ class _ThrowingAutoRefreshCoordinator
     extends ComicFavoriteAutoRefreshCoordinator {
   _ThrowingAutoRefreshCoordinator()
       : super(
-          repository: _NoopComicRepository(),
           refreshService: _NoopRefreshService(),
           searchQueue: _NoopSearchQueue(),
-          firstEpisodeCoverPromoter: _NoopCoverPromoter(),
+          refreshOutcomeApplier: const _NoopRefreshOutcomeApplier(),
           shelfRefreshBus: _UnusedBus.instance,
           subjectParser: const RuleBasedComicSubjectParser(),
         );
@@ -458,10 +471,14 @@ class _ThrowingAutoRefreshCoordinator
   }
 }
 
-class _NoopComicRepository implements ComicRepository {
+class _NoopRefreshOutcomeApplier implements ComicRefreshOutcomeApplier {
+  const _NoopRefreshOutcomeApplier();
+
   @override
-  dynamic noSuchMethod(Invocation invocation) {
-    return super.noSuchMethod(invocation);
+  Future<ComicRefreshApplyResult> apply(
+    ComicRefreshApplyRequest request,
+  ) async {
+    return const ComicRefreshApplyResult.skipped();
   }
 }
 
@@ -481,6 +498,16 @@ class _NoopRefreshService implements ComicEpisodeRefreshService {
     ComicEpisodeRefreshRequest request,
   ) async {
     return const <ComicEpisodeLink>[];
+  }
+
+  @override
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogThenFallback(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    return const ComicEpisodeRefreshOutcome(
+      source: ComicEpisodeRefreshSource.empty,
+      links: <ComicEpisodeLink>[],
+    );
   }
 
   @override
@@ -524,11 +551,6 @@ class _NoopSearchQueue implements ComicSearchRefreshQueueEnqueuer {
       deduplicated: false,
     );
   }
-}
-
-class _NoopCoverPromoter implements ComicFirstEpisodeCoverPromoter {
-  @override
-  Future<bool> promoteIfPossible({required String comicId}) async => false;
 }
 
 class _UnusedBus {

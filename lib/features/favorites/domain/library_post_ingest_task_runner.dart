@@ -37,6 +37,12 @@ class LibraryPostIngestTaskFailure {
 /// 自动刷新、重复合并、书架通知统一在 runner 内执行，并在内部捕获非关键
 /// 失败，避免污染收藏详情补全主流程。
 abstract class LibraryPostIngestTaskRunner {
+  /// Whether this runner has the dependencies required to execute [task].
+  ///
+  /// Services can use this as a lightweight capability probe before starting a
+  /// workflow that would otherwise persist a global "completed" marker.
+  bool canRun(LibraryPostIngestTask task);
+
   Future<LibraryPostIngestTaskReport> runAll(
     List<LibraryPostIngestTask> tasks,
   );

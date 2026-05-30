@@ -684,6 +684,146 @@ void main() {
       expect(outcome.links.map((link) => link.url), contains('thread-101-1-1.html'));
       expect(discovery.catalogFallbackAllowedByTid['100'], isFalse);
     });
+
+    test('catalog-then-fallback returns catalog outcome when catalog matches', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{
+          '100': const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: 'EP 01'),
+          ],
+        },
+        strategyByTid: const <String, EpisodeDiscoveryStrategy>{
+          '100': EpisodeDiscoveryStrategy.catalog,
+        },
+      );
+      final service = NetworkComicEpisodeRefreshService(
+        discoveryService: discovery,
+        searchService: _FakeDiscuzSearchService(
+          response: const DiscuzSearchResponse(
+            items: <DiscuzSearchResultItem>[],
+            rateLimited: false,
+          ),
+        ),
+        subjectParser: const RuleBasedComicSubjectParser(),
+      );
+
+      final outcome = await service.fetchCatalogThenFallback(
+        const ComicEpisodeRefreshRequest(sourceTid: '100'),
+      );
+
+      expect(outcome.source, ComicEpisodeRefreshSource.catalog);
+      expect(outcome.catalogMatched, isTrue);
+      expect(outcome.links, hasLength(1));
+    });
+
+    test('catalog-then-fallback returns search outcome when catalog misses', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{
+          '100': const <ComicEpisodeLink>[],
+          '301': const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-301-1-1.html', rawText: 'EP 03'),
+          ],
+        },
+      );
+      final searchService = _FakeDiscuzSearchService(
+        response: const DiscuzSearchResponse(
+          items: <DiscuzSearchResultItem>[
+            DiscuzSearchResultItem(
+              tid: '301',
+              title: '[Scan] Parsed Display Comic EP 03',
+              url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301',
+              fid: '30',
+            ),
+          ],
+          rateLimited: false,
+        ),
+      );
+      final service = NetworkComicEpisodeRefreshService(
+        discoveryService: discovery,
+        searchService: searchService,
+        subjectParser: const RuleBasedComicSubjectParser(),
+        threadSeedFetcher: (_) async {
+          return const ThreadSeed(subject: '[Scan] Current Thread EP 01');
+        },
+      );
+
+      final outcome = await service.fetchCatalogThenFallback(
+        const ComicEpisodeRefreshRequest(
+          sourceTid: '100',
+          displayTitle: '[Favorite] Parsed Display Comic EP 02',
+        ),
+      );
+
+      expect(outcome.source, ComicEpisodeRefreshSource.search);
+      expect(outcome.usedSearch, isTrue);
+      expect(outcome.links, isNotEmpty);
+      expect(searchService.calledKeywords, <String>['Parsed Display Comic']);
+    });
+
+    test('catalog-then-fallback returns current-only outcome when search misses', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{
+          '100': const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-100-1-1.html', rawText: 'EP 01'),
+          ],
+        },
+      );
+      final service = NetworkComicEpisodeRefreshService(
+        discoveryService: discovery,
+        searchService: _FakeDiscuzSearchService(
+          response: const DiscuzSearchResponse(
+            items: <DiscuzSearchResultItem>[],
+            rateLimited: false,
+          ),
+        ),
+        subjectParser: const RuleBasedComicSubjectParser(),
+        threadSeedFetcher: (_) async {
+          return const ThreadSeed(subject: 'Current Comic EP 01');
+        },
+      );
+
+      final outcome = await service.fetchCatalogThenFallback(
+        const ComicEpisodeRefreshRequest(
+          sourceTid: '100',
+          displayTitle: 'Current Comic EP 01',
+        ),
+      );
+
+      expect(outcome.source, ComicEpisodeRefreshSource.currentOnly);
+      expect(outcome.usedSearch, isTrue);
+      expect(outcome.links, hasLength(1));
+    });
+
+    test('catalog-then-fallback returns empty outcome when nothing is found', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{
+          '100': const <ComicEpisodeLink>[],
+        },
+      );
+      final service = NetworkComicEpisodeRefreshService(
+        discoveryService: discovery,
+        searchService: _FakeDiscuzSearchService(
+          response: const DiscuzSearchResponse(
+            items: <DiscuzSearchResultItem>[],
+            rateLimited: false,
+          ),
+        ),
+        subjectParser: const RuleBasedComicSubjectParser(),
+        threadSeedFetcher: (_) async {
+          return const ThreadSeed(subject: 'Current Comic EP 01');
+        },
+      );
+
+      final outcome = await service.fetchCatalogThenFallback(
+        const ComicEpisodeRefreshRequest(
+          sourceTid: '100',
+          displayTitle: 'Current Comic EP 01',
+        ),
+      );
+
+      expect(outcome.source, ComicEpisodeRefreshSource.empty);
+      expect(outcome.links, isEmpty);
+    });
   });
 }
 
