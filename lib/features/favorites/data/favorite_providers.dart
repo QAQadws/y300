@@ -11,10 +11,12 @@ import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/favorites/data/favorite_content_ingest_registry.dart';
 import 'package:y300/features/favorites/data/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/favorite_repository.dart';
+import 'package:y300/features/favorites/data/favorite_shelf_bootstrapper.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/library_post_ingest_task_runner.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/domain/favorite_content_ingest.dart';
+import 'package:y300/features/favorites/domain/favorite_shelf_bootstrapper.dart';
 import 'package:y300/features/favorites/domain/library_post_ingest_task_runner.dart';
 import 'package:y300/features/favorites/presentation/adapters/favorite_shelf_adapter.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
@@ -115,6 +117,14 @@ final favoriteSyncServiceProvider = Provider<FavoriteSyncService>((ref) {
     postIngestTaskRunner: ref.watch(libraryPostIngestTaskRunnerProvider),
     shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
     downloadStorageService: ref.watch(downloadStorageServiceProvider),
+  );
+});
+
+final favoriteShelfBootstrapperProvider =
+    Provider<FavoriteShelfBootstrapper>((ref) {
+  return DefaultFavoriteShelfBootstrapper(
+    repository: ref.watch(localFavoriteRepositoryProvider),
+    syncService: ref.watch(favoriteSyncServiceProvider),
   );
 });
 

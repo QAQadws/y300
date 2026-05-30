@@ -11,6 +11,7 @@ import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
+import 'package:y300/features/favorites/domain/favorite_shelf_bootstrapper.dart';
 import 'package:y300/features/favorites/presentation/favorite_shelf_page.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
@@ -22,6 +23,7 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
   testWidgets('FavoriteShelfPage builds unified shelf in list mode', (tester) async {
+    final bootstrapper = _RecordingFavoriteShelfBootstrapper();
     final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
       ComicSearchRefreshQueueSnapshot.empty,
     );
@@ -31,6 +33,7 @@ void main() {
         overrides: [
           localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository()),
           favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
+          favoriteShelfBootstrapperProvider.overrideWith((ref) => bootstrapper),
           libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
           comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
         ],
@@ -43,10 +46,16 @@ void main() {
     expect(find.text('收藏'), findsOneWidget);
     expect(find.byKey(const Key('unified-shelf-list-view')), findsOneWidget);
     expect(find.text('收藏帖'), findsOneWidget);
+    expect(bootstrapper.startCallCount, 1);
   });
 
   testWidgets('FavoriteShelfPage shows first-sync progress while cache is building', (tester) async {
     final sync = _FakeFavoriteSyncService(autoComplete: false);
+    final bootstrapper = _RecordingFavoriteShelfBootstrapper(
+      onStart: () async {
+        await sync.sync();
+      },
+    );
     final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
       ComicSearchRefreshQueueSnapshot.empty,
     );
@@ -56,6 +65,7 @@ void main() {
         overrides: [
           localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository(hasSnapshot: false)),
           favoriteSyncServiceProvider.overrideWith((ref) => sync),
+          favoriteShelfBootstrapperProvider.overrideWith((ref) => bootstrapper),
           libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
           comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
         ],
@@ -66,9 +76,25 @@ void main() {
 
     expect(find.byKey(const Key('unified-shelf-task-progress-bar')), findsOneWidget);
     expect(find.text('正在解析: 收藏帖'), findsOneWidget);
+    expect(bootstrapper.startCallCount, 1);
     sync.completePendingSync();
     await tester.pumpAndSettle();
   });
+}
+
+class _RecordingFavoriteShelfBootstrapper implements FavoriteShelfBootstrapper {
+  _RecordingFavoriteShelfBootstrapper({
+    Future<void> Function()? onStart,
+  }) : _onStart = onStart;
+
+  final Future<void> Function()? _onStart;
+  int startCallCount = 0;
+
+  @override
+  Future<void> startIfNeeded() async {
+    startCallCount++;
+    await _onStart?.call();
+  }
 }
 
 class _FakeFavoriteSyncService implements FavoriteSyncService {

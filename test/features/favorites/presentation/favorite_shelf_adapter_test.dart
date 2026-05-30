@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
@@ -20,10 +18,9 @@ import 'package:y300/features/library_shared/domain/models/library_state_models.
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
-  test('FavoriteShelfAdapter defaults to favorite list module and starts first sync without blocking categories', () async {
+  test('FavoriteShelfAdapter loads categories without triggering sync side effects', () async {
     final local = _FakeLocalFavoriteRepository();
     final sync = _FakeFavoriteSyncService();
-    sync.pauseNextSync();
     final adapter = FavoriteShelfAdapter(
       local,
       syncService: sync,
@@ -32,17 +29,15 @@ void main() {
 
     final categories = await adapter.loadCategories();
     await adapter.loadCategories();
-    await sync.syncStarted;
 
     expect(adapter.moduleKey, LibraryModuleKey.favorite);
     expect(adapter.defaultDisplayMode, LibraryDisplayMode.list);
-    expect(sync.syncCount, 1);
+    expect(sync.syncCount, 0);
+    expect(sync.maintenanceCount, 0);
     expect(categories.single.categoryId, favoriteDefaultCategoryId);
-    expect(sync.hasPendingSync, isTrue);
-    sync.completePausedSync();
   });
 
-  test('FavoriteShelfAdapter runs maintenance when cache snapshot already exists', () async {
+  test('FavoriteShelfAdapter querySnapshot stays pure read without maintenance', () async {
     final local = _FakeLocalFavoriteRepository()
       ..snapshot = FavoriteSyncSnapshot(
         syncKey: favoriteSyncKey,
@@ -57,11 +52,15 @@ void main() {
       stateRepository: _FakeLibraryStateRepository(),
     );
 
-    await adapter.loadCategories();
-    await Future<void>.delayed(Duration.zero);
+    final snapshot = await adapter.querySnapshot(
+      filters: LibraryFilterSet.defaults,
+      sortOption: LibraryShelfSortOption.defaults,
+      keyword: '',
+    );
 
     expect(sync.syncCount, 0);
-    expect(sync.maintenanceCount, 1);
+    expect(sync.maintenanceCount, 0);
+    expect(snapshot.categories.single.categoryId, favoriteDefaultCategoryId);
   });
 
   test('FavoriteShelfAdapter returns metadata before warming comic cover, then writes local path back', () async {
@@ -241,8 +240,6 @@ ComicSearchRefreshQueueEntry _queueEntry({
 
 class _FakeFavoriteSyncService implements FavoriteSyncService {
   final _progress = ValueNotifier<FavoriteSyncProgress>(FavoriteSyncProgress.idle);
-  Completer<void>? _pausedSync;
-  Completer<void>? _syncStarted;
   int syncCount = 0;
   int maintenanceCount = 0;
 
@@ -257,11 +254,6 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
   @override
   Future<FavoriteSyncResult> sync() async {
     syncCount++;
-    final started = _syncStarted;
-    if (started != null && !started.isCompleted) {
-      started.complete();
-    }
-    await (_pausedSync?.future ?? Future<void>.value());
     return const FavoriteSyncResult(
       mode: FavoriteSyncMode.fullDiff,
       remoteCount: 1,
@@ -282,22 +274,6 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
 
   void markSynced() {
     syncCount = 1;
-  }
-
-  bool get hasPendingSync => _pausedSync != null && !_pausedSync!.isCompleted;
-
-  Future<void> get syncStarted => _syncStarted?.future ?? Future<void>.value();
-
-  void pauseNextSync() {
-    _pausedSync = Completer<void>();
-    _syncStarted = Completer<void>();
-  }
-
-  void completePausedSync() {
-    final paused = _pausedSync;
-    if (paused != null && !paused.isCompleted) {
-      paused.complete();
-    }
   }
 }
 

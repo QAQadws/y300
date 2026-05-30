@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/cache/domain/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
@@ -64,7 +62,6 @@ class FavoriteShelfAdapter
   final ComicCoverCacheWriterResolver _comicCoverCacheWriterResolver;
   final NovelCoverCacheWriterResolver _novelCoverCacheWriterResolver;
   final ValueListenable<LibraryShelfTaskProgress?> _taskProgress;
-  var _initialSyncAttempted = false;
 
   @override
   ValueListenable<LibraryShelfTaskProgress?> get taskProgress => _taskProgress;
@@ -85,7 +82,6 @@ class FavoriteShelfAdapter
 
   @override
   Future<List<LibraryCategory>> loadCategories() async {
-    _startInitialSyncIfNeeded();
     return _repository.loadVisibleCategories();
   }
 
@@ -133,7 +129,6 @@ class FavoriteShelfAdapter
     required LibraryShelfSortOption sortOption,
     required String keyword,
   }) async {
-    _startInitialSyncIfNeeded();
     final snapshotRepository = _repository is FavoriteShelfSnapshotRepository
         ? _repository as FavoriteShelfSnapshotRepository
         : null;
@@ -263,36 +258,6 @@ class FavoriteShelfAdapter
   @override
   Future<String?> pickRandomWorkId({required String categoryId}) {
     return _repository.pickRandomWorkId(categoryId: categoryId);
-  }
-
-  void _startInitialSyncIfNeeded() {
-    if (_initialSyncAttempted) {
-      return;
-    }
-    _initialSyncAttempted = true;
-    // First entry may either sync remote data or run a one-shot local
-    // maintenance backfill. Keep both off the metadata critical path so the
-    // shelf chrome and progress banner can render immediately.
-    unawaited(_syncIfNoSnapshot());
-  }
-
-  Future<void> _syncIfNoSnapshot() async {
-    try {
-      final snapshot = await _repository.getSyncSnapshot();
-      if (snapshot != null) {
-        final missingDetails = await _repository.countMissingDetailRecords();
-        if (missingDetails > 0) {
-          await _syncService.sync();
-        } else {
-          await _syncService.runBackgroundMaintenance();
-        }
-        return;
-      }
-      await _syncService.sync();
-    } catch (_) {
-      // The sync service owns progress/error reporting. Keep the initial shelf
-      // metadata path non-blocking even if the first remote sync fails.
-    }
   }
 
   @override

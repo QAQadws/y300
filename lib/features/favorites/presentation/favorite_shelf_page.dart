@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
@@ -9,7 +11,7 @@ import 'package:y300/features/novel/presentation/novel_detail_page.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
-class FavoriteShelfPage extends ConsumerWidget {
+class FavoriteShelfPage extends ConsumerStatefulWidget {
   const FavoriteShelfPage({
     super.key,
     this.isActive = true,
@@ -18,13 +20,32 @@ class FavoriteShelfPage extends ConsumerWidget {
   final bool isActive;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<FavoriteShelfPage> createState() => _FavoriteShelfPageState();
+}
+
+class _FavoriteShelfPageState extends ConsumerState<FavoriteShelfPage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      unawaited(
+        ref.read(favoriteShelfBootstrapperProvider).startIfNeeded(),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ref = this.ref;
     final adapter = ref.watch(favoriteShelfAdapterProvider);
     final repository = ref.watch(localFavoriteRepositoryProvider);
     return UnifiedShelfPage(
       adapter: adapter,
       imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
-      isActive: isActive,
+      isActive: widget.isActive,
       onOpenWork: (context, workId) async {
         final target = await repository.getRouteTargetByShelfWorkId(workId);
         if (!context.mounted || target == null) {
