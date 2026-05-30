@@ -7,6 +7,7 @@ import 'package:y300/features/comic/data/comic_search_refresh_queue_providers.da
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/domain/services/comic_post_aggregation_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/favorites/data/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/favorite_repository.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
@@ -49,16 +50,23 @@ final comicFavoriteAutoRefreshCoordinatorProvider =
   );
 });
 
-final favoriteSyncServiceProvider = Provider<FavoriteSyncService>((ref) {
-  return NetworkFavoriteSyncService(
-    remoteRepository: ref.watch(favoriteRepositoryProvider),
-    localRepository: ref.watch(localFavoriteRepositoryProvider),
+final favoriteDetailContextLoaderProvider =
+    Provider<FavoriteDetailContextLoader>((ref) {
+  return DefaultFavoriteDetailContextLoader(
     loadThreadDetail: (tid) => ref.read(threadRepositoryProvider).getThreadDetail(
           tid: tid,
           page: 1,
         ),
     loadTagLookup: () => ref.read(forumTagLookupProvider.future),
     classifier: ref.watch(threadContentClassifierProvider),
+  );
+});
+
+final favoriteSyncServiceProvider = Provider<FavoriteSyncService>((ref) {
+  return NetworkFavoriteSyncService(
+    remoteRepository: ref.watch(favoriteRepositoryProvider),
+    localRepository: ref.watch(localFavoriteRepositoryProvider),
+    detailContextLoader: ref.watch(favoriteDetailContextLoaderProvider),
     comicIngestService: ref.watch(comicFavoriteIngestServiceProvider),
     novelIngestService: ref.watch(novelFavoriteIngestServiceProvider),
     comicAutoRefreshCoordinator: ref.watch(comicFavoriteAutoRefreshCoordinatorProvider),

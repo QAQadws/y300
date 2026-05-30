@@ -13,6 +13,7 @@ import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_m
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
+import 'package:y300/features/favorites/data/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/favorite_repository.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
@@ -47,9 +48,7 @@ void main() {
     final service = NetworkFavoriteSyncService(
       remoteRepository: remote,
       localRepository: local,
-      loadThreadDetail: (tid) async => ApiSuccess(_detailForTid(tid)),
-      loadTagLookup: () async => _lookup(),
-      classifier: const ThreadContentClassifier(),
+      detailContextLoader: _contextLoader(),
       comicIngestService: comicIngest,
       novelIngestService: novelIngest,
       detailBatchLimit: 10,
@@ -63,6 +62,41 @@ void main() {
     expect(comicIngest.upsertedTids, <String>['100']);
     expect(novelIngest.upsertedTids, <String>['200']);
     expect(local.records['300']?.contentKind, ThreadContentKind.forum);
+  });
+
+  test('remote list failure fails sync before detail ingestion', () async {
+    final local = _MemoryLocalFavoriteRepository();
+    final comicIngest = _FakeComicIngestService();
+    final novelIngest = _FakeNovelIngestService();
+    var detailLoadCount = 0;
+    final service = NetworkFavoriteSyncService(
+      remoteRepository: const _FailingFavoriteRepository('远端失败'),
+      localRepository: local,
+      detailContextLoader: _contextLoader(
+        loadThreadDetail: (tid) async {
+          detailLoadCount++;
+          return ApiSuccess(_detailForTid(tid));
+        },
+      ),
+      comicIngestService: comicIngest,
+      novelIngestService: novelIngest,
+    );
+
+    await expectLater(
+      service.sync(),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          '远端失败',
+        ),
+      ),
+    );
+
+    expect(detailLoadCount, 0);
+    expect(comicIngest.upsertedTids, isEmpty);
+    expect(novelIngest.upsertedTids, isEmpty);
+    expect(local.syncFailureMessages, <String>['远端失败']);
   });
 
   test('count decrease does full diff and removes disappeared module shelf items', () async {
@@ -87,9 +121,7 @@ void main() {
     final service = NetworkFavoriteSyncService(
       remoteRepository: remote,
       localRepository: local,
-      loadThreadDetail: (tid) async => ApiSuccess(_detailForTid(tid)),
-      loadTagLookup: () async => _lookup(),
-      classifier: const ThreadContentClassifier(),
+      detailContextLoader: _contextLoader(),
       comicIngestService: _FakeComicIngestService(),
       novelIngestService: novelIngest,
       detailBatchLimit: 10,
@@ -114,16 +146,16 @@ void main() {
     final service = NetworkFavoriteSyncService(
       remoteRepository: remote,
       localRepository: local,
-      loadThreadDetail: (tid) async {
-        if (tid == '100') {
-          return const ApiFailure<ThreadDetailData>(
-            ApiError(type: ApiErrorType.network, message: '网络错误'),
-          );
-        }
-        return ApiSuccess(_detailForTid(tid));
-      },
-      loadTagLookup: () async => _lookup(),
-      classifier: const ThreadContentClassifier(),
+      detailContextLoader: _contextLoader(
+        loadThreadDetail: (tid) async {
+          if (tid == '100') {
+            return const ApiFailure<ThreadDetailData>(
+              ApiError(type: ApiErrorType.network, message: '网络错误'),
+            );
+          }
+          return ApiSuccess(_detailForTid(tid));
+        },
+      ),
       comicIngestService: _FakeComicIngestService(),
       novelIngestService: novelIngest,
       detailBatchLimit: 1,
@@ -151,9 +183,7 @@ void main() {
     final service = NetworkFavoriteSyncService(
       remoteRepository: remote,
       localRepository: _MemoryLocalFavoriteRepository(),
-      loadThreadDetail: (tid) async => ApiSuccess(_detailForTid(tid)),
-      loadTagLookup: () async => _lookup(),
-      classifier: const ThreadContentClassifier(),
+      detailContextLoader: _contextLoader(),
       comicIngestService: _FakeComicIngestService(),
       novelIngestService: _FakeNovelIngestService(),
       detailBatchLimit: 10,
@@ -210,9 +240,7 @@ void main() {
     final service = NetworkFavoriteSyncService(
       remoteRepository: remote,
       localRepository: _MemoryLocalFavoriteRepository(),
-      loadThreadDetail: (tid) async => ApiSuccess(_detailForTid(tid)),
-      loadTagLookup: () async => _lookup(),
-      classifier: const ThreadContentClassifier(),
+      detailContextLoader: _contextLoader(),
       comicIngestService: _FakeComicIngestService(),
       novelIngestService: novelIngest,
       shelfRefreshBus: bus,
@@ -259,11 +287,11 @@ void main() {
     final service = NetworkFavoriteSyncService(
       remoteRepository: remote,
       localRepository: _MemoryLocalFavoriteRepository(),
-      loadThreadDetail: (tid) async => ApiSuccess(_detailForTid(tid)),
-      loadTagLookup: () async => _lookup(
-        comicTagName: ComicFavoriteAutoRefreshCoordinator.longRunningTagName,
+      detailContextLoader: _contextLoader(
+        loadTagLookup: () async => _lookup(
+          comicTagName: ComicFavoriteAutoRefreshCoordinator.longRunningTagName,
+        ),
       ),
-      classifier: const ThreadContentClassifier(),
       comicIngestService: _FakeComicIngestService(),
       novelIngestService: _FakeNovelIngestService(),
       comicAutoRefreshCoordinator: coordinator,
@@ -275,6 +303,78 @@ void main() {
     expect(queue.enqueuedTitles, <String>['[Fav] Long Comic EP 02']);
     expect(queue.enqueuedRequests.single.comicId, 'yamibo:100');
     expect(queue.enqueuedRequests.single.sourceTid, '100');
+  });
+
+  test('first sync skips catalog miss search for non long-running comic tag', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(page: 1, totalCount: 1, items: <FavoriteThread>[
+        _favoriteThread(tid: '100', title: '[Fav] Short Comic EP 02'),
+      ]),
+    });
+    final queue = _RecordingSearchQueue();
+    final bus = LibraryShelfRefreshBus();
+    addTearDown(bus.dispose);
+    final coordinator = ComicFavoriteAutoRefreshCoordinator(
+      repository: _RecordingComicRepository(),
+      refreshService: _BackfillRefreshService(
+        catalogOutcome: const ComicEpisodeRefreshOutcome(
+          source: ComicEpisodeRefreshSource.empty,
+          links: <ComicEpisodeLink>[],
+        ),
+      ),
+      searchQueue: queue,
+      firstEpisodeCoverPromoter: _RecordingCoverPromoter(),
+      shelfRefreshBus: bus,
+      subjectParser: const RuleBasedComicSubjectParser(),
+    );
+    final service = NetworkFavoriteSyncService(
+      remoteRepository: remote,
+      localRepository: _MemoryLocalFavoriteRepository(),
+      detailContextLoader: _contextLoader(),
+      comicIngestService: _FakeComicIngestService(),
+      novelIngestService: _FakeNovelIngestService(),
+      comicAutoRefreshCoordinator: coordinator,
+      detailBatchLimit: 10,
+    );
+
+    await service.sync();
+
+    expect(queue.enqueuedRequests, isEmpty);
+  });
+
+  test('comic auto refresh failure still marks favorite detail loaded', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(page: 1, totalCount: 1, items: <FavoriteThread>[
+        _favoriteThread(tid: '100', title: '漫画'),
+      ]),
+    });
+    final bus = LibraryShelfRefreshBus();
+    addTearDown(bus.dispose);
+    final coordinator = ComicFavoriteAutoRefreshCoordinator(
+      repository: _RecordingComicRepository(),
+      refreshService: const _ThrowingRefreshService(),
+      searchQueue: _RecordingSearchQueue(),
+      firstEpisodeCoverPromoter: _RecordingCoverPromoter(),
+      shelfRefreshBus: bus,
+      subjectParser: const RuleBasedComicSubjectParser(),
+    );
+    final local = _MemoryLocalFavoriteRepository();
+    final service = NetworkFavoriteSyncService(
+      remoteRepository: remote,
+      localRepository: local,
+      detailContextLoader: _contextLoader(),
+      comicIngestService: _FakeComicIngestService(),
+      novelIngestService: _FakeNovelIngestService(),
+      comicAutoRefreshCoordinator: coordinator,
+      detailBatchLimit: 10,
+    );
+
+    final result = await service.sync();
+
+    expect(result.detailLoadedCount, 1);
+    expect(local.records['100']?.contentKind, ThreadContentKind.comic);
+    expect(local.records['100']?.workId, 'yamibo:100');
+    expect(local.records['100']?.detailLoadedAt, isNotNull);
   });
 
   test('background maintenance queues already-loaded comic favorites for auto refresh', () async {
@@ -309,9 +409,9 @@ void main() {
     final service = NetworkFavoriteSyncService(
       remoteRepository: _FakeFavoriteRepository(const <int, FavoriteThreadsPage>{}),
       localRepository: local,
-      loadThreadDetail: (tid) => throw StateError('detail should not be loaded'),
-      loadTagLookup: () async => _lookup(),
-      classifier: const ThreadContentClassifier(),
+      detailContextLoader: _contextLoader(
+        loadThreadDetail: (tid) => throw StateError('detail should not be loaded'),
+      ),
       comicIngestService: _FakeComicIngestService(),
       novelIngestService: _FakeNovelIngestService(),
       comicAutoRefreshCoordinator: coordinator,
@@ -337,9 +437,7 @@ void main() {
     final service = NetworkFavoriteSyncService(
       remoteRepository: remote,
       localRepository: _MemoryLocalFavoriteRepository(),
-      loadThreadDetail: (tid) async => ApiSuccess(_detailForTid(tid)),
-      loadTagLookup: () async => _lookup(),
-      classifier: const ThreadContentClassifier(),
+      detailContextLoader: _contextLoader(),
       comicIngestService: _FakeComicIngestService(),
       novelIngestService: _FakeNovelIngestService(),
       downloadStorageService: storage,
@@ -380,9 +478,7 @@ void main() {
     final service = NetworkFavoriteSyncService(
       remoteRepository: remote,
       localRepository: _MemoryLocalFavoriteRepository(),
-      loadThreadDetail: (tid) async => ApiSuccess(_detailForTid(tid)),
-      loadTagLookup: () async => _lookup(),
-      classifier: const ThreadContentClassifier(),
+      detailContextLoader: _contextLoader(),
       comicIngestService: _FakeComicIngestService(),
       novelIngestService: _FakeNovelIngestService(),
       comicDuplicateMergeService: ComicDuplicateMergeService(
@@ -435,9 +531,7 @@ void main() {
     final service = NetworkFavoriteSyncService(
       remoteRepository: remote,
       localRepository: local,
-      loadThreadDetail: (tid) async => ApiSuccess(_detailForTid(tid)),
-      loadTagLookup: () async => _lookup(),
-      classifier: const ThreadContentClassifier(),
+      detailContextLoader: _contextLoader(),
       comicIngestService: _FakeComicIngestService(),
       novelIngestService: _FakeNovelIngestService(),
       comicDuplicateMergeService: ComicDuplicateMergeService(
@@ -452,6 +546,49 @@ void main() {
     expect(duplicateRepository.mergeAllCallCount, 0);
     expect(duplicateRepository.mergeComicIds, <String>['yamibo:100']);
     expect(local.records['100']?.workId, 'yamibo:old');
+  });
+
+  test('incremental comic detail keeps ingested work id when duplicate merge fails', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(page: 1, totalCount: 2, items: <FavoriteThread>[
+        _favoriteThread(tid: '100', title: '新增漫画'),
+        _favoriteThread(tid: '999', title: '旧收藏'),
+      ]),
+    });
+    final local = _MemoryLocalFavoriteRepository(
+      snapshot: FavoriteSyncSnapshot(
+        syncKey: favoriteSyncKey,
+        remoteCount: 1,
+        localActiveCount: 1,
+        lastSyncedAt: DateTime(2026, 1, 1),
+      ),
+      seedRecords: <FavoriteThreadCacheRecord>[
+        _cacheRecord(
+          tid: '999',
+          title: '旧收藏',
+          contentKind: ThreadContentKind.forum,
+          workId: 'thread:999',
+          detailLoadedAt: DateTime(2026, 1, 1),
+        ),
+      ],
+    );
+    final service = NetworkFavoriteSyncService(
+      remoteRepository: remote,
+      localRepository: local,
+      detailContextLoader: _contextLoader(),
+      comicIngestService: _FakeComicIngestService(),
+      novelIngestService: _FakeNovelIngestService(),
+      comicDuplicateMergeService: const ComicDuplicateMergeService(
+        repository: _ThrowingDuplicateMergeRepository(),
+      ),
+      detailBatchLimit: 10,
+    );
+
+    final result = await service.sync();
+
+    expect(result.detailLoadedCount, 1);
+    expect(local.records['100']?.workId, 'yamibo:100');
+    expect(local.records['100']?.detailLoadedAt, isNotNull);
   });
 
   test('recently added comic sync refreshes target thread and queues search on catalog miss', () async {
@@ -504,9 +641,7 @@ void main() {
     final service = NetworkFavoriteSyncService(
       remoteRepository: remote,
       localRepository: local,
-      loadThreadDetail: (tid) async => ApiSuccess(_detailForTid(tid)),
-      loadTagLookup: () async => _lookup(),
-      classifier: const ThreadContentClassifier(),
+      detailContextLoader: _contextLoader(),
       comicIngestService: _FakeComicIngestService(),
       novelIngestService: _FakeNovelIngestService(),
       comicAutoRefreshCoordinator: coordinator,
@@ -567,12 +702,12 @@ void main() {
     final service = NetworkFavoriteSyncService(
       remoteRepository: remote,
       localRepository: local,
-      loadThreadDetail: (tid) async {
-        detailLoadCount++;
-        return ApiSuccess(_detailForTid(tid));
-      },
-      loadTagLookup: () async => _lookup(),
-      classifier: const ThreadContentClassifier(),
+      detailContextLoader: _contextLoader(
+        loadThreadDetail: (tid) async {
+          detailLoadCount++;
+          return ApiSuccess(_detailForTid(tid));
+        },
+      ),
       comicIngestService: _FakeComicIngestService(),
       novelIngestService: _FakeNovelIngestService(),
       comicAutoRefreshCoordinator: coordinator,
@@ -628,6 +763,26 @@ class _FakeFavoriteRepository implements FavoriteRepository {
   Future<ApiResult<FavoriteThreadsPage>> getFavoriteThreads({required int page}) async {
     requestedPages.add(page);
     return ApiSuccess(pages[page] ?? _page(page: page, totalCount: 0, items: const <FavoriteThread>[]));
+  }
+
+  @override
+  Future<ApiResult<List<FavoriteForum>>> getFavoriteForums() async {
+    return const ApiSuccess<List<FavoriteForum>>(<FavoriteForum>[]);
+  }
+}
+
+class _FailingFavoriteRepository implements FavoriteRepository {
+  const _FailingFavoriteRepository(this.message);
+
+  final String message;
+
+  @override
+  Future<ApiResult<FavoriteThreadsPage>> getFavoriteThreads({
+    required int page,
+  }) async {
+    return ApiFailure<FavoriteThreadsPage>(
+      ApiError(type: ApiErrorType.network, message: message),
+    );
   }
 
   @override
@@ -701,6 +856,36 @@ class _BackfillRefreshService implements ComicEpisodeRefreshService {
       source: ComicEpisodeRefreshSource.empty,
       links: <ComicEpisodeLink>[],
     );
+  }
+}
+
+class _ThrowingRefreshService implements ComicEpisodeRefreshService {
+  const _ThrowingRefreshService();
+
+  @override
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    throw StateError('refresh failed');
+  }
+
+  @override
+  Future<List<ComicEpisodeLink>> fetchEpisodeLinks(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    throw StateError('refresh failed');
+  }
+
+  @override
+  Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
+    throw StateError('refresh failed');
+  }
+
+  @override
+  Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
+    ComicEpisodeRefreshRequest request,
+  ) async {
+    throw StateError('refresh failed');
   }
 }
 
@@ -804,6 +989,22 @@ class _FakeDuplicateMergeRepository implements ComicDuplicateMergeRepository {
   }
 }
 
+class _ThrowingDuplicateMergeRepository implements ComicDuplicateMergeRepository {
+  const _ThrowingDuplicateMergeRepository();
+
+  @override
+  Future<List<ComicDuplicateGroup>> findDuplicateGroups({String? comicId}) {
+    throw StateError('merge failed');
+  }
+
+  @override
+  Future<ComicDuplicateMergeResult> mergeDuplicateGroup({
+    required Set<String> comicIds,
+  }) {
+    throw StateError('merge failed');
+  }
+}
+
 class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
   _MemoryLocalFavoriteRepository({
     FavoriteSyncSnapshot? snapshot,
@@ -816,6 +1017,7 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
   FavoriteSyncSnapshot? _snapshot;
   bool _comicBackfillCompleted = false;
   final Map<String, FavoriteThreadCacheRecord> records;
+  final List<String> syncFailureMessages = <String>[];
 
   @override
   Future<int> countActiveThreads() async => records.values.where((record) => record.isActive).length;
@@ -914,7 +1116,9 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
   Future<List<LibraryCategory>> loadVisibleCategories() async => const <LibraryCategory>[];
 
   @override
-  Future<void> markSyncFailure(String message) async {}
+  Future<void> markSyncFailure(String message) async {
+    syncFailureMessages.add(message);
+  }
 
   @override
   Future<List<FavoriteThreadCacheRecord>> markRemovedTids(Set<String> activeRemoteTids) async {
@@ -1083,5 +1287,17 @@ ForumTagLookup _lookup({String comicTagName = '韩国漫画'}) {
         ],
       ),
     ],
+  );
+}
+
+FavoriteDetailContextLoader _contextLoader({
+  FavoriteThreadDetailLoader? loadThreadDetail,
+  FavoriteTagLookupLoader? loadTagLookup,
+}) {
+  return DefaultFavoriteDetailContextLoader(
+    loadThreadDetail:
+        loadThreadDetail ?? ((tid) async => ApiSuccess(_detailForTid(tid))),
+    loadTagLookup: loadTagLookup ?? (() async => _lookup()),
+    classifier: const ThreadContentClassifier(),
   );
 }

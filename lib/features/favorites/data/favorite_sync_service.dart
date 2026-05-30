@@ -3,6 +3,7 @@ import 'package:y300/features/comic/data/comic_favorite_auto_refresh_coordinator
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/comic/data/comic_favorite_ingest_service.dart';
 import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
+import 'package:y300/features/favorites/data/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/favorite_repository.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
@@ -11,12 +12,8 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/novel/data/novel_favorite_ingest_service.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
-import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
-
-typedef FavoriteThreadDetailLoader = Future<ApiResult<ThreadDetailData>> Function(String tid);
-typedef FavoriteTagLookupLoader = Future<ForumTagLookup> Function();
 
 enum FavoriteSyncProgressPhase {
   idle,
@@ -85,9 +82,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   NetworkFavoriteSyncService({
     required FavoriteRepository remoteRepository,
     required LocalFavoriteRepository localRepository,
-    required FavoriteThreadDetailLoader loadThreadDetail,
-    required FavoriteTagLookupLoader loadTagLookup,
-    required ThreadContentClassifier classifier,
+    required FavoriteDetailContextLoader detailContextLoader,
     required ComicFavoriteIngestService comicIngestService,
     required NovelFavoriteIngestService novelIngestService,
     ComicFavoriteAutoRefreshCoordinator? comicAutoRefreshCoordinator,
@@ -97,9 +92,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     int detailBatchLimit = 20,
   })  : _remoteRepository = remoteRepository,
         _localRepository = localRepository,
-        _loadThreadDetail = loadThreadDetail,
-        _loadTagLookup = loadTagLookup,
-        _classifier = classifier,
+        _detailContextLoader = detailContextLoader,
         _comicIngestService = comicIngestService,
         _novelIngestService = novelIngestService,
         _comicAutoRefreshCoordinator = comicAutoRefreshCoordinator,
@@ -110,9 +103,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
 
   final FavoriteRepository _remoteRepository;
   final LocalFavoriteRepository _localRepository;
-  final FavoriteThreadDetailLoader _loadThreadDetail;
-  final FavoriteTagLookupLoader _loadTagLookup;
-  final ThreadContentClassifier _classifier;
+  final FavoriteDetailContextLoader _detailContextLoader;
   final ComicFavoriteIngestService _comicIngestService;
   final NovelFavoriteIngestService _novelIngestService;
   final ComicFavoriteAutoRefreshCoordinator? _comicAutoRefreshCoordinator;
@@ -540,7 +531,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   }
 
   Future<ThreadDetailData?> _loadTargetDetailOrNull(String tid) async {
-    final result = await _loadThreadDetail(tid);
+    final result = await _detailContextLoader.loadDetail(tid);
     if (result is ApiFailure<ThreadDetailData>) {
       return null;
     }
@@ -654,60 +645,33 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     bool forceComicSearchOnCatalogMiss = false,
     ThreadDetailData? preloadedDetail,
   }) async {
-    ThreadDetailData? detail = preloadedDetail;
-    if (detail == null) {
-      final result = await _loadThreadDetail(record.tid);
-      if (result is ApiFailure<ThreadDetailData>) {
-        return false;
-      }
-      detail = result.dataOrNull;
-    }
-    if (detail == null) {
-      return false;
-    }
+    final result = await _detailContextLoader.load(
+      record,
+      preloadedDetail: preloadedDetail,
+    );
+    return result.when(
+      success: (context) async {
+        final workId = await _syncModule(
+          detail: context.detail,
+          kind: context.kind,
+          tagName: context.tagName,
+          favoriteTitle: context.record.title,
+          mergeIngestedComic: mergeIngestedComics,
+          forceComicSearchOnCatalogMiss: forceComicSearchOnCatalogMiss,
+        );
 
-    final tagName = await _findTagName(
-      fid: detail.fid,
-      typeid: detail.typeid,
+        await _localRepository.updateThreadDetailMeta(
+          tid: context.record.tid,
+          fid: context.detail.fid,
+          typeid: context.detail.typeid,
+          tagName: context.tagName,
+          contentKind: context.kind,
+          workId: workId,
+        );
+        return true;
+      },
+      failure: (_) async => false,
     );
-    final kind = _classifier.classify(
-      fid: detail.fid,
-      typeid: detail.typeid,
-      tagName: tagName,
-    );
-    final workId = await _syncModule(
-      detail: detail,
-      kind: kind,
-      tagName: tagName,
-      favoriteTitle: record.title,
-      mergeIngestedComic: mergeIngestedComics,
-      forceComicSearchOnCatalogMiss: forceComicSearchOnCatalogMiss,
-    );
-
-    await _localRepository.updateThreadDetailMeta(
-      tid: record.tid,
-      fid: detail.fid,
-      typeid: detail.typeid,
-      tagName: tagName,
-      contentKind: kind,
-      workId: workId,
-    );
-    return true;
-  }
-
-  Future<String?> _findTagName({
-    required String fid,
-    required String typeid,
-  }) async {
-    if (fid.trim().isEmpty || typeid.trim().isEmpty) {
-      return null;
-    }
-    try {
-      final lookup = await _loadTagLookup();
-      return lookup.findName(fid: fid, typeid: typeid);
-    } catch (_) {
-      return null;
-    }
   }
 
   Future<String?> _syncModule({
