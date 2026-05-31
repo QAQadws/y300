@@ -118,6 +118,9 @@ class FlutterLocalNotificationClient implements LibraryTaskNotificationClient {
       indeterminate: request.indeterminate,
       maxProgress: request.maxProgress,
       progress: request.progress,
+      // Auto-cancel if not refreshed in time, so the notification clears itself
+      // once the app process is killed and can no longer cancel it explicitly.
+      timeoutAfter: request.timeoutAfterMs,
     );
     const darwinDetails = DarwinNotificationDetails(
       presentSound: false,

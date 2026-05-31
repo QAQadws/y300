@@ -15,6 +15,7 @@ class LibraryTaskNotificationClientRequest {
     required this.indeterminate,
     required this.maxProgress,
     required this.progress,
+    this.timeoutAfterMs,
   });
 
   final int id;
@@ -25,6 +26,12 @@ class LibraryTaskNotificationClientRequest {
   final bool indeterminate;
   final int maxProgress;
   final int progress;
+
+  /// Android `setTimeoutAfter`: the OS cancels the notification this many
+  /// milliseconds after it was posted unless it is refreshed first. Used so a
+  /// notification disappears on its own once the app process is killed and can
+  /// no longer call [LibraryTaskNotificationClient.cancel].
+  final int? timeoutAfterMs;
 }
 
 /// Thin seam over the actual notification plugin.

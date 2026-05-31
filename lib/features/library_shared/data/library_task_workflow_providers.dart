@@ -3,8 +3,11 @@ import 'package:y300/features/comic/data/comic_task_progress.dart';
 import 'package:y300/features/comic/data/comic_refresh_workflow_providers.dart';
 import 'package:y300/features/favorites/data/favorite_task_progress.dart';
 import 'package:y300/features/favorites/data/favorite_providers.dart';
+import 'package:y300/features/library_shared/data/library_task_notification_bridge_impl.dart';
+import 'package:y300/features/library_shared/data/library_task_notification_providers.dart';
 import 'package:y300/features/library_shared/data/library_task_progress_providers.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_task_notification_bridge.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 
 export 'package:y300/features/library_shared/data/library_task_progress_providers.dart'
@@ -52,4 +55,21 @@ final comicSearchQueueTaskProgressRegistrationWorkflowProvider =
   );
   ref.onDispose(registration.dispose);
   return registration;
+});
+
+/// Bridges hub task progress to the system notification shade (stage 4).
+///
+/// Watching this provider once (see `MainShellPage`) starts the bridge so
+/// favorite-sync and comic-search-queue progress surface as OS notifications.
+/// The bridge depends only on the hub and the notification service, keeping it
+/// a thin presentation adapter.
+final libraryTaskNotificationBridgeProvider =
+    Provider<LibraryTaskNotificationBridge>((ref) {
+  final bridge = DefaultLibraryTaskNotificationBridge(
+    hub: ref.watch(libraryTaskProgressHubWorkflowProvider),
+    notificationService: ref.watch(libraryTaskNotificationServiceProvider),
+  );
+  bridge.start();
+  ref.onDispose(bridge.dispose);
+  return bridge;
 });

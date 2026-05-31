@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/library_shared/data/flutter_local_notification_client.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_notification_client.dart';
@@ -13,9 +15,26 @@ class FlutterLocalLibraryTaskNotificationService
     implements LibraryTaskNotificationService {
   FlutterLocalLibraryTaskNotificationService({
     LibraryTaskNotificationClient? client,
-  }) : _client = client ?? FlutterLocalNotificationClient();
+    Duration timeout = defaultTimeout,
+    Duration heartbeatInterval = defaultHeartbeatInterval,
+  })  : _client = client ?? FlutterLocalNotificationClient(),
+        _timeout = timeout,
+        _heartbeatInterval = heartbeatInterval;
 
   final LibraryTaskNotificationClient _client;
+
+  // A posted notification outlives the Dart isolate, so killing the app would
+  // otherwise leave an "ongoing" notification stuck. We post it with an Android
+  // timeoutAfter and refresh it on a heartbeat while the process is alive: once
+  // the app dies the refresh stops and Android clears it within [_timeout].
+  final Duration _timeout;
+  final Duration _heartbeatInterval;
+
+  // Slow favorite-sync steps can hold one message for up to the network receive
+  // timeout (~20s) and a waiting comic queue refreshes every ~10.5s, so the
+  // timeout must comfortably exceed both to avoid a mid-task flicker.
+  static const Duration defaultTimeout = Duration(seconds: 30);
+  static const Duration defaultHeartbeatInterval = Duration(seconds: 8);
 
   // Android channel config (shared by both task notifications).
   static const String channelId = 'library_tasks';
@@ -28,6 +47,12 @@ class FlutterLocalLibraryTaskNotificationService
 
   bool _initialized = false;
   LibraryTaskNotificationPermissionState? _permissionState;
+
+  // Last notification posted per key, kept so the heartbeat can re-post the
+  // unchanged content and reset the Android timeout window.
+  final Map<LibraryTaskNotificationKey, LibraryTaskNotification> _active =
+      <LibraryTaskNotificationKey, LibraryTaskNotification>{};
+  Timer? _heartbeatTimer;
 
   static int notificationIdFor(LibraryTaskNotificationKey key) {
     return switch (key) {
@@ -66,6 +91,25 @@ class FlutterLocalLibraryTaskNotificationService
       return;
     }
 
+    _active[notification.key] = notification;
+    _ensureHeartbeat();
+    await _post(notification);
+  }
+
+  @override
+  Future<void> clear(LibraryTaskNotificationKey key) async {
+    _active.remove(key);
+    if (_active.isEmpty) {
+      _stopHeartbeat();
+    }
+    if (!_initialized) {
+      // Nothing could have been shown yet.
+      return;
+    }
+    await _client.cancel(notificationIdFor(key));
+  }
+
+  Future<void> _post(LibraryTaskNotification notification) async {
     final hasProgress = notification.hasDeterminateProgress;
     await _client.show(
       LibraryTaskNotificationClientRequest(
@@ -79,22 +123,31 @@ class FlutterLocalLibraryTaskNotificationService
         indeterminate: !hasProgress,
         maxProgress: hasProgress ? notification.total! : 0,
         progress: hasProgress ? notification.current! : 0,
+        timeoutAfterMs: _timeout.inMilliseconds,
       ),
     );
   }
 
-  @override
-  Future<void> clear(LibraryTaskNotificationKey key) async {
-    if (!_initialized) {
-      // Nothing could have been shown yet.
-      return;
-    }
-    await _client.cancel(notificationIdFor(key));
+  void _ensureHeartbeat() {
+    _heartbeatTimer ??= Timer.periodic(_heartbeatInterval, (_) {
+      // Re-post active notifications so the Android timeoutAfter window keeps
+      // sliding while the app is alive. After the process is killed this timer
+      // stops firing and the OS clears the notifications on its own.
+      for (final notification in _active.values) {
+        unawaited(_post(notification));
+      }
+    });
   }
 
-  /// Provider disposal hook. The plugin has no explicit teardown, so this only
-  /// resets cached state; kept as a named method so providers can wire it.
+  void _stopHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+  }
+
+  /// Provider disposal hook. Stops the heartbeat and resets cached state.
   void disposeIfNeeded() {
+    _stopHeartbeat();
+    _active.clear();
     _initialized = false;
     _permissionState = null;
   }

@@ -1,3 +1,4 @@
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/library_shared/data/library_task_notification_service_impl.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_notification_client.dart';
@@ -24,6 +25,7 @@ void main() {
       final client = _FakeNotificationClient();
       final service =
           FlutterLocalLibraryTaskNotificationService(client: client);
+      addTearDown(service.disposeIfNeeded);
 
       await service.initialize();
       await service.initialize();
@@ -36,6 +38,7 @@ void main() {
       final client = _FakeNotificationClient();
       final service =
           FlutterLocalLibraryTaskNotificationService(client: client);
+      addTearDown(service.disposeIfNeeded);
 
       await service.showOrUpdate(
         const LibraryTaskNotification(
@@ -56,6 +59,11 @@ void main() {
       expect(request.indeterminate, isFalse);
       expect(request.maxProgress, 10);
       expect(request.progress, 3);
+      // Posted with a timeout so it self-clears if the app is killed mid-task.
+      expect(
+        request.timeoutAfterMs,
+        FlutterLocalLibraryTaskNotificationService.defaultTimeout.inMilliseconds,
+      );
     });
 
     test('shows an indeterminate progress notification without a total',
@@ -63,6 +71,7 @@ void main() {
       final client = _FakeNotificationClient();
       final service =
           FlutterLocalLibraryTaskNotificationService(client: client);
+      addTearDown(service.disposeIfNeeded);
 
       await service.showOrUpdate(
         const LibraryTaskNotification(
@@ -84,6 +93,7 @@ void main() {
       final client = _FakeNotificationClient();
       final service =
           FlutterLocalLibraryTaskNotificationService(client: client);
+      addTearDown(service.disposeIfNeeded);
 
       await service.showOrUpdate(
         const LibraryTaskNotification(
@@ -105,6 +115,7 @@ void main() {
       );
       final service =
           FlutterLocalLibraryTaskNotificationService(client: client);
+      addTearDown(service.disposeIfNeeded);
 
       await service.showOrUpdate(
         const LibraryTaskNotification(
@@ -121,6 +132,7 @@ void main() {
       final client = _FakeNotificationClient();
       final service =
           FlutterLocalLibraryTaskNotificationService(client: client);
+      addTearDown(service.disposeIfNeeded);
 
       await service.ensurePermission();
       await service.showOrUpdate(
@@ -139,6 +151,7 @@ void main() {
       final client = _FakeNotificationClient();
       final service =
           FlutterLocalLibraryTaskNotificationService(client: client);
+      addTearDown(service.disposeIfNeeded);
 
       await service.initialize();
       await service.clear(LibraryTaskNotificationKey.comicSearchQueue);
@@ -150,10 +163,69 @@ void main() {
       final client = _FakeNotificationClient();
       final service =
           FlutterLocalLibraryTaskNotificationService(client: client);
+      addTearDown(service.disposeIfNeeded);
 
       await service.clear(LibraryTaskNotificationKey.favoriteSync);
 
       expect(client.cancelledIds, isEmpty);
+    });
+
+    test('heartbeat re-posts active notification to keep the timeout alive', () {
+      fakeAsync((async) {
+        final client = _FakeNotificationClient();
+        final service = FlutterLocalLibraryTaskNotificationService(
+          client: client,
+          heartbeatInterval: const Duration(seconds: 5),
+        );
+        addTearDown(service.disposeIfNeeded);
+
+        service.showOrUpdate(
+          const LibraryTaskNotification(
+            key: LibraryTaskNotificationKey.comicSearchQueue,
+            title: '漫画搜索等待中',
+            body: '《作品名》正在等待漫画搜索 预计耗时10.5s',
+          ),
+        );
+        async.flushMicrotasks();
+        expect(client.shownRequests, hasLength(1));
+
+        // Two heartbeat ticks re-post the same notification without a new
+        // showOrUpdate call.
+        async.elapse(const Duration(seconds: 11));
+        expect(client.shownRequests.length, greaterThanOrEqualTo(3));
+        expect(
+          client.shownRequests.every((r) => r.id == 3002),
+          isTrue,
+        );
+      });
+    });
+
+    test('heartbeat stops after the last notification is cleared', () {
+      fakeAsync((async) {
+        final client = _FakeNotificationClient();
+        final service = FlutterLocalLibraryTaskNotificationService(
+          client: client,
+          heartbeatInterval: const Duration(seconds: 5),
+        );
+        addTearDown(service.disposeIfNeeded);
+
+        service.showOrUpdate(
+          const LibraryTaskNotification(
+            key: LibraryTaskNotificationKey.favoriteSync,
+            title: '收藏同步',
+            body: '正在解析',
+          ),
+        );
+        async.flushMicrotasks();
+        service.clear(LibraryTaskNotificationKey.favoriteSync);
+        async.flushMicrotasks();
+
+        final postedBeforeIdle = client.shownRequests.length;
+        async.elapse(const Duration(seconds: 30));
+
+        // No more re-posts once nothing is active.
+        expect(client.shownRequests.length, postedBeforeIdle);
+      });
     });
   });
 }

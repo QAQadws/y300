@@ -52,6 +52,8 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
   Widget build(BuildContext context) {
     ref.watch(favoriteSyncTaskProgressRegistrationProvider);
     ref.watch(comicSearchQueueTaskProgressRegistrationProvider);
+    // 启动进度->系统通知桥接，让收藏同步/漫画搜索等待进入通知栏。
+    ref.watch(libraryTaskNotificationBridgeProvider);
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
