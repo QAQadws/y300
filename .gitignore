@@ -45,8 +45,6 @@ app.*.map.json
 /android/app/release
 windows/
 web/
-ios/
-android/
 macos/
 linux/
 mangayomi_lib/
@@ -54,3 +52,5 @@ information/
 .codex/
 .information/
 docs/
+ios/
+android/

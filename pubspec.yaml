@@ -50,6 +50,8 @@ dependencies:
   flutter_cache_manager: ^3.4.1
   file: ^7.0.1
   petitparser: ^7.0.2
+  flutter_local_notifications: ^21.0.0
+  permission_handler: ^12.0.2
 
 dev_dependencies:
   flutter_test:

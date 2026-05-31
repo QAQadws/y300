@@ -44,6 +44,8 @@ void main() {
           favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
           comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
           mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
+          mainShellNotificationInitializerProvider
+              .overrideWithValue(() async {}),
           authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
         ],
         child: const MaterialApp(home: MainShellPage()),
@@ -88,6 +90,8 @@ void main() {
           favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
           comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
           mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
+          mainShellNotificationInitializerProvider
+              .overrideWithValue(() async {}),
           authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
         ],
         child: const MaterialApp(home: MainShellPage()),

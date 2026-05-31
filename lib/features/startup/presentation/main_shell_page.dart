@@ -7,11 +7,24 @@ import 'package:y300/features/comic/presentation/comic_tab_page.dart';
 import 'package:y300/features/library_shared/data/library_task_workflow_providers.dart';
 import 'package:y300/features/favorites/presentation/favorite_shelf_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_page.dart';
+import 'package:y300/features/library_shared/data/library_task_notification_providers.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/features/novel/presentation/novel_tab_page.dart';
 
 final mainShellBackgroundTaskStarterProvider = Provider<Future<void> Function()>((ref) {
   return () => ref.read(comicSearchRefreshQueueServiceProvider).start();
+});
+
+/// Best-effort startup hook for the system task notification service. Failures
+/// (including a denied permission) must never block the shell, so callers run
+/// it detached.
+final mainShellNotificationInitializerProvider =
+    Provider<Future<void> Function()>((ref) {
+  return () async {
+    final service = ref.read(libraryTaskNotificationServiceProvider);
+    await service.initialize();
+    await service.ensurePermission();
+  };
 });
 
 /// 应用主壳：承载论坛、收藏、漫画、小说、更多五栏 Tab，避免业务页面相互耦合。
@@ -31,6 +44,8 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     super.initState();
     // 主壳创建后恢复搜索刷新队列，确保用户离开详情页或收藏页后任务仍继续。
     unawaited(ref.read(mainShellBackgroundTaskStarterProvider).call());
+    // 初始化系统通知能力并请求权限；失败不应阻塞主壳，detach 执行即可。
+    unawaited(ref.read(mainShellNotificationInitializerProvider).call());
   }
 
   @override

@@ -60,6 +60,8 @@ void main() {
           favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
           comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
           mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
+          mainShellNotificationInitializerProvider
+              .overrideWithValue(() async {}),
         ],
         child: const MaterialApp(home: StartupPage()),
       ),
