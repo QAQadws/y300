@@ -15,10 +15,12 @@ import 'package:y300/features/favorites/domain/favorite_shelf_bootstrapper.dart'
 import 'package:y300/features/favorites/presentation/favorite_shelf_page.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
+import 'package:y300/features/library_shared/data/library_task_notification_providers.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_task_notification_service.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
@@ -76,6 +78,41 @@ void main() {
 
     expect(find.byKey(const Key('unified-shelf-task-progress-bar')), findsOneWidget);
     expect(find.text('正在解析: 收藏帖'), findsOneWidget);
+    expect(bootstrapper.startCallCount, 1);
+    sync.completePendingSync();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('FavoriteShelfPage hides first-sync banner when notification permission is granted', (tester) async {
+    final sync = _FakeFavoriteSyncService(autoComplete: false);
+    final bootstrapper = _RecordingFavoriteShelfBootstrapper(
+      onStart: () async {
+        await sync.sync();
+      },
+    );
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    final notificationService = _FakeLibraryTaskNotificationService(
+      initialPermission: LibraryTaskNotificationPermissionState.granted,
+    );
+    addTearDown(queueSnapshot.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository(hasSnapshot: false)),
+          favoriteSyncServiceProvider.overrideWith((ref) => sync),
+          favoriteShelfBootstrapperProvider.overrideWith((ref) => bootstrapper),
+          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
+          libraryTaskNotificationServiceProvider.overrideWithValue(notificationService),
+        ],
+        child: const MaterialApp(home: FavoriteShelfPage()),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('unified-shelf-task-progress-bar')), findsNothing);
     expect(bootstrapper.startCallCount, 1);
     sync.completePendingSync();
     await tester.pumpAndSettle();
@@ -159,6 +196,37 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
       ),
     );
   }
+}
+
+class _FakeLibraryTaskNotificationService
+    implements LibraryTaskNotificationService {
+  _FakeLibraryTaskNotificationService({
+    required LibraryTaskNotificationPermissionState? initialPermission,
+  }) : _permissionState =
+           ValueNotifier<LibraryTaskNotificationPermissionState?>(
+             initialPermission,
+           );
+
+  final ValueNotifier<LibraryTaskNotificationPermissionState?> _permissionState;
+
+  @override
+  ValueListenable<LibraryTaskNotificationPermissionState?> get permissionState =>
+      _permissionState;
+
+  @override
+  Future<void> clear(LibraryTaskNotificationKey key) async {}
+
+  @override
+  Future<LibraryTaskNotificationPermissionState> ensurePermission() async {
+    return _permissionState.value ??
+        LibraryTaskNotificationPermissionState.denied;
+  }
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<void> showOrUpdate(LibraryTaskNotification notification) async {}
 }
 
 class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {

@@ -33,6 +33,25 @@ void main() {
       expect(client.initializeCalls, 1);
     });
 
+    test('permissionState updates after ensurePermission', () async {
+      final client = _FakeNotificationClient(
+        permission: LibraryTaskNotificationPermissionState.denied,
+      );
+      final service =
+          FlutterLocalLibraryTaskNotificationService(client: client);
+      addTearDown(service.disposeIfNeeded);
+
+      expect(service.permissionState.value, isNull);
+
+      final state = await service.ensurePermission();
+
+      expect(state, LibraryTaskNotificationPermissionState.denied);
+      expect(
+        service.permissionState.value,
+        LibraryTaskNotificationPermissionState.denied,
+      );
+    });
+
     test('shows a determinate progress notification when total is provided',
         () async {
       final client = _FakeNotificationClient();

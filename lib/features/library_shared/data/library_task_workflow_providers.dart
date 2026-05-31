@@ -32,12 +32,20 @@ final favoriteSyncTaskProgressRegistrationWorkflowProvider =
     Provider<LibraryTaskProgressRegistration>((ref) {
   final service = ref.watch(favoriteSyncServiceProvider);
   final hub = ref.watch(libraryTaskProgressHubProvider);
+  final notificationService = ref.watch(libraryTaskNotificationServiceProvider);
+  final progress = FavoriteSyncShelfTaskProgressListenable(
+    service.progress,
+    notificationService.permissionState,
+  );
   final registration = hub.registerSource(
     modules: const <LibraryModuleKey>{LibraryModuleKey.favorite},
-    progress: FavoriteSyncShelfTaskProgressListenable(service.progress),
+    progress: progress,
     priority: LibraryTaskProgressPriority.high,
   );
-  ref.onDispose(registration.dispose);
+  ref.onDispose(() {
+    registration.dispose();
+    progress.dispose();
+  });
   return registration;
 });
 
@@ -45,15 +53,23 @@ final comicSearchQueueTaskProgressRegistrationWorkflowProvider =
     Provider<LibraryTaskProgressRegistration>((ref) {
   final snapshot = ref.watch(comicSearchRefreshQueueSnapshotProvider);
   final hub = ref.watch(libraryTaskProgressHubProvider);
+  final notificationService = ref.watch(libraryTaskNotificationServiceProvider);
+  final progress = ComicSearchQueueShelfTaskProgressListenable(
+    snapshot,
+    notificationService.permissionState,
+  );
   final registration = hub.registerSource(
     modules: const <LibraryModuleKey>{
       LibraryModuleKey.comic,
       LibraryModuleKey.favorite,
     },
-    progress: ComicSearchQueueShelfTaskProgressListenable(snapshot),
+    progress: progress,
     priority: LibraryTaskProgressPriority.normal,
   );
-  ref.onDispose(registration.dispose);
+  ref.onDispose(() {
+    registration.dispose();
+    progress.dispose();
+  });
   return registration;
 });
 

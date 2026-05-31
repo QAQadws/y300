@@ -18,10 +18,12 @@ import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
+import 'package:y300/features/library_shared/data/library_task_notification_providers.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_task_notification_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
@@ -107,6 +109,80 @@ void main() {
     expect(find.byIcon(Icons.local_library_outlined), findsNothing);
     expect(find.byIcon(Icons.local_library), findsOneWidget);
   });
+
+  testWidgets('MainShellPage notification permission wiring does not block shell build', (tester) async {
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    final notificationService = _FakeLibraryTaskNotificationService(
+      initialPermission: LibraryTaskNotificationPermissionState.denied,
+    );
+    addTearDown(queueSnapshot.dispose);
+    addTearDown(notificationService.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+          novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+          localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository()),
+          favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
+          mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
+          libraryTaskNotificationServiceProvider.overrideWithValue(
+            notificationService,
+          ),
+          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+        ],
+        child: const MaterialApp(home: MainShellPage()),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('论坛首页'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+class _FakeLibraryTaskNotificationService
+    implements LibraryTaskNotificationService {
+  _FakeLibraryTaskNotificationService({
+    required LibraryTaskNotificationPermissionState? initialPermission,
+  }) : _permissionState =
+           ValueNotifier<LibraryTaskNotificationPermissionState?>(
+             initialPermission,
+           );
+
+  final ValueNotifier<LibraryTaskNotificationPermissionState?> _permissionState;
+  int initializeCalls = 0;
+  int ensurePermissionCalls = 0;
+
+  @override
+  ValueListenable<LibraryTaskNotificationPermissionState?> get permissionState =>
+      _permissionState;
+
+  @override
+  Future<void> clear(LibraryTaskNotificationKey key) async {}
+
+  @override
+  Future<LibraryTaskNotificationPermissionState> ensurePermission() async {
+    ensurePermissionCalls++;
+    return _permissionState.value ??
+        LibraryTaskNotificationPermissionState.denied;
+  }
+
+  @override
+  Future<void> initialize() async {
+    initializeCalls++;
+  }
+
+  @override
+  Future<void> showOrUpdate(LibraryTaskNotification notification) async {}
+
+  void dispose() {
+    _permissionState.dispose();
+  }
 }
 
 class _FakeComicRepository implements ComicRepository {

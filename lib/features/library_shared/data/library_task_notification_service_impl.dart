@@ -46,7 +46,9 @@ class FlutterLocalLibraryTaskNotificationService
   static const int comicSearchQueueNotificationId = 3002;
 
   bool _initialized = false;
-  LibraryTaskNotificationPermissionState? _permissionState;
+  final ValueNotifier<LibraryTaskNotificationPermissionState?>
+      _permissionStateNotifier =
+      ValueNotifier<LibraryTaskNotificationPermissionState?>(null);
 
   // Last notification posted per key, kept so the heartbeat can re-post the
   // unchanged content and reset the Android timeout window.
@@ -63,6 +65,10 @@ class FlutterLocalLibraryTaskNotificationService
   }
 
   @override
+  ValueListenable<LibraryTaskNotificationPermissionState?> get permissionState =>
+      _permissionStateNotifier;
+
+  @override
   Future<void> initialize() async {
     if (_initialized) {
       return;
@@ -74,11 +80,12 @@ class FlutterLocalLibraryTaskNotificationService
   @override
   Future<LibraryTaskNotificationPermissionState> ensurePermission() async {
     await initialize();
-    if (_permissionState?.isGranted == true) {
-      return _permissionState!;
+    final current = _permissionStateNotifier.value;
+    if (current?.isGranted == true) {
+      return current!;
     }
     final state = await _client.requestPermission();
-    _permissionState = state;
+    _permissionStateNotifier.value = state;
     return state;
   }
 
@@ -149,10 +156,10 @@ class FlutterLocalLibraryTaskNotificationService
     _stopHeartbeat();
     _active.clear();
     _initialized = false;
-    _permissionState = null;
+    _permissionStateNotifier.value = null;
   }
 
   @visibleForTesting
   LibraryTaskNotificationPermissionState? get debugPermissionState =>
-      _permissionState;
+      _permissionStateNotifier.value;
 }

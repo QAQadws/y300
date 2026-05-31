@@ -2,12 +2,21 @@ import 'package:flutter/foundation.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
+import 'package:y300/features/library_shared/domain/services/library_task_notification_service.dart';
 
-class FavoriteSyncShelfTaskProgressListenable
+class FavoriteSyncShelfTaskProgressListenable extends ChangeNotifier
     implements ValueListenable<LibraryShelfTaskProgress?> {
-  const FavoriteSyncShelfTaskProgressListenable(this._source);
+  FavoriteSyncShelfTaskProgressListenable(
+    ValueListenable<FavoriteSyncProgress> source,
+    ValueListenable<LibraryTaskNotificationPermissionState?> permissionState,
+  ) : _source = source,
+      _permissionState = permissionState {
+    _source.addListener(_handleChange);
+    _permissionState.addListener(_handleChange);
+  }
 
   final ValueListenable<FavoriteSyncProgress> _source;
+  final ValueListenable<LibraryTaskNotificationPermissionState?> _permissionState;
 
   @override
   LibraryShelfTaskProgress? get value {
@@ -20,18 +29,23 @@ class FavoriteSyncShelfTaskProgressListenable
       current: progress.current,
       total: progress.total,
       source: LibraryMutationSource.favoriteSync,
-      visible: true,
+      visible: !_isNotificationPermissionGranted,
       reloadOnCompletion: true,
     );
   }
 
-  @override
-  void addListener(VoidCallback listener) {
-    _source.addListener(listener);
+  bool get _isNotificationPermissionGranted =>
+      _permissionState.value ==
+      LibraryTaskNotificationPermissionState.granted;
+
+  void _handleChange() {
+    notifyListeners();
   }
 
   @override
-  void removeListener(VoidCallback listener) {
-    _source.removeListener(listener);
+  void dispose() {
+    _source.removeListener(_handleChange);
+    _permissionState.removeListener(_handleChange);
+    super.dispose();
   }
 }

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 /// Stable identity for each long-running library task that can surface a
 /// system notification. The key also maps to a fixed Android notification id so
 /// repeated updates replace the same notification instead of stacking.
@@ -57,6 +59,12 @@ class LibraryTaskNotification {
 abstract class LibraryTaskNotificationService {
   /// Prepares platform channels. Safe to call more than once.
   Future<void> initialize();
+
+  /// Last known OS notification permission state.
+  ///
+  /// `null` means the app has not checked yet, so presentation should keep the
+  /// in-app banner fallback visible.
+  ValueListenable<LibraryTaskNotificationPermissionState?> get permissionState;
 
   /// Requests (or re-checks) the OS notification permission.
   Future<LibraryTaskNotificationPermissionState> ensurePermission();

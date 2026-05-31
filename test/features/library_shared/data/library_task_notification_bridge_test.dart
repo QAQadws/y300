@@ -185,6 +185,14 @@ class _FakeNotificationService implements LibraryTaskNotificationService {
   final List<LibraryTaskNotificationKey> cleared =
       <LibraryTaskNotificationKey>[];
   bool throwOnShow = false;
+  final ValueNotifier<LibraryTaskNotificationPermissionState?> _permissionState =
+      ValueNotifier<LibraryTaskNotificationPermissionState?>(
+        LibraryTaskNotificationPermissionState.granted,
+      );
+
+  @override
+  ValueListenable<LibraryTaskNotificationPermissionState?> get permissionState =>
+      _permissionState;
 
   @override
   Future<void> initialize() async {}
