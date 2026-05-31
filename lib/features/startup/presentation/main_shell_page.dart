@@ -2,10 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/comic/data/comic_task_progress.dart';
-import 'package:y300/features/comic/data/comic_search_refresh_queue_providers.dart';
+import 'package:y300/features/comic/data/comic_refresh_workflow_providers.dart';
 import 'package:y300/features/comic/presentation/comic_tab_page.dart';
-import 'package:y300/features/favorites/data/favorite_task_progress.dart';
+import 'package:y300/features/library_shared/data/library_task_workflow_providers.dart';
 import 'package:y300/features/favorites/presentation/favorite_shelf_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_page.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
