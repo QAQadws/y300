@@ -50,8 +50,8 @@ class DefaultComicEpisodeLinkMerger implements ComicEpisodeLinkMerger {
     final sorted = links.toList()
       ..sort((a, b) {
         final episodeOrder = _compareEpisodeOrder(
-          _linkTitleForSort(a),
-          _linkTitleForSort(b),
+          _sortLabelForLink(a),
+          _sortLabelForLink(b),
         );
         if (episodeOrder != 0) {
           return episodeOrder;
@@ -120,6 +120,15 @@ class DefaultComicEpisodeLinkMerger implements ComicEpisodeLinkMerger {
     return 0;
   }
 
+  String _sortLabelForLink(ComicEpisodeLink link) {
+    final title = _linkTitleForSort(link);
+    final parsedLabel = _subjectParser.parse(title).episodeLabel?.trim();
+    if (parsedLabel != null && parsedLabel.isNotEmpty) {
+      return parsedLabel;
+    }
+    return title;
+  }
+
   String _linkTitleForSort(ComicEpisodeLink link) {
     final episodeTitle = link.episodeTitle?.trim();
     if (episodeTitle != null && episodeTitle.isNotEmpty) {
@@ -163,19 +172,28 @@ class DefaultComicEpisodeLinkMerger implements ComicEpisodeLinkMerger {
 
 class _EpisodeSortKey implements Comparable<_EpisodeSortKey> {
   const _EpisodeSortKey({
+    required this.group,
     required this.number,
     required this.suffixRank,
   });
 
   static final RegExp _episodePattern = RegExp(
-    r'第?\s*(\d+(?:\.\d+)?)\s*(?:话|話|卷|集|篇|章)\s*(上篇|下篇|前篇|后篇|後篇|上|中|下|前|后|後)?',
+    r'^第?\s*(\d+(?:\.\d+)?)\s*(?:话|話|卷|集|篇|章)?\s*(前|上|中|下|后)?$',
+    caseSensitive: false,
+  );
+  static final RegExp _specialPattern = RegExp(
+    r'^(番外|特典|附录|附錄|短篇|SP|卷后附录|卷後附錄|卷彩页|卷彩頁|小剧场|小劇場|小漫画|小漫畫|单行本|單行本)$',
     caseSensitive: false,
   );
 
+  final int group;
   final double number;
   final int suffixRank;
 
   static _EpisodeSortKey? tryParse(String title) {
+    if (_specialPattern.hasMatch(title.trim())) {
+      return const _EpisodeSortKey(group: 1, number: 0, suffixRank: 0);
+    }
     final match = _episodePattern.firstMatch(title);
     if (match == null) {
       return null;
@@ -185,6 +203,7 @@ class _EpisodeSortKey implements Comparable<_EpisodeSortKey> {
       return null;
     }
     return _EpisodeSortKey(
+      group: 0,
       number: number,
       suffixRank: _suffixRank(match.group(2)),
     );
@@ -192,18 +211,22 @@ class _EpisodeSortKey implements Comparable<_EpisodeSortKey> {
 
   static int _suffixRank(String? suffix) {
     return switch (suffix?.trim()) {
-      '前' || '前篇' => -30,
-      '上' || '上篇' => -20,
+      '前' => -20,
+      '上' => -10,
       '中' => 0,
       null || '' => 10,
-      '下' || '下篇' => 20,
-      '后' || '後' || '后篇' || '後篇' => 30,
+      '下' => 20,
+      '后' => 30,
       _ => 10,
     };
   }
 
   @override
   int compareTo(_EpisodeSortKey other) {
+    final groupOrder = group.compareTo(other.group);
+    if (groupOrder != 0) {
+      return groupOrder;
+    }
     final numberOrder = number.compareTo(other.number);
     if (numberOrder != 0) {
       return numberOrder;

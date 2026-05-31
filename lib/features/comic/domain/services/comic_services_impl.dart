@@ -22,6 +22,7 @@ import 'package:y300/features/comic/domain/services/comic_detector.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_keyword_resolver.dart';
 import 'package:y300/features/comic/domain/services/comic_search_candidate_ranker.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
+import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/data/discuz_search_service.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
@@ -39,8 +40,14 @@ final comicParserServiceProvider = Provider<ComicParserService>((ref) {
   return HtmlComicParserService();
 });
 
+final comicTitleAnalyzerProvider = Provider<ComicTitleAnalyzer>((ref) {
+  return const PetitComicTitleAnalyzer();
+});
+
 final comicSubjectParserProvider = Provider<ComicSubjectParser>((ref) {
-  return const RuleBasedComicSubjectParser();
+  return RuleBasedComicSubjectParser(
+    analyzer: ref.watch(comicTitleAnalyzerProvider),
+  );
 });
 
 class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {

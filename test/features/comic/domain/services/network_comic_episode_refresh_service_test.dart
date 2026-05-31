@@ -133,9 +133,9 @@ void main() {
         'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=503102',
       ]);
       expect(links.map((link) => link.episodeTitle).toList(), <String>[
-        '第81話',
-        '第82話上',
-        '第82話下',
+        '第81话',
+        '第82话上',
+        '第82话下',
       ]);
     });
 
@@ -399,6 +399,32 @@ void main() {
         'thread-110-1-1.html',
       ]);
       expect(links.first.rawText, '第13话');
+    });
+
+    test('search keyword uses clean book name from the new parser', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{
+          '100': const <ComicEpisodeLink>[],
+        },
+      );
+      final searchService = _FakeDiscuzSearchService(
+        response: const DiscuzSearchResponse(
+          items: <DiscuzSearchResultItem>[],
+          rateLimited: false,
+        ),
+      );
+      final service = _buildService(
+        discoveryService: discovery,
+        searchService: searchService,
+        subjectParser: const RuleBasedComicSubjectParser(),
+        threadSeedFetcher: (_) async {
+          return const ThreadSeed(subject: '[汉化组]漫画标题 Vol.2');
+        },
+      );
+
+      await service.fetchEpisodeLinksFromTid('100');
+
+      expect(searchService.calledKeywords, <String>['漫画标题']);
     });
 
     test('search fallback skips current tid and keeps scanning candidates', () async {

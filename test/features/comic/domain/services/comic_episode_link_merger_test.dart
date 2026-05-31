@@ -118,7 +118,7 @@ void main() {
       );
     });
 
-    test('sort keeps numbered chapters before unnumbered extras', () {
+    test('sort keeps numbered chapters before extras', () {
       final sorted = merger.sort(
         const <ComicEpisodeLink>[
           ComicEpisodeLink(url: 'thread-4-1-1.html', rawText: '番外'),

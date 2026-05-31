@@ -5,7 +5,7 @@ import 'package:y300/features/comic/domain/services/comic_refresh_keyword_resolv
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 
 void main() {
-  group('DefaultComicRefreshKeywordResolver current baseline', () {
+  group('DefaultComicRefreshKeywordResolver phase 1 baseline', () {
     test('uses custom search title before lower priority fields', () {
       final resolver = DefaultComicRefreshKeywordResolver(
         subjectParser: const RuleBasedComicSubjectParser(),
@@ -110,7 +110,7 @@ void main() {
       );
     });
 
-    test('keeps current parser noise when only light cleaning applies', () {
+    test('uses cleaner parser output for display title keywords', () {
       final resolver = DefaultComicRefreshKeywordResolver(
         subjectParser: const RuleBasedComicSubjectParser(),
       );
@@ -126,7 +126,7 @@ void main() {
       expect(keywords, hasLength(1));
       expect(
         keywords.single.value,
-        'Noisy Title Vol.2',
+        'Noisy Title',
       );
       expect(
         keywords.single.source,

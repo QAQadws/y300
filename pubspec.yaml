@@ -49,6 +49,7 @@ dependencies:
   cached_network_image: ^3.4.1
   flutter_cache_manager: ^3.4.1
   file: ^7.0.1
+  petitparser: ^7.0.2
 
 dev_dependencies:
   flutter_test:
