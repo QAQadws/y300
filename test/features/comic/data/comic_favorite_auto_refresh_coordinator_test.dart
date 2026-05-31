@@ -12,12 +12,12 @@ import 'package:y300/features/library_shared/domain/services/library_shelf_refre
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
 void main() {
-  const longRunningTagName = '長篇連載';
+  const longRunningTagName = 'long-running-tag';
 
-  group('ComicFavoriteAutoRefreshCoordinator', () {
+  group('ComicFavoriteAutoRefreshCoordinator current baseline', () {
     test('catalog hit delegates refresh application with catalog source', () async {
       const links = <ComicEpisodeLink>[
-        ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: '第1话'),
+        ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: 'Episode 1'),
       ];
       final refreshService = _FakeRefreshService(
         catalogOutcome: const ComicEpisodeRefreshOutcome(
@@ -35,7 +35,9 @@ void main() {
         searchQueue: searchQueue,
         refreshOutcomeApplier: applier,
         shelfRefreshBus: bus,
-        catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
+        catalogMissPolicy: const DefaultComicCatalogMissPolicy(
+          longRunningTagName: longRunningTagName,
+        ),
         subjectParser: const RuleBasedComicSubjectParser(),
       );
 
@@ -64,7 +66,7 @@ void main() {
       expect(searchQueue.enqueuedTitles, isEmpty);
     });
 
-    test('catalog miss enqueues search queue with parsed subject title', () async {
+    test('catalog miss keeps raw favorite title in queue but parses source title for search', () async {
       final refreshService = _FakeRefreshService(
         catalogOutcome: const ComicEpisodeRefreshOutcome(
           source: ComicEpisodeRefreshSource.empty,
@@ -79,21 +81,26 @@ void main() {
         searchQueue: searchQueue,
         refreshOutcomeApplier: _RecordingRefreshOutcomeApplier(),
         shelfRefreshBus: bus,
-        catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
+        catalogMissPolicy: const DefaultComicCatalogMissPolicy(
+          longRunningTagName: longRunningTagName,
+        ),
         subjectParser: const RuleBasedComicSubjectParser(),
       );
 
       final result = await coordinator.refreshAfterFavoriteIngest(
         comicId: 'comic:2',
         detail: _detail(subject: '[Scan] Parsed Search Comic EP 02'),
-        favoriteTitle: 'Favorite List Raw Title',
+        favoriteTitle: 'Favorite List Raw Title EP 99',
         sourceTagName: longRunningTagName,
       );
 
       expect(result.status, ComicFavoriteAutoRefreshStatus.queuedForSearch);
       expect(result.queuePosition, 2);
       expect(result.estimatedDuration, const Duration(seconds: 21));
-      expect(searchQueue.enqueuedTitles, <String>['Favorite List Raw Title']);
+      expect(
+        searchQueue.enqueuedTitles,
+        <String>['Favorite List Raw Title EP 99'],
+      );
       expect(searchQueue.enqueuedOrigins, <ComicSearchRefreshOrigin>[
         ComicSearchRefreshOrigin.favoriteSync,
       ]);
@@ -131,7 +138,9 @@ void main() {
         searchQueue: searchQueue,
         refreshOutcomeApplier: _RecordingRefreshOutcomeApplier(),
         shelfRefreshBus: bus,
-        catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
+        catalogMissPolicy: const DefaultComicCatalogMissPolicy(
+          longRunningTagName: longRunningTagName,
+        ),
         subjectParser: const RuleBasedComicSubjectParser(),
       );
 
@@ -139,7 +148,7 @@ void main() {
         comicId: 'comic:3',
         detail: _detail(subject: '[Scan] Short Comic EP 01'),
         favoriteTitle: 'Short Favorite Title',
-        sourceTagName: '韩国漫画',
+        sourceTagName: 'other-tag',
       );
 
       expect(result.status, ComicFavoriteAutoRefreshStatus.skipped);
@@ -155,7 +164,7 @@ void main() {
       expect(bus.signal.value?.tid, '100');
     });
 
-    test('forced catalog miss enqueues search queue for newly favorited comic', () async {
+    test('forced catalog miss keeps raw favorite title while parsing fallback search request', () async {
       final refreshService = _FakeRefreshService(
         catalogOutcome: const ComicEpisodeRefreshOutcome(
           source: ComicEpisodeRefreshSource.empty,
@@ -170,24 +179,33 @@ void main() {
         searchQueue: searchQueue,
         refreshOutcomeApplier: _RecordingRefreshOutcomeApplier(),
         shelfRefreshBus: bus,
-        catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
+        catalogMissPolicy: const DefaultComicCatalogMissPolicy(
+          longRunningTagName: longRunningTagName,
+        ),
         subjectParser: const RuleBasedComicSubjectParser(),
       );
 
-      final result = await coordinator.refreshAfterFavoriteIngest(
+      final result = await coordinator.refreshFavoriteComic(
         comicId: 'comic:4',
-        detail: _detail(subject: '[Scan] Newly Favorited Comic EP 01'),
-        favoriteTitle: 'New Favorite Title',
-        sourceTagName: '韩国漫画',
+        sourceTid: '100',
+        favoriteTitle: '[Favorite] Raw Queue Title EP 09',
+        sourceTagName: 'other-tag',
         forceSearchOnCatalogMiss: true,
       );
 
       expect(result.status, ComicFavoriteAutoRefreshStatus.queuedForSearch);
-      expect(searchQueue.enqueuedTitles, <String>['New Favorite Title']);
+      expect(
+        searchQueue.enqueuedTitles,
+        <String>['[Favorite] Raw Queue Title EP 09'],
+      );
       expect(searchQueue.enqueuedRequests.single.comicId, 'comic:4');
       expect(
         searchQueue.enqueuedRequests.single.displayTitle,
-        'Newly Favorited Comic',
+        'Raw Queue Title',
+      );
+      expect(
+        searchQueue.enqueuedRequests.single.sourceTitle,
+        'Raw Queue Title',
       );
       expect(bus.signal.value?.reason, 'favorite_comic_search_refresh_queued');
       expect(bus.signal.value?.source, LibraryMutationSource.favoriteSync);
@@ -199,14 +217,14 @@ void main() {
 
 ThreadDetailData _detail({
   String tid = '100',
-  String subject = '详情页标题',
+  String subject = 'Detail Title',
 }) {
   return ThreadDetailData(
     tid: tid,
     fid: '30',
     typeid: '398',
     subject: subject,
-    author: '作者',
+    author: 'Author',
     replies: 0,
     views: 1,
     currentPage: 1,
@@ -214,9 +232,9 @@ ThreadDetailData _detail({
     posts: <ThreadPost>[
       ThreadPost(
         pid: 'p1',
-        author: '作者',
+        author: 'Author',
         authorId: '1',
-        message: '<p>正文</p>',
+        message: '<p>Body</p>',
         number: 1,
         isFirst: true,
         dateline: '2026-01-01',

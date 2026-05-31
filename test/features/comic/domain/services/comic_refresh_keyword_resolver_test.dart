@@ -5,7 +5,7 @@ import 'package:y300/features/comic/domain/services/comic_refresh_keyword_resolv
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 
 void main() {
-  group('DefaultComicRefreshKeywordResolver', () {
+  group('DefaultComicRefreshKeywordResolver current baseline', () {
     test('uses custom search title before lower priority fields', () {
       final resolver = DefaultComicRefreshKeywordResolver(
         subjectParser: const RuleBasedComicSubjectParser(),
@@ -14,16 +14,16 @@ void main() {
       final keywords = resolver.resolve(
         const ComicEpisodeRefreshRequest(
           sourceTid: '100',
-          customSearchTitle: '真正标题',
-          customTitle: '自定义标题',
-          displayTitle: '[Favorite] 展示标题 EP 02',
-          sourceTitle: '[Scan] 来源标题 EP 01',
+          customSearchTitle: 'Actual Search Title',
+          customTitle: 'Custom Title',
+          displayTitle: '[Favorite] Display Title EP 02',
+          sourceTitle: '[Scan] Source Title EP 01',
         ),
-        '[Thread] 当前标题 EP 03',
+        '[Thread] Current Title EP 03',
       );
 
       expect(keywords, hasLength(1));
-      expect(keywords.single.value, '真正标题');
+      expect(keywords.single.value, 'Actual Search Title');
       expect(
         keywords.single.source,
         ComicRefreshKeywordSource.customSearchTitle,
@@ -39,15 +39,15 @@ void main() {
         const ComicEpisodeRefreshRequest(
           sourceTid: '100',
           customSearchTitle: '   ',
-          customTitle: '自定义标题',
-          sourceTitle: '来源标题',
+          customTitle: 'Custom Title',
+          sourceTitle: 'Source Title',
         ),
-        '当前标题',
+        'Current Title',
       );
 
       expect(
         keywords.map((keyword) => keyword.value).toList(),
-        <String>['自定义标题'],
+        <String>['Custom Title'],
       );
       expect(
         keywords.single.source,
@@ -66,17 +66,17 @@ void main() {
       final keywords = resolver.resolve(
         const ComicEpisodeRefreshRequest(
           sourceTid: '100',
-          customSearchTitle: '主关键字',
-          customTitle: '主关键字',
-          displayTitle: '[Favorite] 展示标题 EP 02',
-          sourceTitle: '[Scan] 展示标题 EP 01',
+          customSearchTitle: 'Primary Keyword',
+          customTitle: 'Primary Keyword',
+          displayTitle: '[Favorite] Display Title EP 02',
+          sourceTitle: '[Scan] Display Title EP 01',
         ),
-        '[Thread] 当前标题 EP 03',
+        '[Thread] Current Title EP 03',
       );
 
       expect(
         keywords.map((keyword) => keyword.value).toList(),
-        <String>['主关键字', '展示标题', '当前标题'],
+        <String>['Primary Keyword', 'Display Title', 'Current Title'],
       );
       expect(
         keywords.map((keyword) => keyword.source).toList(),
@@ -88,7 +88,7 @@ void main() {
       );
     });
 
-    test('falls back to raw title when parser cannot normalize it', () {
+    test('falls back to raw title when parser only returns the trimmed input', () {
       final resolver = DefaultComicRefreshKeywordResolver(
         subjectParser: const RuleBasedComicSubjectParser(),
         featureFlags: ComicReaderFeatureFlags.defaults.copyWith(
@@ -99,14 +99,38 @@ void main() {
       final keywords = resolver.resolve(
         const ComicEpisodeRefreshRequest(
           sourceTid: '100',
-          displayTitle: '原样标题',
+          displayTitle: 'Original Title',
         ),
-        '另一个原样标题',
+        'Another Raw Title',
       );
 
       expect(
         keywords.map((keyword) => keyword.value).toList(),
-        <String>['原样标题', '另一个原样标题'],
+        <String>['Original Title', 'Another Raw Title'],
+      );
+    });
+
+    test('keeps current parser noise when only light cleaning applies', () {
+      final resolver = DefaultComicRefreshKeywordResolver(
+        subjectParser: const RuleBasedComicSubjectParser(),
+      );
+
+      final keywords = resolver.resolve(
+        const ComicEpisodeRefreshRequest(
+          sourceTid: '100',
+          displayTitle: '[Scan] Noisy Title Vol.2',
+        ),
+        'Unused Subject',
+      );
+
+      expect(keywords, hasLength(1));
+      expect(
+        keywords.single.value,
+        'Noisy Title Vol.2',
+      );
+      expect(
+        keywords.single.source,
+        ComicRefreshKeywordSource.displayTitle,
       );
     });
   });
