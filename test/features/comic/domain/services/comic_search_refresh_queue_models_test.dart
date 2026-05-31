@@ -3,8 +3,8 @@ import 'package:y300/features/comic/domain/services/comic_episode_refresh_servic
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 
 void main() {
-  group('ComicSearchRefreshQueueSnapshot current baseline', () {
-    test('waitingMessage uses head title and fractional second format', () {
+  group('ComicSearchRefreshQueueSnapshot waiting message', () {
+    test('waitingMessage wraps clean head title and uses fractional second format', () {
       final snapshot = ComicSearchRefreshQueueSnapshot(
         entries: <ComicSearchRefreshQueueEntry>[
           _entry(id: 1, title: 'Queued Comic'),
@@ -15,7 +15,7 @@ void main() {
       expect(snapshot.estimatedDuration, const Duration(milliseconds: 10500));
       expect(
         snapshot.waitingMessage,
-        'Queued Comic 正在等待搜索 预计耗时10.5s',
+        '《Queued Comic》正在等待漫画搜索 预计耗时10.5s',
       );
     });
 
@@ -30,7 +30,7 @@ void main() {
       expect(snapshot.estimatedDuration, const Duration(seconds: 10));
       expect(
         snapshot.waitingMessage,
-        'Queued Comic 正在等待搜索 预计耗时10s',
+        '《Queued Comic》正在等待漫画搜索 预计耗时10s',
       );
     });
 

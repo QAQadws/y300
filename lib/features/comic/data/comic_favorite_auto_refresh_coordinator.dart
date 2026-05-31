@@ -3,7 +3,8 @@ import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applie
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
-import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
+import 'package:y300/features/comic/domain/services/title/comic_title_analysis.dart';
+import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
@@ -40,20 +41,20 @@ class ComicFavoriteAutoRefreshCoordinator {
     required ComicRefreshOutcomeApplier refreshOutcomeApplier,
     required LibraryShelfRefreshBus shelfRefreshBus,
     required ComicCatalogMissPolicy catalogMissPolicy,
-    required ComicSubjectParser subjectParser,
+    required ComicTitleAnalyzer titleAnalyzer,
   })  : _refreshService = refreshService,
         _searchQueue = searchQueue,
         _refreshOutcomeApplier = refreshOutcomeApplier,
         _shelfRefreshBus = shelfRefreshBus,
         _catalogMissPolicy = catalogMissPolicy,
-        _subjectParser = subjectParser;
+        _titleAnalyzer = titleAnalyzer;
 
   final ComicEpisodeRefreshService _refreshService;
   final ComicSearchRefreshQueueEnqueuer _searchQueue;
   final ComicRefreshOutcomeApplier _refreshOutcomeApplier;
   final LibraryShelfRefreshBus _shelfRefreshBus;
   final ComicCatalogMissPolicy _catalogMissPolicy;
-  final ComicSubjectParser _subjectParser;
+  final ComicTitleAnalyzer _titleAnalyzer;
 
   Future<ComicFavoriteAutoRefreshResult> refreshAfterFavoriteIngest({
     required String comicId,
@@ -174,29 +175,41 @@ class ComicFavoriteAutoRefreshCoordinator {
   }) {
     final rawFavoriteTitle = _nonEmptyOrNull(favoriteTitle);
     final rawSourceTitle = _nonEmptyOrNull(sourceTitle);
-    final parsedSourceTitle = _parseSearchTitle(rawSourceTitle);
-    final parsedFavoriteTitle = _parseSearchTitle(rawFavoriteTitle);
-    final searchTitle = parsedSourceTitle ??
-        parsedFavoriteTitle ??
+    final sourceAnalysis = _analyze(rawSourceTitle);
+    final favoriteAnalysis = _analyze(rawFavoriteTitle);
+
+    // Search title feeds ComicEpisodeRefreshRequest, which the keyword resolver
+    // re-cleans (without length clipping) into the final search keyword. So we
+    // pass the analyzer clean book name here instead of the clipped
+    // searchKeyword to avoid truncating a title mid-word before the search.
+    // Source title keeps precedence, mirroring the previous behavior.
+    final searchTitle = _nonEmptyOrNull(sourceAnalysis?.cleanBookName) ??
+        _nonEmptyOrNull(favoriteAnalysis?.cleanBookName) ??
         rawFavoriteTitle ??
         rawSourceTitle ??
         sourceTid;
 
+    // Queue title is user-facing progress text. It must no longer leak the raw
+    // forum thread title, so it uses the cleaned book name (favorite first,
+    // matching the historical preference for the favorite list title).
+    final queueTitle = _nonEmptyOrNull(favoriteAnalysis?.cleanBookName) ??
+        _nonEmptyOrNull(sourceAnalysis?.cleanBookName) ??
+        searchTitle;
+
     return _ResolvedFavoriteComicTitles(
-      // Queue title is user-facing progress text, so keep the favorite list
-      // title when available. Search keywords are normalized separately above.
-      queueTitle: rawFavoriteTitle ?? rawSourceTitle ?? searchTitle,
+      queueTitle: queueTitle,
       searchTitle: searchTitle,
-      sourceTitle: parsedSourceTitle ?? searchTitle,
+      sourceTitle:
+          _nonEmptyOrNull(sourceAnalysis?.cleanBookName) ?? searchTitle,
     );
   }
 
-  String? _parseSearchTitle(String? title) {
+  ComicTitleAnalysis? _analyze(String? title) {
     final raw = _nonEmptyOrNull(title);
     if (raw == null) {
       return null;
     }
-    return _nonEmptyOrNull(_subjectParser.parse(raw).normalizedTitle) ?? raw;
+    return _titleAnalyzer.analyze(raw);
   }
 }
 

@@ -11,6 +11,7 @@ import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_m
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
@@ -35,6 +36,7 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
     ComicDownloadService? downloadService,
     ImageCacheService? imageCacheService,
     ComicReaderFeatureFlags featureFlags = ComicReaderFeatureFlags.defaults,
+    ComicTitleAnalyzer titleAnalyzer = const PetitComicTitleAnalyzer(),
     required LibraryStateRepository stateRepository,
   })  : _refreshService = refreshService,
         _searchQueue = searchQueue,
@@ -44,6 +46,7 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
         _downloadService = downloadService,
         _imageCacheService = imageCacheService,
         _featureFlags = featureFlags,
+        _titleAnalyzer = titleAnalyzer,
         _stateRepository = stateRepository;
 
   final ComicRepository _repository;
@@ -55,6 +58,7 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
   final ComicDownloadService? _downloadService;
   final ImageCacheService? _imageCacheService;
   final ComicReaderFeatureFlags _featureFlags;
+  final ComicTitleAnalyzer _titleAnalyzer;
   final LibraryStateRepository _stateRepository;
 
   @override
@@ -542,6 +546,9 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
   }
 
   String _queueTitle(ComicDetail detail) {
+    // Custom search title is user-authored, so it stays highest priority and is
+    // only trimmed. The display title fallback must be cleaned through the
+    // analyzer so the queue/notification no longer leaks the raw thread title.
     final customSearchTitle = _featureFlags.readerCustomMetadataEnabled
         ? detail.customSearchTitle?.trim()
         : null;
@@ -550,6 +557,10 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
     }
     final displayTitle = detail.displayTitle.trim();
     if (displayTitle.isNotEmpty) {
+      final cleanBookName = _titleAnalyzer.analyze(displayTitle).cleanBookName.trim();
+      if (cleanBookName.isNotEmpty) {
+        return cleanBookName;
+      }
       return displayTitle;
     }
     return detail.sourceTid;

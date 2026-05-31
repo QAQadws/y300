@@ -133,5 +133,45 @@ void main() {
         ComicRefreshKeywordSource.displayTitle,
       );
     });
+
+    test('strips author bracket and chapter tail from raw thread title', () {
+      final resolver = DefaultComicRefreshKeywordResolver(
+        subjectParser: const RuleBasedComicSubjectParser(),
+      );
+
+      final keywords = resolver.resolve(
+        const ComicEpisodeRefreshRequest(sourceTid: '100'),
+        '[汉化] My Comic Ch.5',
+      );
+
+      expect(keywords, hasLength(1));
+      expect(keywords.single.value, 'My Comic');
+      expect(
+        keywords.single.source,
+        ComicRefreshKeywordSource.subjectNormalized,
+      );
+    });
+
+    test('keeps trimmed custom search title above cleaned thread title', () {
+      final resolver = DefaultComicRefreshKeywordResolver(
+        subjectParser: const RuleBasedComicSubjectParser(),
+      );
+
+      final keywords = resolver.resolve(
+        const ComicEpisodeRefreshRequest(
+          sourceTid: '100',
+          customSearchTitle: '  My Exact Keyword  ',
+          displayTitle: '[汉化] My Comic Ch.5',
+        ),
+        '[Thread] Another Title EP 03',
+      );
+
+      expect(keywords, hasLength(1));
+      expect(keywords.single.value, 'My Exact Keyword');
+      expect(
+        keywords.single.source,
+        ComicRefreshKeywordSource.customSearchTitle,
+      );
+    });
   });
 }

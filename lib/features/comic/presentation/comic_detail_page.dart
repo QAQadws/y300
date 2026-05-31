@@ -37,6 +37,7 @@ class ComicDetailPage extends ConsumerWidget {
       downloadService: ref.watch(comicDownloadServiceProvider),
       imageCacheService: ref.watch(imageCacheServiceProvider),
       featureFlags: ref.watch(comicReaderFeatureFlagsProvider),
+      titleAnalyzer: ref.watch(comicTitleAnalyzerProvider),
       stateRepository: ref.watch(libraryStateRepositoryProvider),
     );
     return UnifiedDetailPage(

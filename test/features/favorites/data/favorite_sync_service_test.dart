@@ -14,7 +14,7 @@ import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applie
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
-import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
+import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
 import 'package:y300/features/favorites/data/favorite_content_ingest_registry.dart';
 import 'package:y300/features/favorites/data/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/favorite_repository.dart';
@@ -383,7 +383,7 @@ void main() {
       refreshOutcomeApplier: _defaultRefreshOutcomeApplier(bus),
       shelfRefreshBus: bus,
       catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
-      subjectParser: const RuleBasedComicSubjectParser(),
+      titleAnalyzer: const PetitComicTitleAnalyzer(),
     );
     final service = _service(
       remoteRepository: remote,
@@ -401,7 +401,7 @@ void main() {
 
     await service.sync();
 
-    expect(queue.enqueuedTitles, <String>['[Fav] Long Comic EP 02']);
+    expect(queue.enqueuedTitles, <String>['Long Comic']);
     expect(queue.enqueuedRequests.single.comicId, 'yamibo:100');
     expect(queue.enqueuedRequests.single.sourceTid, '100');
   });
@@ -426,7 +426,7 @@ void main() {
       refreshOutcomeApplier: _defaultRefreshOutcomeApplier(bus),
       shelfRefreshBus: bus,
       catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
-      subjectParser: const RuleBasedComicSubjectParser(),
+      titleAnalyzer: const PetitComicTitleAnalyzer(),
     );
     final service = _service(
       remoteRepository: remote,
@@ -457,7 +457,7 @@ void main() {
       refreshOutcomeApplier: _defaultRefreshOutcomeApplier(bus),
       shelfRefreshBus: bus,
       catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
-      subjectParser: const RuleBasedComicSubjectParser(),
+      titleAnalyzer: const PetitComicTitleAnalyzer(),
     );
     final local = _MemoryLocalFavoriteRepository();
     final service = _service(
@@ -505,7 +505,7 @@ void main() {
       refreshOutcomeApplier: _defaultRefreshOutcomeApplier(bus),
       shelfRefreshBus: bus,
       catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
-      subjectParser: const RuleBasedComicSubjectParser(),
+      titleAnalyzer: const PetitComicTitleAnalyzer(),
     );
     final service = _service(
       remoteRepository: _FakeFavoriteRepository(const <int, FavoriteThreadsPage>{}),
@@ -520,7 +520,7 @@ void main() {
 
     await service.runBackgroundMaintenance();
 
-    expect(queue.enqueuedTitles, <String>['[Fav] Backfill Comic EP 02']);
+    expect(queue.enqueuedTitles, <String>['Backfill Comic']);
     expect(queue.enqueuedRequests.single.comicId, 'yamibo:100');
     expect(queue.enqueuedRequests.single.sourceTid, '100');
     expect(queue.enqueuedRequests.single.displayTitle, 'Backfill Comic');
@@ -768,7 +768,7 @@ void main() {
       refreshOutcomeApplier: _defaultRefreshOutcomeApplier(bus),
       shelfRefreshBus: bus,
       catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
-      subjectParser: const RuleBasedComicSubjectParser(),
+      titleAnalyzer: const PetitComicTitleAnalyzer(),
     );
     final service = _service(
       remoteRepository: remote,
@@ -831,7 +831,7 @@ void main() {
       refreshOutcomeApplier: _defaultRefreshOutcomeApplier(bus),
       shelfRefreshBus: bus,
       catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
-      subjectParser: const RuleBasedComicSubjectParser(),
+      titleAnalyzer: const PetitComicTitleAnalyzer(),
     );
     var detailLoadCount = 0;
     final service = _service(

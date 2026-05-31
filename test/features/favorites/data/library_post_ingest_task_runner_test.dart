@@ -8,7 +8,7 @@ import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applie
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
-import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
+import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
 import 'package:y300/features/favorites/data/library_post_ingest_task_runner.dart';
 import 'package:y300/features/favorites/domain/favorite_content_ingest.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -399,7 +399,7 @@ class _RecordingAutoRefreshCoordinator
           refreshOutcomeApplier: const _NoopRefreshOutcomeApplier(),
           shelfRefreshBus: _UnusedBus.instance,
           catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
-          subjectParser: const RuleBasedComicSubjectParser(),
+          titleAnalyzer: const PetitComicTitleAnalyzer(),
         );
 
   final List<_AutoRefreshCallRecord> afterIngestCalls =
@@ -461,7 +461,7 @@ class _ThrowingAutoRefreshCoordinator
           refreshOutcomeApplier: const _NoopRefreshOutcomeApplier(),
           shelfRefreshBus: _UnusedBus.instance,
           catalogMissPolicy: const DefaultComicCatalogMissPolicy(),
-          subjectParser: const RuleBasedComicSubjectParser(),
+          titleAnalyzer: const PetitComicTitleAnalyzer(),
         );
 
   @override

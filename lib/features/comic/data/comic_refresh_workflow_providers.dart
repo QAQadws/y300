@@ -49,6 +49,6 @@ final comicFavoriteAutoRefreshCoordinatorProvider =
     refreshOutcomeApplier: ref.watch(comicRefreshOutcomeApplierProvider),
     shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
     catalogMissPolicy: ref.watch(comicCatalogMissPolicyProvider),
-    subjectParser: ref.watch(comicSubjectParserProvider),
+    titleAnalyzer: ref.watch(comicTitleAnalyzerProvider),
   );
 });

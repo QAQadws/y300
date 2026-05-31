@@ -167,7 +167,10 @@ class ComicSearchRefreshQueueSnapshot {
     if (title == null || title.isEmpty) {
       return null;
     }
-    return '$title 正在等待搜索 预计耗时${_formatSeconds(estimatedDuration)}s';
+    // Title is already the cleaned book name produced by the title analyzer
+    // (stage 2), so we only wrap it for display and avoid leaking raw thread
+    // noise. Stage 4 reuses this wording as the comic search notification body.
+    return '《$title》正在等待漫画搜索 预计耗时${_formatSeconds(estimatedDuration)}s';
   }
 
   String _formatSeconds(Duration duration) {

@@ -137,6 +137,37 @@ void main() {
     expect(queue.enqueuedTitles, <String>['Search Test Comic']);
   });
 
+  test('refreshWork queues cleaned display title when no custom search title is set', () async {
+    final repository = _FakeComicRepository(title: '[Scan] Noisy Title Vol.2');
+    final refreshService = _FakeComicEpisodeRefreshService(
+      catalogOutcome: const ComicEpisodeRefreshOutcome(
+        source: ComicEpisodeRefreshSource.empty,
+        links: <ComicEpisodeLink>[],
+      ),
+    );
+    final queue = _RecordingSearchQueue();
+    final queueState = _FakeSearchQueueStateReader(active: true);
+    addTearDown(queueState.snapshot.dispose);
+    final adapter = ComicDetailAdapter(
+      repository,
+      refreshService: refreshService,
+      searchQueue: queue,
+      searchQueueState: queueState,
+      refreshOutcomeApplier: _RecordingRefreshOutcomeApplier(),
+      featureFlags: ComicReaderFeatureFlags.defaults.copyWith(
+        readerCustomMetadataEnabled: false,
+      ),
+      stateRepository: _FakeLibraryStateRepository(),
+    );
+
+    final result = await adapter.refreshWork(workId: 'comic:1');
+
+    expect(result.status, DetailRefreshStatus.queued);
+    // Custom search title is suppressed, so the queue title is the analyzer's
+    // clean book name rather than the raw "[Scan] Noisy Title Vol.2" thread.
+    expect(queue.enqueuedTitles, <String>['Noisy Title']);
+  });
+
   test('custom metadata feature flag can fall back to source fields', () async {
     final repository = _FakeComicRepositoryWithCoverWriter(
       customCoverImageUrl: 'https://img.test/custom-cover.jpg',
@@ -476,9 +507,10 @@ class _FakeSearchQueueStateReader implements ComicSearchRefreshQueueStateReader 
 }
 
 class _FakeComicRepository implements ComicRepository {
-  _FakeComicRepository({this.progress});
+  _FakeComicRepository({this.progress, this.title = 'Test Comic'});
 
   final ComicReadingProgress? progress;
+  final String title;
   bool mergeCalled = false;
   List<ComicEpisodeLink> lastMergedLinks = const [];
   String? lastFallbackTid;
@@ -491,7 +523,7 @@ class _FakeComicRepository implements ComicRepository {
       sourceFid: '30',
       sourceTypeId: '398',
       sourceTagName: '韩国漫画',
-      title: 'Test Comic',
+      title: title,
       sourceTitle: 'Source Test Comic',
       customTitle: 'Custom Test Comic',
       author: 'Author A',

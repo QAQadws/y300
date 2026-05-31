@@ -6,7 +6,7 @@ import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applie
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
-import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
+import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
@@ -14,7 +14,7 @@ import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 void main() {
   const longRunningTagName = 'long-running-tag';
 
-  group('ComicFavoriteAutoRefreshCoordinator current baseline', () {
+  group('ComicFavoriteAutoRefreshCoordinator title resolution', () {
     test('catalog hit delegates refresh application with catalog source', () async {
       const links = <ComicEpisodeLink>[
         ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: 'Episode 1'),
@@ -38,7 +38,7 @@ void main() {
         catalogMissPolicy: const DefaultComicCatalogMissPolicy(
           longRunningTagName: longRunningTagName,
         ),
-        subjectParser: const RuleBasedComicSubjectParser(),
+        titleAnalyzer: const PetitComicTitleAnalyzer(),
       );
 
       final result = await coordinator.refreshAfterFavoriteIngest(
@@ -66,7 +66,7 @@ void main() {
       expect(searchQueue.enqueuedTitles, isEmpty);
     });
 
-    test('catalog miss keeps raw favorite title in queue but parses source title for search', () async {
+    test('catalog miss uses cleaned favorite title for queue and parsed source title for search', () async {
       final refreshService = _FakeRefreshService(
         catalogOutcome: const ComicEpisodeRefreshOutcome(
           source: ComicEpisodeRefreshSource.empty,
@@ -84,7 +84,7 @@ void main() {
         catalogMissPolicy: const DefaultComicCatalogMissPolicy(
           longRunningTagName: longRunningTagName,
         ),
-        subjectParser: const RuleBasedComicSubjectParser(),
+        titleAnalyzer: const PetitComicTitleAnalyzer(),
       );
 
       final result = await coordinator.refreshAfterFavoriteIngest(
@@ -99,7 +99,7 @@ void main() {
       expect(result.estimatedDuration, const Duration(seconds: 21));
       expect(
         searchQueue.enqueuedTitles,
-        <String>['Favorite List Raw Title EP 99'],
+        <String>['Favorite List Raw Title'],
       );
       expect(searchQueue.enqueuedOrigins, <ComicSearchRefreshOrigin>[
         ComicSearchRefreshOrigin.favoriteSync,
@@ -141,7 +141,7 @@ void main() {
         catalogMissPolicy: const DefaultComicCatalogMissPolicy(
           longRunningTagName: longRunningTagName,
         ),
-        subjectParser: const RuleBasedComicSubjectParser(),
+        titleAnalyzer: const PetitComicTitleAnalyzer(),
       );
 
       final result = await coordinator.refreshAfterFavoriteIngest(
@@ -164,7 +164,7 @@ void main() {
       expect(bus.signal.value?.tid, '100');
     });
 
-    test('forced catalog miss keeps raw favorite title while parsing fallback search request', () async {
+    test('forced catalog miss cleans favorite title for queue and parses fallback search request', () async {
       final refreshService = _FakeRefreshService(
         catalogOutcome: const ComicEpisodeRefreshOutcome(
           source: ComicEpisodeRefreshSource.empty,
@@ -182,7 +182,7 @@ void main() {
         catalogMissPolicy: const DefaultComicCatalogMissPolicy(
           longRunningTagName: longRunningTagName,
         ),
-        subjectParser: const RuleBasedComicSubjectParser(),
+        titleAnalyzer: const PetitComicTitleAnalyzer(),
       );
 
       final result = await coordinator.refreshFavoriteComic(
@@ -196,7 +196,7 @@ void main() {
       expect(result.status, ComicFavoriteAutoRefreshStatus.queuedForSearch);
       expect(
         searchQueue.enqueuedTitles,
-        <String>['[Favorite] Raw Queue Title EP 09'],
+        <String>['Raw Queue Title'],
       );
       expect(searchQueue.enqueuedRequests.single.comicId, 'comic:4');
       expect(
