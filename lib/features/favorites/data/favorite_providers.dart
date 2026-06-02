@@ -21,6 +21,8 @@ import 'package:y300/features/tags/data/tag_providers.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
+export 'package:y300/features/favorites/data/unfavorite_use_case_providers.dart';
+
 final localFavoriteRepositoryProvider = Provider<LocalFavoriteRepository>((ref) {
   return SqfliteLocalFavoriteRepository(ComicLocalDb.open());
 });

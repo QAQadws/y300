@@ -83,6 +83,14 @@ abstract class LocalFavoriteRepository {
     throw UnimplementedError('markRemovedByWorkId($workId)');
   }
 
+  /// 只按指定 tid 标记本地收藏行为已移除。
+  ///
+  /// 用于取消收藏阶段 3 的“部分 tid 成功、部分失败”场景，避免按 workId
+  /// 批量标记时把失败 tid 一起误删。
+  Future<int> markRemovedByTids(Set<String> tids) {
+    throw UnimplementedError('markRemovedByTids($tids)');
+  }
+
   Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(String workId);
 
   Future<List<LibraryCategory>> loadVisibleCategories();
@@ -557,6 +565,27 @@ class SqfliteLocalFavoriteRepository
       <String, Object?>{'removed_at': now},
       where: 'work_id = ? AND removed_at IS NULL',
       whereArgs: <Object>[normalized],
+    );
+  }
+
+  @override
+  Future<int> markRemovedByTids(Set<String> tids) async {
+    final normalized = tids
+        .map((tid) => tid.trim())
+        .where((tid) => tid.isNotEmpty)
+        .toSet();
+    if (normalized.isEmpty) {
+      return 0;
+    }
+
+    final db = await _dbFuture;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final placeholders = List<String>.filled(normalized.length, '?').join(', ');
+    return db.update(
+      ComicLocalDb.favoriteThreadsTable,
+      <String, Object?>{'removed_at': now},
+      where: 'tid IN ($placeholders) AND removed_at IS NULL',
+      whereArgs: normalized.toList(growable: false),
     );
   }
 

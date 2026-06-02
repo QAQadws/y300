@@ -191,6 +191,65 @@ void main() {
       expect(other?.workId, 'novel:49:200');
     });
 
+    test('markRemovedByTids marks only target active tids removed', () async {
+      await repository.upsertRemotePage(
+        page: FavoriteThreadsPage(
+          page: 1,
+          perPage: 20,
+          totalCount: 4,
+          items: <FavoriteThread>[
+            _thread(tid: '100', title: '漫画一'),
+            _thread(tid: '101', title: '漫画二'),
+            _thread(tid: '102', title: '漫画三'),
+            _thread(tid: '200', title: '小说一'),
+          ],
+        ),
+        pageStartOrder: 0,
+      );
+      await repository.updateThreadDetailMeta(
+        tid: '100',
+        fid: '30',
+        typeid: '398',
+        tagName: '韩国漫画',
+        contentKind: ThreadContentKind.comic,
+        workId: 'yamibo:shared',
+      );
+      await repository.updateThreadDetailMeta(
+        tid: '101',
+        fid: '30',
+        typeid: '398',
+        tagName: '韩国漫画',
+        contentKind: ThreadContentKind.comic,
+        workId: 'yamibo:shared',
+      );
+      await repository.updateThreadDetailMeta(
+        tid: '102',
+        fid: '30',
+        typeid: '398',
+        tagName: '韩国漫画',
+        contentKind: ThreadContentKind.comic,
+        workId: 'yamibo:shared',
+      );
+      await repository.updateThreadDetailMeta(
+        tid: '200',
+        fid: '49',
+        typeid: '293',
+        tagName: '原创',
+        contentKind: ThreadContentKind.novel,
+        workId: 'novel:49:200',
+      );
+      await repository.markRemovedTids(const <String>{'100', '101', '102', '200'});
+
+      final changed = await repository.markRemovedByTids(const <String>{'100', '102', '999'});
+      final activeShared = await repository.getActiveThreadsByWorkId('yamibo:shared');
+      final other = await repository.getActiveThreadByTid('200');
+
+      expect(changed, 2);
+      expect(activeShared.map((record) => record.tid), <String>['101']);
+      expect(other, isNotNull);
+      expect(other?.workId, 'novel:49:200');
+    });
+
     test('countMissingDetailRecords ignores loaded and removed favorites', () async {
       await repository.upsertRemotePage(
         page: FavoriteThreadsPage(

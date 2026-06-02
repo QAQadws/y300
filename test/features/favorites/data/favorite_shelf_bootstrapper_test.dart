@@ -286,6 +286,9 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   Future<int> markRemovedByWorkId(String workId) async => 0;
 
   @override
+  Future<int> markRemovedByTids(Set<String> tids) async => 0;
+
+  @override
   Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(String workId) async {
     return null;
   }

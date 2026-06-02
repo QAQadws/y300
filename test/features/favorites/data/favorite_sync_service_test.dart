@@ -1382,6 +1382,28 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
   }
 
   @override
+  Future<int> markRemovedByTids(Set<String> tids) async {
+    var changed = 0;
+    for (final tid in tids) {
+      final record = records[tid];
+      if (record == null || !record.isActive) {
+        continue;
+      }
+      records[record.tid] = _cacheRecord(
+        tid: record.tid,
+        title: record.title,
+        contentKind: record.contentKind,
+        workId: record.workId,
+        sourceTagName: record.sourceTagName,
+        detailLoadedAt: record.detailLoadedAt,
+        removedAt: DateTime(2026, 1, 2),
+      );
+      changed++;
+    }
+    return changed;
+  }
+
+  @override
   Future<List<FavoriteThreadCacheRecord>> getMissingDetailRecords({
     int limit = 20,
     Set<String> excludedTids = const <String>{},

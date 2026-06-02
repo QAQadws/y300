@@ -310,6 +310,9 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   Future<int> markRemovedByWorkId(String workId) async => 0;
 
   @override
+  Future<int> markRemovedByTids(Set<String> tids) async => 0;
+
+  @override
   Future<List<FavoriteThreadCacheRecord>> getMissingDetailRecords({
     int limit = 20,
     Set<String> excludedTids = const <String>{},
