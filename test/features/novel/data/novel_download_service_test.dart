@@ -166,6 +166,9 @@ class _NovelDownloadRepositoryFake implements NovelRepository {
   Future<void> removeFromShelf({required String novelId}) async {}
 
   @override
+  Future<void> purgeWork({required String novelId}) async {}
+
+  @override
   Future<void> renameCategory({required String categoryId, required String newName}) async {}
 
   @override

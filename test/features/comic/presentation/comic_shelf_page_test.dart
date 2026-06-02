@@ -57,6 +57,9 @@ class _FakeComicRepository implements ComicRepository {
   Future<void> removeFromShelf({required String comicId}) async {}
 
   @override
+  Future<void> purgeWork({required String comicId}) async {}
+
+  @override
   Future<String> createCategory({required String name}) async => 'created';
 
   @override
@@ -226,6 +229,12 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
   }) async {
     return 1;
   }
+
+  @override
+  Future<void> purgeWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {}
 
   @override
   Future<String> createTag({required String name}) async => 'tag-1';

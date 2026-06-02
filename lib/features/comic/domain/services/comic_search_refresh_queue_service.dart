@@ -144,6 +144,14 @@ class ComicSearchRefreshQueueService
         await _pump();
       }
 
+      // `_pumpFuture` can be replaced by a follow-up microtask in
+      // `whenComplete`. Wait until that trailing scheduled pump also settles,
+      // otherwise tests may close the SQLite handle while the worker is still
+      // performing its final no-op claim/query pass.
+      if (_pumpFuture != null || _processing) {
+        continue;
+      }
+
       final entries = await _refreshSnapshot();
       final hasRunning = entries.any(
         (entry) => entry.status == ComicSearchRefreshQueueStatus.running,
@@ -156,6 +164,7 @@ class ComicSearchRefreshQueueService
 
   void dispose() {
     _disposed = true;
+    _pumpRequested = false;
     _wakeTimer?.cancel();
     _snapshot.dispose();
   }

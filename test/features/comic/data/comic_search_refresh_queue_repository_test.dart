@@ -83,6 +83,62 @@ void main() {
       await db.close();
       await deleteDatabase(dbName);
     });
+
+    test('deleteByComicId removes all queue rows for target comic only', () async {
+      const dbName = 'comic_search_refresh_queue_delete_test.db';
+      await deleteDatabase(dbName);
+      final dbFuture = ComicLocalDb.open(databaseName: dbName);
+      final repository = LocalComicSearchRefreshQueueRepository(
+        dbFuture,
+      );
+      final now = DateTime(2026, 5, 16, 12, 0, 0);
+
+      final target = await repository.enqueue(
+        _draft(title: '目标漫画'),
+        now: now,
+      );
+      final other = await repository.enqueue(
+        ComicSearchRefreshQueueDraft(
+          title: '其他漫画',
+          origin: ComicSearchRefreshOrigin.favoriteSync,
+          request: const ComicEpisodeRefreshRequest(
+            comicId: 'comic:2',
+            sourceTid: '200',
+            displayTitle: '其他漫画',
+            sourceTitle: '其他漫画来源',
+          ),
+        ),
+        now: now.add(const Duration(seconds: 1)),
+      );
+      await repository.markCompleted(
+        id: target.entry.id,
+        now: now.add(const Duration(seconds: 2)),
+      );
+
+      await repository.deleteByComicId('comic:1');
+
+      final db = await dbFuture;
+      expect(
+        await db.query(
+          ComicLocalDb.comicSearchRefreshQueueTable,
+          where: 'comic_id = ?',
+          whereArgs: const <Object>['comic:1'],
+        ),
+        isEmpty,
+      );
+      expect(
+        await db.query(
+          ComicLocalDb.comicSearchRefreshQueueTable,
+          where: 'comic_id = ?',
+          whereArgs: const <Object>['comic:2'],
+        ),
+        hasLength(1),
+      );
+      expect(other.entry.comicId, 'comic:2');
+
+      await db.close();
+      await deleteDatabase(dbName);
+    });
   });
 }
 

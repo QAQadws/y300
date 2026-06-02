@@ -78,6 +78,11 @@ abstract class LocalFavoriteRepository {
   /// 作品是否还有任意活跃收藏来源。取消收藏后据此决定是否清除作品。
   Future<bool> hasActiveThreadForWorkId(String workId);
 
+  /// 按作品统一标记本地收藏行为已移除。
+  Future<int> markRemovedByWorkId(String workId) {
+    throw UnimplementedError('markRemovedByWorkId($workId)');
+  }
+
   Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(String workId);
 
   Future<List<LibraryCategory>> loadVisibleCategories();
@@ -537,6 +542,22 @@ class SqfliteLocalFavoriteRepository
       <Object>[normalized],
     );
     return rows.isNotEmpty;
+  }
+
+  @override
+  Future<int> markRemovedByWorkId(String workId) async {
+    final normalized = workId.trim();
+    if (normalized.isEmpty) {
+      return 0;
+    }
+    final db = await _dbFuture;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return db.update(
+      ComicLocalDb.favoriteThreadsTable,
+      <String, Object?>{'removed_at': now},
+      where: 'work_id = ? AND removed_at IS NULL',
+      whereArgs: <Object>[normalized],
+    );
   }
 
   @override

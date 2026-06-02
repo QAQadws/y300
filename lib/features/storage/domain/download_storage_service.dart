@@ -19,6 +19,14 @@ abstract class DownloadStorageService {
     required String title,
   });
 
+  Future<bool> deleteComicDownloads({required String workId}) {
+    throw UnimplementedError('deleteComicDownloads($workId)');
+  }
+
+  Future<bool> deleteNovelDownloads({required String novelId}) {
+    throw UnimplementedError('deleteNovelDownloads($novelId)');
+  }
+
   String safeFileName(String value, {String fallback = 'untitled'});
 
   String numberedFileName({
@@ -113,6 +121,32 @@ class DefaultDownloadStorageService implements DownloadStorageService {
     await _prepareDirectory(io.Directory(p.join(directory.path, 'chapters')));
     await _prepareDirectory(io.Directory(p.join(directory.path, 'images')));
     return directory;
+  }
+
+  @override
+  Future<bool> deleteComicDownloads({required String workId}) async {
+    final normalizedWorkId = workId.trim();
+    if (normalizedWorkId.isEmpty) {
+      return false;
+    }
+    final root = await prepareRoot();
+    return _deleteWorkDirectories(
+      parentPath: root.comicsPath,
+      id: normalizedWorkId,
+    );
+  }
+
+  @override
+  Future<bool> deleteNovelDownloads({required String novelId}) async {
+    final normalizedNovelId = novelId.trim();
+    if (normalizedNovelId.isEmpty) {
+      return false;
+    }
+    final root = await prepareRoot();
+    return _deleteWorkDirectories(
+      parentPath: root.novelsPath,
+      id: normalizedNovelId,
+    );
   }
 
   @override
@@ -241,6 +275,32 @@ class DefaultDownloadStorageService implements DownloadStorageService {
   }) {
     final name = safeFileName(title, fallback: 'work');
     return '$name-${_shortHash(id)}';
+  }
+
+  Future<bool> _deleteWorkDirectories({
+    required String parentPath,
+    required String id,
+  }) async {
+    final parent = io.Directory(parentPath);
+    if (!await parent.exists()) {
+      return false;
+    }
+    final suffix = '-${_shortHash(id)}';
+    var deletedAny = false;
+    await for (final entity in parent.list(followLinks: false)) {
+      if (entity is! io.Directory) {
+        continue;
+      }
+      final name = p.basename(entity.path);
+      if (!name.endsWith(suffix)) {
+        continue;
+      }
+      if (await entity.exists()) {
+        await entity.delete(recursive: true);
+        deletedAny = true;
+      }
+    }
+    return deletedAny;
   }
 
   Future<void> _prepareDirectory(io.Directory directory) async {

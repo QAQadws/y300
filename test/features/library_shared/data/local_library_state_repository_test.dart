@@ -100,6 +100,119 @@ void main() {
       expect(state.readAt, isNull);
     });
 
+    test('purgeWorkState removes only target work state, episode state and tags', () async {
+      await repository.upsertWorkState(
+        moduleKey: LibraryModuleKey.comic,
+        workId: 'comic:purge',
+        lastReadEpisodeId: 'comic-ep-1',
+      );
+      await repository.upsertEpisodeState(
+        moduleKey: LibraryModuleKey.comic,
+        episodeId: 'comic-ep-1',
+        workId: 'comic:purge',
+        isRead: true,
+      );
+      final comicTagId = await repository.createTag(name: '待清理');
+      await repository.bindTagToWork(
+        moduleKey: LibraryModuleKey.comic,
+        workId: 'comic:purge',
+        tagId: comicTagId,
+      );
+
+      await repository.upsertWorkState(
+        moduleKey: LibraryModuleKey.comic,
+        workId: 'comic:keep',
+        lastReadEpisodeId: 'comic-ep-2',
+      );
+      await repository.upsertEpisodeState(
+        moduleKey: LibraryModuleKey.comic,
+        episodeId: 'comic-ep-2',
+        workId: 'comic:keep',
+        isRead: false,
+      );
+
+      await repository.upsertWorkState(
+        moduleKey: LibraryModuleKey.novel,
+        workId: 'comic:purge',
+        lastReadEpisodeId: 'novel-ep-1',
+      );
+      await repository.upsertEpisodeState(
+        moduleKey: LibraryModuleKey.novel,
+        episodeId: 'novel-ep-1',
+        workId: 'comic:purge',
+        isRead: false,
+      );
+      final novelTagId = await repository.createTag(name: '保留');
+      await repository.bindTagToWork(
+        moduleKey: LibraryModuleKey.novel,
+        workId: 'comic:purge',
+        tagId: novelTagId,
+      );
+
+      await repository.purgeWorkState(
+        moduleKey: LibraryModuleKey.comic,
+        workId: 'comic:purge',
+      );
+
+      expect(
+        await repository.getWorkState(
+          moduleKey: LibraryModuleKey.comic,
+          workId: 'comic:purge',
+        ),
+        isNull,
+      );
+      expect(
+        await repository.getEpisodeState(
+          moduleKey: LibraryModuleKey.comic,
+          episodeId: 'comic-ep-1',
+        ),
+        isNull,
+      );
+      expect(
+        await repository.hasAnyTag(
+          moduleKey: LibraryModuleKey.comic,
+          workId: 'comic:purge',
+        ),
+        isFalse,
+      );
+
+      expect(
+        await repository.getWorkState(
+          moduleKey: LibraryModuleKey.comic,
+          workId: 'comic:keep',
+        ),
+        isNotNull,
+      );
+      expect(
+        await repository.getEpisodeState(
+          moduleKey: LibraryModuleKey.comic,
+          episodeId: 'comic-ep-2',
+        ),
+        isNotNull,
+      );
+      expect(
+        await repository.getWorkState(
+          moduleKey: LibraryModuleKey.novel,
+          workId: 'comic:purge',
+        ),
+        isNotNull,
+      );
+      expect(
+        await repository.getEpisodeState(
+          moduleKey: LibraryModuleKey.novel,
+          episodeId: 'novel-ep-1',
+        ),
+        isNotNull,
+      );
+      expect(
+        await repository.hasAnyTag(
+          moduleKey: LibraryModuleKey.novel,
+          workId: 'comic:purge',
+        ),
+        isTrue,
+      );
+    });
+
     test('can save and load display settings', () async {
       await repository.upsertDisplaySettings(
         moduleKey: LibraryModuleKey.comic,

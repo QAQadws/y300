@@ -138,6 +138,9 @@ class _FakeNovelRepository implements NovelRepository {
   Future<void> removeFromShelf({required String novelId}) async {}
 
   @override
+  Future<void> purgeWork({required String novelId}) async {}
+
+  @override
   Future<void> renameCategory({
     required String categoryId,
     required String newName,
@@ -188,6 +191,12 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
   }) async {
     return 0;
   }
+
+  @override
+  Future<void> purgeWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {}
 
   @override
   Future<String> createTag({required String name}) async => 'tag-1';

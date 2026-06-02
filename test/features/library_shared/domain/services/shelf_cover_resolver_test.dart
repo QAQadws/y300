@@ -124,6 +124,12 @@ class _FakeImageCacheService implements ImageCacheService {
   Future<void> clearUnprotected() async {}
 
   @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async => 0;
+
+  @override
   Future<CachedImageResult> copyProtectedLocalFile(ImageCacheLocalCopyRequest request) async {
     return CachedImageResult.failed;
   }

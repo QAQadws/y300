@@ -51,6 +51,14 @@ abstract class LibraryStateRepository {
     required String workId,
   });
 
+  /// 删除一个作品在 shared 状态表里的全部状态和标签绑定。
+  Future<void> purgeWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) {
+    throw UnimplementedError('purgeWorkState($moduleKey, $workId)');
+  }
+
   Future<void> upsertDisplaySettings({
     required LibraryModuleKey moduleKey,
     required LibraryDisplayMode displayMode,
@@ -95,4 +103,3 @@ abstract class LibraryStateRepository {
     required String workId,
   });
 }
-

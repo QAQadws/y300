@@ -9,6 +9,14 @@ abstract class ImageCacheService {
     ImageCacheLocalCopyRequest request,
   );
 
+  /// 删除同一 owner 下的全部缓存记录，包含保护与非保护资源。
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) {
+    throw UnimplementedError('deleteByOwner(${ownerType.dbValue}, $ownerId)');
+  }
+
   Future<int> calculateUsageBytes({bool includeProtected = false});
 
   Future<void> pruneToLimit({required int maxBytes});

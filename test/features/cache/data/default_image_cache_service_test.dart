@@ -141,6 +141,80 @@ void main() {
       'https://bbs.yamibo.com/data/attachment/new.jpg',
     );
   });
+
+  test('deleteByOwner removes all owner records and ignores missing files', () async {
+    final tempDir = await io.Directory.systemTemp.createTemp('y300-image-cache-test-');
+    addTearDown(() async {
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+    final existingProtected = io.File('${tempDir.path}/protected.jpg');
+    final existingPage = io.File('${tempDir.path}/page.jpg');
+    await existingProtected.writeAsBytes(<int>[1, 2, 3]);
+    await existingPage.writeAsBytes(<int>[4, 5, 6]);
+
+    final repository = _MemoryImageCacheRepository()
+      ..records['cover-1'] = CachedImageRecord(
+        cacheKey: 'cover-1',
+        ownerType: ImageCacheOwnerType.comic.dbValue,
+        ownerId: 'yamibo:100',
+        role: ImageCacheRole.cover.dbValue,
+        localPath: existingProtected.path,
+        bytes: 3,
+        protected: true,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      )
+      ..records['page-1'] = CachedImageRecord(
+        cacheKey: 'page-1',
+        ownerType: ImageCacheOwnerType.comic.dbValue,
+        ownerId: 'yamibo:100',
+        role: ImageCacheRole.comicPage.dbValue,
+        localPath: existingPage.path,
+        bytes: 3,
+        protected: false,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      )
+      ..records['missing-1'] = CachedImageRecord(
+        cacheKey: 'missing-1',
+        ownerType: ImageCacheOwnerType.comic.dbValue,
+        ownerId: 'yamibo:100',
+        role: ImageCacheRole.comicPage.dbValue,
+        localPath: '${tempDir.path}/missing.jpg',
+        bytes: 0,
+        protected: false,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      )
+      ..records['other-owner'] = CachedImageRecord(
+        cacheKey: 'other-owner',
+        ownerType: ImageCacheOwnerType.comic.dbValue,
+        ownerId: 'yamibo:200',
+        role: ImageCacheRole.cover.dbValue,
+        localPath: '${tempDir.path}/other.jpg',
+        bytes: 0,
+        protected: true,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      );
+    final service = DefaultImageCacheService(
+      repository: repository,
+      cacheManagerFuture: Future<BaseCacheManager>.value(_UnusedCacheManager()),
+      directoryResolver: const ImageCacheDirectoryResolver(),
+    );
+
+    final deletedCount = await service.deleteByOwner(
+      ownerType: ImageCacheOwnerType.comic,
+      ownerId: 'yamibo:100',
+    );
+
+    expect(deletedCount, 3);
+    expect(repository.records.keys, <String>{'other-owner'});
+    expect(await existingProtected.exists(), isFalse);
+    expect(await existingPage.exists(), isFalse);
+  });
 }
 
 class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
@@ -198,6 +272,16 @@ class _MemoryImageCacheRepository implements ImageCacheRepository {
 
   @override
   Future<CachedImageRecord?> getByKey(String cacheKey) async => records[cacheKey];
+
+  @override
+  Future<List<CachedImageRecord>> listByOwner({
+    required String ownerType,
+    required String ownerId,
+  }) async {
+    return records.values
+        .where((record) => record.ownerType == ownerType && record.ownerId == ownerId)
+        .toList(growable: false);
+  }
 
   @override
   Future<List<CachedImageRecord>> listUnprotectedByAccessTime() async => const <CachedImageRecord>[];

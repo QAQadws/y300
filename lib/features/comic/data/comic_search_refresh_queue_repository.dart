@@ -34,5 +34,9 @@ abstract class ComicSearchRefreshQueueRepository {
     required DateTime now,
   });
 
+  Future<void> deleteByComicId(String comicId) {
+    throw UnimplementedError('deleteByComicId($comicId)');
+  }
+
   Future<List<ComicSearchRefreshQueueEntry>> loadActiveEntries();
 }

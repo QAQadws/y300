@@ -120,6 +120,9 @@ class _FakeComicRepository implements ComicRepository {
   Future<void> removeFromShelf({required String comicId}) async {}
 
   @override
+  Future<void> purgeWork({required String comicId}) async {}
+
+  @override
   Future<String> createCategory({required String name}) async => 'mock';
 
   @override
@@ -265,6 +268,9 @@ class _FakeNovelRepository implements NovelRepository {
   Future<void> removeFromShelf({required String novelId}) async {}
 
   @override
+  Future<void> purgeWork({required String novelId}) async {}
+
+  @override
   Future<void> renameCategory({required String categoryId, required String newName}) async {}
 
   @override
@@ -295,6 +301,12 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
     required String workId,
   }) async =>
       0;
+
+  @override
+  Future<void> purgeWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {}
 
   @override
   Future<int> countReadEpisodes({

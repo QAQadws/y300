@@ -172,6 +172,9 @@ class _RecordingComicRepository implements ComicRepository {
   dynamic noSuchMethod(Invocation invocation) {
     return super.noSuchMethod(invocation);
   }
+
+  @override
+  Future<void> purgeWork({required String comicId}) async {}
 }
 
 class _ThrowingComicRepository extends _RecordingComicRepository {

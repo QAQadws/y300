@@ -201,6 +201,9 @@ class _ComicDownloadRepositoryFake implements ComicRepository, ComicEpisodeImage
   Future<void> addToShelf({required String comicId, required String tid, required String fid, String? sourceTypeId, String? sourceTagName, required String title, required ParsedComicPost parsedPost}) async {}
   @override
   Future<void> removeFromShelf({required String comicId}) async {}
+
+  @override
+  Future<void> purgeWork({required String comicId}) async {}
   @override
   Future<String> createCategory({required String name}) async => 'c1';
   @override

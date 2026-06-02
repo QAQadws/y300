@@ -519,6 +519,12 @@ class _FakeImageCacheService implements ImageCacheService {
   Future<void> clearUnprotected() async {}
 
   @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async => 0;
+
+  @override
   Future<CachedImageResult> copyProtectedLocalFile(
     ImageCacheLocalCopyRequest request,
   ) async {
@@ -654,6 +660,9 @@ class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
 
   @override
   Future<void> removeFromShelf({required String comicId}) async {}
+
+  @override
+  Future<void> purgeWork({required String comicId}) async {}
 
   @override
   Future<String> createCategory({required String name}) async => 'mock';

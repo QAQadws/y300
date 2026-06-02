@@ -206,6 +206,32 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
   }
 
   @override
+  Future<void> purgeWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    final db = await _dbFuture;
+    final contentType = _moduleKeyToContentType(moduleKey);
+    await db.transaction((txn) async {
+      await txn.delete(
+        ComicLocalDb.libraryWorkTagsTable,
+        where: 'content_type = ? AND work_id = ?',
+        whereArgs: <Object>[contentType, workId],
+      );
+      await txn.delete(
+        ComicLocalDb.libraryEpisodeStateTable,
+        where: 'content_type = ? AND work_id = ?',
+        whereArgs: <Object>[contentType, workId],
+      );
+      await txn.delete(
+        ComicLocalDb.libraryWorkStateTable,
+        where: 'content_type = ? AND work_id = ?',
+        whereArgs: <Object>[contentType, workId],
+      );
+    });
+  }
+
+  @override
   Future<void> upsertDisplaySettings({
     required LibraryModuleKey moduleKey,
     required LibraryDisplayMode displayMode,

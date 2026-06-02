@@ -38,6 +38,11 @@ class ComicLocalDb {
     return openDatabase(
       targetDbName,
       version: dbVersion,
+      onConfigure: (db) async {
+        // 多个阶段的清理逻辑都依赖 schema 上声明的级联关系，这里显式打开
+        // SQLite 外键约束，避免“表上写了 ON DELETE CASCADE，但运行时不生效”。
+        await db.execute('PRAGMA foreign_keys = ON');
+      },
       onCreate: (db, version) async {
         await _createTables(db);
       },

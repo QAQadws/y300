@@ -556,6 +556,8 @@ class _FakeComicRepository implements ComicRepository {
   @override
   Future<void> removeFromShelf({required String comicId}) async {}
   @override
+  Future<void> purgeWork({required String comicId}) async {}
+  @override
   Future<String> createCategory({required String name}) async => 'c1';
   @override
   Future<void> clearEpisodeImageCache({required String episodeId}) async {}
@@ -698,6 +700,12 @@ class _FakeImageCacheService implements ImageCacheService {
   Future<void> clearUnprotected() async {}
 
   @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async => 0;
+
+  @override
   Future<CachedImageResult> copyProtectedLocalFile(
     ImageCacheLocalCopyRequest request,
   ) async {
@@ -742,6 +750,11 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
   Future<int> countReadEpisodes({required LibraryModuleKey moduleKey, required String workId}) async => 0;
   @override
   Future<int> countUnreadEpisodes({required LibraryModuleKey moduleKey, required String workId}) async => 0;
+  @override
+  Future<void> purgeWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {}
   @override
   Future<String> createTag({required String name}) async => 't1';
   @override

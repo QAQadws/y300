@@ -478,6 +478,11 @@ class _FakeComicRepository implements ComicRepository {
   }
 
   @override
+  Future<void> purgeWork({required String comicId}) async {
+    _ids.remove(comicId);
+  }
+
+  @override
   Future<String> createCategory({required String name}) async => 'mock-category';
 
   @override
@@ -657,6 +662,11 @@ class _FakeNovelRepository implements NovelRepository {
 
   @override
   Future<void> removeFromShelf({required String novelId}) async {
+    _ids.remove(novelId);
+  }
+
+  @override
+  Future<void> purgeWork({required String novelId}) async {
     _ids.remove(novelId);
   }
 

@@ -680,6 +680,23 @@ class LocalNovelRepository
   }
 
   @override
+  Future<void> purgeWork({required String novelId}) async {
+    final db = await _dbFuture;
+    await db.transaction((txn) async {
+      await txn.delete(
+        ComicLocalDb.novelReadingProgressTable,
+        where: 'novel_id = ?',
+        whereArgs: <Object>[novelId],
+      );
+      await txn.delete(
+        ComicLocalDb.worksTable,
+        where: 'work_id = ? AND content_type = ?',
+        whereArgs: <Object>[novelId, _contentType],
+      );
+    });
+  }
+
+  @override
   Future<void> saveReadingProgress({
     required String novelId,
     required String episodeId,

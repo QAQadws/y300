@@ -306,6 +306,8 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
 
   @override
   Future<bool> hasActiveThreadForWorkId(String workId) async => false;
+  @override
+  Future<int> markRemovedByWorkId(String workId) async => 0;
 
   @override
   Future<List<FavoriteThreadCacheRecord>> getMissingDetailRecords({
@@ -397,6 +399,12 @@ class _FakeImageCacheService implements ImageCacheService {
   Future<void> clearUnprotected() async {}
 
   @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async => 0;
+
+  @override
   Future<CachedImageResult> copyProtectedLocalFile(
     ImageCacheLocalCopyRequest request,
   ) async {
@@ -453,6 +461,11 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
   Future<int> countReadEpisodes({required LibraryModuleKey moduleKey, required String workId}) async => 0;
   @override
   Future<int> countUnreadEpisodes({required LibraryModuleKey moduleKey, required String workId}) async => 0;
+  @override
+  Future<void> purgeWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {}
   @override
   Future<String> createTag({required String name}) async => 'tag-1';
   @override

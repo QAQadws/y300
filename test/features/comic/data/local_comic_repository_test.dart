@@ -79,6 +79,179 @@ void main() {
       expect(items.length, 1);
     });
 
+    test('removeFromShelf only removes shelf entry and keeps comic data', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:remove-only',
+        tid: '150',
+        fid: '30',
+        title: '保留数据漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>['https://img.test/remove-only-cover.jpg'],
+          episodeLinks: <ComicEpisodeLink>[
+            ComicEpisodeLink(
+              url: 'thread-151-1-1.html',
+              rawText: '第1话',
+              episodeTitle: '第1话',
+            ),
+          ],
+          plainTextSummary: '摘要',
+        ),
+      );
+      const episodeId = 'yamibo:remove-only:151';
+      await repository.saveEpisodeImages(
+        episodeId: episodeId,
+        imageUrls: const <String>['https://img.test/remove-only-page-1.jpg'],
+      );
+      await repository.updateLastReadProgress(
+        comicId: 'yamibo:remove-only',
+        episodeId: episodeId,
+        imageIndex: 0,
+        scrollOffset: 18,
+      );
+
+      await repository.removeFromShelf(comicId: 'yamibo:remove-only');
+
+      final inShelf = await repository.isInShelf(comicId: 'yamibo:remove-only');
+      final shelfItems = await repository.getShelfItems();
+      final detail = await repository.getComicDetail(comicId: 'yamibo:remove-only');
+      final episodes = await repository.getComicEpisodes(
+        comicId: 'yamibo:remove-only',
+        descending: false,
+      );
+      final images = await repository.getEpisodeImages(episodeId: episodeId);
+      final progress = await repository.getLastReadProgress(
+        comicId: 'yamibo:remove-only',
+      );
+
+      expect(inShelf, isFalse);
+      expect(shelfItems, isEmpty);
+      expect(detail, isNotNull);
+      expect(episodes, hasLength(2));
+      expect(
+        episodes.map((episode) => episode.episodeTitle).toList(),
+        <String?>['首楼', '第1话'],
+      );
+      expect(images, hasLength(1));
+      expect(progress, isNotNull);
+      expect(progress?.episodeId, episodeId);
+    });
+
+    test('purgeWork deletes comic rows and cascaded episode data only for target comic', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:purge-a',
+        tid: '160',
+        fid: '30',
+        title: '待清理漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>['https://img.test/purge-a-cover.jpg'],
+          episodeLinks: <ComicEpisodeLink>[
+            ComicEpisodeLink(
+              url: 'thread-161-1-1.html',
+              rawText: '第1话',
+              episodeTitle: '第1话',
+            ),
+          ],
+          plainTextSummary: '摘要',
+        ),
+      );
+      await repository.addToShelf(
+        comicId: 'yamibo:purge-b',
+        tid: '260',
+        fid: '30',
+        title: '保留漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>['https://img.test/purge-b-cover.jpg'],
+          episodeLinks: <ComicEpisodeLink>[
+            ComicEpisodeLink(
+              url: 'thread-261-1-1.html',
+              rawText: '第1话',
+              episodeTitle: '第1话',
+            ),
+          ],
+          plainTextSummary: '摘要',
+        ),
+      );
+      const purgeEpisodeId = 'yamibo:purge-a:161';
+      await repository.saveEpisodeImages(
+        episodeId: purgeEpisodeId,
+        imageUrls: const <String>['https://img.test/purge-a-page-1.jpg'],
+      );
+      await repository.updateLastReadProgress(
+        comicId: 'yamibo:purge-a',
+        episodeId: purgeEpisodeId,
+        imageIndex: 1,
+        scrollOffset: 64,
+      );
+
+      await repository.purgeWork(comicId: 'yamibo:purge-a');
+
+      final db = await dbFuture;
+      final remainingDetail = await repository.getComicDetail(comicId: 'yamibo:purge-b');
+      final remainingEpisodes = await repository.getComicEpisodes(
+        comicId: 'yamibo:purge-b',
+        descending: false,
+      );
+      final purgedProgress = await repository.getLastReadProgress(
+        comicId: 'yamibo:purge-a',
+      );
+
+      expect(
+        await db.query(
+          ComicLocalDb.comicsTable,
+          where: 'comic_id = ?',
+          whereArgs: const <Object>['yamibo:purge-a'],
+        ),
+        isEmpty,
+      );
+      expect(
+        await db.query(
+          ComicLocalDb.episodesTable,
+          where: 'comic_id = ?',
+          whereArgs: const <Object>['yamibo:purge-a'],
+        ),
+        isEmpty,
+      );
+      expect(
+        await db.query(
+          ComicLocalDb.episodeImagesTable,
+          where: 'episode_id = ?',
+          whereArgs: const <Object>[purgeEpisodeId],
+        ),
+        isEmpty,
+      );
+      expect(
+        await db.query(
+          ComicLocalDb.shelfItemsTable,
+          where: 'comic_id = ?',
+          whereArgs: const <Object>['yamibo:purge-a'],
+        ),
+        isEmpty,
+      );
+      expect(
+        await db.query(
+          ComicLocalDb.readingProgressTable,
+          where: 'comic_id = ?',
+          whereArgs: const <Object>['yamibo:purge-a'],
+        ),
+        isEmpty,
+      );
+      expect(purgedProgress, isNull);
+      expect(remainingDetail, isNotNull);
+      expect(remainingEpisodes, hasLength(2));
+      expect(
+        remainingEpisodes.map((episode) => episode.episodeTitle).toList(),
+        <String?>['首楼', '第1话'],
+      );
+      expect(
+        await db.query(
+          ComicLocalDb.comicsTable,
+          where: 'comic_id = ?',
+          whereArgs: const <Object>['yamibo:purge-b'],
+        ),
+        isNotEmpty,
+      );
+    });
+
     test('addToShelf prefers normalized title and subject-derived author metadata', () async {
       await repository.addToShelf(
         comicId: 'yamibo:200',

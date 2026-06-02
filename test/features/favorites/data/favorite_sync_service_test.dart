@@ -945,6 +945,10 @@ class _FavoriteSnapshotStorageSpy implements DownloadStorageService {
   @override
   Future<io.Directory> prepareNovelDirectory({required String novelId, required String title}) => throw UnimplementedError();
   @override
+  Future<bool> deleteComicDownloads({required String workId}) async => false;
+  @override
+  Future<bool> deleteNovelDownloads({required String novelId}) async => false;
+  @override
   String numberedFileName({required int index, required String title, required String extension}) => throw UnimplementedError();
   @override
   String safeFileName(String value, {String fallback = 'untitled'}) => value;
@@ -1354,6 +1358,27 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
   Future<bool> hasActiveThreadForWorkId(String workId) async {
     return records.values
         .any((record) => record.isActive && record.workId == workId);
+  }
+
+  @override
+  Future<int> markRemovedByWorkId(String workId) async {
+    var changed = 0;
+    for (final record in records.values.toList(growable: false)) {
+      if (!record.isActive || record.workId != workId) {
+        continue;
+      }
+      records[record.tid] = _cacheRecord(
+        tid: record.tid,
+        title: record.title,
+        contentKind: record.contentKind,
+        workId: record.workId,
+        sourceTagName: record.sourceTagName,
+        detailLoadedAt: record.detailLoadedAt,
+        removedAt: DateTime(2026, 1, 2),
+      );
+      changed++;
+    }
+    return changed;
   }
 
   @override

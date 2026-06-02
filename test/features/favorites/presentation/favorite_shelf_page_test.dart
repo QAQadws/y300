@@ -279,6 +279,8 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   @override
   Future<bool> hasActiveThreadForWorkId(String workId) async => false;
   @override
+  Future<int> markRemovedByWorkId(String workId) async => 0;
+  @override
   Future<List<FavoriteThreadCacheRecord>> getMissingDetailRecords({
     int limit = 20,
     Set<String> excludedTids = const <String>{},
@@ -349,6 +351,11 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
   Future<int> countReadEpisodes({required LibraryModuleKey moduleKey, required String workId}) async => 0;
   @override
   Future<int> countUnreadEpisodes({required LibraryModuleKey moduleKey, required String workId}) async => 0;
+  @override
+  Future<void> purgeWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {}
   @override
   Future<String> createTag({required String name}) async => 'tag-1';
   @override

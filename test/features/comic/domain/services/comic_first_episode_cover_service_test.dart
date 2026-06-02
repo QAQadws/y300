@@ -178,6 +178,9 @@ class _FakeComicRepository
   }
 
   @override
+  Future<void> purgeWork({required String comicId}) async {}
+
+  @override
   dynamic noSuchMethod(Invocation invocation) {
     return super.noSuchMethod(invocation);
   }

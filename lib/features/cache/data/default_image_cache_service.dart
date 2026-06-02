@@ -231,6 +231,21 @@ class DefaultImageCacheService implements ImageCacheService {
   }
 
   @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async {
+    final records = await _repository.listByOwner(
+      ownerType: ownerType.dbValue,
+      ownerId: ownerId,
+    );
+    for (final record in records) {
+      await _deleteRecord(record);
+    }
+    return records.length;
+  }
+
+  @override
   Future<int> calculateUsageBytes({bool includeProtected = false}) {
     return _repository.calculateUsageBytes(includeProtected: includeProtected);
   }

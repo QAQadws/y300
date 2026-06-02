@@ -382,6 +382,12 @@ class _FakeImageCacheService implements ImageCacheService {
   Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
 
   @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async => 0;
+
+  @override
   Future<void> pruneToLimit({required int maxBytes}) async {}
 
   @override
@@ -404,6 +410,9 @@ class _FakeComicRepository implements ComicRepository {
 
   @override
   Future<void> removeFromShelf({required String comicId}) async {}
+
+  @override
+  Future<void> purgeWork({required String comicId}) async {}
 
   @override
   Future<String> createCategory({required String name}) async => 'created';
@@ -567,6 +576,12 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
   }) async {
     return 0;
   }
+
+  @override
+  Future<void> purgeWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {}
 
   @override
   Future<String> createTag({required String name}) async => 'tag-1';

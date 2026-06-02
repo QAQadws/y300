@@ -875,6 +875,12 @@ class _FakeImageCacheService implements ImageCacheService {
   Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
 
   @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async => 0;
+
+  @override
   Future<void> clearUnprotected() async {}
 
   @override
@@ -1200,6 +1206,9 @@ class _ReaderRepoForControllerTest
 
   @override
   Future<bool> isInShelf({required String comicId}) async => false;
+
+  @override
+  Future<void> purgeWork({required String comicId}) async {}
 
   @override
   Future<ComicEpisodeRefreshResult> mergeEpisodesFromLinks({

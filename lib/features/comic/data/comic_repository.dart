@@ -75,6 +75,15 @@ abstract class ComicRepository {
   /// 阅读进度、图片缓存或后续下载存储。
   Future<void> removeFromShelf({required String comicId});
 
+  /// 破坏性清除漫画作品的本地数据。
+  ///
+  /// 与 [removeFromShelf] 不同：这里会删除作品主行，由数据库级联清除章节、
+  /// 章节图片、书架项和阅读进度记录。缓存、下载、shared 状态与收藏行由
+  /// 上层 WorkPurgeService 继续编排。
+  Future<void> purgeWork({required String comicId}) {
+    throw UnimplementedError('purgeWork($comicId)');
+  }
+
   Future<List<ComicShelfItem>> getShelfItems({
     String categoryId = 'default',
   });

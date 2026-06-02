@@ -197,6 +197,20 @@ class LocalComicSearchRefreshQueueRepository
   }
 
   @override
+  Future<void> deleteByComicId(String comicId) async {
+    final normalized = comicId.trim();
+    if (normalized.isEmpty) {
+      return;
+    }
+    final db = await _db;
+    await db.delete(
+      ComicLocalDb.comicSearchRefreshQueueTable,
+      where: 'comic_id = ?',
+      whereArgs: <Object>[normalized],
+    );
+  }
+
+  @override
   Future<List<ComicSearchRefreshQueueEntry>> loadActiveEntries() async {
     final db = await _db;
     final rows = await db.query(

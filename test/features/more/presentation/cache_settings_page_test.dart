@@ -224,6 +224,12 @@ class _FakeDownloadStorageService implements DownloadStorageService {
   }
 
   @override
+  Future<bool> deleteComicDownloads({required String workId}) async => false;
+
+  @override
+  Future<bool> deleteNovelDownloads({required String novelId}) async => false;
+
+  @override
   String safeFileName(String value, {String fallback = 'untitled'}) => value;
 
   @override
@@ -290,6 +296,12 @@ class _FakeImageCacheService implements ImageCacheService {
   Future<int> calculateUsageBytes({bool includeProtected = false}) async {
     return usageBytes;
   }
+
+  @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async => 0;
 
   @override
   Future<void> pruneToLimit({required int maxBytes}) async {

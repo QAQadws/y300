@@ -10,6 +10,13 @@ abstract class ImageCacheRepository implements ProtectedCoverCacheStore {
 
   Future<void> touch(String cacheKey, DateTime accessedAt);
 
+  Future<List<CachedImageRecord>> listByOwner({
+    required String ownerType,
+    required String ownerId,
+  }) {
+    throw UnimplementedError('listByOwner($ownerType, $ownerId)');
+  }
+
   Future<int> calculateUsageBytes({required bool includeProtected});
 
   Future<List<CachedImageRecord>> listUnprotectedByAccessTime();
@@ -80,6 +87,21 @@ class LocalImageCacheRepository implements ImageCacheRepository {
       where: 'cache_key = ?',
       whereArgs: <Object>[cacheKey],
     );
+  }
+
+  @override
+  Future<List<CachedImageRecord>> listByOwner({
+    required String ownerType,
+    required String ownerId,
+  }) async {
+    final db = await _dbFuture;
+    final rows = await db.query(
+      ComicLocalDb.cachedImagesTable,
+      where: 'owner_type = ? AND owner_id = ?',
+      whereArgs: <Object>[ownerType, ownerId],
+      orderBy: 'updated_at ASC, created_at ASC, cache_key ASC',
+    );
+    return rows.map(_fromRow).toList(growable: false);
   }
 
   @override

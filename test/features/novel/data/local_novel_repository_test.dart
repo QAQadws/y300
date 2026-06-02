@@ -94,6 +94,70 @@ void main() {
       expect(progress.scrollOffset, 222.5);
     });
 
+    test('purgeWork deletes only target novel data and reading progress', () async {
+      await repository.upsertNovelBySeed(seed: const NovelRefreshSeed(fid: '49', tid: '200'));
+      await repository.upsertNovelBySeed(seed: const NovelRefreshSeed(fid: '55', tid: '300'));
+      await repository.refreshEpisodes(novelId: 'novel:49:200');
+      await repository.refreshEpisodes(novelId: 'novel:55:300');
+
+      final purgeEpisodes = await repository.getEpisodes(novelId: 'novel:49:200');
+      final keepEpisodes = await repository.getEpisodes(novelId: 'novel:55:300');
+      await repository.saveReadingProgress(
+        novelId: 'novel:49:200',
+        episodeId: purgeEpisodes.first.episodeId,
+        scrollOffset: 88,
+      );
+
+      await repository.purgeWork(novelId: 'novel:49:200');
+
+      final db = await dbFuture;
+      expect(await repository.getDetail(novelId: 'novel:49:200'), isNull);
+      expect(await repository.getEpisodes(novelId: 'novel:49:200'), isEmpty);
+      expect(
+        await repository.getChapterContent(episodeId: purgeEpisodes.first.episodeId),
+        isNull,
+      );
+      expect(
+        await repository.getReadingProgress(novelId: 'novel:49:200'),
+        isNull,
+      );
+      expect(
+        await db.query(
+          ComicLocalDb.worksTable,
+          where: 'work_id = ? AND content_type = ?',
+          whereArgs: const <Object>['novel:49:200', 'novel'],
+        ),
+        isEmpty,
+      );
+      expect(
+        await db.query(
+          ComicLocalDb.workEpisodesTable,
+          where: 'work_id = ? AND content_type = ?',
+          whereArgs: const <Object>['novel:49:200', 'novel'],
+        ),
+        isEmpty,
+      );
+      expect(
+        await db.query(
+          ComicLocalDb.novelShelfItemsTable,
+          where: 'novel_id = ?',
+          whereArgs: const <Object>['novel:49:200'],
+        ),
+        isEmpty,
+      );
+      expect(
+        await db.query(
+          ComicLocalDb.novelReadingProgressTable,
+          where: 'novel_id = ?',
+          whereArgs: const <Object>['novel:49:200'],
+        ),
+        isEmpty,
+      );
+      expect(await repository.getDetail(novelId: 'novel:55:300'), isNotNull);
+      expect(keepEpisodes, isNotEmpty);
+      expect(await repository.getEpisodes(novelId: 'novel:55:300'), hasLength(keepEpisodes.length));
+    });
+
     test('queryShelfSnapshot aggregates episode state and tags', () async {
       await repository.upsertNovelBySeed(seed: const NovelRefreshSeed(fid: '49', tid: '200'));
       await repository.refreshEpisodes(novelId: 'novel:49:200');
