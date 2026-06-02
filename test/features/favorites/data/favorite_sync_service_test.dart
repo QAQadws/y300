@@ -1342,6 +1342,21 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
   Future<FavoriteThreadCacheRecord?> getActiveThreadByTid(String tid) async => records[tid];
 
   @override
+  Future<List<FavoriteThreadCacheRecord>> getActiveThreadsByWorkId(
+    String workId,
+  ) async {
+    return records.values
+        .where((record) => record.isActive && record.workId == workId)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<bool> hasActiveThreadForWorkId(String workId) async {
+    return records.values
+        .any((record) => record.isActive && record.workId == workId);
+  }
+
+  @override
   Future<List<FavoriteThreadCacheRecord>> getMissingDetailRecords({
     int limit = 20,
     Set<String> excludedTids = const <String>{},

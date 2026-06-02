@@ -273,6 +273,16 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   }
 
   @override
+  Future<List<FavoriteThreadCacheRecord>> getActiveThreadsByWorkId(
+    String workId,
+  ) async {
+    return const <FavoriteThreadCacheRecord>[];
+  }
+
+  @override
+  Future<bool> hasActiveThreadForWorkId(String workId) async => false;
+
+  @override
   Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(String workId) async {
     return null;
   }

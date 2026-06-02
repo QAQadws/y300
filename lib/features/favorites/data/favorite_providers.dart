@@ -4,10 +4,12 @@ import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/favorites/data/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/favorite_ingest_providers.dart';
+import 'package:y300/features/favorites/data/favorite_link_service_impl.dart';
 import 'package:y300/features/favorites/data/favorite_repository.dart';
 import 'package:y300/features/favorites/data/favorite_shelf_bootstrapper.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
+import 'package:y300/features/favorites/domain/favorite_link_service.dart';
 import 'package:y300/features/favorites/domain/favorite_shelf_bootstrapper.dart';
 import 'package:y300/features/favorites/presentation/adapters/favorite_shelf_adapter.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
@@ -44,6 +46,12 @@ final favoriteSyncServiceProvider = Provider<FavoriteSyncService>((ref) {
     postIngestTaskRunner: ref.watch(libraryPostIngestTaskRunnerProvider),
     shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
     downloadStorageService: ref.watch(downloadStorageServiceProvider),
+  );
+});
+
+final favoriteLinkServiceProvider = Provider<FavoriteLinkService>((ref) {
+  return DefaultFavoriteLinkService(
+    repository: ref.watch(localFavoriteRepositoryProvider),
   );
 });
 

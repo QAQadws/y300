@@ -101,4 +101,14 @@ class _FakeThreadFavoriteRepository implements ThreadFavoriteRepository {
     lastTid = request.tid;
     return result;
   }
+
+  @override
+  Future<ApiResult<ThreadUnfavoriteResult>> unfavoriteThread({
+    required ThreadUnfavoriteRequest request,
+  }) async {
+    lastTid = request.tid;
+    return const ApiSuccess<ThreadUnfavoriteResult>(
+      ThreadUnfavoriteResult(message: '取消收藏成功'),
+    );
+  }
 }

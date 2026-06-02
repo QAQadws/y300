@@ -123,6 +123,87 @@ class DiscuzThreadFavoriteApiRepository implements ThreadFavoriteRepository {
     }
   }
 
+  @override
+  Future<ApiResult<ThreadUnfavoriteResult>> unfavoriteThread({
+    required ThreadUnfavoriteRequest request,
+  }) async {
+    final tid = request.tid.trim();
+    if (tid.isEmpty) {
+      return const ApiFailure<ThreadUnfavoriteResult>(
+        ApiError(type: ApiErrorType.business, message: '帖子 tid 不能为空'),
+      );
+    }
+
+    final formhashResult = await _loadFormhash();
+    if (formhashResult case ApiFailure<String>(:final error)) {
+      return ApiFailure<ThreadUnfavoriteResult>(error);
+    }
+    final formhash = (formhashResult as ApiSuccess<String>).data;
+    final endpoint = '${AppConfig.siteBaseUrl}/api/mobile/index.php';
+
+    try {
+      // 删除以 tid 为键：`op=delete&type=thread&id=<tid>`，与添加收藏的
+      // `favoritesubmit` 路径同构，只是把提交字段换成 `deletesubmit`。
+      final response = await _dio.post<dynamic>(
+        endpoint,
+        queryParameters: <String, String>{
+          'module': 'favthread',
+          'version': '4',
+          'op': 'delete',
+          'type': 'thread',
+          'id': tid,
+        },
+        data: <String, String>{
+          'formhash': formhash,
+          'deletesubmit': 'true',
+        },
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+          headers: <String, String>{
+            'referer': '${AppConfig.siteBaseUrl}/home.php?mod=spacecp&ac=favorite&mobile=2',
+            'accept': 'application/json, text/plain, */*',
+          },
+        ),
+      );
+
+      final parsed = _parseUnfavoriteResponse(response.data);
+      if (!parsed.success) {
+        return ApiFailure<ThreadUnfavoriteResult>(
+          ApiError(
+            type: ApiErrorType.business,
+            message: parsed.message,
+            code: parsed.code,
+            raw: response.data,
+            statusCode: response.statusCode,
+          ),
+        );
+      }
+      return ApiSuccess<ThreadUnfavoriteResult>(
+        ThreadUnfavoriteResult(
+          message: parsed.message,
+          alreadyRemoved: parsed.alreadyRemoved,
+        ),
+      );
+    } on DioException catch (error) {
+      return ApiFailure<ThreadUnfavoriteResult>(
+        ApiError(
+          type: _mapDioErrorType(error),
+          message: error.message ?? '网络异常',
+          statusCode: error.response?.statusCode,
+          raw: error.response?.data,
+        ),
+      );
+    } catch (error) {
+      return ApiFailure<ThreadUnfavoriteResult>(
+        ApiError(
+          type: ApiErrorType.unknown,
+          message: '取消收藏失败：$error',
+          raw: error,
+        ),
+      );
+    }
+  }
+
   Future<ApiResult<String>> _loadFormhash() async {
     final profile = await _profileRepository.getProfile();
     return profile.when(
@@ -182,6 +263,42 @@ class DiscuzThreadFavoriteApiRepository implements ThreadFavoriteRepository {
         loweredMessage.contains('收藏过');
   }
 
+  _ThreadUnfavoriteResponseParseResult _parseUnfavoriteResponse(dynamic data) {
+    final root = _asJsonMap(data);
+    final messageNode = ParseUtils.asMap(root['Message']);
+    final message = ParseUtils.asString(
+      messageNode['messagestr'],
+      fallback: ParseUtils.asString(messageNode['messageval'], fallback: '取消收藏结果未知'),
+    );
+    final code = ParseUtils.asString(messageNode['messageval'], fallback: '');
+    final loweredCode = code.toLowerCase();
+    final loweredMessage = message.toLowerCase();
+    // 删除一个本就不存在的收藏视为幂等成功：上层逐个 tid 取消整部作品时，
+    // 历史残留 / 重复点击都不该当成失败。
+    final alreadyRemoved = _isAlreadyUnfavorited(loweredCode, loweredMessage);
+    final success = alreadyRemoved ||
+        loweredCode.contains('succeed') ||
+        loweredCode.contains('success') ||
+        loweredCode == 'do_success' ||
+        loweredMessage.contains('成功');
+    return _ThreadUnfavoriteResponseParseResult(
+      success: success,
+      alreadyRemoved: alreadyRemoved,
+      message: message,
+      code: code,
+    );
+  }
+
+  bool _isAlreadyUnfavorited(String loweredCode, String loweredMessage) {
+    return loweredCode.contains('favorite_does_not_exist') ||
+        loweredCode.contains('not_exist') ||
+        loweredCode.contains('noexist') ||
+        loweredCode.contains('notfound') ||
+        loweredMessage.contains('未收藏') ||
+        loweredMessage.contains('不存在') ||
+        loweredMessage.contains('没有收藏');
+  }
+
   JsonMap _asJsonMap(dynamic data) {
     if (data is Map<String, dynamic>) {
       return data;
@@ -223,6 +340,20 @@ class _ThreadFavoriteResponseParseResult {
 
   final bool success;
   final bool alreadyFavorited;
+  final String message;
+  final String code;
+}
+
+class _ThreadUnfavoriteResponseParseResult {
+  const _ThreadUnfavoriteResponseParseResult({
+    required this.success,
+    required this.alreadyRemoved,
+    required this.message,
+    required this.code,
+  });
+
+  final bool success;
+  final bool alreadyRemoved;
   final String message;
   final String code;
 }

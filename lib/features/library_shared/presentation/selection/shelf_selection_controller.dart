@@ -25,9 +25,12 @@ class ShelfSelectionController extends ChangeNotifier {
 
   /// 长按进入多选并选中第一项。重复进入只追加选中项。
   void enter(String firstWorkId) {
-    final changed = !_isSelecting || _selected.add(firstWorkId);
+    // 必须先无条件加入选中项：用 `||` 短路会在首次进入时跳过 add，
+    // 导致第一项永远没被选中。
+    final added = _selected.add(firstWorkId);
+    final startedSelecting = !_isSelecting;
     _isSelecting = true;
-    if (changed) {
+    if (added || startedSelecting) {
       notifyListeners();
     }
   }

@@ -67,6 +67,17 @@ abstract class LocalFavoriteRepository {
 
   Future<FavoriteThreadCacheRecord?> getActiveThreadByTid(String tid);
 
+  /// 一个作品（workId）当前关联的全部活跃收藏帖。
+  ///
+  /// 合并机制会把多个收藏帖重指向同一 workId，因此可能返回多条。
+  /// 用于「取消整部作品」时逐个 tid 删除。
+  Future<List<FavoriteThreadCacheRecord>> getActiveThreadsByWorkId(
+    String workId,
+  );
+
+  /// 作品是否还有任意活跃收藏来源。取消收藏后据此决定是否清除作品。
+  Future<bool> hasActiveThreadForWorkId(String workId);
+
   Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(String workId);
 
   Future<List<LibraryCategory>> loadVisibleCategories();
@@ -484,6 +495,48 @@ class SqfliteLocalFavoriteRepository
       return null;
     }
     return _recordFromRow(rows.first);
+  }
+
+  @override
+  Future<List<FavoriteThreadCacheRecord>> getActiveThreadsByWorkId(
+    String workId,
+  ) async {
+    final normalized = workId.trim();
+    if (normalized.isEmpty) {
+      return const <FavoriteThreadCacheRecord>[];
+    }
+    final db = await _dbFuture;
+    final rows = await db.rawQuery(
+      '''
+      SELECT ft.*, fc.category_id AS custom_category_id
+      FROM ${ComicLocalDb.favoriteThreadsTable} ft
+      LEFT JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
+        ON fc.tid = ft.tid
+      WHERE ft.work_id = ? AND ft.removed_at IS NULL
+      ORDER BY ft.remote_order IS NULL, ft.remote_order, ft.tid
+      ''',
+      <Object>[normalized],
+    );
+    return rows.map(_recordFromRow).toList(growable: false);
+  }
+
+  @override
+  Future<bool> hasActiveThreadForWorkId(String workId) async {
+    final normalized = workId.trim();
+    if (normalized.isEmpty) {
+      return false;
+    }
+    final db = await _dbFuture;
+    final rows = await db.rawQuery(
+      '''
+      SELECT 1
+      FROM ${ComicLocalDb.favoriteThreadsTable}
+      WHERE work_id = ? AND removed_at IS NULL
+      LIMIT 1
+      ''',
+      <Object>[normalized],
+    );
+    return rows.isNotEmpty;
   }
 
   @override
