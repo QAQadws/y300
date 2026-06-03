@@ -8,9 +8,7 @@ import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/forum_favorite_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
-import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
-import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/tags/data/forum_tag_repository.dart';
 import 'package:y300/features/tags/data/tag_providers.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
@@ -71,7 +69,7 @@ void main() {
     expect(driver.scripts.length, 2);
   });
 
-  testWidgets('ForumWebViewPage search button opens ForumSearchPage', (
+  testWidgets('ForumWebViewPage home search button loads managed forum search url', (
     tester,
   ) async {
     final driver = _FakeForumWebViewDriver();
@@ -82,8 +80,11 @@ void main() {
     await tester.tap(find.byKey(const Key('forum-webview-search-button')));
     await tester.pumpAndSettle();
 
-    final page = tester.widget<ForumSearchPage>(find.byType(ForumSearchPage));
-    expect(page.context.scope, DiscuzSearchScope.forum);
+    expect(driver.loadedUris.length, 2);
+    expect(
+      driver.loadedUris.last.toString(),
+      'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
+    );
   });
 
   testWidgets('ForumWebViewPage home more menu shows unfavorite action', (
@@ -208,7 +209,7 @@ void main() {
     );
   });
 
-  testWidgets('ForumWebViewPage shows forum display app bar and curForum search', (
+  testWidgets('ForumWebViewPage shows forum display app bar and loads curForum search', (
     tester,
   ) async {
     final driver = _FakeForumWebViewDriver()..title = '页面标题';
@@ -238,9 +239,11 @@ void main() {
     await tester.tap(find.byKey(const Key('forum-webview-search-button')));
     await tester.pumpAndSettle();
 
-    final page = tester.widget<ForumSearchPage>(find.byType(ForumSearchPage));
-    expect(page.context.scope, DiscuzSearchScope.curForum);
-    expect(page.context.srhfid, '55');
+    expect(driver.loadedUris.length, 2);
+    expect(
+      driver.loadedUris.last.toString(),
+      'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
+    );
   });
 
   testWidgets('ForumWebViewPage forum display shows favorite action when forum is not favorited', (
@@ -394,8 +397,11 @@ void main() {
     await tester.tap(find.byKey(const Key('forum-webview-search-button')));
     await tester.pumpAndSettle();
 
-    final page = tester.widget<ForumSearchPage>(find.byType(ForumSearchPage));
-    expect(page.context.scope, DiscuzSearchScope.forum);
+    expect(driver.loadedUris.length, 2);
+    expect(
+      driver.loadedUris.last.toString(),
+      'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
+    );
   });
 
   testWidgets('ForumWebViewPage thread detail more menu keeps placeholder item', (
@@ -443,9 +449,105 @@ void main() {
     await tester.tap(find.byKey(const Key('forum-webview-search-button')));
     await tester.pumpAndSettle();
 
-    final page = tester.widget<ForumSearchPage>(find.byType(ForumSearchPage));
-    expect(page.context.scope, DiscuzSearchScope.curForum);
-    expect(page.context.srhfid, '55');
+    expect(driver.loadedUris.length, 2);
+    expect(
+      driver.loadedUris.last.toString(),
+      'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
+    );
+  });
+
+  testWidgets('ForumWebViewPage search app bar uses forum search title and hides search button', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver()..title = '帖子搜索';
+
+    await tester.pumpWidget(_buildTestApp(driver: driver));
+    await tester.pump();
+
+    driver.canGoBackValue = true;
+    await driver.dispatchPageStarted(
+      'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
+    );
+    await driver.dispatchPageFinished(
+      'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const Key('forum-webview-back-button')), findsOneWidget);
+    expect(find.text('论坛搜索'), findsOneWidget);
+    expect(find.byKey(const Key('forum-webview-search-button')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('返回首页'), findsOneWidget);
+  });
+
+  testWidgets('ForumWebViewPage search app bar uses board name search title for curforum scope', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver()..title = '帖子搜索';
+
+    await tester.pumpWidget(_buildTestApp(driver: driver));
+    await tester.pump();
+
+    driver.canGoBackValue = true;
+    await driver.dispatchPageStarted(
+      'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
+    );
+    await driver.dispatchPageFinished(
+      'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('综合区搜索'), findsOneWidget);
+    expect(find.byKey(const Key('forum-webview-search-button')), findsNothing);
+  });
+
+  testWidgets('ForumWebViewPage search more action loads home', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver()..title = '帖子搜索';
+
+    await tester.pumpWidget(_buildTestApp(driver: driver));
+    await tester.pump();
+
+    await driver.dispatchPageStarted(
+      'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
+    );
+    await driver.dispatchPageFinished(
+      'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('返回首页'));
+    await tester.pumpAndSettle();
+
+    expect(
+      driver.loadedUris.last.toString(),
+      'https://bbs.yamibo.com/index.php?mobile=2',
+    );
+  });
+
+  testWidgets('ForumWebViewPage search page still cleans chrome when loading finishes', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver()..title = '帖子搜索';
+
+    await tester.pumpWidget(_buildTestApp(driver: driver));
+    await tester.pump();
+
+    await driver.dispatchPageFinished(
+      'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
+    );
+    await tester.pump();
+
+    expect(driver.scripts.length, 1);
   });
 
   testWidgets('ForumWebViewPage back button uses driver.goBack when history exists', (

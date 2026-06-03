@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
@@ -12,8 +12,6 @@ import 'package:y300/features/forum/domain/services/forum_webview_script_injecto
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_state.dart';
-import 'package:y300/features/search/data/models/discuz_search_models.dart';
-import 'package:y300/features/search/presentation/forum_search_page.dart';
 
 class ForumWebViewPage extends ConsumerStatefulWidget {
   const ForumWebViewPage({super.key});
@@ -26,6 +24,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   static const String _homeUnfavoriteAction = 'home-unfavorite';
   static const String _forumFavoriteAction = 'forum-favorite';
   static const String _forumUnfavoriteAction = 'forum-unfavorite';
+  static const String _searchGoHomeAction = 'search-go-home';
 
   bool _didScheduleInitialization = false;
   int _navigationGeneration = 0;
@@ -47,6 +46,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         ForumWebViewState(
           currentUri: homeUri,
           pageKind: navigator.classify(homeUri),
+          searchScope: null,
           fid: null,
           tid: null,
           boardName: null,
@@ -231,12 +231,15 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
             ),
       title: Text(title),
       actions: [
-        IconButton(
-          key: const Key('forum-webview-search-button'),
-          tooltip: _searchTooltip(state),
-          onPressed: () => _openSearch(context, state),
-          icon: const Icon(Icons.search),
-        ),
+        if (state.pageKind != ForumWebViewPageKind.search)
+          IconButton(
+            key: const Key('forum-webview-search-button'),
+            tooltip: _searchTooltip(state),
+            onPressed: () {
+              unawaited(_loadSearchPage(driver, state));
+            },
+            icon: const Icon(Icons.search),
+          ),
         PopupMenuButton<String>(
           key: const Key('forum-webview-more-button'),
           icon: const Icon(Icons.more_vert),
@@ -279,7 +282,21 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           ),
         ];
       case ForumWebViewPageKind.threadDetail:
+        return const <PopupMenuEntry<String>>[
+          PopupMenuItem<String>(
+            enabled: false,
+            value: 'placeholder',
+            child: Text('功能开发中'),
+          ),
+        ];
       case ForumWebViewPageKind.search:
+        return const <PopupMenuEntry<String>>[
+          PopupMenuItem<String>(
+            key: Key('forum-webview-search-home-action'),
+            value: _searchGoHomeAction,
+            child: Text('返回首页'),
+          ),
+        ];
       case ForumWebViewPageKind.other:
         return const <PopupMenuEntry<String>>[
           PopupMenuItem<String>(
@@ -299,7 +316,15 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       case ForumWebViewPageKind.threadDetail:
         return state.boardName ?? '百合会论坛';
       case ForumWebViewPageKind.search:
-        return state.boardName ?? '搜索';
+        if (state.searchScope == ForumWebViewSearchScope.curForum) {
+          if (state.boardName != null) {
+            return '${state.boardName}搜索';
+          }
+          if (state.fid != null) {
+            return 'fid=${state.fid}搜索';
+          }
+        }
+        return '论坛搜索';
       case ForumWebViewPageKind.other:
         return state.pageTitle ?? '百合会论坛';
     }
@@ -314,19 +339,18 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     return '搜索论坛';
   }
 
-  void _openSearch(BuildContext context, ForumWebViewState state) {
-    final searchContext =
+  Future<void> _loadSearchPage(
+    ForumWebViewDriver driver,
+    ForumWebViewState state,
+  ) async {
+    final navigator = ref.read(forumWebViewNavigatorProvider);
+    final targetUri =
         ((state.pageKind == ForumWebViewPageKind.forumDisplay ||
                     state.pageKind == ForumWebViewPageKind.threadDetail) &&
                 state.fid != null)
-            ? DiscuzSearchContext.curForum(srhfid: state.fid!)
-            : const DiscuzSearchContext.forum();
-
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ForumSearchPage(context: searchContext),
-      ),
-    );
+            ? navigator.curForumSearchUri(fid: state.fid!)
+            : navigator.forumSearchUri();
+    await driver.load(targetUri);
   }
 
   Future<void> _handleBackPressed(
@@ -366,6 +390,10 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     switch (action) {
       case _homeUnfavoriteAction:
         await _openFavoriteForumPicker(context, driver);
+        return;
+      case _searchGoHomeAction:
+        final navigator = ref.read(forumWebViewNavigatorProvider);
+        await driver.load(navigator.homeUri);
         return;
       case _forumFavoriteAction:
         await _runForumFavoriteAction(

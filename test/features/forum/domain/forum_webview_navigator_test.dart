@@ -45,6 +45,32 @@ void main() {
       ),
       ForumWebViewPageKind.search,
     );
+    expect(
+      navigator.extractSearchScope(
+        Uri.parse('https://bbs.yamibo.com/search.php?mod=forum&mobile=2'),
+      ),
+      ForumWebViewSearchScope.forum,
+    );
+  });
+
+  test('classify recognizes curforum search and extracts search fid', () {
+    final uri = Uri.parse(
+      'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=30&mobile=2',
+    );
+    expect(navigator.classify(uri), ForumWebViewPageKind.search);
+    expect(
+      navigator.extractSearchScope(uri),
+      ForumWebViewSearchScope.curForum,
+    );
+    expect(navigator.extractSearchFid(uri), '30');
+  });
+
+  test('classify recognizes search result url', () {
+    final uri = Uri.parse(
+      'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
+    );
+    expect(navigator.classify(uri), ForumWebViewPageKind.search);
+    expect(navigator.extractSearchScope(uri), isNull);
   });
 
   test('classify returns other for unmanaged site', () {
@@ -64,5 +90,19 @@ void main() {
     );
     expect(navigator.classify(resolved), ForumWebViewPageKind.forumDisplay);
     expect(navigator.extractFid(resolved), '30');
+  });
+
+  test('forumSearchUri builds managed forum search url', () {
+    expect(
+      navigator.forumSearchUri().toString(),
+      'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
+    );
+  });
+
+  test('curForumSearchUri builds managed current forum search url', () {
+    expect(
+      navigator.curForumSearchUri(fid: '30').toString(),
+      'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=30&mobile=2',
+    );
   });
 }

@@ -43,6 +43,7 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
     return ForumWebViewState(
       currentUri: homeUri,
       pageKind: _navigator.classify(homeUri),
+      searchScope: null,
       fid: null,
       tid: null,
       boardName: null,
@@ -73,10 +74,16 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
     final uri = _navigator.resolve(rawUrl);
     final current = _currentState;
     final pageKind = _navigator.classify(uri);
-    final fid = _resolveFidForStartedPage(
+    final searchScope = _resolveSearchScope(
       pageKind: pageKind,
       uri: uri,
-      previousFid: current.fid,
+      current: current,
+    );
+    final fid = _resolveFidForPage(
+      pageKind: pageKind,
+      uri: uri,
+      current: current,
+      searchScope: searchScope,
     );
     final tid = _navigator.extractTid(uri);
     final currentFavoriteForum = _matchCurrentFavoriteForum(
@@ -88,6 +95,8 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
       current.copyWith(
         currentUri: uri,
         pageKind: pageKind,
+        searchScope: searchScope,
+        clearSearchScope: searchScope == null,
         fid: fid,
         clearFid: fid == null,
         tid: tid,
@@ -114,15 +123,22 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
       final uri = _navigator.resolve(rawUrl);
       final current = _currentState;
       final pageKind = _navigator.classify(uri);
-      final fid = _resolveFidForFinishedPage(
+      final searchScope = _resolveSearchScope(
         pageKind: pageKind,
         uri: uri,
-        currentFid: current.fid,
+        current: current,
+      );
+      final fid = _resolveFidForPage(
+        pageKind: pageKind,
+        uri: uri,
+        current: current,
+        searchScope: searchScope,
       );
       final tid = _navigator.extractTid(uri);
       final normalizedTitle = _normalizeText(pageTitle);
       final boardName = await _resolveBoardName(
         pageKind: pageKind,
+        searchScope: searchScope,
         fid: fid,
         pageTitle: normalizedTitle,
       );
@@ -138,6 +154,8 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
         current.copyWith(
           currentUri: uri,
           pageKind: pageKind,
+          searchScope: searchScope,
+          clearSearchScope: searchScope == null,
           fid: fid,
           clearFid: fid == null,
           tid: tid,
@@ -257,37 +275,69 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
     });
   }
 
-  String? _resolveFidForStartedPage({
+  ForumWebViewSearchScope? _resolveSearchScope({
     required ForumWebViewPageKind pageKind,
     required Uri uri,
-    required String? previousFid,
+    required ForumWebViewState current,
   }) {
-    final extracted = _navigator.extractFid(uri);
-    if (pageKind == ForumWebViewPageKind.threadDetail) {
-      return extracted ?? previousFid;
+    if (pageKind != ForumWebViewPageKind.search) {
+      return null;
     }
-    return extracted;
+
+    final extracted = _navigator.extractSearchScope(uri);
+    if (extracted != null) {
+      return extracted;
+    }
+
+    if (current.pageKind == ForumWebViewPageKind.search &&
+        current.searchScope == ForumWebViewSearchScope.curForum &&
+        _normalizeText(current.fid) != null) {
+      return ForumWebViewSearchScope.curForum;
+    }
+
+    return ForumWebViewSearchScope.forum;
   }
 
-  String? _resolveFidForFinishedPage({
+  String? _resolveFidForPage({
     required ForumWebViewPageKind pageKind,
     required Uri uri,
-    required String? currentFid,
+    required ForumWebViewState current,
+    required ForumWebViewSearchScope? searchScope,
   }) {
+    if (pageKind == ForumWebViewPageKind.search) {
+      if (searchScope != ForumWebViewSearchScope.curForum) {
+        return null;
+      }
+      return _navigator.extractSearchFid(uri) ?? current.fid;
+    }
+
     final extracted = _navigator.extractFid(uri);
     if (pageKind == ForumWebViewPageKind.threadDetail) {
-      return extracted ?? currentFid;
+      return extracted ?? current.fid;
     }
     return extracted;
   }
 
   Future<String?> _resolveBoardName({
     required ForumWebViewPageKind pageKind,
+    required ForumWebViewSearchScope? searchScope,
     required String? fid,
     required String? pageTitle,
   }) async {
     if (pageKind == ForumWebViewPageKind.home) {
       return null;
+    }
+
+    if (pageKind == ForumWebViewPageKind.search) {
+      if (searchScope != ForumWebViewSearchScope.curForum || fid == null) {
+        return null;
+      }
+      try {
+        final lookup = await ref.read(forumTagLookupProvider.future);
+        return _normalizeText(lookup.findBoard(fid: fid)?.name);
+      } catch (_) {
+        return null;
+      }
     }
 
     if (fid != null) {

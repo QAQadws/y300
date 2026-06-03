@@ -23,6 +23,7 @@ void main() {
       'https://bbs.yamibo.com/index.php?mobile=2',
     );
     expect(state.pageKind, ForumWebViewPageKind.home);
+    expect(state.searchScope, isNull);
     expect(state.fid, isNull);
     expect(state.tid, isNull);
     expect(state.boardName, isNull);
@@ -108,6 +109,63 @@ void main() {
     expect(favoriteRepository.loadCallCount, 1);
     expect(state.favoriteForums.length, 2);
     expect(state.currentFavoriteForum?.fid, '55');
+  });
+
+  test('curforum search keeps search scope and fid when result url drops srhfid', () async {
+    final container = _createContainer();
+    addTearDown(container.dispose);
+
+    final controller = container.read(forumWebViewControllerProvider.notifier);
+    await controller.onPageFinished(
+      rawUrl: 'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+      pageTitle: '综合区页面',
+      canGoBack: true,
+    );
+
+    controller.onPageStarted(
+      'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
+    );
+    await controller.onPageFinished(
+      rawUrl: 'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
+      pageTitle: '帖子搜索',
+      canGoBack: true,
+    );
+
+    controller.onPageStarted(
+      'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
+    );
+    await controller.onPageFinished(
+      rawUrl: 'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
+      pageTitle: '帖子搜索',
+      canGoBack: true,
+    );
+
+    final state = await container.read(forumWebViewControllerProvider.future);
+    expect(state.pageKind, ForumWebViewPageKind.search);
+    expect(state.searchScope, ForumWebViewSearchScope.curForum);
+    expect(state.fid, '55');
+    expect(state.boardName, '综合区');
+  });
+
+  test('forum search stays in forum scope without fid', () async {
+    final container = _createContainer();
+    addTearDown(container.dispose);
+
+    final controller = container.read(forumWebViewControllerProvider.notifier);
+    controller.onPageStarted(
+      'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
+    );
+    await controller.onPageFinished(
+      rawUrl: 'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
+      pageTitle: '帖子搜索',
+      canGoBack: true,
+    );
+
+    final state = await container.read(forumWebViewControllerProvider.future);
+    expect(state.pageKind, ForumWebViewPageKind.search);
+    expect(state.searchScope, ForumWebViewSearchScope.forum);
+    expect(state.fid, isNull);
+    expect(state.boardName, isNull);
   });
 
   test('thread detail keeps previous fid when url does not carry it', () async {
@@ -257,7 +315,7 @@ ProviderContainer _createContainer({
   );
   container.listen(
     forumWebViewControllerProvider,
-    (_, _) {},
+    (previous, next) {},
   );
   return container;
 }

@@ -9,9 +9,17 @@ final forumWebViewNavigatorProvider = Provider<ForumWebViewNavigator>((ref) {
 abstract class ForumWebViewNavigator {
   Uri get homeUri;
 
+  Uri forumSearchUri();
+
+  Uri curForumSearchUri({required String fid});
+
   Uri resolve(String raw);
 
   ForumWebViewPageKind classify(Uri uri);
+
+  ForumWebViewSearchScope? extractSearchScope(Uri uri);
+
+  String? extractSearchFid(Uri uri);
 
   String? extractFid(Uri uri);
 
@@ -30,6 +38,14 @@ class DefaultForumWebViewNavigator implements ForumWebViewNavigator {
 
   @override
   Uri get homeUri => _siteRoot.resolve('index.php?mobile=2');
+
+  @override
+  Uri forumSearchUri() => _siteRoot.resolve('search.php?mod=forum&mobile=2');
+
+  @override
+  Uri curForumSearchUri({required String fid}) {
+    return _siteRoot.resolve('search.php?mod=curforum&srhfid=$fid&mobile=2');
+  }
 
   @override
   ForumWebViewPageKind classify(Uri uri) {
@@ -53,7 +69,8 @@ class DefaultForumWebViewNavigator implements ForumWebViewNavigator {
       return ForumWebViewPageKind.threadDetail;
     }
 
-    if (path.endsWith('/search.php') && mod == 'forum') {
+    if (path.endsWith('/search.php') &&
+        (mod == 'forum' || mod == 'curforum')) {
       return ForumWebViewPageKind.search;
     }
 
@@ -76,6 +93,34 @@ class DefaultForumWebViewNavigator implements ForumWebViewNavigator {
       return null;
     }
     return _normalizeQueryValue(uri.queryParameters['tid']);
+  }
+
+  @override
+  ForumWebViewSearchScope? extractSearchScope(Uri uri) {
+    if (classify(uri) != ForumWebViewPageKind.search) {
+      return null;
+    }
+    final mod = uri.queryParameters['mod']?.trim();
+    if (mod == 'curforum') {
+      return ForumWebViewSearchScope.curForum;
+    }
+    if (mod == 'forum') {
+      final hasSearchId = _normalizeQueryValue(uri.queryParameters['searchid']);
+      if (hasSearchId != null &&
+          _normalizeQueryValue(uri.queryParameters['srhfid']) == null) {
+        return null;
+      }
+      return ForumWebViewSearchScope.forum;
+    }
+    return null;
+  }
+
+  @override
+  String? extractSearchFid(Uri uri) {
+    if (classify(uri) != ForumWebViewPageKind.search) {
+      return null;
+    }
+    return _normalizeQueryValue(uri.queryParameters['srhfid']);
   }
 
   @override

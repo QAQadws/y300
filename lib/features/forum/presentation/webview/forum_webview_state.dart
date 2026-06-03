@@ -5,6 +5,7 @@ class ForumWebViewState {
   const ForumWebViewState({
     required this.currentUri,
     required this.pageKind,
+    required this.searchScope,
     required this.fid,
     required this.tid,
     required this.boardName,
@@ -19,6 +20,7 @@ class ForumWebViewState {
 
   final Uri currentUri;
   final ForumWebViewPageKind pageKind;
+  final ForumWebViewSearchScope? searchScope;
   final String? fid;
   final String? tid;
   final String? boardName;
@@ -33,6 +35,8 @@ class ForumWebViewState {
   ForumWebViewState copyWith({
     Uri? currentUri,
     ForumWebViewPageKind? pageKind,
+    ForumWebViewSearchScope? searchScope,
+    bool clearSearchScope = false,
     String? fid,
     bool clearFid = false,
     String? tid,
@@ -52,6 +56,9 @@ class ForumWebViewState {
     return ForumWebViewState(
       currentUri: currentUri ?? this.currentUri,
       pageKind: pageKind ?? this.pageKind,
+      searchScope: clearSearchScope
+          ? null
+          : (searchScope ?? this.searchScope),
       fid: clearFid ? null : (fid ?? this.fid),
       tid: clearTid ? null : (tid ?? this.tid),
       boardName: clearBoardName ? null : (boardName ?? this.boardName),

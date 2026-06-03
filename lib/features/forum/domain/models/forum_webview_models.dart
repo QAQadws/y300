@@ -5,3 +5,8 @@ enum ForumWebViewPageKind {
   search,
   other,
 }
+
+enum ForumWebViewSearchScope {
+  forum,
+  curForum,
+}
