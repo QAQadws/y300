@@ -424,6 +424,7 @@ class UnifiedShelfController {
       final selectedCategoryId = _resolveSelectedCategoryId(
         categories: resolved.visibleCategories,
         preferred: _state.selectedCategoryId,
+        hadVisibleCategoriesBefore: _state.categories.isNotEmpty,
       );
 
       _setState(_state.copyWith(
@@ -771,9 +772,15 @@ class UnifiedShelfController {
   String _resolveSelectedCategoryId({
     required List<LibraryCategory> categories,
     required String preferred,
+    required bool hadVisibleCategoriesBefore,
   }) {
     if (categories.isEmpty) {
       return 'default';
+    }
+    // 首次装载前 controller 会带着初始化哨兵值 `default`。若首屏真实第一个分类
+    // 不是 default，则应让 active category 与 PageView 默认展示的第 0 页对齐。
+    if (!hadVisibleCategoriesBefore) {
+      return categories.first.categoryId;
     }
     final hit = categories.any((category) => category.categoryId == preferred);
     if (hit) {

@@ -594,14 +594,219 @@ void main() {
 
     final itemFinder =
         find.byKey(const ValueKey<String>('unified-shelf-list-item-1'));
+    final sizeBefore = tester.getSize(itemFinder);
     await tester.longPress(itemFinder);
     await tester.pumpAndSettle();
+    final sizeAfter = tester.getSize(itemFinder);
 
-    final tile = tester.widget<ListTile>(itemFinder);
+    expect(sizeAfter, sizeBefore);
+    final tile = tester.widget<ListTile>(
+      find.descendant(
+        of: itemFinder,
+        matching: find.byKey(
+          const ValueKey<String>('unified-shelf-list-tile-1'),
+        ),
+      ),
+    );
     expect(tile.selected, isTrue);
-    final shape = tile.shape as RoundedRectangleBorder;
-    expect(shape.side, isNot(BorderSide.none));
+    expect(_borderColorForListItem(tester, itemFinder), isNot(Colors.transparent));
   });
+
+  testWidgets('list mode select all highlights all visible items', (tester) async {
+    final host = ShelfSelectionHostController();
+    addTearDown(host.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeSelectableShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.list,
+            itemsByCategory: {
+              'default': [
+                _item(workId: '1', title: 'Comic A'),
+                _item(workId: '2', title: 'Comic B'),
+                _item(workId: '3', title: 'Comic C'),
+              ],
+            },
+          ),
+          selectionHost: host,
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(
+      find.byKey(const ValueKey<String>('unified-shelf-list-item-1')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('selection-app-bar-select-all')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('已选 3 项'), findsOneWidget);
+    for (final workId in ['1', '2', '3']) {
+      final itemFinder =
+          find.byKey(ValueKey<String>('unified-shelf-list-item-$workId'));
+      final tileFinder = find.descendant(
+        of: itemFinder,
+        matching: find.byKey(
+          ValueKey<String>('unified-shelf-list-tile-$workId'),
+        ),
+      );
+      expect(tester.widget<ListTile>(tileFinder).selected, isTrue);
+      expect(_borderColorForListItem(tester, itemFinder), isNot(Colors.transparent));
+    }
+  });
+
+  testWidgets('list mode invert updates highlighted items', (tester) async {
+    final host = ShelfSelectionHostController();
+    addTearDown(host.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeSelectableShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.list,
+            itemsByCategory: {
+              'default': [
+                _item(workId: '1', title: 'Comic A'),
+                _item(workId: '2', title: 'Comic B'),
+                _item(workId: '3', title: 'Comic C'),
+              ],
+            },
+          ),
+          selectionHost: host,
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(
+      find.byKey(const ValueKey<String>('unified-shelf-list-item-1')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('selection-app-bar-invert')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('已选 2 项'), findsOneWidget);
+    for (final workId in ['2', '3']) {
+      final itemFinder =
+          find.byKey(ValueKey<String>('unified-shelf-list-item-$workId'));
+      final tileFinder = find.descendant(
+        of: itemFinder,
+        matching: find.byKey(
+          ValueKey<String>('unified-shelf-list-tile-$workId'),
+        ),
+      );
+      expect(tester.widget<ListTile>(tileFinder).selected, isTrue);
+      expect(_borderColorForListItem(tester, itemFinder), isNot(Colors.transparent));
+    }
+
+    final firstItemFinder =
+        find.byKey(const ValueKey<String>('unified-shelf-list-item-1'));
+    final firstTileFinder = find.descendant(
+      of: firstItemFinder,
+      matching: find.byKey(
+        const ValueKey<String>('unified-shelf-list-tile-1'),
+      ),
+    );
+    expect(tester.widget<ListTile>(firstTileFinder).selected, isFalse);
+    expect(_borderColorForListItem(tester, firstItemFinder), Colors.transparent);
+  });
+
+  testWidgets('initial selection uses first visible category when controller starts empty', (
+    tester,
+  ) async {
+    final host = ShelfSelectionHostController();
+    addTearDown(host.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeSelectableShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.list,
+            categories: [
+              LibraryCategory(
+                categoryId: 'comic',
+                name: 'Comic',
+                sortOrder: 0,
+                createdAt: DateTime(2026, 1, 1),
+              ),
+              LibraryCategory(
+                categoryId: 'novel',
+                name: 'Novel',
+                sortOrder: 1,
+                createdAt: DateTime(2026, 1, 2),
+              ),
+              LibraryCategory(
+                categoryId: 'default',
+                name: 'Default',
+                sortOrder: 2,
+                createdAt: DateTime(2026, 1, 3),
+              ),
+            ],
+            itemsByCategory: {
+              'comic': [
+                _item(workId: 'comic-1', title: 'Comic A'),
+                _item(workId: 'comic-2', title: 'Comic B'),
+              ],
+              'novel': [
+                _item(workId: 'novel-1', title: 'Novel A'),
+              ],
+              'default': List<LibraryWorkItem>.generate(
+                15,
+                (index) => _item(
+                  workId: 'default-${index + 1}',
+                  title: 'Default ${index + 1}',
+                ),
+              ),
+            },
+          ),
+          selectionHost: host,
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(
+      find.byKey(const ValueKey<String>('unified-shelf-list-item-comic-1')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(host.state?.activeCategoryId, 'comic');
+
+    await tester.tap(find.byKey(const Key('selection-app-bar-select-all')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('已选 2 项'), findsOneWidget);
+    for (final workId in ['comic-1', 'comic-2']) {
+      final itemFinder =
+          find.byKey(ValueKey<String>('unified-shelf-list-item-$workId'));
+      final tileFinder = find.descendant(
+        of: itemFinder,
+        matching: find.byKey(
+          ValueKey<String>('unified-shelf-list-tile-$workId'),
+        ),
+      );
+      expect(tester.widget<ListTile>(tileFinder).selected, isTrue);
+      expect(
+        _borderColorForListItem(tester, itemFinder),
+        isNot(Colors.transparent),
+      );
+    }
+    expect(
+      find.byKey(const ValueKey<String>('unified-shelf-list-item-default-1')),
+      findsNothing,
+    );
+  });
+}
+
+Color _borderColorForListItem(WidgetTester tester, Finder itemFinder) {
+  final container = tester.widget<AnimatedContainer>(itemFinder);
+  final decoration = container.decoration as BoxDecoration;
+  final border = decoration.border as Border;
+  return border.top.color;
 }
 
 LibraryWorkItem _item({

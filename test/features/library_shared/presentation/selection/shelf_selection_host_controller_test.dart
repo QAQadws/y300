@@ -199,6 +199,55 @@ void main() {
       expect(controller.isActive, isTrue);
       expect(controller.state?.selectedCount, 1);
     });
+
+    test('dispose keeps deactivate as no-op', () {
+      final disposedController = ShelfSelectionHostController();
+      final owner = Object();
+      disposedController.dispose();
+
+      expect(
+        () => disposedController.deactivate(owner),
+        returnsNormally,
+      );
+      expect(disposedController.isActive, isFalse);
+      expect(disposedController.state, isNull);
+    });
+
+    test('dispose keeps activate and update as no-op', () {
+      final disposedController = ShelfSelectionHostController();
+      disposedController.dispose();
+
+      expect(
+        () => disposedController.activate(
+          ownerToken: Object(),
+          moduleKey: LibraryModuleKey.comic,
+          moduleTitle: '漫画',
+          activeCategoryId: 'default',
+          selectedCount: 1,
+          selectedWorkIds: const <String>{'comic-1'},
+          selectionActions: const <SelectionAction>[
+            SelectionAction(id: 'download', icon: Icons.download, label: '下载'),
+          ],
+          delegate: _idleDelegate(),
+        ),
+        returnsNormally,
+      );
+      expect(
+        () => disposedController.update(
+          ownerToken: Object(),
+          activeCategoryId: 'other',
+          selectedCount: 2,
+          selectedWorkIds: const <String>{'comic-1', 'comic-2'},
+          selectionActions: const <SelectionAction>[
+            SelectionAction(id: 'download', icon: Icons.download, label: '下载'),
+          ],
+        ),
+        returnsNormally,
+      );
+      expect(disposedController.isActive, isFalse);
+      expect(disposedController.state, isNull);
+      expect(disposedController.selectedWorkIds, isEmpty);
+    });
   });
 }
 

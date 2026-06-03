@@ -1155,6 +1155,7 @@ class _WorkList extends StatelessWidget {
         itemBuilder: (context, index) {
           final item = items[index];
           final selected = selectedWorkIds.contains(item.workId);
+          final scheme = Theme.of(context).colorScheme;
           final leading = _hasCoverSource(item)
               ? ClipRRect(
                   borderRadius: BorderRadius.circular(8),
@@ -1165,26 +1166,38 @@ class _WorkList extends StatelessWidget {
                   ),
                 )
               : null;
-          return ListTile(
+          return AnimatedContainer(
             key: ValueKey<String>('unified-shelf-list-item-${item.workId}'),
-            selected: selected,
-            onTap: () async => onTapItem(item.workId),
-            onLongPress: selectionEnabled
-                ? () async => onLongPressItem(item.workId)
-                : null,
-            shape: RoundedRectangleBorder(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              side: selected
-                  ? BorderSide(
-                      color: Theme.of(context).colorScheme.primary,
-                      width: 2,
-                    )
-                  : BorderSide.none,
+              border: Border.all(
+                color: selected ? scheme.primary : Colors.transparent,
+                width: 2,
+              ),
             ),
-            tileColor: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(64),
-            leading: leading,
-            title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-            trailing: _UnreadBadge(count: item.unreadCount),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Material(
+                color: scheme.surfaceContainerHighest.withAlpha(64),
+                child: ListTile(
+                  key: ValueKey<String>('unified-shelf-list-tile-${item.workId}'),
+                  selected: selected,
+                  onTap: () async => onTapItem(item.workId),
+                  onLongPress: selectionEnabled
+                      ? () async => onLongPressItem(item.workId)
+                      : null,
+                  leading: leading,
+                  title: Text(
+                    item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: _UnreadBadge(count: item.unreadCount),
+                ),
+              ),
+            ),
           );
         },
       ),

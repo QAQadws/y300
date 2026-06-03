@@ -197,6 +197,153 @@ void main() {
     expect(selectionHost.state?.selectionActions.length, 2);
     expect(bootstrapper.startCallCount, 1);
   });
+
+  testWidgets('FavoriteShelfPage select all follows first visible category', (
+    tester,
+  ) async {
+    final bootstrapper = _RecordingFavoriteShelfBootstrapper();
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    final selectionHost = ShelfSelectionHostController();
+    addTearDown(queueSnapshot.dispose);
+    addTearDown(selectionHost.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          localFavoriteRepositoryProvider.overrideWith(
+            (ref) => _FakeLocalFavoriteRepository(
+              categories: _multiCategoryFavoriteCategories(),
+              itemsByCategory: _multiCategoryFavoriteItems(),
+            ),
+          ),
+          favoriteSyncServiceProvider.overrideWith(
+            (ref) => _FakeFavoriteSyncService(),
+          ),
+          favoriteShelfBootstrapperProvider.overrideWith(
+            (ref) => bootstrapper,
+          ),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+            queueSnapshot,
+          ),
+          shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
+        ],
+        child: const MaterialApp(home: FavoriteShelfPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(
+      find.byKey(
+        const ValueKey<String>('unified-shelf-list-item-favorite:201'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(selectionHost.state?.activeCategoryId, favoriteComicCategoryId);
+
+    await tester.tap(find.byKey(const Key('selection-app-bar-select-all')));
+    await tester.pumpAndSettle();
+
+    expect(selectionHost.state?.selectedCount, 2);
+    expect(find.text('已选 2 项'), findsOneWidget);
+    for (final tid in ['201', '202']) {
+      final itemFinder = find.byKey(
+        ValueKey<String>('unified-shelf-list-item-favorite:$tid'),
+      );
+      final tileFinder = find.descendant(
+        of: itemFinder,
+        matching: find.byKey(
+          ValueKey<String>('unified-shelf-list-tile-favorite:$tid'),
+        ),
+      );
+      expect(tester.widget<ListTile>(tileFinder).selected, isTrue);
+      expect(_borderColorForListItem(tester, itemFinder), isNot(Colors.transparent));
+    }
+  });
+
+  testWidgets('FavoriteShelfPage invert follows current visible category', (
+    tester,
+  ) async {
+    final bootstrapper = _RecordingFavoriteShelfBootstrapper();
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    final selectionHost = ShelfSelectionHostController();
+    addTearDown(queueSnapshot.dispose);
+    addTearDown(selectionHost.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          localFavoriteRepositoryProvider.overrideWith(
+            (ref) => _FakeLocalFavoriteRepository(
+              categories: _multiCategoryFavoriteCategories(),
+              itemsByCategory: _multiCategoryFavoriteItems(),
+            ),
+          ),
+          favoriteSyncServiceProvider.overrideWith(
+            (ref) => _FakeFavoriteSyncService(),
+          ),
+          favoriteShelfBootstrapperProvider.overrideWith(
+            (ref) => bootstrapper,
+          ),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+            queueSnapshot,
+          ),
+          shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
+        ],
+        child: const MaterialApp(home: FavoriteShelfPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(
+      find.byKey(
+        const ValueKey<String>('unified-shelf-list-item-favorite:201'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('selection-app-bar-invert')));
+    await tester.pumpAndSettle();
+
+    expect(selectionHost.state?.activeCategoryId, favoriteComicCategoryId);
+    expect(selectionHost.state?.selectedCount, 1);
+    expect(find.text('已选 1 项'), findsOneWidget);
+
+    final firstItemFinder = find.byKey(
+      const ValueKey<String>('unified-shelf-list-item-favorite:201'),
+    );
+    final firstTileFinder = find.descendant(
+      of: firstItemFinder,
+      matching: find.byKey(
+        const ValueKey<String>('unified-shelf-list-tile-favorite:201'),
+      ),
+    );
+    expect(tester.widget<ListTile>(firstTileFinder).selected, isFalse);
+    expect(_borderColorForListItem(tester, firstItemFinder), Colors.transparent);
+
+    final secondItemFinder = find.byKey(
+      const ValueKey<String>('unified-shelf-list-item-favorite:202'),
+    );
+    final secondTileFinder = find.descendant(
+      of: secondItemFinder,
+      matching: find.byKey(
+        const ValueKey<String>('unified-shelf-list-tile-favorite:202'),
+      ),
+    );
+    expect(tester.widget<ListTile>(secondTileFinder).selected, isTrue);
+    expect(
+      _borderColorForListItem(tester, secondItemFinder),
+      isNot(Colors.transparent),
+    );
+  });
 }
 
 class _RecordingFavoriteShelfBootstrapper implements FavoriteShelfBootstrapper {
@@ -310,29 +457,42 @@ class _FakeLibraryTaskNotificationService
 }
 
 class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
-  _FakeLocalFavoriteRepository({this.hasSnapshot = true});
+  _FakeLocalFavoriteRepository({
+    this.hasSnapshot = true,
+    List<LibraryCategory>? categories,
+    Map<String, List<LibraryWorkItem>>? itemsByCategory,
+  })  : _categories = categories ??
+            <LibraryCategory>[
+              LibraryCategory(
+                categoryId: favoriteDefaultCategoryId,
+                name: '默认',
+                sortOrder: 0,
+                createdAt: DateTime(2026, 1, 1),
+              ),
+            ],
+        _itemsByCategory = itemsByCategory ??
+            <String, List<LibraryWorkItem>>{
+              favoriteDefaultCategoryId: <LibraryWorkItem>[
+                LibraryWorkItem(
+                  workId: FavoriteShelfWorkId.fromTid('100'),
+                  categoryId: favoriteDefaultCategoryId,
+                  title: '收藏帖',
+                  secondaryName: '作者A',
+                  unreadCount: 0,
+                  totalChapterCount: 1,
+                  readChapterCount: 0,
+                  addedAt: DateTime(2026, 1, 1),
+                ),
+              ],
+            };
 
   final bool hasSnapshot;
-  final _category = LibraryCategory(
-    categoryId: favoriteDefaultCategoryId,
-    name: '默认',
-    sortOrder: 0,
-    createdAt: DateTime(2026, 1, 1),
-  );
-
-  final _item = LibraryWorkItem(
-    workId: FavoriteShelfWorkId.fromTid('100'),
-    categoryId: favoriteDefaultCategoryId,
-    title: '收藏帖',
-    secondaryName: '作者A',
-    unreadCount: 0,
-    totalChapterCount: 1,
-    readChapterCount: 0,
-    addedAt: DateTime(2026, 1, 1),
-  );
+  final List<LibraryCategory> _categories;
+  final Map<String, List<LibraryWorkItem>> _itemsByCategory;
 
   @override
-  Future<int> countActiveThreads() async => 1;
+  Future<int> countActiveThreads() async =>
+      _itemsByCategory.values.fold<int>(0, (total, items) => total + items.length);
 
   @override
   Future<int> countMissingDetailRecords() async => 0;
@@ -352,7 +512,13 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   }) async {}
 
   @override
-  Future<Set<String>> getActiveTids() async => const <String>{'100'};
+  Future<Set<String>> getActiveTids() async {
+    return _itemsByCategory.values
+        .expand((items) => items)
+        .map((item) => FavoriteShelfWorkId.parseTid(item.workId))
+        .whereType<String>()
+        .toSet();
+  }
 
   @override
   Future<List<FavoriteThreadCacheRecord>> getActiveThreadsForSnapshot() async =>
@@ -399,11 +565,12 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
 
   @override
   Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(String workId) async {
-    return const FavoriteRouteTarget(
-      tid: '100',
-      title: '收藏帖',
+    final tid = FavoriteShelfWorkId.parseTid(workId) ?? '100';
+    return FavoriteRouteTarget(
+      tid: tid,
+      title: '收藏帖$tid',
       contentKind: ThreadContentKind.forum,
-      workId: 'thread:100',
+      workId: 'thread:$tid',
     );
   }
 
@@ -414,19 +581,25 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
     }
     return FavoriteSyncSnapshot(
       syncKey: favoriteSyncKey,
-      remoteCount: 1,
-      localActiveCount: 1,
+      remoteCount: _itemsByCategory.values.fold<int>(
+        0,
+        (total, items) => total + items.length,
+      ),
+      localActiveCount: _itemsByCategory.values.fold<int>(
+        0,
+        (total, items) => total + items.length,
+      ),
       lastSyncedAt: DateTime(2026, 1, 1),
     );
   }
 
   @override
   Future<List<LibraryWorkItem>> loadCategoryItems(String categoryId) async =>
-      <LibraryWorkItem>[_item];
+      _itemsByCategory[categoryId] ?? const <LibraryWorkItem>[];
 
   @override
   Future<List<LibraryCategory>> loadVisibleCategories() async =>
-      <LibraryCategory>[_category];
+      _categories;
 
   @override
   Future<void> markSyncFailure(String message) async {}
@@ -443,8 +616,13 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   }) async {}
 
   @override
-  Future<String?> pickRandomWorkId({required String categoryId}) async =>
-      _item.workId;
+  Future<String?> pickRandomWorkId({required String categoryId}) async {
+    final items = _itemsByCategory[categoryId] ?? const <LibraryWorkItem>[];
+    if (items.isEmpty) {
+      return null;
+    }
+    return items.first.workId;
+  }
 
   @override
   Future<Map<String, List<LibraryWorkItem>>> queryItems({
@@ -455,7 +633,8 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   }) async {
     return <String, List<LibraryWorkItem>>{
       for (final category in categories)
-        category.categoryId: <LibraryWorkItem>[_item],
+        category.categoryId:
+            _itemsByCategory[category.categoryId] ?? const <LibraryWorkItem>[],
     };
   }
 
@@ -480,6 +659,85 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
     required FavoriteThreadsPage page,
     required int pageStartOrder,
   }) async => page.items.length;
+}
+
+List<LibraryCategory> _multiCategoryFavoriteCategories() {
+  return <LibraryCategory>[
+    LibraryCategory(
+      categoryId: favoriteComicCategoryId,
+      name: '漫画',
+      sortOrder: 0,
+      createdAt: DateTime(2026, 1, 1),
+    ),
+    LibraryCategory(
+      categoryId: favoriteNovelCategoryId,
+      name: '小说',
+      sortOrder: 1,
+      createdAt: DateTime(2026, 1, 2),
+    ),
+    LibraryCategory(
+      categoryId: favoriteDefaultCategoryId,
+      name: '默认',
+      sortOrder: 2,
+      createdAt: DateTime(2026, 1, 3),
+    ),
+  ];
+}
+
+Map<String, List<LibraryWorkItem>> _multiCategoryFavoriteItems() {
+  return <String, List<LibraryWorkItem>>{
+    favoriteComicCategoryId: <LibraryWorkItem>[
+      _favoriteItem(
+        tid: '201',
+        categoryId: favoriteComicCategoryId,
+        title: '漫画收藏 A',
+      ),
+      _favoriteItem(
+        tid: '202',
+        categoryId: favoriteComicCategoryId,
+        title: '漫画收藏 B',
+      ),
+    ],
+    favoriteNovelCategoryId: <LibraryWorkItem>[
+      _favoriteItem(
+        tid: '301',
+        categoryId: favoriteNovelCategoryId,
+        title: '小说收藏 A',
+      ),
+    ],
+    favoriteDefaultCategoryId: List<LibraryWorkItem>.generate(
+      15,
+      (index) => _favoriteItem(
+        tid: '${401 + index}',
+        categoryId: favoriteDefaultCategoryId,
+        title: '默认收藏 ${index + 1}',
+      ),
+    ),
+  };
+}
+
+LibraryWorkItem _favoriteItem({
+  required String tid,
+  required String categoryId,
+  required String title,
+}) {
+  return LibraryWorkItem(
+    workId: FavoriteShelfWorkId.fromTid(tid),
+    categoryId: categoryId,
+    title: title,
+    secondaryName: '作者$tid',
+    unreadCount: 0,
+    totalChapterCount: 1,
+    readChapterCount: 0,
+    addedAt: DateTime(2026, 1, 1),
+  );
+}
+
+Color _borderColorForListItem(WidgetTester tester, Finder itemFinder) {
+  final container = tester.widget<AnimatedContainer>(itemFinder);
+  final decoration = container.decoration as BoxDecoration;
+  final border = decoration.border as Border;
+  return border.top.color;
 }
 
 class _FakeLibraryStateRepository implements LibraryStateRepository {
