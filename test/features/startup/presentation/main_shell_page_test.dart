@@ -478,6 +478,19 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   Future<void> load(Uri uri) async {}
 
   @override
+  Future<String?> getTitle() async {
+    return null;
+  }
+
+  @override
+  Future<bool> canGoBack() async {
+    return false;
+  }
+
+  @override
+  Future<void> goBack() async {}
+
+  @override
   Future<void> runJavaScript(String script) async {}
 
   @override

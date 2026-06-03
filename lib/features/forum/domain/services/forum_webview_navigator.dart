@@ -13,6 +13,10 @@ abstract class ForumWebViewNavigator {
 
   ForumWebViewPageKind classify(Uri uri);
 
+  String? extractFid(Uri uri);
+
+  String? extractTid(Uri uri);
+
   bool isManagedSite(Uri uri);
 }
 
@@ -57,6 +61,24 @@ class DefaultForumWebViewNavigator implements ForumWebViewNavigator {
   }
 
   @override
+  String? extractFid(Uri uri) {
+    final kind = classify(uri);
+    if (kind != ForumWebViewPageKind.forumDisplay &&
+        kind != ForumWebViewPageKind.threadDetail) {
+      return null;
+    }
+    return _normalizeQueryValue(uri.queryParameters['fid']);
+  }
+
+  @override
+  String? extractTid(Uri uri) {
+    if (classify(uri) != ForumWebViewPageKind.threadDetail) {
+      return null;
+    }
+    return _normalizeQueryValue(uri.queryParameters['tid']);
+  }
+
+  @override
   bool isManagedSite(Uri uri) {
     final host = uri.host.trim().toLowerCase();
     return host.isNotEmpty && host == _siteHost;
@@ -81,5 +103,13 @@ class DefaultForumWebViewNavigator implements ForumWebViewNavigator {
       return parsed;
     }
     return _siteRoot.resolveUri(parsed);
+  }
+
+  String? _normalizeQueryValue(String? value) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
+    return trimmed;
   }
 }

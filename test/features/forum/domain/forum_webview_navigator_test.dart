@@ -13,21 +13,29 @@ void main() {
   });
 
   test('classify recognizes forum display', () {
-    expect(
-      navigator.classify(
-        Uri.parse('https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2'),
-      ),
-      ForumWebViewPageKind.forumDisplay,
+    final uri = Uri.parse(
+      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
     );
+    expect(navigator.classify(uri), ForumWebViewPageKind.forumDisplay);
+    expect(navigator.extractFid(uri), '55');
   });
 
   test('classify recognizes thread detail', () {
-    expect(
-      navigator.classify(
-        Uri.parse('https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&mobile=2'),
-      ),
-      ForumWebViewPageKind.threadDetail,
+    final uri = Uri.parse(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&mobile=2',
     );
+    expect(navigator.classify(uri), ForumWebViewPageKind.threadDetail);
+    expect(navigator.extractTid(uri), '100');
+    expect(navigator.extractFid(uri), isNull);
+  });
+
+  test('thread detail can also extract fid when query carries it', () {
+    final uri = Uri.parse(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&fid=55&mobile=2',
+    );
+    expect(navigator.classify(uri), ForumWebViewPageKind.threadDetail);
+    expect(navigator.extractTid(uri), '100');
+    expect(navigator.extractFid(uri), '55');
   });
 
   test('classify recognizes forum search', () {
@@ -47,9 +55,14 @@ void main() {
   });
 
   test('resolve maps relative url to managed site', () {
+    final resolved = navigator.resolve(
+      'forum.php?mod=forumdisplay&fid=30&mobile=2',
+    );
     expect(
-      navigator.resolve('forum.php?mod=forumdisplay&fid=30&mobile=2').toString(),
+      resolved.toString(),
       'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=30&mobile=2',
     );
+    expect(navigator.classify(resolved), ForumWebViewPageKind.forumDisplay);
+    expect(navigator.extractFid(resolved), '30');
   });
 }

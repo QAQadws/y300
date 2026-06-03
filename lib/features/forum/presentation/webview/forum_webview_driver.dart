@@ -38,6 +38,12 @@ abstract class ForumWebViewDriver implements ForumWebViewScriptTarget {
 
   Future<void> load(Uri uri);
 
+  Future<String?> getTitle();
+
+  Future<bool> canGoBack();
+
+  Future<void> goBack();
+
   Future<void> seedCookies({
     required String domain,
     required Map<String, String> cookies,
@@ -87,6 +93,21 @@ class FlutterForumWebViewDriver implements ForumWebViewDriver {
   @override
   Future<void> load(Uri uri) {
     return _controller.loadRequest(uri);
+  }
+
+  @override
+  Future<String?> getTitle() {
+    return _controller.getTitle();
+  }
+
+  @override
+  Future<bool> canGoBack() {
+    return _controller.canGoBack();
+  }
+
+  @override
+  Future<void> goBack() {
+    return _controller.goBack();
   }
 
   @override
