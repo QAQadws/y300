@@ -23,6 +23,7 @@ class NovelDetailPage extends ConsumerWidget {
     final adapter = NovelDetailAdapter(
       ref.watch(novelRepositoryProvider),
       downloadService: ref.watch(novelDownloadServiceProvider),
+      readingStateBatchWriter: ref.watch(readingStateBatchWriterProvider),
       stateRepository: ref.watch(libraryStateRepositoryProvider),
     );
     return UnifiedDetailPage(

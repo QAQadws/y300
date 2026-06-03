@@ -6,6 +6,7 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/bulk_download_use_case.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
@@ -17,6 +18,7 @@ import 'package:y300/features/library_shared/domain/contracts/detail_module_adap
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
+import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
 
 void main() {
   test('refreshWork applies catalog result without running search fallback', () async {
@@ -331,6 +333,58 @@ void main() {
     );
 
     expect(target?.episodeId, 'comic:1:90');
+  });
+
+  test('clearAllReadState delegates to ReadingStateBatchWriter when injected', () async {
+    final writer = _RecordingReadingStateBatchWriter();
+    final adapter = ComicDetailAdapter(
+      _FakeComicRepository(),
+      readingStateBatchWriter: writer,
+      stateRepository: _FakeLibraryStateRepository(),
+    );
+
+    await adapter.clearAllReadState(workId: 'comic:1');
+
+    expect(writer.calls, hasLength(1));
+    expect(writer.calls.single.module, LibraryModuleKey.comic);
+    expect(writer.calls.single.workIds, <String>{'comic:1'});
+    expect(writer.calls.single.isRead, isFalse);
+  });
+
+  test('downloadAll delegates to BulkDownloadUseCase when injected', () async {
+    final bulkDownloadUseCase = _RecordingBulkDownloadUseCase();
+    final adapter = ComicDetailAdapter(
+      _FakeComicRepository(),
+      bulkDownloadUseCase: bulkDownloadUseCase,
+      stateRepository: _FakeLibraryStateRepository(),
+    );
+
+    await adapter.downloadAll(workId: 'comic:1');
+
+    expect(bulkDownloadUseCase.requestedComicIds, <Set<String>>[
+      <String>{'comic:1'},
+    ]);
+  });
+
+  test('downloadUnread keeps per-episode fallback behavior', () async {
+    final stateRepository = _RecordingLibraryStateRepository(
+      episodeStates: <String, LibraryEpisodeState>{
+        'comic:1:120': LibraryEpisodeState(
+          moduleKey: LibraryModuleKey.comic,
+          episodeId: 'comic:1:120',
+          workId: 'comic:1',
+          isRead: true,
+        ),
+      },
+    );
+    final adapter = ComicDetailAdapter(
+      _FakeComicRepository(),
+      stateRepository: stateRepository,
+    );
+
+    await adapter.downloadUnread(workId: 'comic:1');
+
+    expect(stateRepository.downloadedEpisodeIds, <String>['comic:1:90']);
   });
 }
 
@@ -756,6 +810,13 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
     required String workId,
   }) async {}
   @override
+  Future<void> setWorksReadState({
+    required LibraryModuleKey moduleKey,
+    required Set<String> workIds,
+    required bool isRead,
+    DateTime? readAt,
+  }) async {}
+  @override
   Future<String> createTag({required String name}) async => 't1';
   @override
   Future<void> deleteTag({required String tagId}) async {}
@@ -782,4 +843,89 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
   Future<void> upsertEpisodeState({required LibraryModuleKey moduleKey, required String episodeId, required String workId, bool? isRead, bool? isDownloaded, bool? isBookmarked, DateTime? readAt, DateTime? downloadedAt}) async {}
   @override
   Future<void> upsertWorkState({required LibraryModuleKey moduleKey, required String workId, String? lastReadEpisodeId, DateTime? lastReadAt, DateTime? checkUpdatedAt, DateTime? fetchedUpdatedAt, String? introText}) async {}
+}
+
+class _RecordingLibraryStateRepository extends _FakeLibraryStateRepository {
+  _RecordingLibraryStateRepository({
+    super.episodeStates,
+  });
+
+  final List<String> downloadedEpisodeIds = <String>[];
+
+  @override
+  Future<void> upsertEpisodeState({
+    required LibraryModuleKey moduleKey,
+    required String episodeId,
+    required String workId,
+    bool? isRead,
+    bool? isDownloaded,
+    bool? isBookmarked,
+    DateTime? readAt,
+    DateTime? downloadedAt,
+  }) async {
+    if (isDownloaded == true) {
+      downloadedEpisodeIds.add(episodeId);
+    }
+  }
+}
+
+class _RecordingReadingStateBatchWriter implements ReadingStateBatchWriter {
+  final List<_ReadingStateBatchCall> calls = <_ReadingStateBatchCall>[];
+
+  @override
+  Future<void> setWorkRead({
+    required LibraryModuleKey module,
+    required String workId,
+    required bool isRead,
+  }) async {
+    calls.add(
+      _ReadingStateBatchCall(
+        module: module,
+        workIds: <String>{workId},
+        isRead: isRead,
+      ),
+    );
+  }
+
+  @override
+  Future<void> setWorksRead({
+    required LibraryModuleKey module,
+    required Set<String> workIds,
+    required bool isRead,
+  }) async {
+    calls.add(
+      _ReadingStateBatchCall(
+        module: module,
+        workIds: workIds,
+        isRead: isRead,
+      ),
+    );
+  }
+}
+
+class _ReadingStateBatchCall {
+  const _ReadingStateBatchCall({
+    required this.module,
+    required this.workIds,
+    required this.isRead,
+  });
+
+  final LibraryModuleKey module;
+  final Set<String> workIds;
+  final bool isRead;
+}
+
+class _RecordingBulkDownloadUseCase implements BulkDownloadUseCase {
+  final List<Set<String>> requestedComicIds = <Set<String>>[];
+
+  @override
+  Future<BulkDownloadResult> downloadComics(Set<String> comicIds) async {
+    requestedComicIds.add(Set<String>.from(comicIds));
+    return BulkDownloadResult(
+      requestedComicIds: comicIds.toList(growable: false),
+      completedComicIds: comicIds.toList(growable: false),
+      failedComicIds: const <String>[],
+      downloadedEpisodeCount: 0,
+    );
+  }
 }

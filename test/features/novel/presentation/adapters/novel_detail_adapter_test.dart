@@ -1,32 +1,42 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
+import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
-import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
-import 'package:y300/features/novel/presentation/novel_shelf_page.dart';
+import 'package:y300/features/novel/presentation/adapters/novel_detail_adapter.dart';
 
 void main() {
-  testWidgets('NovelShelfPage builds unified shelf shell with module title', (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
-          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
-        ],
-        child: const MaterialApp(home: NovelShelfPage()),
-      ),
+  test('clearAllReadState delegates to ReadingStateBatchWriter when injected', () async {
+    final writer = _RecordingReadingStateBatchWriter();
+    final adapter = NovelDetailAdapter(
+      _FakeNovelRepository(),
+      readingStateBatchWriter: writer,
+      stateRepository: _RecordingLibraryStateRepository(),
     );
 
-    await tester.pumpAndSettle();
+    await adapter.clearAllReadState(workId: 'novel:1');
 
-    expect(find.text('小说'), findsOneWidget);
-    expect(find.byKey(const Key('unified-shelf-category-indicator')), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('unified-shelf-category-tab-default')), findsOneWidget);
+    expect(writer.calls, hasLength(1));
+    expect(writer.calls.single.module, LibraryModuleKey.novel);
+    expect(writer.calls.single.workIds, <String>{'novel:1'});
+    expect(writer.calls.single.isRead, isFalse);
+  });
+
+  test('clearAllReadState keeps fallback per-episode loop without writer', () async {
+    final stateRepository = _RecordingLibraryStateRepository();
+    final adapter = NovelDetailAdapter(
+      _FakeNovelRepository(),
+      stateRepository: stateRepository,
+    );
+
+    await adapter.clearAllReadState(workId: 'novel:1');
+
+    expect(stateRepository.unreadEpisodeIds, <String>[
+      'novel:1:1',
+      'novel:1:2',
+    ]);
   });
 }
 
@@ -39,7 +49,7 @@ class _FakeNovelRepository implements NovelRepository {
 
   @override
   Future<List<NovelShelfCategory>> getCategories() async {
-    return [
+    return <NovelShelfCategory>[
       NovelShelfCategory(
         categoryId: 'default',
         name: '默认',
@@ -53,14 +63,40 @@ class _FakeNovelRepository implements NovelRepository {
   Future<NovelChapterContent?> getChapterContent({required String episodeId}) async => null;
 
   @override
-  Future<NovelItem?> getDetail({required String novelId}) async => null;
+  Future<NovelItem?> getDetail({required String novelId}) async {
+    return NovelItem(
+      novelId: novelId,
+      sourceTid: '100',
+      sourceFid: '75',
+      title: 'Novel',
+      updatedAt: DateTime(2026, 1, 1),
+      episodeCount: 2,
+    );
+  }
 
   @override
   Future<List<NovelEpisodeItem>> getEpisodes({
     required String novelId,
     bool descending = false,
   }) async {
-    return const [];
+    return <NovelEpisodeItem>[
+      NovelEpisodeItem(
+        episodeId: '$novelId:1',
+        novelId: novelId,
+        sourceTid: '100',
+        sourcePid: '1',
+        episodeTitle: '第一章',
+        orderIndex: 0,
+      ),
+      NovelEpisodeItem(
+        episodeId: '$novelId:2',
+        novelId: novelId,
+        sourceTid: '100',
+        sourcePid: '2',
+        episodeTitle: '第二章',
+        orderIndex: 1,
+      ),
+    ];
   }
 
   @override
@@ -70,21 +106,7 @@ class _FakeNovelRepository implements NovelRepository {
   Future<NovelReadingProgress?> getReadingProgress({required String novelId}) async => null;
 
   @override
-  Future<List<NovelItem>> getShelfItems({String categoryId = 'default'}) async {
-    return [
-      NovelItem(
-        novelId: 'novel-1',
-        sourceTid: '100',
-        sourceFid: '49',
-        title: '小说A',
-        author: '作者A',
-        coverImageUrl: null,
-        updatedAt: DateTime(2026, 1, 1),
-        episodeCount: 2,
-        categoryId: categoryId,
-      ),
-    ];
-  }
+  Future<List<NovelItem>> getShelfItems({String categoryId = 'default'}) async => const <NovelItem>[];
 
   @override
   Future<void> moveNovelToCategory({
@@ -94,15 +116,19 @@ class _FakeNovelRepository implements NovelRepository {
   }) async {}
 
   @override
+  Future<void> purgeWork({required String novelId}) async {}
+
+  @override
   Future<NovelEpisodeRefreshResult> refreshEpisodes({required String novelId}) async {
-    return const NovelEpisodeRefreshResult(insertedCount: 0, updatedCount: 0, totalCount: 0);
+    return const NovelEpisodeRefreshResult(
+      insertedCount: 0,
+      updatedCount: 0,
+      totalCount: 0,
+    );
   }
 
   @override
   Future<void> removeFromShelf({required String novelId}) async {}
-
-  @override
-  Future<void> purgeWork({required String novelId}) async {}
 
   @override
   Future<void> renameCategory({
@@ -124,7 +150,9 @@ class _FakeNovelRepository implements NovelRepository {
   Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {}
 }
 
-class _FakeLibraryStateRepository implements LibraryStateRepository {
+class _RecordingLibraryStateRepository implements LibraryStateRepository {
+  final List<String> unreadEpisodeIds = <String>[];
+
   @override
   Future<void> bindTagToWork({
     required LibraryModuleKey moduleKey,
@@ -136,39 +164,19 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
   Future<int> countDownloadedEpisodes({
     required LibraryModuleKey moduleKey,
     required String workId,
-  }) async {
-    return 0;
-  }
+  }) async => 0;
 
   @override
   Future<int> countReadEpisodes({
     required LibraryModuleKey moduleKey,
     required String workId,
-  }) async {
-    return 0;
-  }
+  }) async => 0;
 
   @override
   Future<int> countUnreadEpisodes({
     required LibraryModuleKey moduleKey,
     required String workId,
-  }) async {
-    return 1;
-  }
-
-  @override
-  Future<void> purgeWorkState({
-    required LibraryModuleKey moduleKey,
-    required String workId,
-  }) async {}
-
-  @override
-  Future<void> setWorksReadState({
-    required LibraryModuleKey moduleKey,
-    required Set<String> workIds,
-    required bool isRead,
-    DateTime? readAt,
-  }) async {}
+  }) async => 0;
 
   @override
   Future<String> createTag({required String name}) async => 'tag-1';
@@ -193,41 +201,47 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
   Future<LibraryEpisodeState?> getEpisodeState({
     required LibraryModuleKey moduleKey,
     required String episodeId,
-  }) async {
-    return null;
-  }
+  }) async => null;
 
   @override
-  Future<List<LibraryTag>> getTags() async => const [];
+  Future<List<LibraryTag>> getTags() async => const <LibraryTag>[];
 
   @override
   Future<LibraryWorkState?> getWorkState({
     required LibraryModuleKey moduleKey,
     required String workId,
-  }) async {
-    return null;
-  }
+  }) async => null;
 
   @override
   Future<List<LibraryTag>> getWorkTags({
     required LibraryModuleKey moduleKey,
     required String workId,
-  }) async {
-    return const [];
-  }
+  }) async => const <LibraryTag>[];
 
   @override
   Future<bool> hasAnyTag({
     required LibraryModuleKey moduleKey,
     required String workId,
-  }) async {
-    return false;
-  }
+  }) async => false;
+
+  @override
+  Future<void> purgeWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {}
 
   @override
   Future<void> renameTag({
     required String tagId,
     required String newName,
+  }) async {}
+
+  @override
+  Future<void> setWorksReadState({
+    required LibraryModuleKey moduleKey,
+    required Set<String> workIds,
+    required bool isRead,
+    DateTime? readAt,
   }) async {}
 
   @override
@@ -254,7 +268,11 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
     bool? isBookmarked,
     DateTime? readAt,
     DateTime? downloadedAt,
-  }) async {}
+  }) async {
+    if (isRead == false) {
+      unreadEpisodeIds.add(episodeId);
+    }
+  }
 
   @override
   Future<void> upsertWorkState({
@@ -266,4 +284,50 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
     DateTime? fetchedUpdatedAt,
     String? introText,
   }) async {}
+}
+
+class _RecordingReadingStateBatchWriter implements ReadingStateBatchWriter {
+  final List<_ReadingStateBatchCall> calls = <_ReadingStateBatchCall>[];
+
+  @override
+  Future<void> setWorkRead({
+    required LibraryModuleKey module,
+    required String workId,
+    required bool isRead,
+  }) async {
+    calls.add(
+      _ReadingStateBatchCall(
+        module: module,
+        workIds: <String>{workId},
+        isRead: isRead,
+      ),
+    );
+  }
+
+  @override
+  Future<void> setWorksRead({
+    required LibraryModuleKey module,
+    required Set<String> workIds,
+    required bool isRead,
+  }) async {
+    calls.add(
+      _ReadingStateBatchCall(
+        module: module,
+        workIds: workIds,
+        isRead: isRead,
+      ),
+    );
+  }
+}
+
+class _ReadingStateBatchCall {
+  const _ReadingStateBatchCall({
+    required this.module,
+    required this.workIds,
+    required this.isRead,
+  });
+
+  final LibraryModuleKey module;
+  final Set<String> workIds;
+  final bool isRead;
 }

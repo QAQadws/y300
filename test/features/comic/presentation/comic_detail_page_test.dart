@@ -584,6 +584,14 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
   }) async {}
 
   @override
+  Future<void> setWorksReadState({
+    required LibraryModuleKey moduleKey,
+    required Set<String> workIds,
+    required bool isRead,
+    DateTime? readAt,
+  }) async {}
+
+  @override
   Future<String> createTag({required String name}) async => 'tag-1';
 
   @override

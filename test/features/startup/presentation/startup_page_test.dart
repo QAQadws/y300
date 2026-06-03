@@ -309,6 +309,14 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
   }) async {}
 
   @override
+  Future<void> setWorksReadState({
+    required LibraryModuleKey moduleKey,
+    required Set<String> workIds,
+    required bool isRead,
+    DateTime? readAt,
+  }) async {}
+
+  @override
   Future<int> countReadEpisodes({
     required LibraryModuleKey moduleKey,
     required String workId,

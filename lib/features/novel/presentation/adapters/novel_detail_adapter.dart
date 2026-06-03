@@ -3,6 +3,7 @@ import 'package:y300/features/library_shared/domain/contracts/detail_module_adap
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
 import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 
@@ -11,12 +12,15 @@ class NovelDetailAdapter implements DetailModuleAdapter {
   NovelDetailAdapter(
     this._repository, {
     NovelDownloadService? downloadService,
+    ReadingStateBatchWriter? readingStateBatchWriter,
     required LibraryStateRepository stateRepository,
   })  : _downloadService = downloadService,
+        _readingStateBatchWriter = readingStateBatchWriter,
         _stateRepository = stateRepository;
 
   final NovelRepository _repository;
   final NovelDownloadService? _downloadService;
+  final ReadingStateBatchWriter? _readingStateBatchWriter;
   final LibraryStateRepository _stateRepository;
 
   @override
@@ -91,6 +95,15 @@ class NovelDetailAdapter implements DetailModuleAdapter {
 
   @override
   Future<void> clearAllReadState({required String workId}) async {
+    final writer = _readingStateBatchWriter;
+    if (writer != null) {
+      await writer.setWorkRead(
+        module: LibraryModuleKey.novel,
+        workId: workId,
+        isRead: false,
+      );
+      return;
+    }
     final episodes = await _repository.getEpisodes(novelId: workId, descending: false);
     for (final episode in episodes) {
       await _stateRepository.upsertEpisodeState(

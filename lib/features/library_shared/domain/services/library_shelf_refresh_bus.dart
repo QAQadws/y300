@@ -10,6 +10,8 @@ enum LibraryMutationSource {
   novelRefresh,
   coverWarmup,
   duplicateMerge,
+  readingStateBatch,
+  bulkDownload,
 }
 
 class LibraryShelfRefreshSignal {

@@ -51,6 +51,19 @@ abstract class LibraryStateRepository {
     required String workId,
   });
 
+  /// 批量写入一个或多个作品下全部章节的已读状态。
+  ///
+  /// 该接口面向持久化层，要求以集合式 upsert 保证“原本没有状态行的章节”
+  /// 也能在一次事务内写入到统一状态表。
+  Future<void> setWorksReadState({
+    required LibraryModuleKey moduleKey,
+    required Set<String> workIds,
+    required bool isRead,
+    DateTime? readAt,
+  }) {
+    throw UnimplementedError('setWorksReadState($moduleKey, $workIds, $isRead)');
+  }
+
   /// 删除一个作品在 shared 状态表里的全部状态和标签绑定。
   Future<void> purgeWorkState({
     required LibraryModuleKey moduleKey,

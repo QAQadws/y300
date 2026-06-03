@@ -5,6 +5,7 @@ import 'package:y300/features/comic/data/comic_download_service.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/comic/domain/services/bulk_download_use_case.dart';
 import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
@@ -18,6 +19,7 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
+import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
 
 /// 漫画详情适配器（Phase 6）。
 ///
@@ -35,6 +37,8 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
     ComicRefreshOutcomeApplier? refreshOutcomeApplier,
     ComicDownloadService? downloadService,
     ImageCacheService? imageCacheService,
+    ReadingStateBatchWriter? readingStateBatchWriter,
+    BulkDownloadUseCase? bulkDownloadUseCase,
     ComicReaderFeatureFlags featureFlags = ComicReaderFeatureFlags.defaults,
     ComicTitleAnalyzer titleAnalyzer = const PetitComicTitleAnalyzer(),
     required LibraryStateRepository stateRepository,
@@ -45,6 +49,8 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
         _refreshOutcomeApplier = refreshOutcomeApplier,
         _downloadService = downloadService,
         _imageCacheService = imageCacheService,
+        _readingStateBatchWriter = readingStateBatchWriter,
+        _bulkDownloadUseCase = bulkDownloadUseCase,
         _featureFlags = featureFlags,
         _titleAnalyzer = titleAnalyzer,
         _stateRepository = stateRepository;
@@ -57,6 +63,8 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
   final ComicRefreshOutcomeApplier? _refreshOutcomeApplier;
   final ComicDownloadService? _downloadService;
   final ImageCacheService? _imageCacheService;
+  final ReadingStateBatchWriter? _readingStateBatchWriter;
+  final BulkDownloadUseCase? _bulkDownloadUseCase;
   final ComicReaderFeatureFlags _featureFlags;
   final ComicTitleAnalyzer _titleAnalyzer;
   final LibraryStateRepository _stateRepository;
@@ -265,6 +273,15 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
 
   @override
   Future<void> clearAllReadState({required String workId}) async {
+    final writer = _readingStateBatchWriter;
+    if (writer != null) {
+      await writer.setWorkRead(
+        module: LibraryModuleKey.comic,
+        workId: workId,
+        isRead: false,
+      );
+      return;
+    }
     final episodes = await _repository.getComicEpisodes(comicId: workId, descending: false);
     for (final episode in episodes) {
       await _stateRepository.upsertEpisodeState(
@@ -297,6 +314,11 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
 
   @override
   Future<void> downloadAll({required String workId}) async {
+    final bulkDownloadUseCase = _bulkDownloadUseCase;
+    if (bulkDownloadUseCase != null) {
+      await bulkDownloadUseCase.downloadComics(<String>{workId});
+      return;
+    }
     final episodes = await _repository.getComicEpisodes(comicId: workId, descending: false);
     for (final episode in episodes) {
       await markChapterDownloaded(workId: workId, episodeId: episode.episodeId, isDownloaded: true);
@@ -755,4 +777,3 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
     };
   }
 }
-

@@ -206,6 +206,81 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
   }
 
   @override
+  Future<void> setWorksReadState({
+    required LibraryModuleKey moduleKey,
+    required Set<String> workIds,
+    required bool isRead,
+    DateTime? readAt,
+  }) async {
+    final normalizedWorkIds = workIds
+        .map((workId) => workId.trim())
+        .where((workId) => workId.isNotEmpty)
+        .toSet();
+    if (normalizedWorkIds.isEmpty) {
+      return;
+    }
+    final db = await _dbFuture;
+    final contentType = _moduleKeyToContentType(moduleKey);
+    final readAtMillis =
+        isRead ? (readAt ?? DateTime.now()).millisecondsSinceEpoch : null;
+    final placeholders = List<String>.filled(normalizedWorkIds.length, '?').join(', ');
+    final workIdArgs = normalizedWorkIds.toList(growable: false);
+    final sourceTable = switch (moduleKey) {
+      LibraryModuleKey.comic => ComicLocalDb.episodesTable,
+      LibraryModuleKey.novel => ComicLocalDb.workEpisodesTable,
+      LibraryModuleKey.favorite => null,
+    };
+    if (sourceTable == null) {
+      throw UnsupportedError('收藏模块不支持批量阅读状态写入');
+    }
+    final sourceWorkColumn =
+        moduleKey == LibraryModuleKey.comic ? 'comic_id' : 'work_id';
+    final sourceFilters = moduleKey == LibraryModuleKey.novel
+        ? 'AND src.content_type = ?'
+        : '';
+    await db.transaction((txn) async {
+      await txn.rawInsert(
+        '''
+        INSERT OR REPLACE INTO ${ComicLocalDb.libraryEpisodeStateTable} (
+          content_type,
+          episode_id,
+          work_id,
+          is_read,
+          is_downloaded,
+          is_bookmarked,
+          read_at,
+          downloaded_at
+        )
+        SELECT
+          ?,
+          src.episode_id,
+          src.$sourceWorkColumn,
+          ?,
+          COALESCE(state.is_downloaded, 0),
+          COALESCE(state.is_bookmarked, 0),
+          ?,
+          state.downloaded_at
+        FROM $sourceTable src
+        LEFT JOIN ${ComicLocalDb.libraryEpisodeStateTable} state
+          ON state.content_type = ?
+         AND state.episode_id = src.episode_id
+         AND state.work_id = src.$sourceWorkColumn
+        WHERE src.$sourceWorkColumn IN ($placeholders)
+        $sourceFilters
+        ''',
+          <Object?>[
+            contentType,
+            isRead ? 1 : 0,
+            readAtMillis,
+            contentType,
+            ...workIdArgs,
+            if (moduleKey == LibraryModuleKey.novel) contentType,
+          ],
+      );
+    });
+  }
+
+  @override
   Future<void> purgeWorkState({
     required LibraryModuleKey moduleKey,
     required String workId,
