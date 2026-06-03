@@ -21,6 +21,8 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_notification_service.dart';
+import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
+import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
@@ -148,6 +150,52 @@ void main() {
     expect(bootstrapper.startCallCount, 1);
     sync.completePendingSync();
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('FavoriteShelfPage long press activates 2 selection actions', (
+    tester,
+  ) async {
+    final bootstrapper = _RecordingFavoriteShelfBootstrapper();
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    final selectionHost = ShelfSelectionHostController();
+    addTearDown(queueSnapshot.dispose);
+    addTearDown(selectionHost.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          localFavoriteRepositoryProvider.overrideWith(
+            (ref) => _FakeLocalFavoriteRepository(),
+          ),
+          favoriteSyncServiceProvider.overrideWith(
+            (ref) => _FakeFavoriteSyncService(),
+          ),
+          favoriteShelfBootstrapperProvider.overrideWith(
+            (ref) => bootstrapper,
+          ),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+            queueSnapshot,
+          ),
+          shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
+        ],
+        child: const MaterialApp(home: FavoriteShelfPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(
+      find.byKey(
+        const ValueKey<String>('unified-shelf-list-item-favorite:100'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(selectionHost.state?.selectionActions.length, 2);
+    expect(bootstrapper.startCallCount, 1);
   });
 }
 

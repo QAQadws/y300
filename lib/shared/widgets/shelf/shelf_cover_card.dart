@@ -44,6 +44,7 @@ class ShelfCoverCard extends StatelessWidget {
     this.fallbackBackground,
     this.imageHeaderBuilder,
     this.coverLayerBuilder,
+    this.selected = false,
   });
 
   final String? coverKey;
@@ -59,31 +60,43 @@ class ShelfCoverCard extends StatelessWidget {
   final Decoration? fallbackBackground;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ShelfCoverLayerBuilder? coverLayerBuilder;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
+    final borderColor = selected
+        ? Theme.of(context).colorScheme.primary
+        : Colors.transparent;
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            _buildCoverLayer(context),
-            if (topLeftBadge != null)
-              Align(
-                alignment: Alignment.topLeft,
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: topLeftBadge,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: borderColor, width: 2),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              _buildCoverLayer(context),
+              if (topLeftBadge != null)
+                Align(
+                  alignment: Alignment.topLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: topLeftBadge,
+                  ),
                 ),
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: _buildTitleOverlay(context),
               ),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: _buildTitleOverlay(context),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

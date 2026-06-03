@@ -7,6 +7,7 @@ import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_task_workflow_providers.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_shelf_page.dart';
+import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/presentation/adapters/novel_shelf_adapter.dart';
 import 'package:y300/features/novel/presentation/novel_detail_page.dart';
@@ -46,6 +47,7 @@ class NovelShelfPage extends ConsumerWidget {
       imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
       isActive: isActive,
       taskProgressHub: taskProgressHub,
+      selectionHost: ref.watch(shelfSelectionHostControllerProvider),
       onOpenWork: (context, workId) async {
         await Navigator.of(context).push(
           MaterialPageRoute<void>(

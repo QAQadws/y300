@@ -8,6 +8,7 @@ import 'package:y300/features/favorites/data/favorite_providers.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
 import 'package:y300/features/library_shared/data/library_task_workflow_providers.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_shelf_page.dart';
+import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
 import 'package:y300/features/novel/presentation/novel_detail_page.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
@@ -51,6 +52,7 @@ class _FavoriteShelfPageState extends ConsumerState<FavoriteShelfPage> {
       imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
       isActive: widget.isActive,
       taskProgressHub: taskProgressHub,
+      selectionHost: ref.watch(shelfSelectionHostControllerProvider),
       onOpenWork: (context, workId) async {
         final target = await repository.getRouteTargetByShelfWorkId(workId);
         if (!context.mounted || target == null) {

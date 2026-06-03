@@ -69,6 +69,14 @@ class ComicShelfAdapter
             bulkDownloadUseCaseResolver ?? (() => bulkDownloadUseCase),
         _unfavoriteWorkUseCaseResolver =
             unfavoriteWorkUseCaseResolver ?? (() => unfavoriteWorkUseCase),
+        _supportsCategoryAssign =
+            categoryAssignUseCase != null || categoryAssignUseCaseResolver != null,
+        _supportsReadingStateBatch =
+            readingStateBatchWriter != null || readingStateBatchWriterResolver != null,
+        _supportsBulkDownload =
+            bulkDownloadUseCase != null || bulkDownloadUseCaseResolver != null,
+        _supportsUnfavorite =
+            unfavoriteWorkUseCase != null || unfavoriteWorkUseCaseResolver != null,
         _coverCacheService = imageCacheServiceResolver == null
             ? LibraryCoverCacheService(imageCacheService)
             : LibraryCoverCacheService.lazy(imageCacheServiceResolver);
@@ -83,6 +91,10 @@ class ComicShelfAdapter
   final ReadingStateBatchWriterResolver _readingStateBatchWriterResolver;
   final BulkDownloadUseCaseResolver _bulkDownloadUseCaseResolver;
   final UnfavoriteWorkUseCaseResolver _unfavoriteWorkUseCaseResolver;
+  final bool _supportsCategoryAssign;
+  final bool _supportsReadingStateBatch;
+  final bool _supportsBulkDownload;
+  final bool _supportsUnfavorite;
   final LibraryCoverCacheService _coverCacheService;
 
   static const String _mergeDuplicatesActionId = 'merge-duplicates';
@@ -122,7 +134,7 @@ class ComicShelfAdapter
   @override
   List<SelectionAction> get selectionActions {
     final actions = <SelectionAction>[];
-    if (_categoryAssignUseCaseResolver() != null) {
+    if (_supportsCategoryAssign) {
       actions.add(
         const SelectionAction(
           id: SelectionActionIds.assignCategory,
@@ -131,7 +143,7 @@ class ComicShelfAdapter
         ),
       );
     }
-    if (_readingStateBatchWriterResolver() != null) {
+    if (_supportsReadingStateBatch) {
       actions.add(
         const SelectionAction(
           id: SelectionActionIds.markAllRead,
@@ -147,7 +159,7 @@ class ComicShelfAdapter
         ),
       );
     }
-    if (_bulkDownloadUseCaseResolver() != null) {
+    if (_supportsBulkDownload) {
       actions.add(
         const SelectionAction(
           id: SelectionActionIds.download,
@@ -156,7 +168,7 @@ class ComicShelfAdapter
         ),
       );
     }
-    if (_unfavoriteWorkUseCaseResolver() != null) {
+    if (_supportsUnfavorite) {
       actions.add(
         const SelectionAction(
           id: SelectionActionIds.unfavorite,

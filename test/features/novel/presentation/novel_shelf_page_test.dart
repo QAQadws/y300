@@ -5,6 +5,8 @@ import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
+import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
+import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
@@ -37,6 +39,33 @@ void main() {
       find.byKey(const ValueKey<String>('unified-shelf-category-tab-default')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('NovelShelfPage long press activates 4 selection actions', (
+    tester,
+  ) async {
+    final selectionHost = ShelfSelectionHostController();
+    addTearDown(selectionHost.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
+          shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
+        ],
+        child: const MaterialApp(home: NovelShelfPage()),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.longPress(
+      find.byKey(const ValueKey<String>('unified-shelf-list-item-novel-1')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(selectionHost.state?.selectionActions.length, 4);
   });
 }
 

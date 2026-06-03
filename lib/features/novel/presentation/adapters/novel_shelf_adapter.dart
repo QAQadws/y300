@@ -55,6 +55,12 @@ class NovelShelfAdapter
             readingStateBatchWriterResolver ?? (() => readingStateBatchWriter),
         _unfavoriteWorkUseCaseResolver =
             unfavoriteWorkUseCaseResolver ?? (() => unfavoriteWorkUseCase),
+        _supportsCategoryAssign =
+            categoryAssignUseCase != null || categoryAssignUseCaseResolver != null,
+        _supportsReadingStateBatch =
+            readingStateBatchWriter != null || readingStateBatchWriterResolver != null,
+        _supportsUnfavorite =
+            unfavoriteWorkUseCase != null || unfavoriteWorkUseCaseResolver != null,
         _coverCacheService = imageCacheServiceResolver == null
             ? LibraryCoverCacheService(imageCacheService)
             : LibraryCoverCacheService.lazy(imageCacheServiceResolver);
@@ -66,6 +72,9 @@ class NovelShelfAdapter
   final ShelfCategoryAssignUseCaseResolver _categoryAssignUseCaseResolver;
   final ReadingStateBatchWriterResolver _readingStateBatchWriterResolver;
   final UnfavoriteWorkUseCaseResolver _unfavoriteWorkUseCaseResolver;
+  final bool _supportsCategoryAssign;
+  final bool _supportsReadingStateBatch;
+  final bool _supportsUnfavorite;
   final LibraryCoverCacheService _coverCacheService;
 
   static const String _moduleTitle = '\u5c0f\u8bf4';
@@ -89,7 +98,7 @@ class NovelShelfAdapter
   @override
   List<SelectionAction> get selectionActions {
     final actions = <SelectionAction>[];
-    if (_categoryAssignUseCaseResolver() != null) {
+    if (_supportsCategoryAssign) {
       actions.add(
         const SelectionAction(
           id: SelectionActionIds.assignCategory,
@@ -98,7 +107,7 @@ class NovelShelfAdapter
         ),
       );
     }
-    if (_readingStateBatchWriterResolver() != null) {
+    if (_supportsReadingStateBatch) {
       actions.add(
         const SelectionAction(
           id: SelectionActionIds.markAllRead,
@@ -114,7 +123,7 @@ class NovelShelfAdapter
         ),
       );
     }
-    if (_unfavoriteWorkUseCaseResolver() != null) {
+    if (_supportsUnfavorite) {
       actions.add(
         const SelectionAction(
           id: SelectionActionIds.unfavorite,

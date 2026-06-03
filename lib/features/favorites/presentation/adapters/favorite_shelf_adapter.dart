@@ -68,6 +68,10 @@ class FavoriteShelfAdapter
             categoryAssignUseCaseResolver ?? (() => categoryAssignUseCase),
         _unfavoriteThreadUseCaseResolver =
             unfavoriteThreadUseCaseResolver ?? (() => unfavoriteThreadUseCase),
+        _supportsCategoryAssign =
+            categoryAssignUseCase != null || categoryAssignUseCaseResolver != null,
+        _supportsUnfavorite =
+            unfavoriteThreadUseCase != null || unfavoriteThreadUseCaseResolver != null,
         _taskProgress = taskProgressHub?.progressFor(LibraryModuleKey.favorite);
 
   final LocalFavoriteRepository _repository;
@@ -79,6 +83,8 @@ class FavoriteShelfAdapter
   final NovelCoverCacheWriterResolver _novelCoverCacheWriterResolver;
   final ShelfCategoryAssignUseCaseResolver _categoryAssignUseCaseResolver;
   final UnfavoriteThreadUseCaseResolver _unfavoriteThreadUseCaseResolver;
+  final bool _supportsCategoryAssign;
+  final bool _supportsUnfavorite;
   final ValueListenable<LibraryShelfTaskProgress?>? _taskProgress;
 
   static const String _moduleTitle = '\u6536\u85cf';
@@ -91,7 +97,7 @@ class FavoriteShelfAdapter
   @override
   List<SelectionAction> get selectionActions {
     final actions = <SelectionAction>[];
-    if (_categoryAssignUseCaseResolver() != null) {
+    if (_supportsCategoryAssign) {
       actions.add(
         const SelectionAction(
           id: SelectionActionIds.assignCategory,
@@ -100,7 +106,7 @@ class FavoriteShelfAdapter
         ),
       );
     }
-    if (_unfavoriteThreadUseCaseResolver() != null) {
+    if (_supportsUnfavorite) {
       actions.add(
         const SelectionAction(
           id: SelectionActionIds.unfavorite,

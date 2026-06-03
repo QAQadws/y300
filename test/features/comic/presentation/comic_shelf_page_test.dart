@@ -13,6 +13,8 @@ import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
+import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
+import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
 
 void main() {
   testWidgets('ComicShelfPage builds unified shelf shell with module title', (
@@ -48,6 +50,40 @@ void main() {
       find.byKey(const ValueKey<String>('unified-shelf-category-tab-default')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('ComicShelfPage long press activates 5 selection actions', (
+    tester,
+  ) async {
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    final selectionHost = ShelfSelectionHostController();
+    addTearDown(queueSnapshot.dispose);
+    addTearDown(selectionHost.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+            queueSnapshot,
+          ),
+          shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
+        ],
+        child: const MaterialApp(home: ComicShelfPage()),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.longPress(
+      find.byKey(const ValueKey<String>('unified-shelf-grid-item-comic-1')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(selectionHost.state?.selectionActions.length, 5);
   });
 }
 

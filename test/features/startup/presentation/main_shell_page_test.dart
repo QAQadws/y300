@@ -19,11 +19,14 @@ import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/data/library_task_notification_providers.dart';
+import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_notification_service.dart';
+import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
+import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
@@ -143,6 +146,221 @@ void main() {
     expect(find.text('论坛首页'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('MainShellPage switches bottom bar when selection becomes active', (
+    tester,
+  ) async {
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    final selectionHost = ShelfSelectionHostController();
+    addTearDown(queueSnapshot.dispose);
+    addTearDown(selectionHost.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+          novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+          localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository()),
+          favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
+          mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
+          mainShellNotificationInitializerProvider.overrideWithValue(() async {}),
+          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
+        ],
+        child: const MaterialApp(home: MainShellPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byKey(const Key('selection-action-bar')), findsNothing);
+
+    selectionHost.activate(
+      ownerToken: Object(),
+      moduleKey: LibraryModuleKey.comic,
+      moduleTitle: '漫画',
+      activeCategoryId: 'default',
+      selectedCount: 1,
+      selectedWorkIds: const <String>{'comic-1'},
+      selectionActions: const <SelectionAction>[
+        SelectionAction(
+          id: SelectionActionIds.download,
+          icon: Icons.download_outlined,
+          label: '下载',
+        ),
+      ],
+      delegate: _selectionDelegate(),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(NavigationBar), findsNothing);
+    expect(find.byKey(const Key('selection-action-bar')), findsOneWidget);
+
+    selectionHost.deactivate(selectionHost.state!.ownerToken);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byKey(const Key('selection-action-bar')), findsNothing);
+  });
+
+  testWidgets('MainShellPage selection action bar delegates button taps', (tester) async {
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    final selectionHost = ShelfSelectionHostController();
+    final calls = <String>[];
+    addTearDown(queueSnapshot.dispose);
+    addTearDown(selectionHost.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+          novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+          localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository()),
+          favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
+          mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
+          mainShellNotificationInitializerProvider.overrideWithValue(() async {}),
+          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
+        ],
+        child: const MaterialApp(home: MainShellPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    selectionHost.activate(
+      ownerToken: Object(),
+      moduleKey: LibraryModuleKey.comic,
+      moduleTitle: '漫画',
+      activeCategoryId: 'default',
+      selectedCount: 1,
+      selectedWorkIds: const <String>{'comic-1'},
+      selectionActions: const <SelectionAction>[
+        SelectionAction(
+          id: SelectionActionIds.download,
+          icon: Icons.download_outlined,
+          label: '下载',
+        ),
+      ],
+      delegate: _selectionDelegate(
+        onRun: (request) async {
+          calls.add(request.actionId);
+          return const SelectionActionResult(message: 'done');
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey<String>('selection-action-download')));
+    await tester.pumpAndSettle();
+
+    expect(calls, <String>[SelectionActionIds.download]);
+    expect(selectionHost.isActive, isTrue);
+  });
+
+  testWidgets('MainShellPage unfavorite action requires confirmation', (tester) async {
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    final selectionHost = ShelfSelectionHostController();
+    var runCount = 0;
+    addTearDown(queueSnapshot.dispose);
+    addTearDown(selectionHost.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+          novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+          localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository()),
+          favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
+          mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
+          mainShellNotificationInitializerProvider.overrideWithValue(() async {}),
+          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
+        ],
+        child: const MaterialApp(home: MainShellPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    selectionHost.activate(
+      ownerToken: Object(),
+      moduleKey: LibraryModuleKey.favorite,
+      moduleTitle: '收藏',
+      activeCategoryId: 'default',
+      selectedCount: 2,
+      selectedWorkIds: const <String>{'favorite:100', 'favorite:101'},
+      selectionActions: const <SelectionAction>[
+        SelectionAction(
+          id: SelectionActionIds.unfavorite,
+          icon: Icons.delete_outline,
+          label: '取消收藏',
+          destructive: true,
+          needsConfirm: true,
+        ),
+      ],
+      delegate: _selectionDelegate(
+        onRun: (request) async {
+          runCount += 1;
+          return const SelectionActionResult(
+            message: 'done',
+            changed: true,
+          );
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('selection-action-unfavorite')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('确认取消收藏'), findsOneWidget);
+    expect(find.textContaining('会被清除'), findsOneWidget);
+
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+
+    expect(runCount, 0);
+    expect(selectionHost.isActive, isTrue);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('selection-action-unfavorite')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+
+    expect(runCount, 1);
+    expect(selectionHost.isActive, isFalse);
+  });
+}
+
+ShelfSelectionHostDelegate _selectionDelegate({
+  Future<SelectionActionResult> Function(
+    SelectionActionExecutionRequest request,
+  )? onRun,
+}) {
+  return ShelfSelectionHostDelegate(
+    exitSelection: () async {},
+    selectAllVisible: () async {},
+    invertVisible: () async {},
+    loadAvailableCategories: () async => const <LibraryCategory>[],
+    createCategory: (name) async => 'created',
+    runSelectionAction: onRun ??
+        (request) async {
+          return const SelectionActionResult(message: 'noop');
+        },
+    refreshAfterAction: () async {},
+  );
 }
 
 class _FakeLibraryTaskNotificationService

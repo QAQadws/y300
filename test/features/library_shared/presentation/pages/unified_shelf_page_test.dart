@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
+import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_feature_flags.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_shelf_page.dart';
+import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
+import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
 
 void main() {
@@ -418,6 +421,187 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pumpAndSettle();
   });
+
+  testWidgets('long press enters selection mode and selected grid item is highlighted', (
+    tester,
+  ) async {
+    final host = ShelfSelectionHostController();
+    addTearDown(host.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeSelectableShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.grid,
+          ),
+          selectionHost: host,
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(
+      find.byKey(const ValueKey<String>('unified-shelf-grid-item-1')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('selection-app-bar')), findsOneWidget);
+    expect(host.state?.selectedCount, 1);
+    final card = tester.widget<ShelfCoverCard>(
+      find.byKey(const ValueKey<String>('unified-shelf-grid-item-1')),
+    );
+    expect(card.selected, isTrue);
+  });
+
+  testWidgets('selection mode tap toggles item without opening detail', (
+    tester,
+  ) async {
+    final host = ShelfSelectionHostController();
+    addTearDown(host.dispose);
+    var openCount = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeSelectableShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.grid,
+          ),
+          selectionHost: host,
+          onOpenWork: (context, workId) async {
+            openCount += 1;
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final itemFinder =
+        find.byKey(const ValueKey<String>('unified-shelf-grid-item-1'));
+    await tester.longPress(itemFinder);
+    await tester.pumpAndSettle();
+    await tester.tap(itemFinder);
+    await tester.pumpAndSettle();
+
+    expect(openCount, 0);
+    expect(find.byKey(const Key('selection-app-bar')), findsNothing);
+    expect(host.isActive, isFalse);
+  });
+
+  testWidgets('selection mode disables category tap and page swipe', (tester) async {
+    final host = ShelfSelectionHostController();
+    addTearDown(host.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeSelectableShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.grid,
+            categories: [
+              LibraryCategory(
+                categoryId: 'default',
+                name: 'Default',
+                sortOrder: 0,
+                createdAt: DateTime(2026, 1, 1),
+              ),
+              LibraryCategory(
+                categoryId: 'other',
+                name: 'Other',
+                sortOrder: 1,
+                createdAt: DateTime(2026, 1, 2),
+              ),
+            ],
+            itemsByCategory: {
+              'default': [_item(workId: '1', title: 'Comic A')],
+              'other': [_item(workId: '2', title: 'Comic B')],
+            },
+          ),
+          selectionHost: host,
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(
+      find.byKey(const ValueKey<String>('unified-shelf-grid-item-1')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('unified-shelf-category-tab-other')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.byKey(const Key('unified-shelf-grid-view')).first,
+      const Offset(-300, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(host.state?.activeCategoryId, 'default');
+    expect(
+      find.byKey(const ValueKey<String>('unified-shelf-grid-item-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('unified-shelf-grid-item-2')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('page back exits selection before popping route', (tester) async {
+    final host = ShelfSelectionHostController();
+    addTearDown(host.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeSelectableShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.grid,
+          ),
+          selectionHost: host,
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(
+      find.byKey(const ValueKey<String>('unified-shelf-grid-item-1')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(UnifiedShelfPage), findsOneWidget);
+    expect(find.byKey(const Key('selection-app-bar')), findsNothing);
+    expect(host.isActive, isFalse);
+  });
+
+  testWidgets('list mode selected item shows border highlight', (tester) async {
+    final host = ShelfSelectionHostController();
+    addTearDown(host.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeSelectableShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.list,
+          ),
+          selectionHost: host,
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final itemFinder =
+        find.byKey(const ValueKey<String>('unified-shelf-list-item-1'));
+    await tester.longPress(itemFinder);
+    await tester.pumpAndSettle();
+
+    final tile = tester.widget<ListTile>(itemFinder);
+    expect(tile.selected, isTrue);
+    final shape = tile.shape as RoundedRectangleBorder;
+    expect(shape.side, isNot(BorderSide.none));
+  });
 }
 
 LibraryWorkItem _item({
@@ -442,7 +626,21 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
     required this.initialDisplayMode,
     this.onQuery,
     this.taskProgress,
-  });
+    List<LibraryCategory>? categories,
+    Map<String, List<LibraryWorkItem>>? itemsByCategory,
+  })  : categories = categories ??
+            [
+              LibraryCategory(
+                categoryId: 'default',
+                name: 'Default',
+                sortOrder: 0,
+                createdAt: DateTime(2026, 1, 1),
+              ),
+            ],
+        itemsByCategory = itemsByCategory ??
+            {
+              'default': [_item(workId: '1', title: 'Comic A')],
+            };
 
   final LibraryDisplayMode initialDisplayMode;
   @override
@@ -457,6 +655,8 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
     required LibraryShelfSortOption sortOption,
     required String keyword,
   })? onQuery;
+  final List<LibraryCategory> categories;
+  final Map<String, List<LibraryWorkItem>> itemsByCategory;
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
@@ -478,19 +678,12 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
 
   @override
   Future<List<LibraryCategory>> loadCategories() async {
-    return [
-      LibraryCategory(
-        categoryId: 'default',
-        name: 'Default',
-        sortOrder: 0,
-        createdAt: DateTime(2026, 1, 1),
-      ),
-    ];
+    return categories;
   }
 
   @override
   Future<List<LibraryWorkItem>> loadCategoryItems({required String categoryId}) async {
-    return [_item(workId: '1', title: 'Comic A')];
+    return itemsByCategory[categoryId] ?? const <LibraryWorkItem>[];
   }
 
   @override
@@ -526,9 +719,7 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
         keyword: keyword,
       );
     }
-    return {
-      'default': [_item(workId: '1', title: 'Comic A')],
-    };
+    return itemsByCategory;
   }
 
   @override
@@ -559,4 +750,34 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
     required LibraryDisplayMode displayMode,
     required int gridColumnCount,
   }) async {}
+}
+
+class _FakeSelectableShelfAdapter extends _FakeShelfAdapter
+    implements ShelfSelectionActionAdapter {
+  _FakeSelectableShelfAdapter({
+    required super.initialDisplayMode,
+    super.categories,
+    super.itemsByCategory,
+  });
+
+  @override
+  List<SelectionAction> get selectionActions => const <SelectionAction>[
+        SelectionAction(
+          id: SelectionActionIds.assignCategory,
+          icon: Icons.edit_outlined,
+          label: '设置分类',
+        ),
+        SelectionAction(
+          id: SelectionActionIds.download,
+          icon: Icons.download_outlined,
+          label: '下载',
+        ),
+      ];
+
+  @override
+  Future<SelectionActionResult> runSelectionAction(
+    SelectionActionExecutionRequest request,
+  ) async {
+    return const SelectionActionResult(message: 'noop');
+  }
 }

@@ -71,4 +71,17 @@ class ShelfSelectionController extends ChangeNotifier {
     _selected.clear();
     notifyListeners();
   }
+
+  /// 按当前仍然可见的作品集合裁剪选中项。
+  void prune(Iterable<String> visibleWorkIds) {
+    if (_selected.isEmpty) {
+      return;
+    }
+    final allowed = visibleWorkIds.toSet();
+    final beforeCount = _selected.length;
+    _selected.removeWhere((workId) => !allowed.contains(workId));
+    if (_selected.length != beforeCount) {
+      notifyListeners();
+    }
+  }
 }
