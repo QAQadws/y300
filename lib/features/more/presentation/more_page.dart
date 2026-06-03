@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
+import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/more/presentation/data_storage_page.dart';
@@ -12,6 +14,8 @@ class MorePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authSession = ref.watch(authSessionControllerProvider).asData?.value ??
         const AuthSessionViewState.signedOut();
+    final forumMode = ref.watch(forumShellModeControllerProvider).asData?.value ??
+        ForumShellMode.webview;
 
     return Scaffold(
       appBar: AppBar(title: const Text('更多')),
@@ -21,6 +25,13 @@ class MorePage extends ConsumerWidget {
             session: authSession,
             onLogin: () => _openLoginPage(context, ref),
             onLogout: () => _confirmAndLogout(context, ref),
+          ),
+          ListTile(
+            key: const Key('more-forum-mode-entry'),
+            leading: const Icon(Icons.public_outlined),
+            title: const Text('论坛显示模式'),
+            subtitle: Text('当前：${forumMode.displayLabel}'),
+            onTap: () => _showForumModeSheet(context, ref, forumMode),
           ),
           ListTile(
             key: const Key('more-data-storage-entry'),
@@ -48,6 +59,76 @@ class MorePage extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _showForumModeSheet(
+    BuildContext context,
+    WidgetRef ref,
+    ForumShellMode currentMode,
+  ) {
+    return showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                key: const Key('more-forum-mode-option-webview'),
+                leading: const Icon(Icons.language_outlined),
+                title: const Text('WebView 模式'),
+                trailing: currentMode == ForumShellMode.webview
+                    ? const Icon(Icons.check)
+                    : null,
+                onTap: () => _setForumMode(
+                  pageContext: context,
+                  sheetContext: sheetContext,
+                  ref: ref,
+                  mode: ForumShellMode.webview,
+                ),
+              ),
+              ListTile(
+                key: const Key('more-forum-mode-option-native'),
+                leading: const Icon(Icons.forum_outlined),
+                title: const Text('原生模式'),
+                trailing: currentMode == ForumShellMode.native
+                    ? const Icon(Icons.check)
+                    : null,
+                onTap: () => _setForumMode(
+                  pageContext: context,
+                  sheetContext: sheetContext,
+                  ref: ref,
+                  mode: ForumShellMode.native,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _setForumMode({
+    required BuildContext pageContext,
+    required BuildContext sheetContext,
+    required WidgetRef ref,
+    required ForumShellMode mode,
+  }) async {
+    try {
+      await ref.read(forumShellModeControllerProvider.notifier).setMode(mode);
+      if (sheetContext.mounted) {
+        Navigator.of(sheetContext).pop();
+      }
+    } catch (error) {
+      if (!pageContext.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(pageContext)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text('论坛显示模式切换失败：$error')),
+        );
+    }
   }
 
   Future<void> _openLoginPage(BuildContext context, WidgetRef ref) async {

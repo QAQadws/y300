@@ -6,7 +6,7 @@ import 'package:y300/features/comic/data/comic_refresh_workflow_providers.dart';
 import 'package:y300/features/comic/presentation/comic_tab_page.dart';
 import 'package:y300/features/library_shared/data/library_task_workflow_providers.dart';
 import 'package:y300/features/favorites/presentation/favorite_shelf_page.dart';
-import 'package:y300/features/forum/presentation/forum_home_page.dart';
+import 'package:y300/features/forum/presentation/forum_shell_page.dart';
 import 'package:y300/features/library_shared/data/library_task_notification_providers.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
 import 'package:y300/features/library_shared/presentation/selection/selection_action_bar.dart';
@@ -329,7 +329,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
 
   Widget _buildPage(int index, {required bool isActive}) {
     return switch (index) {
-      0 => const ForumHomePage(),
+      0 => const ForumShellPage(),
       1 => FavoriteShelfPage(isActive: isActive),
       2 => ComicTabPage(isActive: isActive),
       3 => NovelTabPage(isActive: isActive),

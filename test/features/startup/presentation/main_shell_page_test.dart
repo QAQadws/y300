@@ -16,6 +16,9 @@ import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
+import 'package:y300/features/forum/data/forum_mode_settings_repository.dart';
+import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
+import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/data/library_task_notification_providers.dart';
@@ -52,12 +55,15 @@ void main() {
           mainShellNotificationInitializerProvider
               .overrideWithValue(() async {}),
           authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
     );
 
-    expect(find.text('论坛首页'), findsOneWidget);
+    expect(find.byKey(const Key('forum-shell-webview-placeholder')), findsOneWidget);
 
     await tester.tap(find.text('收藏').last);
     await tester.pumpAndSettle();
@@ -98,6 +104,9 @@ void main() {
           mainShellNotificationInitializerProvider
               .overrideWithValue(() async {}),
           authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
@@ -136,6 +145,9 @@ void main() {
             notificationService,
           ),
           authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
@@ -143,7 +155,7 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('论坛首页'), findsOneWidget);
+    expect(find.byKey(const Key('forum-shell-webview-placeholder')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -169,6 +181,9 @@ void main() {
           mainShellNotificationInitializerProvider.overrideWithValue(() async {}),
           authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
           shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
@@ -227,6 +242,9 @@ void main() {
           mainShellNotificationInitializerProvider.overrideWithValue(() async {}),
           authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
           shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
@@ -284,6 +302,9 @@ void main() {
           mainShellNotificationInitializerProvider.overrideWithValue(() async {}),
           authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
           shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
@@ -400,6 +421,22 @@ class _FakeLibraryTaskNotificationService
 
   void dispose() {
     _permissionState.dispose();
+  }
+}
+
+class _FakeForumModeSettingsRepository implements ForumModeSettingsRepository {
+  _FakeForumModeSettingsRepository();
+
+  ForumShellMode mode = ForumShellMode.webview;
+
+  @override
+  Future<ForumShellMode> loadMode() async {
+    return mode;
+  }
+
+  @override
+  Future<void> saveMode(ForumShellMode nextMode) async {
+    mode = nextMode;
   }
 }
 

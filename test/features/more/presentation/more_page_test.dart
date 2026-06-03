@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/auth/data/auth_repository.dart';
+import 'package:y300/features/forum/data/forum_mode_settings_repository.dart';
+import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
+import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
 
 void main() {
@@ -13,14 +16,21 @@ void main() {
           authRepositoryProvider.overrideWithValue(
             _FakeAuthRepository(isLoggedIn: false),
           ),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
         ],
         child: const MaterialApp(home: MorePage()),
       ),
     );
+    await tester.pumpAndSettle();
 
     expect(find.text('更多'), findsWidgets);
     expect(find.byKey(const Key('more-login-entry')), findsOneWidget);
     expect(find.text('登录'), findsOneWidget);
+    expect(find.byKey(const Key('more-forum-mode-entry')), findsOneWidget);
+    expect(find.text('论坛显示模式'), findsOneWidget);
+    expect(find.text('当前：WebView 模式'), findsOneWidget);
     expect(find.byKey(const Key('more-cache-settings-entry')), findsNothing);
     expect(find.byKey(const Key('more-data-storage-entry')), findsOneWidget);
     expect(find.text('数据与存储'), findsOneWidget);
@@ -35,6 +45,9 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(repository),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
         ],
         child: const MaterialApp(home: MorePage()),
       ),
@@ -54,6 +67,66 @@ void main() {
     expect(repository.logoutCount, 1);
     expect(find.byKey(const Key('more-login-entry')), findsOneWidget);
     expect(find.text('已退出登录'), findsOneWidget);
+  });
+
+  testWidgets('MorePage switches forum shell mode from bottom sheet', (
+    tester,
+  ) async {
+    final modeRepository = _FakeForumModeSettingsRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(
+            _FakeAuthRepository(isLoggedIn: false),
+          ),
+          forumModeSettingsRepositoryProvider.overrideWithValue(modeRepository),
+        ],
+        child: const MaterialApp(home: MorePage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('当前：WebView 模式'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('more-forum-mode-entry')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('more-forum-mode-option-webview')), findsOneWidget);
+    expect(find.byKey(const Key('more-forum-mode-option-native')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('more-forum-mode-option-native')));
+    await tester.pumpAndSettle();
+
+    expect(modeRepository.mode, ForumShellMode.native);
+    expect(find.text('当前：原生模式'), findsOneWidget);
+  });
+
+  testWidgets('MorePage shows snackbar when forum mode save fails', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(
+            _FakeAuthRepository(isLoggedIn: false),
+          ),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(failOnSave: true),
+          ),
+        ],
+        child: const MaterialApp(home: MorePage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('more-forum-mode-entry')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('more-forum-mode-option-native')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('论坛显示模式切换失败'), findsOneWidget);
+    expect(find.text('当前：WebView 模式'), findsOneWidget);
+    expect(find.byKey(const Key('more-forum-mode-option-native')), findsOneWidget);
   });
 }
 
@@ -106,5 +179,27 @@ class _FakeAuthRepository implements AuthRepository {
       formhash: 'fh',
       isLoggedIn: true,
     );
+  }
+}
+
+class _FakeForumModeSettingsRepository implements ForumModeSettingsRepository {
+  _FakeForumModeSettingsRepository({
+    this.failOnSave = false,
+  });
+
+  ForumShellMode mode = ForumShellMode.webview;
+  final bool failOnSave;
+
+  @override
+  Future<ForumShellMode> loadMode() async {
+    return mode;
+  }
+
+  @override
+  Future<void> saveMode(ForumShellMode nextMode) async {
+    if (failOnSave) {
+      throw StateError('save failed');
+    }
+    mode = nextMode;
   }
 }
