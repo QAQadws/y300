@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/favorites/data/models/favorite_models.dart';
+import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_script_injector.dart';
@@ -20,6 +23,10 @@ class ForumWebViewPage extends ConsumerStatefulWidget {
 }
 
 class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
+  static const String _homeUnfavoriteAction = 'home-unfavorite';
+  static const String _forumFavoriteAction = 'forum-favorite';
+  static const String _forumUnfavoriteAction = 'forum-unfavorite';
+
   bool _didScheduleInitialization = false;
   int _navigationGeneration = 0;
   Timer? _delayedCleanupTimer;
@@ -45,6 +52,9 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           boardName: null,
           pageTitle: null,
           canGoBack: false,
+          favoriteForums: const <FavoriteForum>[],
+          currentFavoriteForum: null,
+          isFavoriteMutationLoading: false,
           isLoading: true,
           loadingProgress: 0,
         );
@@ -230,18 +240,55 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         PopupMenuButton<String>(
           key: const Key('forum-webview-more-button'),
           icon: const Icon(Icons.more_vert),
-          itemBuilder: (context) {
-            return const [
-              PopupMenuItem<String>(
-                enabled: false,
-                value: 'placeholder',
-                child: Text('功能开发中'),
-              ),
-            ];
+          onSelected: (value) {
+            unawaited(_handleMoreMenuSelected(context, state, driver, value));
           },
+          itemBuilder: (context) => _buildMoreMenuItems(state),
         ),
       ],
     );
+  }
+
+  List<PopupMenuEntry<String>> _buildMoreMenuItems(ForumWebViewState state) {
+    switch (state.pageKind) {
+      case ForumWebViewPageKind.home:
+        return const <PopupMenuEntry<String>>[
+          PopupMenuItem<String>(
+            key: Key('forum-webview-home-unfavorite-action'),
+            value: _homeUnfavoriteAction,
+            child: Text('取消收藏'),
+          ),
+        ];
+      case ForumWebViewPageKind.forumDisplay:
+        if (state.isFavoriteMutationLoading) {
+          return const <PopupMenuEntry<String>>[
+            PopupMenuItem<String>(
+              enabled: false,
+              value: 'favorite-loading',
+              child: Text('处理中'),
+            ),
+          ];
+        }
+        return <PopupMenuEntry<String>>[
+          PopupMenuItem<String>(
+            key: const Key('forum-webview-forum-favorite-action'),
+            value: state.currentFavoriteForum == null
+                ? _forumFavoriteAction
+                : _forumUnfavoriteAction,
+            child: Text(state.currentFavoriteForum == null ? '收藏本版' : '取消收藏'),
+          ),
+        ];
+      case ForumWebViewPageKind.threadDetail:
+      case ForumWebViewPageKind.search:
+      case ForumWebViewPageKind.other:
+        return const <PopupMenuEntry<String>>[
+          PopupMenuItem<String>(
+            enabled: false,
+            value: 'placeholder',
+            child: Text('功能开发中'),
+          ),
+        ];
+    }
   }
 
   String _resolveTitle(ForumWebViewState state) {
@@ -308,5 +355,255 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     } catch (_) {
       return false;
     }
+  }
+
+  Future<void> _handleMoreMenuSelected(
+    BuildContext context,
+    ForumWebViewState state,
+    ForumWebViewDriver driver,
+    String action,
+  ) async {
+    switch (action) {
+      case _homeUnfavoriteAction:
+        await _openFavoriteForumPicker(context, driver);
+        return;
+      case _forumFavoriteAction:
+        await _runForumFavoriteAction(
+          context: context,
+          driver: driver,
+          reloadUri: state.currentUri,
+          action: ref
+              .read(forumWebViewControllerProvider.notifier)
+              .favoriteCurrentForum,
+        );
+        return;
+      case _forumUnfavoriteAction:
+        await _runForumFavoriteAction(
+          context: context,
+          driver: driver,
+          reloadUri: state.currentUri,
+          action: ref
+              .read(forumWebViewControllerProvider.notifier)
+              .unfavoriteCurrentForum,
+        );
+        return;
+    }
+  }
+
+  Future<void> _openFavoriteForumPicker(
+    BuildContext context,
+    ForumWebViewDriver driver,
+  ) {
+    final controller = ref.read(forumWebViewControllerProvider.notifier);
+    final navigator = ref.read(forumWebViewNavigatorProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    return showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) {
+        final sheetNavigator = Navigator.of(sheetContext);
+        return _FavoriteForumPickerSheet(
+          loadFavoriteForums: controller.loadFavoriteForums,
+          onUnfavorite: (forum) async {
+            final result = await controller.unfavoriteForumByFavid(
+              favid: forum.favid,
+            );
+            if (!mounted || !messenger.mounted) {
+              return;
+            }
+            if (result case ApiSuccess<ForumFavoriteMutationResult>(:final data)) {
+              if (sheetNavigator.mounted) {
+                sheetNavigator.pop();
+              }
+              _showSnackBar(messenger, data.message);
+              await driver.load(navigator.homeUri);
+              return;
+            }
+            final message =
+                result.errorOrNull?.message ?? '取消收藏失败，请稍后重试';
+            _showSnackBar(messenger, message);
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _runForumFavoriteAction({
+    required BuildContext context,
+    required ForumWebViewDriver driver,
+    required Uri reloadUri,
+    required Future<ApiResult<ForumFavoriteMutationResult>> Function() action,
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final result = await action();
+    if (!mounted || !messenger.mounted) {
+      return;
+    }
+    if (result case ApiSuccess<ForumFavoriteMutationResult>(:final data)) {
+      _showSnackBar(messenger, data.message);
+      await driver.load(reloadUri);
+      return;
+    }
+    final message = result.errorOrNull?.message ?? '操作失败，请稍后重试';
+    _showSnackBar(messenger, message);
+  }
+
+  void _showSnackBar(ScaffoldMessengerState messenger, String message) {
+    if (!messenger.mounted) {
+      return;
+    }
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+  }
+}
+
+class _FavoriteForumPickerSheet extends StatefulWidget {
+  const _FavoriteForumPickerSheet({
+    required this.loadFavoriteForums,
+    required this.onUnfavorite,
+  });
+
+  final Future<ApiResult<List<FavoriteForum>>> Function() loadFavoriteForums;
+  final Future<void> Function(FavoriteForum forum) onUnfavorite;
+
+  @override
+  State<_FavoriteForumPickerSheet> createState() => _FavoriteForumPickerSheetState();
+}
+
+class _FavoriteForumPickerSheetState extends State<_FavoriteForumPickerSheet> {
+  late Future<ApiResult<List<FavoriteForum>>> _future;
+  String? _submittingFavid;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = widget.loadFavoriteForums();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SizedBox(
+        key: const Key('forum-favorite-forum-picker'),
+        height: 360,
+        child: FutureBuilder<ApiResult<List<FavoriteForum>>>(
+          future: _future,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final result = snapshot.data;
+            if (result == null) {
+              return _FavoriteForumPickerErrorView(
+                message: '加载收藏版块失败',
+                onRetry: _reload,
+              );
+            }
+
+            return result.when(
+              success: (forums) {
+                if (forums.isEmpty) {
+                  return const Center(
+                    child: Text('暂无收藏版块'),
+                  );
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      child: Text('取消收藏'),
+                    ),
+                    Expanded(
+                      child: ListView.separated(
+                        itemCount: forums.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final forum = forums[index];
+                          final isSubmitting = _submittingFavid == forum.favid;
+                          return ListTile(
+                            key: Key('forum-favorite-forum-item-${forum.favid}'),
+                            enabled: _submittingFavid == null,
+                            title: Text(forum.title),
+                            subtitle: Text('fid=${forum.fid}'),
+                            trailing: isSubmitting
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : null,
+                            onTap: _submittingFavid == null
+                                ? () => _handleUnfavorite(forum)
+                                : null,
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
+              failure: (error) => _FavoriteForumPickerErrorView(
+                message: error.message,
+                onRetry: _reload,
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  void _reload() {
+    setState(() {
+      _future = widget.loadFavoriteForums();
+    });
+  }
+
+  Future<void> _handleUnfavorite(FavoriteForum forum) async {
+    setState(() {
+      _submittingFavid = forum.favid;
+    });
+    await widget.onUnfavorite(forum);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _submittingFavid = null;
+    });
+  }
+}
+
+class _FavoriteForumPickerErrorView extends StatelessWidget {
+  const _FavoriteForumPickerErrorView({
+    required this.message,
+    required this.onRetry,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(message, textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            FilledButton(
+              key: const Key('forum-favorite-forum-picker-retry'),
+              onPressed: onRetry,
+              child: const Text('重试'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

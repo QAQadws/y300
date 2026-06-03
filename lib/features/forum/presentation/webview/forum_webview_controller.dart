@@ -1,5 +1,9 @@
 import 'dart:async';
 
+import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/favorites/data/models/favorite_models.dart';
+import 'package:y300/features/forum/data/forum_favorite_repository.dart';
+import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
@@ -12,11 +16,26 @@ final forumWebViewControllerProvider =
     );
 
 class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
-  ForumWebViewNavigator get _navigator => ref.read(forumWebViewNavigatorProvider);
+  late ForumWebViewNavigator _navigator;
+  late ForumFavoriteRepository _favoriteRepository;
+  ForumWebViewState? _lastKnownState;
+  dynamic _keepAliveLink;
+  int _pendingAsyncOperations = 0;
+  bool _disposed = false;
 
   @override
   FutureOr<ForumWebViewState> build() {
-    return _initialState();
+    _disposed = false;
+    _navigator = ref.read(forumWebViewNavigatorProvider);
+    _favoriteRepository = ref.read(forumFavoriteRepositoryProvider);
+    ref.onDispose(() {
+      _disposed = true;
+      _keepAliveLink?.close();
+      _keepAliveLink = null;
+    });
+    final initialState = _initialState();
+    _lastKnownState = initialState;
+    return initialState;
   }
 
   ForumWebViewState _initialState() {
@@ -29,14 +48,28 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
       boardName: null,
       pageTitle: null,
       canGoBack: false,
+      favoriteForums: const <FavoriteForum>[],
+      currentFavoriteForum: null,
+      isFavoriteMutationLoading: false,
       isLoading: true,
       loadingProgress: 0,
     );
   }
 
-  ForumWebViewState get _currentState => state.value ?? _initialState();
+  ForumWebViewState get _currentState {
+    if (_disposed) {
+      return _lastKnownState ?? _initialState();
+    }
+    final currentState = state;
+    final currentValue =
+        currentState is AsyncData<ForumWebViewState> ? currentState.value : null;
+    return currentValue ?? _lastKnownState ?? _initialState();
+  }
 
   void onPageStarted(String rawUrl) {
+    if (_disposed) {
+      return;
+    }
     final uri = _navigator.resolve(rawUrl);
     final current = _currentState;
     final pageKind = _navigator.classify(uri);
@@ -46,7 +79,12 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
       previousFid: current.fid,
     );
     final tid = _navigator.extractTid(uri);
-    state = AsyncData(
+    final currentFavoriteForum = _matchCurrentFavoriteForum(
+      pageKind: pageKind,
+      fid: fid,
+      favoriteForums: current.favoriteForums,
+    );
+    _setState(
       current.copyWith(
         currentUri: uri,
         pageKind: pageKind,
@@ -54,6 +92,8 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
         clearFid: fid == null,
         tid: tid,
         clearTid: tid == null,
+        currentFavoriteForum: currentFavoriteForum,
+        clearCurrentFavoriteForum: currentFavoriteForum == null,
         clearBoardName: true,
         clearPageTitle: true,
         isLoading: true,
@@ -67,53 +107,154 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
     required String? pageTitle,
     required bool canGoBack,
   }) async {
-    final uri = _navigator.resolve(rawUrl);
-    final current = _currentState;
-    final pageKind = _navigator.classify(uri);
-    final fid = _resolveFidForFinishedPage(
-      pageKind: pageKind,
-      uri: uri,
-      currentFid: current.fid,
-    );
-    final tid = _navigator.extractTid(uri);
-    final normalizedTitle = _normalizeText(pageTitle);
-    final boardName = await _resolveBoardName(
-      pageKind: pageKind,
-      fid: fid,
-      pageTitle: normalizedTitle,
-    );
-    if (!ref.mounted) {
-      return;
-    }
-    state = AsyncData(
-      current.copyWith(
-        currentUri: uri,
+    await _runKeptAlive(() async {
+      if (_disposed) {
+        return;
+      }
+      final uri = _navigator.resolve(rawUrl);
+      final current = _currentState;
+      final pageKind = _navigator.classify(uri);
+      final fid = _resolveFidForFinishedPage(
+        pageKind: pageKind,
+        uri: uri,
+        currentFid: current.fid,
+      );
+      final tid = _navigator.extractTid(uri);
+      final normalizedTitle = _normalizeText(pageTitle);
+      final boardName = await _resolveBoardName(
         pageKind: pageKind,
         fid: fid,
-        clearFid: fid == null,
-        tid: tid,
-        clearTid: tid == null,
-        boardName: boardName,
-        clearBoardName: boardName == null,
-        pageTitle: pageKind == ForumWebViewPageKind.home ? null : normalizedTitle,
-        clearPageTitle:
-            pageKind == ForumWebViewPageKind.home || normalizedTitle == null,
-        canGoBack: canGoBack,
-        isLoading: false,
-        loadingProgress: 100,
-      ),
-    );
+        pageTitle: normalizedTitle,
+      );
+      if (_disposed) {
+        return;
+      }
+      final currentFavoriteForum = _matchCurrentFavoriteForum(
+        pageKind: pageKind,
+        fid: fid,
+        favoriteForums: current.favoriteForums,
+      );
+      _setState(
+        current.copyWith(
+          currentUri: uri,
+          pageKind: pageKind,
+          fid: fid,
+          clearFid: fid == null,
+          tid: tid,
+          clearTid: tid == null,
+          boardName: boardName,
+          clearBoardName: boardName == null,
+          pageTitle: pageKind == ForumWebViewPageKind.home ? null : normalizedTitle,
+          clearPageTitle:
+              pageKind == ForumWebViewPageKind.home || normalizedTitle == null,
+          canGoBack: canGoBack,
+          currentFavoriteForum: currentFavoriteForum,
+          clearCurrentFavoriteForum: currentFavoriteForum == null,
+          isLoading: false,
+          loadingProgress: 100,
+        ),
+      );
+      if (pageKind == ForumWebViewPageKind.forumDisplay && fid != null) {
+        unawaited(loadFavoriteForums());
+      }
+    });
   }
 
   void onProgress(int progress) {
+    if (_disposed) {
+      return;
+    }
     final normalized = progress.clamp(0, 100).toInt();
     final current = _currentState;
-    state = AsyncData(
+    _setState(
       current.copyWith(
         loadingProgress: normalized,
         isLoading: normalized < 100 || current.isLoading,
       ),
     );
+  }
+
+  Future<ApiResult<List<FavoriteForum>>> loadFavoriteForums() async {
+    return _runKeptAlive(() async {
+      final result = await _favoriteRepository.loadFavoriteForums();
+      if (_disposed) {
+        return result;
+      }
+      return result.when(
+        success: (forums) {
+          final deduped = _dedupeFavoriteForums(forums);
+          final current = _currentState;
+          final currentFavoriteForum = _matchCurrentFavoriteForum(
+            pageKind: current.pageKind,
+            fid: current.fid,
+            favoriteForums: deduped,
+          );
+          _setState(
+            current.copyWith(
+              favoriteForums: deduped,
+              currentFavoriteForum: currentFavoriteForum,
+              clearCurrentFavoriteForum: currentFavoriteForum == null,
+            ),
+          );
+          return ApiSuccess<List<FavoriteForum>>(deduped);
+        },
+        failure: ApiFailure.new,
+      );
+    });
+  }
+
+  Future<ApiResult<ForumFavoriteMutationResult>> favoriteCurrentForum() async {
+    final fid = _currentState.fid?.trim() ?? '';
+    if (fid.isEmpty) {
+      return const ApiFailure<ForumFavoriteMutationResult>(
+        ApiError(type: ApiErrorType.business, message: '当前版块 fid 缺失，无法收藏本版'),
+      );
+    }
+
+    return _runKeptAlive(() async {
+      _setFavoriteMutationLoading(true);
+      final result = await _favoriteRepository.favoriteForum(fid: fid);
+      if (result.isSuccess) {
+        await loadFavoriteForums();
+      }
+      _setFavoriteMutationLoading(false);
+      return result;
+    });
+  }
+
+  Future<ApiResult<ForumFavoriteMutationResult>> unfavoriteCurrentForum() async {
+    final currentFavoriteForum = _currentState.currentFavoriteForum;
+    if (currentFavoriteForum == null) {
+      return const ApiFailure<ForumFavoriteMutationResult>(
+        ApiError(type: ApiErrorType.business, message: '当前版块尚未收藏'),
+      );
+    }
+
+    return _runKeptAlive(() async {
+      _setFavoriteMutationLoading(true);
+      final result = await _favoriteRepository.unfavoriteForum(
+        favid: currentFavoriteForum.favid,
+      );
+      if (result.isSuccess) {
+        await loadFavoriteForums();
+      }
+      _setFavoriteMutationLoading(false);
+      return result;
+    });
+  }
+
+  Future<ApiResult<ForumFavoriteMutationResult>> unfavoriteForumByFavid({
+    required String favid,
+  }) async {
+    return _runKeptAlive(() async {
+      _setFavoriteMutationLoading(true);
+      final result = await _favoriteRepository.unfavoriteForum(favid: favid);
+      if (result.isSuccess) {
+        await loadFavoriteForums();
+      }
+      _setFavoriteMutationLoading(false);
+      return result;
+    });
   }
 
   String? _resolveFidForStartedPage({
@@ -182,5 +323,75 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
       return null;
     }
     return trimmed;
+  }
+
+  List<FavoriteForum> _dedupeFavoriteForums(List<FavoriteForum> source) {
+    final seen = <String>{};
+    final output = <FavoriteForum>[];
+    for (final forum in source) {
+      final fid = forum.fid.trim();
+      if (fid.isEmpty || !seen.add(fid)) {
+        continue;
+      }
+      output.add(forum);
+    }
+    return output;
+  }
+
+  FavoriteForum? _matchCurrentFavoriteForum({
+    required ForumWebViewPageKind pageKind,
+    required String? fid,
+    required List<FavoriteForum> favoriteForums,
+  }) {
+    if (pageKind != ForumWebViewPageKind.forumDisplay || fid == null) {
+      return null;
+    }
+    final normalizedFid = fid.trim();
+    if (normalizedFid.isEmpty) {
+      return null;
+    }
+    for (final forum in favoriteForums) {
+      if (forum.fid.trim() == normalizedFid) {
+        return forum;
+      }
+    }
+    return null;
+  }
+
+  void _setFavoriteMutationLoading(bool isLoading) {
+    if (_disposed) {
+      return;
+    }
+    final current = _currentState;
+    _setState(
+      current.copyWith(isFavoriteMutationLoading: isLoading),
+    );
+  }
+
+  void _setState(ForumWebViewState nextState) {
+    _lastKnownState = nextState;
+    if (_disposed) {
+      return;
+    }
+    state = AsyncData(nextState);
+  }
+
+  Future<T> _runKeptAlive<T>(Future<T> Function() action) async {
+    final shouldKeepAlive = !_disposed;
+    if (shouldKeepAlive) {
+      _pendingAsyncOperations += 1;
+      _keepAliveLink ??= ref.keepAlive();
+    }
+    try {
+      return await action();
+    } finally {
+      if (shouldKeepAlive) {
+        _pendingAsyncOperations -= 1;
+        if (_pendingAsyncOperations == 0) {
+          _keepAliveLink?.close();
+          _keepAliveLink = null;
+        }
+      }
+    }
   }
 }
