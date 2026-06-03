@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/forum_home_repository.dart';
@@ -9,30 +11,35 @@ import 'package:y300/features/forum/data/models/forum_index_models.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/forum/presentation/forum_shell_page.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 
 void main() {
-  testWidgets('ForumShellPage shows webview placeholder by default', (
+  testWidgets('ForumShellPage shows webview home page by default', (
     tester,
   ) async {
+    final driver = _FakeForumWebViewDriver();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(mode: ForumShellMode.webview),
           ),
+          forumWebViewDriverProvider.overrideWith((ref) => driver),
+          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
         child: const MaterialApp(home: ForumShellPage()),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
 
-    expect(find.byKey(const Key('forum-shell-webview-placeholder')), findsOneWidget);
+    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
     expect(find.text('百合会论坛'), findsOneWidget);
   });
 
   testWidgets('ForumShellPage shows native forum home when mode is native', (
     tester,
   ) async {
+    final driver = _FakeForumWebViewDriver();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -42,6 +49,8 @@ void main() {
           forumHomeRepositoryProvider.overrideWithValue(
             _FakeForumHomeRepository(),
           ),
+          forumWebViewDriverProvider.overrideWith((ref) => driver),
+          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
         child: const MaterialApp(home: ForumShellPage()),
       ),
@@ -56,6 +65,7 @@ void main() {
     final modeRepository = _FakeForumModeSettingsRepository(
       mode: ForumShellMode.webview,
     );
+    final driver = _FakeForumWebViewDriver();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -63,13 +73,15 @@ void main() {
           forumHomeRepositoryProvider.overrideWithValue(
             _FakeForumHomeRepository(),
           ),
+          forumWebViewDriverProvider.overrideWith((ref) => driver),
+          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
         child: const MaterialApp(home: ForumShellPage()),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
 
-    expect(find.byKey(const Key('forum-shell-webview-placeholder')), findsOneWidget);
+    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
 
     final container = ProviderScope.containerOf(
       tester.element(find.byType(ForumShellPage)),
@@ -126,5 +138,35 @@ class _FakeForumHomeRepository implements ForumHomeRepository {
         favoriteForums: const <FavoriteForum>[],
       ),
     );
+  }
+}
+
+class _FakeForumWebViewDriver implements ForumWebViewDriver {
+  @override
+  Widget buildWidget({Key? key}) {
+    return Container(key: key);
+  }
+
+  @override
+  Future<void> initialize({required ForumWebViewCallbacks callbacks}) async {}
+
+  @override
+  Future<void> load(Uri uri) async {}
+
+  @override
+  Future<void> runJavaScript(String script) async {}
+
+  @override
+  Future<void> seedCookies({
+    required String domain,
+    required Map<String, String> cookies,
+    String path = '/',
+  }) async {}
+}
+
+class _FakeCookieStore extends CookieStore {
+  @override
+  Future<String?> readCookieHeader(Uri uri) async {
+    return null;
   }
 }

@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/auth/data/auth_repository.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
@@ -19,6 +21,7 @@ import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
 import 'package:y300/features/forum/data/forum_mode_settings_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/data/library_task_notification_providers.dart';
@@ -41,6 +44,7 @@ void main() {
     final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
       ComicSearchRefreshQueueSnapshot.empty,
     );
+    final webViewDriver = _FakeForumWebViewDriver();
     addTearDown(queueSnapshot.dispose);
     await tester.pumpWidget(
       ProviderScope(
@@ -58,12 +62,16 @@ void main() {
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
+          forumWebViewDriverProvider.overrideWith((ref) => webViewDriver),
+          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
     );
 
-    expect(find.byKey(const Key('forum-shell-webview-placeholder')), findsOneWidget);
+    await tester.pump();
+
+    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
 
     await tester.tap(find.text('收藏').last);
     await tester.pumpAndSettle();
@@ -90,6 +98,7 @@ void main() {
     final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
       ComicSearchRefreshQueueSnapshot.empty,
     );
+    final webViewDriver = _FakeForumWebViewDriver();
     addTearDown(queueSnapshot.dispose);
     await tester.pumpWidget(
       ProviderScope(
@@ -107,10 +116,14 @@ void main() {
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
+          forumWebViewDriverProvider.overrideWith((ref) => webViewDriver),
+          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
     );
+
+    await tester.pump();
 
     expect(find.byIcon(Icons.local_library_outlined), findsOneWidget);
     expect(find.byIcon(Icons.local_library), findsNothing);
@@ -129,6 +142,7 @@ void main() {
     final notificationService = _FakeLibraryTaskNotificationService(
       initialPermission: LibraryTaskNotificationPermissionState.denied,
     );
+    final webViewDriver = _FakeForumWebViewDriver();
     addTearDown(queueSnapshot.dispose);
     addTearDown(notificationService.dispose);
     await tester.pumpWidget(
@@ -148,6 +162,8 @@ void main() {
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
+          forumWebViewDriverProvider.overrideWith((ref) => webViewDriver),
+          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
@@ -155,7 +171,7 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('forum-shell-webview-placeholder')), findsOneWidget);
+    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -166,6 +182,7 @@ void main() {
       ComicSearchRefreshQueueSnapshot.empty,
     );
     final selectionHost = ShelfSelectionHostController();
+    final webViewDriver = _FakeForumWebViewDriver();
     addTearDown(queueSnapshot.dispose);
     addTearDown(selectionHost.dispose);
     await tester.pumpWidget(
@@ -184,6 +201,8 @@ void main() {
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
+          forumWebViewDriverProvider.overrideWith((ref) => webViewDriver),
+          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
@@ -227,6 +246,7 @@ void main() {
     );
     final selectionHost = ShelfSelectionHostController();
     final calls = <String>[];
+    final webViewDriver = _FakeForumWebViewDriver();
     addTearDown(queueSnapshot.dispose);
     addTearDown(selectionHost.dispose);
     await tester.pumpWidget(
@@ -245,6 +265,8 @@ void main() {
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
+          forumWebViewDriverProvider.overrideWith((ref) => webViewDriver),
+          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
@@ -287,6 +309,7 @@ void main() {
     );
     final selectionHost = ShelfSelectionHostController();
     var runCount = 0;
+    final webViewDriver = _FakeForumWebViewDriver();
     addTearDown(queueSnapshot.dispose);
     addTearDown(selectionHost.dispose);
     await tester.pumpWidget(
@@ -305,6 +328,8 @@ void main() {
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
+          forumWebViewDriverProvider.overrideWith((ref) => webViewDriver),
+          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
@@ -437,6 +462,36 @@ class _FakeForumModeSettingsRepository implements ForumModeSettingsRepository {
   @override
   Future<void> saveMode(ForumShellMode nextMode) async {
     mode = nextMode;
+  }
+}
+
+class _FakeForumWebViewDriver implements ForumWebViewDriver {
+  @override
+  Widget buildWidget({Key? key}) {
+    return Container(key: key);
+  }
+
+  @override
+  Future<void> initialize({required ForumWebViewCallbacks callbacks}) async {}
+
+  @override
+  Future<void> load(Uri uri) async {}
+
+  @override
+  Future<void> runJavaScript(String script) async {}
+
+  @override
+  Future<void> seedCookies({
+    required String domain,
+    required Map<String, String> cookies,
+    String path = '/',
+  }) async {}
+}
+
+class _FakeCookieStore extends CookieStore {
+  @override
+  Future<String?> readCookieHeader(Uri uri) async {
+    return null;
   }
 }
 
