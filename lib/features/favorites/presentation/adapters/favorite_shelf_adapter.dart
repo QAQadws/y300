@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:y300/features/cache/domain/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
@@ -6,14 +7,17 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
+import 'package:y300/features/favorites/domain/unfavorite_use_cases.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
+import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
+import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
@@ -24,9 +28,16 @@ typedef _FavoriteCoverWriteBack = Future<void> Function(
 );
 typedef ComicCoverCacheWriterResolver = ComicCoverCacheWriter? Function();
 typedef NovelCoverCacheWriterResolver = NovelCoverCacheWriter? Function();
+typedef ShelfCategoryAssignUseCaseResolver =
+    ShelfCategoryAssignUseCase? Function();
+typedef UnfavoriteThreadUseCaseResolver = UnfavoriteThreadUseCase? Function();
 
 class FavoriteShelfAdapter
-    implements ShelfModuleAdapter, ShelfSnapshotAdapter, ShelfCoverWarmupAdapter {
+    implements
+        ShelfModuleAdapter,
+        ShelfSnapshotAdapter,
+        ShelfCoverWarmupAdapter,
+        ShelfSelectionActionAdapter {
   FavoriteShelfAdapter(
     this._repository, {
     required FavoriteSyncService syncService,
@@ -39,16 +50,24 @@ class FavoriteShelfAdapter
     NovelCoverCacheWriterResolver? novelCoverCacheWriterResolver,
     LibraryTaskProgressHub? taskProgressHub,
     LibraryShelfRefreshBus? shelfRefreshBus,
+    ShelfCategoryAssignUseCase? categoryAssignUseCase,
+    ShelfCategoryAssignUseCaseResolver? categoryAssignUseCaseResolver,
+    UnfavoriteThreadUseCase? unfavoriteThreadUseCase,
+    UnfavoriteThreadUseCaseResolver? unfavoriteThreadUseCaseResolver,
   })  : _syncService = syncService,
         _stateRepository = stateRepository,
         _shelfRefreshBus = shelfRefreshBus,
         _coverCacheService = imageCacheServiceResolver == null
             ? LibraryCoverCacheService(imageCacheService)
             : LibraryCoverCacheService.lazy(imageCacheServiceResolver),
-        _comicCoverCacheWriterResolver = comicCoverCacheWriterResolver ??
-            (() => comicCoverCacheWriter),
-        _novelCoverCacheWriterResolver = novelCoverCacheWriterResolver ??
-            (() => novelCoverCacheWriter),
+        _comicCoverCacheWriterResolver =
+            comicCoverCacheWriterResolver ?? (() => comicCoverCacheWriter),
+        _novelCoverCacheWriterResolver =
+            novelCoverCacheWriterResolver ?? (() => novelCoverCacheWriter),
+        _categoryAssignUseCaseResolver =
+            categoryAssignUseCaseResolver ?? (() => categoryAssignUseCase),
+        _unfavoriteThreadUseCaseResolver =
+            unfavoriteThreadUseCaseResolver ?? (() => unfavoriteThreadUseCase),
         _taskProgress = taskProgressHub?.progressFor(LibraryModuleKey.favorite);
 
   final LocalFavoriteRepository _repository;
@@ -58,10 +77,42 @@ class FavoriteShelfAdapter
   final LibraryCoverCacheService _coverCacheService;
   final ComicCoverCacheWriterResolver _comicCoverCacheWriterResolver;
   final NovelCoverCacheWriterResolver _novelCoverCacheWriterResolver;
+  final ShelfCategoryAssignUseCaseResolver _categoryAssignUseCaseResolver;
+  final UnfavoriteThreadUseCaseResolver _unfavoriteThreadUseCaseResolver;
   final ValueListenable<LibraryShelfTaskProgress?>? _taskProgress;
+
+  static const String _moduleTitle = '\u6536\u85cf';
+  static const String _assignLabel = '\u8bbe\u7f6e\u5206\u7c7b';
+  static const String _unfavoriteLabel = '\u53d6\u6d88\u6536\u85cf';
 
   @override
   ValueListenable<LibraryShelfTaskProgress?>? get taskProgress => _taskProgress;
+
+  @override
+  List<SelectionAction> get selectionActions {
+    final actions = <SelectionAction>[];
+    if (_categoryAssignUseCaseResolver() != null) {
+      actions.add(
+        const SelectionAction(
+          id: SelectionActionIds.assignCategory,
+          icon: Icons.label_outline,
+          label: _assignLabel,
+        ),
+      );
+    }
+    if (_unfavoriteThreadUseCaseResolver() != null) {
+      actions.add(
+        const SelectionAction(
+          id: SelectionActionIds.unfavorite,
+          icon: Icons.favorite_border,
+          label: _unfavoriteLabel,
+          destructive: true,
+          needsConfirm: true,
+        ),
+      );
+    }
+    return actions;
+  }
 
   @override
   ValueListenable<LibraryShelfRefreshSignal?>? get shelfRefreshSignals {
@@ -72,7 +123,7 @@ class FavoriteShelfAdapter
   LibraryModuleKey get moduleKey => LibraryModuleKey.favorite;
 
   @override
-  String get moduleTitle => '收藏';
+  String get moduleTitle => _moduleTitle;
 
   @override
   LibraryDisplayMode get defaultDisplayMode => LibraryDisplayMode.list;
@@ -87,7 +138,9 @@ class FavoriteShelfAdapter
     required String categoryId,
   }) async {
     final items = await _repository.loadCategoryItems(categoryId);
-    return items.map(_withoutOrdinaryCoverWhenCustomIsPending).toList(growable: false);
+    return items
+        .map(_withoutOrdinaryCoverWhenCustomIsPending)
+        .toList(growable: false);
   }
 
   @override
@@ -135,10 +188,11 @@ class FavoriteShelfAdapter
         sortOption: sortOption,
         keyword: keyword,
       );
-      final itemsByCategory = _withoutOrdinaryCoversWhenCustomIsPending(snapshot.itemsByCategory);
       return LibraryShelfSnapshot(
         categories: snapshot.categories,
-        itemsByCategory: itemsByCategory,
+        itemsByCategory: _withoutOrdinaryCoversWhenCustomIsPending(
+          snapshot.itemsByCategory,
+        ),
         visibleMatchCountByCategory: snapshot.visibleMatchCountByCategory,
       );
     }
@@ -155,7 +209,8 @@ class FavoriteShelfAdapter
       itemsByCategory: queried,
       visibleMatchCountByCategory: <String, int>{
         for (final category in categories)
-          category.categoryId: (queried[category.categoryId] ?? const <LibraryWorkItem>[]).length,
+          category.categoryId:
+              (queried[category.categoryId] ?? const <LibraryWorkItem>[]).length,
       },
     );
   }
@@ -170,11 +225,15 @@ class FavoriteShelfAdapter
   ) {
     return <String, List<LibraryWorkItem>>{
       for (final entry in source.entries)
-        entry.key: entry.value.map(_withoutOrdinaryCoverWhenCustomIsPending).toList(growable: false),
+        entry.key: entry.value
+            .map(_withoutOrdinaryCoverWhenCustomIsPending)
+            .toList(growable: false),
     };
   }
 
-  LibraryWorkItem _withoutOrdinaryCoverWhenCustomIsPending(LibraryWorkItem item) {
+  LibraryWorkItem _withoutOrdinaryCoverWhenCustomIsPending(
+    LibraryWorkItem item,
+  ) {
     final customSource = item.customCoverImageUrl?.trim();
     final customLocal = item.customCoverLocalPath?.trim();
     if (customSource == null ||
@@ -189,7 +248,7 @@ class FavoriteShelfAdapter
   Future<Object> buildDetailRouteArgument({required String workId}) async {
     final target = await _repository.getRouteTargetByShelfWorkId(workId);
     if (target == null) {
-      throw StateError('收藏记录不存在');
+      throw StateError('Favorite route target is missing');
     }
     return target;
   }
@@ -204,7 +263,10 @@ class FavoriteShelfAdapter
     required String categoryId,
     required String newName,
   }) {
-    return _repository.renameCategory(categoryId: categoryId, newName: newName);
+    return _repository.renameCategory(
+      categoryId: categoryId,
+      newName: newName,
+    );
   }
 
   @override
@@ -258,6 +320,90 @@ class FavoriteShelfAdapter
   }
 
   @override
+  Future<SelectionActionResult> runSelectionAction(
+    SelectionActionExecutionRequest request,
+  ) async {
+    switch (request.actionId) {
+      case SelectionActionIds.assignCategory:
+        return _runAssignCategory(request);
+      case SelectionActionIds.unfavorite:
+        return _runUnfavorite(request);
+      case SelectionActionIds.markAllRead:
+      case SelectionActionIds.markAllUnread:
+      case SelectionActionIds.download:
+        return const SelectionActionResult(
+          message: 'Favorite shelf does not support this batch action',
+        );
+    }
+    return const SelectionActionResult(message: 'Unsupported favorite action');
+  }
+
+  Future<SelectionActionResult> _runAssignCategory(
+    SelectionActionExecutionRequest request,
+  ) async {
+    final useCase = _categoryAssignUseCaseResolver();
+    final targetCategoryId = request.targetCategoryId?.trim();
+    if (useCase == null) {
+      return const SelectionActionResult(
+        message: 'Favorite shelf does not support batch category assignment',
+      );
+    }
+    if (targetCategoryId == null || targetCategoryId.isEmpty) {
+      return const SelectionActionResult(message: 'Missing target category');
+    }
+    final result = await useCase.assign(
+      workIds: request.workIds,
+      sourceCategoryId: request.activeCategoryId,
+      targetCategoryId: targetCategoryId,
+    );
+    return SelectionActionResult(
+      message: _buildAssignMessage(
+        assignedCount: result.assignedWorkIds.length,
+        failedCount: result.failedWorkIds.length,
+      ),
+      changed: result.assignedWorkIds.isNotEmpty,
+      failedCount: result.failedWorkIds.length,
+    );
+  }
+
+  Future<SelectionActionResult> _runUnfavorite(
+    SelectionActionExecutionRequest request,
+  ) async {
+    final useCase = _unfavoriteThreadUseCaseResolver();
+    if (useCase == null) {
+      return const SelectionActionResult(
+        message: 'Favorite shelf does not support batch unfavorite',
+      );
+    }
+    final tids = <String>{};
+    var invalidCount = 0;
+    for (final rawWorkId in request.workIds) {
+      final tid = FavoriteShelfWorkId.parseTid(rawWorkId.trim());
+      if (tid == null) {
+        invalidCount += 1;
+        continue;
+      }
+      tids.add(tid);
+    }
+    if (tids.isEmpty) {
+      return SelectionActionResult(
+        message: 'No valid favorite threads to unfavorite',
+        failedCount: invalidCount,
+      );
+    }
+    final result = await useCase.callMany(tids);
+    final failedCount = result.failedTids.length + invalidCount;
+    return SelectionActionResult(
+      message: _buildUnfavoriteMessage(
+        succeededCount: result.succeededTids.length,
+        failedCount: failedCount,
+      ),
+      changed: result.succeededTids.isNotEmpty,
+      failedCount: failedCount,
+    );
+  }
+
+  @override
   Future<List<ShelfCoverWarmupRequest>> buildCoverWarmupRequests({
     required Map<String, List<LibraryWorkItem>> itemsByCategory,
     String? selectedCategoryId,
@@ -269,8 +415,10 @@ class FavoriteShelfAdapter
     );
     for (final item in items) {
       final customSourceUrl = item.customCoverImageUrl?.trim();
-      final useCustomCover = customSourceUrl != null && customSourceUrl.isNotEmpty;
-      final sourceUrl = useCustomCover ? customSourceUrl : item.coverImageUrl?.trim();
+      final useCustomCover =
+          customSourceUrl != null && customSourceUrl.isNotEmpty;
+      final sourceUrl =
+          useCustomCover ? customSourceUrl : item.coverImageUrl?.trim();
       if (sourceUrl == null || sourceUrl.isEmpty) {
         continue;
       }
@@ -321,7 +469,9 @@ class FavoriteShelfAdapter
   }
 
   @override
-  Future<ShelfCoverWarmupResult?> warmCover(ShelfCoverWarmupRequest request) async {
+  Future<ShelfCoverWarmupResult?> warmCover(
+    ShelfCoverWarmupRequest request,
+  ) async {
     final cached = await _coverCacheService.ensureProtectedCover(
       cacheKey: request.cacheKey,
       sourceUrl: request.sourceUrl,
@@ -409,6 +559,38 @@ class FavoriteShelfAdapter
       case ThreadContentKind.forum:
         return null;
     }
+  }
+
+  String _buildAssignMessage({
+    required int assignedCount,
+    required int failedCount,
+  }) {
+    if (assignedCount == 0 && failedCount == 0) {
+      return 'No favorites were moved';
+    }
+    if (failedCount == 0) {
+      return 'Moved $assignedCount favorites';
+    }
+    if (assignedCount == 0) {
+      return 'Failed to move favorites';
+    }
+    return 'Moved $assignedCount favorites, failed $failedCount';
+  }
+
+  String _buildUnfavoriteMessage({
+    required int succeededCount,
+    required int failedCount,
+  }) {
+    if (succeededCount == 0 && failedCount == 0) {
+      return 'No valid favorite threads to unfavorite';
+    }
+    if (failedCount == 0) {
+      return 'Unfavorited $succeededCount items';
+    }
+    if (succeededCount == 0) {
+      return 'Failed to unfavorite';
+    }
+    return 'Unfavorited $succeededCount items, failed $failedCount';
   }
 }
 

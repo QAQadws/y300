@@ -1,17 +1,20 @@
-﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
 import 'package:y300/features/novel/data/local_novel_repository.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
+import 'package:y300/features/novel/data/novel_shelf_category_assign_use_case_impl.dart';
 import 'package:y300/features/novel/data/novel_thread_gateway.dart';
 import 'package:y300/features/novel/domain/services/novel_episode_discovery_service.dart';
 import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 
-final novelEpisodeDiscoveryServiceProvider = Provider<NovelEpisodeDiscoveryService>((ref) {
-  return NovelEpisodeDiscoveryService(
-    imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
-  );
-});
+final novelEpisodeDiscoveryServiceProvider =
+    Provider<NovelEpisodeDiscoveryService>((ref) {
+      return NovelEpisodeDiscoveryService(
+        imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
+      );
+    });
 
 final novelRepositoryProvider = Provider<NovelRepository>((ref) {
   return LocalNovelRepository(
@@ -21,6 +24,13 @@ final novelRepositoryProvider = Provider<NovelRepository>((ref) {
     imageCacheService: ref.watch(imageCacheServiceProvider),
   );
 });
+
+final novelShelfCategoryAssignUseCaseProvider =
+    Provider<ShelfCategoryAssignUseCase>((ref) {
+      return DefaultNovelShelfCategoryAssignUseCase(
+        repository: ref.watch(novelRepositoryProvider),
+      );
+    });
 
 final novelCoverCacheWriterProvider = Provider<NovelCoverCacheWriter?>((ref) {
   final repository = ref.watch(novelRepositoryProvider);

@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
+import 'package:y300/features/comic/data/bulk_download_use_case_providers.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/presentation/adapters/comic_shelf_adapter.dart';
 import 'package:y300/features/comic/presentation/comic_detail_page.dart';
+import 'package:y300/features/favorites/data/unfavorite_use_case_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_task_workflow_providers.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
@@ -33,6 +35,18 @@ class ComicShelfPage extends ConsumerWidget {
       shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
       taskProgressHub: taskProgressHub,
       duplicateMergeService: ref.watch(comicDuplicateMergeServiceProvider),
+      categoryAssignUseCaseResolver: () => ref.read(
+        comicShelfCategoryAssignUseCaseProvider,
+      ),
+      readingStateBatchWriterResolver: () => ref.read(
+        readingStateBatchWriterProvider,
+      ),
+      bulkDownloadUseCaseResolver: () => ref.read(
+        bulkDownloadUseCaseProvider,
+      ),
+      unfavoriteWorkUseCaseResolver: () => ref.read(
+        unfavoriteWorkUseCaseProvider,
+      ),
     );
     return UnifiedShelfPage(
       adapter: adapter,

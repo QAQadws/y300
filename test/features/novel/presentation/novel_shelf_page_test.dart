@@ -11,12 +11,16 @@ import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/presentation/novel_shelf_page.dart';
 
 void main() {
-  testWidgets('NovelShelfPage builds unified shelf shell with module title', (tester) async {
+  testWidgets('NovelShelfPage builds unified shelf shell with module title', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
-          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
         ],
         child: const MaterialApp(home: NovelShelfPage()),
       ),
@@ -25,8 +29,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('小说'), findsOneWidget);
-    expect(find.byKey(const Key('unified-shelf-category-indicator')), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('unified-shelf-category-tab-default')), findsOneWidget);
+    expect(
+      find.byKey(const Key('unified-shelf-category-indicator')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('unified-shelf-category-tab-default')),
+      findsOneWidget,
+    );
   });
 }
 
@@ -50,7 +60,8 @@ class _FakeNovelRepository implements NovelRepository {
   }
 
   @override
-  Future<NovelChapterContent?> getChapterContent({required String episodeId}) async => null;
+  Future<NovelChapterContent?> getChapterContent({required String episodeId}) async =>
+      null;
 
   @override
   Future<NovelItem?> getDetail({required String novelId}) async => null;
@@ -64,10 +75,12 @@ class _FakeNovelRepository implements NovelRepository {
   }
 
   @override
-  Future<NovelReaderPreferences> getReaderPreferences() async => NovelReaderPreferences.defaults();
+  Future<NovelReaderPreferences> getReaderPreferences() async =>
+      NovelReaderPreferences.defaults();
 
   @override
-  Future<NovelReadingProgress?> getReadingProgress({required String novelId}) async => null;
+  Future<NovelReadingProgress?> getReadingProgress({required String novelId}) async =>
+      null;
 
   @override
   Future<List<NovelItem>> getShelfItems({String categoryId = 'default'}) async {
@@ -95,7 +108,11 @@ class _FakeNovelRepository implements NovelRepository {
 
   @override
   Future<NovelEpisodeRefreshResult> refreshEpisodes({required String novelId}) async {
-    return const NovelEpisodeRefreshResult(insertedCount: 0, updatedCount: 0, totalCount: 0);
+    return const NovelEpisodeRefreshResult(
+      insertedCount: 0,
+      updatedCount: 0,
+      totalCount: 0,
+    );
   }
 
   @override

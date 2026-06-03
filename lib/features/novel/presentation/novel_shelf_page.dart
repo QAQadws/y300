@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
+import 'package:y300/features/favorites/data/unfavorite_use_case_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_task_workflow_providers.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
@@ -30,6 +31,15 @@ class NovelShelfPage extends ConsumerWidget {
       imageCacheServiceResolver: () => ref.read(imageCacheServiceProvider),
       shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
       taskProgressHub: taskProgressHub,
+      categoryAssignUseCaseResolver: () => ref.read(
+        novelShelfCategoryAssignUseCaseProvider,
+      ),
+      readingStateBatchWriterResolver: () => ref.read(
+        readingStateBatchWriterProvider,
+      ),
+      unfavoriteWorkUseCaseResolver: () => ref.read(
+        unfavoriteWorkUseCaseProvider,
+      ),
     );
     return UnifiedShelfPage(
       adapter: adapter,

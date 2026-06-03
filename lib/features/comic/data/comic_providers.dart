@@ -4,6 +4,7 @@ import 'package:y300/features/cache/data/image_cache_providers.dart' as image_ca
 import 'package:y300/features/comic/data/comic_cache_directory_provider.dart';
 import 'package:y300/features/comic/data/comic_cache_manager_factory.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
+import 'package:y300/features/comic/data/comic_shelf_category_assign_use_case_impl.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/local_comic_repository.dart';
 import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
@@ -11,6 +12,7 @@ import 'package:y300/features/comic/domain/services/comic_reader_events.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
+import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
 
 final comicRepositoryProvider = Provider<ComicRepository>((ref) {
   return LocalComicRepository(
@@ -42,6 +44,13 @@ final comicReaderEventLoggerProvider = Provider<ComicReaderEventLogger>((ref) {
 final comicReaderFeatureFlagsProvider = Provider<ComicReaderFeatureFlags>((ref) {
   return ComicReaderFeatureFlags.defaults;
 });
+
+final comicShelfCategoryAssignUseCaseProvider =
+    Provider<ShelfCategoryAssignUseCase>((ref) {
+      return DefaultComicShelfCategoryAssignUseCase(
+        repository: ref.watch(comicRepositoryProvider),
+      );
+    });
 
 final comicReadingStateWriterProvider = Provider<ComicReadingStateWriter>((ref) {
   return DefaultComicReadingStateWriter(

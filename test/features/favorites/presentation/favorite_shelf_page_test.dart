@@ -33,11 +33,21 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository()),
-          favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
-          favoriteShelfBootstrapperProvider.overrideWith((ref) => bootstrapper),
-          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
-          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
+          localFavoriteRepositoryProvider.overrideWith(
+            (ref) => _FakeLocalFavoriteRepository(),
+          ),
+          favoriteSyncServiceProvider.overrideWith(
+            (ref) => _FakeFavoriteSyncService(),
+          ),
+          favoriteShelfBootstrapperProvider.overrideWith(
+            (ref) => bootstrapper,
+          ),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+            queueSnapshot,
+          ),
         ],
         child: const MaterialApp(home: FavoriteShelfPage()),
       ),
@@ -51,7 +61,9 @@ void main() {
     expect(bootstrapper.startCallCount, 1);
   });
 
-  testWidgets('FavoriteShelfPage shows first-sync progress while cache is building', (tester) async {
+  testWidgets('FavoriteShelfPage shows first-sync progress while cache is building', (
+    tester,
+  ) async {
     final sync = _FakeFavoriteSyncService(autoComplete: false);
     final bootstrapper = _RecordingFavoriteShelfBootstrapper(
       onStart: () async {
@@ -65,11 +77,19 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository(hasSnapshot: false)),
+          localFavoriteRepositoryProvider.overrideWith(
+            (ref) => _FakeLocalFavoriteRepository(hasSnapshot: false),
+          ),
           favoriteSyncServiceProvider.overrideWith((ref) => sync),
-          favoriteShelfBootstrapperProvider.overrideWith((ref) => bootstrapper),
-          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
-          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
+          favoriteShelfBootstrapperProvider.overrideWith(
+            (ref) => bootstrapper,
+          ),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+            queueSnapshot,
+          ),
         ],
         child: const MaterialApp(home: FavoriteShelfPage()),
       ),
@@ -83,7 +103,9 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('FavoriteShelfPage hides first-sync banner when notification permission is granted', (tester) async {
+  testWidgets('FavoriteShelfPage hides first-sync banner when notification permission is granted', (
+    tester,
+  ) async {
     final sync = _FakeFavoriteSyncService(autoComplete: false);
     final bootstrapper = _RecordingFavoriteShelfBootstrapper(
       onStart: () async {
@@ -100,12 +122,22 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository(hasSnapshot: false)),
+          localFavoriteRepositoryProvider.overrideWith(
+            (ref) => _FakeLocalFavoriteRepository(hasSnapshot: false),
+          ),
           favoriteSyncServiceProvider.overrideWith((ref) => sync),
-          favoriteShelfBootstrapperProvider.overrideWith((ref) => bootstrapper),
-          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
-          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
-          libraryTaskNotificationServiceProvider.overrideWithValue(notificationService),
+          favoriteShelfBootstrapperProvider.overrideWith(
+            (ref) => bootstrapper,
+          ),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+            queueSnapshot,
+          ),
+          libraryTaskNotificationServiceProvider.overrideWithValue(
+            notificationService,
+          ),
         ],
         child: const MaterialApp(home: FavoriteShelfPage()),
       ),
@@ -259,39 +291,64 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
 
   @override
   Future<String> createCategory({required String name}) async => 'custom';
+
   @override
   Future<void> deleteCategory({required String categoryId}) async {}
+
   @override
-  Future<void> finishSync({required FavoriteSyncMode mode, required int remoteCount, String? status, String? message}) async {}
+  Future<void> finishSync({
+    required FavoriteSyncMode mode,
+    required int remoteCount,
+    String? status,
+    String? message,
+  }) async {}
+
   @override
   Future<Set<String>> getActiveTids() async => const <String>{'100'};
+
   @override
-  Future<List<FavoriteThreadCacheRecord>> getActiveThreadsForSnapshot() async => const <FavoriteThreadCacheRecord>[];
+  Future<List<FavoriteThreadCacheRecord>> getActiveThreadsForSnapshot() async =>
+      const <FavoriteThreadCacheRecord>[];
+
   @override
   Future<bool> hasCompletedComicAutoRefreshBackfill() async => true;
+
   @override
-  Future<void> markComicAutoRefreshBackfillCompleted({required int checkedCount, String? message}) async {}
+  Future<void> markComicAutoRefreshBackfillCompleted({
+    required int checkedCount,
+    String? message,
+  }) async {}
+
   @override
-  Future<FavoriteThreadCacheRecord?> getActiveThreadByTid(String tid) async => null;
+  Future<FavoriteThreadCacheRecord?> getActiveThreadByTid(String tid) async =>
+      null;
+
   @override
-  Future<List<FavoriteThreadCacheRecord>> getActiveThreadsByWorkId(String workId) async =>
-      const <FavoriteThreadCacheRecord>[];
+  Future<List<FavoriteThreadCacheRecord>> getActiveThreadsByWorkId(
+    String workId,
+  ) async => const <FavoriteThreadCacheRecord>[];
+
   @override
   Future<bool> hasActiveThreadForWorkId(String workId) async => false;
+
   @override
   Future<int> markRemovedByWorkId(String workId) async => 0;
+
   @override
   Future<int> markRemovedByTids(Set<String> tids) async => 0;
+
   @override
   Future<List<FavoriteThreadCacheRecord>> getMissingDetailRecords({
     int limit = 20,
     Set<String> excludedTids = const <String>{},
   }) async => const <FavoriteThreadCacheRecord>[];
+
   @override
   Future<List<FavoriteThreadCacheRecord>> getComicAutoRefreshBackfillCandidates({
     int limit = 20,
     Set<String> excludedTids = const <String>{},
   }) async => const <FavoriteThreadCacheRecord>[];
+
   @override
   Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(String workId) async {
     return const FavoriteRouteTarget(
@@ -301,6 +358,7 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
       workId: 'thread:100',
     );
   }
+
   @override
   Future<FavoriteSyncSnapshot?> getSyncSnapshot() async {
     if (!hasSnapshot) {
@@ -313,18 +371,33 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
       lastSyncedAt: DateTime(2026, 1, 1),
     );
   }
+
   @override
-  Future<List<LibraryWorkItem>> loadCategoryItems(String categoryId) async => <LibraryWorkItem>[_item];
+  Future<List<LibraryWorkItem>> loadCategoryItems(String categoryId) async =>
+      <LibraryWorkItem>[_item];
+
   @override
-  Future<List<LibraryCategory>> loadVisibleCategories() async => <LibraryCategory>[_category];
+  Future<List<LibraryCategory>> loadVisibleCategories() async =>
+      <LibraryCategory>[_category];
+
   @override
   Future<void> markSyncFailure(String message) async {}
+
   @override
-  Future<List<FavoriteThreadCacheRecord>> markRemovedTids(Set<String> activeRemoteTids) async => const <FavoriteThreadCacheRecord>[];
+  Future<List<FavoriteThreadCacheRecord>> markRemovedTids(
+    Set<String> activeRemoteTids,
+  ) async => const <FavoriteThreadCacheRecord>[];
+
   @override
-  Future<void> moveThreadToCategory({required String tid, required String toCategoryId}) async {}
+  Future<void> moveThreadToCategory({
+    required String tid,
+    required String toCategoryId,
+  }) async {}
+
   @override
-  Future<String?> pickRandomWorkId({required String categoryId}) async => _item.workId;
+  Future<String?> pickRandomWorkId({required String categoryId}) async =>
+      _item.workId;
+
   @override
   Future<Map<String, List<LibraryWorkItem>>> queryItems({
     required List<LibraryCategory> categories,
@@ -333,26 +406,60 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
     required String keyword,
   }) async {
     return <String, List<LibraryWorkItem>>{
-      for (final category in categories) category.categoryId: <LibraryWorkItem>[_item],
+      for (final category in categories)
+        category.categoryId: <LibraryWorkItem>[_item],
     };
   }
+
   @override
-  Future<void> renameCategory({required String categoryId, required String newName}) async {}
+  Future<void> renameCategory({
+    required String categoryId,
+    required String newName,
+  }) async {}
+
   @override
-  Future<void> updateThreadDetailMeta({required String tid, required String fid, required String typeid, required String? tagName, required ThreadContentKind contentKind, required String? workId}) async {}
+  Future<void> updateThreadDetailMeta({
+    required String tid,
+    required String fid,
+    required String typeid,
+    required String? tagName,
+    required ThreadContentKind contentKind,
+    required String? workId,
+  }) async {}
+
   @override
-  Future<int> upsertRemotePage({required FavoriteThreadsPage page, required int pageStartOrder}) async => page.items.length;
+  Future<int> upsertRemotePage({
+    required FavoriteThreadsPage page,
+    required int pageStartOrder,
+  }) async => page.items.length;
 }
 
 class _FakeLibraryStateRepository implements LibraryStateRepository {
   @override
-  Future<void> bindTagToWork({required LibraryModuleKey moduleKey, required String workId, required String tagId}) async {}
+  Future<void> bindTagToWork({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    required String tagId,
+  }) async {}
+
   @override
-  Future<int> countDownloadedEpisodes({required LibraryModuleKey moduleKey, required String workId}) async => 0;
+  Future<int> countDownloadedEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async => 0;
+
   @override
-  Future<int> countReadEpisodes({required LibraryModuleKey moduleKey, required String workId}) async => 0;
+  Future<int> countReadEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async => 0;
+
   @override
-  Future<int> countUnreadEpisodes({required LibraryModuleKey moduleKey, required String workId}) async => 0;
+  Future<int> countUnreadEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async => 0;
+
   @override
   Future<void> purgeWorkState({
     required LibraryModuleKey moduleKey,
@@ -366,12 +473,18 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
     required bool isRead,
     DateTime? readAt,
   }) async {}
+
   @override
   Future<String> createTag({required String name}) async => 'tag-1';
+
   @override
   Future<void> deleteTag({required String tagId}) async {}
+
   @override
-  Future<LibraryModuleDisplaySettings> getDisplaySettings({required LibraryModuleKey moduleKey, required LibraryDisplayMode defaultDisplayMode}) async {
+  Future<LibraryModuleDisplaySettings> getDisplaySettings({
+    required LibraryModuleKey moduleKey,
+    required LibraryDisplayMode defaultDisplayMode,
+  }) async {
     return LibraryModuleDisplaySettings(
       moduleKey: moduleKey,
       displayMode: defaultDisplayMode,
@@ -379,24 +492,74 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
       updatedAt: DateTime(2026, 1, 1),
     );
   }
+
   @override
-  Future<LibraryEpisodeState?> getEpisodeState({required LibraryModuleKey moduleKey, required String episodeId}) async => null;
+  Future<LibraryEpisodeState?> getEpisodeState({
+    required LibraryModuleKey moduleKey,
+    required String episodeId,
+  }) async => null;
+
   @override
   Future<List<LibraryTag>> getTags() async => const <LibraryTag>[];
+
   @override
-  Future<LibraryWorkState?> getWorkState({required LibraryModuleKey moduleKey, required String workId}) async => null;
+  Future<LibraryWorkState?> getWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async => null;
+
   @override
-  Future<List<LibraryTag>> getWorkTags({required LibraryModuleKey moduleKey, required String workId}) async => const <LibraryTag>[];
+  Future<List<LibraryTag>> getWorkTags({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async => const <LibraryTag>[];
+
   @override
-  Future<bool> hasAnyTag({required LibraryModuleKey moduleKey, required String workId}) async => false;
+  Future<bool> hasAnyTag({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async => false;
+
   @override
-  Future<void> renameTag({required String tagId, required String newName}) async {}
+  Future<void> renameTag({
+    required String tagId,
+    required String newName,
+  }) async {}
+
   @override
-  Future<void> unbindTagFromWork({required LibraryModuleKey moduleKey, required String workId, required String tagId}) async {}
+  Future<void> unbindTagFromWork({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    required String tagId,
+  }) async {}
+
   @override
-  Future<void> upsertDisplaySettings({required LibraryModuleKey moduleKey, required LibraryDisplayMode displayMode, required int gridColumns}) async {}
+  Future<void> upsertDisplaySettings({
+    required LibraryModuleKey moduleKey,
+    required LibraryDisplayMode displayMode,
+    required int gridColumns,
+  }) async {}
+
   @override
-  Future<void> upsertEpisodeState({required LibraryModuleKey moduleKey, required String episodeId, required String workId, bool? isRead, bool? isDownloaded, bool? isBookmarked, DateTime? readAt, DateTime? downloadedAt}) async {}
+  Future<void> upsertEpisodeState({
+    required LibraryModuleKey moduleKey,
+    required String episodeId,
+    required String workId,
+    bool? isRead,
+    bool? isDownloaded,
+    bool? isBookmarked,
+    DateTime? readAt,
+    DateTime? downloadedAt,
+  }) async {}
+
   @override
-  Future<void> upsertWorkState({required LibraryModuleKey moduleKey, required String workId, String? lastReadEpisodeId, DateTime? lastReadAt, DateTime? checkUpdatedAt, DateTime? fetchedUpdatedAt, String? introText}) async {}
+  Future<void> upsertWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    String? lastReadEpisodeId,
+    DateTime? lastReadAt,
+    DateTime? checkUpdatedAt,
+    DateTime? fetchedUpdatedAt,
+    String? introText,
+  }) async {}
 }

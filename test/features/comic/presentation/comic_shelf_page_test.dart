@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/comic/data/comic_search_refresh_queue_providers.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
-import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
+import 'package:y300/features/comic/data/comic_search_refresh_queue_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/presentation/comic_shelf_page.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
@@ -15,7 +15,9 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 
 void main() {
-  testWidgets('ComicShelfPage builds unified shelf shell with module title', (tester) async {
+  testWidgets('ComicShelfPage builds unified shelf shell with module title', (
+    tester,
+  ) async {
     final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
       ComicSearchRefreshQueueSnapshot.empty,
     );
@@ -24,7 +26,9 @@ void main() {
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
-          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
           comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
             queueSnapshot,
           ),
@@ -36,8 +40,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('漫画'), findsOneWidget);
-    expect(find.byKey(const Key('unified-shelf-category-indicator')), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('unified-shelf-category-tab-default')), findsOneWidget);
+    expect(
+      find.byKey(const Key('unified-shelf-category-indicator')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('unified-shelf-category-tab-default')),
+      findsOneWidget,
+    );
   });
 }
 
@@ -84,7 +94,10 @@ class _FakeComicRepository implements ComicRepository {
   Future<ComicDetail?> getComicDetail({required String comicId}) async => null;
 
   @override
-  Future<List<ComicEpisodeItem>> getComicEpisodes({required String comicId, bool descending = true}) async {
+  Future<List<ComicEpisodeItem>> getComicEpisodes({
+    required String comicId,
+    bool descending = true,
+  }) async {
     return const [];
   }
 
@@ -94,15 +107,21 @@ class _FakeComicRepository implements ComicRepository {
   }
 
   @override
-  Future<List<ComicEpisodeImageItem>> getEpisodeImages({required String episodeId}) async {
+  Future<List<ComicEpisodeImageItem>> getEpisodeImages({
+    required String episodeId,
+  }) async {
     return const [];
   }
 
   @override
-  Future<ComicReadingProgress?> getLastReadProgress({required String comicId}) async => null;
+  Future<ComicReadingProgress?> getLastReadProgress({
+    required String comicId,
+  }) async => null;
 
   @override
-  Future<List<ComicShelfItem>> getShelfItems({String categoryId = 'default'}) async {
+  Future<List<ComicShelfItem>> getShelfItems({
+    String categoryId = 'default',
+  }) async {
     return [
       ComicShelfItem(
         comicId: 'comic-1',
@@ -126,7 +145,11 @@ class _FakeComicRepository implements ComicRepository {
     required List<ComicEpisodeLink> episodeLinks,
     required String fallbackSourceTid,
   }) async {
-    return const ComicEpisodeRefreshResult(insertedCount: 0, updatedCount: 0, totalCount: 0);
+    return const ComicEpisodeRefreshResult(
+      insertedCount: 0,
+      updatedCount: 0,
+      totalCount: 0,
+    );
   }
 
   @override
@@ -143,7 +166,10 @@ class _FakeComicRepository implements ComicRepository {
   }) async {}
 
   @override
-  Future<void> saveEpisodeImages({required String episodeId, required List<String> imageUrls}) async {}
+  Future<void> saveEpisodeImages({
+    required String episodeId,
+    required List<String> imageUrls,
+  }) async {}
 
   @override
   Future<void> updateCustomCover({

@@ -1,24 +1,38 @@
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:y300/features/cache/domain/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
+import 'package:y300/features/favorites/domain/unfavorite_use_cases.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
+import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
+import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
+import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
+import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
-/// 小说书架适配器（Phase 0 骨架版）。
+typedef ShelfCategoryAssignUseCaseResolver =
+    ShelfCategoryAssignUseCase? Function();
+typedef ReadingStateBatchWriterResolver = ReadingStateBatchWriter? Function();
+typedef UnfavoriteWorkUseCaseResolver = UnfavoriteWorkUseCase? Function();
+
 class NovelShelfAdapter
-    implements ShelfModuleAdapter, ShelfSnapshotAdapter, ShelfCoverWarmupAdapter {
+    implements
+        ShelfModuleAdapter,
+        ShelfSnapshotAdapter,
+        ShelfCoverWarmupAdapter,
+        ShelfSelectionActionAdapter {
   NovelShelfAdapter(
     this._repository, {
     required LibraryStateRepository stateRepository,
@@ -26,9 +40,21 @@ class NovelShelfAdapter
     ImageCacheServiceResolver? imageCacheServiceResolver,
     LibraryShelfRefreshBus? shelfRefreshBus,
     LibraryTaskProgressHub? taskProgressHub,
+    ShelfCategoryAssignUseCase? categoryAssignUseCase,
+    ShelfCategoryAssignUseCaseResolver? categoryAssignUseCaseResolver,
+    ReadingStateBatchWriter? readingStateBatchWriter,
+    ReadingStateBatchWriterResolver? readingStateBatchWriterResolver,
+    UnfavoriteWorkUseCase? unfavoriteWorkUseCase,
+    UnfavoriteWorkUseCaseResolver? unfavoriteWorkUseCaseResolver,
   })  : _stateRepository = stateRepository,
         _shelfRefreshBus = shelfRefreshBus,
         _taskProgress = taskProgressHub?.progressFor(LibraryModuleKey.novel),
+        _categoryAssignUseCaseResolver =
+            categoryAssignUseCaseResolver ?? (() => categoryAssignUseCase),
+        _readingStateBatchWriterResolver =
+            readingStateBatchWriterResolver ?? (() => readingStateBatchWriter),
+        _unfavoriteWorkUseCaseResolver =
+            unfavoriteWorkUseCaseResolver ?? (() => unfavoriteWorkUseCase),
         _coverCacheService = imageCacheServiceResolver == null
             ? LibraryCoverCacheService(imageCacheService)
             : LibraryCoverCacheService.lazy(imageCacheServiceResolver);
@@ -37,19 +63,70 @@ class NovelShelfAdapter
   final LibraryStateRepository _stateRepository;
   final LibraryShelfRefreshBus? _shelfRefreshBus;
   final ValueListenable<LibraryShelfTaskProgress?>? _taskProgress;
+  final ShelfCategoryAssignUseCaseResolver _categoryAssignUseCaseResolver;
+  final ReadingStateBatchWriterResolver _readingStateBatchWriterResolver;
+  final UnfavoriteWorkUseCaseResolver _unfavoriteWorkUseCaseResolver;
   final LibraryCoverCacheService _coverCacheService;
+
+  static const String _moduleTitle = '\u5c0f\u8bf4';
+  static const String _assignLabel = '\u8bbe\u7f6e\u5206\u7c7b';
+  static const String _markAllReadLabel = '\u5168\u90e8\u5df2\u8bfb';
+  static const String _markAllUnreadLabel = '\u5168\u90e8\u672a\u8bfb';
+  static const String _unfavoriteLabel = '\u53d6\u6d88\u6536\u85cf';
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.novel;
 
   @override
-  String get moduleTitle => '小说';
+  String get moduleTitle => _moduleTitle;
 
   @override
   LibraryDisplayMode get defaultDisplayMode => LibraryDisplayMode.list;
 
   @override
   ValueListenable<LibraryShelfTaskProgress?>? get taskProgress => _taskProgress;
+
+  @override
+  List<SelectionAction> get selectionActions {
+    final actions = <SelectionAction>[];
+    if (_categoryAssignUseCaseResolver() != null) {
+      actions.add(
+        const SelectionAction(
+          id: SelectionActionIds.assignCategory,
+          icon: Icons.label_outline,
+          label: _assignLabel,
+        ),
+      );
+    }
+    if (_readingStateBatchWriterResolver() != null) {
+      actions.add(
+        const SelectionAction(
+          id: SelectionActionIds.markAllRead,
+          icon: Icons.done_all,
+          label: _markAllReadLabel,
+        ),
+      );
+      actions.add(
+        const SelectionAction(
+          id: SelectionActionIds.markAllUnread,
+          icon: Icons.remove_done,
+          label: _markAllUnreadLabel,
+        ),
+      );
+    }
+    if (_unfavoriteWorkUseCaseResolver() != null) {
+      actions.add(
+        const SelectionAction(
+          id: SelectionActionIds.unfavorite,
+          icon: Icons.favorite_border,
+          label: _unfavoriteLabel,
+          destructive: true,
+          needsConfirm: true,
+        ),
+      );
+    }
+    return actions;
+  }
 
   @override
   ValueListenable<LibraryShelfRefreshSignal?>? get shelfRefreshSignals {
@@ -63,7 +140,9 @@ class NovelShelfAdapter
   }
 
   @override
-  Future<List<LibraryWorkItem>> loadCategoryItems({required String categoryId}) async {
+  Future<List<LibraryWorkItem>> loadCategoryItems({
+    required String categoryId,
+  }) async {
     final items = await _repository.getShelfItems(categoryId: categoryId);
     return Future.wait(items.map(_mapWork));
   }
@@ -76,17 +155,20 @@ class NovelShelfAdapter
     final categories = await _repository.getCategories();
     final result = <String, List<LibraryWorkItem>>{};
     for (final category in categories) {
-      final items = await _repository.getShelfItems(categoryId: category.categoryId);
+      final items = await _repository.getShelfItems(
+        categoryId: category.categoryId,
+      );
       final mappedSource = await Future.wait(items.map(_mapWork));
-      final mapped = mappedSource.where((item) {
-        if (normalized.isEmpty) {
-          return true;
-        }
-        final title = item.title.toLowerCase();
-        final secondary = (item.secondaryName ?? '').toLowerCase();
-        return title.contains(normalized) || secondary.contains(normalized);
-      }).toList(growable: false);
-      result[category.categoryId] = mapped;
+      result[category.categoryId] = mappedSource
+          .where((item) {
+            if (normalized.isEmpty) {
+              return true;
+            }
+            final title = item.title.toLowerCase();
+            final secondary = (item.secondaryName ?? '').toLowerCase();
+            return title.contains(normalized) || secondary.contains(normalized);
+          })
+          .toList(growable: false);
     }
     return result;
   }
@@ -137,15 +219,15 @@ class NovelShelfAdapter
       itemsByCategory: itemsByCategory,
       visibleMatchCountByCategory: <String, int>{
         for (final category in categories)
-          category.categoryId: (itemsByCategory[category.categoryId] ?? const <LibraryWorkItem>[]).length,
+          category.categoryId:
+              (itemsByCategory[category.categoryId] ?? const <LibraryWorkItem>[])
+                  .length,
       },
     );
   }
 
   @override
-  Future<void> refreshShelf() async {
-    // Phase 0 保持空实现：后续可在此增加批量章节刷新策略。
-  }
+  Future<void> refreshShelf() async {}
 
   @override
   Future<Object> buildDetailRouteArgument({required String workId}) async {
@@ -162,7 +244,10 @@ class NovelShelfAdapter
     required String categoryId,
     required String newName,
   }) {
-    return _repository.renameCategory(categoryId: categoryId, newName: newName);
+    return _repository.renameCategory(
+      categoryId: categoryId,
+      newName: newName,
+    );
   }
 
   @override
@@ -215,6 +300,120 @@ class NovelShelfAdapter
     }
     final random = Random();
     return items[random.nextInt(items.length)].workId;
+  }
+
+  @override
+  Future<SelectionActionResult> runSelectionAction(
+    SelectionActionExecutionRequest request,
+  ) async {
+    switch (request.actionId) {
+      case SelectionActionIds.assignCategory:
+        return _runAssignCategory(request);
+      case SelectionActionIds.markAllRead:
+        return _runReadStateChange(request, isRead: true);
+      case SelectionActionIds.markAllUnread:
+        return _runReadStateChange(request, isRead: false);
+      case SelectionActionIds.unfavorite:
+        return _runUnfavorite(request);
+      case SelectionActionIds.download:
+        return const SelectionActionResult(
+          message: 'Novel shelf does not support batch download',
+        );
+    }
+    return const SelectionActionResult(message: 'Unsupported novel action');
+  }
+
+  Future<SelectionActionResult> _runAssignCategory(
+    SelectionActionExecutionRequest request,
+  ) async {
+    final useCase = _categoryAssignUseCaseResolver();
+    final targetCategoryId = request.targetCategoryId?.trim();
+    if (useCase == null) {
+      return const SelectionActionResult(
+        message: 'Novel shelf does not support batch category assignment',
+      );
+    }
+    if (targetCategoryId == null || targetCategoryId.isEmpty) {
+      return const SelectionActionResult(message: 'Missing target category');
+    }
+    final result = await useCase.assign(
+      workIds: request.workIds,
+      sourceCategoryId: request.activeCategoryId,
+      targetCategoryId: targetCategoryId,
+    );
+    return SelectionActionResult(
+      message: _buildAssignMessage(
+        assignedCount: result.assignedWorkIds.length,
+        failedCount: result.failedWorkIds.length,
+      ),
+      changed: result.assignedWorkIds.isNotEmpty,
+      failedCount: result.failedWorkIds.length,
+    );
+  }
+
+  Future<SelectionActionResult> _runReadStateChange(
+    SelectionActionExecutionRequest request, {
+    required bool isRead,
+  }) async {
+    final writer = _readingStateBatchWriterResolver();
+    if (writer == null) {
+      return const SelectionActionResult(
+        message: 'Novel shelf does not support batch read-state changes',
+      );
+    }
+    final normalizedWorkIds = _normalizedWorkIds(request.workIds);
+    if (normalizedWorkIds.isEmpty) {
+      return const SelectionActionResult(message: 'No valid novels selected');
+    }
+    await writer.setWorksRead(
+      module: LibraryModuleKey.novel,
+      workIds: normalizedWorkIds,
+      isRead: isRead,
+    );
+    return SelectionActionResult(
+      message: isRead
+          ? 'Marked selected novels as fully read'
+          : 'Marked selected novels as fully unread',
+      changed: true,
+      failedCount: request.workIds.length - normalizedWorkIds.length,
+    );
+  }
+
+  Future<SelectionActionResult> _runUnfavorite(
+    SelectionActionExecutionRequest request,
+  ) async {
+    final useCase = _unfavoriteWorkUseCaseResolver();
+    if (useCase == null) {
+      return const SelectionActionResult(
+        message: 'Novel shelf does not support batch unfavorite',
+      );
+    }
+    final workKinds = <String, ThreadContentKind>{};
+    var invalidCount = 0;
+    for (final rawWorkId in request.workIds) {
+      final workId = rawWorkId.trim();
+      if (workId.isEmpty) {
+        invalidCount += 1;
+        continue;
+      }
+      workKinds[workId] = ThreadContentKind.novel;
+    }
+    if (workKinds.isEmpty) {
+      return SelectionActionResult(
+        message: 'No valid novels to unfavorite',
+        failedCount: invalidCount,
+      );
+    }
+    final result = await useCase.callMany(workKinds: workKinds);
+    final failedCount = result.failedTids.length + invalidCount;
+    return SelectionActionResult(
+      message: _buildUnfavoriteMessage(
+        succeededCount: result.succeededTids.length,
+        failedCount: failedCount,
+      ),
+      changed: result.succeededTids.isNotEmpty,
+      failedCount: failedCount,
+    );
   }
 
   LibraryCategory _mapCategory(NovelShelfCategory source) {
@@ -278,7 +477,9 @@ class NovelShelfAdapter
       }
       final local = item.coverLocalPath?.trim();
       final sourceUrl = item.coverImageUrl?.trim();
-      if ((local == null || local.isEmpty) && sourceUrl != null && sourceUrl.isNotEmpty) {
+      if ((local == null || local.isEmpty) &&
+          sourceUrl != null &&
+          sourceUrl.isNotEmpty) {
         requests.add(
           ShelfCoverWarmupRequest(
             moduleKey: LibraryModuleKey.novel,
@@ -297,7 +498,9 @@ class NovelShelfAdapter
   }
 
   @override
-  Future<ShelfCoverWarmupResult?> warmCover(ShelfCoverWarmupRequest request) async {
+  Future<ShelfCoverWarmupResult?> warmCover(
+    ShelfCoverWarmupRequest request,
+  ) async {
     final cached = await _coverCacheService.ensureProtectedCover(
       cacheKey: request.cacheKey,
       sourceUrl: request.sourceUrl,
@@ -338,7 +541,9 @@ class NovelShelfAdapter
           break;
         case LibraryShelfSortField.workUpdatedAt:
           cmp = (a.workUpdatedAt ?? DateTime.fromMillisecondsSinceEpoch(0))
-              .compareTo(b.workUpdatedAt ?? DateTime.fromMillisecondsSinceEpoch(0));
+              .compareTo(
+                b.workUpdatedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+              );
           break;
         default:
           cmp = a.addedAt.compareTo(b.addedAt);
@@ -350,5 +555,44 @@ class NovelShelfAdapter
       return cmp;
     });
     return list;
+  }
+
+  Set<String> _normalizedWorkIds(Set<String> workIds) {
+    return workIds
+        .map((workId) => workId.trim())
+        .where((workId) => workId.isNotEmpty)
+        .toSet();
+  }
+
+  String _buildAssignMessage({
+    required int assignedCount,
+    required int failedCount,
+  }) {
+    if (assignedCount == 0 && failedCount == 0) {
+      return 'No novels were moved';
+    }
+    if (failedCount == 0) {
+      return 'Moved $assignedCount novels';
+    }
+    if (assignedCount == 0) {
+      return 'Failed to move novels';
+    }
+    return 'Moved $assignedCount novels, failed $failedCount';
+  }
+
+  String _buildUnfavoriteMessage({
+    required int succeededCount,
+    required int failedCount,
+  }) {
+    if (succeededCount == 0 && failedCount == 0) {
+      return 'No valid novels to unfavorite';
+    }
+    if (failedCount == 0) {
+      return 'Unfavorited $succeededCount items';
+    }
+    if (succeededCount == 0) {
+      return 'Failed to unfavorite';
+    }
+    return 'Unfavorited $succeededCount items, failed $failedCount';
   }
 }

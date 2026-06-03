@@ -1,34 +1,44 @@
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:y300/features/cache/domain/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/bulk_download_use_case.dart';
 import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
+import 'package:y300/features/favorites/domain/unfavorite_use_cases.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
+import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_query_utils.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
-import 'package:y300/features/library_shared/domain/services/library_shelf_query_utils.dart';
+import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
+import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
+import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
-/// 漫画书架适配器（Phase 0 骨架版）。
-///
-/// 目标：先把“统一接口 -> 现有仓储”的映射打通，后续 Phase 1/2 再逐步填充
-/// 筛选、排序、状态位（未读/已下载/标签）等增强能力。
+typedef ShelfCategoryAssignUseCaseResolver =
+    ShelfCategoryAssignUseCase? Function();
+typedef ReadingStateBatchWriterResolver = ReadingStateBatchWriter? Function();
+typedef BulkDownloadUseCaseResolver = BulkDownloadUseCase? Function();
+typedef UnfavoriteWorkUseCaseResolver = UnfavoriteWorkUseCase? Function();
+
 class ComicShelfAdapter
     implements
         ShelfModuleAdapter,
         ShelfSnapshotAdapter,
         ShelfCoverWarmupAdapter,
-        ShelfModuleActionAdapter {
+        ShelfModuleActionAdapter,
+        ShelfSelectionActionAdapter {
   ComicShelfAdapter(
     this._repository, {
     required LibraryStateRepository stateRepository,
@@ -38,11 +48,27 @@ class ComicShelfAdapter
     LibraryShelfRefreshBus? shelfRefreshBus,
     LibraryTaskProgressHub? taskProgressHub,
     ComicDuplicateMergeService? duplicateMergeService,
+    ShelfCategoryAssignUseCase? categoryAssignUseCase,
+    ShelfCategoryAssignUseCaseResolver? categoryAssignUseCaseResolver,
+    ReadingStateBatchWriter? readingStateBatchWriter,
+    ReadingStateBatchWriterResolver? readingStateBatchWriterResolver,
+    BulkDownloadUseCase? bulkDownloadUseCase,
+    BulkDownloadUseCaseResolver? bulkDownloadUseCaseResolver,
+    UnfavoriteWorkUseCase? unfavoriteWorkUseCase,
+    UnfavoriteWorkUseCaseResolver? unfavoriteWorkUseCaseResolver,
   })  : _stateRepository = stateRepository,
         _featureFlags = featureFlags,
         _duplicateMergeService = duplicateMergeService,
         _shelfRefreshBus = shelfRefreshBus,
         _taskProgress = taskProgressHub?.progressFor(LibraryModuleKey.comic),
+        _categoryAssignUseCaseResolver =
+            categoryAssignUseCaseResolver ?? (() => categoryAssignUseCase),
+        _readingStateBatchWriterResolver =
+            readingStateBatchWriterResolver ?? (() => readingStateBatchWriter),
+        _bulkDownloadUseCaseResolver =
+            bulkDownloadUseCaseResolver ?? (() => bulkDownloadUseCase),
+        _unfavoriteWorkUseCaseResolver =
+            unfavoriteWorkUseCaseResolver ?? (() => unfavoriteWorkUseCase),
         _coverCacheService = imageCacheServiceResolver == null
             ? LibraryCoverCacheService(imageCacheService)
             : LibraryCoverCacheService.lazy(imageCacheServiceResolver);
@@ -53,15 +79,26 @@ class ComicShelfAdapter
   final ComicDuplicateMergeService? _duplicateMergeService;
   final LibraryShelfRefreshBus? _shelfRefreshBus;
   final ValueListenable<LibraryShelfTaskProgress?>? _taskProgress;
+  final ShelfCategoryAssignUseCaseResolver _categoryAssignUseCaseResolver;
+  final ReadingStateBatchWriterResolver _readingStateBatchWriterResolver;
+  final BulkDownloadUseCaseResolver _bulkDownloadUseCaseResolver;
+  final UnfavoriteWorkUseCaseResolver _unfavoriteWorkUseCaseResolver;
   final LibraryCoverCacheService _coverCacheService;
 
   static const String _mergeDuplicatesActionId = 'merge-duplicates';
+  static const String _moduleTitle = '\u6f2b\u753b';
+  static const String _mergeDuplicatesLabel = '\u5408\u5e76\u91cd\u590d';
+  static const String _assignLabel = '\u8bbe\u7f6e\u5206\u7c7b';
+  static const String _markAllReadLabel = '\u5168\u90e8\u5df2\u8bfb';
+  static const String _markAllUnreadLabel = '\u5168\u90e8\u672a\u8bfb';
+  static const String _downloadLabel = '\u4e0b\u8f7d';
+  static const String _unfavoriteLabel = '\u53d6\u6d88\u6536\u85cf';
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
 
   @override
-  String get moduleTitle => '漫画';
+  String get moduleTitle => _moduleTitle;
 
   @override
   LibraryDisplayMode get defaultDisplayMode => LibraryDisplayMode.grid;
@@ -77,9 +114,60 @@ class ComicShelfAdapter
     return const <LibraryShelfMenuAction>[
       LibraryShelfMenuAction(
         id: _mergeDuplicatesActionId,
-        label: '合并重复',
+        label: _mergeDuplicatesLabel,
       ),
     ];
+  }
+
+  @override
+  List<SelectionAction> get selectionActions {
+    final actions = <SelectionAction>[];
+    if (_categoryAssignUseCaseResolver() != null) {
+      actions.add(
+        const SelectionAction(
+          id: SelectionActionIds.assignCategory,
+          icon: Icons.label_outline,
+          label: _assignLabel,
+        ),
+      );
+    }
+    if (_readingStateBatchWriterResolver() != null) {
+      actions.add(
+        const SelectionAction(
+          id: SelectionActionIds.markAllRead,
+          icon: Icons.done_all,
+          label: _markAllReadLabel,
+        ),
+      );
+      actions.add(
+        const SelectionAction(
+          id: SelectionActionIds.markAllUnread,
+          icon: Icons.remove_done,
+          label: _markAllUnreadLabel,
+        ),
+      );
+    }
+    if (_bulkDownloadUseCaseResolver() != null) {
+      actions.add(
+        const SelectionAction(
+          id: SelectionActionIds.download,
+          icon: Icons.download,
+          label: _downloadLabel,
+        ),
+      );
+    }
+    if (_unfavoriteWorkUseCaseResolver() != null) {
+      actions.add(
+        const SelectionAction(
+          id: SelectionActionIds.unfavorite,
+          icon: Icons.star_border,
+          label: _unfavoriteLabel,
+          destructive: true,
+          needsConfirm: true,
+        ),
+      );
+    }
+    return actions;
   }
 
   @override
@@ -94,7 +182,9 @@ class ComicShelfAdapter
   }
 
   @override
-  Future<List<LibraryWorkItem>> loadCategoryItems({required String categoryId}) async {
+  Future<List<LibraryWorkItem>> loadCategoryItems({
+    required String categoryId,
+  }) async {
     final items = await _repository.getShelfItems(categoryId: categoryId);
     return Future.wait(items.map(_mapWork));
   }
@@ -106,7 +196,9 @@ class ComicShelfAdapter
     final categories = await _repository.getCategories();
     final result = <String, List<LibraryWorkItem>>{};
     for (final category in categories) {
-      final items = await _repository.getShelfItems(categoryId: category.categoryId);
+      final items = await _repository.getShelfItems(
+        categoryId: category.categoryId,
+      );
       final mappedSource = await Future.wait(items.map(_mapWork));
       result[category.categoryId] = LibraryShelfQueryUtils.filterAndSort(
         source: mappedSource,
@@ -151,17 +243,13 @@ class ComicShelfAdapter
         : null;
     if (snapshotRepository != null &&
         _featureFlags.readerCustomMetadataEnabled) {
-      final snapshot = await snapshotRepository.queryShelfSnapshot(
+      return snapshotRepository.queryShelfSnapshot(
         filters: filters,
         sortOption: sortOption,
         keyword: keyword,
       );
-      return snapshot;
     }
 
-    // Snapshot rows only expose the already-composed display fields. When
-    // custom metadata is disabled, use the item mapping path so source/custom
-    // columns can be separated before reaching shared shelf UI.
     final categories = await loadCategories();
     final itemsByCategory = await queryItems(
       categories: categories,
@@ -174,19 +262,18 @@ class ComicShelfAdapter
       itemsByCategory: itemsByCategory,
       visibleMatchCountByCategory: <String, int>{
         for (final category in categories)
-          category.categoryId: (itemsByCategory[category.categoryId] ?? const <LibraryWorkItem>[]).length,
+          category.categoryId:
+              (itemsByCategory[category.categoryId] ?? const <LibraryWorkItem>[])
+                  .length,
       },
     );
   }
 
   @override
-  Future<void> refreshShelf() async {
-    // 当前漫画书架数据主要来自本地，Phase 0 保留空实现接口以对齐统一控制器合同。
-  }
+  Future<void> refreshShelf() async {}
 
   @override
   Future<Object> buildDetailRouteArgument({required String workId}) async {
-    // 统一层只透传参数，不感知具体页面类型。
     return workId;
   }
 
@@ -200,7 +287,10 @@ class ComicShelfAdapter
     required String categoryId,
     required String newName,
   }) {
-    return _repository.renameCategory(categoryId: categoryId, newName: newName);
+    return _repository.renameCategory(
+      categoryId: categoryId,
+      newName: newName,
+    );
   }
 
   @override
@@ -239,7 +329,6 @@ class ComicShelfAdapter
       moduleKey: LibraryModuleKey.comic,
       defaultDisplayMode: LibraryDisplayMode.grid,
     );
-    // 兼容历史数据：若统一配置不存在，回退旧设置表。
     final legacy = await _repository.getDisplaySettings();
     return LibraryDisplayPreference(
       displayMode: stateSettings.displayMode,
@@ -262,20 +351,18 @@ class ComicShelfAdapter
   @override
   Future<ShelfModuleActionResult> runMenuAction(String actionId) async {
     if (actionId != _mergeDuplicatesActionId) {
-      return const ShelfModuleActionResult(
-        message: '未知漫画操作',
-      );
+      return const ShelfModuleActionResult(message: 'Unknown comic action');
     }
     final service = _duplicateMergeService;
     if (service == null) {
       return const ShelfModuleActionResult(
-        message: '当前漫画仓库不支持重复合并',
+        message: 'Comic repository does not support duplicate merging',
       );
     }
     final summary = await service.mergeAllDuplicates();
     if (!summary.changed) {
       return const ShelfModuleActionResult(
-        message: '没有发现可合并的重复漫画',
+        message: 'No duplicate comics were found',
       );
     }
     _shelfRefreshBus?.notify(
@@ -290,8 +377,146 @@ class ComicShelfAdapter
       },
     );
     return ShelfModuleActionResult(
-      message: '已合并 ${summary.removedComicCount} 个重复漫画',
+      message: 'Merged ${summary.removedComicCount} duplicate comics',
       changed: true,
+    );
+  }
+
+  @override
+  Future<SelectionActionResult> runSelectionAction(
+    SelectionActionExecutionRequest request,
+  ) async {
+    switch (request.actionId) {
+      case SelectionActionIds.assignCategory:
+        return _runAssignCategory(request);
+      case SelectionActionIds.markAllRead:
+        return _runReadStateChange(request, isRead: true);
+      case SelectionActionIds.markAllUnread:
+        return _runReadStateChange(request, isRead: false);
+      case SelectionActionIds.download:
+        return _runDownload(request);
+      case SelectionActionIds.unfavorite:
+        return _runUnfavorite(request);
+    }
+    return const SelectionActionResult(message: 'Unsupported comic action');
+  }
+
+  Future<SelectionActionResult> _runAssignCategory(
+    SelectionActionExecutionRequest request,
+  ) async {
+    final useCase = _categoryAssignUseCaseResolver();
+    final targetCategoryId = request.targetCategoryId?.trim();
+    if (useCase == null) {
+      return const SelectionActionResult(
+        message: 'Comic shelf does not support batch category assignment',
+      );
+    }
+    if (targetCategoryId == null || targetCategoryId.isEmpty) {
+      return const SelectionActionResult(message: 'Missing target category');
+    }
+    final result = await useCase.assign(
+      workIds: request.workIds,
+      sourceCategoryId: request.activeCategoryId,
+      targetCategoryId: targetCategoryId,
+    );
+    return SelectionActionResult(
+      message: _buildAssignMessage(
+        assignedCount: result.assignedWorkIds.length,
+        failedCount: result.failedWorkIds.length,
+      ),
+      changed: result.assignedWorkIds.isNotEmpty,
+      failedCount: result.failedWorkIds.length,
+    );
+  }
+
+  Future<SelectionActionResult> _runReadStateChange(
+    SelectionActionExecutionRequest request, {
+    required bool isRead,
+  }) async {
+    final writer = _readingStateBatchWriterResolver();
+    if (writer == null) {
+      return const SelectionActionResult(
+        message: 'Comic shelf does not support batch read-state changes',
+      );
+    }
+    final normalizedWorkIds = _normalizedWorkIds(request.workIds);
+    if (normalizedWorkIds.isEmpty) {
+      return const SelectionActionResult(message: 'No valid comics selected');
+    }
+    await writer.setWorksRead(
+      module: LibraryModuleKey.comic,
+      workIds: normalizedWorkIds,
+      isRead: isRead,
+    );
+    return SelectionActionResult(
+      message: isRead
+          ? 'Marked selected comics as fully read'
+          : 'Marked selected comics as fully unread',
+      changed: true,
+      failedCount: request.workIds.length - normalizedWorkIds.length,
+    );
+  }
+
+  Future<SelectionActionResult> _runDownload(
+    SelectionActionExecutionRequest request,
+  ) async {
+    final useCase = _bulkDownloadUseCaseResolver();
+    if (useCase == null) {
+      return const SelectionActionResult(
+        message: 'Comic shelf does not support batch download',
+      );
+    }
+    final normalizedWorkIds = _normalizedWorkIds(request.workIds);
+    final result = await useCase.downloadComics(normalizedWorkIds);
+    final failedCount =
+        result.failedComicIds.length +
+        (request.workIds.length - normalizedWorkIds.length);
+    final message = switch ((result.downloadedEpisodeCount, failedCount)) {
+      (0, 0) => 'No downloadable episodes were found',
+      (_, 0) => 'Downloaded ${result.downloadedEpisodeCount} episodes',
+      _ => 'Downloaded ${result.downloadedEpisodeCount} episodes, failed $failedCount',
+    };
+    return SelectionActionResult(
+      message: message,
+      changed: result.downloadedEpisodeCount > 0,
+      failedCount: failedCount,
+    );
+  }
+
+  Future<SelectionActionResult> _runUnfavorite(
+    SelectionActionExecutionRequest request,
+  ) async {
+    final useCase = _unfavoriteWorkUseCaseResolver();
+    if (useCase == null) {
+      return const SelectionActionResult(
+        message: 'Comic shelf does not support batch unfavorite',
+      );
+    }
+    final workKinds = <String, ThreadContentKind>{};
+    var invalidCount = 0;
+    for (final rawWorkId in request.workIds) {
+      final workId = rawWorkId.trim();
+      if (workId.isEmpty) {
+        invalidCount += 1;
+        continue;
+      }
+      workKinds[workId] = ThreadContentKind.comic;
+    }
+    if (workKinds.isEmpty) {
+      return SelectionActionResult(
+        message: 'No valid comics to unfavorite',
+        failedCount: invalidCount,
+      );
+    }
+    final result = await useCase.callMany(workKinds: workKinds);
+    final failedCount = result.failedTids.length + invalidCount;
+    return SelectionActionResult(
+      message: _buildUnfavoriteMessage(
+        succeededCount: result.succeededTids.length,
+        failedCount: failedCount,
+      ),
+      changed: result.succeededTids.isNotEmpty,
+      failedCount: failedCount,
     );
   }
 
@@ -318,23 +543,27 @@ class ComicShelfAdapter
   }
 
   Future<LibraryWorkItem> _mapWork(ComicShelfItem source) async {
-    final statsRepository = _repository is ComicShelfStatsRepository
-        ? _repository as ComicShelfStatsRepository
-        : null;
+    final statsRepository =
+        _repository is ComicShelfStatsRepository
+            ? _repository as ComicShelfStatsRepository
+            : null;
     final stats = statsRepository == null
         ? null
         : await statsRepository.getShelfWorkStats(comicId: source.comicId);
-    final unread = stats?.unreadCount ??
+    final unread =
+        stats?.unreadCount ??
         await _stateRepository.countUnreadEpisodes(
           moduleKey: LibraryModuleKey.comic,
           workId: source.comicId,
         );
-    final read = stats?.readCount ??
+    final read =
+        stats?.readCount ??
         await _stateRepository.countReadEpisodes(
           moduleKey: LibraryModuleKey.comic,
           workId: source.comicId,
         );
-    final downloaded = stats?.downloadedCount ??
+    final downloaded =
+        stats?.downloadedCount ??
         await _stateRepository.countDownloadedEpisodes(
           moduleKey: LibraryModuleKey.comic,
           workId: source.comicId,
@@ -349,13 +578,14 @@ class ComicShelfAdapter
     final customLocal =
         useCustomMetadata ? source.customCoverLocalPath?.trim() : null;
     final hasPendingCustomCover =
-        customSource != null && customSource.isNotEmpty && (customLocal == null || customLocal.isEmpty);
+        customSource != null &&
+        customSource.isNotEmpty &&
+        (customLocal == null || customLocal.isEmpty);
     return LibraryWorkItem(
       workId: source.comicId,
       categoryId: source.categoryId,
-      title: useCustomMetadata
-          ? source.title
-          : (source.sourceTitle ?? source.title),
+      title:
+          useCustomMetadata ? source.title : (source.sourceTitle ?? source.title),
       secondaryName: _shelfSecondaryName(
         author: useCustomMetadata
             ? source.author
@@ -370,10 +600,8 @@ class ComicShelfAdapter
               coverImageUrl: source.coverImageUrl,
               customCoverImageUrl: source.customCoverImageUrl,
             ),
-      customCoverImageUrl: useCustomMetadata ? source.customCoverImageUrl : null,
-      // If a remote custom cover exists but is not cached yet, keep the normal
-      // local cover out of the preferred path so the UI does not flash an older
-      // ordinary cover while the custom one warms in the background.
+      customCoverImageUrl:
+          useCustomMetadata ? source.customCoverImageUrl : null,
       coverLocalPath: hasPendingCustomCover
           ? null
           : useCustomMetadata
@@ -382,7 +610,8 @@ class ComicShelfAdapter
                   coverLocalPath: source.coverLocalPath,
                   customCoverLocalPath: source.customCoverLocalPath,
                 ),
-      customCoverLocalPath: useCustomMetadata ? source.customCoverLocalPath : null,
+      customCoverLocalPath:
+          useCustomMetadata ? source.customCoverLocalPath : null,
       unreadCount: unread,
       totalChapterCount: stats?.totalCount ?? unread + read,
       readChapterCount: read,
@@ -428,7 +657,9 @@ class ComicShelfAdapter
 
       final local = item.coverLocalPath?.trim();
       final sourceUrl = item.coverImageUrl?.trim();
-      if ((local == null || local.isEmpty) && sourceUrl != null && sourceUrl.isNotEmpty) {
+      if ((local == null || local.isEmpty) &&
+          sourceUrl != null &&
+          sourceUrl.isNotEmpty) {
         requests.add(
           ShelfCoverWarmupRequest(
             moduleKey: LibraryModuleKey.comic,
@@ -447,7 +678,9 @@ class ComicShelfAdapter
   }
 
   @override
-  Future<ShelfCoverWarmupResult?> warmCover(ShelfCoverWarmupRequest request) async {
+  Future<ShelfCoverWarmupResult?> warmCover(
+    ShelfCoverWarmupRequest request,
+  ) async {
     final cached = await _coverCacheService.ensureProtectedCover(
       cacheKey: request.cacheKey,
       sourceUrl: request.sourceUrl,
@@ -472,6 +705,45 @@ class ComicShelfAdapter
       coverLocalPath: request.useCustomCover ? null : localPath,
       customCoverLocalPath: request.useCustomCover ? localPath : null,
     );
+  }
+
+  Set<String> _normalizedWorkIds(Set<String> workIds) {
+    return workIds
+        .map((workId) => workId.trim())
+        .where((workId) => workId.isNotEmpty)
+        .toSet();
+  }
+
+  String _buildAssignMessage({
+    required int assignedCount,
+    required int failedCount,
+  }) {
+    if (assignedCount == 0 && failedCount == 0) {
+      return 'No comics were moved';
+    }
+    if (failedCount == 0) {
+      return 'Moved $assignedCount comics';
+    }
+    if (assignedCount == 0) {
+      return 'Failed to move comics';
+    }
+    return 'Moved $assignedCount comics, failed $failedCount';
+  }
+
+  String _buildUnfavoriteMessage({
+    required int succeededCount,
+    required int failedCount,
+  }) {
+    if (succeededCount == 0 && failedCount == 0) {
+      return 'No valid comics to unfavorite';
+    }
+    if (failedCount == 0) {
+      return 'Unfavorited $succeededCount items';
+    }
+    if (succeededCount == 0) {
+      return 'Failed to unfavorite';
+    }
+    return 'Unfavorited $succeededCount items, failed $failedCount';
   }
 
   String? _sourceCoverImageUrl({
