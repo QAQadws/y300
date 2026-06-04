@@ -19,12 +19,17 @@ import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/tags/domain/forum_tag_models.dart';
 
 void main() {
-  testWidgets('ForumWebViewPage shows home app bar and seeds cookies before load', (
+  testWidgets('ForumWebViewPage shows home app bar and seeds normalized cookies before load', (
     tester,
   ) async {
     final driver = _FakeForumWebViewDriver();
     final cookieStore = _FakeCookieStore(
-      header: 'auth=token123; saltkey=abc',
+      cookies: <String, String>{
+        'auth': 'token%2B123',
+        'saltkey': 'abc%7Cxyz',
+        'removed': 'deleted',
+        'empty': '',
+      },
     );
 
     await tester.pumpWidget(
@@ -40,11 +45,14 @@ void main() {
     expect(find.byKey(const Key('forum-webview-back-button')), findsNothing);
     expect(find.byKey(const Key('forum-webview-search-button')), findsOneWidget);
     expect(find.byKey(const Key('forum-webview-more-button')), findsOneWidget);
-    expect(driver.events, <String>['initialize', 'seedCookies', 'load']);
+    expect(
+      driver.events,
+      <String>['initialize', 'clearCookies', 'seedCookies', 'load'],
+    );
     expect(driver.seededCookies.single.domain, 'bbs.yamibo.com');
     expect(
       driver.seededCookies.single.cookies,
-      <String, String>{'auth': 'token123', 'saltkey': 'abc'},
+      <String, String>{'auth': 'token+123', 'saltkey': 'abc|xyz'},
     );
     expect(
       driver.loadedUris.single.toString(),
@@ -1053,6 +1061,12 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   }
 
   @override
+  Future<bool> clearCookies() async {
+    events.add('clearCookies');
+    return true;
+  }
+
+  @override
   Future<String?> getTitle() async {
     return title;
   }
@@ -1122,13 +1136,20 @@ class _SeededCookieRecord {
 }
 
 class _FakeCookieStore extends CookieStore {
-  _FakeCookieStore({this.header});
+  _FakeCookieStore({
+    this.cookies = const <String, String>{},
+  });
 
-  final String? header;
+  final Map<String, String> cookies;
+
+  @override
+  Future<Map<String, String>> readCookieMap(Uri uri) async {
+    return Map<String, String>.from(cookies);
+  }
 
   @override
   Future<String?> readCookieHeader(Uri uri) async {
-    return header;
+    return null;
   }
 }
 

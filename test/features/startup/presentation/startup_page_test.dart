@@ -119,6 +119,11 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   Future<void> reload() async {}
 
   @override
+  Future<bool> clearCookies() async {
+    return true;
+  }
+
+  @override
   Future<String?> getTitle() async {
     return null;
   }
@@ -187,6 +192,11 @@ class _FakeAuthRepository implements AuthRepository {
 }
 
 class _FakeCookieStore extends CookieStore {
+  @override
+  Future<Map<String, String>> readCookieMap(Uri uri) async {
+    return <String, String>{};
+  }
+
   @override
   Future<String?> readCookieHeader(Uri uri) async {
     return null;

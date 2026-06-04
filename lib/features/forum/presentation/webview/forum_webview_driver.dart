@@ -51,6 +51,8 @@ abstract class ForumWebViewDriver
 
   Future<void> reload();
 
+  Future<bool> clearCookies();
+
   Future<String?> getTitle();
 
   Future<bool> canGoBack();
@@ -114,6 +116,11 @@ class FlutterForumWebViewDriver implements ForumWebViewDriver {
   @override
   Future<void> reload() {
     return _controller.reload();
+  }
+
+  @override
+  Future<bool> clearCookies() {
+    return _cookieManager.clearCookies();
   }
 
   @override

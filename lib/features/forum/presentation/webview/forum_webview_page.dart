@@ -4,10 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
+import 'package:y300/features/forum/domain/services/forum_webview_cookie_bootstrapper.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_script_injector.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_thread_menu_bridge.dart';
@@ -110,6 +110,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
 
   Future<void> _initialize(ForumWebViewDriver driver) async {
     final navigator = ref.read(forumWebViewNavigatorProvider);
+    final bootstrapper = ref.read(forumWebViewCookieBootstrapperProvider);
     await driver.initialize(
       callbacks: ForumWebViewCallbacks(
         onPageStarted: _handlePageStarted,
@@ -123,17 +124,24 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     }
 
     // API 登录/退出会通过 auth-scoped ProviderScope 重建整个 WebView 壳；
-    // 每次重建都只从 CookieStore 单向 seed 一次 cookie 到全新的 WebView。
-    final cookieHeader = await ref
-        .read(cookieStoreProvider)
-        .readCookieHeader(navigator.homeUri);
+    // 每次重建都先清空平台 cookie jar，再从 CookieStore 单向 bootstrap 到 WebView。
+    try {
+      await driver.clearCookies();
+    } catch (_) {
+      // 清空失败时继续 seed，避免阻断论坛首页加载。
+    }
+    if (!mounted) {
+      return;
+    }
+
+    final cookies = await bootstrapper.buildSeedCookies(uri: navigator.homeUri);
     if (!mounted) {
       return;
     }
 
     await driver.seedCookies(
       domain: navigator.homeUri.host,
-      cookies: _parseCookieHeader(cookieHeader),
+      cookies: cookies,
     );
     if (!mounted) {
       return;
@@ -235,28 +243,6 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
 
     unawaited(_launchExternalUri(uri));
     return ForumWebViewNavigationDecision.prevent;
-  }
-
-  Map<String, String> _parseCookieHeader(String? header) {
-    if (header == null || header.trim().isEmpty) {
-      return const <String, String>{};
-    }
-
-    final output = <String, String>{};
-    for (final rawSegment in header.split(';')) {
-      final segment = rawSegment.trim();
-      if (segment.isEmpty || !segment.contains('=')) {
-        continue;
-      }
-      final separatorIndex = segment.indexOf('=');
-      final name = segment.substring(0, separatorIndex).trim();
-      final value = segment.substring(separatorIndex + 1).trim();
-      if (name.isEmpty || value.isEmpty) {
-        continue;
-      }
-      output[name] = value;
-    }
-    return output;
   }
 
   PreferredSizeWidget _buildAppBar(
