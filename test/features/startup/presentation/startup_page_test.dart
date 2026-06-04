@@ -110,7 +110,22 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   }
 
   @override
-  Future<void> initialize({required ForumWebViewCallbacks callbacks}) async {}
+  Future<ForumWebViewCapabilityProfile> probeCapabilities() async {
+    return const ForumWebViewCapabilityProfile(
+      engine: ForumWebViewEngine.legacy,
+      documentStartMode: ForumWebViewDocumentStartMode.unavailable,
+      supportsContentBlockers: false,
+      supportsTransparentBackground: false,
+      supportsPlatformScrollTuning: false,
+      supportsCookieHooks: false,
+    );
+  }
+
+  @override
+  Future<void> initialize({
+    required ForumWebViewCallbacks callbacks,
+    required ForumWebViewBootstrapConfig bootstrapConfig,
+  }) async {}
 
   @override
   Future<void> load(Uri uri) async {}

@@ -46,8 +46,20 @@ void main() {
     expect(find.byKey(const Key('forum-webview-more-button')), findsOneWidget);
     expect(
       driver.events,
-      <String>['initialize', 'clearCookies', 'seedCookies', 'load'],
+      <String>[
+        'probeCapabilities',
+        'initialize',
+        'clearCookies',
+        'seedCookies',
+        'load',
+      ],
     );
+    expect(driver.probeCapabilitiesCallCount, 1);
+    expect(
+      driver.bootstrapConfig?.initialUri.toString(),
+      'https://bbs.yamibo.com/index.php?mobile=2',
+    );
+    expect(driver.bootstrapConfig?.capabilityProfile.engine, ForumWebViewEngine.legacy);
     expect(driver.seededCookies.single.domain, 'bbs.yamibo.com');
     expect(
       driver.seededCookies.single.cookies,
@@ -1023,6 +1035,8 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   bool canGoBackValue = false;
   int goBackCallCount = 0;
   int reloadCallCount = 0;
+  int probeCapabilitiesCallCount = 0;
+  ForumWebViewBootstrapConfig? bootstrapConfig;
   ForumWebViewCallbacks? _callbacks;
 
   @override
@@ -1057,8 +1071,26 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   }
 
   @override
-  Future<void> initialize({required ForumWebViewCallbacks callbacks}) async {
+  Future<ForumWebViewCapabilityProfile> probeCapabilities() async {
+    probeCapabilitiesCallCount += 1;
+    events.add('probeCapabilities');
+    return const ForumWebViewCapabilityProfile(
+      engine: ForumWebViewEngine.legacy,
+      documentStartMode: ForumWebViewDocumentStartMode.unavailable,
+      supportsContentBlockers: false,
+      supportsTransparentBackground: false,
+      supportsPlatformScrollTuning: false,
+      supportsCookieHooks: false,
+    );
+  }
+
+  @override
+  Future<void> initialize({
+    required ForumWebViewCallbacks callbacks,
+    required ForumWebViewBootstrapConfig bootstrapConfig,
+  }) async {
     events.add('initialize');
+    this.bootstrapConfig = bootstrapConfig;
     _callbacks = callbacks;
   }
 

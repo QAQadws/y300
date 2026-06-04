@@ -16,6 +16,45 @@ import 'package:y300/features/forum/presentation/forum_shell_page.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 
 void main() {
+  test('forumWebViewDriverProvider uses legacy factory by default', () {
+    final legacyDriver = _FakeForumWebViewDriver();
+    final advancedDriver = _FakeForumWebViewDriver();
+    final container = ProviderContainer(
+      overrides: [
+        forumWebViewLegacyDriverFactoryProvider.overrideWithValue(
+          () => legacyDriver,
+        ),
+        forumWebViewAdvancedDriverFactoryProvider.overrideWithValue(
+          () => advancedDriver,
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    expect(container.read(forumWebViewDriverProvider), same(legacyDriver));
+  });
+
+  test('forumWebViewDriverProvider uses advanced factory when preferred engine is overridden', () {
+    final legacyDriver = _FakeForumWebViewDriver();
+    final advancedDriver = _FakeForumWebViewDriver();
+    final container = ProviderContainer(
+      overrides: [
+        forumWebViewPreferredEngineProvider.overrideWithValue(
+          ForumWebViewEngine.advanced,
+        ),
+        forumWebViewLegacyDriverFactoryProvider.overrideWithValue(
+          () => legacyDriver,
+        ),
+        forumWebViewAdvancedDriverFactoryProvider.overrideWithValue(
+          () => advancedDriver,
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    expect(container.read(forumWebViewDriverProvider), same(advancedDriver));
+  });
+
   testWidgets('ForumShellPage shows webview home page by default', (
     tester,
   ) async {
@@ -156,6 +195,59 @@ void main() {
     expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
   });
 
+  testWidgets('ForumShellPage rebuilds advanced webview after login state changes', (
+    tester,
+  ) async {
+    final driverRegistry = _FakeForumWebViewDriverRegistry();
+    final authRepository = _FakeAuthRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(authRepository),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(mode: ForumShellMode.webview),
+          ),
+          forumWebViewPreferredEngineProvider.overrideWithValue(
+            ForumWebViewEngine.advanced,
+          ),
+          forumWebViewAdvancedDriverFactoryProvider.overrideWithValue(
+            driverRegistry.create,
+          ),
+          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
+        ],
+        child: const MaterialApp(home: ForumShellPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(driverRegistry.instances.length, 1);
+    expect(driverRegistry.instances.single.initializeCallCount, 1);
+    expect(driverRegistry.instances.single.loadCallCount, 1);
+
+    authRepository.setSession(
+      SessionInfo(
+        uid: '1',
+        username: 'alice',
+        formhash: 'hash',
+        isLoggedIn: true,
+      ),
+    );
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ForumShellPage)),
+    );
+    await container.read(authSessionControllerProvider.notifier).refresh();
+    await tester.pumpAndSettle();
+
+    expect(driverRegistry.instances.length, 2);
+    expect(
+      driverRegistry.instances.last,
+      isNot(same(driverRegistry.instances.first)),
+    );
+    expect(driverRegistry.instances.last.initializeCallCount, 1);
+    expect(driverRegistry.instances.last.loadCallCount, 1);
+    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+  });
+
   testWidgets('ForumShellPage rebuilds webview after logout state changes', (
     tester,
   ) async {
@@ -176,6 +268,58 @@ void main() {
             _FakeForumModeSettingsRepository(mode: ForumShellMode.webview),
           ),
           forumWebViewDriverFactoryProvider.overrideWithValue(
+            driverRegistry.create,
+          ),
+          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
+        ],
+        child: const MaterialApp(home: ForumShellPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final initialDriverCount = driverRegistry.instances.length;
+    final activeDriverBeforeLogout = driverRegistry.instances.last;
+
+    authRepository.setSignedOut();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ForumShellPage)),
+    );
+    await container.read(authSessionControllerProvider.notifier).refresh();
+    await tester.pumpAndSettle();
+
+    expect(driverRegistry.instances.length, initialDriverCount + 1);
+    expect(
+      driverRegistry.instances.last,
+      isNot(same(activeDriverBeforeLogout)),
+    );
+    expect(driverRegistry.instances.last.initializeCallCount, 1);
+    expect(driverRegistry.instances.last.loadCallCount, 1);
+    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+  });
+
+  testWidgets('ForumShellPage rebuilds advanced webview after logout state changes', (
+    tester,
+  ) async {
+    final driverRegistry = _FakeForumWebViewDriverRegistry();
+    final authRepository = _FakeAuthRepository(
+      session: SessionInfo(
+        uid: '1',
+        username: 'alice',
+        formhash: 'hash',
+        isLoggedIn: true,
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(authRepository),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(mode: ForumShellMode.webview),
+          ),
+          forumWebViewPreferredEngineProvider.overrideWithValue(
+            ForumWebViewEngine.advanced,
+          ),
+          forumWebViewAdvancedDriverFactoryProvider.overrideWithValue(
             driverRegistry.create,
           ),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
@@ -357,6 +501,8 @@ class _FakeAuthRepository implements AuthRepository {
 class _FakeForumWebViewDriver implements ForumWebViewDriver {
   int initializeCallCount = 0;
   int loadCallCount = 0;
+  int probeCapabilitiesCallCount = 0;
+  ForumWebViewBootstrapConfig? bootstrapConfig;
 
   @override
   Widget buildWidget({Key? key}) {
@@ -364,8 +510,25 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   }
 
   @override
-  Future<void> initialize({required ForumWebViewCallbacks callbacks}) async {
+  Future<ForumWebViewCapabilityProfile> probeCapabilities() async {
+    probeCapabilitiesCallCount += 1;
+    return const ForumWebViewCapabilityProfile(
+      engine: ForumWebViewEngine.legacy,
+      documentStartMode: ForumWebViewDocumentStartMode.unavailable,
+      supportsContentBlockers: false,
+      supportsTransparentBackground: false,
+      supportsPlatformScrollTuning: false,
+      supportsCookieHooks: false,
+    );
+  }
+
+  @override
+  Future<void> initialize({
+    required ForumWebViewCallbacks callbacks,
+    required ForumWebViewBootstrapConfig bootstrapConfig,
+  }) async {
     initializeCallCount += 1;
+    this.bootstrapConfig = bootstrapConfig;
   }
 
   @override

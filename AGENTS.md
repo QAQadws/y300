@@ -55,6 +55,7 @@
 - 不要运行 `flutter test`。
 - 不要运行 `flutter analyze`。
 - 不要运行 `dart format`。
+- 不要运行 `flutter pub get`
 - 写完代码后，把验证交给用户。用户会运行测试、分析或格式化检查，并把输出贴回来供继续修复。
 - 创建或编辑文件时使用 UTF-8。
 

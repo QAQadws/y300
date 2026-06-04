@@ -110,12 +110,21 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   Future<void> _initialize(ForumWebViewDriver driver) async {
     final navigator = ref.read(forumWebViewNavigatorProvider);
     final bootstrapper = ref.read(forumWebViewCookieBootstrapperProvider);
+    final capabilityProfile = await driver.probeCapabilities();
+    if (!mounted) {
+      return;
+    }
+
     await driver.initialize(
       callbacks: ForumWebViewCallbacks(
         onPageStarted: _handlePageStarted,
         onPageFinished: _handlePageFinished,
         onProgress: _handleProgress,
         onNavigationRequest: _handleNavigationRequest,
+      ),
+      bootstrapConfig: ForumWebViewBootstrapConfig(
+        initialUri: navigator.homeUri,
+        capabilityProfile: capabilityProfile,
       ),
     );
     if (!mounted) {
