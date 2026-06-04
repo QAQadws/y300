@@ -40,6 +40,14 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   static const String _threadReverseOrderAction = 'thread-reverse-order';
   static const String _threadNormalOrderAction = 'thread-normal-order';
   static const String _threadGoHomeAction = 'thread-go-home';
+  static const List<ForumWebViewPageKind> _managedPageKinds =
+      <ForumWebViewPageKind>[
+        ForumWebViewPageKind.home,
+        ForumWebViewPageKind.forumDisplay,
+        ForumWebViewPageKind.threadDetail,
+        ForumWebViewPageKind.search,
+        ForumWebViewPageKind.other,
+      ];
 
   bool _didScheduleInitialization = false;
   int _navigationGeneration = 0;
@@ -148,9 +156,16 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     }
 
     final visualPolicy = visualPolicyResolver.resolve(ForumWebViewPageKind.home);
+    // Initial user scripts are registered once per WebView runtime, but they
+    // run on every later managed-page navigation. Merge page-specific cleanup
+    // selectors up front so thread detail / forum list chrome can still be
+    // hidden at document-start after leaving the home page.
+    final initialVisualPolicy = _mergeVisualPolicies(
+      _managedPageKinds.map(visualPolicyResolver.resolve),
+    );
     final initialUserScripts = earlyScriptBuilder.build(
       capabilityProfile: capabilityProfile,
-      visualPolicy: visualPolicy,
+      visualPolicy: initialVisualPolicy,
     );
     final networkPolicy = networkPolicyResolver.resolve(navigator.homeUri);
     final bootstrapConfig = ForumWebViewBootstrapConfig(
@@ -894,6 +909,41 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       return bootstrapConfig.networkPolicy;
     }
     return ref.read(forumWebViewNetworkPolicyResolverProvider).resolve(targetUri);
+  }
+
+  ForumWebViewVisualPolicy _mergeVisualPolicies(
+    Iterable<ForumWebViewVisualPolicy> policies,
+  ) {
+    final collectedPolicies = policies.toList(growable: false);
+    return ForumWebViewVisualPolicy(
+      earlyHiddenSelectors: Set<String>.unmodifiable(
+        collectedPolicies.expand((policy) => policy.earlyHiddenSelectors),
+      ),
+      lateRemovedSelectors: Set<String>.unmodifiable(
+        collectedPolicies.expand((policy) => policy.lateRemovedSelectors),
+      ),
+      extraCss: _mergeCssBlocks(
+        collectedPolicies.map((policy) => policy.extraCss),
+      ),
+      useLoadingMaskUntilStable: collectedPolicies.any(
+        (policy) => policy.useLoadingMaskUntilStable,
+      ),
+      disableHorizontalOverflow: collectedPolicies.any(
+        (policy) => policy.disableHorizontalOverflow,
+      ),
+    );
+  }
+
+  String _mergeCssBlocks(Iterable<String> blocks) {
+    final mergedBlocks = <String>{};
+    for (final block in blocks) {
+      final trimmedBlock = block.trim();
+      if (trimmedBlock.isEmpty) {
+        continue;
+      }
+      mergedBlocks.add(trimmedBlock);
+    }
+    return mergedBlocks.join('\n');
   }
 }
 

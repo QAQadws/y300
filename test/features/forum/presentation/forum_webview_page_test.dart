@@ -104,9 +104,13 @@ void main() {
         '.header.cl',
         '.footer.mt10.cl',
         '.foot.flex-box',
+        '.foot_height',
+        '.foot-pwa',
       },
     );
     expect(bootstrapConfig.initialUserScripts, hasLength(1));
+    expect(bootstrapConfig.initialUserScripts.single.source, contains('.foot_height'));
+    expect(bootstrapConfig.initialUserScripts.single.source, contains('.foot-pwa'));
     expect(bootstrapConfig.networkPolicy.customUserAgent, isNull);
     expect(bootstrapConfig.networkPolicy.preferAppLocale, isTrue);
     expect(driver.seededCookies.single.domain, 'bbs.yamibo.com');
@@ -156,6 +160,22 @@ void main() {
       bootstrapConfig.initialUserScripts.single.source,
       contains("window.location.host !== 'bbs.yamibo.com'"),
     );
+    expect(
+      bootstrapConfig.initialUserScripts.single.source,
+      contains('.foot_height'),
+    );
+    expect(
+      bootstrapConfig.initialUserScripts.single.source,
+      contains('.foot-pwa'),
+    );
+    expect(
+      bootstrapConfig.initialUserScripts.single.source,
+      contains('.foot.foot_reply.flex-box.cl'),
+    );
+    expect(
+      bootstrapConfig.initialUserScripts.single.source,
+      contains('.foot_height_view'),
+    );
   });
 
   testWidgets('ForumWebViewPage cleans chrome when page finishes loading', (
@@ -172,11 +192,31 @@ void main() {
     await tester.pump();
 
     expect(driver.scripts.length, 1);
+    expect(driver.scripts.single, contains('.foot_height'));
+    expect(driver.scripts.single, contains('.foot-pwa'));
 
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump();
 
     expect(driver.scripts.length, 2);
+  });
+
+  testWidgets('ForumWebViewPage uses thread-detail cleanup selectors after thread detail navigation', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver()..title = '主题标题';
+
+    await tester.pumpWidget(_buildTestApp(driver: driver));
+    await tester.pump();
+
+    await driver.dispatchPageFinished(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+    );
+    await tester.pump();
+
+    expect(driver.scripts.length, 1);
+    expect(driver.scripts.single, contains('.foot.foot_reply.flex-box.cl'));
+    expect(driver.scripts.single, contains('.foot_height_view'));
   });
 
   testWidgets('ForumWebViewPage keeps loading mask until the first managed page commits visible and stabilizes', (

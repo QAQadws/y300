@@ -5,18 +5,43 @@ import 'package:y300/features/forum/domain/services/forum_webview_early_script_b
 
 void main() {
   const builder = DefaultForumWebViewEarlyScriptBuilder();
-  const visualPolicy = ForumWebViewVisualPolicy(
+  const homeVisualPolicy = ForumWebViewVisualPolicy(
     earlyHiddenSelectors: <String>{
       '#header-padding',
       '.header.cl',
       '.footer.mt10.cl',
       '.foot.flex-box',
+      '.foot_height',
+      '.foot-pwa',
     },
     lateRemovedSelectors: <String>{
       '#header-padding',
       '.header.cl',
       '.footer.mt10.cl',
       '.foot.flex-box',
+      '.foot_height',
+      '.foot-pwa',
+    },
+    extraCss: '',
+    useLoadingMaskUntilStable: true,
+    disableHorizontalOverflow: true,
+  );
+  const threadDetailVisualPolicy = ForumWebViewVisualPolicy(
+    earlyHiddenSelectors: <String>{
+      '#header-padding',
+      '.header.cl',
+      '.footer.mt10.cl',
+      '.foot.flex-box',
+      '.foot.foot_reply.flex-box.cl',
+      '.foot_height_view',
+    },
+    lateRemovedSelectors: <String>{
+      '#header-padding',
+      '.header.cl',
+      '.footer.mt10.cl',
+      '.foot.flex-box',
+      '.foot.foot_reply.flex-box.cl',
+      '.foot_height_view',
     },
     extraCss: '',
     useLoadingMaskUntilStable: true,
@@ -33,13 +58,13 @@ void main() {
         supportsPlatformScrollTuning: false,
         supportsCookieHooks: false,
       ),
-      visualPolicy: visualPolicy,
+      visualPolicy: homeVisualPolicy,
     );
 
     expect(scripts, isEmpty);
   });
 
-  test('best-effort and reliable modes produce a document-start style script', () {
+  test('best-effort and reliable modes produce a home/forum list document-start style script', () {
     for (final mode in <ForumWebViewDocumentStartMode>[
       ForumWebViewDocumentStartMode.bestEffort,
       ForumWebViewDocumentStartMode.reliable,
@@ -53,7 +78,7 @@ void main() {
           supportsPlatformScrollTuning: true,
           supportsCookieHooks: true,
         ),
-        visualPolicy: visualPolicy,
+        visualPolicy: homeVisualPolicy,
       );
 
       expect(scripts, hasLength(1));
@@ -64,6 +89,39 @@ void main() {
       expect(scripts.single.source, contains("window.location.host !== 'bbs.yamibo.com'"));
       expect(scripts.single.source, contains('#header-padding'));
       expect(scripts.single.source, contains('.header.cl'));
+      expect(scripts.single.source, contains('.foot_height'));
+      expect(scripts.single.source, contains('.foot-pwa'));
+      expect(
+        scripts.single.source,
+        contains('overscroll-behavior-x: none !important;'),
+      );
+    }
+  });
+
+  test('best-effort and reliable modes produce a thread-detail document-start style script', () {
+    for (final mode in <ForumWebViewDocumentStartMode>[
+      ForumWebViewDocumentStartMode.bestEffort,
+      ForumWebViewDocumentStartMode.reliable,
+    ]) {
+      final scripts = builder.build(
+        capabilityProfile: ForumWebViewCapabilityProfile(
+          engine: ForumWebViewEngine.advanced,
+          documentStartMode: mode,
+          supportsContentBlockers: false,
+          supportsTransparentBackground: true,
+          supportsPlatformScrollTuning: true,
+          supportsCookieHooks: true,
+        ),
+        visualPolicy: threadDetailVisualPolicy,
+      );
+
+      expect(scripts, hasLength(1));
+      expect(
+        scripts.single.injectionTime,
+        ForumWebViewInitialUserScriptInjectionTime.documentStart,
+      );
+      expect(scripts.single.source, contains('.foot.foot_reply.flex-box.cl'));
+      expect(scripts.single.source, contains('.foot_height_view'));
       expect(
         scripts.single.source,
         contains('overscroll-behavior-x: none !important;'),

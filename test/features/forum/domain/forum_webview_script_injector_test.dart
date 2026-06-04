@@ -4,32 +4,67 @@ import 'package:y300/features/forum/domain/services/forum_webview_script_injecto
 
 void main() {
   const injector = DefaultForumWebViewScriptInjector();
-  const visualPolicy = ForumWebViewVisualPolicy(
+  const homeVisualPolicy = ForumWebViewVisualPolicy(
     earlyHiddenSelectors: <String>{
       '#header-padding',
       '.header.cl',
       '.footer.mt10.cl',
       '.foot.flex-box',
+      '.foot_height',
+      '.foot-pwa',
     },
     lateRemovedSelectors: <String>{
       '#header-padding',
       '.header.cl',
       '.footer.mt10.cl',
       '.foot.flex-box',
+      '.foot_height',
+      '.foot-pwa',
+    },
+    extraCss: '',
+    useLoadingMaskUntilStable: true,
+    disableHorizontalOverflow: true,
+  );
+  const threadDetailVisualPolicy = ForumWebViewVisualPolicy(
+    earlyHiddenSelectors: <String>{
+      '#header-padding',
+      '.header.cl',
+      '.footer.mt10.cl',
+      '.foot.flex-box',
+      '.foot.foot_reply.flex-box.cl',
+      '.foot_height_view',
+    },
+    lateRemovedSelectors: <String>{
+      '#header-padding',
+      '.header.cl',
+      '.footer.mt10.cl',
+      '.foot.flex-box',
+      '.foot.foot_reply.flex-box.cl',
+      '.foot_height_view',
     },
     extraCss: '',
     useLoadingMaskUntilStable: true,
     disableHorizontalOverflow: true,
   );
 
-  test('cleanupScriptForPolicy contains target selectors and late-repair css', () {
-    final script = injector.cleanupScriptForPolicy(visualPolicy);
+  test('cleanupScriptForPolicy contains home/forum list selectors and late-repair css', () {
+    final script = injector.cleanupScriptForPolicy(homeVisualPolicy);
 
     expect(script, contains('#header-padding'));
     expect(script, contains('.header.cl'));
     expect(script, contains('.footer.mt10.cl'));
     expect(script, contains('.foot.flex-box'));
+    expect(script, contains('.foot_height'));
+    expect(script, contains('.foot-pwa'));
     expect(script, contains('overscroll-behavior-x: none !important;'));
+    expect(script, contains('querySelectorAll'));
+  });
+
+  test('cleanupScriptForPolicy contains thread-detail reply footer selectors', () {
+    final script = injector.cleanupScriptForPolicy(threadDetailVisualPolicy);
+
+    expect(script, contains('.foot.foot_reply.flex-box.cl'));
+    expect(script, contains('.foot_height_view'));
     expect(script, contains('querySelectorAll'));
   });
 
@@ -38,12 +73,12 @@ void main() {
 
     await injector.cleanChrome(
       target,
-      visualPolicy: visualPolicy,
+      visualPolicy: threadDetailVisualPolicy,
     );
 
     expect(
       target.scripts,
-      <String>[injector.cleanupScriptForPolicy(visualPolicy)],
+      <String>[injector.cleanupScriptForPolicy(threadDetailVisualPolicy)],
     );
   });
 }
