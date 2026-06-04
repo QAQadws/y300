@@ -25,7 +25,7 @@ void main() {
     expect(settings.verticalScrollBarEnabled, isFalse);
     expect(settings.horizontalScrollBarEnabled, isFalse);
     expect(settings.disableVerticalScroll, isFalse);
-    expect(settings.disableHorizontalScroll, isTrue);
+    expect(settings.disableHorizontalScroll, isFalse);
     expect(settings.textZoom, 100);
     expect(settings.useWideViewPort, isTrue);
     expect(settings.loadWithOverviewMode, isTrue);
@@ -47,7 +47,7 @@ void main() {
 
       expect(settings.verticalScrollBarEnabled, isFalse);
       expect(settings.horizontalScrollBarEnabled, isFalse);
-      expect(settings.disableHorizontalScroll, isTrue);
+      expect(settings.disableHorizontalScroll, isFalse);
       expect(settings.alwaysBounceVertical, isTrue);
       expect(settings.scrollsToTop, isTrue);
       expect(

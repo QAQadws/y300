@@ -44,7 +44,10 @@ class DefaultForumWebViewPlatformConfigurator
       verticalScrollBarEnabled: false,
       horizontalScrollBarEnabled: false,
       disableVerticalScroll: false,
-      disableHorizontalScroll: true,
+      // Keep page-level horizontal overflow constrained in CSS, but do not
+      // block the platform view from dispatching horizontal drags to nested
+      // scrollable elements such as forum category rails.
+      disableHorizontalScroll: false,
     );
   }
 
