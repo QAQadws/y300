@@ -474,12 +474,12 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   @override
   Future<ForumWebViewCapabilityProfile> probeCapabilities() async {
     return const ForumWebViewCapabilityProfile(
-      engine: ForumWebViewEngine.legacy,
-      documentStartMode: ForumWebViewDocumentStartMode.unavailable,
+      engine: ForumWebViewEngine.advanced,
+      documentStartMode: ForumWebViewDocumentStartMode.reliable,
       supportsContentBlockers: false,
-      supportsTransparentBackground: false,
-      supportsPlatformScrollTuning: false,
-      supportsCookieHooks: false,
+      supportsTransparentBackground: true,
+      supportsPlatformScrollTuning: true,
+      supportsCookieHooks: true,
     );
   }
 

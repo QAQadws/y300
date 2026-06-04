@@ -5,10 +5,11 @@ import 'package:y300/features/forum/presentation/webview/runtime/inapp_forum_web
 import 'package:y300/features/forum/presentation/webview/runtime/legacy_forum_webview_driver.dart';
 
 export 'package:y300/features/forum/domain/models/forum_webview_runtime_models.dart';
+export 'package:y300/features/forum/domain/models/forum_webview_visual_policy_models.dart';
 export 'package:y300/features/forum/presentation/webview/forum_webview_driver_contract.dart';
 
 final forumWebViewPreferredEngineProvider = Provider<ForumWebViewEngine>((ref) {
-  return ForumWebViewEngine.legacy;
+  return ForumWebViewEngine.advanced;
 });
 
 final forumWebViewLegacyDriverFactoryProvider = Provider<ForumWebViewDriverFactory>((

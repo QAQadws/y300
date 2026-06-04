@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:collection';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart' as inapp;
 import 'package:y300/features/forum/domain/models/forum_webview_runtime_models.dart';
@@ -13,19 +15,11 @@ class InAppForumWebViewDriver implements ForumWebViewDriver {
       Completer<inapp.InAppWebViewController>();
   inapp.InAppWebViewController? _controller;
   ForumWebViewCallbacks? _callbacks;
-
-  static const ForumWebViewCapabilityProfile _capabilityProfile =
-      ForumWebViewCapabilityProfile(
-        engine: ForumWebViewEngine.advanced,
-        documentStartMode: ForumWebViewDocumentStartMode.bestEffort,
-        supportsContentBlockers: false,
-        supportsTransparentBackground: true,
-        supportsPlatformScrollTuning: true,
-        supportsCookieHooks: true,
-      );
+  ForumWebViewBootstrapConfig? _bootstrapConfig;
 
   @override
   Widget buildWidget({Key? key}) {
+    final bootstrapConfig = _bootstrapConfig;
     return inapp.InAppWebView(
       key: key,
       initialSettings: inapp.InAppWebViewSettings(
@@ -33,6 +27,7 @@ class InAppForumWebViewDriver implements ForumWebViewDriver {
         useShouldOverrideUrlLoading: true,
         transparentBackground: true,
       ),
+      initialUserScripts: _buildInitialUserScripts(bootstrapConfig),
       onWebViewCreated: (controller) {
         _controller = controller;
         if (!_controllerCompleter.isCompleted) {
@@ -75,7 +70,14 @@ class InAppForumWebViewDriver implements ForumWebViewDriver {
 
   @override
   Future<ForumWebViewCapabilityProfile> probeCapabilities() async {
-    return _capabilityProfile;
+    return ForumWebViewCapabilityProfile(
+      engine: ForumWebViewEngine.advanced,
+      documentStartMode: _resolveDocumentStartMode(),
+      supportsContentBlockers: false,
+      supportsTransparentBackground: true,
+      supportsPlatformScrollTuning: true,
+      supportsCookieHooks: true,
+    );
   }
 
   @override
@@ -84,6 +86,7 @@ class InAppForumWebViewDriver implements ForumWebViewDriver {
     required ForumWebViewBootstrapConfig bootstrapConfig,
   }) async {
     _callbacks = callbacks;
+    _bootstrapConfig = bootstrapConfig;
   }
 
   @override
@@ -163,5 +166,45 @@ class InAppForumWebViewDriver implements ForumWebViewDriver {
       return controller;
     }
     return _controllerCompleter.future;
+  }
+
+  ForumWebViewDocumentStartMode _resolveDocumentStartMode() {
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.iOS:
+      case TargetPlatform.macOS:
+        return ForumWebViewDocumentStartMode.reliable;
+      case TargetPlatform.android:
+      case TargetPlatform.fuchsia:
+      case TargetPlatform.linux:
+      case TargetPlatform.windows:
+        return ForumWebViewDocumentStartMode.bestEffort;
+    }
+  }
+
+  UnmodifiableListView<inapp.UserScript>? _buildInitialUserScripts(
+    ForumWebViewBootstrapConfig? bootstrapConfig,
+  ) {
+    final initialUserScripts = bootstrapConfig?.initialUserScripts;
+    if (initialUserScripts == null || initialUserScripts.isEmpty) {
+      return null;
+    }
+    return UnmodifiableListView<inapp.UserScript>(
+      initialUserScripts.map(_mapInitialUserScript),
+    );
+  }
+
+  inapp.UserScript _mapInitialUserScript(
+    ForumWebViewInitialUserScript script,
+  ) {
+    return inapp.UserScript(
+      source: script.source,
+      injectionTime: switch (script.injectionTime) {
+        ForumWebViewInitialUserScriptInjectionTime.documentStart =>
+          inapp.UserScriptInjectionTime.AT_DOCUMENT_START,
+        ForumWebViewInitialUserScriptInjectionTime.documentEnd =>
+          inapp.UserScriptInjectionTime.AT_DOCUMENT_END,
+      },
+      forMainFrameOnly: script.forMainFrameOnly,
+    );
   }
 }

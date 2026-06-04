@@ -1,3 +1,5 @@
+import 'package:y300/features/forum/domain/models/forum_webview_visual_policy_models.dart';
+
 enum ForumWebViewEngine {
   legacy,
   advanced,
@@ -27,12 +29,33 @@ class ForumWebViewCapabilityProfile {
   final bool supportsCookieHooks;
 }
 
+enum ForumWebViewInitialUserScriptInjectionTime {
+  documentStart,
+  documentEnd,
+}
+
+class ForumWebViewInitialUserScript {
+  const ForumWebViewInitialUserScript({
+    required this.source,
+    required this.injectionTime,
+    this.forMainFrameOnly = true,
+  });
+
+  final String source;
+  final ForumWebViewInitialUserScriptInjectionTime injectionTime;
+  final bool forMainFrameOnly;
+}
+
 class ForumWebViewBootstrapConfig {
   const ForumWebViewBootstrapConfig({
     required this.initialUri,
     required this.capabilityProfile,
+    required this.visualPolicy,
+    required this.initialUserScripts,
   });
 
   final Uri initialUri;
   final ForumWebViewCapabilityProfile capabilityProfile;
+  final ForumWebViewVisualPolicy visualPolicy;
+  final List<ForumWebViewInitialUserScript> initialUserScripts;
 }

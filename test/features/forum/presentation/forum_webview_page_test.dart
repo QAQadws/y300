@@ -18,6 +18,31 @@ import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/tags/domain/forum_tag_models.dart';
 
 void main() {
+  testWidgets('ForumWebViewPage waits for bootstrap config before building the real webview', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver()
+      ..capabilityProfile = const ForumWebViewCapabilityProfile(
+        engine: ForumWebViewEngine.legacy,
+        documentStartMode: ForumWebViewDocumentStartMode.unavailable,
+        supportsContentBlockers: false,
+        supportsTransparentBackground: false,
+        supportsPlatformScrollTuning: false,
+        supportsCookieHooks: false,
+      );
+
+    await tester.pumpWidget(_buildTestApp(driver: driver));
+
+    expect(find.byKey(const Key('forum-webview-bootstrap-placeholder')), findsOneWidget);
+    expect(find.byKey(const Key('forum-webview-surface')), findsNothing);
+    expect(driver.buildWidgetCallCount, 0);
+
+    await tester.pump();
+
+    expect(find.byKey(const Key('forum-webview-surface')), findsOneWidget);
+    expect(driver.buildWidgetCallCount, greaterThanOrEqualTo(1));
+  });
+
   testWidgets('ForumWebViewPage shows home app bar and seeds normalized cookies before load', (
     tester,
   ) async {
@@ -59,7 +84,19 @@ void main() {
       driver.bootstrapConfig?.initialUri.toString(),
       'https://bbs.yamibo.com/index.php?mobile=2',
     );
-    expect(driver.bootstrapConfig?.capabilityProfile.engine, ForumWebViewEngine.legacy);
+    expect(driver.bootstrapConfig?.capabilityProfile.engine, ForumWebViewEngine.advanced);
+    final bootstrapConfig = driver.bootstrapConfig;
+    expect(bootstrapConfig, isNotNull);
+    expect(
+      bootstrapConfig!.visualPolicy.earlyHiddenSelectors,
+      const <String>{
+        '#header-padding',
+        '.header.cl',
+        '.footer.mt10.cl',
+        '.foot.flex-box',
+      },
+    );
+    expect(bootstrapConfig.initialUserScripts, hasLength(1));
     expect(driver.seededCookies.single.domain, 'bbs.yamibo.com');
     expect(
       driver.seededCookies.single.cookies,
@@ -68,6 +105,36 @@ void main() {
     expect(
       driver.loadedUris.single.toString(),
       'https://bbs.yamibo.com/index.php?mobile=2',
+    );
+  });
+
+  testWidgets('ForumWebViewPage passes early user scripts into bootstrap config when document-start is available', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver()
+      ..capabilityProfile = const ForumWebViewCapabilityProfile(
+        engine: ForumWebViewEngine.advanced,
+        documentStartMode: ForumWebViewDocumentStartMode.bestEffort,
+        supportsContentBlockers: false,
+        supportsTransparentBackground: true,
+        supportsPlatformScrollTuning: true,
+        supportsCookieHooks: true,
+      );
+
+    await tester.pumpWidget(_buildTestApp(driver: driver));
+    await tester.pump();
+
+    final bootstrapConfig = driver.bootstrapConfig;
+    expect(bootstrapConfig, isNotNull);
+    expect(bootstrapConfig!.capabilityProfile.engine, ForumWebViewEngine.advanced);
+    expect(bootstrapConfig.initialUserScripts, hasLength(1));
+    expect(
+      bootstrapConfig.initialUserScripts.single.injectionTime,
+      ForumWebViewInitialUserScriptInjectionTime.documentStart,
+    );
+    expect(
+      bootstrapConfig.initialUserScripts.single.source,
+      contains("window.location.host !== 'bbs.yamibo.com'"),
     );
   });
 
@@ -90,6 +157,41 @@ void main() {
     await tester.pump();
 
     expect(driver.scripts.length, 2);
+  });
+
+  testWidgets('ForumWebViewPage shows loading mask for best-effort runtime and hides it after the first managed page stabilizes', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver()
+      ..capabilityProfile = const ForumWebViewCapabilityProfile(
+        engine: ForumWebViewEngine.advanced,
+        documentStartMode: ForumWebViewDocumentStartMode.bestEffort,
+        supportsContentBlockers: false,
+        supportsTransparentBackground: true,
+        supportsPlatformScrollTuning: true,
+        supportsCookieHooks: true,
+      );
+
+    await tester.pumpWidget(_buildTestApp(driver: driver));
+    await tester.pump();
+
+    expect(find.byKey(const Key('forum-webview-loading-mask')), findsOneWidget);
+
+    await driver.dispatchPageStarted(
+      'https://bbs.yamibo.com/index.php?mobile=2',
+    );
+    await driver.dispatchPageFinished(
+      'https://bbs.yamibo.com/index.php?mobile=2',
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('forum-webview-loading-mask')), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+
+    expect(driver.scripts.length, 2);
+    expect(find.byKey(const Key('forum-webview-loading-mask')), findsNothing);
   });
 
   testWidgets('ForumWebViewPage home search button loads managed forum search url', (
@@ -1035,12 +1137,23 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   bool canGoBackValue = false;
   int goBackCallCount = 0;
   int reloadCallCount = 0;
+  int buildWidgetCallCount = 0;
   int probeCapabilitiesCallCount = 0;
   ForumWebViewBootstrapConfig? bootstrapConfig;
+  ForumWebViewCapabilityProfile capabilityProfile =
+      const ForumWebViewCapabilityProfile(
+        engine: ForumWebViewEngine.advanced,
+        documentStartMode: ForumWebViewDocumentStartMode.reliable,
+        supportsContentBlockers: false,
+        supportsTransparentBackground: true,
+        supportsPlatformScrollTuning: true,
+        supportsCookieHooks: true,
+      );
   ForumWebViewCallbacks? _callbacks;
 
   @override
   Widget buildWidget({Key? key}) {
+    buildWidgetCallCount += 1;
     return Container(key: key);
   }
 
@@ -1074,14 +1187,7 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   Future<ForumWebViewCapabilityProfile> probeCapabilities() async {
     probeCapabilitiesCallCount += 1;
     events.add('probeCapabilities');
-    return const ForumWebViewCapabilityProfile(
-      engine: ForumWebViewEngine.legacy,
-      documentStartMode: ForumWebViewDocumentStartMode.unavailable,
-      supportsContentBlockers: false,
-      supportsTransparentBackground: false,
-      supportsPlatformScrollTuning: false,
-      supportsCookieHooks: false,
-    );
+    return capabilityProfile;
   }
 
   @override

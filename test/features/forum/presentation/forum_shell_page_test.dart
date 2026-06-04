@@ -16,32 +16,11 @@ import 'package:y300/features/forum/presentation/forum_shell_page.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 
 void main() {
-  test('forumWebViewDriverProvider uses legacy factory by default', () {
+  test('forumWebViewDriverProvider uses advanced factory by default', () {
     final legacyDriver = _FakeForumWebViewDriver();
     final advancedDriver = _FakeForumWebViewDriver();
     final container = ProviderContainer(
       overrides: [
-        forumWebViewLegacyDriverFactoryProvider.overrideWithValue(
-          () => legacyDriver,
-        ),
-        forumWebViewAdvancedDriverFactoryProvider.overrideWithValue(
-          () => advancedDriver,
-        ),
-      ],
-    );
-    addTearDown(container.dispose);
-
-    expect(container.read(forumWebViewDriverProvider), same(legacyDriver));
-  });
-
-  test('forumWebViewDriverProvider uses advanced factory when preferred engine is overridden', () {
-    final legacyDriver = _FakeForumWebViewDriver();
-    final advancedDriver = _FakeForumWebViewDriver();
-    final container = ProviderContainer(
-      overrides: [
-        forumWebViewPreferredEngineProvider.overrideWithValue(
-          ForumWebViewEngine.advanced,
-        ),
         forumWebViewLegacyDriverFactoryProvider.overrideWithValue(
           () => legacyDriver,
         ),
@@ -53,6 +32,27 @@ void main() {
     addTearDown(container.dispose);
 
     expect(container.read(forumWebViewDriverProvider), same(advancedDriver));
+  });
+
+  test('forumWebViewDriverProvider uses legacy factory when preferred engine is overridden', () {
+    final legacyDriver = _FakeForumWebViewDriver();
+    final advancedDriver = _FakeForumWebViewDriver();
+    final container = ProviderContainer(
+      overrides: [
+        forumWebViewPreferredEngineProvider.overrideWithValue(
+          ForumWebViewEngine.legacy,
+        ),
+        forumWebViewLegacyDriverFactoryProvider.overrideWithValue(
+          () => legacyDriver,
+        ),
+        forumWebViewAdvancedDriverFactoryProvider.overrideWithValue(
+          () => advancedDriver,
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    expect(container.read(forumWebViewDriverProvider), same(legacyDriver));
   });
 
   testWidgets('ForumShellPage shows webview home page by default', (
@@ -513,12 +513,12 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   Future<ForumWebViewCapabilityProfile> probeCapabilities() async {
     probeCapabilitiesCallCount += 1;
     return const ForumWebViewCapabilityProfile(
-      engine: ForumWebViewEngine.legacy,
-      documentStartMode: ForumWebViewDocumentStartMode.unavailable,
+      engine: ForumWebViewEngine.advanced,
+      documentStartMode: ForumWebViewDocumentStartMode.reliable,
       supportsContentBlockers: false,
-      supportsTransparentBackground: false,
-      supportsPlatformScrollTuning: false,
-      supportsCookieHooks: false,
+      supportsTransparentBackground: true,
+      supportsPlatformScrollTuning: true,
+      supportsCookieHooks: true,
     );
   }
 

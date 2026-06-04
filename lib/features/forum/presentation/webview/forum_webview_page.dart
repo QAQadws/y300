@@ -7,13 +7,16 @@ import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_cookie_bootstrapper.dart';
+import 'package:y300/features/forum/domain/services/forum_webview_early_script_builder.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_script_injector.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_thread_menu_bridge.dart';
+import 'package:y300/features/forum/domain/services/forum_webview_visual_policy_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_state.dart';
+import 'package:y300/features/forum/presentation/webview/runtime/forum_webview_loading_mask.dart';
 
 class ForumWebViewPage extends ConsumerStatefulWidget {
   const ForumWebViewPage({super.key});
@@ -37,6 +40,9 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   bool _didScheduleInitialization = false;
   int _navigationGeneration = 0;
   Timer? _delayedCleanupTimer;
+  ForumWebViewBootstrapConfig? _bootstrapConfig;
+  bool _showLoadingMask = false;
+  bool _isAwaitingInitialManagedPageStable = false;
 
   @override
   void dispose() {
@@ -90,17 +96,18 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       child: Scaffold(
         key: const Key('forum-webview-page'),
         appBar: _buildAppBar(context, state, driver),
-        body: Column(
+        body: Stack(
+          fit: StackFit.expand,
           children: [
-            if (state.isLoading && state.loadingProgress < 100)
-              LinearProgressIndicator(
-                value: state.loadingProgress.clamp(0, 99).toDouble() / 100,
-              ),
-            Expanded(
-              child: _buildWebViewSurface(
-                driver: driver,
-              ),
+            _buildWebViewSurface(
+              context: context,
+              driver: driver,
             ),
+            if (_showLoadingMask) const ForumWebViewLoadingMask(),
+            if (state.isLoading && state.loadingProgress < 100)
+              _ForumWebViewProgressOverlay(
+                progress: state.loadingProgress.clamp(0, 99).toDouble() / 100,
+              ),
           ],
         ),
       ),
@@ -110,10 +117,28 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   Future<void> _initialize(ForumWebViewDriver driver) async {
     final navigator = ref.read(forumWebViewNavigatorProvider);
     final bootstrapper = ref.read(forumWebViewCookieBootstrapperProvider);
+    final visualPolicyResolver = ref.read(
+      forumWebViewVisualPolicyResolverProvider,
+    );
+    final earlyScriptBuilder = ref.read(
+      forumWebViewEarlyScriptBuilderProvider,
+    );
     final capabilityProfile = await driver.probeCapabilities();
     if (!mounted) {
       return;
     }
+
+    final visualPolicy = visualPolicyResolver.resolve(ForumWebViewPageKind.home);
+    final initialUserScripts = earlyScriptBuilder.build(
+      capabilityProfile: capabilityProfile,
+      visualPolicy: visualPolicy,
+    );
+    final bootstrapConfig = ForumWebViewBootstrapConfig(
+      initialUri: navigator.homeUri,
+      capabilityProfile: capabilityProfile,
+      visualPolicy: visualPolicy,
+      initialUserScripts: initialUserScripts,
+    );
 
     await driver.initialize(
       callbacks: ForumWebViewCallbacks(
@@ -122,14 +147,21 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         onProgress: _handleProgress,
         onNavigationRequest: _handleNavigationRequest,
       ),
-      bootstrapConfig: ForumWebViewBootstrapConfig(
-        initialUri: navigator.homeUri,
-        capabilityProfile: capabilityProfile,
-      ),
+      bootstrapConfig: bootstrapConfig,
     );
     if (!mounted) {
       return;
     }
+
+    final shouldUseMask =
+        capabilityProfile.documentStartMode !=
+            ForumWebViewDocumentStartMode.reliable &&
+        visualPolicy.useLoadingMaskUntilStable;
+    setState(() {
+      _bootstrapConfig = bootstrapConfig;
+      _showLoadingMask = shouldUseMask;
+      _isAwaitingInitialManagedPageStable = shouldUseMask;
+    });
 
     // API 登录/退出会通过 auth-scoped ProviderScope 重建整个 WebView 壳；
     // 每次重建都先清空平台 cookie jar，再从 CookieStore 单向 bootstrap 到 WebView。
@@ -175,9 +207,13 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     final navigator = ref.read(forumWebViewNavigatorProvider);
     final injector = ref.read(forumWebViewScriptInjectorProvider);
     final threadMenuBridge = ref.read(forumWebViewThreadMenuBridgeProvider);
+    final visualPolicyResolver = ref.read(
+      forumWebViewVisualPolicyResolverProvider,
+    );
     final driver = ref.read(forumWebViewDriverProvider);
     final uri = navigator.resolve(url);
     final pageKind = navigator.classify(uri);
+    final visualPolicy = visualPolicyResolver.resolve(pageKind);
     final generation = _navigationGeneration;
 
     final pageTitle = await _readPageTitle(driver);
@@ -208,7 +244,10 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       return;
     }
 
-    await injector.cleanChrome(driver);
+    await injector.cleanChrome(
+      driver,
+      visualPolicy: visualPolicy,
+    );
 
     _delayedCleanupTimer?.cancel();
     _delayedCleanupTimer = Timer(
@@ -225,7 +264,19 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         if (currentUri != uri) {
           return;
         }
-        await injector.cleanChrome(driver);
+        await injector.cleanChrome(
+          driver,
+          visualPolicy: visualPolicy,
+        );
+        if (!mounted || generation != _navigationGeneration) {
+          return;
+        }
+        if (_isAwaitingInitialManagedPageStable) {
+          setState(() {
+            _showLoadingMask = false;
+            _isAwaitingInitialManagedPageStable = false;
+          });
+        }
       },
     );
   }
@@ -488,8 +539,15 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   }
 
   Widget _buildWebViewSurface({
+    required BuildContext context,
     required ForumWebViewDriver driver,
   }) {
+    if (_bootstrapConfig == null) {
+      return ColoredBox(
+        key: const Key('forum-webview-bootstrap-placeholder'),
+        color: Theme.of(context).scaffoldBackgroundColor,
+      );
+    }
     return driver.buildWidget(
       key: const Key('forum-webview-surface'),
     );
@@ -818,6 +876,32 @@ class _FavoriteForumPickerErrorView extends StatelessWidget {
               child: const Text('重试'),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ForumWebViewProgressOverlay extends StatelessWidget {
+  const _ForumWebViewProgressOverlay({
+    required this.progress,
+  });
+
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      top: 0,
+      left: 12,
+      right: 12,
+      child: IgnorePointer(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(
+            minHeight: 2,
+            value: progress,
+          ),
         ),
       ),
     );
