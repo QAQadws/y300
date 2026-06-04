@@ -31,16 +31,8 @@ class DefaultForumWebViewCookieBootstrapper
       if (name.isEmpty || value.isEmpty || value.toLowerCase() == 'deleted') {
         continue;
       }
-      seedCookies[name] = _decodeOnce(value);
+      seedCookies[name] = value;
     }
     return seedCookies;
-  }
-
-  String _decodeOnce(String value) {
-    try {
-      return Uri.decodeComponent(value);
-    } catch (_) {
-      return value;
-    }
   }
 }

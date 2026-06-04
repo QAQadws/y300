@@ -51,7 +51,7 @@ void main() {
     expect(driver.buildWidgetCallCount, greaterThanOrEqualTo(1));
   });
 
-  testWidgets('ForumWebViewPage shows home app bar and seeds normalized cookies before load', (
+  testWidgets('ForumWebViewPage shows home app bar and seeds raw cookies before load', (
     tester,
   ) async {
     final driver = _FakeForumWebViewDriver();
@@ -112,7 +112,7 @@ void main() {
     expect(driver.seededCookies.single.domain, 'bbs.yamibo.com');
     expect(
       driver.seededCookies.single.cookies,
-      <String, String>{'auth': 'token+123', 'saltkey': 'abc|xyz'},
+      <String, String>{'auth': 'token%2B123', 'saltkey': 'abc%7Cxyz'},
     );
     final initialLoadRequest = driver.loadRequests.single;
     final initialHeaderKeys = initialLoadRequest.headers.keys

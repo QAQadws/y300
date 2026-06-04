@@ -3,7 +3,7 @@ import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_cookie_bootstrapper.dart';
 
 void main() {
-  test('buildSeedCookies decodes encoded cookie values exactly once', () async {
+  test('buildSeedCookies keeps raw encoded cookie values for webview seeding', () async {
     final bootstrapper = DefaultForumWebViewCookieBootstrapper(
       cookieStore: _FakeCookieStore(
         cookies: <String, String>{
@@ -21,14 +21,14 @@ void main() {
     expect(
       result,
       <String, String>{
-        'auth': 'token+value',
-        'lastcheckfeed': '597454|1717530000',
-        'lip': '127.0.0.1,1717530000',
+        'auth': 'token%2Bvalue',
+        'lastcheckfeed': '597454%7C1717530000',
+        'lip': '127.0.0.1%2C1717530000',
       },
     );
   });
 
-  test('buildSeedCookies skips deleted or empty cookies and falls back on decode failure', () async {
+  test('buildSeedCookies skips deleted or empty cookies without rewriting raw values', () async {
     final bootstrapper = DefaultForumWebViewCookieBootstrapper(
       cookieStore: _FakeCookieStore(
         cookies: <String, String>{
