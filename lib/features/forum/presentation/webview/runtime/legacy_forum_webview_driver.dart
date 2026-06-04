@@ -43,6 +43,10 @@ class LegacyForumWebViewDriver implements ForumWebViewDriver {
     required ForumWebViewBootstrapConfig bootstrapConfig,
   }) async {
     await _controller.setJavaScriptMode(webview.JavaScriptMode.unrestricted);
+    final customUserAgent = bootstrapConfig.networkPolicy.customUserAgent;
+    if (customUserAgent != null && customUserAgent.trim().isNotEmpty) {
+      await _controller.setUserAgent(customUserAgent);
+    }
     await _controller.setNavigationDelegate(
       webview.NavigationDelegate(
         onProgress: callbacks.onProgress,
@@ -64,8 +68,8 @@ class LegacyForumWebViewDriver implements ForumWebViewDriver {
   }
 
   @override
-  Future<void> load(Uri uri) {
-    return _controller.loadRequest(uri);
+  Future<void> load(Uri uri, {Map<String, String> headers = const {}}) {
+    return _controller.loadRequest(uri, headers: headers);
   }
 
   @override

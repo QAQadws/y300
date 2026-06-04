@@ -491,7 +491,7 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   }) async {}
 
   @override
-  Future<void> load(Uri uri) async {}
+  Future<void> load(Uri uri, {Map<String, String> headers = const {}}) async {}
 
   @override
   Future<void> reload() async {}

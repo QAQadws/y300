@@ -5,16 +5,21 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart' as inapp;
 import 'package:y300/features/forum/domain/models/forum_webview_runtime_models.dart';
+import 'package:y300/features/forum/domain/models/forum_webview_resource_diagnostic_models.dart';
+import 'package:y300/features/forum/domain/services/forum_webview_resource_classifier.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver_contract.dart';
 import 'package:y300/features/forum/presentation/webview/runtime/forum_webview_platform_configurator.dart';
 
 class InAppForumWebViewDriver implements ForumWebViewDriver {
   InAppForumWebViewDriver({
     required ForumWebViewPlatformConfigurator platformConfigurator,
+    required ForumWebViewResourceClassifier resourceClassifier,
   }) : _platformConfigurator = platformConfigurator,
+       _resourceClassifier = resourceClassifier,
        _cookieManager = inapp.CookieManager.instance();
 
   final ForumWebViewPlatformConfigurator _platformConfigurator;
+  final ForumWebViewResourceClassifier _resourceClassifier;
   final inapp.CookieManager _cookieManager;
   final Completer<inapp.InAppWebViewController> _controllerCompleter =
       Completer<inapp.InAppWebViewController>();
@@ -25,17 +30,16 @@ class InAppForumWebViewDriver implements ForumWebViewDriver {
   @override
   Widget buildWidget({Key? key}) {
     final bootstrapConfig = _bootstrapConfig;
+    final initialSettings = bootstrapConfig != null
+        ? _buildSettings(bootstrapConfig)
+        : inapp.InAppWebViewSettings(
+            javaScriptEnabled: true,
+            useShouldOverrideUrlLoading: true,
+            transparentBackground: true,
+          );
     return inapp.InAppWebView(
       key: key,
-      initialSettings: bootstrapConfig != null
-          ? _platformConfigurator.buildSettings(
-              bootstrapConfig: bootstrapConfig,
-            )
-          : inapp.InAppWebViewSettings(
-              javaScriptEnabled: true,
-              useShouldOverrideUrlLoading: true,
-              transparentBackground: true,
-            ),
+      initialSettings: initialSettings,
       initialUserScripts: _buildInitialUserScripts(bootstrapConfig),
       onWebViewCreated: (controller) {
         _controller = controller;
@@ -66,6 +70,31 @@ class InAppForumWebViewDriver implements ForumWebViewDriver {
           return;
         }
         onPageCommitVisible(url.toString());
+      },
+      onLoadResource: (controller, resource) {
+        final resourceUrl = resource.url;
+        if (resourceUrl == null) {
+          return;
+        }
+        _emitResourceDiagnostic(
+          uri: _resolveUri(resourceUrl.toString()),
+          isMainFrame: false,
+        );
+      },
+      onReceivedError: (controller, request, error) {
+        _emitResourceDiagnostic(
+          uri: _resolveUri(request.url.toString()),
+          isMainFrame: request.isForMainFrame ?? false,
+          errorDescription: error.description,
+        );
+      },
+      onReceivedHttpError: (controller, request, response) {
+        _emitResourceDiagnostic(
+          uri: _resolveUri(request.url.toString()),
+          isMainFrame: request.isForMainFrame ?? false,
+          statusCode: response.statusCode,
+          errorDescription: response.reasonPhrase,
+        );
       },
       shouldOverrideUrlLoading: (controller, navigationAction) async {
         final callbacks = _callbacks;
@@ -107,10 +136,13 @@ class InAppForumWebViewDriver implements ForumWebViewDriver {
   }
 
   @override
-  Future<void> load(Uri uri) async {
+  Future<void> load(Uri uri, {Map<String, String> headers = const {}}) async {
     final controller = await _requireController();
     await controller.loadUrl(
-      urlRequest: inapp.URLRequest(url: inapp.WebUri(uri.toString())),
+      urlRequest: inapp.URLRequest(
+        url: inapp.WebUri(uri.toString()),
+        headers: headers.isEmpty ? null : headers,
+      ),
     );
   }
 
@@ -185,6 +217,22 @@ class InAppForumWebViewDriver implements ForumWebViewDriver {
     return _controllerCompleter.future;
   }
 
+  inapp.InAppWebViewSettings _buildSettings(
+    ForumWebViewBootstrapConfig bootstrapConfig,
+  ) {
+    final settings = _platformConfigurator.buildSettings(
+      bootstrapConfig: bootstrapConfig,
+    );
+    final customUserAgent = bootstrapConfig.networkPolicy.customUserAgent;
+    if (customUserAgent != null && customUserAgent.trim().isNotEmpty) {
+      settings.userAgent = customUserAgent;
+    }
+    if (_callbacks?.onResourceDiagnostic != null) {
+      settings.useOnLoadResource = true;
+    }
+    return settings;
+  }
+
   ForumWebViewDocumentStartMode _resolveDocumentStartMode() {
     switch (defaultTargetPlatform) {
       case TargetPlatform.iOS:
@@ -223,5 +271,30 @@ class InAppForumWebViewDriver implements ForumWebViewDriver {
       },
       forMainFrameOnly: script.forMainFrameOnly,
     );
+  }
+
+  void _emitResourceDiagnostic({
+    required Uri uri,
+    required bool isMainFrame,
+    int? statusCode,
+    String? errorDescription,
+  }) {
+    final onResourceDiagnostic = _callbacks?.onResourceDiagnostic;
+    if (onResourceDiagnostic == null) {
+      return;
+    }
+    onResourceDiagnostic(
+      ForumWebViewResourceDiagnosticEvent(
+        uri: uri,
+        kind: _resourceClassifier.classify(uri),
+        statusCode: statusCode,
+        errorDescription: errorDescription,
+        isMainFrame: isMainFrame,
+      ),
+    );
+  }
+
+  Uri _resolveUri(String rawUrl) {
+    return Uri.tryParse(rawUrl) ?? Uri();
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart' as inapp;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/forum/domain/models/forum_webview_network_policy_models.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_runtime_models.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_visual_policy_models.dart';
 import 'package:y300/features/forum/presentation/webview/runtime/forum_webview_platform_configurator.dart';
@@ -79,5 +80,10 @@ ForumWebViewBootstrapConfig _advancedBootstrapConfig() {
       disableHorizontalOverflow: true,
     ),
     initialUserScripts: const <ForumWebViewInitialUserScript>[],
+    networkPolicy: const ForumWebViewNetworkPolicy(
+      customUserAgent: null,
+      extraHeaders: <String, String>{},
+      preferAppLocale: true,
+    ),
   );
 }

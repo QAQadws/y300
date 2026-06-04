@@ -9,13 +9,16 @@ import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_cookie_bootstrapper.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_early_script_builder.dart';
+import 'package:y300/features/forum/domain/services/forum_webview_navigation_header_builder.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
+import 'package:y300/features/forum/domain/services/forum_webview_network_policy_resolver.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_script_injector.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_thread_menu_bridge.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_visual_policy_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_resource_diagnostic_recorder.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_state.dart';
 import 'package:y300/features/forum/presentation/webview/runtime/forum_webview_loading_mask.dart';
 
@@ -136,6 +139,9 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     final earlyScriptBuilder = ref.read(
       forumWebViewEarlyScriptBuilderProvider,
     );
+    final networkPolicyResolver = ref.read(
+      forumWebViewNetworkPolicyResolverProvider,
+    );
     final capabilityProfile = await driver.probeCapabilities();
     if (!mounted) {
       return;
@@ -146,11 +152,13 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       capabilityProfile: capabilityProfile,
       visualPolicy: visualPolicy,
     );
+    final networkPolicy = networkPolicyResolver.resolve(navigator.homeUri);
     final bootstrapConfig = ForumWebViewBootstrapConfig(
       initialUri: navigator.homeUri,
       capabilityProfile: capabilityProfile,
       visualPolicy: visualPolicy,
       initialUserScripts: initialUserScripts,
+      networkPolicy: networkPolicy,
     );
 
     await driver.initialize(
@@ -160,6 +168,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         onProgress: _handleProgress,
         onNavigationRequest: _handleNavigationRequest,
         onPageCommitVisible: _handlePageCommitVisible,
+        onResourceDiagnostic: _handleResourceDiagnostic,
       ),
       bootstrapConfig: bootstrapConfig,
     );
@@ -203,7 +212,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       return;
     }
 
-    await driver.load(navigator.homeUri);
+    await _loadManagedUri(driver, navigator.homeUri);
   }
 
   void _handlePageStarted(String url) {
@@ -317,6 +326,10 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       return;
     }
     ref.read(forumWebViewControllerProvider.notifier).onProgress(progress);
+  }
+
+  void _handleResourceDiagnostic(ForumWebViewResourceDiagnosticEvent event) {
+    ref.read(forumWebViewResourceDiagnosticRecorderProvider).record(event);
   }
 
   FutureOr<ForumWebViewNavigationDecision> _handleNavigationRequest(
@@ -551,7 +564,11 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
                 state.fid != null)
             ? navigator.curForumSearchUri(fid: state.fid!)
             : navigator.forumSearchUri();
-    await driver.load(targetUri);
+    await _loadManagedUri(
+      driver,
+      targetUri,
+      referrerUri: state.currentUri,
+    );
   }
 
   Future<void> _handleBackNavigation(
@@ -566,7 +583,11 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       return;
     }
     final navigator = ref.read(forumWebViewNavigatorProvider);
-    await driver.load(navigator.homeUri);
+    await _loadManagedUri(
+      driver,
+      navigator.homeUri,
+      referrerUri: state.currentUri,
+    );
   }
 
   bool _shouldAllowRoutePop(ForumWebViewState state) {
@@ -683,7 +704,11 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       case _searchGoHomeAction:
       case _threadGoHomeAction:
         final navigator = ref.read(forumWebViewNavigatorProvider);
-        await driver.load(navigator.homeUri);
+        await _loadManagedUri(
+          driver,
+          navigator.homeUri,
+          referrerUri: state.currentUri,
+        );
         return;
       case _forumFavoriteAction:
         await _runForumFavoriteAction(
@@ -708,25 +733,41 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       case _threadAuthorOnlyAction:
         final authorOnlyUri = state.threadDetailMenu?.authorOnlyUri;
         if (authorOnlyUri != null) {
-          await driver.load(authorOnlyUri);
+          await _loadManagedUri(
+            driver,
+            authorOnlyUri,
+            referrerUri: state.currentUri,
+          );
         }
         return;
       case _threadNormalThreadAction:
         final normalThreadUri = state.threadDetailMenu?.normalThreadUri;
         if (normalThreadUri != null) {
-          await driver.load(normalThreadUri);
+          await _loadManagedUri(
+            driver,
+            normalThreadUri,
+            referrerUri: state.currentUri,
+          );
         }
         return;
       case _threadReverseOrderAction:
         final reverseOrderUri = state.threadDetailMenu?.reverseOrderUri;
         if (reverseOrderUri != null) {
-          await driver.load(reverseOrderUri);
+          await _loadManagedUri(
+            driver,
+            reverseOrderUri,
+            referrerUri: state.currentUri,
+          );
         }
         return;
       case _threadNormalOrderAction:
         final normalOrderUri = state.threadDetailMenu?.normalOrderUri;
         if (normalOrderUri != null) {
-          await driver.load(normalOrderUri);
+          await _loadManagedUri(
+            driver,
+            normalOrderUri,
+            referrerUri: state.currentUri,
+          );
         }
         return;
     }
@@ -757,7 +798,18 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
                 sheetNavigator.pop();
               }
               _showSnackBar(messenger, data.message);
-              await driver.load(navigator.homeUri);
+              final referrerUri =
+                  ref
+                      .read(forumWebViewControllerProvider)
+                      .asData
+                      ?.value
+                      .currentUri ??
+                  navigator.homeUri;
+              await _loadManagedUri(
+                driver,
+                navigator.homeUri,
+                referrerUri: referrerUri,
+              );
               return;
             }
             final message =
@@ -782,7 +834,11 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     }
     if (result case ApiSuccess<ForumFavoriteMutationResult>(:final data)) {
       _showSnackBar(messenger, data.message);
-      await driver.load(reloadUri);
+      await _loadManagedUri(
+        driver,
+        reloadUri,
+        referrerUri: reloadUri,
+      );
       return;
     }
     final message = result.errorOrNull?.message ?? '操作失败，请稍后重试';
@@ -798,6 +854,46 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       ..showSnackBar(
         SnackBar(content: Text(message)),
       );
+  }
+
+  Future<void> _loadManagedUri(
+    ForumWebViewDriver driver,
+    Uri targetUri, {
+    Uri? referrerUri,
+  }) {
+    final navigator = ref.read(forumWebViewNavigatorProvider);
+    if (!navigator.isManagedSite(targetUri)) {
+      return driver.load(targetUri);
+    }
+    final headers = _buildManagedNavigationHeaders(
+      targetUri: targetUri,
+      referrerUri: referrerUri,
+    );
+    return driver.load(targetUri, headers: headers);
+  }
+
+  Map<String, String> _buildManagedNavigationHeaders({
+    required Uri targetUri,
+    Uri? referrerUri,
+  }) {
+    final headerBuilder = ref.read(
+      forumWebViewNavigationHeaderBuilderProvider,
+    );
+    final policy = _resolveNetworkPolicy(targetUri);
+    return headerBuilder.build(
+      targetUri: targetUri,
+      referrerUri: referrerUri,
+      policy: policy,
+    );
+  }
+
+  ForumWebViewNetworkPolicy _resolveNetworkPolicy(Uri targetUri) {
+    final bootstrapConfig = _bootstrapConfig;
+    if (bootstrapConfig != null &&
+        bootstrapConfig.initialUri == targetUri) {
+      return bootstrapConfig.networkPolicy;
+    }
+    return ref.read(forumWebViewNetworkPolicyResolverProvider).resolve(targetUri);
   }
 }
 

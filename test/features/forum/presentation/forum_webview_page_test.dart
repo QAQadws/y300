@@ -107,13 +107,23 @@ void main() {
       },
     );
     expect(bootstrapConfig.initialUserScripts, hasLength(1));
+    expect(bootstrapConfig.networkPolicy.customUserAgent, isNull);
+    expect(bootstrapConfig.networkPolicy.preferAppLocale, isTrue);
     expect(driver.seededCookies.single.domain, 'bbs.yamibo.com');
     expect(
       driver.seededCookies.single.cookies,
       <String, String>{'auth': 'token+123', 'saltkey': 'abc|xyz'},
     );
+    final initialLoadRequest = driver.loadRequests.single;
+    final initialHeaderKeys = initialLoadRequest.headers.keys
+        .map((key) => key.toLowerCase())
+        .toSet();
+    expect(initialLoadRequest.headers['Referer'], 'https://bbs.yamibo.com/');
+    expect(initialHeaderKeys, contains('accept-language'));
+    expect(initialHeaderKeys, isNot(contains('cookie')));
+    expect(initialHeaderKeys, isNot(contains('user-agent')));
     expect(
-      driver.loadedUris.single.toString(),
+      initialLoadRequest.uri.toString(),
       'https://bbs.yamibo.com/index.php?mobile=2',
     );
   });
@@ -273,6 +283,14 @@ void main() {
     expect(
       driver.loadedUris.last.toString(),
       'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
+    );
+    expect(
+      driver.loadRequests.last.headers['Referer'],
+      'https://bbs.yamibo.com/index.php?mobile=2',
+    );
+    expect(
+      driver.loadRequests.last.headers.keys.map((key) => key.toLowerCase()).toSet(),
+      isNot(contains('cookie')),
     );
   });
 
@@ -500,6 +518,10 @@ void main() {
       driver.loadedUris.last.toString(),
       'https://bbs.yamibo.com/index.php?mobile=2',
     );
+    expect(
+      driver.loadRequests.last.headers['Referer'],
+      'https://bbs.yamibo.com/index.php?mobile=2',
+    );
   });
 
   testWidgets('ForumWebViewPage shows forum display app bar and loads curForum search', (
@@ -536,6 +558,10 @@ void main() {
     expect(
       driver.loadedUris.last.toString(),
       'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
+    );
+    expect(
+      driver.loadRequests.last.headers['Referer'],
+      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
     );
   });
 
@@ -630,6 +656,7 @@ void main() {
     expect(favoriteRepository.favoriteCalls, <String>['55']);
     expect(find.text('收藏成功'), findsOneWidget);
     expect(driver.loadedUris.last.toString(), forumDisplayUrl);
+    expect(driver.loadRequests.last.headers['Referer'], forumDisplayUrl);
   });
 
   testWidgets('ForumWebViewPage forum display unfavorite action reloads current page', (
@@ -665,6 +692,7 @@ void main() {
     expect(favoriteRepository.unfavoriteCalls, <String>['fav-55']);
     expect(find.text('取消收藏成功'), findsOneWidget);
     expect(driver.loadedUris.last.toString(), forumDisplayUrl);
+    expect(driver.loadRequests.last.headers['Referer'], forumDisplayUrl);
   });
 
   testWidgets('ForumWebViewPage thread detail falls back to forum search when fid is unknown', (
@@ -871,6 +899,10 @@ void main() {
       driver.loadedUris.last.toString(),
       'https://bbs.yamibo.com/index.php?mobile=2',
     );
+    expect(
+      driver.loadRequests.last.headers['Referer'],
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+    );
   });
 
   testWidgets('ForumWebViewPage thread detail uses curForum search when fid is known', (
@@ -900,6 +932,10 @@ void main() {
     expect(
       driver.loadedUris.last.toString(),
       'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
+    );
+    expect(
+      driver.loadRequests.last.headers['Referer'],
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&fid=55&mobile=2',
     );
   });
 
@@ -979,6 +1015,10 @@ void main() {
     expect(
       driver.loadedUris.last.toString(),
       'https://bbs.yamibo.com/index.php?mobile=2',
+    );
+    expect(
+      driver.loadRequests.last.headers['Referer'],
+      'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
     );
   });
 
@@ -1196,6 +1236,7 @@ Widget _buildRoutedTestApp({
 class _FakeForumWebViewDriver implements ForumWebViewDriver {
   final List<String> events = <String>[];
   final List<Uri> loadedUris = <Uri>[];
+  final List<_LoadRequestRecord> loadRequests = <_LoadRequestRecord>[];
   final List<String> scripts = <String>[];
   final List<String> returningScripts = <String>[];
   final List<_SeededCookieRecord> seededCookies = <_SeededCookieRecord>[];
@@ -1277,9 +1318,15 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   }
 
   @override
-  Future<void> load(Uri uri) async {
+  Future<void> load(Uri uri, {Map<String, String> headers = const {}}) async {
     events.add('load');
     loadedUris.add(uri);
+    loadRequests.add(
+      _LoadRequestRecord(
+        uri: uri,
+        headers: Map<String, String>.from(headers),
+      ),
+    );
   }
 
   @override
@@ -1360,6 +1407,16 @@ class _SeededCookieRecord {
   final String domain;
   final Map<String, String> cookies;
   final String path;
+}
+
+class _LoadRequestRecord {
+  const _LoadRequestRecord({
+    required this.uri,
+    required this.headers,
+  });
+
+  final Uri uri;
+  final Map<String, String> headers;
 }
 
 class _FakeCookieStore extends CookieStore {

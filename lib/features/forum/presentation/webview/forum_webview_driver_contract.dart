@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:y300/features/forum/domain/models/forum_webview_resource_diagnostic_models.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_runtime_models.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_script_injector.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_thread_menu_bridge.dart';
@@ -19,12 +20,15 @@ class ForumWebViewCallbacks {
     required this.onProgress,
     required this.onNavigationRequest,
     this.onPageCommitVisible,
+    this.onResourceDiagnostic,
   });
 
   final void Function(String url) onPageStarted;
   final Future<void> Function(String url) onPageFinished;
   final void Function(int progress) onProgress;
   final void Function(String url)? onPageCommitVisible;
+  final void Function(ForumWebViewResourceDiagnosticEvent event)?
+      onResourceDiagnostic;
   final FutureOr<ForumWebViewNavigationDecision> Function(String url)
       onNavigationRequest;
 }
@@ -40,7 +44,7 @@ abstract class ForumWebViewDriver
 
   Widget buildWidget({Key? key});
 
-  Future<void> load(Uri uri);
+  Future<void> load(Uri uri, {Map<String, String> headers = const {}});
 
   Future<void> reload();
 
