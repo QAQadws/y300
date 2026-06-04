@@ -32,6 +32,7 @@ void main() {
     expect(state.favoriteForums, isEmpty);
     expect(state.currentFavoriteForum, isNull);
     expect(state.isFavoriteMutationLoading, isFalse);
+    expect(state.threadDetailMenu, isNull);
     expect(state.isLoading, isTrue);
     expect(state.loadingProgress, 0);
   });
@@ -196,8 +197,127 @@ void main() {
     expect(state.fid, '55');
     expect(state.tid, '123');
     expect(state.boardName, '综合区');
+    expect(state.threadDetailMenu?.isAuthorOnly, isFalse);
+    expect(state.threadDetailMenu?.isReverseOrder, isFalse);
     expect(state.isLoading, isFalse);
     expect(state.loadingProgress, 100);
+  });
+
+  test('thread detail start derives author and order flags from current url', () async {
+    final container = _createContainer();
+    addTearDown(container.dispose);
+
+    container.read(forumWebViewControllerProvider.notifier).onPageStarted(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&authorid=9&ordertype=1&mobile=2',
+    );
+
+    final state = await container.read(forumWebViewControllerProvider.future);
+    expect(state.pageKind, ForumWebViewPageKind.threadDetail);
+    expect(state.threadDetailMenu?.isAuthorOnly, isTrue);
+    expect(state.threadDetailMenu?.isReverseOrder, isTrue);
+    expect(
+      state.threadDetailMenu?.normalThreadUri?.toString(),
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&ordertype=1&mobile=2',
+    );
+    expect(
+      state.threadDetailMenu?.normalOrderUri.toString(),
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
+    );
+  });
+
+  test('thread detail completion merges dom snapshot with fallback urls', () async {
+    final container = _createContainer();
+    addTearDown(container.dispose);
+
+    const rawUrl =
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&fid=55&mobile=2';
+    final controller = container.read(forumWebViewControllerProvider.notifier);
+    controller.onPageStarted(rawUrl);
+    await controller.onPageFinished(
+      rawUrl: rawUrl,
+      pageTitle: '主题标题',
+      canGoBack: true,
+      threadMenuSnapshot: ForumThreadMenuSnapshot(
+        authorOnlyUri: Uri.parse(
+          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&fid=55&authorid=9&mobile=2',
+        ),
+        reverseOrderUri: Uri.parse(
+          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&fid=55&ordertype=1&mobile=2',
+        ),
+      ),
+    );
+
+    final state = await container.read(forumWebViewControllerProvider.future);
+    expect(state.threadDetailMenu?.isAuthorOnly, isFalse);
+    expect(state.threadDetailMenu?.authorOnlyUri?.toString(), contains('authorid=9'));
+    expect(
+      state.threadDetailMenu?.reverseOrderUri.toString(),
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&fid=55&ordertype=1&mobile=2',
+    );
+    expect(
+      state.threadDetailMenu?.normalOrderUri.toString(),
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&fid=55&mobile=2',
+    );
+  });
+
+  test('thread detail can fallback normalThreadUri when current url already filters author', () async {
+    final container = _createContainer();
+    addTearDown(container.dispose);
+
+    const rawUrl =
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&authorid=9&mobile=2';
+    final controller = container.read(forumWebViewControllerProvider.notifier);
+    controller.onPageStarted(rawUrl);
+    await controller.onPageFinished(
+      rawUrl: rawUrl,
+      pageTitle: '主题标题',
+      canGoBack: true,
+      threadMenuSnapshot: const ForumThreadMenuSnapshot(),
+    );
+
+    final state = await container.read(forumWebViewControllerProvider.future);
+    expect(state.threadDetailMenu?.isAuthorOnly, isTrue);
+    expect(
+      state.threadDetailMenu?.normalThreadUri?.toString(),
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+    );
+  });
+
+  test('thread detail hides author action when no dom link is available', () async {
+    final container = _createContainer();
+    addTearDown(container.dispose);
+
+    const rawUrl =
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2';
+    final controller = container.read(forumWebViewControllerProvider.notifier);
+    controller.onPageStarted(rawUrl);
+    await controller.onPageFinished(
+      rawUrl: rawUrl,
+      pageTitle: '主题标题',
+      canGoBack: true,
+      threadMenuSnapshot: const ForumThreadMenuSnapshot(),
+    );
+
+    final state = await container.read(forumWebViewControllerProvider.future);
+    expect(state.threadDetailMenu?.isAuthorOnly, isFalse);
+    expect(state.threadDetailMenu?.authorOnlyUri, isNull);
+  });
+
+  test('non thread page clears thread detail menu', () async {
+    final container = _createContainer();
+    addTearDown(container.dispose);
+
+    final controller = container.read(forumWebViewControllerProvider.notifier);
+    controller.onPageStarted(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
+    );
+    controller.onPageStarted(
+      'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
+    );
+
+    final state = await container.read(forumWebViewControllerProvider.future);
+    expect(state.pageKind, ForumWebViewPageKind.search);
+    expect(state.threadDetailMenu, isNull);
   });
 
   test('board name falls back to page title when tag lookup misses fid', () async {

@@ -9,6 +9,7 @@ import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_script_injector.dart';
+import 'package:y300/features/forum/domain/services/forum_webview_thread_menu_bridge.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_state.dart';
@@ -25,6 +26,11 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   static const String _forumFavoriteAction = 'forum-favorite';
   static const String _forumUnfavoriteAction = 'forum-unfavorite';
   static const String _searchGoHomeAction = 'search-go-home';
+  static const String _threadAuthorOnlyAction = 'thread-author-only';
+  static const String _threadNormalThreadAction = 'thread-normal-thread';
+  static const String _threadReverseOrderAction = 'thread-reverse-order';
+  static const String _threadNormalOrderAction = 'thread-normal-order';
+  static const String _threadGoHomeAction = 'thread-go-home';
 
   bool _didScheduleInitialization = false;
   int _navigationGeneration = 0;
@@ -55,6 +61,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           favoriteForums: const <FavoriteForum>[],
           currentFavoriteForum: null,
           isFavoriteMutationLoading: false,
+          threadDetailMenu: null,
           isLoading: true,
           loadingProgress: 0,
         );
@@ -137,24 +144,40 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     }
     final navigator = ref.read(forumWebViewNavigatorProvider);
     final injector = ref.read(forumWebViewScriptInjectorProvider);
+    final threadMenuBridge = ref.read(forumWebViewThreadMenuBridgeProvider);
     final driver = ref.read(forumWebViewDriverProvider);
+    final uri = navigator.resolve(url);
+    final pageKind = navigator.classify(uri);
+    final generation = _navigationGeneration;
 
     final pageTitle = await _readPageTitle(driver);
     final canGoBack = await _readCanGoBack(driver);
-    if (!mounted) {
+    if (!mounted || generation != _navigationGeneration) {
+      return;
+    }
+    final threadMenuSnapshot = pageKind == ForumWebViewPageKind.threadDetail
+        ? await _readThreadMenuSnapshot(
+            driver: driver,
+            navigator: navigator,
+            threadMenuBridge: threadMenuBridge,
+          )
+        : null;
+    if (!mounted || generation != _navigationGeneration) {
       return;
     }
     await ref.read(forumWebViewControllerProvider.notifier).onPageFinished(
           rawUrl: url,
           pageTitle: pageTitle,
           canGoBack: canGoBack,
+          threadMenuSnapshot: threadMenuSnapshot,
         );
-    final uri = navigator.resolve(url);
+    if (!mounted || generation != _navigationGeneration) {
+      return;
+    }
     if (!navigator.isManagedSite(uri)) {
       return;
     }
 
-    final generation = _navigationGeneration;
     await injector.cleanChrome(driver);
 
     _delayedCleanupTimer?.cancel();
@@ -282,13 +305,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           ),
         ];
       case ForumWebViewPageKind.threadDetail:
-        return const <PopupMenuEntry<String>>[
-          PopupMenuItem<String>(
-            enabled: false,
-            value: 'placeholder',
-            child: Text('功能开发中'),
-          ),
-        ];
+        return _buildThreadDetailMoreMenuItems(state);
       case ForumWebViewPageKind.search:
         return const <PopupMenuEntry<String>>[
           PopupMenuItem<String>(
@@ -306,6 +323,65 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           ),
         ];
     }
+  }
+
+  List<PopupMenuEntry<String>> _buildThreadDetailMoreMenuItems(
+    ForumWebViewState state,
+  ) {
+    final menu = state.threadDetailMenu ?? _buildFallbackThreadDetailMenu(state);
+
+    final items = <PopupMenuEntry<String>>[];
+    if (!menu.isAuthorOnly && menu.authorOnlyUri != null) {
+      items.add(
+        const PopupMenuItem<String>(
+          key: Key('forum-webview-thread-author-action'),
+          value: _threadAuthorOnlyAction,
+          child: Text('只看楼主'),
+        ),
+      );
+    } else if (menu.isAuthorOnly && menu.normalThreadUri != null) {
+      items.add(
+        const PopupMenuItem<String>(
+          key: Key('forum-webview-thread-author-action'),
+          value: _threadNormalThreadAction,
+          child: Text('看全部'),
+        ),
+      );
+    }
+
+    items.add(
+      PopupMenuItem<String>(
+        key: const Key('forum-webview-thread-order-action'),
+        value: menu.isReverseOrder
+            ? _threadNormalOrderAction
+            : _threadReverseOrderAction,
+        child: Text(menu.isReverseOrder ? '正序浏览' : '倒序浏览'),
+      ),
+    );
+    items.add(
+      const PopupMenuItem<String>(
+        key: Key('forum-webview-thread-home-action'),
+        value: _threadGoHomeAction,
+        child: Text('返回首页'),
+      ),
+    );
+    return items;
+  }
+
+  ForumThreadDetailMenuState _buildFallbackThreadDetailMenu(
+    ForumWebViewState state,
+  ) {
+    final navigator = ref.read(forumWebViewNavigatorProvider);
+    return ForumThreadDetailMenuState(
+      isAuthorOnly: navigator.extractAuthorId(state.currentUri) != null,
+      isReverseOrder: navigator.isReverseOrder(state.currentUri),
+      authorOnlyUri: null,
+      normalThreadUri: navigator.extractAuthorId(state.currentUri) != null
+          ? navigator.buildNormalThreadUri(state.currentUri)
+          : null,
+      reverseOrderUri: navigator.buildReverseOrderUri(state.currentUri),
+      normalOrderUri: navigator.buildNormalOrderUri(state.currentUri),
+    );
   }
 
   String _resolveTitle(ForumWebViewState state) {
@@ -381,6 +457,21 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     }
   }
 
+  Future<ForumThreadMenuSnapshot?> _readThreadMenuSnapshot({
+    required ForumWebViewDriver driver,
+    required ForumWebViewNavigator navigator,
+    required ForumWebViewThreadMenuBridge threadMenuBridge,
+  }) async {
+    try {
+      return await threadMenuBridge.read(
+        target: driver,
+        navigator: navigator,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _handleMoreMenuSelected(
     BuildContext context,
     ForumWebViewState state,
@@ -392,6 +483,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         await _openFavoriteForumPicker(context, driver);
         return;
       case _searchGoHomeAction:
+      case _threadGoHomeAction:
         final navigator = ref.read(forumWebViewNavigatorProvider);
         await driver.load(navigator.homeUri);
         return;
@@ -414,6 +506,30 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
               .read(forumWebViewControllerProvider.notifier)
               .unfavoriteCurrentForum,
         );
+        return;
+      case _threadAuthorOnlyAction:
+        final authorOnlyUri = state.threadDetailMenu?.authorOnlyUri;
+        if (authorOnlyUri != null) {
+          await driver.load(authorOnlyUri);
+        }
+        return;
+      case _threadNormalThreadAction:
+        final normalThreadUri = state.threadDetailMenu?.normalThreadUri;
+        if (normalThreadUri != null) {
+          await driver.load(normalThreadUri);
+        }
+        return;
+      case _threadReverseOrderAction:
+        final reverseOrderUri = state.threadDetailMenu?.reverseOrderUri;
+        if (reverseOrderUri != null) {
+          await driver.load(reverseOrderUri);
+        }
+        return;
+      case _threadNormalOrderAction:
+        final normalOrderUri = state.threadDetailMenu?.normalOrderUri;
+        if (normalOrderUri != null) {
+          await driver.load(normalOrderUri);
+        }
         return;
     }
   }

@@ -52,6 +52,7 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
       favoriteForums: const <FavoriteForum>[],
       currentFavoriteForum: null,
       isFavoriteMutationLoading: false,
+      threadDetailMenu: null,
       isLoading: true,
       loadingProgress: 0,
     );
@@ -91,6 +92,10 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
       fid: fid,
       favoriteForums: current.favoriteForums,
     );
+    final threadDetailMenu = _buildThreadDetailMenu(
+      pageKind: pageKind,
+      uri: uri,
+    );
     _setState(
       current.copyWith(
         currentUri: uri,
@@ -103,6 +108,8 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
         clearTid: tid == null,
         currentFavoriteForum: currentFavoriteForum,
         clearCurrentFavoriteForum: currentFavoriteForum == null,
+        threadDetailMenu: threadDetailMenu,
+        clearThreadDetailMenu: threadDetailMenu == null,
         clearBoardName: true,
         clearPageTitle: true,
         isLoading: true,
@@ -115,6 +122,7 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
     required String rawUrl,
     required String? pageTitle,
     required bool canGoBack,
+    ForumThreadMenuSnapshot? threadMenuSnapshot,
   }) async {
     await _runKeptAlive(() async {
       if (_disposed) {
@@ -145,13 +153,19 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
       if (_disposed) {
         return;
       }
+      final latest = _currentState;
       final currentFavoriteForum = _matchCurrentFavoriteForum(
         pageKind: pageKind,
         fid: fid,
-        favoriteForums: current.favoriteForums,
+        favoriteForums: latest.favoriteForums,
+      );
+      final threadDetailMenu = _buildThreadDetailMenu(
+        pageKind: pageKind,
+        uri: uri,
+        snapshot: threadMenuSnapshot,
       );
       _setState(
-        current.copyWith(
+        latest.copyWith(
           currentUri: uri,
           pageKind: pageKind,
           searchScope: searchScope,
@@ -168,6 +182,8 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
           canGoBack: canGoBack,
           currentFavoriteForum: currentFavoriteForum,
           clearCurrentFavoriteForum: currentFavoriteForum == null,
+          threadDetailMenu: threadDetailMenu,
+          clearThreadDetailMenu: threadDetailMenu == null,
           isLoading: false,
           loadingProgress: 100,
         ),
@@ -406,6 +422,31 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
       }
     }
     return null;
+  }
+
+  ForumThreadDetailMenuState? _buildThreadDetailMenu({
+    required ForumWebViewPageKind pageKind,
+    required Uri uri,
+    ForumThreadMenuSnapshot? snapshot,
+  }) {
+    if (pageKind != ForumWebViewPageKind.threadDetail) {
+      return null;
+    }
+
+    final isAuthorOnly = _navigator.extractAuthorId(uri) != null;
+    final isReverseOrder = _navigator.isReverseOrder(uri);
+    return ForumThreadDetailMenuState(
+      isAuthorOnly: isAuthorOnly,
+      isReverseOrder: isReverseOrder,
+      authorOnlyUri: snapshot?.authorOnlyUri,
+      normalThreadUri:
+          snapshot?.normalThreadUri ??
+          (isAuthorOnly ? _navigator.buildNormalThreadUri(uri) : null),
+      reverseOrderUri:
+          snapshot?.reverseOrderUri ?? _navigator.buildReverseOrderUri(uri),
+      normalOrderUri:
+          snapshot?.normalOrderUri ?? _navigator.buildNormalOrderUri(uri),
+    );
   }
 
   void _setFavoriteMutationLoading(bool isLoading) {

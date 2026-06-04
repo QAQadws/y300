@@ -25,6 +25,18 @@ abstract class ForumWebViewNavigator {
 
   String? extractTid(Uri uri);
 
+  String? extractAuthorId(Uri uri);
+
+  bool isReverseOrder(Uri uri);
+
+  Uri buildAuthorOnlyUri({required Uri currentUri, required String authorId});
+
+  Uri buildNormalThreadUri(Uri currentUri);
+
+  Uri buildReverseOrderUri(Uri currentUri);
+
+  Uri buildNormalOrderUri(Uri currentUri);
+
   bool isManagedSite(Uri uri);
 }
 
@@ -96,6 +108,22 @@ class DefaultForumWebViewNavigator implements ForumWebViewNavigator {
   }
 
   @override
+  String? extractAuthorId(Uri uri) {
+    if (classify(uri) != ForumWebViewPageKind.threadDetail) {
+      return null;
+    }
+    return _normalizeQueryValue(uri.queryParameters['authorid']);
+  }
+
+  @override
+  bool isReverseOrder(Uri uri) {
+    if (classify(uri) != ForumWebViewPageKind.threadDetail) {
+      return false;
+    }
+    return _normalizeQueryValue(uri.queryParameters['ordertype']) == '1';
+  }
+
+  @override
   ForumWebViewSearchScope? extractSearchScope(Uri uri) {
     if (classify(uri) != ForumWebViewPageKind.search) {
       return null;
@@ -148,6 +176,43 @@ class DefaultForumWebViewNavigator implements ForumWebViewNavigator {
       return parsed;
     }
     return _siteRoot.resolveUri(parsed);
+  }
+
+  @override
+  Uri buildAuthorOnlyUri({required Uri currentUri, required String authorId}) {
+    final params = _copyQueryParameters(currentUri);
+    params['authorid'] = authorId;
+    return _replaceQueryParameters(currentUri, params);
+  }
+
+  @override
+  Uri buildNormalThreadUri(Uri currentUri) {
+    final params = _copyQueryParameters(currentUri);
+    params.remove('authorid');
+    return _replaceQueryParameters(currentUri, params);
+  }
+
+  @override
+  Uri buildReverseOrderUri(Uri currentUri) {
+    final params = _copyQueryParameters(currentUri);
+    params['ordertype'] = '1';
+    return _replaceQueryParameters(currentUri, params);
+  }
+
+  @override
+  Uri buildNormalOrderUri(Uri currentUri) {
+    final params = _copyQueryParameters(currentUri);
+    params.remove('ordertype');
+    return _replaceQueryParameters(currentUri, params);
+  }
+
+  Map<String, String> _copyQueryParameters(Uri uri) {
+    return Map<String, String>.from(resolve(uri.toString()).queryParameters);
+  }
+
+  Uri _replaceQueryParameters(Uri currentUri, Map<String, String> params) {
+    final absoluteUri = resolve(currentUri.toString());
+    return absoluteUri.replace(queryParameters: params);
   }
 
   String? _normalizeQueryValue(String? value) {

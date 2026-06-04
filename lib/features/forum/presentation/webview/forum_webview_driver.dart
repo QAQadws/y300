@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_script_injector.dart';
+import 'package:y300/features/forum/domain/services/forum_webview_thread_menu_bridge.dart';
 import 'package:webview_flutter/webview_flutter.dart' as webview;
 
 final forumWebViewDriverProvider = Provider.autoDispose<ForumWebViewDriver>((
@@ -31,7 +32,8 @@ class ForumWebViewCallbacks {
       onNavigationRequest;
 }
 
-abstract class ForumWebViewDriver implements ForumWebViewScriptTarget {
+abstract class ForumWebViewDriver
+    implements ForumWebViewScriptTarget, ForumWebViewThreadMenuTarget {
   Future<void> initialize({required ForumWebViewCallbacks callbacks});
 
   Widget buildWidget({Key? key});
@@ -43,6 +45,9 @@ abstract class ForumWebViewDriver implements ForumWebViewScriptTarget {
   Future<bool> canGoBack();
 
   Future<void> goBack();
+
+  @override
+  Future<Object?> runJavaScriptReturningResult(String script);
 
   Future<void> seedCookies({
     required String domain,
@@ -113,6 +118,11 @@ class FlutterForumWebViewDriver implements ForumWebViewDriver {
   @override
   Future<void> runJavaScript(String script) {
     return _controller.runJavaScript(script);
+  }
+
+  @override
+  Future<Object?> runJavaScriptReturningResult(String script) {
+    return _controller.runJavaScriptReturningResult(script);
   }
 
   @override

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:y300/core/network/api_result.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -404,7 +406,107 @@ void main() {
     );
   });
 
-  testWidgets('ForumWebViewPage thread detail more menu keeps placeholder item', (
+  testWidgets('ForumWebViewPage thread detail more menu shows author order and home actions', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver()
+      ..title = '主题标题'
+      ..javaScriptResult = jsonEncode(
+        jsonEncode(<String, String?>{
+          'authorOnlyHref':
+              'forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
+          'normalThreadHref': null,
+          'reverseOrderHref':
+              'forum.php?mod=viewthread&tid=123&ordertype=1&mobile=2',
+          'normalOrderHref': null,
+        }),
+      );
+
+    await tester.pumpWidget(_buildTestApp(driver: driver));
+    await tester.pump();
+
+    await driver.dispatchPageStarted(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+    );
+    await driver.dispatchPageFinished(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('只看楼主'), findsOneWidget);
+    expect(find.text('倒序浏览'), findsOneWidget);
+    expect(find.text('返回首页'), findsOneWidget);
+    expect(driver.returningScripts.single, contains('#nav-more-menu .nav-more-item'));
+  });
+
+  testWidgets('ForumWebViewPage thread detail author filter action loads author-only url', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver()
+      ..title = '主题标题'
+      ..javaScriptResult = jsonEncode(
+        jsonEncode(<String, String?>{
+          'authorOnlyHref':
+              'forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
+        }),
+      );
+
+    await tester.pumpWidget(_buildTestApp(driver: driver));
+    await tester.pump();
+
+    await driver.dispatchPageStarted(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+    );
+    await driver.dispatchPageFinished(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('只看楼主'));
+    await tester.pumpAndSettle();
+
+    expect(
+      driver.loadedUris.last.toString(),
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
+    );
+  });
+
+  testWidgets('ForumWebViewPage thread detail already author-only shows normal thread action', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver()..title = '主题标题';
+
+    await tester.pumpWidget(_buildTestApp(driver: driver));
+    await tester.pump();
+
+    await driver.dispatchPageStarted(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
+    );
+    await driver.dispatchPageFinished(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('看全部'), findsOneWidget);
+
+    await tester.tap(find.text('看全部'));
+    await tester.pumpAndSettle();
+
+    expect(
+      driver.loadedUris.last.toString(),
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+    );
+  });
+
+  testWidgets('ForumWebViewPage thread detail order action toggles between reverse and normal order', (
     tester,
   ) async {
     final driver = _FakeForumWebViewDriver()..title = '主题标题';
@@ -422,8 +524,61 @@ void main() {
 
     await tester.tap(find.byKey(const Key('forum-webview-more-button')));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('倒序浏览'));
+    await tester.pumpAndSettle();
 
-    expect(find.text('功能开发中'), findsOneWidget);
+    expect(
+      driver.loadedUris.last.toString(),
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2&ordertype=1',
+    );
+
+    await driver.dispatchPageStarted(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&ordertype=1&mobile=2',
+    );
+    await driver.dispatchPageFinished(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&ordertype=1&mobile=2',
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('正序浏览'), findsOneWidget);
+
+    await tester.tap(find.text('正序浏览'));
+    await tester.pumpAndSettle();
+
+    expect(
+      driver.loadedUris.last.toString(),
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+    );
+  });
+
+  testWidgets('ForumWebViewPage thread detail more menu can load home', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver()..title = '主题标题';
+
+    await tester.pumpWidget(_buildTestApp(driver: driver));
+    await tester.pump();
+
+    await driver.dispatchPageStarted(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+    );
+    await driver.dispatchPageFinished(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('返回首页'));
+    await tester.pumpAndSettle();
+
+    expect(
+      driver.loadedUris.last.toString(),
+      'https://bbs.yamibo.com/index.php?mobile=2',
+    );
   });
 
   testWidgets('ForumWebViewPage thread detail uses curForum search when fid is known', (
@@ -631,8 +786,10 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   final List<String> events = <String>[];
   final List<Uri> loadedUris = <Uri>[];
   final List<String> scripts = <String>[];
+  final List<String> returningScripts = <String>[];
   final List<_SeededCookieRecord> seededCookies = <_SeededCookieRecord>[];
   String? title;
+  Object? javaScriptResult;
   bool canGoBackValue = false;
   int goBackCallCount = 0;
   ForumWebViewCallbacks? _callbacks;
@@ -688,6 +845,12 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   @override
   Future<void> runJavaScript(String script) async {
     scripts.add(script);
+  }
+
+  @override
+  Future<Object?> runJavaScriptReturningResult(String script) async {
+    returningScripts.add(script);
+    return javaScriptResult;
   }
 
   @override

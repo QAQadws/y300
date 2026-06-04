@@ -31,11 +31,13 @@ void main() {
 
   test('thread detail can also extract fid when query carries it', () {
     final uri = Uri.parse(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&fid=55&mobile=2',
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&fid=55&authorid=9&ordertype=1&mobile=2',
     );
     expect(navigator.classify(uri), ForumWebViewPageKind.threadDetail);
     expect(navigator.extractTid(uri), '100');
     expect(navigator.extractFid(uri), '55');
+    expect(navigator.extractAuthorId(uri), '9');
+    expect(navigator.isReverseOrder(uri), isTrue);
   });
 
   test('classify recognizes forum search', () {
@@ -103,6 +105,50 @@ void main() {
     expect(
       navigator.curForumSearchUri(fid: '30').toString(),
       'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=30&mobile=2',
+    );
+  });
+
+  test('buildNormalThreadUri removes authorid while preserving other params', () {
+    final uri = Uri.parse(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&authorid=9&extra=page%3D1&page=2&mobile=2',
+    );
+
+    expect(
+      navigator.buildNormalThreadUri(uri).toString(),
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&extra=page%3D1&page=2&mobile=2',
+    );
+  });
+
+  test('buildReverseOrderUri adds ordertype while preserving current params', () {
+    final uri = Uri.parse(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&extra=page%3D1&page=2&mobile=2',
+    );
+
+    expect(
+      navigator.buildReverseOrderUri(uri).toString(),
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&extra=page%3D1&page=2&mobile=2&ordertype=1',
+    );
+  });
+
+  test('buildNormalOrderUri removes ordertype while preserving current params', () {
+    final uri = Uri.parse(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&extra=page%3D1&page=2&ordertype=1&mobile=2',
+    );
+
+    expect(
+      navigator.buildNormalOrderUri(uri).toString(),
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&extra=page%3D1&page=2&mobile=2',
+    );
+  });
+
+  test('buildAuthorOnlyUri writes authorid onto the current thread url', () {
+    final uri = Uri.parse(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&extra=page%3D1&page=2&mobile=2',
+    );
+
+    expect(
+      navigator.buildAuthorOnlyUri(currentUri: uri, authorId: '9').toString(),
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&extra=page%3D1&page=2&mobile=2&authorid=9',
     );
   });
 }

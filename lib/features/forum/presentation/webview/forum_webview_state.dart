@@ -14,6 +14,7 @@ class ForumWebViewState {
     required this.favoriteForums,
     required this.currentFavoriteForum,
     required this.isFavoriteMutationLoading,
+    required this.threadDetailMenu,
     required this.isLoading,
     required this.loadingProgress,
   });
@@ -29,6 +30,7 @@ class ForumWebViewState {
   final List<FavoriteForum> favoriteForums;
   final FavoriteForum? currentFavoriteForum;
   final bool isFavoriteMutationLoading;
+  final ForumThreadDetailMenuState? threadDetailMenu;
   final bool isLoading;
   final int loadingProgress;
 
@@ -50,6 +52,8 @@ class ForumWebViewState {
     FavoriteForum? currentFavoriteForum,
     bool clearCurrentFavoriteForum = false,
     bool? isFavoriteMutationLoading,
+    ForumThreadDetailMenuState? threadDetailMenu,
+    bool clearThreadDetailMenu = false,
     bool? isLoading,
     int? loadingProgress,
   }) {
@@ -70,6 +74,9 @@ class ForumWebViewState {
           : (currentFavoriteForum ?? this.currentFavoriteForum),
       isFavoriteMutationLoading:
           isFavoriteMutationLoading ?? this.isFavoriteMutationLoading,
+      threadDetailMenu: clearThreadDetailMenu
+          ? null
+          : (threadDetailMenu ?? this.threadDetailMenu),
       isLoading: isLoading ?? this.isLoading,
       loadingProgress: loadingProgress ?? this.loadingProgress,
     );

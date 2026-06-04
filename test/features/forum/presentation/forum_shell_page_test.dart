@@ -170,6 +170,11 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   Future<void> runJavaScript(String script) async {}
 
   @override
+  Future<Object?> runJavaScriptReturningResult(String script) async {
+    return null;
+  }
+
+  @override
   Future<void> seedCookies({
     required String domain,
     required Map<String, String> cookies,
