@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/auth/data/auth_repository.dart';
 import 'package:y300/features/comic/data/comic_search_refresh_queue_providers.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
@@ -69,10 +71,11 @@ void main() {
           mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
           mainShellNotificationInitializerProvider
               .overrideWithValue(() async {}),
+          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
-          forumWebViewDriverProvider.overrideWith((ref) => webViewDriver),
+          forumWebViewDriverFactoryProvider.overrideWithValue(() => webViewDriver),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
         child: const MaterialApp(home: StartupPage()),
@@ -113,6 +116,9 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   Future<void> load(Uri uri) async {}
 
   @override
+  Future<void> reload() async {}
+
+  @override
   Future<String?> getTitle() async {
     return null;
   }
@@ -139,6 +145,45 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
     required Map<String, String> cookies,
     String path = '/',
   }) async {}
+}
+
+class _FakeAuthRepository implements AuthRepository {
+  @override
+  Future<ApiResult<SessionInfo>> refreshSession() async {
+    return ApiSuccess<SessionInfo>(
+      SessionInfo(
+        uid: '0',
+        username: '',
+        formhash: '',
+        isLoggedIn: false,
+      ),
+    );
+  }
+
+  @override
+  Future<ApiResult<bool>> verifyAuthByForumIndex() async {
+    return const ApiSuccess<bool>(false);
+  }
+
+  @override
+  Future<ApiResult<SessionInfo>> login({
+    required String username,
+    required String password,
+    String questionId = '0',
+    String answer = '',
+  }) async {
+    return ApiSuccess<SessionInfo>(
+      SessionInfo(
+        uid: '1',
+        username: username,
+        formhash: 'hash',
+        isLoggedIn: true,
+      ),
+    );
+  }
+
+  @override
+  Future<void> logout() async {}
 }
 
 class _FakeCookieStore extends CookieStore {

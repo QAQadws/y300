@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/auth/presentation/login_controller.dart';
 import 'package:y300/features/auth/presentation/login_state.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
@@ -45,6 +46,7 @@ class LoginPage extends ConsumerWidget {
                 : () async {
                     final success = await controller.submit();
                     if (success && context.mounted) {
+                      ref.invalidate(authSessionControllerProvider);
                       // 登录成功后主动刷新论坛首页，确保首页登录态立即生效。
                       ref.invalidate(forumHomeControllerProvider);
                       ScaffoldMessenger.of(context).showSnackBar(

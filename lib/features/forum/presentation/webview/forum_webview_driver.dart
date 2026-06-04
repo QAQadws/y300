@@ -6,10 +6,19 @@ import 'package:y300/features/forum/domain/services/forum_webview_script_injecto
 import 'package:y300/features/forum/domain/services/forum_webview_thread_menu_bridge.dart';
 import 'package:webview_flutter/webview_flutter.dart' as webview;
 
+typedef ForumWebViewDriverFactory = ForumWebViewDriver Function();
+
+final forumWebViewDriverFactoryProvider = Provider<ForumWebViewDriverFactory>((
+  ref,
+) {
+  return FlutterForumWebViewDriver.new;
+});
+
 final forumWebViewDriverProvider = Provider.autoDispose<ForumWebViewDriver>((
   ref,
 ) {
-  return FlutterForumWebViewDriver();
+  final factory = ref.watch(forumWebViewDriverFactoryProvider);
+  return factory();
 });
 
 enum ForumWebViewNavigationDecision {
@@ -39,6 +48,8 @@ abstract class ForumWebViewDriver
   Widget buildWidget({Key? key});
 
   Future<void> load(Uri uri);
+
+  Future<void> reload();
 
   Future<String?> getTitle();
 
@@ -98,6 +109,11 @@ class FlutterForumWebViewDriver implements ForumWebViewDriver {
   @override
   Future<void> load(Uri uri) {
     return _controller.loadRequest(uri);
+  }
+
+  @override
+  Future<void> reload() {
+    return _controller.reload();
   }
 
   @override

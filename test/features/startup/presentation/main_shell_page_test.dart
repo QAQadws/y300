@@ -62,7 +62,7 @@ void main() {
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
-          forumWebViewDriverProvider.overrideWith((ref) => webViewDriver),
+          forumWebViewDriverFactoryProvider.overrideWithValue(() => webViewDriver),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
         child: const MaterialApp(home: MainShellPage()),
@@ -116,7 +116,7 @@ void main() {
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
-          forumWebViewDriverProvider.overrideWith((ref) => webViewDriver),
+          forumWebViewDriverFactoryProvider.overrideWithValue(() => webViewDriver),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
         child: const MaterialApp(home: MainShellPage()),
@@ -162,7 +162,7 @@ void main() {
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
-          forumWebViewDriverProvider.overrideWith((ref) => webViewDriver),
+          forumWebViewDriverFactoryProvider.overrideWithValue(() => webViewDriver),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
         child: const MaterialApp(home: MainShellPage()),
@@ -201,7 +201,7 @@ void main() {
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
-          forumWebViewDriverProvider.overrideWith((ref) => webViewDriver),
+          forumWebViewDriverFactoryProvider.overrideWithValue(() => webViewDriver),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
         child: const MaterialApp(home: MainShellPage()),
@@ -265,7 +265,7 @@ void main() {
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
-          forumWebViewDriverProvider.overrideWith((ref) => webViewDriver),
+          forumWebViewDriverFactoryProvider.overrideWithValue(() => webViewDriver),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
         child: const MaterialApp(home: MainShellPage()),
@@ -328,7 +328,7 @@ void main() {
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
-          forumWebViewDriverProvider.overrideWith((ref) => webViewDriver),
+          forumWebViewDriverFactoryProvider.overrideWithValue(() => webViewDriver),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
         child: const MaterialApp(home: MainShellPage()),
@@ -476,6 +476,9 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
 
   @override
   Future<void> load(Uri uri) async {}
+
+  @override
+  Future<void> reload() async {}
 
   @override
   Future<String?> getTitle() async {

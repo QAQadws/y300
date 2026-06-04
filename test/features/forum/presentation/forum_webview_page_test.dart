@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:y300/core/network/api_result.dart';
@@ -10,6 +11,7 @@ import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/forum_favorite_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
 import 'package:y300/features/tags/data/forum_tag_repository.dart';
 import 'package:y300/features/tags/data/tag_providers.dart';
@@ -87,6 +89,95 @@ void main() {
       driver.loadedUris.last.toString(),
       'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
     );
+  });
+
+  testWidgets('ForumWebViewPage pull to refresh reloads current page', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+
+    await tester.pumpWidget(_buildTestApp(driver: driver));
+    await tester.pump();
+
+    final refreshIndicator = tester.state<RefreshIndicatorState>(
+      find.byKey(const Key('forum-webview-refresh-indicator')),
+    );
+    unawaited(refreshIndicator.show());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(driver.reloadCallCount, 1);
+  });
+
+  testWidgets('ForumWebViewPage keeps managed site links inside webview', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+    final launcher = _FakeForumWebViewExternalLauncher();
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        driver: driver,
+        launcher: launcher,
+      ),
+    );
+    await tester.pump();
+
+    final decision = await driver.dispatchNavigationRequest(
+      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+    );
+
+    expect(decision, ForumWebViewNavigationDecision.navigate);
+    expect(launcher.launchedUris, isEmpty);
+  });
+
+  testWidgets('ForumWebViewPage opens external links in system browser', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+    final launcher = _FakeForumWebViewExternalLauncher();
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        driver: driver,
+        launcher: launcher,
+      ),
+    );
+    await tester.pump();
+
+    final decision = await driver.dispatchNavigationRequest(
+      'https://example.com/thread/123',
+    );
+    await tester.pump();
+
+    expect(decision, ForumWebViewNavigationDecision.prevent);
+    expect(
+      launcher.launchedUris.single.toString(),
+      'https://example.com/thread/123',
+    );
+  });
+
+  testWidgets('ForumWebViewPage shows snackbar when external launch fails', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+    final launcher = _FakeForumWebViewExternalLauncher(shouldSucceed: false);
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        driver: driver,
+        launcher: launcher,
+      ),
+    );
+    await tester.pump();
+
+    final decision = await driver.dispatchNavigationRequest(
+      'https://example.com/thread/123',
+    );
+    await tester.pumpAndSettle();
+
+    expect(decision, ForumWebViewNavigationDecision.prevent);
+    expect(find.text('打开外部链接失败'), findsOneWidget);
   });
 
   testWidgets('ForumWebViewPage home more menu shows unfavorite action', (
@@ -759,6 +850,75 @@ void main() {
       'https://bbs.yamibo.com/index.php?mobile=2',
     );
   });
+
+  testWidgets('ForumWebViewPage system back uses driver.goBack when history exists', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver()..title = '页面标题';
+
+    await tester.pumpWidget(_buildRoutedTestApp(driver: driver));
+    await tester.tap(find.byKey(const Key('open-forum-webview-page')));
+    await tester.pumpAndSettle();
+
+    driver.canGoBackValue = true;
+    await driver.dispatchPageStarted(
+      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+    );
+    await driver.dispatchPageFinished(
+      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+    );
+    await tester.pump();
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+
+    expect(driver.goBackCallCount, 1);
+    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+  });
+
+  testWidgets('ForumWebViewPage system back loads home when history is unavailable away from home', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver()..title = '页面标题';
+
+    await tester.pumpWidget(_buildRoutedTestApp(driver: driver));
+    await tester.tap(find.byKey(const Key('open-forum-webview-page')));
+    await tester.pumpAndSettle();
+
+    await driver.dispatchPageStarted(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+    );
+    await driver.dispatchPageFinished(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+    );
+    await tester.pump();
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+
+    expect(driver.goBackCallCount, 0);
+    expect(
+      driver.loadedUris.last.toString(),
+      'https://bbs.yamibo.com/index.php?mobile=2',
+    );
+    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+  });
+
+  testWidgets('ForumWebViewPage system back allows route pop on home without history', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+
+    await tester.pumpWidget(_buildRoutedTestApp(driver: driver));
+    await tester.tap(find.byKey(const Key('open-forum-webview-page')));
+    await tester.pumpAndSettle();
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('forum-webview-page')), findsNothing);
+    expect(find.byKey(const Key('open-forum-webview-page')), findsOneWidget);
+  });
 }
 
 Widget _buildTestApp({
@@ -766,10 +926,14 @@ Widget _buildTestApp({
   CookieStore? cookieStore,
   ForumTagRepository? tagRepository,
   ForumFavoriteRepository? favoriteRepository,
+  ForumWebViewExternalLauncher? launcher,
 }) {
   return ProviderScope(
     overrides: [
       forumWebViewDriverProvider.overrideWith((ref) => driver),
+      forumWebViewExternalLauncherProvider.overrideWithValue(
+        launcher ?? _FakeForumWebViewExternalLauncher(),
+      ),
       cookieStoreProvider.overrideWithValue(cookieStore ?? _FakeCookieStore()),
       forumTagRepositoryProvider.overrideWithValue(
         tagRepository ?? _FakeForumTagRepository(),
@@ -779,6 +943,51 @@ Widget _buildTestApp({
       ),
     ],
     child: const MaterialApp(home: ForumWebViewPage()),
+  );
+}
+
+Widget _buildRoutedTestApp({
+  required _FakeForumWebViewDriver driver,
+  CookieStore? cookieStore,
+  ForumTagRepository? tagRepository,
+  ForumFavoriteRepository? favoriteRepository,
+  ForumWebViewExternalLauncher? launcher,
+}) {
+  return ProviderScope(
+    overrides: [
+      forumWebViewDriverProvider.overrideWith((ref) => driver),
+      forumWebViewExternalLauncherProvider.overrideWithValue(
+        launcher ?? _FakeForumWebViewExternalLauncher(),
+      ),
+      cookieStoreProvider.overrideWithValue(cookieStore ?? _FakeCookieStore()),
+      forumTagRepositoryProvider.overrideWithValue(
+        tagRepository ?? _FakeForumTagRepository(),
+      ),
+      forumFavoriteRepositoryProvider.overrideWithValue(
+        favoriteRepository ?? _FakeForumFavoriteRepository(),
+      ),
+    ],
+    child: MaterialApp(
+      home: Builder(
+        builder: (context) {
+          return Scaffold(
+            body: Center(
+              child: FilledButton(
+                key: const Key('open-forum-webview-page'),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const ForumWebViewPage(),
+                    ),
+                  );
+                },
+                child: const Text('打开论坛 WebView'),
+              ),
+            ),
+          );
+        },
+      ),
+    ),
   );
 }
 
@@ -792,6 +1001,7 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   Object? javaScriptResult;
   bool canGoBackValue = false;
   int goBackCallCount = 0;
+  int reloadCallCount = 0;
   ForumWebViewCallbacks? _callbacks;
 
   @override
@@ -815,6 +1025,16 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
     await callbacks.onPageFinished(url);
   }
 
+  Future<ForumWebViewNavigationDecision?> dispatchNavigationRequest(
+    String url,
+  ) async {
+    final callbacks = _callbacks;
+    if (callbacks == null) {
+      return null;
+    }
+    return callbacks.onNavigationRequest(url);
+  }
+
   @override
   Future<void> initialize({required ForumWebViewCallbacks callbacks}) async {
     events.add('initialize');
@@ -825,6 +1045,11 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   Future<void> load(Uri uri) async {
     events.add('load');
     loadedUris.add(uri);
+  }
+
+  @override
+  Future<void> reload() async {
+    reloadCallCount += 1;
   }
 
   @override
@@ -867,6 +1092,20 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
         path: path,
       ),
     );
+  }
+}
+
+class _FakeForumWebViewExternalLauncher
+    implements ForumWebViewExternalLauncher {
+  _FakeForumWebViewExternalLauncher({this.shouldSucceed = true});
+
+  final bool shouldSucceed;
+  final List<Uri> launchedUris = <Uri>[];
+
+  @override
+  Future<bool> launch(Uri uri) async {
+    launchedUris.add(uri);
+    return shouldSucceed;
   }
 }
 

@@ -101,6 +101,35 @@ void main() {
     expect(find.text('当前：原生模式'), findsOneWidget);
   });
 
+  testWidgets('MorePage login flow refreshes session through LoginPage', (
+    tester,
+  ) async {
+    final repository = _FakeAuthRepository(isLoggedIn: false);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(repository),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: MorePage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('more-login-entry')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('login-username-field')), 'tester');
+    await tester.enterText(find.byKey(const Key('login-password-field')), '123456');
+    await tester.tap(find.byKey(const Key('login-submit-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MorePage), findsOneWidget);
+    expect(find.byKey(const Key('more-logout-entry')), findsOneWidget);
+    expect(find.text('当前账号：tester'), findsOneWidget);
+  });
+
   testWidgets('MorePage shows snackbar when forum mode save fails', (
     tester,
   ) async {

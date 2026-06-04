@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -12,6 +13,7 @@ import 'package:y300/features/forum/domain/services/forum_webview_script_injecto
 import 'package:y300/features/forum/domain/services/forum_webview_thread_menu_bridge.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_state.dart';
 
 class ForumWebViewPage extends ConsumerStatefulWidget {
@@ -77,21 +79,31 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       });
     }
 
-    return Scaffold(
-      key: const Key('forum-webview-page'),
-      appBar: _buildAppBar(context, state, driver),
-      body: Column(
-        children: [
-          if (state.isLoading && state.loadingProgress < 100)
-            LinearProgressIndicator(
-              value: state.loadingProgress.clamp(0, 99).toDouble() / 100,
+    return PopScope<Object?>(
+      canPop: _shouldAllowRoutePop(state),
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) {
+          return;
+        }
+        unawaited(_handleBackNavigation(driver, state));
+      },
+      child: Scaffold(
+        key: const Key('forum-webview-page'),
+        appBar: _buildAppBar(context, state, driver),
+        body: Column(
+          children: [
+            if (state.isLoading && state.loadingProgress < 100)
+              LinearProgressIndicator(
+                value: state.loadingProgress.clamp(0, 99).toDouble() / 100,
+              ),
+            Expanded(
+              child: _buildWebViewSurface(
+                context: context,
+                driver: driver,
+              ),
             ),
-          Expanded(
-            child: driver.buildWidget(
-              key: const Key('forum-webview-surface'),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -110,6 +122,8 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       return;
     }
 
+    // API 登录/退出会通过 auth-scoped ProviderScope 重建整个 WebView 壳；
+    // 每次重建都只从 CookieStore 单向 seed 一次 cookie 到全新的 WebView。
     final cookieHeader = await ref
         .read(cookieStoreProvider)
         .readCookieHeader(navigator.homeUri);
@@ -208,9 +222,19 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   }
 
   FutureOr<ForumWebViewNavigationDecision> _handleNavigationRequest(
-    String _,
+    String url,
   ) {
-    return ForumWebViewNavigationDecision.navigate;
+    final navigator = ref.read(forumWebViewNavigatorProvider);
+    final uri = navigator.resolve(url);
+    if (uri.scheme.toLowerCase() == 'javascript') {
+      return ForumWebViewNavigationDecision.prevent;
+    }
+    if (navigator.isManagedSite(uri)) {
+      return ForumWebViewNavigationDecision.navigate;
+    }
+
+    unawaited(_launchExternalUri(uri));
+    return ForumWebViewNavigationDecision.prevent;
   }
 
   Map<String, String> _parseCookieHeader(String? header) {
@@ -249,7 +273,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           : BackButton(
               key: const Key('forum-webview-back-button'),
               onPressed: () {
-                unawaited(_handleBackPressed(driver, state));
+                unawaited(_handleBackNavigation(driver, state));
               },
             ),
       title: Text(title),
@@ -429,7 +453,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     await driver.load(targetUri);
   }
 
-  Future<void> _handleBackPressed(
+  Future<void> _handleBackNavigation(
     ForumWebViewDriver driver,
     ForumWebViewState state,
   ) async {
@@ -437,8 +461,71 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       await driver.goBack();
       return;
     }
+    if (state.pageKind == ForumWebViewPageKind.home) {
+      return;
+    }
     final navigator = ref.read(forumWebViewNavigatorProvider);
     await driver.load(navigator.homeUri);
+  }
+
+  bool _shouldAllowRoutePop(ForumWebViewState state) {
+    return !state.canGoBack && state.pageKind == ForumWebViewPageKind.home;
+  }
+
+  Widget _buildWebViewSurface({
+    required BuildContext context,
+    required ForumWebViewDriver driver,
+  }) {
+    final surface = driver.buildWidget(
+      key: const Key('forum-webview-surface'),
+    );
+    if (!_supportsPullToRefresh(context)) {
+      return surface;
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return RefreshIndicator.adaptive(
+          key: const Key('forum-webview-refresh-indicator'),
+          onRefresh: driver.reload,
+          child: ListView(
+            key: const Key('forum-webview-refresh-scroll'),
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.zero,
+            children: [
+              SizedBox(
+                height: constraints.maxHeight,
+                child: surface,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  bool _supportsPullToRefresh(BuildContext context) {
+    if (kIsWeb) {
+      return false;
+    }
+    final platform = Theme.of(context).platform;
+    return platform == TargetPlatform.android ||
+        platform == TargetPlatform.iOS;
+  }
+
+  Future<void> _launchExternalUri(Uri uri) async {
+    if (!mounted) {
+      return;
+    }
+    final launcher = ref.read(forumWebViewExternalLauncherProvider);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final launched = await launcher.launch(uri);
+    if (!mounted || launched) {
+      return;
+    }
+    if (messenger != null) {
+      _showSnackBar(messenger, '打开外部链接失败');
+    }
   }
 
   Future<String?> _readPageTitle(ForumWebViewDriver driver) async {

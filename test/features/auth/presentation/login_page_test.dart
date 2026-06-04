@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/auth/data/auth_repository.dart';
+import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/auth/presentation/login_page.dart';
 
 void main() {
@@ -29,6 +30,8 @@ void main() {
       expect(find.byType(LoginPage), findsNothing);
       expect(find.byKey(const Key('login-result-text')), findsOneWidget);
       expect(find.text('result=true'), findsOneWidget);
+      expect(find.text('session=tester'), findsOneWidget);
+      expect(repository.refreshSessionCallCount, 2);
     });
 
     testWidgets('shows error message after failed login', (tester) async {
@@ -96,6 +99,18 @@ class _LoginHostPageState extends State<_LoginHostPage> {
               child: const Text('open login'),
             ),
             Text('result=$_result', key: const Key('login-result-text')),
+            Consumer(
+              builder: (context, ref, _) {
+                final session = ref
+                    .watch(authSessionControllerProvider)
+                    .asData
+                    ?.value;
+                return Text(
+                  'session=${session?.username ?? ''}',
+                  key: const Key('login-session-text'),
+                );
+              },
+            ),
           ],
         ),
       ),
@@ -108,6 +123,8 @@ class _FakeAuthRepository implements AuthRepository {
 
   final bool shouldSucceed;
   final String username;
+  bool _isLoggedIn = false;
+  int refreshSessionCallCount = 0;
 
   @override
   Future<ApiResult<SessionInfo>> login({
@@ -117,6 +134,7 @@ class _FakeAuthRepository implements AuthRepository {
     String answer = '',
   }) async {
     if (shouldSucceed) {
+      _isLoggedIn = true;
       return ApiSuccess(
         SessionInfo(
           uid: '100',
@@ -137,18 +155,26 @@ class _FakeAuthRepository implements AuthRepository {
 
   @override
   Future<ApiResult<SessionInfo>> refreshSession() async {
+    refreshSessionCallCount += 1;
     return ApiSuccess(
-      SessionInfo(
-        uid: '100',
-        username: username,
-        formhash: 'fh',
-        isLoggedIn: true,
-      ),
+      _isLoggedIn
+          ? SessionInfo(
+              uid: '100',
+              username: username,
+              formhash: 'fh',
+              isLoggedIn: true,
+            )
+          : SessionInfo(
+              uid: '0',
+              username: '',
+              formhash: '',
+              isLoggedIn: false,
+            ),
     );
   }
 
   @override
   Future<ApiResult<bool>> verifyAuthByForumIndex() async {
-    return const ApiSuccess(true);
+    return ApiSuccess(_isLoggedIn);
   }
 }

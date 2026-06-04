@@ -23,7 +23,7 @@ class MorePage extends ConsumerWidget {
         children: [
           _AuthSessionTile(
             session: authSession,
-            onLogin: () => _openLoginPage(context, ref),
+            onLogin: () => _openLoginPage(context),
             onLogout: () => _confirmAndLogout(context, ref),
           ),
           ListTile(
@@ -131,14 +131,10 @@ class MorePage extends ConsumerWidget {
     }
   }
 
-  Future<void> _openLoginPage(BuildContext context, WidgetRef ref) async {
-    final result = await Navigator.of(context).push<bool>(
+  Future<void> _openLoginPage(BuildContext context) async {
+    await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(builder: (_) => const LoginPage()),
     );
-    if (result == true) {
-      ref.invalidate(authSessionControllerProvider);
-      ref.invalidate(forumHomeControllerProvider);
-    }
   }
 
   Future<void> _confirmAndLogout(BuildContext context, WidgetRef ref) async {
