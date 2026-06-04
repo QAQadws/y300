@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -24,6 +23,7 @@ class ForumWebViewPage extends ConsumerStatefulWidget {
 }
 
 class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
+  static const String _refreshPageAction = 'refresh-page';
   static const String _homeUnfavoriteAction = 'home-unfavorite';
   static const String _forumFavoriteAction = 'forum-favorite';
   static const String _forumUnfavoriteAction = 'forum-unfavorite';
@@ -98,7 +98,6 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
               ),
             Expanded(
               child: _buildWebViewSurface(
-                context: context,
                 driver: driver,
               ),
             ),
@@ -286,53 +285,74 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   }
 
   List<PopupMenuEntry<String>> _buildMoreMenuItems(ForumWebViewState state) {
+    const refreshItem = PopupMenuItem<String>(
+      key: Key('forum-webview-refresh-action'),
+      value: _refreshPageAction,
+      child: Text('刷新页面'),
+    );
+
     switch (state.pageKind) {
       case ForumWebViewPageKind.home:
-        return const <PopupMenuEntry<String>>[
-          PopupMenuItem<String>(
+        return <PopupMenuEntry<String>>[
+          refreshItem,
+          const PopupMenuItem<String>(
             key: Key('forum-webview-home-unfavorite-action'),
             value: _homeUnfavoriteAction,
             child: Text('取消收藏'),
           ),
         ];
       case ForumWebViewPageKind.forumDisplay:
-        if (state.isFavoriteMutationLoading) {
-          return const <PopupMenuEntry<String>>[
-            PopupMenuItem<String>(
-              enabled: false,
-              value: 'favorite-loading',
-              child: Text('处理中'),
-            ),
-          ];
-        }
         return <PopupMenuEntry<String>>[
-          PopupMenuItem<String>(
-            key: const Key('forum-webview-forum-favorite-action'),
-            value: state.currentFavoriteForum == null
-                ? _forumFavoriteAction
-                : _forumUnfavoriteAction,
-            child: Text(state.currentFavoriteForum == null ? '收藏本版' : '取消收藏'),
-          ),
+          refreshItem,
+          ..._buildForumDisplayMoreMenuItems(state),
         ];
       case ForumWebViewPageKind.threadDetail:
-        return _buildThreadDetailMoreMenuItems(state);
+        return <PopupMenuEntry<String>>[
+          refreshItem,
+          ..._buildThreadDetailMoreMenuItems(state),
+        ];
       case ForumWebViewPageKind.search:
-        return const <PopupMenuEntry<String>>[
-          PopupMenuItem<String>(
+        return <PopupMenuEntry<String>>[
+          refreshItem,
+          const PopupMenuItem<String>(
             key: Key('forum-webview-search-home-action'),
             value: _searchGoHomeAction,
             child: Text('返回首页'),
           ),
         ];
       case ForumWebViewPageKind.other:
-        return const <PopupMenuEntry<String>>[
-          PopupMenuItem<String>(
+        return <PopupMenuEntry<String>>[
+          refreshItem,
+          const PopupMenuItem<String>(
             enabled: false,
             value: 'placeholder',
             child: Text('功能开发中'),
           ),
         ];
     }
+  }
+
+  List<PopupMenuEntry<String>> _buildForumDisplayMoreMenuItems(
+    ForumWebViewState state,
+  ) {
+    if (state.isFavoriteMutationLoading) {
+      return const <PopupMenuEntry<String>>[
+        PopupMenuItem<String>(
+          enabled: false,
+          value: 'favorite-loading',
+          child: Text('处理中'),
+        ),
+      ];
+    }
+    return <PopupMenuEntry<String>>[
+      PopupMenuItem<String>(
+        key: const Key('forum-webview-forum-favorite-action'),
+        value: state.currentFavoriteForum == null
+            ? _forumFavoriteAction
+            : _forumUnfavoriteAction,
+        child: Text(state.currentFavoriteForum == null ? '收藏本版' : '取消收藏'),
+      ),
+    ];
   }
 
   List<PopupMenuEntry<String>> _buildThreadDetailMoreMenuItems(
@@ -459,44 +479,11 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   }
 
   Widget _buildWebViewSurface({
-    required BuildContext context,
     required ForumWebViewDriver driver,
   }) {
-    final surface = driver.buildWidget(
+    return driver.buildWidget(
       key: const Key('forum-webview-surface'),
     );
-    if (!_supportsPullToRefresh(context)) {
-      return surface;
-    }
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return RefreshIndicator.adaptive(
-          key: const Key('forum-webview-refresh-indicator'),
-          onRefresh: driver.reload,
-          child: ListView(
-            key: const Key('forum-webview-refresh-scroll'),
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.zero,
-            children: [
-              SizedBox(
-                height: constraints.maxHeight,
-                child: surface,
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  bool _supportsPullToRefresh(BuildContext context) {
-    if (kIsWeb) {
-      return false;
-    }
-    final platform = Theme.of(context).platform;
-    return platform == TargetPlatform.android ||
-        platform == TargetPlatform.iOS;
   }
 
   Future<void> _launchExternalUri(Uri uri) async {
@@ -552,6 +539,9 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     String action,
   ) async {
     switch (action) {
+      case _refreshPageAction:
+        await driver.reload();
+        return;
       case _homeUnfavoriteAction:
         await _openFavoriteForumPicker(context, driver);
         return;

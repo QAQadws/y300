@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:y300/core/network/api_result.dart';
@@ -99,7 +98,7 @@ void main() {
     );
   });
 
-  testWidgets('ForumWebViewPage pull to refresh reloads current page', (
+  testWidgets('ForumWebViewPage no longer wraps webview in refresh indicator', (
     tester,
   ) async {
     final driver = _FakeForumWebViewDriver();
@@ -107,12 +106,22 @@ void main() {
     await tester.pumpWidget(_buildTestApp(driver: driver));
     await tester.pump();
 
-    final refreshIndicator = tester.state<RefreshIndicatorState>(
-      find.byKey(const Key('forum-webview-refresh-indicator')),
-    );
-    unawaited(refreshIndicator.show());
+    expect(find.byKey(const Key('forum-webview-refresh-indicator')), findsNothing);
+    expect(find.byKey(const Key('forum-webview-refresh-scroll')), findsNothing);
+  });
+
+  testWidgets('ForumWebViewPage refresh action reloads current page from more menu', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+
+    await tester.pumpWidget(_buildTestApp(driver: driver));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
+
+    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('forum-webview-refresh-action')));
+    await tester.pumpAndSettle();
 
     expect(driver.reloadCallCount, 1);
   });
@@ -199,6 +208,8 @@ void main() {
     await tester.tap(find.byKey(const Key('forum-webview-more-button')));
     await tester.pumpAndSettle();
 
+    expect(find.text('刷新页面'), findsOneWidget);
+    expect(find.byKey(const Key('forum-webview-refresh-action')), findsOneWidget);
     expect(find.text('取消收藏'), findsOneWidget);
     expect(
       find.byKey(const Key('forum-webview-home-unfavorite-action')),
@@ -535,6 +546,7 @@ void main() {
     await tester.tap(find.byKey(const Key('forum-webview-more-button')));
     await tester.pumpAndSettle();
 
+    expect(find.text('刷新页面'), findsOneWidget);
     expect(find.text('只看楼主'), findsOneWidget);
     expect(find.text('倒序浏览'), findsOneWidget);
     expect(find.text('返回首页'), findsOneWidget);
@@ -735,6 +747,7 @@ void main() {
     await tester.tap(find.byKey(const Key('forum-webview-more-button')));
     await tester.pumpAndSettle();
 
+    expect(find.text('刷新页面'), findsOneWidget);
     expect(find.text('返回首页'), findsOneWidget);
   });
 
