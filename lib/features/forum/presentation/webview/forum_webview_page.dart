@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
@@ -43,6 +44,8 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   ForumWebViewBootstrapConfig? _bootstrapConfig;
   bool _showLoadingMask = false;
   bool _isAwaitingInitialManagedPageStable = false;
+  bool _didReceiveInitialManagedPageCommitVisible = false;
+  bool _didCompleteInitialManagedPageLateRepair = false;
 
   @override
   void dispose() {
@@ -54,6 +57,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   Widget build(BuildContext context) {
     final navigator = ref.watch(forumWebViewNavigatorProvider);
     final asyncState = ref.watch(forumWebViewControllerProvider);
+    final overlayStyle = _resolveSystemUiOverlayStyle(context);
     final homeUri = navigator.homeUri;
     final state =
         asyncState.asData?.value ??
@@ -85,30 +89,39 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       });
     }
 
-    return PopScope<Object?>(
-      canPop: _shouldAllowRoutePop(state),
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) {
-          return;
-        }
-        unawaited(_handleBackNavigation(driver, state));
-      },
-      child: Scaffold(
-        key: const Key('forum-webview-page'),
-        appBar: _buildAppBar(context, state, driver),
-        body: Stack(
-          fit: StackFit.expand,
-          children: [
-            _buildWebViewSurface(
-              context: context,
-              driver: driver,
-            ),
-            if (_showLoadingMask) const ForumWebViewLoadingMask(),
-            if (state.isLoading && state.loadingProgress < 100)
-              _ForumWebViewProgressOverlay(
-                progress: state.loadingProgress.clamp(0, 99).toDouble() / 100,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: overlayStyle,
+      child: PopScope<Object?>(
+        canPop: _shouldAllowRoutePop(state),
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) {
+            return;
+          }
+          unawaited(_handleBackNavigation(driver, state));
+        },
+        child: Scaffold(
+          key: const Key('forum-webview-page'),
+          appBar: _buildAppBar(
+            context,
+            state,
+            driver,
+            overlayStyle: overlayStyle,
+          ),
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              _buildWebViewSurface(
+                context: context,
+                driver: driver,
               ),
-          ],
+              if (_showLoadingMask) const ForumWebViewLoadingMask(),
+              if (state.isLoading && state.loadingProgress < 100)
+                _ForumWebViewProgressOverlay(
+                  progress:
+                      state.loadingProgress.clamp(0, 99).toDouble() / 100,
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -146,6 +159,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         onPageFinished: _handlePageFinished,
         onProgress: _handleProgress,
         onNavigationRequest: _handleNavigationRequest,
+        onPageCommitVisible: _handlePageCommitVisible,
       ),
       bootstrapConfig: bootstrapConfig,
     );
@@ -161,6 +175,8 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       _bootstrapConfig = bootstrapConfig;
       _showLoadingMask = shouldUseMask;
       _isAwaitingInitialManagedPageStable = shouldUseMask;
+      _didReceiveInitialManagedPageCommitVisible = false;
+      _didCompleteInitialManagedPageLateRepair = false;
     });
 
     // API 登录/退出会通过 auth-scoped ProviderScope 重建整个 WebView 壳；
@@ -196,8 +212,25 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     }
     _delayedCleanupTimer?.cancel();
     _delayedCleanupTimer = null;
+    if (_isAwaitingInitialManagedPageStable) {
+      _didReceiveInitialManagedPageCommitVisible = false;
+      _didCompleteInitialManagedPageLateRepair = false;
+    }
     _navigationGeneration += 1;
     ref.read(forumWebViewControllerProvider.notifier).onPageStarted(url);
+  }
+
+  void _handlePageCommitVisible(String url) {
+    if (!mounted || !_isAwaitingInitialManagedPageStable) {
+      return;
+    }
+    final navigator = ref.read(forumWebViewNavigatorProvider);
+    final uri = navigator.resolve(url);
+    if (!navigator.isManagedSite(uri)) {
+      return;
+    }
+    _didReceiveInitialManagedPageCommitVisible = true;
+    _tryHideInitialLoadingMask();
   }
 
   Future<void> _handlePageFinished(String url) async {
@@ -272,10 +305,8 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           return;
         }
         if (_isAwaitingInitialManagedPageStable) {
-          setState(() {
-            _showLoadingMask = false;
-            _isAwaitingInitialManagedPageStable = false;
-          });
+          _didCompleteInitialManagedPageLateRepair = true;
+          _tryHideInitialLoadingMask();
         }
       },
     );
@@ -308,11 +339,15 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     BuildContext context,
     ForumWebViewState state,
     ForumWebViewDriver driver,
+    {
+      required SystemUiOverlayStyle overlayStyle,
+    }
   ) {
     final title = _resolveTitle(state);
 
     return AppBar(
       automaticallyImplyLeading: false,
+      systemOverlayStyle: overlayStyle,
       leading: state.pageKind == ForumWebViewPageKind.home
           ? null
           : BackButton(
@@ -545,12 +580,45 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     if (_bootstrapConfig == null) {
       return ColoredBox(
         key: const Key('forum-webview-bootstrap-placeholder'),
-        color: Theme.of(context).scaffoldBackgroundColor,
+        color: Theme.of(context).colorScheme.surface,
       );
     }
+    // Platform views must own vertical drag gestures directly. Re-wrapping the
+    // WebView in a Flutter Scrollable brings back the mixed-shell scrolling
+    // regressions UX-2 is trying to remove.
     return driver.buildWidget(
       key: const Key('forum-webview-surface'),
     );
+  }
+
+  void _tryHideInitialLoadingMask() {
+    if (!mounted || !_isAwaitingInitialManagedPageStable) {
+      return;
+    }
+    if (!_didCompleteInitialManagedPageLateRepair) {
+      return;
+    }
+    final supportsPageCommitVisible =
+        _bootstrapConfig?.capabilityProfile.supportsPageCommitVisible ?? false;
+    if (supportsPageCommitVisible &&
+        !_didReceiveInitialManagedPageCommitVisible) {
+      return;
+    }
+    setState(() {
+      _showLoadingMask = false;
+      _isAwaitingInitialManagedPageStable = false;
+    });
+  }
+
+  SystemUiOverlayStyle _resolveSystemUiOverlayStyle(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return (isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
+        .copyWith(
+          statusBarColor: Colors.transparent,
+          statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+          statusBarIconBrightness:
+              isDark ? Brightness.light : Brightness.dark,
+        );
   }
 
   Future<void> _launchExternalUri(Uri uri) async {

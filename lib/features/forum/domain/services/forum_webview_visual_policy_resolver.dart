@@ -29,7 +29,9 @@ class DefaultForumWebViewVisualPolicyResolver
           '.footer.mt10.cl',
           '.foot.flex-box',
         },
-        extraCss: '',
+        extraCss:
+            'html, body { margin: 0 !important; padding: 0 !important; background: transparent !important; }\n'
+            'img, video, svg, canvas, iframe { max-width: 100% !important; height: auto !important; }',
         useLoadingMaskUntilStable: true,
         disableHorizontalOverflow: true,
       );

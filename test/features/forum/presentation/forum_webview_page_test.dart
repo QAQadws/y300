@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:y300/core/network/api_result.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,6 +33,15 @@ void main() {
     await tester.pumpWidget(_buildTestApp(driver: driver));
 
     expect(find.byKey(const Key('forum-webview-bootstrap-placeholder')), findsOneWidget);
+    final placeholder = tester.widget<ColoredBox>(
+      find.byKey(const Key('forum-webview-bootstrap-placeholder')),
+    );
+    expect(
+      placeholder.color,
+      Theme.of(
+        tester.element(find.byKey(const Key('forum-webview-bootstrap-placeholder'))),
+      ).colorScheme.surface,
+    );
     expect(find.byKey(const Key('forum-webview-surface')), findsNothing);
     expect(driver.buildWidgetCallCount, 0);
 
@@ -69,6 +77,8 @@ void main() {
     expect(find.byKey(const Key('forum-webview-back-button')), findsNothing);
     expect(find.byKey(const Key('forum-webview-search-button')), findsOneWidget);
     expect(find.byKey(const Key('forum-webview-more-button')), findsOneWidget);
+    final appBar = tester.widget<AppBar>(find.byType(AppBar));
+    expect(appBar.systemOverlayStyle?.statusBarColor, Colors.transparent);
     expect(
       driver.events,
       <String>[
@@ -159,7 +169,7 @@ void main() {
     expect(driver.scripts.length, 2);
   });
 
-  testWidgets('ForumWebViewPage shows loading mask for best-effort runtime and hides it after the first managed page stabilizes', (
+  testWidgets('ForumWebViewPage keeps loading mask until the first managed page commits visible and stabilizes', (
     tester,
   ) async {
     final driver = _FakeForumWebViewDriver()
@@ -170,6 +180,60 @@ void main() {
         supportsTransparentBackground: true,
         supportsPlatformScrollTuning: true,
         supportsCookieHooks: true,
+        supportsPageCommitVisible: true,
+      );
+
+    await tester.pumpWidget(_buildTestApp(driver: driver));
+    await tester.pump();
+
+    expect(find.byKey(const Key('forum-webview-loading-mask')), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    final mask = tester.widget<ColoredBox>(
+      find.byKey(const Key('forum-webview-loading-mask')),
+    );
+    expect(
+      mask.color,
+      Theme.of(
+        tester.element(find.byKey(const Key('forum-webview-loading-mask'))),
+      ).colorScheme.surface,
+    );
+
+    await driver.dispatchPageStarted(
+      'https://bbs.yamibo.com/index.php?mobile=2',
+    );
+    await driver.dispatchPageFinished(
+      'https://bbs.yamibo.com/index.php?mobile=2',
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('forum-webview-loading-mask')), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+
+    expect(driver.scripts.length, 2);
+    expect(find.byKey(const Key('forum-webview-loading-mask')), findsOneWidget);
+
+    await driver.dispatchPageCommitVisible(
+      'https://bbs.yamibo.com/index.php?mobile=2',
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('forum-webview-loading-mask')), findsNothing);
+  });
+
+  testWidgets('ForumWebViewPage falls back to page-finished stabilization when commit-visible is unavailable', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver()
+      ..capabilityProfile = const ForumWebViewCapabilityProfile(
+        engine: ForumWebViewEngine.legacy,
+        documentStartMode: ForumWebViewDocumentStartMode.unavailable,
+        supportsContentBlockers: false,
+        supportsTransparentBackground: false,
+        supportsPlatformScrollTuning: false,
+        supportsCookieHooks: false,
+        supportsPageCommitVisible: false,
       );
 
     await tester.pumpWidget(_buildTestApp(driver: driver));
@@ -222,6 +286,9 @@ void main() {
 
     expect(find.byKey(const Key('forum-webview-refresh-indicator')), findsNothing);
     expect(find.byKey(const Key('forum-webview-refresh-scroll')), findsNothing);
+    expect(find.byType(RefreshIndicator), findsNothing);
+    expect(find.byType(SingleChildScrollView), findsNothing);
+    expect(find.byType(ListView), findsNothing);
   });
 
   testWidgets('ForumWebViewPage refresh action reloads current page from more menu', (
@@ -1148,6 +1215,7 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
         supportsTransparentBackground: true,
         supportsPlatformScrollTuning: true,
         supportsCookieHooks: true,
+        supportsPageCommitVisible: true,
       );
   ForumWebViewCallbacks? _callbacks;
 
@@ -1171,6 +1239,14 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
       return;
     }
     await callbacks.onPageFinished(url);
+  }
+
+  Future<void> dispatchPageCommitVisible(String url) async {
+    final onPageCommitVisible = _callbacks?.onPageCommitVisible;
+    if (onPageCommitVisible == null) {
+      return;
+    }
+    onPageCommitVisible(url);
   }
 
   Future<ForumWebViewNavigationDecision?> dispatchNavigationRequest(

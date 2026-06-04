@@ -19,6 +19,7 @@ class ForumWebViewCapabilityProfile {
     required this.supportsTransparentBackground,
     required this.supportsPlatformScrollTuning,
     required this.supportsCookieHooks,
+    this.supportsPageCommitVisible = false,
   });
 
   final ForumWebViewEngine engine;
@@ -27,6 +28,7 @@ class ForumWebViewCapabilityProfile {
   final bool supportsTransparentBackground;
   final bool supportsPlatformScrollTuning;
   final bool supportsCookieHooks;
+  final bool supportsPageCommitVisible;
 }
 
 enum ForumWebViewInitialUserScriptInjectionTime {

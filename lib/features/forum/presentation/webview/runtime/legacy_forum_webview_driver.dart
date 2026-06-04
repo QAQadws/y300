@@ -21,6 +21,7 @@ class LegacyForumWebViewDriver implements ForumWebViewDriver {
         supportsTransparentBackground: false,
         supportsPlatformScrollTuning: false,
         supportsCookieHooks: false,
+        supportsPageCommitVisible: false,
       );
 
   @override

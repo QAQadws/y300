@@ -519,6 +519,7 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
       supportsTransparentBackground: true,
       supportsPlatformScrollTuning: true,
       supportsCookieHooks: true,
+      supportsPageCommitVisible: true,
     );
   }
 

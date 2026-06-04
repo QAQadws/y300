@@ -18,11 +18,13 @@ class ForumWebViewCallbacks {
     required this.onPageFinished,
     required this.onProgress,
     required this.onNavigationRequest,
+    this.onPageCommitVisible,
   });
 
   final void Function(String url) onPageStarted;
   final Future<void> Function(String url) onPageFinished;
   final void Function(int progress) onProgress;
+  final void Function(String url)? onPageCommitVisible;
   final FutureOr<ForumWebViewNavigationDecision> Function(String url)
       onNavigationRequest;
 }

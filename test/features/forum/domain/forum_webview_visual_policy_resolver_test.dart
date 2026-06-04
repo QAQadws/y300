@@ -18,7 +18,19 @@ void main() {
       expect(policy.lateRemovedSelectors, expectedSelectors);
       expect(policy.disableHorizontalOverflow, isTrue);
       expect(policy.useLoadingMaskUntilStable, isTrue);
-      expect(policy.extraCss, isEmpty);
+      expect(policy.extraCss, isNotEmpty);
+      expect(
+        policy.extraCss,
+        contains(
+          'html, body { margin: 0 !important; padding: 0 !important; background: transparent !important; }',
+        ),
+      );
+      expect(
+        policy.extraCss,
+        contains(
+          'img, video, svg, canvas, iframe { max-width: 100% !important; height: auto !important; }',
+        ),
+      );
     }
   });
 }

@@ -6,10 +6,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart' as inapp;
 import 'package:y300/features/forum/domain/models/forum_webview_runtime_models.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver_contract.dart';
+import 'package:y300/features/forum/presentation/webview/runtime/forum_webview_platform_configurator.dart';
 
 class InAppForumWebViewDriver implements ForumWebViewDriver {
-  InAppForumWebViewDriver() : _cookieManager = inapp.CookieManager.instance();
+  InAppForumWebViewDriver({
+    required ForumWebViewPlatformConfigurator platformConfigurator,
+  }) : _platformConfigurator = platformConfigurator,
+       _cookieManager = inapp.CookieManager.instance();
 
+  final ForumWebViewPlatformConfigurator _platformConfigurator;
   final inapp.CookieManager _cookieManager;
   final Completer<inapp.InAppWebViewController> _controllerCompleter =
       Completer<inapp.InAppWebViewController>();
@@ -22,11 +27,15 @@ class InAppForumWebViewDriver implements ForumWebViewDriver {
     final bootstrapConfig = _bootstrapConfig;
     return inapp.InAppWebView(
       key: key,
-      initialSettings: inapp.InAppWebViewSettings(
-        javaScriptEnabled: true,
-        useShouldOverrideUrlLoading: true,
-        transparentBackground: true,
-      ),
+      initialSettings: bootstrapConfig != null
+          ? _platformConfigurator.buildSettings(
+              bootstrapConfig: bootstrapConfig,
+            )
+          : inapp.InAppWebViewSettings(
+              javaScriptEnabled: true,
+              useShouldOverrideUrlLoading: true,
+              transparentBackground: true,
+            ),
       initialUserScripts: _buildInitialUserScripts(bootstrapConfig),
       onWebViewCreated: (controller) {
         _controller = controller;
@@ -50,6 +59,13 @@ class InAppForumWebViewDriver implements ForumWebViewDriver {
       },
       onProgressChanged: (controller, progress) {
         _callbacks?.onProgress(progress);
+      },
+      onPageCommitVisible: (controller, url) {
+        final onPageCommitVisible = _callbacks?.onPageCommitVisible;
+        if (onPageCommitVisible == null || url == null) {
+          return;
+        }
+        onPageCommitVisible(url.toString());
       },
       shouldOverrideUrlLoading: (controller, navigationAction) async {
         final callbacks = _callbacks;
@@ -77,6 +93,7 @@ class InAppForumWebViewDriver implements ForumWebViewDriver {
       supportsTransparentBackground: true,
       supportsPlatformScrollTuning: true,
       supportsCookieHooks: true,
+      supportsPageCommitVisible: true,
     );
   }
 

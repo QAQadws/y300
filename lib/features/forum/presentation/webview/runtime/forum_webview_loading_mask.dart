@@ -5,14 +5,12 @@ class ForumWebViewLoadingMask extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context).scaffoldBackgroundColor;
+    final color = Theme.of(context).colorScheme.surface;
     return IgnorePointer(
       child: ColoredBox(
         key: const Key('forum-webview-loading-mask'),
         color: color,
-        child: const Center(
-          child: CircularProgressIndicator.adaptive(),
-        ),
+        child: const SizedBox.expand(),
       ),
     );
   }
