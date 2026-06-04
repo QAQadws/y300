@@ -10,7 +10,7 @@ void main() {
     '.footer.mt10.cl',
     '.foot.flex-box',
   };
-  const homeAndForumDisplayExtraSelectors = <String>{
+  const pwaLateOnlySelectors = <String>{
     '.foot_height',
     '.foot-pwa',
   };
@@ -38,27 +38,41 @@ void main() {
     );
   }
 
-  test('home and forum display include their footer cleanup selectors', () {
+  test('home keeps the managed-site baseline selectors only', () {
+    final policy = resolver.resolve(ForumWebViewPageKind.home);
+
+    expect(policy.earlyHiddenSelectors, baselineSelectors);
+    expect(policy.lateRemovedSelectors, baselineSelectors);
+    expect(policy.earlyHiddenSelectors, isNot(contains('.foot_height')));
+    expect(policy.earlyHiddenSelectors, isNot(contains('.foot-pwa')));
+    expect(
+      policy.earlyHiddenSelectors,
+      isNot(contains('.foot.foot_reply.flex-box.cl')),
+    );
+    expect(policy.earlyHiddenSelectors, isNot(contains('.foot_height_view')));
+    expectSharedPolicyShape(ForumWebViewPageKind.home);
+  });
+
+  test('forum display and search keep pwa cleanup late-only', () {
     for (final pageKind in <ForumWebViewPageKind>[
-      ForumWebViewPageKind.home,
       ForumWebViewPageKind.forumDisplay,
+      ForumWebViewPageKind.search,
     ]) {
       final policy = resolver.resolve(pageKind);
-      expect(
-        policy.earlyHiddenSelectors,
-        <String>{
-          ...baselineSelectors,
-          ...homeAndForumDisplayExtraSelectors,
-        },
-      );
+      expect(policy.earlyHiddenSelectors, baselineSelectors);
       expect(
         policy.lateRemovedSelectors,
         <String>{
           ...baselineSelectors,
-          ...homeAndForumDisplayExtraSelectors,
+          ...pwaLateOnlySelectors,
         },
       );
-      expect(policy.earlyHiddenSelectors, isNot(contains('.foot.foot_reply.flex-box.cl')));
+      expect(policy.earlyHiddenSelectors, isNot(contains('.foot_height')));
+      expect(policy.earlyHiddenSelectors, isNot(contains('.foot-pwa')));
+      expect(
+        policy.earlyHiddenSelectors,
+        isNot(contains('.foot.foot_reply.flex-box.cl')),
+      );
       expect(policy.earlyHiddenSelectors, isNot(contains('.foot_height_view')));
       expectSharedPolicyShape(pageKind);
     }
@@ -86,22 +100,18 @@ void main() {
     expectSharedPolicyShape(ForumWebViewPageKind.threadDetail);
   });
 
-  test('search and other keep the managed-site baseline selectors only', () {
-    for (final pageKind in <ForumWebViewPageKind>[
-      ForumWebViewPageKind.search,
-      ForumWebViewPageKind.other,
-    ]) {
-      final policy = resolver.resolve(pageKind);
-      expect(policy.earlyHiddenSelectors, baselineSelectors);
-      expect(policy.lateRemovedSelectors, baselineSelectors);
-      expect(policy.earlyHiddenSelectors, isNot(contains('.foot_height')));
-      expect(policy.earlyHiddenSelectors, isNot(contains('.foot-pwa')));
-      expect(
-        policy.earlyHiddenSelectors,
-        isNot(contains('.foot.foot_reply.flex-box.cl')),
-      );
-      expect(policy.earlyHiddenSelectors, isNot(contains('.foot_height_view')));
-      expectSharedPolicyShape(pageKind);
-    }
+  test('other keeps the managed-site baseline selectors only', () {
+    final policy = resolver.resolve(ForumWebViewPageKind.other);
+
+    expect(policy.earlyHiddenSelectors, baselineSelectors);
+    expect(policy.lateRemovedSelectors, baselineSelectors);
+    expect(policy.earlyHiddenSelectors, isNot(contains('.foot_height')));
+    expect(policy.earlyHiddenSelectors, isNot(contains('.foot-pwa')));
+    expect(
+      policy.earlyHiddenSelectors,
+      isNot(contains('.foot.foot_reply.flex-box.cl')),
+    );
+    expect(policy.earlyHiddenSelectors, isNot(contains('.foot_height_view')));
+    expectSharedPolicyShape(ForumWebViewPageKind.other);
   });
 }

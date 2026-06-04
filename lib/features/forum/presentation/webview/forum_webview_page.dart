@@ -157,10 +157,10 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
 
     final visualPolicy = visualPolicyResolver.resolve(ForumWebViewPageKind.home);
     // Initial user scripts are registered once per WebView runtime, but they
-    // run on every later managed-page navigation. Merge page-specific cleanup
-    // selectors up front so thread detail / forum list chrome can still be
-    // hidden at document-start after leaving the home page.
-    final initialVisualPolicy = _mergeVisualPolicies(
+    // run on every later managed-page navigation. Only merge early-safe
+    // selectors here so late-only cleanup targets such as forum/search PWA
+    // chrome stay out of document-start injection.
+    final initialVisualPolicy = _mergeEarlyHiddenPolicies(
       _managedPageKinds.map(visualPolicyResolver.resolve),
     );
     final initialUserScripts = earlyScriptBuilder.build(
@@ -911,7 +911,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     return ref.read(forumWebViewNetworkPolicyResolverProvider).resolve(targetUri);
   }
 
-  ForumWebViewVisualPolicy _mergeVisualPolicies(
+  ForumWebViewVisualPolicy _mergeEarlyHiddenPolicies(
     Iterable<ForumWebViewVisualPolicy> policies,
   ) {
     final collectedPolicies = policies.toList(growable: false);
@@ -919,9 +919,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       earlyHiddenSelectors: Set<String>.unmodifiable(
         collectedPolicies.expand((policy) => policy.earlyHiddenSelectors),
       ),
-      lateRemovedSelectors: Set<String>.unmodifiable(
-        collectedPolicies.expand((policy) => policy.lateRemovedSelectors),
-      ),
+      lateRemovedSelectors: const <String>{},
       extraCss: _mergeCssBlocks(
         collectedPolicies.map((policy) => policy.extraCss),
       ),

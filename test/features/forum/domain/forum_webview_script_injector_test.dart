@@ -4,14 +4,12 @@ import 'package:y300/features/forum/domain/services/forum_webview_script_injecto
 
 void main() {
   const injector = DefaultForumWebViewScriptInjector();
-  const homeVisualPolicy = ForumWebViewVisualPolicy(
+  const pwaLateOnlyVisualPolicy = ForumWebViewVisualPolicy(
     earlyHiddenSelectors: <String>{
       '#header-padding',
       '.header.cl',
       '.footer.mt10.cl',
       '.foot.flex-box',
-      '.foot_height',
-      '.foot-pwa',
     },
     lateRemovedSelectors: <String>{
       '#header-padding',
@@ -47,8 +45,8 @@ void main() {
     disableHorizontalOverflow: true,
   );
 
-  test('cleanupScriptForPolicy contains home/forum list selectors and late-repair css', () {
-    final script = injector.cleanupScriptForPolicy(homeVisualPolicy);
+  test('cleanupScriptForPolicy contains forum list/search selectors and late-repair css', () {
+    final script = injector.cleanupScriptForPolicy(pwaLateOnlyVisualPolicy);
 
     expect(script, contains('#header-padding'));
     expect(script, contains('.header.cl'));

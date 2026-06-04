@@ -16,6 +16,13 @@ import 'package:y300/features/tags/data/tag_providers.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/tags/domain/forum_tag_models.dart';
 
+Matcher containsCssSelector(String selector) {
+  final escapedSelector = RegExp.escape(selector);
+  return contains(
+    RegExp('(^|[^A-Za-z0-9_-])$escapedSelector(?=\$|[^A-Za-z0-9_-])'),
+  );
+}
+
 void main() {
   testWidgets('ForumWebViewPage waits for bootstrap config before building the real webview', (
     tester,
@@ -95,22 +102,34 @@ void main() {
       'https://bbs.yamibo.com/index.php?mobile=2',
     );
     expect(driver.bootstrapConfig?.capabilityProfile.engine, ForumWebViewEngine.advanced);
-    final bootstrapConfig = driver.bootstrapConfig;
-    expect(bootstrapConfig, isNotNull);
+    final bootstrapConfig = driver.bootstrapConfig!;
     expect(
-      bootstrapConfig!.visualPolicy.earlyHiddenSelectors,
+      bootstrapConfig.visualPolicy.earlyHiddenSelectors,
       const <String>{
         '#header-padding',
         '.header.cl',
         '.footer.mt10.cl',
         '.foot.flex-box',
-        '.foot_height',
-        '.foot-pwa',
+      },
+    );
+    expect(
+      bootstrapConfig.visualPolicy.lateRemovedSelectors,
+      const <String>{
+        '#header-padding',
+        '.header.cl',
+        '.footer.mt10.cl',
+        '.foot.flex-box',
       },
     );
     expect(bootstrapConfig.initialUserScripts, hasLength(1));
-    expect(bootstrapConfig.initialUserScripts.single.source, contains('.foot_height'));
-    expect(bootstrapConfig.initialUserScripts.single.source, contains('.foot-pwa'));
+    expect(
+      bootstrapConfig.initialUserScripts.single.source,
+      isNot(containsCssSelector('.foot_height')),
+    );
+    expect(
+      bootstrapConfig.initialUserScripts.single.source,
+      isNot(containsCssSelector('.foot-pwa')),
+    );
     expect(bootstrapConfig.networkPolicy.customUserAgent, isNull);
     expect(bootstrapConfig.networkPolicy.preferAppLocale, isTrue);
     expect(driver.seededCookies.single.domain, 'bbs.yamibo.com');
@@ -148,9 +167,8 @@ void main() {
     await tester.pumpWidget(_buildTestApp(driver: driver));
     await tester.pump();
 
-    final bootstrapConfig = driver.bootstrapConfig;
-    expect(bootstrapConfig, isNotNull);
-    expect(bootstrapConfig!.capabilityProfile.engine, ForumWebViewEngine.advanced);
+    final bootstrapConfig = driver.bootstrapConfig!;
+    expect(bootstrapConfig.capabilityProfile.engine, ForumWebViewEngine.advanced);
     expect(bootstrapConfig.initialUserScripts, hasLength(1));
     expect(
       bootstrapConfig.initialUserScripts.single.injectionTime,
@@ -162,23 +180,23 @@ void main() {
     );
     expect(
       bootstrapConfig.initialUserScripts.single.source,
-      contains('.foot_height'),
+      isNot(containsCssSelector('.foot_height')),
     );
     expect(
       bootstrapConfig.initialUserScripts.single.source,
-      contains('.foot-pwa'),
+      isNot(containsCssSelector('.foot-pwa')),
     );
     expect(
       bootstrapConfig.initialUserScripts.single.source,
-      contains('.foot.foot_reply.flex-box.cl'),
+      containsCssSelector('.foot.foot_reply.flex-box.cl'),
     );
     expect(
       bootstrapConfig.initialUserScripts.single.source,
-      contains('.foot_height_view'),
+      containsCssSelector('.foot_height_view'),
     );
   });
 
-  testWidgets('ForumWebViewPage cleans chrome when page finishes loading', (
+  testWidgets('ForumWebViewPage cleans baseline chrome when home finishes loading', (
     tester,
   ) async {
     final driver = _FakeForumWebViewDriver();
@@ -192,8 +210,10 @@ void main() {
     await tester.pump();
 
     expect(driver.scripts.length, 1);
-    expect(driver.scripts.single, contains('.foot_height'));
-    expect(driver.scripts.single, contains('.foot-pwa'));
+    expect(driver.scripts.single, containsCssSelector('#header-padding'));
+    expect(driver.scripts.single, containsCssSelector('.header.cl'));
+    expect(driver.scripts.single, isNot(containsCssSelector('.foot_height')));
+    expect(driver.scripts.single, isNot(containsCssSelector('.foot-pwa')));
 
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump();
@@ -215,8 +235,29 @@ void main() {
     await tester.pump();
 
     expect(driver.scripts.length, 1);
-    expect(driver.scripts.single, contains('.foot.foot_reply.flex-box.cl'));
-    expect(driver.scripts.single, contains('.foot_height_view'));
+    expect(
+      driver.scripts.single,
+      containsCssSelector('.foot.foot_reply.flex-box.cl'),
+    );
+    expect(driver.scripts.single, containsCssSelector('.foot_height_view'));
+  });
+
+  testWidgets('ForumWebViewPage uses pwa cleanup selectors after search navigation', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver()..title = '帖子搜索';
+
+    await tester.pumpWidget(_buildTestApp(driver: driver));
+    await tester.pump();
+
+    await driver.dispatchPageFinished(
+      'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
+    );
+    await tester.pump();
+
+    expect(driver.scripts.length, 1);
+    expect(driver.scripts.single, containsCssSelector('.foot_height'));
+    expect(driver.scripts.single, containsCssSelector('.foot-pwa'));
   });
 
   testWidgets('ForumWebViewPage keeps loading mask until the first managed page commits visible and stabilizes', (

@@ -21,7 +21,7 @@ class DefaultForumWebViewVisualPolicyResolver
     '.footer.mt10.cl',
     '.foot.flex-box',
   };
-  static const Set<String> _homeAndForumDisplayExtraSelectors = <String>{
+  static const Set<String> _pwaLateOnlySelectors = <String>{
     '.foot_height',
     '.foot-pwa',
   };
@@ -33,14 +33,15 @@ class DefaultForumWebViewVisualPolicyResolver
       'html, body { margin: 0 !important; padding: 0 !important; background: transparent !important; }\n'
       'img, video, svg, canvas, iframe { max-width: 100% !important; height: auto !important; }';
 
-  static final ForumWebViewVisualPolicy _homePolicy = _buildPolicy(
-    extraSelectors: _homeAndForumDisplayExtraSelectors,
-  );
+  static final ForumWebViewVisualPolicy _homePolicy = _buildPolicy();
   static final ForumWebViewVisualPolicy _forumDisplayPolicy = _buildPolicy(
-    extraSelectors: _homeAndForumDisplayExtraSelectors,
+    lateOnlyExtraSelectors: _pwaLateOnlySelectors,
+  );
+  static final ForumWebViewVisualPolicy _searchPolicy = _buildPolicy(
+    lateOnlyExtraSelectors: _pwaLateOnlySelectors,
   );
   static final ForumWebViewVisualPolicy _threadDetailPolicy = _buildPolicy(
-    extraSelectors: _threadDetailExtraSelectors,
+    earlyAndLateExtraSelectors: _threadDetailExtraSelectors,
   );
   static final ForumWebViewVisualPolicy _baselinePolicy = _buildPolicy();
 
@@ -54,21 +55,28 @@ class DefaultForumWebViewVisualPolicyResolver
       case ForumWebViewPageKind.threadDetail:
         return _threadDetailPolicy;
       case ForumWebViewPageKind.search:
+        return _searchPolicy;
       case ForumWebViewPageKind.other:
         return _baselinePolicy;
     }
   }
 
   static ForumWebViewVisualPolicy _buildPolicy({
-    Set<String> extraSelectors = const <String>{},
+    Set<String> earlyAndLateExtraSelectors = const <String>{},
+    Set<String> lateOnlyExtraSelectors = const <String>{},
   }) {
-    final selectors = Set<String>.unmodifiable(<String>{
+    final earlySelectors = Set<String>.unmodifiable(<String>{
       ..._baselineSelectors,
-      ...extraSelectors,
+      ...earlyAndLateExtraSelectors,
+    });
+    final lateSelectors = Set<String>.unmodifiable(<String>{
+      ..._baselineSelectors,
+      ...earlyAndLateExtraSelectors,
+      ...lateOnlyExtraSelectors,
     });
     return ForumWebViewVisualPolicy(
-      earlyHiddenSelectors: selectors,
-      lateRemovedSelectors: selectors,
+      earlyHiddenSelectors: earlySelectors,
+      lateRemovedSelectors: lateSelectors,
       extraCss: _sharedExtraCss,
       useLoadingMaskUntilStable: true,
       disableHorizontalOverflow: true,

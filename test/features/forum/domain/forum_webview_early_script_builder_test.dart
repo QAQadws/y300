@@ -3,16 +3,21 @@ import 'package:y300/features/forum/domain/models/forum_webview_runtime_models.d
 import 'package:y300/features/forum/domain/models/forum_webview_visual_policy_models.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_early_script_builder.dart';
 
+Matcher containsCssSelector(String selector) {
+  final escapedSelector = RegExp.escape(selector);
+  return contains(
+    RegExp('(^|[^A-Za-z0-9_-])$escapedSelector(?=\$|[^A-Za-z0-9_-])'),
+  );
+}
+
 void main() {
   const builder = DefaultForumWebViewEarlyScriptBuilder();
-  const homeVisualPolicy = ForumWebViewVisualPolicy(
+  const pwaLateOnlyVisualPolicy = ForumWebViewVisualPolicy(
     earlyHiddenSelectors: <String>{
       '#header-padding',
       '.header.cl',
       '.footer.mt10.cl',
       '.foot.flex-box',
-      '.foot_height',
-      '.foot-pwa',
     },
     lateRemovedSelectors: <String>{
       '#header-padding',
@@ -58,13 +63,13 @@ void main() {
         supportsPlatformScrollTuning: false,
         supportsCookieHooks: false,
       ),
-      visualPolicy: homeVisualPolicy,
+      visualPolicy: pwaLateOnlyVisualPolicy,
     );
 
     expect(scripts, isEmpty);
   });
 
-  test('best-effort and reliable modes produce a home/forum list document-start style script', () {
+  test('best-effort and reliable modes keep late-only pwa cleanup out of document-start script', () {
     for (final mode in <ForumWebViewDocumentStartMode>[
       ForumWebViewDocumentStartMode.bestEffort,
       ForumWebViewDocumentStartMode.reliable,
@@ -78,7 +83,7 @@ void main() {
           supportsPlatformScrollTuning: true,
           supportsCookieHooks: true,
         ),
-        visualPolicy: homeVisualPolicy,
+        visualPolicy: pwaLateOnlyVisualPolicy,
       );
 
       expect(scripts, hasLength(1));
@@ -89,8 +94,8 @@ void main() {
       expect(scripts.single.source, contains("window.location.host !== 'bbs.yamibo.com'"));
       expect(scripts.single.source, contains('#header-padding'));
       expect(scripts.single.source, contains('.header.cl'));
-      expect(scripts.single.source, contains('.foot_height'));
-      expect(scripts.single.source, contains('.foot-pwa'));
+      expect(scripts.single.source, isNot(containsCssSelector('.foot_height')));
+      expect(scripts.single.source, isNot(containsCssSelector('.foot-pwa')));
       expect(
         scripts.single.source,
         contains('overscroll-behavior-x: none !important;'),
@@ -120,8 +125,14 @@ void main() {
         scripts.single.injectionTime,
         ForumWebViewInitialUserScriptInjectionTime.documentStart,
       );
-      expect(scripts.single.source, contains('.foot.foot_reply.flex-box.cl'));
-      expect(scripts.single.source, contains('.foot_height_view'));
+      expect(
+        scripts.single.source,
+        containsCssSelector('.foot.foot_reply.flex-box.cl'),
+      );
+      expect(
+        scripts.single.source,
+        containsCssSelector('.foot_height_view'),
+      );
       expect(
         scripts.single.source,
         contains('overscroll-behavior-x: none !important;'),
