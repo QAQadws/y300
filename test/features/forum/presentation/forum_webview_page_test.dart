@@ -11,6 +11,10 @@ import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
+import 'package:y300/features/reply/data/reply_draft_repository.dart';
+import 'package:y300/features/reply/data/reply_providers.dart';
+import 'package:y300/features/reply/data/reply_repository.dart';
+import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/tags/data/forum_tag_repository.dart';
 import 'package:y300/features/tags/data/tag_providers.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
@@ -795,6 +799,10 @@ void main() {
 
     expect(find.byKey(const Key('forum-webview-back-button')), findsOneWidget);
     expect(find.text('主题标题'), findsOneWidget);
+    expect(
+      find.byKey(const Key('forum-webview-thread-reply-button')),
+      findsNothing,
+    );
 
     await tester.tap(find.byKey(const Key('forum-webview-search-button')));
     await tester.pumpAndSettle();
@@ -804,6 +812,108 @@ void main() {
       driver.loadedUris.last.toString(),
       'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
     );
+  });
+
+  testWidgets('ForumWebViewPage hides thread reply button outside thread detail', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+
+    await tester.pumpWidget(_buildTestApp(driver: driver));
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('forum-webview-thread-reply-button')),
+      findsNothing,
+    );
+
+    await driver.dispatchPageStarted(
+      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+    );
+    await driver.dispatchPageFinished(
+      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('forum-webview-thread-reply-button')),
+      findsNothing,
+    );
+
+    await driver.dispatchPageStarted(
+      'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
+    );
+    await driver.dispatchPageFinished(
+      'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('forum-webview-thread-reply-button')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('ForumWebViewPage opens thread reply composer with fid and tid', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver()..title = '主题标题';
+    final replyRepository = _FakeReplyRepository();
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        driver: driver,
+        replyRepository: replyRepository,
+      ),
+    );
+    await tester.pump();
+
+    await driver.dispatchPageStarted(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&fid=55&mobile=2',
+    );
+    await driver.dispatchPageFinished(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&fid=55&mobile=2',
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('forum-webview-thread-reply-button')),
+      findsOneWidget,
+    );
+    final appBar = tester.widget<AppBar>(find.byType(AppBar));
+    final actionKeys = appBar.actions!
+        .map((action) => action.key)
+        .whereType<Key>()
+        .toList(growable: false);
+    expect(
+      actionKeys,
+      containsAllInOrder(
+        const <Key>[
+          Key('forum-webview-search-button'),
+          Key('forum-webview-thread-reply-button'),
+          Key('forum-webview-more-button'),
+        ],
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('forum-webview-thread-reply-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('回复帖子'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('reply-composer-message-input')),
+      '来自 WebView 的回复',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('reply-composer-send-button')));
+    await tester.pumpAndSettle();
+
+    expect(replyRepository.sentDrafts, hasLength(1));
+    expect(replyRepository.sentDrafts.single.fid, '55');
+    expect(replyRepository.sentDrafts.single.tid, '123');
+    expect(replyRepository.sentDrafts.single.message, '来自 WebView 的回复');
+    expect(driver.reloadCallCount, 1);
+    expect(find.text('回复发布成功'), findsOneWidget);
   });
 
   testWidgets('ForumWebViewPage thread detail more menu shows author order and home actions', (
@@ -1250,6 +1360,8 @@ Widget _buildTestApp({
   ForumTagRepository? tagRepository,
   ForumFavoriteRepository? favoriteRepository,
   ForumWebViewExternalLauncher? launcher,
+  ReplyRepository? replyRepository,
+  ReplyDraftRepository? replyDraftRepository,
 }) {
   return ProviderScope(
     overrides: [
@@ -1263,6 +1375,12 @@ Widget _buildTestApp({
       ),
       forumFavoriteRepositoryProvider.overrideWithValue(
         favoriteRepository ?? _FakeForumFavoriteRepository(),
+      ),
+      replyRepositoryProvider.overrideWithValue(
+        replyRepository ?? _FakeReplyRepository(),
+      ),
+      replyDraftRepositoryProvider.overrideWithValue(
+        replyDraftRepository ?? _MemoryReplyDraftRepository(),
       ),
     ],
     child: const MaterialApp(home: ForumWebViewPage()),
@@ -1275,6 +1393,8 @@ Widget _buildRoutedTestApp({
   ForumTagRepository? tagRepository,
   ForumFavoriteRepository? favoriteRepository,
   ForumWebViewExternalLauncher? launcher,
+  ReplyRepository? replyRepository,
+  ReplyDraftRepository? replyDraftRepository,
 }) {
   return ProviderScope(
     overrides: [
@@ -1288,6 +1408,12 @@ Widget _buildRoutedTestApp({
       ),
       forumFavoriteRepositoryProvider.overrideWithValue(
         favoriteRepository ?? _FakeForumFavoriteRepository(),
+      ),
+      replyRepositoryProvider.overrideWithValue(
+        replyRepository ?? _FakeReplyRepository(),
+      ),
+      replyDraftRepositoryProvider.overrideWithValue(
+        replyDraftRepository ?? _MemoryReplyDraftRepository(),
       ),
     ],
     child: MaterialApp(
@@ -1475,6 +1601,60 @@ class _FakeForumWebViewExternalLauncher
   Future<bool> launch(Uri uri) async {
     launchedUris.add(uri);
     return shouldSucceed;
+  }
+}
+
+class _MemoryReplyDraftRepository implements ReplyDraftRepository {
+  final Map<String, ReplyDraftSnapshot> _drafts = <String, ReplyDraftSnapshot>{};
+
+  @override
+  Future<void> deleteDraft(ReplyDraftIdentity identity) async {
+    _drafts.remove(identity.storageKey);
+  }
+
+  @override
+  Future<List<ReplyDraftSnapshot>> listDraftsForThread({
+    required String fid,
+    required String tid,
+  }) async {
+    return _drafts.values
+        .where((draft) => draft.identity.fid == fid && draft.identity.tid == tid)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<ReplyDraftSnapshot?> loadDraft(ReplyDraftIdentity identity) async {
+    return _drafts[identity.storageKey];
+  }
+
+  @override
+  Future<void> saveDraft(ReplyDraftSnapshot draft) async {
+    if (draft.isEmpty) {
+      _drafts.remove(draft.identity.storageKey);
+      return;
+    }
+    _drafts[draft.identity.storageKey] = draft;
+  }
+}
+
+class _FakeReplyRepository implements ReplyRepository {
+  _FakeReplyRepository({
+    ApiResult<ReplySubmissionResult>? result,
+  }) : result =
+           result ??
+           const ApiSuccess<ReplySubmissionResult>(
+             ReplySubmissionResult(message: '回复发布成功'),
+           );
+
+  final ApiResult<ReplySubmissionResult> result;
+  final List<ReplyDraft> sentDrafts = <ReplyDraft>[];
+
+  @override
+  Future<ApiResult<ReplySubmissionResult>> sendReply({
+    required ReplyDraft draft,
+  }) async {
+    sentDrafts.add(draft);
+    return result;
   }
 }
 

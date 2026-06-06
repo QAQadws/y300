@@ -21,6 +21,9 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_external_
 import 'package:y300/features/forum/presentation/webview/forum_webview_resource_diagnostic_recorder.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_state.dart';
 import 'package:y300/features/forum/presentation/webview/runtime/forum_webview_loading_mask.dart';
+import 'package:y300/features/reply/domain/models/reply_models.dart';
+import 'package:y300/features/reply/presentation/reply_composer_page.dart';
+import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 
 class ForumWebViewPage extends ConsumerStatefulWidget {
   const ForumWebViewPage({super.key});
@@ -395,6 +398,15 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
             },
             icon: const Icon(Icons.search),
           ),
+        if (_canOpenThreadReply(state))
+          IconButton(
+            key: const Key('forum-webview-thread-reply-button'),
+            tooltip: '回复帖子',
+            onPressed: () {
+              unawaited(_openThreadReplyComposer(context, state, driver));
+            },
+            icon: const Icon(Icons.reply),
+          ),
         PopupMenuButton<String>(
           key: const Key('forum-webview-more-button'),
           icon: const Icon(Icons.more_vert),
@@ -566,6 +578,50 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       return '搜索本版';
     }
     return '搜索论坛';
+  }
+
+  bool _canOpenThreadReply(ForumWebViewState state) {
+    return state.pageKind == ForumWebViewPageKind.threadDetail &&
+        (state.fid ?? '').trim().isNotEmpty &&
+        (state.tid ?? '').trim().isNotEmpty;
+  }
+
+  Future<void> _openThreadReplyComposer(
+    BuildContext context,
+    ForumWebViewState state,
+    ForumWebViewDriver driver,
+  ) async {
+    final fid = state.fid?.trim();
+    final tid = state.tid?.trim();
+    if (fid == null || fid.isEmpty || tid == null || tid.isEmpty) {
+      return;
+    }
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final result = await navigator.push<ReplyComposerResult>(
+      MaterialPageRoute<ReplyComposerResult>(
+        builder: (_) => ReplyComposerPage(
+          args: ReplyComposerArgs(
+            target: ReplyTarget.thread(
+              fid: fid,
+              tid: tid,
+              sourceUri: state.currentUri,
+            ),
+            title: state.pageTitle,
+          ),
+        ),
+      ),
+    );
+    if (!mounted || result == null || !result.sent) {
+      return;
+    }
+    if (messenger != null) {
+      _showSnackBar(
+        messenger,
+        result.message.trim().isEmpty ? '回复成功' : result.message,
+      );
+    }
+    await driver.reload();
   }
 
   Future<void> _loadSearchPage(
