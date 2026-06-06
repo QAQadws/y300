@@ -17,17 +17,17 @@ void main() {
                 'smilies': <Object?>[
                   <Object?>[
                     <String, String>{
-                      'code': r'/\{\:9_656\:\}/',
+                      'code': '{:9_656:}',
                       'image': 'bugcat/Capoo16.gif',
                     },
                     <String, String>{
-                      'code': r'/\{\:9_657\:\}/',
+                      'code': '{:9_657:}',
                       'image': 'bugcat/Capoo27.gif',
                     },
                   ],
                   <Object?>[
                     <String, String>{
-                      'code': r'/\{\:1_1000\:\}/',
+                      'code': '{:1_1000:}',
                       'image': 'default/handshake.gif',
                     },
                   ],
@@ -45,6 +45,7 @@ void main() {
       expect(groups[0].title, 'group-0');
       expect(groups[0].stickers, hasLength(2));
       expect(groups[0].stickers.first.code, '{:9_656:}');
+      expect(groups[0].stickers.first.rawCodePattern, '{:9_656:}');
       expect(
         groups[0].stickers.first.assetPath,
         'assets/stickers/bugcat/Capoo16.gif',
@@ -56,37 +57,6 @@ void main() {
       );
     });
 
-    test('loads Discuz sticker json with raw escaped code patterns', () async {
-      final repository = AssetStickerCatalogRepository(
-        normalizer: const StickerCodeNormalizer(),
-        bundle: _FakeAssetBundle(
-          <String, String>{
-            'assets/stickers/stickers.json': r'''
-{
-  "smilies": [
-    [
-      {
-        "code":"/\{\:9_656\:\}/",
-        "image": "bugcat/Capoo16.gif"
-      }
-    ]
-  ]
-}
-''',
-          },
-        ),
-      );
-
-      final groups = await repository.loadStickerGroups();
-
-      expect(groups, hasLength(1));
-      expect(groups.single.stickers.single.code, '{:9_656:}');
-      expect(
-        groups.single.stickers.single.assetPath,
-        'assets/stickers/bugcat/Capoo16.gif',
-      );
-    });
-
     test('keeps all six sticker groups from asset payload', () async {
       final repository = AssetStickerCatalogRepository(
         normalizer: const StickerCodeNormalizer(),
@@ -95,12 +65,12 @@ void main() {
             'assets/stickers/stickers.json': r'''
 {
   "smilies": [
-    [{"code":"/\{\:0_1000\:\}/","image":"group0/item.gif"}],
-    [{"code":"/\{\:1_1000\:\}/","image":"group1/item.gif"}],
-    [{"code":"/\{\:2_1000\:\}/","image":"group2/item.gif"}],
-    [{"code":"/\{\:3_1000\:\}/","image":"group3/item.gif"}],
-    [{"code":"/\{\:4_1000\:\}/","image":"group4/item.gif"}],
-    [{"code":"/\{\:5_1000\:\}/","image":"group5/item.gif"}]
+    [{"code":"{:0_1000:}","image":"group0/item.gif"}],
+    [{"code":"{:1_1000:}","image":"group1/item.gif"}],
+    [{"code":"{:2_1000:}","image":"group2/item.gif"}],
+    [{"code":"{:3_1000:}","image":"group3/item.gif"}],
+    [{"code":"{:4_1000:}","image":"group4/item.gif"}],
+    [{"code":"{:5_1000:}","image":"group5/item.gif"}]
   ]
 }
 ''',
@@ -131,10 +101,10 @@ void main() {
                 'smilies': <Object?>[
                   <Object?>[
                     <String, String>{
-                      'code': r'/\{\:9_656\:\}/',
+                      'code': '{:9_656:}',
                       'image': 'bugcat/Capoo16.gif',
                     },
-                    <String, String>{'code': r'/\{\:9_657\:\}/'},
+                    <String, String>{'code': '{:9_657:}'},
                     <String, String>{'image': 'bugcat/Capoo27.gif'},
                   ],
                 ],

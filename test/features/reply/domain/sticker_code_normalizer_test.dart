@@ -13,7 +13,7 @@ void main() {
       expect(normalizer.normalize(r'/\{\:1_1000\:\}/'), '{:1_1000:}');
     });
 
-    test('keeps plain code stable', () {
+    test('keeps literal asset code stable', () {
       expect(normalizer.normalize('{:9_656:}'), '{:9_656:}');
     });
   });

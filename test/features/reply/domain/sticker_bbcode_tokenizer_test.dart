@@ -9,12 +9,12 @@ void main() {
       StickerItem(
         code: '{:9_656:}',
         assetPath: 'assets/stickers/bugcat/Capoo16.gif',
-        rawCodePattern: r'/\{\:9_656\:\}/',
+        rawCodePattern: '{:9_656:}',
       ),
       StickerItem(
         code: '{:1_1000:}',
         assetPath: 'assets/stickers/default/handshake.gif',
-        rawCodePattern: r'/\{\:1_1000\:\}/',
+        rawCodePattern: '{:1_1000:}',
       ),
     ];
 

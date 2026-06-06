@@ -282,7 +282,7 @@ const _stickerGroups = [
       StickerItem(
         code: '{:9_656:}',
         assetPath: 'assets/stickers/bugcat/Capoo16.gif',
-        rawCodePattern: r'/\{\:9_656\:\}/',
+        rawCodePattern: '{:9_656:}',
       ),
     ],
   ),
