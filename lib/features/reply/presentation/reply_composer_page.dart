@@ -2,10 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/reply/data/reply_providers.dart';
+import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/reply/presentation/reply_composer_controller.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 import 'package:y300/features/reply/presentation/widgets/bbcode_preview_panel.dart';
+import 'package:y300/features/reply/presentation/widgets/reply_editor_toolbar.dart';
+import 'package:y300/features/reply/presentation/widgets/sticker_picker_sheet.dart';
 
 class ReplyComposerPage extends ConsumerStatefulWidget {
   const ReplyComposerPage({
@@ -46,6 +50,10 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
     final asyncState = ref.watch(provider);
     final controller = ref.read(provider.notifier);
     final bbCodeRenderer = ref.watch(forumBbCodeRendererProvider);
+    final stickerGroups = ref.watch(stickerGroupsProvider).maybeWhen(
+          data: (groups) => groups,
+          orElse: () => const <StickerGroup>[],
+        );
     _controller = controller;
     final state = asyncState.value;
     if (state != null) {
@@ -76,13 +84,23 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
         data: (state) => _ReplyComposerBody(
           state: state,
           bbCodeRenderer: bbCodeRenderer,
+          stickers: _flattenStickers(stickerGroups),
           messageController: _messageController,
           onModeChanged: controller.switchMode,
           onMessageChanged: controller.updateMessage,
           onUseSignatureChanged: controller.toggleUseSignature,
+          onStickerPressed: () {
+            unawaited(_pickAndInsertSticker(context, controller));
+          },
         ),
       ),
     );
+  }
+
+  List<StickerItem> _flattenStickers(List<StickerGroup> groups) {
+    return [
+      for (final group in groups) ...group.stickers,
+    ];
   }
 
   void _applyRestoredDraftOnce(ReplyComposerState state) {
@@ -107,24 +125,69 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
     }
     navigator.pop(result);
   }
+
+  Future<void> _pickAndInsertSticker(
+    BuildContext context,
+    ReplyComposerController controller,
+  ) async {
+    final sticker = await showModalBottomSheet<StickerItem>(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => const StickerPickerSheet(),
+    );
+    if (!mounted || sticker == null) {
+      return;
+    }
+    _insertSticker(sticker, controller);
+  }
+
+  void _insertSticker(
+    StickerItem sticker,
+    ReplyComposerController controller,
+  ) {
+    final value = _messageController.value;
+    final text = value.text;
+    final selection = value.selection;
+    final start = selection.isValid ? selection.start : text.length;
+    final end = selection.isValid ? selection.end : text.length;
+    final normalizedStart = start.clamp(0, text.length).toInt();
+    final normalizedEnd = end.clamp(0, text.length).toInt();
+    final replaceStart = normalizedStart < normalizedEnd
+        ? normalizedStart
+        : normalizedEnd;
+    final replaceEnd = normalizedStart < normalizedEnd
+        ? normalizedEnd
+        : normalizedStart;
+    final nextText = text.replaceRange(replaceStart, replaceEnd, sticker.code);
+    final nextOffset = replaceStart + sticker.code.length;
+    _messageController.value = TextEditingValue(
+      text: nextText,
+      selection: TextSelection.collapsed(offset: nextOffset),
+    );
+    controller.updateMessage(nextText);
+  }
 }
 
 class _ReplyComposerBody extends StatelessWidget {
   const _ReplyComposerBody({
     required this.state,
     required this.bbCodeRenderer,
+    required this.stickers,
     required this.messageController,
     required this.onModeChanged,
     required this.onMessageChanged,
     required this.onUseSignatureChanged,
+    required this.onStickerPressed,
   });
 
   final ReplyComposerState state;
   final ForumBbCodeRenderer bbCodeRenderer;
+  final List<StickerItem> stickers;
   final TextEditingController messageController;
   final ValueChanged<ReplyComposerMode> onModeChanged;
   final ValueChanged<String> onMessageChanged;
   final ValueChanged<bool> onUseSignatureChanged;
+  final VoidCallback onStickerPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -157,6 +220,11 @@ class _ReplyComposerBody extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
+          ReplyEditorToolbar(
+            enabled: !state.isSubmitting,
+            onStickerPressed: onStickerPressed,
+          ),
+          const SizedBox(height: 12),
           if (state.mode == ReplyComposerMode.source)
             TextField(
               key: const Key('reply-composer-message-input'),
@@ -177,6 +245,7 @@ class _ReplyComposerBody extends StatelessWidget {
             BbCodePreviewPanel(
               source: state.message,
               renderer: bbCodeRenderer,
+              stickers: stickers,
             ),
           const SizedBox(height: 12),
           SwitchListTile(

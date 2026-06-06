@@ -56,6 +56,71 @@ void main() {
       );
     });
 
+    test('loads Discuz sticker json with raw escaped code patterns', () async {
+      final repository = AssetStickerCatalogRepository(
+        normalizer: const StickerCodeNormalizer(),
+        bundle: _FakeAssetBundle(
+          <String, String>{
+            'assets/stickers/stickers.json': r'''
+{
+  "smilies": [
+    [
+      {
+        "code":"/\{\:9_656\:\}/",
+        "image": "bugcat/Capoo16.gif"
+      }
+    ]
+  ]
+}
+''',
+          },
+        ),
+      );
+
+      final groups = await repository.loadStickerGroups();
+
+      expect(groups, hasLength(1));
+      expect(groups.single.stickers.single.code, '{:9_656:}');
+      expect(
+        groups.single.stickers.single.assetPath,
+        'assets/stickers/bugcat/Capoo16.gif',
+      );
+    });
+
+    test('keeps all six sticker groups from asset payload', () async {
+      final repository = AssetStickerCatalogRepository(
+        normalizer: const StickerCodeNormalizer(),
+        bundle: _FakeAssetBundle(
+          <String, String>{
+            'assets/stickers/stickers.json': r'''
+{
+  "smilies": [
+    [{"code":"/\{\:0_1000\:\}/","image":"group0/item.gif"}],
+    [{"code":"/\{\:1_1000\:\}/","image":"group1/item.gif"}],
+    [{"code":"/\{\:2_1000\:\}/","image":"group2/item.gif"}],
+    [{"code":"/\{\:3_1000\:\}/","image":"group3/item.gif"}],
+    [{"code":"/\{\:4_1000\:\}/","image":"group4/item.gif"}],
+    [{"code":"/\{\:5_1000\:\}/","image":"group5/item.gif"}]
+  ]
+}
+''',
+          },
+        ),
+      );
+
+      final groups = await repository.loadStickerGroups();
+
+      expect(groups, hasLength(6));
+      expect(groups.map((group) => group.id), [
+        'group-0',
+        'group-1',
+        'group-2',
+        'group-3',
+        'group-4',
+        'group-5',
+      ]);
+    });
+
     test('skips sticker entries with missing code or image', () async {
       final repository = AssetStickerCatalogRepository(
         normalizer: const StickerCodeNormalizer(),

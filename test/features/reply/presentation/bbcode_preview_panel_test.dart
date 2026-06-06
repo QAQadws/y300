@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
+import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/reply/presentation/widgets/bbcode_preview_panel.dart';
 
@@ -70,11 +71,43 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('BbCodePreviewPanel renders known sticker as asset image', (
+    tester,
+  ) async {
+    const sticker = StickerItem(
+      code: '{:9_656:}',
+      assetPath: 'assets/stickers/bugcat/Capoo16.gif',
+      rawCodePattern: r'/\{\:9_656\:\}/',
+    );
+
+    await tester.pumpWidget(
+      _buildPanel(
+        source: '表情{:9_656:}',
+        stickers: const [sticker],
+      ),
+    );
+
+    expect(
+      find.byKey(const Key('reply-bbcode-preview-sticker-{:9_656:}')),
+      findsOneWidget,
+    );
+    expect(find.byType(Image), findsOneWidget);
+  });
+
+  testWidgets('BbCodePreviewPanel keeps unknown sticker code as text', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildPanel(source: '未知{:9_999:}'));
+
+    expect(find.textContaining('{:9_999:}', findRichText: true), findsOneWidget);
+  });
 }
 
 Widget _buildPanel({
   required String source,
   ForumBbCodeRenderer renderer = const FlutterBbCodeForumRenderer(),
+  List<StickerItem> stickers = const [],
 }) {
   return MaterialApp(
     theme: AppTheme.light(),
@@ -82,6 +115,7 @@ Widget _buildPanel({
       body: BbCodePreviewPanel(
         source: source,
         renderer: renderer,
+        stickers: stickers,
       ),
     ),
   );

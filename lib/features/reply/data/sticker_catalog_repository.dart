@@ -26,7 +26,7 @@ class AssetStickerCatalogRepository implements StickerCatalogRepository {
   @override
   Future<List<StickerGroup>> loadStickerGroups() async {
     final raw = await (_bundle ?? rootBundle).loadString(assetPath);
-    final decoded = ParseUtils.asMap(jsonDecode(raw));
+    final decoded = ParseUtils.asMap(_decodeStickerJson(raw));
     final groups = ParseUtils.asList(decoded['smilies']);
     return groups.indexed.map((entry) {
       final (groupIndex, rawGroup) = entry;
@@ -40,6 +40,21 @@ class AssetStickerCatalogRepository implements StickerCatalogRepository {
         stickers: stickers,
       );
     }).toList(growable: false);
+  }
+
+  Object? _decodeStickerJson(String raw) {
+    try {
+      return jsonDecode(raw);
+    } on FormatException {
+      return jsonDecode(_sanitizeDiscuzStickerJson(raw));
+    }
+  }
+
+  String _sanitizeDiscuzStickerJson(String raw) {
+    return raw
+        .replaceAll(r'\{', r'\\{')
+        .replaceAll(r'\}', r'\\}')
+        .replaceAll(r'\:', r'\\:');
   }
 
   StickerItem? _parseSticker(Object? rawSticker) {

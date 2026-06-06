@@ -18,6 +18,10 @@ void main() {
     expect(find.text('源码'), findsOneWidget);
     expect(find.text('预览'), findsOneWidget);
     expect(find.byKey(const Key('reply-composer-mode-switch')), findsOneWidget);
+    expect(
+      find.byKey(const Key('reply-composer-sticker-button')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('reply-composer-message-input')), findsOneWidget);
     expect(
       find.byKey(const Key('reply-composer-use-signature-switch')),
@@ -170,12 +174,89 @@ void main() {
 
     expect(replyRepository.sentDrafts.single.message, '[quote]原始源码[/quote]');
   });
+
+  testWidgets('ReplyComposerPage inserts sticker code at cursor position', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildPage(stickerGroups: _stickerGroups));
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('reply-composer-message-input')),
+      '前后',
+    );
+    final editable = tester.widget<EditableText>(find.byType(EditableText));
+    editable.controller.selection = const TextSelection.collapsed(offset: 1);
+
+    await tester.tap(find.byKey(const Key('reply-composer-sticker-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('reply-sticker-item-{:9_656:}')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('前{:9_656:}后'), findsOneWidget);
+  });
+
+  testWidgets('ReplyComposerPage previews inserted sticker as asset image', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildPage(stickerGroups: _stickerGroups));
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('reply-composer-message-input')),
+      '{:9_656:}',
+    );
+    await tester.pump();
+    await tester.tap(find.text('预览'));
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('reply-bbcode-preview-sticker-{:9_656:}')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('ReplyComposerPage submits raw sticker code', (tester) async {
+    final replyRepository = _FakeReplyRepository(
+      result: const ApiSuccess<ReplySubmissionResult>(
+        ReplySubmissionResult(message: '回复发布成功'),
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          replyDraftRepositoryProvider.overrideWithValue(
+            _MemoryReplyDraftRepository(),
+          ),
+          replyRepositoryProvider.overrideWithValue(replyRepository),
+          stickerGroupsProvider.overrideWith((_) async => _stickerGroups),
+        ],
+        child: MaterialApp(
+          home: _ReplyComposerLauncher(onResult: (_) {}),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('open-reply-composer-page')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('reply-composer-message-input')),
+      '表情{:9_656:}',
+    );
+    await tester.pump();
+    await tester.tap(find.text('预览'));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('reply-composer-send-button')));
+    await tester.pumpAndSettle();
+
+    expect(replyRepository.sentDrafts.single.message, '表情{:9_656:}');
+  });
 }
 
 Widget _buildPage({
   ReplyComposerArgs? args,
   ReplyDraftRepository? draftRepository,
   ReplyRepository? replyRepository,
+  List<StickerGroup> stickerGroups = const [],
 }) {
   return ProviderScope(
     overrides: [
@@ -185,12 +266,27 @@ Widget _buildPage({
       replyRepositoryProvider.overrideWithValue(
         replyRepository ?? _FakeReplyRepository(),
       ),
+      stickerGroupsProvider.overrideWith((_) async => stickerGroups),
     ],
     child: MaterialApp(
       home: ReplyComposerPage(args: args ?? _threadArgs()),
     ),
   );
 }
+
+const _stickerGroups = [
+  StickerGroup(
+    id: 'group-0',
+    title: 'group-0',
+    stickers: [
+      StickerItem(
+        code: '{:9_656:}',
+        assetPath: 'assets/stickers/bugcat/Capoo16.gif',
+        rawCodePattern: r'/\{\:9_656\:\}/',
+      ),
+    ],
+  ),
+];
 
 ReplyComposerArgs _threadArgs() {
   return const ReplyComposerArgs(

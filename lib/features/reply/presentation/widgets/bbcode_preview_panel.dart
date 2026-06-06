@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/bbcode/forum_bbcode_renderer.dart';
 
 class BbCodePreviewPanel extends StatelessWidget {
@@ -6,10 +7,12 @@ class BbCodePreviewPanel extends StatelessWidget {
     super.key,
     required this.source,
     required this.renderer,
+    this.stickers = const [],
   });
 
   final String source;
   final ForumBbCodeRenderer renderer;
+  final List<StickerItem> stickers;
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +33,7 @@ class BbCodePreviewPanel extends StatelessWidget {
               key: Key('reply-composer-bbcode-preview-empty'),
               height: 24,
             )
-          : renderer.buildPreview(context, source),
+          : renderer.buildPreview(context, source, stickers: stickers),
     );
   }
 }

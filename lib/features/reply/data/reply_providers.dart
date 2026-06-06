@@ -7,9 +7,10 @@ import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/data/shared_preferences_reply_draft_repository.dart';
 import 'package:y300/features/reply/data/sticker_catalog_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
+import 'package:y300/features/reply/domain/services/sticker_bbcode_tokenizer.dart';
 import 'package:y300/features/reply/domain/services/sticker_code_normalizer.dart';
 
-final stickerCodeNormalizerProvider = Provider<StickerCodeNormalizer>((ref) {
+final stickerCodeNormalizerProvider = Provider<StickerCodeNormalizer>((_) {
   return const StickerCodeNormalizer();
 });
 
@@ -25,7 +26,11 @@ final stickerGroupsProvider = FutureProvider<List<StickerGroup>>((ref) {
   return ref.read(stickerCatalogRepositoryProvider).loadStickerGroups();
 });
 
-final replyDraftRepositoryProvider = Provider<ReplyDraftRepository>((ref) {
+final stickerBbCodeTokenizerProvider = Provider<StickerBbCodeTokenizer>((_) {
+  return const StickerBbCodeTokenizer();
+});
+
+final replyDraftRepositoryProvider = Provider<ReplyDraftRepository>((_) {
   return SharedPreferencesReplyDraftRepository();
 });
 
