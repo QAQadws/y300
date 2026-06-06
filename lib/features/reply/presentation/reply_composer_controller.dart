@@ -74,6 +74,14 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
     _scheduleDraftSave();
   }
 
+  void switchMode(ReplyComposerMode mode) {
+    final current = state.value;
+    if (current == null || current.mode == mode) {
+      return;
+    }
+    _setDataState(current.copyWith(mode: mode));
+  }
+
   Future<void> flushDraft() async {
     _saveTimer?.cancel();
     _saveTimer = null;

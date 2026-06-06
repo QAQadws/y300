@@ -15,6 +15,9 @@ void main() {
     await tester.pump();
 
     expect(find.text('回复帖子'), findsOneWidget);
+    expect(find.text('源码'), findsOneWidget);
+    expect(find.text('预览'), findsOneWidget);
+    expect(find.byKey(const Key('reply-composer-mode-switch')), findsOneWidget);
     expect(find.byKey(const Key('reply-composer-message-input')), findsOneWidget);
     expect(
       find.byKey(const Key('reply-composer-use-signature-switch')),
@@ -59,6 +62,34 @@ void main() {
     expect(sendButton.onPressed, isNull);
   });
 
+  testWidgets('ReplyComposerPage switches between source and preview modes', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildPage());
+    await tester.pump();
+
+    await tester.enterText(
+      find.byKey(const Key('reply-composer-message-input')),
+      '[b]粗体内容[/b]',
+    );
+    await tester.pump();
+    await tester.tap(find.text('预览'));
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('reply-composer-bbcode-preview-panel')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('reply-composer-message-input')), findsNothing);
+    expect(find.text('粗体内容', findRichText: true), findsOneWidget);
+
+    await tester.tap(find.text('源码'));
+    await tester.pump();
+
+    expect(find.byKey(const Key('reply-composer-message-input')), findsOneWidget);
+    expect(find.text('[b]粗体内容[/b]'), findsOneWidget);
+  });
+
   testWidgets('ReplyComposerPage pops sent result after successful submit', (
     tester,
   ) async {
@@ -100,6 +131,44 @@ void main() {
     expect(replyRepository.sentDrafts.single.message, '提交内容');
     expect(poppedResult?.sent, isTrue);
     expect(poppedResult?.message, '回复发布成功');
+  });
+
+  testWidgets('ReplyComposerPage submits source message from preview mode', (
+    tester,
+  ) async {
+    final replyRepository = _FakeReplyRepository(
+      result: const ApiSuccess<ReplySubmissionResult>(
+        ReplySubmissionResult(message: '回复发布成功'),
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          replyDraftRepositoryProvider.overrideWithValue(
+            _MemoryReplyDraftRepository(),
+          ),
+          replyRepositoryProvider.overrideWithValue(replyRepository),
+        ],
+        child: MaterialApp(
+          home: _ReplyComposerLauncher(onResult: (_) {}),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('open-reply-composer-page')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('reply-composer-message-input')),
+      '[quote]原始源码[/quote]',
+    );
+    await tester.pump();
+    await tester.tap(find.text('预览'));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('reply-composer-send-button')));
+    await tester.pumpAndSettle();
+
+    expect(replyRepository.sentDrafts.single.message, '[quote]原始源码[/quote]');
   });
 }
 

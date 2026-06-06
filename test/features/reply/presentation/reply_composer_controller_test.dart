@@ -32,6 +32,7 @@ void main() {
 
       expect(state.message, '恢复的草稿');
       expect(state.useSignature, isFalse);
+      expect(state.mode, ReplyComposerMode.source);
     });
 
     test('different thread does not reuse draft', () async {
@@ -169,6 +170,47 @@ void main() {
         '网络失败',
       );
       expect((await draftRepository.loadDraft(args.identity))?.message, '失败也要保留');
+    });
+
+    test('switchMode updates mode without changing message or signature', () async {
+      final args = _threadArgs(tid: '572063');
+      final container = _buildContainer();
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(replyComposerControllerProvider(args).future);
+      final controller = container.read(
+        replyComposerControllerProvider(args).notifier,
+      );
+
+      controller.updateMessage('[b]源码[/b]');
+      controller.toggleUseSignature(false);
+      controller.switchMode(ReplyComposerMode.preview);
+
+      final state = container.read(replyComposerControllerProvider(args)).value;
+      expect(state?.mode, ReplyComposerMode.preview);
+      expect(state?.message, '[b]源码[/b]');
+      expect(state?.useSignature, isFalse);
+    });
+
+    test('submit sends source message while in preview mode', () async {
+      final replyRepository = _FakeReplyRepository();
+      final args = _threadArgs(tid: '572063');
+      final container = _buildContainer(replyRepository: replyRepository);
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(replyComposerControllerProvider(args).future);
+      final controller = container.read(
+        replyComposerControllerProvider(args).notifier,
+      );
+
+      controller.updateMessage('[quote]源码内容[/quote]');
+      controller.switchMode(ReplyComposerMode.preview);
+      final result = await controller.submit();
+
+      expect(result.sent, isTrue);
+      expect(replyRepository.sentDrafts.single.message, '[quote]源码内容[/quote]');
     });
   });
 }

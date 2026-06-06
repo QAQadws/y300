@@ -1,5 +1,10 @@
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 
+enum ReplyComposerMode {
+  source,
+  preview,
+}
+
 class ReplyComposerArgs {
   const ReplyComposerArgs({
     required this.target,
@@ -55,6 +60,7 @@ class ReplyComposerState {
     required this.message,
     required this.useSignature,
     required this.isSubmitting,
+    required this.mode,
     this.errorMessage,
   });
 
@@ -62,12 +68,14 @@ class ReplyComposerState {
     required ReplyTarget target,
     String message = '',
     bool useSignature = true,
+    ReplyComposerMode mode = ReplyComposerMode.source,
   }) {
     return ReplyComposerState(
       target: target,
       message: message,
       useSignature: useSignature,
       isSubmitting: false,
+      mode: mode,
     );
   }
 
@@ -75,6 +83,7 @@ class ReplyComposerState {
   final String message;
   final bool useSignature;
   final bool isSubmitting;
+  final ReplyComposerMode mode;
   final String? errorMessage;
 
   bool get canSubmit => message.trim().isNotEmpty && !isSubmitting;
@@ -83,6 +92,7 @@ class ReplyComposerState {
     String? message,
     bool? useSignature,
     bool? isSubmitting,
+    ReplyComposerMode? mode,
     String? errorMessage,
     bool clearErrorMessage = false,
   }) {
@@ -91,6 +101,7 @@ class ReplyComposerState {
       message: message ?? this.message,
       useSignature: useSignature ?? this.useSignature,
       isSubmitting: isSubmitting ?? this.isSubmitting,
+      mode: mode ?? this.mode,
       errorMessage: clearErrorMessage ? null : errorMessage ?? this.errorMessage,
     );
   }

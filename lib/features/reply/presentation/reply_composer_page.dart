@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/reply/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/reply/presentation/reply_composer_controller.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
+import 'package:y300/features/reply/presentation/widgets/bbcode_preview_panel.dart';
 
 class ReplyComposerPage extends ConsumerStatefulWidget {
   const ReplyComposerPage({
@@ -43,6 +45,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
     final provider = replyComposerControllerProvider(widget.args);
     final asyncState = ref.watch(provider);
     final controller = ref.read(provider.notifier);
+    final bbCodeRenderer = ref.watch(forumBbCodeRendererProvider);
     _controller = controller;
     final state = asyncState.value;
     if (state != null) {
@@ -72,7 +75,9 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
         ),
         data: (state) => _ReplyComposerBody(
           state: state,
+          bbCodeRenderer: bbCodeRenderer,
           messageController: _messageController,
+          onModeChanged: controller.switchMode,
           onMessageChanged: controller.updateMessage,
           onUseSignatureChanged: controller.toggleUseSignature,
         ),
@@ -107,13 +112,17 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
 class _ReplyComposerBody extends StatelessWidget {
   const _ReplyComposerBody({
     required this.state,
+    required this.bbCodeRenderer,
     required this.messageController,
+    required this.onModeChanged,
     required this.onMessageChanged,
     required this.onUseSignatureChanged,
   });
 
   final ReplyComposerState state;
+  final ForumBbCodeRenderer bbCodeRenderer;
   final TextEditingController messageController;
+  final ValueChanged<ReplyComposerMode> onModeChanged;
   final ValueChanged<String> onMessageChanged;
   final ValueChanged<bool> onUseSignatureChanged;
 
@@ -123,21 +132,52 @@ class _ReplyComposerBody extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          TextField(
-            key: const Key('reply-composer-message-input'),
-            controller: messageController,
-            enabled: !state.isSubmitting,
-            minLines: 8,
-            maxLines: null,
-            keyboardType: TextInputType.multiline,
-            textInputAction: TextInputAction.newline,
-            onChanged: onMessageChanged,
-            decoration: const InputDecoration(
-              hintText: '输入回复内容',
-              border: OutlineInputBorder(),
-              alignLabelWithHint: true,
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SegmentedButton<ReplyComposerMode>(
+              key: const Key('reply-composer-mode-switch'),
+              segments: const [
+                ButtonSegment<ReplyComposerMode>(
+                  value: ReplyComposerMode.source,
+                  label: Text('源码'),
+                  icon: Icon(Icons.edit_note),
+                ),
+                ButtonSegment<ReplyComposerMode>(
+                  value: ReplyComposerMode.preview,
+                  label: Text('预览'),
+                  icon: Icon(Icons.visibility),
+                ),
+              ],
+              selected: {state.mode},
+              onSelectionChanged: state.isSubmitting
+                  ? null
+                  : (selection) {
+                      onModeChanged(selection.single);
+                    },
             ),
           ),
+          const SizedBox(height: 12),
+          if (state.mode == ReplyComposerMode.source)
+            TextField(
+              key: const Key('reply-composer-message-input'),
+              controller: messageController,
+              enabled: !state.isSubmitting,
+              minLines: 8,
+              maxLines: null,
+              keyboardType: TextInputType.multiline,
+              textInputAction: TextInputAction.newline,
+              onChanged: onMessageChanged,
+              decoration: const InputDecoration(
+                hintText: '输入回复内容',
+                border: OutlineInputBorder(),
+                alignLabelWithHint: true,
+              ),
+            )
+          else
+            BbCodePreviewPanel(
+              source: state.message,
+              renderer: bbCodeRenderer,
+            ),
           const SizedBox(height: 12),
           SwitchListTile(
             key: const Key('reply-composer-use-signature-switch'),
