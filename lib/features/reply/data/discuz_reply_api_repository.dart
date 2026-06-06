@@ -1,59 +1,46 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
-import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/utils/parse_utils.dart';
 import 'package:y300/features/profile/data/profile_repository.dart';
+import 'package:y300/features/reply/data/discuz_reply_remote_data_source.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
+import 'package:y300/features/reply/domain/services/reply_draft_validator.dart';
 
 class DiscuzReplyApiRepository implements ReplyRepository {
   DiscuzReplyApiRepository({
     required ProfileRepository profileRepository,
     required CookieStore cookieStore,
     Dio? dio,
-  }) : _profileRepository = profileRepository,
-       _cookieStore = cookieStore,
-       _dio =
-           dio ??
-           Dio(
-             BaseOptions(
-               connectTimeout: AppConfig.connectTimeout,
-               receiveTimeout: AppConfig.receiveTimeout,
-             ),
-           ) {
-    _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) async {
-          final cookieHeader = await _cookieStore.readCookieHeader(options.uri);
-          if (cookieHeader != null && cookieHeader.isNotEmpty) {
-            options.headers['cookie'] = cookieHeader;
-          }
-          handler.next(options);
-        },
-        onResponse: (response, handler) async {
-          final setCookie = response.headers.map['set-cookie'] ?? <String>[];
-          await _cookieStore.saveFromSetCookie(response.requestOptions.uri, setCookie);
-          handler.next(response);
-        },
-      ),
-    );
-  }
+    DiscuzReplyRemoteDataSource? remoteDataSource,
+    ReplyDraftValidator validator = const ReplyDraftValidator(),
+  })  : _profileRepository = profileRepository,
+        _remoteDataSource = remoteDataSource ??
+            DiscuzReplyDioRemoteDataSource(
+              cookieStore: cookieStore,
+              dio: dio,
+            ),
+        _validator = validator;
 
   final ProfileRepository _profileRepository;
-  final CookieStore _cookieStore;
-  final Dio _dio;
+  final DiscuzReplyRemoteDataSource _remoteDataSource;
+  final ReplyDraftValidator _validator;
 
   @override
   Future<ApiResult<ReplySubmissionResult>> sendReply({
     required ReplyDraft draft,
   }) async {
     final message = draft.message.trim();
-    if (message.isEmpty) {
-      return const ApiFailure<ReplySubmissionResult>(
-        ApiError(type: ApiErrorType.business, message: '回复内容不能为空'),
+    final validation = _validator.validate(draft);
+    if (!validation.isValid) {
+      return ApiFailure<ReplySubmissionResult>(
+        ApiError(
+          type: ApiErrorType.business,
+          message: validation.message ?? '回复内容不能为空',
+        ),
       );
     }
     final formhashResult = await _loadFormhash();
@@ -61,36 +48,14 @@ class DiscuzReplyApiRepository implements ReplyRepository {
       return ApiFailure<ReplySubmissionResult>(error);
     }
     final formhash = (formhashResult as ApiSuccess<String>).data;
-    final endpoint = '${AppConfig.siteBaseUrl}/api/mobile/index.php';
+    final payload = ReplySubmitPayload.fromDraft(
+      draft: draft,
+      formHash: formhash,
+      message: message,
+    );
 
     try {
-      final response = await _dio.post<dynamic>(
-        endpoint,
-        queryParameters: const <String, String>{
-          'module': 'sendreply',
-          'version': '4',
-        },
-        data: <String, String>{
-          'formhash': formhash,
-          'fid': draft.fid,
-          'tid': draft.tid,
-          'message': message,
-          'replysubmit': 'yes',
-          'usesig': draft.useSignature ? '1' : '0',
-          if ((draft.repPid ?? '').isNotEmpty) 'reppid': draft.repPid!,
-          if ((draft.repPost ?? '').isNotEmpty) 'reppost': draft.repPost!,
-          if ((draft.noticeAuthor ?? '').isNotEmpty) 'noticeauthor': draft.noticeAuthor!,
-          if ((draft.noticeTrimStr ?? '').isNotEmpty) 'noticetrimstr': draft.noticeTrimStr!,
-          if ((draft.noticeAuthorMsg ?? '').isNotEmpty) 'noticeauthormsg': draft.noticeAuthorMsg!,
-        },
-        options: Options(
-          contentType: Headers.formUrlEncodedContentType,
-          headers: <String, String>{
-            'referer': '${AppConfig.siteBaseUrl}/forum.php?mod=viewthread&tid=${draft.tid}&mobile=2',
-            'accept': 'application/json, text/plain, */*',
-          },
-        ),
-      );
+      final response = await _remoteDataSource.sendReply(payload);
       final parsed = _parseReplyResponse(response.data);
       if (!parsed.success) {
         return ApiFailure<ReplySubmissionResult>(
