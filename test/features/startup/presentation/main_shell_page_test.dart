@@ -2,6 +2,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_providers.dart';
@@ -133,6 +134,60 @@ void main() {
 
     expect(find.byIcon(Icons.local_library_outlined), findsNothing);
     expect(find.byIcon(Icons.local_library), findsOneWidget);
+  });
+
+  testWidgets('MainShellPage navigation bar reads the themed background color', (
+    tester,
+  ) async {
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    final webViewDriver = _FakeForumWebViewDriver();
+    addTearDown(queueSnapshot.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+          novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
+          localFavoriteRepositoryProvider.overrideWith(
+            (ref) => _FakeLocalFavoriteRepository(),
+          ),
+          favoriteSyncServiceProvider.overrideWith(
+            (ref) => _FakeFavoriteSyncService(),
+          ),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+            queueSnapshot,
+          ),
+          mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
+          mainShellNotificationInitializerProvider.overrideWithValue(
+            () async {},
+          ),
+          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
+          forumWebViewDriverFactoryProvider.overrideWithValue(
+            () => webViewDriver,
+          ),
+          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: const MainShellPage(),
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    final navigationBarContext = tester.element(find.byType(NavigationBar));
+    expect(
+      NavigationBarTheme.of(navigationBarContext).backgroundColor,
+      const Color(0xFFFDE6B9),
+    );
   });
 
   testWidgets('MainShellPage notification permission wiring does not block shell build', (tester) async {

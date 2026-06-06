@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/widget_previews.dart';
+import 'package:y300/app/theme/app_theme.dart';
 
 /// 通用骨架块，供启动页和列表加载态复用。
 class SkeletonBlock extends StatelessWidget {
@@ -61,4 +63,38 @@ class ForumHomeSkeleton extends StatelessWidget {
       },
     );
   }
+}
+
+Widget appSkeletonPreviewShell(Widget child) {
+  return MaterialApp(
+    theme: AppTheme.light(),
+    home: Scaffold(
+      body: SafeArea(child: child),
+    ),
+  );
+}
+
+@Preview(
+  name: 'Skeleton block',
+  group: 'Shared/AppSkeleton',
+  size: Size(220, 120),
+  wrapper: appSkeletonPreviewShell,
+)
+Widget skeletonBlockPreview() {
+  return const Center(
+    child: SkeletonBlock(
+      height: 18,
+      width: 160,
+    ),
+  );
+}
+
+@Preview(
+  name: 'Forum home skeleton',
+  group: 'Shared/AppSkeleton',
+  size: Size(393, 852),
+  wrapper: appSkeletonPreviewShell,
+)
+Widget forumHomeSkeletonPreview() {
+  return const ForumHomeSkeleton();
 }
