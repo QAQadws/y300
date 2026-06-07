@@ -7,8 +7,23 @@ abstract class ReplyDraftRepository {
 
   Future<void> deleteDraft(ReplyDraftIdentity identity);
 
+  Future<ReplyDraftPruneResult> pruneDrafts({
+    Duration maxAge = const Duration(days: 30),
+    int maxCount = 100,
+  });
+
   Future<List<ReplyDraftSnapshot>> listDraftsForThread({
     required String fid,
     required String tid,
   });
+}
+
+class ReplyDraftPruneResult {
+  const ReplyDraftPruneResult({
+    required this.removedCount,
+    required this.keptCount,
+  });
+
+  final int removedCount;
+  final int keptCount;
 }

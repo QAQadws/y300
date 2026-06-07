@@ -66,6 +66,7 @@ class ReplyComposerState {
     required this.isSubmitting,
     required this.mode,
     required this.isPreparing,
+    required this.restoredDraft,
     this.preparation,
     this.preparationError,
     this.errorMessage,
@@ -77,6 +78,7 @@ class ReplyComposerState {
     bool useSignature = true,
     ReplyComposerMode mode = ReplyComposerMode.source,
     bool isPreparing = false,
+    bool restoredDraft = false,
     ReplyPreparation? preparation,
     String? preparationError,
   }) {
@@ -87,6 +89,7 @@ class ReplyComposerState {
       isSubmitting: false,
       mode: mode,
       isPreparing: isPreparing,
+      restoredDraft: restoredDraft,
       preparation: preparation,
       preparationError: preparationError,
     );
@@ -98,6 +101,7 @@ class ReplyComposerState {
   final bool isSubmitting;
   final ReplyComposerMode mode;
   final bool isPreparing;
+  final bool restoredDraft;
   final ReplyPreparation? preparation;
   final String? preparationError;
   final String? errorMessage;
@@ -118,6 +122,7 @@ class ReplyComposerState {
     bool? isSubmitting,
     ReplyComposerMode? mode,
     bool? isPreparing,
+    bool? restoredDraft,
     ReplyPreparation? preparation,
     String? preparationError,
     String? errorMessage,
@@ -132,6 +137,7 @@ class ReplyComposerState {
       isSubmitting: isSubmitting ?? this.isSubmitting,
       mode: mode ?? this.mode,
       isPreparing: isPreparing ?? this.isPreparing,
+      restoredDraft: restoredDraft ?? this.restoredDraft,
       preparation: clearPreparation ? null : preparation ?? this.preparation,
       preparationError: clearPreparationError
           ? null

@@ -6,6 +6,7 @@ import 'package:y300/features/reply/data/reply_draft_repository.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
+import 'package:y300/features/reply/domain/services/reply_submission_error_presenter.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 
 final replyComposerControllerProvider = AsyncNotifierProvider.autoDispose
@@ -22,12 +23,14 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
   Timer? _saveTimer;
   ReplyDraftRepository? _draftRepository;
   ReplyRepository? _replyRepository;
+  ReplySubmissionErrorPresenter? _errorPresenter;
   ReplyComposerState? _latestState;
 
   @override
   FutureOr<ReplyComposerState> build() async {
     _draftRepository = ref.read(replyDraftRepositoryProvider);
     _replyRepository = ref.read(replyRepositoryProvider);
+    _errorPresenter = ref.read(replySubmissionErrorPresenterProvider);
     ref.onDispose(() {
       _saveTimer?.cancel();
       final current = _latestState;
@@ -36,12 +39,15 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
       }
     });
 
+    await _pruneDraftsIfNeeded();
     final snapshot = await _draftRepository!.loadDraft(_args.identity);
+    final restoredDraft = snapshot != null && !snapshot.isEmpty;
     final initialState = ReplyComposerState.initial(
       target: _args.target,
       message: snapshot?.message ?? '',
       useSignature: snapshot?.useSignature ?? true,
       isPreparing: _shouldPreparePostReply,
+      restoredDraft: restoredDraft,
     );
     _latestState = initialState;
     if (_shouldPreparePostReply) {
@@ -174,14 +180,15 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
     }
 
     final error = (result as ApiFailure<ReplySubmissionResult>).error;
+    final errorMessage = _errorPresenter?.present(error) ?? error.message;
     _setDataState(
       afterSubmit.copyWith(
         isSubmitting: false,
-        errorMessage: error.message,
+        errorMessage: errorMessage,
       ),
     );
     await _saveSnapshot(afterSubmit.copyWith(isSubmitting: false));
-    return ReplyComposerResult(sent: false, message: error.message);
+    return ReplyComposerResult(sent: false, message: errorMessage);
   }
 
   void _setDataState(ReplyComposerState value) {
@@ -235,6 +242,14 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
         errorMessage: error.message,
       ),
     );
+  }
+
+  Future<void> _pruneDraftsIfNeeded() async {
+    try {
+      await _draftRepository?.pruneDrafts();
+    } catch (_) {
+      // 草稿清理失败不阻断回复页加载，后续保存会继续覆盖当前草稿。
+    }
   }
 
   void _scheduleDraftSave() {

@@ -1,8 +1,9 @@
 import 'dart:convert';
-import 'package:y300/core/network/api_result.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
@@ -1670,6 +1671,17 @@ class _MemoryReplyDraftRepository implements ReplyDraftRepository {
   @override
   Future<ReplyDraftSnapshot?> loadDraft(ReplyDraftIdentity identity) async {
     return _drafts[identity.storageKey];
+  }
+
+  @override
+  Future<ReplyDraftPruneResult> pruneDrafts({
+    Duration maxAge = const Duration(days: 30),
+    int maxCount = 100,
+  }) async {
+    return ReplyDraftPruneResult(
+      removedCount: 0,
+      keptCount: _drafts.length,
+    );
   }
 
   @override

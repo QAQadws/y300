@@ -27,6 +27,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
   late final TextEditingController _messageController;
   ReplyComposerController? _controller;
   bool _didApplyRestoredDraft = false;
+  bool _allowPopWithoutConfirm = false;
 
   @override
   void initState() {
@@ -60,39 +61,48 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
       _applyRestoredDraftOnce(state);
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.args.target.isPostReply ? '回复楼层' : '回复帖子'),
-        actions: [
-          IconButton(
-            key: const Key('reply-composer-send-button'),
-            tooltip: '发送',
-            onPressed: state == null || !state.canSubmit
-                ? null
-                : () {
-                    unawaited(_submit(context, controller));
-                  },
-            icon: const Icon(Icons.send),
-          ),
-        ],
-      ),
-      body: asyncState.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => _ReplyComposerErrorView(
-          message: '加载草稿失败：$error',
+    return PopScope(
+      canPop: !_shouldConfirmPop(state),
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) {
+          return;
+        }
+        unawaited(_confirmAndPop(context, controller));
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.args.target.isPostReply ? '回复楼层' : '回复帖子'),
+          actions: [
+            IconButton(
+              key: const Key('reply-composer-send-button'),
+              tooltip: '发送',
+              onPressed: state == null || !state.canSubmit
+                  ? null
+                  : () {
+                      unawaited(_submit(context, controller));
+                    },
+              icon: const Icon(Icons.send),
+            ),
+          ],
         ),
-        data: (state) => _ReplyComposerBody(
-          state: state,
-          bbCodeRenderer: bbCodeRenderer,
-          stickers: _flattenStickers(stickerGroups),
-          messageController: _messageController,
-          onModeChanged: controller.switchMode,
-          onMessageChanged: controller.updateMessage,
-          onUseSignatureChanged: controller.toggleUseSignature,
-          onRetryPrepare: controller.retryPreparePostReply,
-          onStickerPressed: () {
-            unawaited(_pickAndInsertSticker(context, controller));
-          },
+        body: asyncState.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, _) => _ReplyComposerErrorView(
+            message: '加载草稿失败：$error',
+          ),
+          data: (state) => _ReplyComposerBody(
+            state: state,
+            bbCodeRenderer: bbCodeRenderer,
+            stickers: _flattenStickers(stickerGroups),
+            messageController: _messageController,
+            onModeChanged: controller.switchMode,
+            onMessageChanged: controller.updateMessage,
+            onUseSignatureChanged: controller.toggleUseSignature,
+            onRetryPrepare: controller.retryPreparePostReply,
+            onStickerPressed: () {
+              unawaited(_pickAndInsertSticker(context, controller));
+            },
+          ),
         ),
       ),
     );
@@ -124,7 +134,56 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
     if (!mounted || !result.sent) {
       return;
     }
+    _allowPopWithoutConfirm = true;
     navigator.pop(result);
+  }
+
+  bool _shouldConfirmPop(ReplyComposerState? state) {
+    if (_allowPopWithoutConfirm) {
+      return false;
+    }
+    return state != null && state.message.trim().isNotEmpty;
+  }
+
+  Future<void> _confirmAndPop(
+    BuildContext context,
+    ReplyComposerController controller,
+  ) async {
+    final navigator = Navigator.of(context);
+    final shouldLeave = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('保存草稿并离开？'),
+          content: const Text('当前回复还没有发送，离开前会保存为草稿。'),
+          actions: [
+            TextButton(
+              key: const Key('reply-composer-continue-edit-button'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('继续编辑'),
+            ),
+            FilledButton(
+              key: const Key('reply-composer-save-leave-button'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: const Text('保存草稿并离开'),
+            ),
+          ],
+        );
+      },
+    );
+    if (!mounted || shouldLeave != true) {
+      return;
+    }
+    await controller.flushDraft();
+    if (!mounted) {
+      return;
+    }
+    _allowPopWithoutConfirm = true;
+    navigator.pop();
   }
 
   Future<void> _pickAndInsertSticker(
@@ -205,6 +264,10 @@ class _ReplyComposerBody extends StatelessWidget {
             ),
             const SizedBox(height: 12),
           ],
+          if (state.restoredDraft) ...[
+            const _RestoredDraftBanner(),
+            const SizedBox(height: 12),
+          ],
           Align(
             alignment: Alignment.centerLeft,
             child: SegmentedButton<ReplyComposerMode>(
@@ -277,6 +340,29 @@ class _ReplyComposerBody extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _RestoredDraftBanner extends StatelessWidget {
+  const _RestoredDraftBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+        color: colorScheme.surface,
+      ),
+      child: const Padding(
+        padding: EdgeInsets.all(12),
+        child: Text(
+          '已恢复未发送草稿',
+          key: Key('reply-composer-restored-draft-banner'),
+        ),
       ),
     );
   }

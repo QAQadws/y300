@@ -48,6 +48,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('恢复的草稿'), findsOneWidget);
+    expect(find.text('已恢复未发送草稿'), findsOneWidget);
     final switchTile = tester.widget<SwitchListTile>(
       find.byKey(const Key('reply-composer-use-signature-switch')),
     );
@@ -317,6 +318,88 @@ void main() {
     expect(draft.noticeTrimStr, '[quote]引用[/quote]');
     expect(draft.repPost, '41554317');
   });
+
+  testWidgets('ReplyComposerPage confirms leaving with unsent input', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildLauncher(draftRepository: _MemoryReplyDraftRepository()),
+    );
+    await tester.tap(find.byKey(const Key('open-reply-composer-page')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('reply-composer-message-input')),
+      '未发送内容',
+    );
+    await tester.pump();
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text('保存草稿并离开？'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('reply-composer-continue-edit-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('reply-composer-message-input')), findsOneWidget);
+  });
+
+  testWidgets('ReplyComposerPage saves draft and leaves after confirmation', (
+    tester,
+  ) async {
+    final draftRepository = _MemoryReplyDraftRepository();
+    await tester.pumpWidget(_buildLauncher(draftRepository: draftRepository));
+    await tester.tap(find.byKey(const Key('open-reply-composer-page')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('reply-composer-message-input')),
+      '离开前保存',
+    );
+    await tester.pump();
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('reply-composer-save-leave-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('open-reply-composer-page')), findsOneWidget);
+    expect((await draftRepository.loadDraft(_threadArgs().identity))?.message, '离开前保存');
+  });
+
+  testWidgets('ReplyComposerPage leaves without confirmation for empty input', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildLauncher());
+    await tester.tap(find.byKey(const Key('open-reply-composer-page')));
+    await tester.pumpAndSettle();
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text('保存草稿并离开？'), findsNothing);
+    expect(find.byKey(const Key('open-reply-composer-page')), findsOneWidget);
+  });
+
+  testWidgets('ReplyComposerPage successful submit does not show leave confirm', (
+    tester,
+  ) async {
+    final replyRepository = _FakeReplyRepository(
+      result: const ApiSuccess<ReplySubmissionResult>(
+        ReplySubmissionResult(message: '回复发布成功'),
+      ),
+    );
+    await tester.pumpWidget(_buildLauncher(replyRepository: replyRepository));
+    await tester.tap(find.byKey(const Key('open-reply-composer-page')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('reply-composer-message-input')),
+      '提交内容',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('reply-composer-send-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('保存草稿并离开？'), findsNothing);
+    expect(find.byKey(const Key('open-reply-composer-page')), findsOneWidget);
+  });
 }
 
 Widget _buildPage({
@@ -337,6 +420,26 @@ Widget _buildPage({
     ],
     child: MaterialApp(
       home: ReplyComposerPage(args: args ?? _threadArgs()),
+    ),
+  );
+}
+
+Widget _buildLauncher({
+  ReplyDraftRepository? draftRepository,
+  ReplyRepository? replyRepository,
+}) {
+  return ProviderScope(
+    overrides: [
+      replyDraftRepositoryProvider.overrideWithValue(
+        draftRepository ?? _MemoryReplyDraftRepository(),
+      ),
+      replyRepositoryProvider.overrideWithValue(
+        replyRepository ?? _FakeReplyRepository(),
+      ),
+      stickerGroupsProvider.overrideWith((_) async => const <StickerGroup>[]),
+    ],
+    child: MaterialApp(
+      home: _ReplyComposerLauncher(onResult: (_) {}),
     ),
   );
 }
@@ -427,6 +530,17 @@ class _MemoryReplyDraftRepository implements ReplyDraftRepository {
   @override
   Future<ReplyDraftSnapshot?> loadDraft(ReplyDraftIdentity identity) async {
     return _drafts[identity.storageKey];
+  }
+
+  @override
+  Future<ReplyDraftPruneResult> pruneDrafts({
+    Duration maxAge = const Duration(days: 30),
+    int maxCount = 100,
+  }) async {
+    return ReplyDraftPruneResult(
+      removedCount: 0,
+      keptCount: _drafts.length,
+    );
   }
 
   @override

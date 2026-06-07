@@ -7,6 +7,7 @@ import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/data/shared_preferences_reply_draft_repository.dart';
 import 'package:y300/features/reply/data/sticker_catalog_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
+import 'package:y300/features/reply/domain/services/reply_submission_error_presenter.dart';
 import 'package:y300/features/reply/domain/services/sticker_bbcode_tokenizer.dart';
 import 'package:y300/features/reply/domain/services/sticker_code_normalizer.dart';
 
@@ -28,6 +29,11 @@ final stickerGroupsProvider = FutureProvider<List<StickerGroup>>((ref) {
 
 final stickerBbCodeTokenizerProvider = Provider<StickerBbCodeTokenizer>((_) {
   return const StickerBbCodeTokenizer();
+});
+
+final replySubmissionErrorPresenterProvider =
+    Provider<ReplySubmissionErrorPresenter>((_) {
+  return const ReplySubmissionErrorPresenter();
 });
 
 final replyDraftRepositoryProvider = Provider<ReplyDraftRepository>((_) {

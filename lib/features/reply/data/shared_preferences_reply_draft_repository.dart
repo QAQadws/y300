@@ -44,6 +44,50 @@ class SharedPreferencesReplyDraftRepository implements ReplyDraftRepository {
   }
 
   @override
+  Future<ReplyDraftPruneResult> pruneDrafts({
+    Duration maxAge = const Duration(days: 30),
+    int maxCount = 100,
+  }) async {
+    final prefs = await _prefs();
+    final now = DateTime.now();
+    final cutoff = now.subtract(maxAge);
+    final validEntries = <_DraftEntry>[];
+    var removedCount = 0;
+
+    for (final key in prefs.getKeys()) {
+      if (!key.startsWith(_keyPrefix)) {
+        continue;
+      }
+      final raw = prefs.getString(key);
+      final draft = raw == null ? null : _decodeSnapshot(raw);
+      if (draft == null || draft.updatedAt.isBefore(cutoff)) {
+        await prefs.remove(key);
+        removedCount += 1;
+        continue;
+      }
+      validEntries.add(_DraftEntry(key: key, draft: draft));
+    }
+
+    validEntries.sort(
+      (a, b) => b.draft.updatedAt.compareTo(a.draft.updatedAt),
+    );
+    final normalizedMaxCount = maxCount < 0 ? 0 : maxCount;
+    final overflow = validEntries.skip(normalizedMaxCount);
+    for (final entry in overflow) {
+      await prefs.remove(entry.key);
+      removedCount += 1;
+    }
+
+    final keptCount = validEntries.length > normalizedMaxCount
+        ? normalizedMaxCount
+        : validEntries.length;
+    return ReplyDraftPruneResult(
+      removedCount: removedCount,
+      keptCount: keptCount,
+    );
+  }
+
+  @override
   Future<List<ReplyDraftSnapshot>> listDraftsForThread({
     required String fid,
     required String tid,
@@ -119,6 +163,10 @@ class SharedPreferencesReplyDraftRepository implements ReplyDraftRepository {
       }
 
       final repquote = _stringValue(decoded['repquote']);
+      final updatedAt = DateTime.tryParse(updatedAtRaw);
+      if (updatedAt == null) {
+        return null;
+      }
       final identity = repquote == null || repquote.trim().isEmpty
           ? ReplyDraftIdentity.thread(fid: fid, tid: tid)
           : ReplyDraftIdentity.post(
@@ -132,9 +180,7 @@ class SharedPreferencesReplyDraftRepository implements ReplyDraftRepository {
         useSignature: decoded['useSignature'] is bool
             ? decoded['useSignature'] as bool
             : true,
-        updatedAt:
-            DateTime.tryParse(updatedAtRaw) ??
-            DateTime.fromMillisecondsSinceEpoch(0),
+        updatedAt: updatedAt,
       );
     } catch (_) {
       return null;
@@ -147,4 +193,14 @@ class SharedPreferencesReplyDraftRepository implements ReplyDraftRepository {
     }
     return null;
   }
+}
+
+class _DraftEntry {
+  const _DraftEntry({
+    required this.key,
+    required this.draft,
+  });
+
+  final String key;
+  final ReplyDraftSnapshot draft;
 }

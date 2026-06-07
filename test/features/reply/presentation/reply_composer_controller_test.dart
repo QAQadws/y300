@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -167,9 +169,76 @@ void main() {
       expect(result.sent, isFalse);
       expect(
         container.read(replyComposerControllerProvider(args)).value?.errorMessage,
-        '网络失败',
+        '网络异常，请稍后重试',
       );
       expect((await draftRepository.loadDraft(args.identity))?.message, '失败也要保留');
+    });
+
+    test('build prunes drafts and tolerates prune failure', () async {
+      final draftRepository = _MemoryReplyDraftRepository()
+        ..throwOnPrune = true;
+      final args = _threadArgs(tid: '572063');
+      final container = _buildContainer(draftRepository: draftRepository);
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+
+      final state = await container.read(
+        replyComposerControllerProvider(args).future,
+      );
+
+      expect(draftRepository.pruneCallCount, 1);
+      expect(state.message, isEmpty);
+    });
+
+    test('restored draft flag is true when draft exists', () async {
+      final draftRepository = _MemoryReplyDraftRepository();
+      final args = _threadArgs(tid: '572063');
+      await draftRepository.saveDraft(
+        ReplyDraftSnapshot(
+          identity: args.identity,
+          message: '旧草稿',
+          useSignature: true,
+          updatedAt: DateTime.utc(2026, 6, 6),
+        ),
+      );
+      final container = _buildContainer(draftRepository: draftRepository);
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+
+      final state = await container.read(
+        replyComposerControllerProvider(args).future,
+      );
+
+      expect(state.restoredDraft, isTrue);
+    });
+
+    test('duplicate submit while submitting does not call repository twice', () async {
+      final completer = Completer<ApiResult<ReplySubmissionResult>>();
+      final replyRepository = _FakeReplyRepository(asyncResult: completer.future);
+      final args = _threadArgs(tid: '572063');
+      final container = _buildContainer(replyRepository: replyRepository);
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(replyComposerControllerProvider(args).future);
+      final controller = container.read(
+        replyComposerControllerProvider(args).notifier,
+      );
+      controller.updateMessage('提交内容');
+
+      final first = controller.submit();
+      final second = await controller.submit();
+      completer.complete(
+        const ApiSuccess<ReplySubmissionResult>(
+          ReplySubmissionResult(message: '回复成功'),
+        ),
+      );
+      await first;
+
+      expect(second.sent, isFalse);
+      expect(replyRepository.sentDrafts, hasLength(1));
     });
 
     test('switchMode updates mode without changing message or signature', () async {
@@ -359,6 +428,8 @@ Future<void> _drainMicrotasks() async {
 
 class _MemoryReplyDraftRepository implements ReplyDraftRepository {
   final Map<String, ReplyDraftSnapshot> _drafts = <String, ReplyDraftSnapshot>{};
+  bool throwOnPrune = false;
+  int pruneCallCount = 0;
 
   @override
   Future<void> deleteDraft(ReplyDraftIdentity identity) async {
@@ -381,6 +452,21 @@ class _MemoryReplyDraftRepository implements ReplyDraftRepository {
   }
 
   @override
+  Future<ReplyDraftPruneResult> pruneDrafts({
+    Duration maxAge = const Duration(days: 30),
+    int maxCount = 100,
+  }) async {
+    pruneCallCount += 1;
+    if (throwOnPrune) {
+      throw StateError('prune failed');
+    }
+    return ReplyDraftPruneResult(
+      removedCount: 0,
+      keptCount: _drafts.length,
+    );
+  }
+
+  @override
   Future<void> saveDraft(ReplyDraftSnapshot draft) async {
     if (draft.isEmpty) {
       _drafts.remove(draft.identity.storageKey);
@@ -393,6 +479,7 @@ class _MemoryReplyDraftRepository implements ReplyDraftRepository {
 class _FakeReplyRepository implements ReplyRepository {
   _FakeReplyRepository({
     ApiResult<ReplySubmissionResult>? result,
+    this.asyncResult,
     ApiResult<ReplyPreparation>? preparationResult,
   }) : result =
             result ??
@@ -420,6 +507,7 @@ class _FakeReplyRepository implements ReplyRepository {
             );
 
   final ApiResult<ReplySubmissionResult> result;
+  final Future<ApiResult<ReplySubmissionResult>>? asyncResult;
   final ApiResult<ReplyPreparation> preparationResult;
   final List<ReplyDraft> sentDrafts = <ReplyDraft>[];
   int prepareCallCount = 0;
@@ -429,6 +517,10 @@ class _FakeReplyRepository implements ReplyRepository {
     required ReplyDraft draft,
   }) async {
     sentDrafts.add(draft);
+    final asyncResult = this.asyncResult;
+    if (asyncResult != null) {
+      return asyncResult;
+    }
     return result;
   }
 
