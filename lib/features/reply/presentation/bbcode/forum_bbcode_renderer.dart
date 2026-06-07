@@ -75,7 +75,6 @@ class _StickerPreviewTag extends WrappedStyleTag {
           ? [TextSpan(text: code, style: renderer.getCurrentStyle())]
           : spans;
     }
-    final fallbackStyle = renderer.getCurrentStyle();
     return [
       WidgetSpan(
         alignment: PlaceholderAlignment.middle,
@@ -85,7 +84,10 @@ class _StickerPreviewTag extends WrappedStyleTag {
           width: 28,
           height: 28,
           fit: BoxFit.contain,
-          errorBuilder: (_, _, _) => Text(code, style: fallbackStyle),
+          errorBuilder: (_, _, _) => const Icon(
+            Icons.broken_image_outlined,
+            size: 28,
+          ),
         ),
       ),
     ];

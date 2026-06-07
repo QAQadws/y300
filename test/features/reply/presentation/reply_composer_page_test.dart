@@ -5,6 +5,7 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/reply/data/reply_draft_repository.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
+import 'package:y300/features/reply/data/sticker_picker_preferences_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
@@ -190,6 +191,8 @@ void main() {
 
     await tester.tap(find.byKey(const Key('reply-composer-sticker-button')));
     await tester.pumpAndSettle();
+    expect(find.text('貓貓蟲'), findsOneWidget);
+    expect(find.text('{:9_656:}'), findsNothing);
     await tester.tap(find.byKey(const Key('reply-sticker-item-{:9_656:}')));
     await tester.pumpAndSettle();
 
@@ -213,6 +216,7 @@ void main() {
       find.byKey(const Key('reply-bbcode-preview-sticker-{:9_656:}')),
       findsOneWidget,
     );
+    expect(find.textContaining('{:9_656:}', findRichText: true), findsNothing);
   });
 
   testWidgets('ReplyComposerPage submits raw sticker code', (tester) async {
@@ -230,6 +234,14 @@ void main() {
           ),
           replyRepositoryProvider.overrideWithValue(replyRepository),
           stickerGroupsProvider.overrideWith((_) async => _stickerGroups),
+          stickerPickerPreferencesRepositoryProvider.overrideWithValue(
+            _FakeStickerPickerPreferencesRepository(),
+          ),
+          stickerPickerLastGroupIdProvider.overrideWith((ref) {
+            return ref
+                .read(stickerPickerPreferencesRepositoryProvider)
+                .loadLastGroupId();
+          }),
         ],
         child: MaterialApp(
           home: _ReplyComposerLauncher(onResult: (_) {}),
@@ -417,6 +429,14 @@ Widget _buildPage({
         replyRepository ?? _FakeReplyRepository(),
       ),
       stickerGroupsProvider.overrideWith((_) async => stickerGroups),
+      stickerPickerPreferencesRepositoryProvider.overrideWithValue(
+        _FakeStickerPickerPreferencesRepository(),
+      ),
+      stickerPickerLastGroupIdProvider.overrideWith((ref) {
+        return ref
+            .read(stickerPickerPreferencesRepositoryProvider)
+            .loadLastGroupId();
+      }),
     ],
     child: MaterialApp(
       home: ReplyComposerPage(args: args ?? _threadArgs()),
@@ -437,6 +457,14 @@ Widget _buildLauncher({
         replyRepository ?? _FakeReplyRepository(),
       ),
       stickerGroupsProvider.overrideWith((_) async => const <StickerGroup>[]),
+      stickerPickerPreferencesRepositoryProvider.overrideWithValue(
+        _FakeStickerPickerPreferencesRepository(),
+      ),
+      stickerPickerLastGroupIdProvider.overrideWith((ref) {
+        return ref
+            .read(stickerPickerPreferencesRepositoryProvider)
+            .loadLastGroupId();
+      }),
     ],
     child: MaterialApp(
       home: _ReplyComposerLauncher(onResult: (_) {}),
@@ -446,8 +474,8 @@ Widget _buildLauncher({
 
 const _stickerGroups = [
   StickerGroup(
-    id: 'group-0',
-    title: 'group-0',
+    id: 'bugcat',
+    title: '貓貓蟲',
     stickers: [
       StickerItem(
         code: '{:9_656:}',
@@ -550,6 +578,21 @@ class _MemoryReplyDraftRepository implements ReplyDraftRepository {
       return;
     }
     _drafts[draft.identity.storageKey] = draft;
+  }
+}
+
+class _FakeStickerPickerPreferencesRepository
+    implements StickerPickerPreferencesRepository {
+  String? lastGroupId;
+
+  @override
+  Future<String?> loadLastGroupId() async {
+    return lastGroupId;
+  }
+
+  @override
+  Future<void> saveLastGroupId(String groupId) async {
+    lastGroupId = groupId;
   }
 }
 

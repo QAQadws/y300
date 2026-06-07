@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,18 +18,18 @@ void main() {
                 'smilies': <Object?>[
                   <Object?>[
                     <String, String>{
-                      'code': '{:9_656:}',
-                      'image': 'bugcat/Capoo16.gif',
+                      'code': '{:1_1000:}',
+                      'image': 'default/handshake.gif',
                     },
                     <String, String>{
-                      'code': '{:9_657:}',
-                      'image': 'bugcat/Capoo27.gif',
+                      'code': '{:1_1001:}',
+                      'image': 'default/6.png',
                     },
                   ],
                   <Object?>[
                     <String, String>{
-                      'code': '{:1_1000:}',
-                      'image': 'default/handshake.gif',
+                      'code': '{:9_656:}',
+                      'image': 'bugcat/Capoo16.gif',
                     },
                   ],
                 ],
@@ -41,19 +42,21 @@ void main() {
       final groups = await repository.loadStickerGroups();
 
       expect(groups, hasLength(2));
-      expect(groups[0].id, 'group-0');
-      expect(groups[0].title, 'group-0');
+      expect(groups[0].id, 'default');
+      expect(groups[0].title, '默认表情');
       expect(groups[0].stickers, hasLength(2));
-      expect(groups[0].stickers.first.code, '{:9_656:}');
-      expect(groups[0].stickers.first.rawCodePattern, '{:9_656:}');
+      expect(groups[0].stickers.first.code, '{:1_1000:}');
+      expect(groups[0].stickers.first.rawCodePattern, '{:1_1000:}');
       expect(
         groups[0].stickers.first.assetPath,
-        'assets/stickers/bugcat/Capoo16.gif',
+        'assets/stickers/default/handshake.gif',
       );
-      expect(groups[1].stickers.single.code, '{:1_1000:}');
+      expect(groups[1].id, 'bugcat');
+      expect(groups[1].title, '貓貓蟲');
+      expect(groups[1].stickers.single.code, '{:9_656:}');
       expect(
         groups[1].stickers.single.assetPath,
-        'assets/stickers/default/handshake.gif',
+        'assets/stickers/bugcat/Capoo16.gif',
       );
     });
 
@@ -82,12 +85,20 @@ void main() {
 
       expect(groups, hasLength(6));
       expect(groups.map((group) => group.id), [
-        'group-0',
-        'group-1',
-        'group-2',
-        'group-3',
-        'group-4',
-        'group-5',
+        'default',
+        'bugcat',
+        'coolmonkey',
+        'gexing',
+        'gexing2',
+        'azukisan',
+      ]);
+      expect(groups.map((group) => group.title), [
+        '默认表情',
+        '貓貓蟲',
+        '企鹅表情',
+        '个性表情',
+        '孤獨搖滾',
+        '小豆泥',
       ]);
     });
 
@@ -119,6 +130,45 @@ void main() {
       expect(groups, hasLength(1));
       expect(groups.single.stickers, hasLength(1));
       expect(groups.single.stickers.single.code, '{:9_656:}');
+    });
+
+    test('real sticker json images point to existing asset files', () async {
+      final raw = await File('assets/stickers/stickers.json').readAsString();
+      final decoded = jsonDecode(raw);
+      expect(decoded, isA<Map<String, Object?>>());
+      final smilies = (decoded as Map<String, Object?>)['smilies'];
+      expect(smilies, isA<List<Object?>>());
+
+      final missingImages = <String>[];
+      var imageCount = 0;
+      for (final group in smilies as List<Object?>) {
+        expect(group, isA<List<Object?>>());
+        for (final rawSticker in group as List<Object?>) {
+          expect(rawSticker, isA<Map<String, Object?>>());
+          final sticker = rawSticker as Map<String, Object?>;
+          final image = sticker['image'];
+          expect(image, isA<String>());
+          final imagePath = 'assets/stickers/$image';
+          imageCount += 1;
+          if (!File(imagePath).existsSync()) {
+            missingImages.add(imagePath);
+          }
+        }
+      }
+
+      expect(imageCount, greaterThan(0));
+      expect(missingImages, isEmpty);
+    });
+
+    test('pubspec declares sticker image asset directories', () async {
+      final pubspec = await File('pubspec.yaml').readAsString();
+
+      expect(pubspec, contains('- assets/stickers/default/'));
+      expect(pubspec, contains('- assets/stickers/bugcat/'));
+      expect(pubspec, contains('- assets/stickers/coolmonkey/'));
+      expect(pubspec, contains('- assets/stickers/gexing/'));
+      expect(pubspec, contains('- assets/stickers/gexing2/'));
+      expect(pubspec, contains('- assets/stickers/azukisan/'));
     });
   });
 }

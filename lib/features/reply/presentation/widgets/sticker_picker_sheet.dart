@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
@@ -11,6 +13,7 @@ class StickerPickerSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncGroups = ref.watch(stickerGroupsProvider);
+    final asyncLastGroupId = ref.watch(stickerPickerLastGroupIdProvider);
     return SafeArea(
       top: false,
       child: SizedBox(
@@ -44,35 +47,146 @@ class StickerPickerSheet extends ConsumerWidget {
                 ),
               );
             }
-            return DefaultTabController(
-              length: visibleGroups.length,
-              child: Column(
-                children: [
-                  TabBar(
-                    isScrollable: true,
-                    tabs: [
-                      for (final group in visibleGroups)
-                        Tab(
-                          key: Key('reply-sticker-group-tab-${group.id}'),
-                          text: group.title,
-                        ),
-                    ],
-                  ),
-                  Expanded(
-                    child: TabBarView(
-                      children: [
-                        for (final group in visibleGroups)
-                          StickerGrid(stickers: group.stickers),
-                      ],
-                    ),
-                  ),
-                ],
+            return asyncLastGroupId.when(
+              loading: () => const Center(
+                child: CircularProgressIndicator(
+                  key: Key('reply-sticker-picker-loading'),
+                ),
+              ),
+              error: (_, _) => _StickerPickerContent(
+                groups: visibleGroups,
+                initialGroupId: null,
+              ),
+              data: (lastGroupId) => _StickerPickerContent(
+                groups: visibleGroups,
+                initialGroupId: lastGroupId,
               ),
             );
           },
         ),
       ),
     );
+  }
+}
+
+class _StickerPickerContent extends ConsumerStatefulWidget {
+  const _StickerPickerContent({
+    required this.groups,
+    required this.initialGroupId,
+  });
+
+  final List<StickerGroup> groups;
+  final String? initialGroupId;
+
+  @override
+  ConsumerState<_StickerPickerContent> createState() {
+    return _StickerPickerContentState();
+  }
+}
+
+class _StickerPickerContentState extends ConsumerState<_StickerPickerContent> {
+  TabController? _tabController;
+  int? _lastSavedIndex;
+
+  @override
+  void dispose() {
+    _tabController?.removeListener(_handleTabChanged);
+    _tabController = null;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final initialIndex = _initialIndex();
+    return DefaultTabController(
+      length: widget.groups.length,
+      initialIndex: initialIndex,
+      child: Builder(
+        builder: (context) {
+          _bindTabController(DefaultTabController.of(context));
+          return Column(
+            children: [
+              TabBar(
+                isScrollable: true,
+                onTap: (index) {
+                  if (_saveGroupAt(index)) {
+                    _lastSavedIndex = index;
+                  }
+                },
+                tabs: [
+                  for (final group in widget.groups)
+                    Tab(
+                      key: Key('reply-sticker-group-tab-${group.id}'),
+                      text: group.title,
+                    ),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    for (final group in widget.groups)
+                      StickerGrid(stickers: group.stickers),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  int _initialIndex() {
+    final initialGroupId = widget.initialGroupId;
+    if (initialGroupId == null) {
+      return 0;
+    }
+    final index = widget.groups.indexWhere((group) {
+      return group.id == initialGroupId;
+    });
+    return index < 0 ? 0 : index;
+  }
+
+  void _bindTabController(TabController controller) {
+    if (_tabController == controller) {
+      return;
+    }
+    _tabController?.removeListener(_handleTabChanged);
+    _tabController = controller;
+    _lastSavedIndex = controller.index;
+    controller.addListener(_handleTabChanged);
+  }
+
+  void _handleTabChanged() {
+    final controller = _tabController;
+    if (controller == null || controller.indexIsChanging) {
+      return;
+    }
+    final index = controller.index;
+    if (index == _lastSavedIndex || index < 0 || index >= widget.groups.length) {
+      return;
+    }
+    if (_saveGroupAt(index)) {
+      _lastSavedIndex = index;
+    }
+  }
+
+  bool _saveGroupAt(int index) {
+    if (index < 0 || index >= widget.groups.length) {
+      return false;
+    }
+    final groupId = widget.groups[index].id;
+    unawaited(
+      _persistLastGroupId(groupId),
+    );
+    return true;
+  }
+
+  Future<void> _persistLastGroupId(String groupId) async {
+    await ref
+        .read(stickerPickerPreferencesRepositoryProvider)
+        .saveLastGroupId(groupId);
+    ref.invalidate(stickerPickerLastGroupIdProvider);
   }
 }
 
@@ -89,29 +203,24 @@ class StickerGrid extends StatelessWidget {
     return GridView.builder(
       padding: const EdgeInsets.all(12),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 56,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
+        maxCrossAxisExtent: 48,
+        mainAxisSpacing: 4,
+        crossAxisSpacing: 4,
       ),
       itemCount: stickers.length,
       itemBuilder: (context, index) {
         final sticker = stickers[index];
         return IconButton(
           key: Key('reply-sticker-item-${sticker.code}'),
-          tooltip: sticker.code,
           onPressed: () {
             Navigator.of(context).pop(sticker);
           },
           icon: Image.asset(
             sticker.assetPath,
-            width: 32,
-            height: 32,
+            width: 40,
+            height: 40,
             fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => Text(
-              sticker.code,
-              textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
-            ),
+            errorBuilder: (_, _, _) => const Icon(Icons.broken_image_outlined),
           ),
         );
       },

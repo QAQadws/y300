@@ -6,6 +6,7 @@ import 'package:y300/features/reply/data/reply_draft_repository.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/data/shared_preferences_reply_draft_repository.dart';
 import 'package:y300/features/reply/data/sticker_catalog_repository.dart';
+import 'package:y300/features/reply/data/sticker_picker_preferences_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/domain/services/reply_submission_error_presenter.dart';
 import 'package:y300/features/reply/domain/services/sticker_bbcode_tokenizer.dart';
@@ -25,6 +26,19 @@ final stickerCatalogRepositoryProvider = Provider<StickerCatalogRepository>((
 
 final stickerGroupsProvider = FutureProvider<List<StickerGroup>>((ref) {
   return ref.read(stickerCatalogRepositoryProvider).loadStickerGroups();
+});
+
+final stickerPickerPreferencesRepositoryProvider =
+    Provider<StickerPickerPreferencesRepository>((_) {
+  return SharedPreferencesStickerPickerPreferencesRepository();
+});
+
+final stickerPickerLastGroupIdProvider = FutureProvider.autoDispose<String?>((
+  ref,
+) {
+  return ref
+      .read(stickerPickerPreferencesRepositoryProvider)
+      .loadLastGroupId();
 });
 
 final stickerBbCodeTokenizerProvider = Provider<StickerBbCodeTokenizer>((_) {

@@ -30,16 +30,27 @@ class AssetStickerCatalogRepository implements StickerCatalogRepository {
     final groups = ParseUtils.asList(decoded['smilies']);
     return groups.indexed.map((entry) {
       final (groupIndex, rawGroup) = entry;
+      final metadata = _metadataForIndex(groupIndex);
       final stickers = ParseUtils.asList(rawGroup)
           .map(_parseSticker)
           .whereType<StickerItem>()
           .toList(growable: false);
       return StickerGroup(
-        id: 'group-$groupIndex',
-        title: 'group-$groupIndex',
+        id: metadata.id,
+        title: metadata.title,
         stickers: stickers,
       );
     }).toList(growable: false);
+  }
+
+  _StickerGroupMetadata _metadataForIndex(int index) {
+    if (index >= 0 && index < _knownGroupMetadata.length) {
+      return _knownGroupMetadata[index];
+    }
+    return _StickerGroupMetadata(
+      id: 'group-$index',
+      title: 'group-$index',
+    );
   }
 
   StickerItem? _parseSticker(Object? rawSticker) {
@@ -55,4 +66,23 @@ class AssetStickerCatalogRepository implements StickerCatalogRepository {
       rawCodePattern: rawCodePattern,
     );
   }
+}
+
+const _knownGroupMetadata = <_StickerGroupMetadata>[
+  _StickerGroupMetadata(id: 'default', title: '默认表情'),
+  _StickerGroupMetadata(id: 'bugcat', title: '貓貓蟲'),
+  _StickerGroupMetadata(id: 'coolmonkey', title: '企鹅表情'),
+  _StickerGroupMetadata(id: 'gexing', title: '个性表情'),
+  _StickerGroupMetadata(id: 'gexing2', title: '孤獨搖滾'),
+  _StickerGroupMetadata(id: 'azukisan', title: '小豆泥'),
+];
+
+class _StickerGroupMetadata {
+  const _StickerGroupMetadata({
+    required this.id,
+    required this.title,
+  });
+
+  final String id;
+  final String title;
 }

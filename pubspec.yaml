@@ -86,6 +86,12 @@ flutter:
   assets:
     - assets/tag.json
     - assets/stickers/
+    - assets/stickers/default/
+    - assets/stickers/bugcat/
+    - assets/stickers/coolmonkey/
+    - assets/stickers/gexing/
+    - assets/stickers/gexing2/
+    - assets/stickers/azukisan/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

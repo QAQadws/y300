@@ -93,6 +93,28 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(Image), findsOneWidget);
+    expect(find.textContaining('{:9_656:}', findRichText: true), findsNothing);
+  });
+
+  testWidgets('BbCodePreviewPanel hides known sticker code when asset fails', (
+    tester,
+  ) async {
+    const sticker = StickerItem(
+      code: '{:9_656:}',
+      assetPath: 'assets/stickers/missing.gif',
+      rawCodePattern: '{:9_656:}',
+    );
+
+    await tester.pumpWidget(
+      _buildPanel(
+        source: '{:9_656:}',
+        stickers: const [sticker],
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
+    expect(find.textContaining('{:9_656:}', findRichText: true), findsNothing);
   });
 
   testWidgets('BbCodePreviewPanel keeps unknown sticker code as text', (

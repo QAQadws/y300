@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
+import 'package:y300/features/reply/data/sticker_picker_preferences_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/widgets/sticker_picker_sheet.dart';
 
@@ -27,7 +28,7 @@ void main() {
         },
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('reply-sticker-picker-error')), findsOneWidget);
   });
@@ -38,7 +39,7 @@ void main() {
         loadGroups: () async => const [],
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('reply-sticker-picker-empty')), findsOneWidget);
   });
@@ -47,10 +48,19 @@ void main() {
     tester,
   ) async {
     StickerItem? selected;
+    final preferencesRepository = _FakeStickerPickerPreferencesRepository();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           stickerGroupsProvider.overrideWith((_) async => _groups),
+          stickerPickerPreferencesRepositoryProvider.overrideWithValue(
+            preferencesRepository,
+          ),
+          stickerPickerLastGroupIdProvider.overrideWith((ref) {
+            return ref
+                .read(stickerPickerPreferencesRepositoryProvider)
+                .loadLastGroupId();
+          }),
         ],
         child: const MaterialApp(
           home: Scaffold(
@@ -59,15 +69,25 @@ void main() {
         ),
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('reply-sticker-group-tab-group-0')), findsOneWidget);
+    expect(find.byKey(const Key('reply-sticker-group-tab-bugcat')), findsOneWidget);
+    expect(find.text('貓貓蟲'), findsOneWidget);
+    expect(find.text('{:9_656:}'), findsNothing);
     expect(find.byKey(const Key('reply-sticker-item-{:9_656:}')), findsOneWidget);
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           stickerGroupsProvider.overrideWith((_) async => _groups),
+          stickerPickerPreferencesRepositoryProvider.overrideWithValue(
+            preferencesRepository,
+          ),
+          stickerPickerLastGroupIdProvider.overrideWith((ref) {
+            return ref
+                .read(stickerPickerPreferencesRepositoryProvider)
+                .loadLastGroupId();
+          }),
         ],
         child: MaterialApp(
           home: _PickerLauncher(
@@ -85,12 +105,35 @@ void main() {
 
     expect(selected?.code, '{:9_656:}');
   });
+
+  testWidgets('StickerPickerSheet restores and saves selected group', (
+    tester,
+  ) async {
+    final preferencesRepository = _FakeStickerPickerPreferencesRepository(
+      lastGroupId: 'azukisan',
+    );
+    await tester.pumpWidget(
+      _buildSheet(
+        loadGroups: () async => _groups,
+        preferencesRepository: preferencesRepository,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('reply-sticker-item-{:6_1:}')), findsOneWidget);
+    expect(find.byKey(const Key('reply-sticker-item-{:9_656:}')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('reply-sticker-group-tab-bugcat')));
+    await tester.pumpAndSettle();
+
+    expect(preferencesRepository.lastGroupId, 'bugcat');
+  });
 }
 
 const _groups = [
   StickerGroup(
-    id: 'group-0',
-    title: 'group-0',
+    id: 'bugcat',
+    title: '貓貓蟲',
     stickers: [
       StickerItem(
         code: '{:9_656:}',
@@ -99,14 +142,36 @@ const _groups = [
       ),
     ],
   ),
+  StickerGroup(
+    id: 'azukisan',
+    title: '小豆泥',
+    stickers: [
+      StickerItem(
+        code: '{:6_1:}',
+        assetPath: 'assets/stickers/azukisan/1.gif',
+        rawCodePattern: '{:6_1:}',
+      ),
+    ],
+  ),
 ];
 
 Widget _buildSheet({
   required Future<List<StickerGroup>> Function() loadGroups,
+  StickerPickerPreferencesRepository? preferencesRepository,
 }) {
+  final resolvedPreferencesRepository =
+      preferencesRepository ?? _FakeStickerPickerPreferencesRepository();
   return ProviderScope(
     overrides: [
       stickerGroupsProvider.overrideWith((_) => loadGroups()),
+      stickerPickerPreferencesRepositoryProvider.overrideWithValue(
+        resolvedPreferencesRepository,
+      ),
+      stickerPickerLastGroupIdProvider.overrideWith((ref) {
+        return ref
+            .read(stickerPickerPreferencesRepositoryProvider)
+            .loadLastGroupId();
+      }),
     ],
     child: const MaterialApp(
       home: Scaffold(
@@ -140,5 +205,24 @@ class _PickerLauncher extends StatelessWidget {
         child: const Text('open'),
       ),
     );
+  }
+}
+
+class _FakeStickerPickerPreferencesRepository
+    implements StickerPickerPreferencesRepository {
+  _FakeStickerPickerPreferencesRepository({
+    this.lastGroupId,
+  });
+
+  String? lastGroupId;
+
+  @override
+  Future<String?> loadLastGroupId() async {
+    return lastGroupId;
+  }
+
+  @override
+  Future<void> saveLastGroupId(String groupId) async {
+    lastGroupId = groupId;
   }
 }
