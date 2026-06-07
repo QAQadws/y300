@@ -62,7 +62,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('回复帖子'),
+        title: Text(widget.args.target.isPostReply ? '回复楼层' : '回复帖子'),
         actions: [
           IconButton(
             key: const Key('reply-composer-send-button'),
@@ -89,6 +89,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
           onModeChanged: controller.switchMode,
           onMessageChanged: controller.updateMessage,
           onUseSignatureChanged: controller.toggleUseSignature,
+          onRetryPrepare: controller.retryPreparePostReply,
           onStickerPressed: () {
             unawaited(_pickAndInsertSticker(context, controller));
           },
@@ -177,6 +178,7 @@ class _ReplyComposerBody extends StatelessWidget {
     required this.onModeChanged,
     required this.onMessageChanged,
     required this.onUseSignatureChanged,
+    required this.onRetryPrepare,
     required this.onStickerPressed,
   });
 
@@ -187,6 +189,7 @@ class _ReplyComposerBody extends StatelessWidget {
   final ValueChanged<ReplyComposerMode> onModeChanged;
   final ValueChanged<String> onMessageChanged;
   final ValueChanged<bool> onUseSignatureChanged;
+  final VoidCallback onRetryPrepare;
   final VoidCallback onStickerPressed;
 
   @override
@@ -195,6 +198,13 @@ class _ReplyComposerBody extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (state.target.isPostReply) ...[
+            _ReplyReferenceStatus(
+              state: state,
+              onRetryPrepare: onRetryPrepare,
+            ),
+            const SizedBox(height: 12),
+          ],
           Align(
             alignment: Alignment.centerLeft,
             child: SegmentedButton<ReplyComposerMode>(
@@ -212,7 +222,7 @@ class _ReplyComposerBody extends StatelessWidget {
                 ),
               ],
               selected: {state.mode},
-              onSelectionChanged: state.isSubmitting
+              onSelectionChanged: state.isSubmitting || state.isPreparing
                   ? null
                   : (selection) {
                       onModeChanged(selection.single);
@@ -221,7 +231,7 @@ class _ReplyComposerBody extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           ReplyEditorToolbar(
-            enabled: !state.isSubmitting,
+            enabled: !state.isSubmitting && !state.isPreparing,
             onStickerPressed: onStickerPressed,
           ),
           const SizedBox(height: 12),
@@ -229,7 +239,7 @@ class _ReplyComposerBody extends StatelessWidget {
             TextField(
               key: const Key('reply-composer-message-input'),
               controller: messageController,
-              enabled: !state.isSubmitting,
+              enabled: !state.isSubmitting && !state.isPreparing,
               minLines: 8,
               maxLines: null,
               keyboardType: TextInputType.multiline,
@@ -251,7 +261,9 @@ class _ReplyComposerBody extends StatelessWidget {
           SwitchListTile(
             key: const Key('reply-composer-use-signature-switch'),
             value: state.useSignature,
-            onChanged: state.isSubmitting ? null : onUseSignatureChanged,
+            onChanged: state.isSubmitting || state.isPreparing
+                ? null
+                : onUseSignatureChanged,
             title: const Text('使用个人签名'),
             contentPadding: EdgeInsets.zero,
           ),
@@ -265,6 +277,102 @@ class _ReplyComposerBody extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _ReplyReferenceStatus extends StatelessWidget {
+  const _ReplyReferenceStatus({
+    required this.state,
+    required this.onRetryPrepare,
+  });
+
+  final ReplyComposerState state;
+  final VoidCallback onRetryPrepare;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    if (state.isPreparing) {
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border.all(color: colorScheme.outlineVariant),
+          borderRadius: BorderRadius.circular(8),
+          color: colorScheme.surface,
+        ),
+        child: const Padding(
+          padding: EdgeInsets.all(12),
+          child: Row(
+            key: Key('reply-composer-preparing'),
+            children: [
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 12),
+              Text('正在准备楼层引用'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final error = state.preparationError;
+    if (error != null && error.trim().isNotEmpty) {
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border.all(color: colorScheme.error),
+          borderRadius: BorderRadius.circular(8),
+          color: colorScheme.errorContainer,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            key: const Key('reply-composer-preparation-error'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                error,
+                style: TextStyle(color: colorScheme.onErrorContainer),
+              ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                key: const Key('reply-composer-retry-prepare-button'),
+                onPressed: onRetryPrepare,
+                icon: const Icon(Icons.refresh),
+                label: const Text('重试'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final reference = state.preparation?.reference;
+    final noticeAuthorMsg = reference?.noticeAuthorMsg?.trim();
+    final rawQuotePreview = reference?.rawQuotePreview?.trim();
+    final preview = noticeAuthorMsg != null && noticeAuthorMsg.isNotEmpty
+        ? noticeAuthorMsg
+        : rawQuotePreview;
+    if (preview == null || preview.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+        color: colorScheme.surface,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Text(
+          preview,
+          key: const Key('reply-composer-reference-banner'),
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
     );
   }

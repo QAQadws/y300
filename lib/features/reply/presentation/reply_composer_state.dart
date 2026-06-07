@@ -9,10 +9,12 @@ class ReplyComposerArgs {
   const ReplyComposerArgs({
     required this.target,
     this.title,
+    this.replyFormUri,
   });
 
   final ReplyTarget target;
   final String? title;
+  final Uri? replyFormUri;
 
   ReplyDraftIdentity get identity {
     final pid = target.pid;
@@ -40,7 +42,8 @@ class ReplyComposerArgs {
         other.target.tid == target.tid &&
         other.target.pid == target.pid &&
         other.target.sourceUri == target.sourceUri &&
-        other.title == title;
+        other.title == title &&
+        other.replyFormUri == replyFormUri;
   }
 
   @override
@@ -51,6 +54,7 @@ class ReplyComposerArgs {
         target.pid,
         target.sourceUri,
         title,
+        replyFormUri,
       );
 }
 
@@ -61,6 +65,9 @@ class ReplyComposerState {
     required this.useSignature,
     required this.isSubmitting,
     required this.mode,
+    required this.isPreparing,
+    this.preparation,
+    this.preparationError,
     this.errorMessage,
   });
 
@@ -69,6 +76,9 @@ class ReplyComposerState {
     String message = '',
     bool useSignature = true,
     ReplyComposerMode mode = ReplyComposerMode.source,
+    bool isPreparing = false,
+    ReplyPreparation? preparation,
+    String? preparationError,
   }) {
     return ReplyComposerState(
       target: target,
@@ -76,6 +86,9 @@ class ReplyComposerState {
       useSignature: useSignature,
       isSubmitting: false,
       mode: mode,
+      isPreparing: isPreparing,
+      preparation: preparation,
+      preparationError: preparationError,
     );
   }
 
@@ -84,16 +97,32 @@ class ReplyComposerState {
   final bool useSignature;
   final bool isSubmitting;
   final ReplyComposerMode mode;
+  final bool isPreparing;
+  final ReplyPreparation? preparation;
+  final String? preparationError;
   final String? errorMessage;
 
-  bool get canSubmit => message.trim().isNotEmpty && !isSubmitting;
+  bool get canSubmit {
+    if (message.trim().isEmpty || isSubmitting || isPreparing) {
+      return false;
+    }
+    if (target.isPostReply && preparation == null) {
+      return false;
+    }
+    return true;
+  }
 
   ReplyComposerState copyWith({
     String? message,
     bool? useSignature,
     bool? isSubmitting,
     ReplyComposerMode? mode,
+    bool? isPreparing,
+    ReplyPreparation? preparation,
+    String? preparationError,
     String? errorMessage,
+    bool clearPreparation = false,
+    bool clearPreparationError = false,
     bool clearErrorMessage = false,
   }) {
     return ReplyComposerState(
@@ -102,6 +131,11 @@ class ReplyComposerState {
       useSignature: useSignature ?? this.useSignature,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       mode: mode ?? this.mode,
+      isPreparing: isPreparing ?? this.isPreparing,
+      preparation: clearPreparation ? null : preparation ?? this.preparation,
+      preparationError: clearPreparationError
+          ? null
+          : preparationError ?? this.preparationError,
       errorMessage: clearErrorMessage ? null : errorMessage ?? this.errorMessage,
     );
   }

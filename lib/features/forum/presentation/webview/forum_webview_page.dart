@@ -12,6 +12,7 @@ import 'package:y300/features/forum/domain/services/forum_webview_early_script_b
 import 'package:y300/features/forum/domain/services/forum_webview_navigation_header_builder.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_network_policy_resolver.dart';
+import 'package:y300/features/forum/domain/services/forum_webview_reply_navigator.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_script_injector.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_thread_menu_bridge.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_visual_policy_resolver.dart';
@@ -358,6 +359,12 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     if (uri.scheme.toLowerCase() == 'javascript') {
       return ForumWebViewNavigationDecision.prevent;
     }
+    final postReplyRequest =
+        ref.read(forumWebViewReplyNavigatorProvider).resolvePostReply(url);
+    if (postReplyRequest != null) {
+      unawaited(_openPostReplyComposer(context, postReplyRequest));
+      return ForumWebViewNavigationDecision.prevent;
+    }
     if (navigator.isManagedSite(uri)) {
       return ForumWebViewNavigationDecision.navigate;
     }
@@ -608,6 +615,43 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
               sourceUri: state.currentUri,
             ),
             title: state.pageTitle,
+          ),
+        ),
+      ),
+    );
+    if (!mounted || result == null || !result.sent) {
+      return;
+    }
+    if (messenger != null) {
+      _showSnackBar(
+        messenger,
+        result.message.trim().isEmpty ? '回复成功' : result.message,
+      );
+    }
+    await driver.reload();
+  }
+
+  Future<void> _openPostReplyComposer(
+    BuildContext context,
+    ForumWebViewPostReplyRequest request,
+  ) async {
+    if (!mounted) {
+      return;
+    }
+    final driver = ref.read(forumWebViewDriverProvider);
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final result = await navigator.push<ReplyComposerResult>(
+      MaterialPageRoute<ReplyComposerResult>(
+        builder: (_) => ReplyComposerPage(
+          args: ReplyComposerArgs(
+            target: ReplyTarget.post(
+              fid: request.fid,
+              tid: request.tid,
+              pid: request.repquote,
+              sourceUri: request.replyFormUri,
+            ),
+            replyFormUri: request.replyFormUri,
           ),
         ),
       ),

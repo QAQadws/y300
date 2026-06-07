@@ -916,6 +916,51 @@ void main() {
     expect(find.text('回复发布成功'), findsOneWidget);
   });
 
+  testWidgets('ForumWebViewPage intercepts post reply navigation and reloads after sent', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver()..title = '主题标题';
+    final replyRepository = _FakeReplyRepository();
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        driver: driver,
+        replyRepository: replyRepository,
+      ),
+    );
+    await tester.pump();
+
+    final decision = await driver.dispatchNavigationRequest(
+      'https://bbs.yamibo.com/forum.php?mod=post&action=reply'
+      '&fid=55&tid=123&repquote=41554317'
+      '&extra=page%3D1&page=1&mobile=2',
+    );
+    await tester.pumpAndSettle();
+
+    expect(decision, ForumWebViewNavigationDecision.prevent);
+    expect(find.text('回复楼层'), findsOneWidget);
+    expect(replyRepository.prepareCallCount, 1);
+    expect(
+      find.byKey(const Key('reply-composer-reference-banner')),
+      findsOneWidget,
+    );
+    await tester.enterText(
+      find.byKey(const Key('reply-composer-message-input')),
+      '来自 WebView 的楼层回复',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('reply-composer-send-button')));
+    await tester.pumpAndSettle();
+
+    expect(replyRepository.sentDrafts, hasLength(1));
+    expect(replyRepository.sentDrafts.single.fid, '55');
+    expect(replyRepository.sentDrafts.single.tid, '123');
+    expect(replyRepository.sentDrafts.single.formHash, 'prepared-formhash');
+    expect(replyRepository.sentDrafts.single.noticeTrimStr, '[quote]引用[/quote]');
+    expect(replyRepository.sentDrafts.single.repPost, '41554317');
+    expect(driver.reloadCallCount, 1);
+  });
+
   testWidgets('ForumWebViewPage thread detail more menu shows author order and home actions', (
     tester,
   ) async {
@@ -1640,14 +1685,36 @@ class _MemoryReplyDraftRepository implements ReplyDraftRepository {
 class _FakeReplyRepository implements ReplyRepository {
   _FakeReplyRepository({
     ApiResult<ReplySubmissionResult>? result,
+    ApiResult<ReplyPreparation>? preparationResult,
   }) : result =
            result ??
            const ApiSuccess<ReplySubmissionResult>(
              ReplySubmissionResult(message: '回复发布成功'),
+           ),
+       preparationResult =
+           preparationResult ??
+           const ApiSuccess<ReplyPreparation>(
+             ReplyPreparation(
+               target: ReplyTarget.post(
+                 fid: '55',
+                 tid: '123',
+                 pid: '41554317',
+               ),
+               reference: ReplyReference(
+                 formHash: 'prepared-formhash',
+                 noticeAuthor: 'notice-token',
+                 noticeTrimStr: '[quote]引用[/quote]',
+                 noticeAuthorMsg: '引用正文',
+                 repPid: '41554317',
+                 repPost: '41554317',
+               ),
+             ),
            );
 
   final ApiResult<ReplySubmissionResult> result;
+  final ApiResult<ReplyPreparation> preparationResult;
   final List<ReplyDraft> sentDrafts = <ReplyDraft>[];
+  int prepareCallCount = 0;
 
   @override
   Future<ApiResult<ReplySubmissionResult>> sendReply({
@@ -1655,6 +1722,14 @@ class _FakeReplyRepository implements ReplyRepository {
   }) async {
     sentDrafts.add(draft);
     return result;
+  }
+
+  @override
+  Future<ApiResult<ReplyPreparation>> preparePostReply({
+    required Uri replyFormUri,
+  }) async {
+    prepareCallCount += 1;
+    return preparationResult;
   }
 }
 

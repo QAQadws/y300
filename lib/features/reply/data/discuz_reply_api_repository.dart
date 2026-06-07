@@ -6,6 +6,7 @@ import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/utils/parse_utils.dart';
 import 'package:y300/features/profile/data/profile_repository.dart';
 import 'package:y300/features/reply/data/discuz_reply_remote_data_source.dart';
+import 'package:y300/features/reply/data/reply_form_preparation_data_source.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/domain/services/reply_draft_validator.dart';
@@ -16,6 +17,7 @@ class DiscuzReplyApiRepository implements ReplyRepository {
     required CookieStore cookieStore,
     Dio? dio,
     DiscuzReplyRemoteDataSource? remoteDataSource,
+    ReplyFormPreparationDataSource? preparationDataSource,
     ReplyDraftValidator validator = const ReplyDraftValidator(),
   })  : _profileRepository = profileRepository,
         _remoteDataSource = remoteDataSource ??
@@ -23,10 +25,15 @@ class DiscuzReplyApiRepository implements ReplyRepository {
               cookieStore: cookieStore,
               dio: dio,
             ),
+        _preparationDataSource = preparationDataSource ??
+            DiscuzReplyFormPreparationDataSource(
+              cookieStore: cookieStore,
+            ),
         _validator = validator;
 
   final ProfileRepository _profileRepository;
   final DiscuzReplyRemoteDataSource _remoteDataSource;
+  final ReplyFormPreparationDataSource _preparationDataSource;
   final ReplyDraftValidator _validator;
 
   @override
@@ -43,7 +50,7 @@ class DiscuzReplyApiRepository implements ReplyRepository {
         ),
       );
     }
-    final formhashResult = await _loadFormhash();
+    final formhashResult = await _resolveFormhash(draft.formHash);
     if (formhashResult case ApiFailure<String>(:final error)) {
       return ApiFailure<ReplySubmissionResult>(error);
     }
@@ -89,6 +96,46 @@ class DiscuzReplyApiRepository implements ReplyRepository {
         ),
       );
     }
+  }
+
+  @override
+  Future<ApiResult<ReplyPreparation>> preparePostReply({
+    required Uri replyFormUri,
+  }) async {
+    try {
+      final preparation =
+          await _preparationDataSource.fetchReplyPreparation(replyFormUri);
+      return ApiSuccess<ReplyPreparation>(preparation);
+    } on DioException catch (error) {
+      return ApiFailure<ReplyPreparation>(
+        ApiError(
+          type: _mapDioErrorType(error),
+          message: error.message ?? '获取楼层回复表单失败',
+          statusCode: error.response?.statusCode,
+          raw: error.response?.data,
+        ),
+      );
+    } on ReplyFormParseException catch (error) {
+      return ApiFailure<ReplyPreparation>(
+        ApiError(type: ApiErrorType.parse, message: error.message),
+      );
+    } catch (error) {
+      return ApiFailure<ReplyPreparation>(
+        ApiError(
+          type: ApiErrorType.unknown,
+          message: '准备楼层回复失败：$error',
+          raw: error,
+        ),
+      );
+    }
+  }
+
+  Future<ApiResult<String>> _resolveFormhash(String? preparedFormhash) async {
+    final normalized = preparedFormhash?.trim();
+    if (normalized != null && normalized.isNotEmpty) {
+      return ApiSuccess<String>(normalized);
+    }
+    return _loadFormhash();
   }
 
   Future<ApiResult<String>> _loadFormhash() async {

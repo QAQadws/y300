@@ -212,12 +212,117 @@ void main() {
       expect(result.sent, isTrue);
       expect(replyRepository.sentDrafts.single.message, '[quote]源码内容[/quote]');
     });
+
+    test('post reply restores post draft and prepares reference', () async {
+      final draftRepository = _MemoryReplyDraftRepository();
+      final replyRepository = _FakeReplyRepository();
+      final args = _postArgs();
+      await draftRepository.saveDraft(
+        ReplyDraftSnapshot(
+          identity: args.identity,
+          message: '楼层草稿',
+          useSignature: false,
+          updatedAt: DateTime.utc(2026, 6, 6),
+        ),
+      );
+      final container = _buildContainer(
+        draftRepository: draftRepository,
+        replyRepository: replyRepository,
+      );
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+
+      final initialState = await container.read(
+        replyComposerControllerProvider(args).future,
+      );
+      expect(initialState.message, '楼层草稿');
+      expect(initialState.useSignature, isFalse);
+
+      await _drainMicrotasks();
+      final preparedState = container.read(
+        replyComposerControllerProvider(args),
+      ).value;
+      expect(replyRepository.prepareCallCount, 1);
+      expect(preparedState?.preparation?.reference.noticeTrimStr, '[quote]引用[/quote]');
+    });
+
+    test('post reply submit passes prepared reference fields', () async {
+      final replyRepository = _FakeReplyRepository();
+      final args = _postArgs();
+      final container = _buildContainer(replyRepository: replyRepository);
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(replyComposerControllerProvider(args).future);
+      await _drainMicrotasks();
+      final controller = container.read(
+        replyComposerControllerProvider(args).notifier,
+      );
+
+      controller.updateMessage('回复楼层');
+      final result = await controller.submit();
+
+      expect(result.sent, isTrue);
+      final draft = replyRepository.sentDrafts.single;
+      expect(draft.formHash, 'prepared-formhash');
+      expect(draft.repPid, '41554317');
+      expect(draft.repPost, '41554317');
+      expect(draft.noticeAuthor, 'notice-token');
+      expect(draft.noticeTrimStr, '[quote]引用[/quote]');
+      expect(draft.noticeAuthorMsg, '引用正文');
+    });
+
+    test('post reply preparation failure disables submit and keeps draft', () async {
+      final draftRepository = _MemoryReplyDraftRepository();
+      final replyRepository = _FakeReplyRepository(
+        preparationResult: const ApiFailure<ReplyPreparation>(
+          ApiError(type: ApiErrorType.parse, message: '表单解析失败'),
+        ),
+      );
+      final args = _postArgs();
+      final container = _buildContainer(
+        draftRepository: draftRepository,
+        replyRepository: replyRepository,
+      );
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(replyComposerControllerProvider(args).future);
+      await _drainMicrotasks();
+      final controller = container.read(
+        replyComposerControllerProvider(args).notifier,
+      );
+      controller.updateMessage('失败也保留');
+
+      final result = await controller.submit();
+
+      expect(result.sent, isFalse);
+      expect(replyRepository.sentDrafts, isEmpty);
+      await controller.flushDraft();
+      expect((await draftRepository.loadDraft(args.identity))?.message, '失败也保留');
+    });
   });
 }
 
 ReplyComposerArgs _threadArgs({required String tid}) {
   return ReplyComposerArgs(
     target: ReplyTarget.thread(fid: '33', tid: tid),
+  );
+}
+
+ReplyComposerArgs _postArgs() {
+  final uri = Uri.parse(
+    'https://bbs.yamibo.com/forum.php?mod=post&action=reply&fid=33&tid=572063&repquote=41554317&mobile=2',
+  );
+  return ReplyComposerArgs(
+    target: ReplyTarget.post(
+      fid: '33',
+      tid: '572063',
+      pid: '41554317',
+      sourceUri: uri,
+    ),
+    replyFormUri: uri,
   );
 }
 
@@ -245,6 +350,11 @@ ProviderSubscription<AsyncValue<ReplyComposerState>> _keepComposerAlive(
     replyComposerControllerProvider(args),
     (_, _) {},
   );
+}
+
+Future<void> _drainMicrotasks() async {
+  await Future<void>.delayed(Duration.zero);
+  await Future<void>.delayed(Duration.zero);
 }
 
 class _MemoryReplyDraftRepository implements ReplyDraftRepository {
@@ -283,14 +393,36 @@ class _MemoryReplyDraftRepository implements ReplyDraftRepository {
 class _FakeReplyRepository implements ReplyRepository {
   _FakeReplyRepository({
     ApiResult<ReplySubmissionResult>? result,
+    ApiResult<ReplyPreparation>? preparationResult,
   }) : result =
             result ??
             const ApiSuccess<ReplySubmissionResult>(
               ReplySubmissionResult(message: '回复成功'),
+            ),
+        preparationResult =
+            preparationResult ??
+            const ApiSuccess<ReplyPreparation>(
+              ReplyPreparation(
+                target: ReplyTarget.post(
+                  fid: '33',
+                  tid: '572063',
+                  pid: '41554317',
+                ),
+                reference: ReplyReference(
+                  formHash: 'prepared-formhash',
+                  noticeAuthor: 'notice-token',
+                  noticeTrimStr: '[quote]引用[/quote]',
+                  noticeAuthorMsg: '引用正文',
+                  repPid: '41554317',
+                  repPost: '41554317',
+                ),
+              ),
             );
 
   final ApiResult<ReplySubmissionResult> result;
+  final ApiResult<ReplyPreparation> preparationResult;
   final List<ReplyDraft> sentDrafts = <ReplyDraft>[];
+  int prepareCallCount = 0;
 
   @override
   Future<ApiResult<ReplySubmissionResult>> sendReply({
@@ -298,5 +430,13 @@ class _FakeReplyRepository implements ReplyRepository {
   }) async {
     sentDrafts.add(draft);
     return result;
+  }
+
+  @override
+  Future<ApiResult<ReplyPreparation>> preparePostReply({
+    required Uri replyFormUri,
+  }) async {
+    prepareCallCount += 1;
+    return preparationResult;
   }
 }

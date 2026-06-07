@@ -443,6 +443,15 @@ class _FakeReplyRepository implements ReplyRepository {
       ReplySubmissionResult(message: '回复发布成功'),
     );
   }
+
+  @override
+  Future<ApiResult<ReplyPreparation>> preparePostReply({
+    required Uri replyFormUri,
+  }) async {
+    return const ApiFailure<ReplyPreparation>(
+      ApiError(type: ApiErrorType.business, message: '测试不支持楼层回复准备'),
+    );
+  }
 }
 
 class _FakeThreadRepository implements ThreadRepository {

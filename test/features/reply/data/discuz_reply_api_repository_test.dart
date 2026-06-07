@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/features/reply/data/discuz_reply_remote_data_source.dart';
+import 'package:y300/features/reply/data/reply_form_preparation_data_source.dart';
 import 'package:y300/features/profile/data/models/profile_models.dart';
 import 'package:y300/features/profile/data/profile_repository.dart';
 import 'package:y300/features/reply/data/discuz_reply_api_repository.dart';
@@ -192,6 +193,63 @@ void main() {
       expect(result.errorOrNull?.type, ApiErrorType.server);
       expect(result.errorOrNull?.statusCode, 500);
     });
+
+    test('preparePostReply returns preparation from data source', () async {
+      final preparationDataSource = _FakeReplyFormPreparationDataSource(
+        preparation: _preparation(),
+      );
+      final repository = _buildRepositoryWithRemote(
+        remoteDataSource: _FakeReplyRemoteDataSource(),
+        preparationDataSource: preparationDataSource,
+      );
+
+      final result = await repository.preparePostReply(
+        replyFormUri: Uri.parse(
+          'https://bbs.yamibo.com/forum.php?mod=post&action=reply&fid=33&tid=570617&repquote=41554317&mobile=2',
+        ),
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(result.dataOrNull?.reference.noticeTrimStr, '[quote]引用[/quote]');
+    });
+
+    test('uses prepared formhash before profile formhash for post reply', () async {
+      final remoteDataSource = _FakeReplyRemoteDataSource(
+        response: const ReplyRemoteResponse(
+          data: <String, dynamic>{
+            'Message': <String, dynamic>{
+              'messageval': 'post_reply_succeed',
+              'messagestr': '回复发布成功',
+            },
+          },
+          statusCode: 200,
+        ),
+      );
+      final repository = _buildRepositoryWithRemote(
+        profileRepository: _FakeProfileRepository.success(
+          formhash: 'profile-formhash',
+        ),
+        remoteDataSource: remoteDataSource,
+      );
+
+      final result = await repository.sendReply(
+        draft: const ReplyDraft(
+          fid: '33',
+          tid: '570617',
+          message: '楼层回复',
+          formHash: 'prepared-formhash',
+          repPid: '41554317',
+          repPost: '41554317',
+          noticeAuthor: 'notice-token',
+          noticeTrimStr: '[quote]引用[/quote]',
+          noticeAuthorMsg: '引用正文',
+        ),
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(remoteDataSource.payloads.single.formHash, 'prepared-formhash');
+      expect(remoteDataSource.payloads.single.noticeTrimStr, '[quote]引用[/quote]');
+    });
   });
 }
 
@@ -208,6 +266,7 @@ DiscuzReplyApiRepository _buildRepository({
 
 DiscuzReplyApiRepository _buildRepositoryWithRemote({
   required DiscuzReplyRemoteDataSource remoteDataSource,
+  ReplyFormPreparationDataSource? preparationDataSource,
   ProfileRepository? profileRepository,
 }) {
   return DiscuzReplyApiRepository(
@@ -215,6 +274,7 @@ DiscuzReplyApiRepository _buildRepositoryWithRemote({
         profileRepository ?? _FakeProfileRepository.success(formhash: 'fe182126'),
     cookieStore: CookieStore(),
     remoteDataSource: remoteDataSource,
+    preparationDataSource: preparationDataSource,
   );
 }
 
@@ -248,10 +308,12 @@ class _FakeReplyRemoteDataSource implements DiscuzReplyRemoteDataSource {
   final ReplyRemoteResponse? response;
   final Object? exception;
   bool called = false;
+  final List<ReplySubmitPayload> payloads = <ReplySubmitPayload>[];
 
   @override
   Future<ReplyRemoteResponse> sendReply(ReplySubmitPayload payload) async {
     called = true;
+    payloads.add(payload);
     final exception = this.exception;
     if (exception != null) {
       throw exception;
@@ -259,6 +321,38 @@ class _FakeReplyRemoteDataSource implements DiscuzReplyRemoteDataSource {
     return response ??
         const ReplyRemoteResponse(data: <String, dynamic>{}, statusCode: 200);
   }
+}
+
+class _FakeReplyFormPreparationDataSource
+    implements ReplyFormPreparationDataSource {
+  _FakeReplyFormPreparationDataSource({
+    required this.preparation,
+  });
+
+  final ReplyPreparation preparation;
+
+  @override
+  Future<ReplyPreparation> fetchReplyPreparation(Uri replyFormUri) async {
+    return preparation;
+  }
+}
+
+ReplyPreparation _preparation() {
+  return const ReplyPreparation(
+    target: ReplyTarget.post(
+      fid: '33',
+      tid: '570617',
+      pid: '41554317',
+    ),
+    reference: ReplyReference(
+      formHash: 'prepared-formhash',
+      noticeAuthor: 'notice-token',
+      noticeTrimStr: '[quote]引用[/quote]',
+      noticeAuthorMsg: '引用正文',
+      repPid: '41554317',
+      repPost: '41554317',
+    ),
+  );
 }
 
 class _ReplyTestAdapter implements HttpClientAdapter {

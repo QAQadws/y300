@@ -41,8 +41,12 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
       target: _args.target,
       message: snapshot?.message ?? '',
       useSignature: snapshot?.useSignature ?? true,
+      isPreparing: _shouldPreparePostReply,
     );
     _latestState = initialState;
+    if (_shouldPreparePostReply) {
+      unawaited(Future<void>.microtask(_preparePostReply));
+    }
     return initialState;
   }
 
@@ -82,6 +86,10 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
     _setDataState(current.copyWith(mode: mode));
   }
 
+  Future<void> retryPreparePostReply() {
+    return _preparePostReply();
+  }
+
   Future<void> flushDraft() async {
     _saveTimer?.cancel();
     _saveTimer = null;
@@ -111,6 +119,20 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
       return const ReplyComposerResult(sent: false, message: '请输入回复内容');
     }
 
+    final preparation = current.preparation;
+    final missingPostReference =
+        current.target.isPostReply &&
+        (current.isPreparing || preparation == null);
+    if (missingPostReference) {
+      _setDataState(
+        current.copyWith(errorMessage: '楼层回复引用准备失败，请重试'),
+      );
+      return const ReplyComposerResult(
+        sent: false,
+        message: '楼层回复引用准备失败，请重试',
+      );
+    }
+
     _saveTimer?.cancel();
     _saveTimer = null;
     _setDataState(
@@ -120,12 +142,19 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
       ),
     );
 
+    final reference = preparation?.reference;
     final result = await _replyRepository!.sendReply(
       draft: ReplyDraft(
         fid: current.target.fid,
         tid: current.target.tid,
         message: message,
         useSignature: current.useSignature,
+        formHash: reference?.formHash,
+        repPid: reference?.repPid,
+        repPost: reference?.repPost,
+        noticeAuthor: reference?.noticeAuthor,
+        noticeTrimStr: reference?.noticeTrimStr,
+        noticeAuthorMsg: reference?.noticeAuthorMsg,
       ),
     );
     final afterSubmit = state.value ?? current;
@@ -158,6 +187,54 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
   void _setDataState(ReplyComposerState value) {
     _latestState = value;
     state = AsyncData(value);
+  }
+
+  bool get _shouldPreparePostReply {
+    return _args.target.isPostReply && _args.replyFormUri != null;
+  }
+
+  Future<void> _preparePostReply() async {
+    final replyFormUri = _args.replyFormUri;
+    if (replyFormUri == null || !_args.target.isPostReply) {
+      return;
+    }
+    final current = state.value ?? _latestState;
+    if (current != null) {
+      _setDataState(
+        current.copyWith(
+          isPreparing: true,
+          clearPreparation: true,
+          clearPreparationError: true,
+          clearErrorMessage: true,
+        ),
+      );
+    }
+
+    final result = await _replyRepository!.preparePostReply(
+      replyFormUri: replyFormUri,
+    );
+    final latest = state.value ?? _latestState;
+    if (latest == null) {
+      return;
+    }
+    if (result case ApiSuccess<ReplyPreparation>(:final data)) {
+      _setDataState(
+        latest.copyWith(
+          isPreparing: false,
+          preparation: data,
+          clearPreparationError: true,
+        ),
+      );
+      return;
+    }
+    final error = (result as ApiFailure<ReplyPreparation>).error;
+    _setDataState(
+      latest.copyWith(
+        isPreparing: false,
+        preparationError: error.message,
+        errorMessage: error.message,
+      ),
+    );
   }
 
   void _scheduleDraftSave() {

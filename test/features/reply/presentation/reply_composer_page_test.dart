@@ -250,6 +250,73 @@ void main() {
 
     expect(replyRepository.sentDrafts.single.message, '表情{:9_656:}');
   });
+
+  testWidgets('ReplyComposerPage shows post reply preparation banner', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildPage(args: _postArgs()));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('回复楼层'), findsOneWidget);
+    expect(
+      find.byKey(const Key('reply-composer-reference-banner')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('引用正文'), findsOneWidget);
+  });
+
+  testWidgets('ReplyComposerPage shows post preparation failure and retry', (
+    tester,
+  ) async {
+    final replyRepository = _FakeReplyRepository(
+      preparationResult: const ApiFailure<ReplyPreparation>(
+        ApiError(type: ApiErrorType.parse, message: '表单解析失败'),
+      ),
+    );
+
+    await tester.pumpWidget(
+      _buildPage(args: _postArgs(), replyRepository: replyRepository),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('reply-composer-preparation-error')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('reply-composer-retry-prepare-button')),
+      findsOneWidget,
+    );
+    final sendButton = tester.widget<IconButton>(
+      find.byKey(const Key('reply-composer-send-button')),
+    );
+    expect(sendButton.onPressed, isNull);
+  });
+
+  testWidgets('ReplyComposerPage submits post reply with reference fields', (
+    tester,
+  ) async {
+    final replyRepository = _FakeReplyRepository();
+    await tester.pumpWidget(
+      _buildPage(args: _postArgs(), replyRepository: replyRepository),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('reply-composer-message-input')),
+      '楼层回复',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('reply-composer-send-button')));
+    await tester.pumpAndSettle();
+
+    final draft = replyRepository.sentDrafts.single;
+    expect(draft.formHash, 'prepared-formhash');
+    expect(draft.noticeTrimStr, '[quote]引用[/quote]');
+    expect(draft.repPost, '41554317');
+  });
 }
 
 Widget _buildPage({
@@ -291,6 +358,21 @@ const _stickerGroups = [
 ReplyComposerArgs _threadArgs() {
   return const ReplyComposerArgs(
     target: ReplyTarget.thread(fid: '33', tid: '572063'),
+  );
+}
+
+ReplyComposerArgs _postArgs() {
+  final uri = Uri.parse(
+    'https://bbs.yamibo.com/forum.php?mod=post&action=reply&fid=33&tid=572063&repquote=41554317&mobile=2',
+  );
+  return ReplyComposerArgs(
+    target: ReplyTarget.post(
+      fid: '33',
+      tid: '572063',
+      pid: '41554317',
+      sourceUri: uri,
+    ),
+    replyFormUri: uri,
   );
 }
 
@@ -360,13 +442,34 @@ class _MemoryReplyDraftRepository implements ReplyDraftRepository {
 class _FakeReplyRepository implements ReplyRepository {
   _FakeReplyRepository({
     ApiResult<ReplySubmissionResult>? result,
+    ApiResult<ReplyPreparation>? preparationResult,
   }) : result =
             result ??
             const ApiSuccess<ReplySubmissionResult>(
               ReplySubmissionResult(message: '回复成功'),
+            ),
+        preparationResult =
+            preparationResult ??
+            const ApiSuccess<ReplyPreparation>(
+              ReplyPreparation(
+                target: ReplyTarget.post(
+                  fid: '33',
+                  tid: '572063',
+                  pid: '41554317',
+                ),
+                reference: ReplyReference(
+                  formHash: 'prepared-formhash',
+                  noticeAuthor: 'notice-token',
+                  noticeTrimStr: '[quote]引用[/quote]',
+                  noticeAuthorMsg: '引用正文',
+                  repPid: '41554317',
+                  repPost: '41554317',
+                ),
+              ),
             );
 
   final ApiResult<ReplySubmissionResult> result;
+  final ApiResult<ReplyPreparation> preparationResult;
   final List<ReplyDraft> sentDrafts = <ReplyDraft>[];
 
   @override
@@ -375,5 +478,12 @@ class _FakeReplyRepository implements ReplyRepository {
   }) async {
     sentDrafts.add(draft);
     return result;
+  }
+
+  @override
+  Future<ApiResult<ReplyPreparation>> preparePostReply({
+    required Uri replyFormUri,
+  }) async {
+    return preparationResult;
   }
 }

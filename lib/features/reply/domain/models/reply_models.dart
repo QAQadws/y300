@@ -57,6 +57,7 @@ class ReplyDraft {
     required this.tid,
     required this.message,
     this.useSignature = true,
+    this.formHash,
     this.repPid,
     this.repPost,
     this.noticeAuthor,
@@ -68,6 +69,7 @@ class ReplyDraft {
   final String tid;
   final String message;
   final bool useSignature;
+  final String? formHash;
   final String? repPid;
   final String? repPost;
   final String? noticeAuthor;

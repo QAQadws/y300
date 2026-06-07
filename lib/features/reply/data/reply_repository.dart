@@ -5,4 +5,8 @@ abstract class ReplyRepository {
   Future<ApiResult<ReplySubmissionResult>> sendReply({
     required ReplyDraft draft,
   });
+
+  Future<ApiResult<ReplyPreparation>> preparePostReply({
+    required Uri replyFormUri,
+  });
 }
