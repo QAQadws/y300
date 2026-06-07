@@ -203,7 +203,7 @@ class StickerGrid extends StatelessWidget {
     return GridView.builder(
       padding: const EdgeInsets.all(12),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 48,
+        maxCrossAxisExtent: 64,
         mainAxisSpacing: 4,
         crossAxisSpacing: 4,
       ),
@@ -212,13 +212,18 @@ class StickerGrid extends StatelessWidget {
         final sticker = stickers[index];
         return IconButton(
           key: Key('reply-sticker-item-${sticker.code}'),
+          constraints: const BoxConstraints.tightFor(
+            width: 56,
+            height: 56,
+          ),
+          padding: EdgeInsets.zero,
           onPressed: () {
             Navigator.of(context).pop(sticker);
           },
           icon: Image.asset(
             sticker.assetPath,
-            width: 40,
-            height: 40,
+            width: 48,
+            height: 48,
             fit: BoxFit.contain,
             errorBuilder: (_, _, _) => const Icon(Icons.broken_image_outlined),
           ),

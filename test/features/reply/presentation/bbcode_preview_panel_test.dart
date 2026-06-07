@@ -96,6 +96,31 @@ void main() {
     expect(find.textContaining('{:9_656:}', findRichText: true), findsNothing);
   });
 
+  testWidgets('BbCodePreviewPanel aligns sticker bottom with text', (
+    tester,
+  ) async {
+    const sticker = StickerItem(
+      code: '{:9_656:}',
+      assetPath: 'assets/stickers/bugcat/Capoo16.gif',
+      rawCodePattern: '{:9_656:}',
+    );
+
+    await tester.pumpWidget(
+      _buildPanel(
+        source: '文字{:9_656:}',
+        stickers: const [sticker],
+      ),
+    );
+
+    final stickerSpan = _findWidgetSpan(
+      tester.widgetList<RichText>(find.byType(RichText)),
+      const Key('reply-bbcode-preview-sticker-{:9_656:}'),
+    );
+
+    expect(stickerSpan, isNotNull);
+    expect(stickerSpan!.alignment, PlaceholderAlignment.bottom);
+  });
+
   testWidgets('BbCodePreviewPanel hides known sticker code when asset fails', (
     tester,
   ) async {
@@ -141,4 +166,31 @@ Widget _buildPanel({
       ),
     ),
   );
+}
+
+WidgetSpan? _findWidgetSpan(Iterable<RichText> richTexts, Key childKey) {
+  for (final richText in richTexts) {
+    final span = _findWidgetSpanInInlineSpan(richText.text, childKey);
+    if (span != null) {
+      return span;
+    }
+  }
+  return null;
+}
+
+WidgetSpan? _findWidgetSpanInInlineSpan(InlineSpan span, Key childKey) {
+  if (span is WidgetSpan && span.child.key == childKey) {
+    return span;
+  }
+  final children = span is TextSpan ? span.children : null;
+  if (children == null) {
+    return null;
+  }
+  for (final child in children) {
+    final match = _findWidgetSpanInInlineSpan(child, childKey);
+    if (match != null) {
+      return match;
+    }
+  }
+  return null;
 }

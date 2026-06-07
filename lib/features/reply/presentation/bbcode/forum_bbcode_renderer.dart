@@ -77,16 +77,12 @@ class _StickerPreviewTag extends WrappedStyleTag {
     }
     return [
       WidgetSpan(
-        alignment: PlaceholderAlignment.middle,
+        alignment: PlaceholderAlignment.bottom,
         child: Image.asset(
           sticker.assetPath,
           key: Key('reply-bbcode-preview-sticker-${sticker.code}'),
-          width: 28,
-          height: 28,
-          fit: BoxFit.contain,
           errorBuilder: (_, _, _) => const Icon(
             Icons.broken_image_outlined,
-            size: 28,
           ),
         ),
       ),
