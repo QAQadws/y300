@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -156,8 +155,8 @@ void main() {
   testWidgets('BbCodePreviewPanel renders known attach as local image', (
     tester,
   ) async {
-    final file = await _createLocalPreviewImage('known.png');
-    final attachment = _uploadedAttachment(aid: '123456', path: file.path);
+    const path = 'E:/test/reply/known.png';
+    final attachment = _uploadedAttachment(aid: '123456', path: path);
 
     await tester.pumpWidget(
       _buildPanel(
@@ -167,10 +166,10 @@ void main() {
     );
     await tester.pump();
 
-    final image = tester.widget<Image>(
+    final previewImage = tester.widget<_TestAttachPreviewImage>(
       find.byKey(const Key('reply-bbcode-preview-attach-123456')),
     );
-    expect(image.image, isA<FileImage>());
+    expect(previewImage.file.path, path);
     expect(find.textContaining('[attach]123456[/attach]', findRichText: true),
         findsNothing);
   });
@@ -178,15 +177,15 @@ void main() {
   testWidgets('BbCodePreviewPanel keeps multiple attach images in source order', (
     tester,
   ) async {
-    final first = await _createLocalPreviewImage('first.png');
-    final second = await _createLocalPreviewImage('second.png');
+    const firstPath = 'E:/test/reply/first.png';
+    const secondPath = 'E:/test/reply/second.png';
 
     await tester.pumpWidget(
       _buildPanel(
         source: '[attach]111[/attach]\n文字\n[attach]222[/attach]',
         imageAttachments: [
-          _uploadedAttachment(aid: '222', path: second.path),
-          _uploadedAttachment(aid: '111', path: first.path),
+          _uploadedAttachment(aid: '222', path: secondPath),
+          _uploadedAttachment(aid: '111', path: firstPath),
         ],
       ),
     );
@@ -207,6 +206,9 @@ void main() {
     await tester.pumpWidget(
       _buildPanel(
         source: '[attach]123456[/attach]',
+        renderer: FlutterBbCodeForumRenderer(
+          attachImageBuilder: _buildTestAttachPreviewImage,
+        ),
         imageAttachments: [
           _uploadedAttachment(aid: '123456', path: '/missing/local.png'),
         ],
@@ -224,7 +226,7 @@ void main() {
   testWidgets('BbCodePreviewPanel keeps invalid attachment statuses as text', (
     tester,
   ) async {
-    final file = await _createLocalPreviewImage('failed.png');
+    const path = 'E:/test/reply/failed.png';
 
     for (final status in [
       ReplyImageAttachmentStatus.local,
@@ -237,7 +239,7 @@ void main() {
           imageAttachments: [
             _uploadedAttachment(
               aid: '123456',
-              path: file.path,
+              path: path,
               status: status,
             ),
           ],
@@ -258,14 +260,14 @@ void main() {
       assetPath: 'assets/stickers/bugcat/Capoo16.gif',
       rawCodePattern: '{:9_656:}',
     );
-    final file = await _createLocalPreviewImage('mixed.png');
+    const path = 'E:/test/reply/mixed.png';
 
     await tester.pumpWidget(
       _buildPanel(
         source: '{:9_656:}\n[attach]123456[/attach]',
         stickers: const [sticker],
         imageAttachments: [
-          _uploadedAttachment(aid: '123456', path: file.path),
+          _uploadedAttachment(aid: '123456', path: path),
         ],
       ),
     );
@@ -284,7 +286,7 @@ void main() {
 
 Widget _buildPanel({
   required String source,
-  ForumBbCodeRenderer renderer = const FlutterBbCodeForumRenderer(),
+  ForumBbCodeRenderer? renderer,
   List<StickerItem> stickers = const [],
   List<ReplyImageAttachment> imageAttachments =
       const <ReplyImageAttachment>[],
@@ -294,24 +296,12 @@ Widget _buildPanel({
     home: Scaffold(
       body: BbCodePreviewPanel(
         source: source,
-        renderer: renderer,
+        renderer: renderer ?? _testRenderer,
         stickers: stickers,
         imageAttachments: imageAttachments,
       ),
     ),
   );
-}
-
-Future<File> _createLocalPreviewImage(String fileName) async {
-  final directory = await Directory.systemTemp.createTemp('y300-reply-preview-');
-  addTearDown(() async {
-    if (await directory.exists()) {
-      await directory.delete(recursive: true);
-    }
-  });
-  final file = File('${directory.path}/$fileName');
-  await file.writeAsBytes(base64Decode(_transparentPngBase64));
-  return file;
 }
 
 ReplyImageAttachment _uploadedAttachment({
@@ -331,10 +321,32 @@ ReplyImageAttachment _uploadedAttachment({
   );
 }
 
-const _transparentPngBase64 =
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6Q'
-    'AAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAANSURBVBh'
-    'XY/j//z8DAAj8Av6IXwbgAAAAAElFTkSuQmCC';
+final _testRenderer = FlutterBbCodeForumRenderer(
+  attachImageBuilder: _buildTestAttachPreviewImage,
+  attachFileExists: _testAttachFileExists,
+);
+
+Widget _buildTestAttachPreviewImage(File file, Key key) {
+  return _TestAttachPreviewImage(file: file, key: key);
+}
+
+bool _testAttachFileExists(File file) {
+  return !file.path.contains('/missing/');
+}
+
+class _TestAttachPreviewImage extends StatelessWidget {
+  const _TestAttachPreviewImage({
+    super.key,
+    required this.file,
+  });
+
+  final File file;
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(width: 28, height: 28);
+  }
+}
 
 WidgetSpan? _findWidgetSpan(Iterable<RichText> richTexts, Key childKey) {
   for (final richText in richTexts) {

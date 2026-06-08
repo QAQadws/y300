@@ -15,6 +15,22 @@ final forumBbCodeRendererProvider = Provider<ForumBbCodeRenderer>((ref) {
   );
 });
 
+typedef ForumAttachPreviewImageBuilder = Widget Function(File file, Key key);
+typedef ForumAttachPreviewFileExists = bool Function(File file);
+
+Widget _defaultAttachPreviewImageBuilder(File file, Key key) {
+  return Image.file(
+    file,
+    key: key,
+    fit: BoxFit.contain,
+    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+  );
+}
+
+bool _defaultAttachPreviewFileExists(File file) {
+  return file.existsSync();
+}
+
 abstract class ForumBbCodeRenderer {
   const ForumBbCodeRenderer();
 
@@ -31,10 +47,14 @@ class FlutterBbCodeForumRenderer extends ForumBbCodeRenderer {
   const FlutterBbCodeForumRenderer({
     this.stickerTokenizer = const StickerBbCodeTokenizer(),
     this.attachTokenizer = const ReplyAttachBbCodeTokenizer(),
+    this.attachImageBuilder = _defaultAttachPreviewImageBuilder,
+    this.attachFileExists = _defaultAttachPreviewFileExists,
   });
 
   final StickerBbCodeTokenizer stickerTokenizer;
   final ReplyAttachBbCodeTokenizer attachTokenizer;
+  final ForumAttachPreviewImageBuilder attachImageBuilder;
+  final ForumAttachPreviewFileExists attachFileExists;
 
   @override
   Widget buildPreview(
@@ -65,7 +85,14 @@ class FlutterBbCodeForumRenderer extends ForumBbCodeRenderer {
         stylesheet.removeTag('img');
         stylesheet.addTag(_StickerPreviewTag(stickers));
         stylesheet.addTag(_AttachSourceFallbackTag());
-        stylesheet.addTag(_AttachPreviewTag(imageAttachments, maxImageWidth));
+        stylesheet.addTag(
+          _AttachPreviewTag(
+            imageAttachments,
+            maxImageWidth,
+            attachImageBuilder,
+            attachFileExists,
+          ),
+        );
 
         return BBCodeText(
           data: previewSource,
@@ -81,6 +108,8 @@ class _AttachPreviewTag extends WrappedStyleTag {
   _AttachPreviewTag(
     List<ReplyImageAttachment> imageAttachments,
     this.maxImageWidth,
+    this.attachImageBuilder,
+    this.attachFileExists,
   )
       : _attachmentsByAid = {
           for (final attachment in imageAttachments)
@@ -91,6 +120,8 @@ class _AttachPreviewTag extends WrappedStyleTag {
 
   final Map<String, ReplyImageAttachment> _attachmentsByAid;
   final double maxImageWidth;
+  final ForumAttachPreviewImageBuilder attachImageBuilder;
+  final ForumAttachPreviewFileExists attachFileExists;
 
   @override
   List<InlineSpan> wrap(
@@ -108,7 +139,7 @@ class _AttachPreviewTag extends WrappedStyleTag {
       return _attachTextFallback(renderer, aid);
     }
     final file = File(attachment.previewPath);
-    if (!file.existsSync()) {
+    if (!attachFileExists(file)) {
       return const <InlineSpan>[];
     }
 
@@ -117,11 +148,9 @@ class _AttachPreviewTag extends WrappedStyleTag {
         alignment: PlaceholderAlignment.bottom,
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: maxImageWidth),
-          child: Image.file(
+          child: attachImageBuilder(
             file,
-            key: Key('reply-bbcode-preview-attach-$aid'),
-            fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            Key('reply-bbcode-preview-attach-$aid'),
           ),
         ),
       ),

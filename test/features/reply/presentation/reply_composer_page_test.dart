@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -15,6 +14,7 @@ import 'package:y300/features/reply/data/sticker_picker_preferences_repository.d
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/domain/services/reply_draft_attachment_sanitizer.dart';
 import 'package:y300/features/reply/domain/services/reply_image_upload_coordinator.dart';
+import 'package:y300/features/reply/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 
@@ -115,7 +115,7 @@ void main() {
   testWidgets('ReplyComposerPage previews restored uploaded local image', (
     tester,
   ) async {
-    final file = await _createLocalPreviewImage('restored.png');
+    const path = 'E:/test/reply/restored.png';
     final args = _threadArgs();
     final draftRepository = _MemoryReplyDraftRepository();
     await draftRepository.saveDraft(
@@ -129,7 +129,7 @@ void main() {
             localId: 'image-1',
             aid: '123456',
             uploadedAt: DateTime.utc(2026, 6, 8, 10),
-            localPath: file.path,
+            localPath: path,
           ),
         ],
       ),
@@ -142,10 +142,10 @@ void main() {
     await tester.tap(find.text('预览'));
     await tester.pump();
 
-    final image = tester.widget<Image>(
+    final previewImage = tester.widget<_TestAttachPreviewImage>(
       find.byKey(const Key('reply-bbcode-preview-attach-123456')),
     );
-    expect(image.image, isA<FileImage>());
+    expect(previewImage.file.path, path);
     expect(find.textContaining('[attach]123456[/attach]', findRichText: true),
         findsNothing);
   });
@@ -530,7 +530,7 @@ void main() {
   testWidgets(
     'ReplyComposerPage previews uploaded image and submits raw attach code',
     (tester) async {
-      final file = await _createLocalPreviewImage('uploaded.png');
+      const path = 'E:/test/reply/uploaded.png';
       final replyRepository = _FakeReplyRepository();
       await tester.pumpWidget(
         _buildPage(
@@ -538,7 +538,7 @@ void main() {
           imagePicker: _FakeReplyImagePicker(
             images: [
               ReplyPickedImage(
-                path: file.path,
+                path: path,
                 fileName: 'uploaded.png',
                 mimeType: 'image/png',
                 originalIndex: 0,
@@ -773,6 +773,7 @@ Widget _buildPage({
       replyUploadNotificationServiceProvider.overrideWithValue(
         _FakeReplyUploadNotificationService(),
       ),
+      forumBbCodeRendererProvider.overrideWithValue(_testRenderer),
       stickerGroupsProvider.overrideWith((_) async => stickerGroups),
       stickerPickerPreferencesRepositoryProvider.overrideWithValue(
         _FakeStickerPickerPreferencesRepository(),
@@ -810,6 +811,7 @@ Widget _buildLauncher({
       replyUploadNotificationServiceProvider.overrideWithValue(
         _FakeReplyUploadNotificationService(),
       ),
+      forumBbCodeRendererProvider.overrideWithValue(_testRenderer),
       stickerGroupsProvider.overrideWith((_) async => stickerGroups),
       stickerPickerPreferencesRepositoryProvider.overrideWithValue(
         _FakeStickerPickerPreferencesRepository(),
@@ -982,22 +984,32 @@ ReplyImageAttachment _uploadedAttachment({
   );
 }
 
-Future<File> _createLocalPreviewImage(String fileName) async {
-  final directory = await Directory.systemTemp.createTemp('y300-reply-page-');
-  addTearDown(() async {
-    if (await directory.exists()) {
-      await directory.delete(recursive: true);
-    }
-  });
-  final file = File('${directory.path}/$fileName');
-  await file.writeAsBytes(base64Decode(_transparentPngBase64));
-  return file;
+final _testRenderer = FlutterBbCodeForumRenderer(
+  attachImageBuilder: _buildTestAttachPreviewImage,
+  attachFileExists: _testAttachFileExists,
+);
+
+Widget _buildTestAttachPreviewImage(File file, Key key) {
+  return _TestAttachPreviewImage(file: file, key: key);
 }
 
-const _transparentPngBase64 =
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6Q'
-    'AAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAANSURBVBh'
-    'XY/j//z8DAAj8Av6IXwbgAAAAAElFTkSuQmCC';
+bool _testAttachFileExists(File file) {
+  return !file.path.contains('/missing/');
+}
+
+class _TestAttachPreviewImage extends StatelessWidget {
+  const _TestAttachPreviewImage({
+    super.key,
+    required this.file,
+  });
+
+  final File file;
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(width: 28, height: 28);
+  }
+}
 
 class _FakeStickerPickerPreferencesRepository
     implements StickerPickerPreferencesRepository {
