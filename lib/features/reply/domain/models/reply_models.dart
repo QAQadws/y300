@@ -237,6 +237,42 @@ class ReplyPickedImage {
   final int originalIndex;
 }
 
+class ReplyLocalImageFile {
+  const ReplyLocalImageFile({
+    required this.path,
+    required this.fileName,
+    required this.mimeType,
+  });
+
+  final String path;
+  final String fileName;
+  final String mimeType;
+}
+
+class ReplyImageUploadResponse {
+  const ReplyImageUploadResponse({
+    required this.aid,
+    required this.rawBody,
+    required this.statusCode,
+  });
+
+  final String aid;
+  final Object? rawBody;
+  final int? statusCode;
+}
+
+class ReplyUploadedImage {
+  const ReplyUploadedImage({
+    required this.localId,
+    required this.aid,
+    required this.uploadedAt,
+  });
+
+  final String localId;
+  final String aid;
+  final DateTime uploadedAt;
+}
+
 class ReplySubmissionResult {
   const ReplySubmissionResult({
     required this.message,
