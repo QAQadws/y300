@@ -23,8 +23,7 @@ void main() {
     await tester.pumpWidget(_buildScaffold());
 
     await tester.tapAt(const Offset(400, 300));
-    await tester.pump(const Duration(milliseconds: 330));
-    await tester.pump();
+    await _pumpTapAndOverlayAnimation(tester);
 
     var top = tester.widget<IgnorePointer>(
       find.byKey(const Key('shared-reader-top-overlay-hit-test-gate')),
@@ -32,8 +31,7 @@ void main() {
     expect(top.ignoring, isFalse);
 
     await tester.tapAt(const Offset(400, 300));
-    await tester.pump(const Duration(milliseconds: 330));
-    await tester.pump();
+    await _pumpTapAndOverlayAnimation(tester);
 
     top = tester.widget<IgnorePointer>(
       find.byKey(const Key('shared-reader-top-overlay-hit-test-gate')),
@@ -88,8 +86,7 @@ void main() {
     );
 
     await tester.tapAt(const Offset(400, 300));
-    await tester.pump(const Duration(milliseconds: 330));
-    await tester.pump();
+    await _pumpTapAndOverlayAnimation(tester);
 
     final top = tester.widget<IgnorePointer>(
       find.byKey(const Key('shared-reader-top-overlay-hit-test-gate')),
@@ -97,16 +94,51 @@ void main() {
     expect(centerTaps, 1);
     expect(top.ignoring, isFalse);
   });
+
+  testWidgets('ReaderOverlayScaffold controller can hide visible menu', (
+    tester,
+  ) async {
+    final controller = ReaderOverlayController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(_buildScaffold(controller: controller));
+
+    await tester.tapAt(const Offset(400, 300));
+    await _pumpTapAndOverlayAnimation(tester);
+
+    var top = tester.widget<IgnorePointer>(
+      find.byKey(const Key('shared-reader-top-overlay-hit-test-gate')),
+    );
+    expect(top.ignoring, isFalse);
+    expect(controller.isMenuVisible, isTrue);
+
+    controller.hideMenu();
+    await tester.pump(const Duration(milliseconds: 260));
+    await tester.pump();
+
+    top = tester.widget<IgnorePointer>(
+      find.byKey(const Key('shared-reader-top-overlay-hit-test-gate')),
+    );
+    expect(top.ignoring, isTrue);
+    expect(controller.isMenuVisible, isFalse);
+  });
+}
+
+Future<void> _pumpTapAndOverlayAnimation(WidgetTester tester) async {
+  await tester.pump(const Duration(milliseconds: 330));
+  await tester.pump(const Duration(milliseconds: 260));
+  await tester.pump();
 }
 
 Widget _buildScaffold({
   bool menuInitiallyVisible = false,
   List<ReaderToolbarAction> topActions = const <ReaderToolbarAction>[],
   VoidCallback? onCenterTap,
+  ReaderOverlayController? controller,
 }) {
   return MaterialApp(
     home: Scaffold(
       body: ReaderOverlayScaffold(
+        controller: controller,
         menuInitiallyVisible: menuInitiallyVisible,
         animationDuration: Duration.zero,
         onCenterTap: onCenterTap,

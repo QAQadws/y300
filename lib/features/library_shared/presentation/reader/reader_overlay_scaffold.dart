@@ -4,12 +4,76 @@ import 'package:y300/features/library_shared/presentation/reader/reader_models.d
 import 'package:y300/features/library_shared/presentation/reader/reader_tap_zones.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_top_overlay_bar.dart';
 
+class ReaderOverlayController extends ChangeNotifier {
+  bool _isMenuVisible = false;
+  _ReaderOverlayScaffoldState? _state;
+
+  bool get isMenuVisible => _state?._isMenuVisible ?? _isMenuVisible;
+
+  void showMenu() {
+    final state = _state;
+    if (state != null) {
+      state._setMenuVisible(true);
+      return;
+    }
+    _setDetachedValue(true);
+  }
+
+  void hideMenu() {
+    final state = _state;
+    if (state != null) {
+      state._setMenuVisible(false);
+      return;
+    }
+    _setDetachedValue(false);
+  }
+
+  void toggleMenu() {
+    final state = _state;
+    if (state != null) {
+      state._setMenuVisible(!state._isMenuVisible);
+      return;
+    }
+    _setDetachedValue(!_isMenuVisible);
+  }
+
+  void _attach(_ReaderOverlayScaffoldState state) {
+    _state = state;
+    _isMenuVisible = state._isMenuVisible;
+  }
+
+  void _detach(_ReaderOverlayScaffoldState state) {
+    if (_state != state) {
+      return;
+    }
+    _isMenuVisible = state._isMenuVisible;
+    _state = null;
+  }
+
+  void _syncFromState(bool value) {
+    if (_isMenuVisible == value) {
+      return;
+    }
+    _isMenuVisible = value;
+    notifyListeners();
+  }
+
+  void _setDetachedValue(bool value) {
+    if (_isMenuVisible == value) {
+      return;
+    }
+    _isMenuVisible = value;
+    notifyListeners();
+  }
+}
+
 class ReaderOverlayScaffold extends StatefulWidget {
   const ReaderOverlayScaffold({
     super.key,
     required this.topBar,
     required this.bottomBar,
     required this.child,
+    this.controller,
     this.onLeftTap,
     this.onCenterTap,
     this.onRightTap,
@@ -22,6 +86,7 @@ class ReaderOverlayScaffold extends StatefulWidget {
   final ReaderTopBarConfig topBar;
   final ReaderBottomBarConfig bottomBar;
   final Widget child;
+  final ReaderOverlayController? controller;
   final VoidCallback? onLeftTap;
   final VoidCallback? onCenterTap;
   final VoidCallback? onRightTap;
@@ -44,7 +109,8 @@ class _ReaderOverlayScaffoldState extends State<ReaderOverlayScaffold>
   @override
   void initState() {
     super.initState();
-    _isMenuVisible = widget.menuInitiallyVisible;
+    _isMenuVisible =
+        widget.menuInitiallyVisible || (widget.controller?.isMenuVisible ?? false);
     _animationController = AnimationController(
       vsync: this,
       duration: widget.animationDuration,
@@ -62,10 +128,26 @@ class _ReaderOverlayScaffoldState extends State<ReaderOverlayScaffold>
       begin: const Offset(0, 1),
       end: Offset.zero,
     ).animate(curve);
+    widget.controller?._attach(this);
+  }
+
+  @override
+  void didUpdateWidget(ReaderOverlayScaffold oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) {
+      return;
+    }
+    oldWidget.controller?._detach(this);
+    final nextVisible = widget.controller?.isMenuVisible;
+    if (nextVisible != null) {
+      _setMenuVisible(nextVisible);
+    }
+    widget.controller?._attach(this);
   }
 
   @override
   void dispose() {
+    widget.controller?._detach(this);
     _animationController.dispose();
     super.dispose();
   }
@@ -115,10 +197,14 @@ class _ReaderOverlayScaffoldState extends State<ReaderOverlayScaffold>
     );
   }
 
-  void _toggleMenu() {
+  void _setMenuVisible(bool visible) {
+    if (_isMenuVisible == visible) {
+      return;
+    }
     setState(() {
-      _isMenuVisible = !_isMenuVisible;
+      _isMenuVisible = visible;
     });
+    widget.controller?._syncFromState(visible);
     if (_isMenuVisible) {
       _animationController.forward();
       return;
@@ -127,7 +213,7 @@ class _ReaderOverlayScaffoldState extends State<ReaderOverlayScaffold>
   }
 
   void _handleCenterTap() {
-    _toggleMenu();
+    _setMenuVisible(!_isMenuVisible);
     widget.onCenterTap?.call();
   }
 }

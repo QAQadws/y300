@@ -30,6 +30,7 @@ class NovelReaderArgs {
 
 class NovelReaderViewState {
   const NovelReaderViewState({
+    required this.novel,
     required this.episodes,
     required this.currentEpisode,
     required this.currentContent,
@@ -37,6 +38,7 @@ class NovelReaderViewState {
     required this.currentOffset,
   });
 
+  final NovelItem? novel;
   final List<NovelEpisodeItem> episodes;
   final NovelEpisodeItem currentEpisode;
   final NovelChapterContent currentContent;
@@ -44,6 +46,8 @@ class NovelReaderViewState {
   final double currentOffset;
 
   NovelReaderViewState copyWith({
+    NovelItem? novel,
+    bool clearNovel = false,
     List<NovelEpisodeItem>? episodes,
     NovelEpisodeItem? currentEpisode,
     NovelChapterContent? currentContent,
@@ -51,6 +55,7 @@ class NovelReaderViewState {
     double? currentOffset,
   }) {
     return NovelReaderViewState(
+      novel: clearNovel ? null : (novel ?? this.novel),
       episodes: episodes ?? this.episodes,
       currentEpisode: currentEpisode ?? this.currentEpisode,
       currentContent: currentContent ?? this.currentContent,
@@ -95,6 +100,34 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     state = await AsyncValue.guard(() => _load(episodeId));
   }
 
+  Future<void> goToPreviousEpisode() async {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    final index = current.episodes.indexWhere(
+      (episode) => episode.episodeId == current.currentEpisode.episodeId,
+    );
+    if (index <= 0) {
+      return;
+    }
+    await openEpisode(current.episodes[index - 1].episodeId);
+  }
+
+  Future<void> goToNextEpisode() async {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    final index = current.episodes.indexWhere(
+      (episode) => episode.episodeId == current.currentEpisode.episodeId,
+    );
+    if (index < 0 || index >= current.episodes.length - 1) {
+      return;
+    }
+    await openEpisode(current.episodes[index + 1].episodeId);
+  }
+
   Future<void> onScrollOffsetChanged(double offset) async {
     final current = state.value;
     if (current == null) {
@@ -104,16 +137,34 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
 
     _saveDebounce?.cancel();
     _saveDebounce = Timer(const Duration(milliseconds: 200), () async {
-      await ref.read(novelRepositoryProvider).saveReadingProgress(
-            novelId: _args.novelId,
-            episodeId: current.currentEpisode.episodeId,
-            scrollOffset: offset,
-          );
+      await _saveReadingProgress(
+        episodeId: current.currentEpisode.episodeId,
+        offset: offset,
+      );
     });
+  }
+
+  Future<void> saveCurrentOffsetNow(double offset) async {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    _saveDebounce?.cancel();
+    state = AsyncData(current.copyWith(currentOffset: offset));
+    await _saveReadingProgress(
+      episodeId: current.currentEpisode.episodeId,
+      offset: offset,
+    );
   }
 
   Future<NovelReaderViewState> _load(String episodeId) async {
     final repository = ref.read(novelRepositoryProvider);
+    NovelItem? novel;
+    try {
+      novel = await repository.getDetail(novelId: _args.novelId);
+    } catch (_) {
+      novel = null;
+    }
     final episodes = await repository.getEpisodes(
       novelId: _args.novelId,
       descending: false,
@@ -140,11 +191,23 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
         : 0.0;
 
     return NovelReaderViewState(
+      novel: novel,
       episodes: episodes,
       currentEpisode: currentEpisode,
       currentContent: content,
       preferences: preferences,
       currentOffset: offset,
     );
+  }
+
+  Future<void> _saveReadingProgress({
+    required String episodeId,
+    required double offset,
+  }) {
+    return ref.read(novelRepositoryProvider).saveReadingProgress(
+          novelId: _args.novelId,
+          episodeId: episodeId,
+          scrollOffset: offset,
+        );
   }
 }
