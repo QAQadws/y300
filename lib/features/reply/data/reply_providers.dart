@@ -15,6 +15,7 @@ import 'package:y300/features/reply/data/sticker_catalog_repository.dart';
 import 'package:y300/features/reply/data/sticker_picker_preferences_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/domain/services/reply_attach_bbcode_service.dart';
+import 'package:y300/features/reply/domain/services/reply_attach_bbcode_tokenizer.dart';
 import 'package:y300/features/reply/domain/services/reply_image_upload_coordinator.dart';
 import 'package:y300/features/reply/domain/services/reply_submission_error_presenter.dart';
 import 'package:y300/features/reply/domain/services/sticker_bbcode_tokenizer.dart';
@@ -51,6 +52,11 @@ final stickerPickerLastGroupIdProvider = FutureProvider.autoDispose<String?>((
 
 final stickerBbCodeTokenizerProvider = Provider<StickerBbCodeTokenizer>((_) {
   return const StickerBbCodeTokenizer();
+});
+
+final replyAttachBbCodeTokenizerProvider =
+    Provider<ReplyAttachBbCodeTokenizer>((_) {
+  return const ReplyAttachBbCodeTokenizer();
 });
 
 final replySubmissionErrorPresenterProvider =

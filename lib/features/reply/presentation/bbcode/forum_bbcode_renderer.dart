@@ -1,13 +1,17 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bbcode/flutter_bbcode.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
+import 'package:y300/features/reply/domain/services/reply_attach_bbcode_tokenizer.dart';
 import 'package:y300/features/reply/domain/services/sticker_bbcode_tokenizer.dart';
 
 final forumBbCodeRendererProvider = Provider<ForumBbCodeRenderer>((ref) {
   return FlutterBbCodeForumRenderer(
-    tokenizer: ref.read(stickerBbCodeTokenizerProvider),
+    stickerTokenizer: ref.read(stickerBbCodeTokenizerProvider),
+    attachTokenizer: ref.read(replyAttachBbCodeTokenizerProvider),
   );
 });
 
@@ -18,21 +22,27 @@ abstract class ForumBbCodeRenderer {
     BuildContext context,
     String source, {
     List<StickerItem> stickers = const [],
+    List<ReplyImageAttachment> imageAttachments =
+        const <ReplyImageAttachment>[],
   });
 }
 
 class FlutterBbCodeForumRenderer extends ForumBbCodeRenderer {
   const FlutterBbCodeForumRenderer({
-    this.tokenizer = const StickerBbCodeTokenizer(),
+    this.stickerTokenizer = const StickerBbCodeTokenizer(),
+    this.attachTokenizer = const ReplyAttachBbCodeTokenizer(),
   });
 
-  final StickerBbCodeTokenizer tokenizer;
+  final StickerBbCodeTokenizer stickerTokenizer;
+  final ReplyAttachBbCodeTokenizer attachTokenizer;
 
   @override
   Widget buildPreview(
     BuildContext context,
     String source, {
     List<StickerItem> stickers = const [],
+    List<ReplyImageAttachment> imageAttachments =
+        const <ReplyImageAttachment>[],
   }) {
     final colorScheme = Theme.of(context).colorScheme;
     final textStyle =
@@ -40,16 +50,110 @@ class FlutterBbCodeForumRenderer extends ForumBbCodeRenderer {
           color: colorScheme.onSurface,
         ) ??
         TextStyle(color: colorScheme.onSurface);
-    final stylesheet = defaultBBStylesheet(textStyle: textStyle);
-    stylesheet.removeTag('img');
-    stylesheet.addTag(_StickerPreviewTag(stickers));
+    final stickerEncoded = stickerTokenizer.encodeForPreview(source, stickers);
+    final previewSource = attachTokenizer.encodeForPreview(
+      stickerEncoded,
+      imageAttachments,
+    );
 
-    return BBCodeText(
-      data: tokenizer.encodeForPreview(source, stickers),
-      stylesheet: stylesheet,
-      errorBuilder: (_, _, _) => Text(source, style: textStyle),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxImageWidth = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : 520.0;
+        final stylesheet = defaultBBStylesheet(textStyle: textStyle);
+        stylesheet.removeTag('img');
+        stylesheet.addTag(_StickerPreviewTag(stickers));
+        stylesheet.addTag(_AttachSourceFallbackTag());
+        stylesheet.addTag(_AttachPreviewTag(imageAttachments, maxImageWidth));
+
+        return BBCodeText(
+          data: previewSource,
+          stylesheet: stylesheet,
+          errorBuilder: (_, _, _) => Text(source, style: textStyle),
+        );
+      },
     );
   }
+}
+
+class _AttachPreviewTag extends WrappedStyleTag {
+  _AttachPreviewTag(
+    List<ReplyImageAttachment> imageAttachments,
+    this.maxImageWidth,
+  )
+      : _attachmentsByAid = {
+          for (final attachment in imageAttachments)
+            if (attachment.canEnterSubmitPayload)
+              attachment.aid!.trim(): attachment,
+        },
+        super(ReplyAttachBbCodeTokenizer.previewTag);
+
+  final Map<String, ReplyImageAttachment> _attachmentsByAid;
+  final double maxImageWidth;
+
+  @override
+  List<InlineSpan> wrap(
+    FlutterRenderer renderer,
+    Object element,
+    List<InlineSpan> spans,
+  ) {
+    final children = (element as dynamic).children as Iterable<dynamic>;
+    final aid = children
+        .map((child) => child.textContent as String)
+        .join()
+        .trim();
+    final attachment = _attachmentsByAid[aid];
+    if (attachment == null) {
+      return _attachTextFallback(renderer, aid);
+    }
+    final file = File(attachment.previewPath);
+    if (!file.existsSync()) {
+      return const <InlineSpan>[];
+    }
+
+    return [
+      WidgetSpan(
+        alignment: PlaceholderAlignment.bottom,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxImageWidth),
+          child: Image.file(
+            file,
+            key: Key('reply-bbcode-preview-attach-$aid'),
+            fit: BoxFit.contain,
+            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+          ),
+        ),
+      ),
+    ];
+  }
+}
+
+class _AttachSourceFallbackTag extends WrappedStyleTag {
+  _AttachSourceFallbackTag() : super('attach');
+
+  @override
+  List<InlineSpan> wrap(
+    FlutterRenderer renderer,
+    Object element,
+    List<InlineSpan> spans,
+  ) {
+    final children = (element as dynamic).children as Iterable<dynamic>;
+    final aid = children
+        .map((child) => child.textContent as String)
+        .join()
+        .trim();
+    return _attachTextFallback(renderer, aid);
+  }
+}
+
+List<InlineSpan> _attachTextFallback(FlutterRenderer renderer, String aid) {
+  return [
+    TextSpan(
+      text: '[attach]$aid[/attach]',
+      style: renderer.getCurrentStyle(),
+    ),
+  ];
 }
 
 class _StickerPreviewTag extends WrappedStyleTag {

@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -108,6 +110,44 @@ void main() {
     expect(find.byKey(const Key('reply-composer-image-queue')), findsOneWidget);
     expect(find.text('image-1.jpg'), findsOneWidget);
     expect(find.textContaining('已上传'), findsOneWidget);
+  });
+
+  testWidgets('ReplyComposerPage previews restored uploaded local image', (
+    tester,
+  ) async {
+    final file = await _createLocalPreviewImage('restored.png');
+    final args = _threadArgs();
+    final draftRepository = _MemoryReplyDraftRepository();
+    await draftRepository.saveDraft(
+      ReplyDraftSnapshot(
+        identity: args.identity,
+        message: '正文\n[attach]123456[/attach]',
+        useSignature: true,
+        updatedAt: DateTime.utc(2026, 6, 8),
+        imageAttachments: [
+          _uploadedAttachment(
+            localId: 'image-1',
+            aid: '123456',
+            uploadedAt: DateTime.utc(2026, 6, 8, 10),
+            localPath: file.path,
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      _buildPage(args: args, draftRepository: draftRepository),
+    );
+    await tester.pump();
+    await tester.tap(find.text('预览'));
+    await tester.pump();
+
+    final image = tester.widget<Image>(
+      find.byKey(const Key('reply-bbcode-preview-attach-123456')),
+    );
+    expect(image.image, isA<FileImage>());
+    expect(find.textContaining('[attach]123456[/attach]', findRichText: true),
+        findsNothing);
   });
 
   testWidgets('ReplyComposerPage omits expired restored image attachment', (
@@ -487,6 +527,77 @@ void main() {
     );
   });
 
+  testWidgets(
+    'ReplyComposerPage previews uploaded image and submits raw attach code',
+    (tester) async {
+      final file = await _createLocalPreviewImage('uploaded.png');
+      final replyRepository = _FakeReplyRepository();
+      await tester.pumpWidget(
+        _buildPage(
+          replyRepository: replyRepository,
+          imagePicker: _FakeReplyImagePicker(
+            images: [
+              ReplyPickedImage(
+                path: file.path,
+                fileName: 'uploaded.png',
+                mimeType: 'image/png',
+                originalIndex: 0,
+              ),
+            ],
+          ),
+          imageUploadCoordinator: _FakeReplyImageUploadCoordinator(
+            events: [
+              ReplyImageUploadEvent.uploaded(
+                localId: '',
+                current: 1,
+                total: 1,
+                uploadedImage: ReplyUploadedImage(
+                  localId: '',
+                  aid: '123456',
+                  uploadedAt: DateTime.utc(2026, 6, 8),
+                ),
+              ),
+              const ReplyImageUploadEvent.completed(total: 1),
+            ],
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const Key('reply-composer-message-input')),
+        '正文',
+      );
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('reply-composer-image-button')));
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.text('预览'));
+      await tester.pump();
+
+      expect(
+        find.byKey(const Key('reply-bbcode-preview-attach-123456')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('[attach]123456[/attach]', findRichText: true),
+          findsNothing);
+
+      await tester.tap(find.text('源码'));
+      await tester.pump();
+      final editable = tester.widget<EditableText>(find.byType(EditableText));
+      expect(editable.controller.text, '正文\n[attach]123456[/attach]');
+      await tester.tap(find.text('预览'));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('reply-composer-send-button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        replyRepository.sentDrafts.single.message,
+        '正文\n[attach]123456[/attach]',
+      );
+    },
+  );
+
   testWidgets('ReplyComposerPage shows upload failure without changing message', (
     tester,
   ) async {
@@ -857,10 +968,11 @@ ReplyImageAttachment _uploadedAttachment({
   required String localId,
   required String aid,
   required DateTime uploadedAt,
+  String? localPath,
 }) {
   return ReplyImageAttachment(
     localId: localId,
-    localPath: '/gallery/$localId.jpg',
+    localPath: localPath ?? '/gallery/$localId.jpg',
     fileName: '$localId.jpg',
     mimeType: 'image/jpeg',
     order: 0,
@@ -869,6 +981,23 @@ ReplyImageAttachment _uploadedAttachment({
     uploadedAt: uploadedAt,
   );
 }
+
+Future<File> _createLocalPreviewImage(String fileName) async {
+  final directory = await Directory.systemTemp.createTemp('y300-reply-page-');
+  addTearDown(() async {
+    if (await directory.exists()) {
+      await directory.delete(recursive: true);
+    }
+  });
+  final file = File('${directory.path}/$fileName');
+  await file.writeAsBytes(base64Decode(_transparentPngBase64));
+  return file;
+}
+
+const _transparentPngBase64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6Q'
+    'AAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAANSURBVBh'
+    'XY/j//z8DAAj8Av6IXwbgAAAAAElFTkSuQmCC';
 
 class _FakeStickerPickerPreferencesRepository
     implements StickerPickerPreferencesRepository {

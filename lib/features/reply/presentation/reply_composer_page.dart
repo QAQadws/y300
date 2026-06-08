@@ -356,6 +356,7 @@ class _ReplyComposerBody extends StatelessWidget {
               source: state.message,
               renderer: bbCodeRenderer,
               stickers: stickers,
+              imageAttachments: state.imageAttachments,
             ),
           if (state.imageAttachments.isNotEmpty) ...[
             const SizedBox(height: 12),

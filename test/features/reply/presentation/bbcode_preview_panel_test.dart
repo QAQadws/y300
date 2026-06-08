@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
@@ -149,12 +152,142 @@ void main() {
 
     expect(find.textContaining('{:9_999:}', findRichText: true), findsOneWidget);
   });
+
+  testWidgets('BbCodePreviewPanel renders known attach as local image', (
+    tester,
+  ) async {
+    final file = await _createLocalPreviewImage('known.png');
+    final attachment = _uploadedAttachment(aid: '123456', path: file.path);
+
+    await tester.pumpWidget(
+      _buildPanel(
+        source: '正文\n[attach]123456[/attach]',
+        imageAttachments: [attachment],
+      ),
+    );
+    await tester.pump();
+
+    final image = tester.widget<Image>(
+      find.byKey(const Key('reply-bbcode-preview-attach-123456')),
+    );
+    expect(image.image, isA<FileImage>());
+    expect(find.textContaining('[attach]123456[/attach]', findRichText: true),
+        findsNothing);
+  });
+
+  testWidgets('BbCodePreviewPanel keeps multiple attach images in source order', (
+    tester,
+  ) async {
+    final first = await _createLocalPreviewImage('first.png');
+    final second = await _createLocalPreviewImage('second.png');
+
+    await tester.pumpWidget(
+      _buildPanel(
+        source: '[attach]111[/attach]\n文字\n[attach]222[/attach]',
+        imageAttachments: [
+          _uploadedAttachment(aid: '222', path: second.path),
+          _uploadedAttachment(aid: '111', path: first.path),
+        ],
+      ),
+    );
+    await tester.pump();
+
+    final firstCenter = tester.getCenter(
+      find.byKey(const Key('reply-bbcode-preview-attach-111')),
+    );
+    final secondCenter = tester.getCenter(
+      find.byKey(const Key('reply-bbcode-preview-attach-222')),
+    );
+    expect(firstCenter.dy, lessThan(secondCenter.dy));
+  });
+
+  testWidgets('BbCodePreviewPanel does not show broken image for missing file', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildPanel(
+        source: '[attach]123456[/attach]',
+        imageAttachments: [
+          _uploadedAttachment(aid: '123456', path: '/missing/local.png'),
+        ],
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('reply-bbcode-preview-attach-123456')),
+      findsNothing,
+    );
+    expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
+  });
+
+  testWidgets('BbCodePreviewPanel keeps invalid attachment statuses as text', (
+    tester,
+  ) async {
+    final file = await _createLocalPreviewImage('failed.png');
+
+    for (final status in [
+      ReplyImageAttachmentStatus.local,
+      ReplyImageAttachmentStatus.failed,
+      ReplyImageAttachmentStatus.expired,
+    ]) {
+      await tester.pumpWidget(
+        _buildPanel(
+          source: '[attach]123456[/attach]',
+          imageAttachments: [
+            _uploadedAttachment(
+              aid: '123456',
+              path: file.path,
+              status: status,
+            ),
+          ],
+        ),
+      );
+
+      expect(find.byType(Image), findsNothing);
+      expect(find.textContaining('[attach]123456[/attach]', findRichText: true),
+        findsOneWidget);
+    }
+  });
+
+  testWidgets('BbCodePreviewPanel supports stickers and attach images together', (
+    tester,
+  ) async {
+    const sticker = StickerItem(
+      code: '{:9_656:}',
+      assetPath: 'assets/stickers/bugcat/Capoo16.gif',
+      rawCodePattern: '{:9_656:}',
+    );
+    final file = await _createLocalPreviewImage('mixed.png');
+
+    await tester.pumpWidget(
+      _buildPanel(
+        source: '{:9_656:}\n[attach]123456[/attach]',
+        stickers: const [sticker],
+        imageAttachments: [
+          _uploadedAttachment(aid: '123456', path: file.path),
+        ],
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('reply-bbcode-preview-sticker-{:9_656:}')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('reply-bbcode-preview-attach-123456')),
+      findsOneWidget,
+    );
+  });
 }
 
 Widget _buildPanel({
   required String source,
   ForumBbCodeRenderer renderer = const FlutterBbCodeForumRenderer(),
   List<StickerItem> stickers = const [],
+  List<ReplyImageAttachment> imageAttachments =
+      const <ReplyImageAttachment>[],
 }) {
   return MaterialApp(
     theme: AppTheme.light(),
@@ -163,10 +296,45 @@ Widget _buildPanel({
         source: source,
         renderer: renderer,
         stickers: stickers,
+        imageAttachments: imageAttachments,
       ),
     ),
   );
 }
+
+Future<File> _createLocalPreviewImage(String fileName) async {
+  final directory = await Directory.systemTemp.createTemp('y300-reply-preview-');
+  addTearDown(() async {
+    if (await directory.exists()) {
+      await directory.delete(recursive: true);
+    }
+  });
+  final file = File('${directory.path}/$fileName');
+  await file.writeAsBytes(base64Decode(_transparentPngBase64));
+  return file;
+}
+
+ReplyImageAttachment _uploadedAttachment({
+  required String aid,
+  required String path,
+  ReplyImageAttachmentStatus status = ReplyImageAttachmentStatus.uploaded,
+}) {
+  return ReplyImageAttachment(
+    localId: 'local-$aid',
+    localPath: path,
+    fileName: '$aid.png',
+    mimeType: 'image/png',
+    order: 0,
+    status: status,
+    aid: aid,
+    uploadedAt: DateTime.utc(2026, 6, 8),
+  );
+}
+
+const _transparentPngBase64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6Q'
+    'AAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAANSURBVBh'
+    'XY/j//z8DAAj8Av6IXwbgAAAAAElFTkSuQmCC';
 
 WidgetSpan? _findWidgetSpan(Iterable<RichText> richTexts, Key childKey) {
   for (final richText in richTexts) {

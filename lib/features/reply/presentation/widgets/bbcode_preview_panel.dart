@@ -8,11 +8,13 @@ class BbCodePreviewPanel extends StatelessWidget {
     required this.source,
     required this.renderer,
     this.stickers = const [],
+    this.imageAttachments = const <ReplyImageAttachment>[],
   });
 
   final String source;
   final ForumBbCodeRenderer renderer;
   final List<StickerItem> stickers;
+  final List<ReplyImageAttachment> imageAttachments;
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +35,12 @@ class BbCodePreviewPanel extends StatelessWidget {
               key: Key('reply-composer-bbcode-preview-empty'),
               height: 24,
             )
-          : renderer.buildPreview(context, source, stickers: stickers),
+          : renderer.buildPreview(
+              context,
+              source,
+              stickers: stickers,
+              imageAttachments: imageAttachments,
+            ),
     );
   }
 }
