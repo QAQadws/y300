@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/reply/data/reply_draft_repository.dart';
+import 'package:y300/features/reply/data/reply_image_picker.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
@@ -214,6 +215,132 @@ void main() {
       expect(state.restoredDraft, isTrue);
     });
 
+    test('pickImages adds local image attachments in picker order', () async {
+      final imagePicker = _FakeReplyImagePicker(
+        images: const [
+          ReplyPickedImage(
+            path: '/gallery/first.jpg',
+            fileName: 'first.jpg',
+            mimeType: 'image/jpeg',
+            originalIndex: 0,
+          ),
+          ReplyPickedImage(
+            path: '/gallery/second.png',
+            fileName: 'second.png',
+            mimeType: 'image/png',
+            originalIndex: 1,
+          ),
+        ],
+      );
+      final args = _threadArgs(tid: '572063');
+      final container = _buildContainer(imagePicker: imagePicker);
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(replyComposerControllerProvider(args).future);
+
+      await container
+          .read(replyComposerControllerProvider(args).notifier)
+          .pickImages();
+
+      final state = container.read(replyComposerControllerProvider(args)).value!;
+      expect(imagePicker.pickCallCount, 1);
+      expect(state.imageAttachments, hasLength(2));
+      expect(state.imageAttachments.map((item) => item.fileName), [
+        'first.jpg',
+        'second.png',
+      ]);
+      expect(
+        state.imageAttachments.map((item) => item.status),
+        [
+          ReplyImageAttachmentStatus.local,
+          ReplyImageAttachmentStatus.local,
+        ],
+      );
+      expect(state.message, isEmpty);
+    });
+
+    test('pickImages cancellation does not change state or draft', () async {
+      final draftRepository = _MemoryReplyDraftRepository();
+      final imagePicker = _FakeReplyImagePicker();
+      final args = _threadArgs(tid: '572063');
+      final container = _buildContainer(
+        draftRepository: draftRepository,
+        imagePicker: imagePicker,
+      );
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(replyComposerControllerProvider(args).future);
+      final controller = container.read(
+        replyComposerControllerProvider(args).notifier,
+      );
+      controller.updateMessage('正文');
+
+      await controller.pickImages();
+
+      final state = container.read(replyComposerControllerProvider(args)).value!;
+      expect(state.imageAttachments, isEmpty);
+      expect(state.message, '正文');
+      expect(await draftRepository.loadDraft(args.identity), isNull);
+    });
+
+    test('pickImages exposes picker error', () async {
+      final imagePicker = _FakeReplyImagePicker(
+        error: const ReplyImagePickerException('failed'),
+      );
+      final args = _threadArgs(tid: '572063');
+      final container = _buildContainer(imagePicker: imagePicker);
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(replyComposerControllerProvider(args).future);
+
+      await container
+          .read(replyComposerControllerProvider(args).notifier)
+          .pickImages();
+
+      expect(
+        container
+            .read(replyComposerControllerProvider(args))
+            .value
+            ?.imageUploadError,
+        '选择图片失败，请重试',
+      );
+    });
+
+    test('pickImages does not run while preparing post reply', () async {
+      final imagePicker = _FakeReplyImagePicker(
+        images: const [
+          ReplyPickedImage(
+            path: '/gallery/first.jpg',
+            fileName: 'first.jpg',
+            mimeType: 'image/jpeg',
+            originalIndex: 0,
+          ),
+        ],
+      );
+      final args = _postArgs();
+      final container = _buildContainer(imagePicker: imagePicker);
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(replyComposerControllerProvider(args).future);
+
+      await container
+          .read(replyComposerControllerProvider(args).notifier)
+          .pickImages();
+
+      expect(imagePicker.pickCallCount, 0);
+      expect(
+        container
+            .read(replyComposerControllerProvider(args))
+            .value
+            ?.imageAttachments,
+        isEmpty,
+      );
+    });
+
     test('duplicate submit while submitting does not call repository twice', () async {
       final completer = Completer<ApiResult<ReplySubmissionResult>>();
       final replyRepository = _FakeReplyRepository(asyncResult: completer.future);
@@ -398,6 +525,7 @@ ReplyComposerArgs _postArgs() {
 ProviderContainer _buildContainer({
   ReplyDraftRepository? draftRepository,
   ReplyRepository? replyRepository,
+  ReplyImagePicker? imagePicker,
 }) {
   return ProviderContainer(
     overrides: [
@@ -406,6 +534,9 @@ ProviderContainer _buildContainer({
       ),
       replyRepositoryProvider.overrideWithValue(
         replyRepository ?? _FakeReplyRepository(),
+      ),
+      replyImagePickerProvider.overrideWithValue(
+        imagePicker ?? _FakeReplyImagePicker(),
       ),
     ],
   );
@@ -473,6 +604,27 @@ class _MemoryReplyDraftRepository implements ReplyDraftRepository {
       return;
     }
     _drafts[draft.identity.storageKey] = draft;
+  }
+}
+
+class _FakeReplyImagePicker implements ReplyImagePicker {
+  _FakeReplyImagePicker({
+    this.images = const <ReplyPickedImage>[],
+    this.error,
+  });
+
+  final List<ReplyPickedImage> images;
+  final ReplyImagePickerException? error;
+  int pickCallCount = 0;
+
+  @override
+  Future<List<ReplyPickedImage>> pickImagesInOrder() async {
+    pickCallCount += 1;
+    final error = this.error;
+    if (error != null) {
+      throw error;
+    }
+    return images;
   }
 }
 

@@ -3,6 +3,7 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/profile/data/profile_repository.dart';
 import 'package:y300/features/reply/data/discuz_reply_api_repository.dart';
 import 'package:y300/features/reply/data/reply_draft_repository.dart';
+import 'package:y300/features/reply/data/reply_image_picker.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/data/shared_preferences_reply_draft_repository.dart';
 import 'package:y300/features/reply/data/sticker_catalog_repository.dart';
@@ -52,6 +53,10 @@ final replySubmissionErrorPresenterProvider =
 
 final replyDraftRepositoryProvider = Provider<ReplyDraftRepository>((_) {
   return SharedPreferencesReplyDraftRepository();
+});
+
+final replyImagePickerProvider = Provider<ReplyImagePicker>((_) {
+  return ImagePickerReplyImagePicker();
 });
 
 final replyRepositoryProvider = Provider<ReplyRepository>((ref) {

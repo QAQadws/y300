@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/reply/data/reply_draft_repository.dart';
+import 'package:y300/features/reply/data/reply_image_picker.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
@@ -24,6 +25,7 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
   ReplyDraftRepository? _draftRepository;
   ReplyRepository? _replyRepository;
   ReplySubmissionErrorPresenter? _errorPresenter;
+  ReplyImagePicker? _imagePicker;
   ReplyComposerState? _latestState;
 
   @override
@@ -31,6 +33,7 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
     _draftRepository = ref.read(replyDraftRepositoryProvider);
     _replyRepository = ref.read(replyRepositoryProvider);
     _errorPresenter = ref.read(replySubmissionErrorPresenterProvider);
+    _imagePicker = ref.read(replyImagePickerProvider);
     ref.onDispose(() {
       _saveTimer?.cancel();
       final current = _latestState;
@@ -94,6 +97,50 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
 
   Future<void> retryPreparePostReply() {
     return _preparePostReply();
+  }
+
+  Future<void> pickImages() async {
+    final current = state.value;
+    if (current == null || !current.canPickImages) {
+      return;
+    }
+
+    try {
+      final pickedImages = await _imagePicker!.pickImagesInOrder();
+      if (pickedImages.isEmpty) {
+        return;
+      }
+      final latest = state.value ?? current;
+      if (!latest.canPickImages) {
+        return;
+      }
+      final baseTime = DateTime.now().microsecondsSinceEpoch;
+      final existingCount = latest.imageAttachments.length;
+      final sortedPickedImages = pickedImages.toList(growable: false)
+        ..sort((a, b) => a.originalIndex.compareTo(b.originalIndex));
+      final attachments = [
+        ...latest.imageAttachments,
+        for (var index = 0; index < sortedPickedImages.length; index += 1)
+          ReplyImageAttachment(
+            localId: 'picked-$baseTime-${existingCount + index}',
+            localPath: sortedPickedImages[index].path,
+            fileName: sortedPickedImages[index].fileName,
+            mimeType: sortedPickedImages[index].mimeType,
+            order: existingCount + index,
+            status: ReplyImageAttachmentStatus.local,
+          ),
+      ];
+      _setDataState(
+        latest.copyWith(
+          imageAttachments: attachments,
+          clearImageUploadError: true,
+        ),
+      );
+    } on ReplyImagePickerException catch (_) {
+      _setDataState(
+        current.copyWith(imageUploadError: '选择图片失败，请重试'),
+      );
+    }
   }
 
   Future<void> flushDraft() async {

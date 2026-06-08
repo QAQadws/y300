@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/reply/data/reply_draft_repository.dart';
+import 'package:y300/features/reply/data/reply_image_picker.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/data/sticker_picker_preferences_repository.dart';
@@ -28,7 +31,24 @@ void main() {
       find.byKey(const Key('reply-composer-use-signature-switch')),
       findsOneWidget,
     );
+    expect(find.byKey(const Key('reply-composer-image-button')), findsOneWidget);
     expect(find.byKey(const Key('reply-composer-send-button')), findsOneWidget);
+  });
+
+  testWidgets('ReplyComposerPage places image action before send action', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildPage());
+    await tester.pump();
+
+    final imageCenter = tester.getCenter(
+      find.byKey(const Key('reply-composer-image-button')),
+    );
+    final sendCenter = tester.getCenter(
+      find.byKey(const Key('reply-composer-send-button')),
+    );
+
+    expect(imageCenter.dx, lessThan(sendCenter.dx));
   });
 
   testWidgets('ReplyComposerPage restores draft into input', (tester) async {
@@ -308,6 +328,98 @@ void main() {
     expect(sendButton.onPressed, isNull);
   });
 
+  testWidgets('ReplyComposerPage disables image button while preparing post', (
+    tester,
+  ) async {
+    final preparationCompleter = Completer<ApiResult<ReplyPreparation>>();
+    await tester.pumpWidget(
+      _buildPage(
+        args: _postArgs(),
+        replyRepository: _FakeReplyRepository(
+          asyncPreparationResult: preparationCompleter.future,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final imageButton = tester.widget<IconButton>(
+      find.byKey(const Key('reply-composer-image-button')),
+    );
+    expect(imageButton.onPressed, isNull);
+    preparationCompleter.complete(
+      const ApiSuccess<ReplyPreparation>(
+        ReplyPreparation(
+          target: ReplyTarget.post(
+            fid: '33',
+            tid: '572063',
+            pid: '41554317',
+          ),
+          reference: ReplyReference(),
+        ),
+      ),
+    );
+  });
+
+  testWidgets('ReplyComposerPage shows picked image queue', (tester) async {
+    await tester.pumpWidget(
+      _buildPage(
+        imagePicker: _FakeReplyImagePicker(
+          images: const [
+            ReplyPickedImage(
+              path: '/gallery/first.jpg',
+              fileName: 'first.jpg',
+              mimeType: 'image/jpeg',
+              originalIndex: 0,
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('reply-composer-image-button')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('reply-composer-image-queue')), findsOneWidget);
+    expect(find.text('first.jpg'), findsOneWidget);
+    expect(find.textContaining('image/jpeg'), findsOneWidget);
+    expect(find.textContaining('等待上传'), findsOneWidget);
+  });
+
+  testWidgets('ReplyComposerPage picking image does not change message or submit payload', (
+    tester,
+  ) async {
+    final replyRepository = _FakeReplyRepository();
+    await tester.pumpWidget(
+      _buildPage(
+        replyRepository: replyRepository,
+        imagePicker: _FakeReplyImagePicker(
+          images: const [
+            ReplyPickedImage(
+              path: '/gallery/first.jpg',
+              fileName: 'first.jpg',
+              mimeType: 'image/jpeg',
+              originalIndex: 0,
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('reply-composer-message-input')),
+      '正文',
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('reply-composer-image-button')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('reply-composer-send-button')));
+    await tester.pumpAndSettle();
+
+    expect(replyRepository.sentDrafts.single.message, '正文');
+  });
+
   testWidgets('ReplyComposerPage submits post reply with reference fields', (
     tester,
   ) async {
@@ -418,6 +530,7 @@ Widget _buildPage({
   ReplyComposerArgs? args,
   ReplyDraftRepository? draftRepository,
   ReplyRepository? replyRepository,
+  ReplyImagePicker? imagePicker,
   List<StickerGroup> stickerGroups = const [],
 }) {
   return ProviderScope(
@@ -427,6 +540,9 @@ Widget _buildPage({
       ),
       replyRepositoryProvider.overrideWithValue(
         replyRepository ?? _FakeReplyRepository(),
+      ),
+      replyImagePickerProvider.overrideWithValue(
+        imagePicker ?? _FakeReplyImagePicker(),
       ),
       stickerGroupsProvider.overrideWith((_) async => stickerGroups),
       stickerPickerPreferencesRepositoryProvider.overrideWithValue(
@@ -456,6 +572,7 @@ Widget _buildLauncher({
       replyRepositoryProvider.overrideWithValue(
         replyRepository ?? _FakeReplyRepository(),
       ),
+      replyImagePickerProvider.overrideWithValue(_FakeReplyImagePicker()),
       stickerGroupsProvider.overrideWith((_) async => const <StickerGroup>[]),
       stickerPickerPreferencesRepositoryProvider.overrideWithValue(
         _FakeStickerPickerPreferencesRepository(),
@@ -596,10 +713,24 @@ class _FakeStickerPickerPreferencesRepository
   }
 }
 
+class _FakeReplyImagePicker implements ReplyImagePicker {
+  _FakeReplyImagePicker({
+    this.images = const <ReplyPickedImage>[],
+  });
+
+  final List<ReplyPickedImage> images;
+
+  @override
+  Future<List<ReplyPickedImage>> pickImagesInOrder() async {
+    return images;
+  }
+}
+
 class _FakeReplyRepository implements ReplyRepository {
   _FakeReplyRepository({
     ApiResult<ReplySubmissionResult>? result,
     ApiResult<ReplyPreparation>? preparationResult,
+    this.asyncPreparationResult,
   }) : result =
             result ??
             const ApiSuccess<ReplySubmissionResult>(
@@ -627,6 +758,7 @@ class _FakeReplyRepository implements ReplyRepository {
 
   final ApiResult<ReplySubmissionResult> result;
   final ApiResult<ReplyPreparation> preparationResult;
+  final Future<ApiResult<ReplyPreparation>>? asyncPreparationResult;
   final List<ReplyDraft> sentDrafts = <ReplyDraft>[];
 
   @override
@@ -641,6 +773,10 @@ class _FakeReplyRepository implements ReplyRepository {
   Future<ApiResult<ReplyPreparation>> preparePostReply({
     required Uri replyFormUri,
   }) async {
+    final asyncPreparationResult = this.asyncPreparationResult;
+    if (asyncPreparationResult != null) {
+      return asyncPreparationResult;
+    }
     return preparationResult;
   }
 }

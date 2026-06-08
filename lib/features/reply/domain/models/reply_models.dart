@@ -223,6 +223,20 @@ class ReplyImageUploadPermission {
   }
 }
 
+class ReplyPickedImage {
+  const ReplyPickedImage({
+    required this.path,
+    required this.fileName,
+    required this.mimeType,
+    required this.originalIndex,
+  });
+
+  final String path;
+  final String fileName;
+  final String mimeType;
+  final int originalIndex;
+}
+
 class ReplySubmissionResult {
   const ReplySubmissionResult({
     required this.message,

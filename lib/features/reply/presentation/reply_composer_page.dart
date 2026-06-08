@@ -74,6 +74,16 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
           title: Text(widget.args.target.isPostReply ? '回复楼层' : '回复帖子'),
           actions: [
             IconButton(
+              key: const Key('reply-composer-image-button'),
+              tooltip: '图片',
+              onPressed: state == null || !state.canPickImages
+                  ? null
+                  : () {
+                      unawaited(controller.pickImages());
+                    },
+              icon: const Icon(Icons.image),
+            ),
+            IconButton(
               key: const Key('reply-composer-send-button'),
               tooltip: '发送',
               onPressed: state == null || !state.canSubmit
@@ -268,6 +278,15 @@ class _ReplyComposerBody extends StatelessWidget {
             const _RestoredDraftBanner(),
             const SizedBox(height: 12),
           ],
+          if (state.imageUploadError != null &&
+              state.imageUploadError!.trim().isNotEmpty) ...[
+            Text(
+              state.imageUploadError!,
+              key: const Key('reply-composer-image-error'),
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+            const SizedBox(height: 12),
+          ],
           Align(
             alignment: Alignment.centerLeft,
             child: SegmentedButton<ReplyComposerMode>(
@@ -320,6 +339,12 @@ class _ReplyComposerBody extends StatelessWidget {
               renderer: bbCodeRenderer,
               stickers: stickers,
             ),
+          if (state.imageAttachments.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _ReplyImageAttachmentQueue(
+              attachments: state.imageAttachments,
+            ),
+          ],
           const SizedBox(height: 12),
           SwitchListTile(
             key: const Key('reply-composer-use-signature-switch'),
@@ -339,6 +364,41 @@ class _ReplyComposerBody extends StatelessWidget {
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ReplyImageAttachmentQueue extends StatelessWidget {
+  const _ReplyImageAttachmentQueue({
+    required this.attachments,
+  });
+
+  final List<ReplyImageAttachment> attachments;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      key: const Key('reply-composer-image-queue'),
+      decoration: BoxDecoration(
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+        color: colorScheme.surface,
+      ),
+      child: Column(
+        children: [
+          for (final attachment in attachments)
+            ListTile(
+              key: Key(
+                'reply-composer-image-attachment-${attachment.localId}',
+              ),
+              leading: const Icon(Icons.image_outlined),
+              title: Text(attachment.fileName),
+              subtitle: Text('${attachment.mimeType} · 等待上传'),
+              dense: true,
+            ),
         ],
       ),
     );

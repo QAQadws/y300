@@ -67,9 +67,11 @@ class ReplyComposerState {
     required this.mode,
     required this.isPreparing,
     required this.restoredDraft,
+    required this.imageAttachments,
     this.preparation,
     this.preparationError,
     this.errorMessage,
+    this.imageUploadError,
   });
 
   factory ReplyComposerState.initial({
@@ -79,6 +81,7 @@ class ReplyComposerState {
     ReplyComposerMode mode = ReplyComposerMode.source,
     bool isPreparing = false,
     bool restoredDraft = false,
+    List<ReplyImageAttachment> imageAttachments = const [],
     ReplyPreparation? preparation,
     String? preparationError,
   }) {
@@ -90,6 +93,7 @@ class ReplyComposerState {
       mode: mode,
       isPreparing: isPreparing,
       restoredDraft: restoredDraft,
+      imageAttachments: imageAttachments,
       preparation: preparation,
       preparationError: preparationError,
     );
@@ -102,9 +106,13 @@ class ReplyComposerState {
   final ReplyComposerMode mode;
   final bool isPreparing;
   final bool restoredDraft;
+  final List<ReplyImageAttachment> imageAttachments;
   final ReplyPreparation? preparation;
   final String? preparationError;
   final String? errorMessage;
+  final String? imageUploadError;
+
+  bool get canPickImages => !isSubmitting && !isPreparing;
 
   bool get canSubmit {
     if (message.trim().isEmpty || isSubmitting || isPreparing) {
@@ -123,12 +131,15 @@ class ReplyComposerState {
     ReplyComposerMode? mode,
     bool? isPreparing,
     bool? restoredDraft,
+    List<ReplyImageAttachment>? imageAttachments,
     ReplyPreparation? preparation,
     String? preparationError,
     String? errorMessage,
+    String? imageUploadError,
     bool clearPreparation = false,
     bool clearPreparationError = false,
     bool clearErrorMessage = false,
+    bool clearImageUploadError = false,
   }) {
     return ReplyComposerState(
       target: target,
@@ -138,11 +149,14 @@ class ReplyComposerState {
       mode: mode ?? this.mode,
       isPreparing: isPreparing ?? this.isPreparing,
       restoredDraft: restoredDraft ?? this.restoredDraft,
+      imageAttachments: imageAttachments ?? this.imageAttachments,
       preparation: clearPreparation ? null : preparation ?? this.preparation,
       preparationError: clearPreparationError
           ? null
           : preparationError ?? this.preparationError,
       errorMessage: clearErrorMessage ? null : errorMessage ?? this.errorMessage,
+      imageUploadError:
+          clearImageUploadError ? null : imageUploadError ?? this.imageUploadError,
     );
   }
 }
