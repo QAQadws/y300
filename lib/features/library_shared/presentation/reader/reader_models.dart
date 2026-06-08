@@ -36,10 +36,12 @@ class ReaderBottomBarConfig {
   const ReaderBottomBarConfig({
     required this.progress,
     required this.actions,
+    this.showProgress = true,
   });
 
   final ReaderProgressConfig progress;
   final List<ReaderToolbarAction> actions;
+  final bool showProgress;
 }
 
 class ReaderProgressConfig {

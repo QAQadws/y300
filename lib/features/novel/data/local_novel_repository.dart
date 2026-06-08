@@ -466,6 +466,14 @@ class LocalNovelRepository
         'page_padding': preferences.pagePadding,
         'theme_mode': preferences.themeMode,
         'font_family': preferences.fontFamily,
+        'flow_mode': preferences.flowMode.storageValue,
+        'theme_preset': preferences.themePreset.storageValue,
+        'content_max_width': preferences.contentMaxWidth,
+        'first_line_indent': preferences.firstLineIndent,
+        'font_weight': preferences.fontWeight,
+        'text_align': preferences.textAlign.storageValue,
+        'show_progress_indicator': preferences.showProgressIndicator ? 1 : 0,
+        'show_chapter_title': preferences.showChapterTitle ? 1 : 0,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -485,14 +493,38 @@ class LocalNovelRepository
     }
 
     final row = rows.first;
+    final defaults = NovelReaderPreferences.defaults();
     return NovelReaderPreferences(
-      fontSize: (row['font_size'] as num?)?.toDouble() ?? 18,
-      lineHeight: (row['line_height'] as num?)?.toDouble() ?? 1.8,
-      paragraphSpacing: (row['paragraph_spacing'] as num?)?.toDouble() ?? 10,
-      pagePadding: (row['page_padding'] as num?)?.toDouble() ?? 16,
-      themeMode: (row['theme_mode'] as String?) ?? 'light',
-      fontFamily: (row['font_family'] as String?) ?? 'system',
+      fontSize: (row['font_size'] as num?)?.toDouble() ?? defaults.fontSize,
+      lineHeight: (row['line_height'] as num?)?.toDouble() ?? defaults.lineHeight,
+      paragraphSpacing:
+          (row['paragraph_spacing'] as num?)?.toDouble() ?? defaults.paragraphSpacing,
+      pagePadding: (row['page_padding'] as num?)?.toDouble() ?? defaults.pagePadding,
+      fontFamily: (row['font_family'] as String?) ?? defaults.fontFamily,
+      flowMode: NovelReaderFlowModeCodec.fromStorage(row['flow_mode'] as String?),
+      themePreset: NovelReaderThemePresetCodec.fromStorage(
+        (row['theme_preset'] as String?) ?? (row['theme_mode'] as String?),
+      ),
+      contentMaxWidth:
+          (row['content_max_width'] as num?)?.toDouble() ?? defaults.contentMaxWidth,
+      firstLineIndent:
+          (row['first_line_indent'] as num?)?.toDouble() ?? defaults.firstLineIndent,
+      fontWeight: (row['font_weight'] as num?)?.toInt() ?? defaults.fontWeight,
+      textAlign: NovelReaderTextAlignModeCodec.fromStorage(row['text_align'] as String?),
+      showProgressIndicator:
+          _intToBool(row['show_progress_indicator'] as int?, defaults.showProgressIndicator),
+      showChapterTitle: _intToBool(
+        row['show_chapter_title'] as int?,
+        defaults.showChapterTitle,
+      ),
     );
+  }
+
+  bool _intToBool(int? value, bool fallback) {
+    if (value == null) {
+      return fallback;
+    }
+    return value != 0;
   }
 
   @override

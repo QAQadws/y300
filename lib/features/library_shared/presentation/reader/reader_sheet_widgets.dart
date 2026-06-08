@@ -42,30 +42,43 @@ class ReaderSegmentControl<T extends Object> extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-      child: Row(
-        children: [
-          SizedBox(width: 88, child: Text(label)),
-          Expanded(
-            child: SegmentedButton<T>(
-              segments: [
-                for (final item in values)
-                  ButtonSegment<T>(
-                    value: item,
-                    label: Text(labelBuilder(item)),
-                  ),
-              ],
-              selected: {value},
-              showSelectedIcon: false,
-              onSelectionChanged: enabled
-                  ? (selection) {
-                      if (selection.isNotEmpty) {
-                        onChanged(selection.first);
-                      }
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final control = SegmentedButton<T>(
+            segments: [
+              for (final item in values)
+                ButtonSegment<T>(
+                  value: item,
+                  label: Text(labelBuilder(item)),
+                ),
+            ],
+            selected: {value},
+            showSelectedIcon: false,
+            onSelectionChanged: enabled
+                ? (selection) {
+                    if (selection.isNotEmpty) {
+                      onChanged(selection.first);
                     }
-                  : null,
-            ),
-          ),
-        ],
+                  }
+                : null,
+          );
+          if (constraints.maxWidth < 360) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(label),
+                const SizedBox(height: 6),
+                control,
+              ],
+            );
+          }
+          return Row(
+            children: [
+              SizedBox(width: 88, child: Text(label)),
+              Expanded(child: control),
+            ],
+          );
+        },
       ),
     );
   }

@@ -34,7 +34,10 @@ void main() {
     );
     expect(topGate.ignoring, isFalse);
     expect(find.text('测试小说'), findsOneWidget);
-    expect(find.text('第1章'), findsOneWidget);
+    final subtitle = tester.widget<Text>(
+      find.byKey(const Key('shared-reader-top-subtitle')),
+    );
+    expect(subtitle.data, '第1章');
   });
 
   testWidgets('NovelReaderPage hides menu after content scroll', (tester) async {
@@ -100,11 +103,61 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('novel-theme-sepia')), findsOneWidget);
+    expect(find.byKey(const Key('novel-reader-display-settings-sheet')), findsOneWidget);
+    expect(find.byKey(const Key('novel-reader-flow-mode-control')), findsOneWidget);
+    expect(find.byKey(const Key('novel-reader-content-width-slider')), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(const Key('novel-theme-sepia')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('novel-theme-sepia')));
     await tester.pumpAndSettle();
 
     expect(repository.latestPreferences?.themeMode, 'sepia');
+    expect(repository.latestPreferences?.themePreset, NovelReaderThemePreset.sepia);
+  });
+
+  testWidgets('NovelReaderPage display sheet persists reading mode preference', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository();
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-display')));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('分页'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('分页'));
+    await tester.pumpAndSettle();
+
+    expect(repository.latestPreferences?.flowMode, NovelReaderFlowMode.pagedLtr);
+    expect(find.byKey(const Key('novel-reader-paragraph-list')), findsOneWidget);
+  });
+
+  testWidgets('NovelReaderPage constrains wide content column', (tester) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(contentMaxWidth: 360),
+    );
+    await tester.binding.setSurfaceSize(const Size(900, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    final width = tester.getSize(find.byKey(const Key('novel-reader-content-column'))).width;
+
+    expect(width, lessThanOrEqualTo(360));
+  });
+
+  testWidgets('NovelReaderPage can hide inline chapter title', (tester) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(showChapterTitle: false),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-inline-chapter-title')), findsNothing);
   });
 
   testWidgets('NovelReaderPage open thread uses novel detail source tid', (
@@ -269,10 +322,12 @@ class _DownloadedNovelServiceFake extends _NoopNovelDownloadService {
 class _FakeNovelRepository implements NovelRepository {
   _FakeNovelRepository({
     List<String>? firstParagraphs,
-  }) : firstParagraphs = firstParagraphs ?? const <String>['第一段。', '第二段。'];
+    NovelReaderPreferences? preferences,
+  })  : firstParagraphs = firstParagraphs ?? const <String>['第一段。', '第二段。'],
+        preferences = preferences ?? NovelReaderPreferences.defaults();
 
   final List<String> firstParagraphs;
-  NovelReaderPreferences preferences = NovelReaderPreferences.defaults();
+  NovelReaderPreferences preferences;
   NovelReaderPreferences? latestPreferences;
   double lastSavedOffset = 0;
   final savedProgressEpisodeIds = <String>[];

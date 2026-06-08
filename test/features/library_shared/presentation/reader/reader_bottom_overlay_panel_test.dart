@@ -53,15 +53,35 @@ void main() {
 
     expect(taps, 0);
   });
+
+  testWidgets('ReaderBottomOverlayPanel can hide progress control', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildPanel(
+        showProgress: false,
+        actions: [
+          _action(id: 'catalog', icon: Icons.list, label: '目录'),
+        ],
+      ),
+    );
+
+    expect(find.byKey(const Key('shared-reader-progress-slider')), findsNothing);
+    expect(find.byKey(const Key('shared-reader-bottom-action-catalog')), findsOneWidget);
+  });
 }
 
-Widget _buildPanel({required List<ReaderToolbarAction> actions}) {
+Widget _buildPanel({
+  required List<ReaderToolbarAction> actions,
+  bool showProgress = true,
+}) {
   return MaterialApp(
     home: Scaffold(
       body: Align(
         alignment: Alignment.bottomCenter,
         child: ReaderBottomOverlayPanel(
           config: ReaderBottomBarConfig(
+            showProgress: showProgress,
             progress: ReaderProgressConfig(
               current: 1,
               total: 10,

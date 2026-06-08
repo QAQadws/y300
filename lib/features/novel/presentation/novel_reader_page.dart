@@ -5,7 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
-import 'package:y300/features/novel/presentation/widgets/reader_style_panel.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_display_settings_sheet.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
 class NovelReaderPage extends ConsumerStatefulWidget {
@@ -25,6 +26,9 @@ class NovelReaderPage extends ConsumerStatefulWidget {
 class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
   late final ScrollController _scrollController;
   late final ReaderOverlayController _overlayController;
+  final NovelReaderThemeResolver _themeResolver = const NovelReaderThemeResolver();
+  final NovelReaderTypographyResolver _typographyResolver =
+      const NovelReaderTypographyResolver();
   bool _hasRestoredOffset = false;
   bool _isProgrammaticScrollChange = false;
 
@@ -59,15 +63,25 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
         data: (viewState) {
           _restoreOffsetIfNeeded(viewState.currentOffset);
 
-          final colors = _resolveColors(viewState.preferences.themeMode);
+          final theme = Theme.of(context);
+          final palette = _themeResolver.resolve(
+            preferences: viewState.preferences,
+            theme: theme,
+            platformBrightness: MediaQuery.platformBrightnessOf(context),
+          );
+          final typography = _typographyResolver.resolve(
+            preferences: viewState.preferences,
+            theme: theme,
+            palette: palette,
+          );
           return ColoredBox(
-            color: colors.background,
+            color: palette.background,
             child: ReaderOverlayScaffold(
               controller: _overlayController,
               topBar: _buildTopBarConfig(viewState),
               bottomBar: _buildBottomBarConfig(viewState, controller),
               bottomSafeFraction: 0.18,
-              child: _buildParagraphList(viewState, colors),
+              child: _buildParagraphList(viewState, typography),
             ),
           );
         },
@@ -117,6 +131,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     final total = viewState.episodes.isEmpty ? 1 : viewState.episodes.length;
     final current = currentIndex < 0 ? 1 : currentIndex + 1;
     return ReaderBottomBarConfig(
+      showProgress: viewState.preferences.showProgressIndicator,
       progress: ReaderProgressConfig(
         current: current,
         total: total,
@@ -158,27 +173,45 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
 
   Widget _buildParagraphList(
     NovelReaderViewState viewState,
-    _ReaderColors colors,
+    NovelReaderTypography typography,
   ) {
-    return ListView.separated(
+    final children = <Widget>[
+      if (viewState.preferences.showChapterTitle) ...[
+        Text(
+          viewState.currentEpisode.episodeTitle,
+          key: const Key('novel-reader-inline-chapter-title'),
+          style: typography.chapterTitle,
+          textAlign: TextAlign.center,
+        ),
+        SizedBox(height: viewState.preferences.paragraphSpacing * 1.6),
+      ],
+      for (var index = 0; index < viewState.currentContent.paragraphs.length; index++) ...[
+        _NovelParagraphText(
+          text: viewState.currentContent.paragraphs[index],
+          style: typography.body,
+          textAlign: typography.textAlign,
+          firstLineIndent: typography.firstLineIndent,
+        ),
+        if (index < viewState.currentContent.paragraphs.length - 1)
+          SizedBox(height: viewState.preferences.paragraphSpacing),
+      ],
+    ];
+    return ListView(
       key: const Key('novel-reader-paragraph-list'),
       controller: _scrollController,
       padding: EdgeInsets.all(viewState.preferences.pagePadding),
-      itemCount: viewState.currentContent.paragraphs.length,
-      separatorBuilder: (context, index) => SizedBox(
-        height: viewState.preferences.paragraphSpacing,
-      ),
-      itemBuilder: (context, index) {
-        final paragraph = viewState.currentContent.paragraphs[index];
-        return Text(
-          paragraph,
-          style: TextStyle(
-            color: colors.foreground,
-            fontSize: viewState.preferences.fontSize,
-            height: viewState.preferences.lineHeight,
+      children: [
+        Center(
+          child: ConstrainedBox(
+            key: const Key('novel-reader-content-column'),
+            constraints: BoxConstraints(maxWidth: typography.contentMaxWidth),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            ),
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 
@@ -295,7 +328,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
         showDragHandle: true,
         isScrollControlled: true,
         builder: (context) => SafeArea(
-          child: ReaderStylePanel(
+          child: NovelReaderDisplaySettingsSheet(
             preferences: viewState.preferences,
             onPreferencesChanged: controller.updatePreferences,
           ),
@@ -338,26 +371,40 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
       (episode) => episode.episodeId == viewState.currentEpisode.episodeId,
     );
   }
+}
 
-  _ReaderColors _resolveColors(String themeMode) {
-    switch (themeMode) {
-      case 'dark':
-        return const _ReaderColors(
-          background: Color(0xFF141414),
-          foreground: Color(0xFFE9E9E9),
-        );
-      case 'sepia':
-        return const _ReaderColors(
-          background: Color(0xFFF4EAD7),
-          foreground: Color(0xFF4C3A21),
-        );
-      case 'light':
-      default:
-        return const _ReaderColors(
-          background: Color(0xFFFDFDFD),
-          foreground: Color(0xFF1F1F1F),
-        );
+class _NovelParagraphText extends StatelessWidget {
+  const _NovelParagraphText({
+    required this.text,
+    required this.style,
+    required this.textAlign,
+    required this.firstLineIndent,
+  });
+
+  final String text;
+  final TextStyle style;
+  final TextAlign textAlign;
+  final double firstLineIndent;
+
+  @override
+  Widget build(BuildContext context) {
+    if (firstLineIndent <= 0) {
+      return Text(
+        text,
+        style: style,
+        textAlign: textAlign,
+      );
     }
+    return Text.rich(
+      TextSpan(
+        children: [
+          WidgetSpan(child: SizedBox(width: firstLineIndent)),
+          TextSpan(text: text),
+        ],
+      ),
+      style: style,
+      textAlign: textAlign,
+    );
   }
 }
 
@@ -412,14 +459,4 @@ class NovelReaderChapterListSheet extends StatelessWidget {
       ),
     );
   }
-}
-
-class _ReaderColors {
-  const _ReaderColors({
-    required this.background,
-    required this.foreground,
-  });
-
-  final Color background;
-  final Color foreground;
 }

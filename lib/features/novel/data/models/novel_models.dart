@@ -66,24 +66,159 @@ class NovelChapterContent {
   final List<String> paragraphs;
 }
 
+enum NovelReaderThemePreset {
+  light,
+  sepia,
+  dark,
+  followSystem,
+}
+
+enum NovelReaderFlowMode {
+  vertical,
+  pagedLtr,
+  pagedRtl,
+}
+
+enum NovelReaderTextAlignMode {
+  start,
+  justify,
+  center,
+}
+
+extension NovelReaderThemePresetCodec on NovelReaderThemePreset {
+  String get storageValue {
+    switch (this) {
+      case NovelReaderThemePreset.light:
+        return 'light';
+      case NovelReaderThemePreset.sepia:
+        return 'sepia';
+      case NovelReaderThemePreset.dark:
+        return 'dark';
+      case NovelReaderThemePreset.followSystem:
+        return 'followSystem';
+    }
+  }
+
+  static NovelReaderThemePreset fromStorage(String? value) {
+    switch (value) {
+      case 'sepia':
+        return NovelReaderThemePreset.sepia;
+      case 'dark':
+        return NovelReaderThemePreset.dark;
+      case 'followSystem':
+      case 'follow_system':
+      case 'system':
+        return NovelReaderThemePreset.followSystem;
+      case 'light':
+      default:
+        return NovelReaderThemePreset.light;
+    }
+  }
+}
+
+extension NovelReaderFlowModeCodec on NovelReaderFlowMode {
+  String get storageValue {
+    switch (this) {
+      case NovelReaderFlowMode.vertical:
+        return 'vertical';
+      case NovelReaderFlowMode.pagedLtr:
+        return 'pagedLtr';
+      case NovelReaderFlowMode.pagedRtl:
+        return 'pagedRtl';
+    }
+  }
+
+  static NovelReaderFlowMode fromStorage(String? value) {
+    switch (value) {
+      case 'pagedLtr':
+      case 'paged_ltr':
+        return NovelReaderFlowMode.pagedLtr;
+      case 'pagedRtl':
+      case 'paged_rtl':
+        return NovelReaderFlowMode.pagedRtl;
+      case 'vertical':
+      default:
+        return NovelReaderFlowMode.vertical;
+    }
+  }
+}
+
+extension NovelReaderTextAlignModeCodec on NovelReaderTextAlignMode {
+  String get storageValue {
+    switch (this) {
+      case NovelReaderTextAlignMode.start:
+        return 'start';
+      case NovelReaderTextAlignMode.justify:
+        return 'justify';
+      case NovelReaderTextAlignMode.center:
+        return 'center';
+    }
+  }
+
+  static NovelReaderTextAlignMode fromStorage(String? value) {
+    switch (value) {
+      case 'justify':
+        return NovelReaderTextAlignMode.justify;
+      case 'center':
+        return NovelReaderTextAlignMode.center;
+      case 'start':
+      default:
+        return NovelReaderTextAlignMode.start;
+    }
+  }
+}
+
 class NovelReaderPreferences {
-  const NovelReaderPreferences({
+  NovelReaderPreferences({
     required this.fontSize,
     required this.lineHeight,
     required this.paragraphSpacing,
     required this.pagePadding,
-    required this.themeMode,
     required this.fontFamily,
+    this.flowMode = NovelReaderFlowMode.vertical,
+    NovelReaderThemePreset themePreset = NovelReaderThemePreset.light,
+    this.contentMaxWidth = 720,
+    this.firstLineIndent = 0,
+    this.fontWeight = 400,
+    this.textAlign = NovelReaderTextAlignMode.start,
+    this.showProgressIndicator = true,
+    this.showChapterTitle = true,
+    String? themeMode,
+  }) : themePreset = themeMode == null
+            ? themePreset
+            : NovelReaderThemePresetCodec.fromStorage(themeMode);
+
+  const NovelReaderPreferences._({
+    required this.fontSize,
+    required this.lineHeight,
+    required this.paragraphSpacing,
+    required this.pagePadding,
+    required this.fontFamily,
+    required this.flowMode,
+    required this.themePreset,
+    required this.contentMaxWidth,
+    required this.firstLineIndent,
+    required this.fontWeight,
+    required this.textAlign,
+    required this.showProgressIndicator,
+    required this.showChapterTitle,
   });
 
   factory NovelReaderPreferences.defaults() {
-    return const NovelReaderPreferences(
+    return const NovelReaderPreferences._(
       fontSize: 18,
       lineHeight: 1.8,
       paragraphSpacing: 10,
       pagePadding: 16,
-      themeMode: 'light',
       fontFamily: 'system',
+      flowMode: NovelReaderFlowMode.vertical,
+      themePreset: NovelReaderThemePreset.light,
+      contentMaxWidth: 720,
+      firstLineIndent: 0,
+      fontWeight: 400,
+      textAlign: NovelReaderTextAlignMode.start,
+      showProgressIndicator: true,
+      showChapterTitle: true,
     );
   }
 
@@ -91,8 +226,17 @@ class NovelReaderPreferences {
   final double lineHeight;
   final double paragraphSpacing;
   final double pagePadding;
-  final String themeMode;
   final String fontFamily;
+  final NovelReaderFlowMode flowMode;
+  final NovelReaderThemePreset themePreset;
+  final double contentMaxWidth;
+  final double firstLineIndent;
+  final int fontWeight;
+  final NovelReaderTextAlignMode textAlign;
+  final bool showProgressIndicator;
+  final bool showChapterTitle;
+
+  String get themeMode => themePreset.storageValue;
 
   NovelReaderPreferences copyWith({
     double? fontSize,
@@ -101,14 +245,31 @@ class NovelReaderPreferences {
     double? pagePadding,
     String? themeMode,
     String? fontFamily,
+    NovelReaderFlowMode? flowMode,
+    NovelReaderThemePreset? themePreset,
+    double? contentMaxWidth,
+    double? firstLineIndent,
+    int? fontWeight,
+    NovelReaderTextAlignMode? textAlign,
+    bool? showProgressIndicator,
+    bool? showChapterTitle,
   }) {
-    return NovelReaderPreferences(
+    return NovelReaderPreferences._(
       fontSize: fontSize ?? this.fontSize,
       lineHeight: lineHeight ?? this.lineHeight,
       paragraphSpacing: paragraphSpacing ?? this.paragraphSpacing,
       pagePadding: pagePadding ?? this.pagePadding,
-      themeMode: themeMode ?? this.themeMode,
       fontFamily: fontFamily ?? this.fontFamily,
+      flowMode: flowMode ?? this.flowMode,
+      themePreset: themeMode == null
+          ? (themePreset ?? this.themePreset)
+          : NovelReaderThemePresetCodec.fromStorage(themeMode),
+      contentMaxWidth: contentMaxWidth ?? this.contentMaxWidth,
+      firstLineIndent: firstLineIndent ?? this.firstLineIndent,
+      fontWeight: fontWeight ?? this.fontWeight,
+      textAlign: textAlign ?? this.textAlign,
+      showProgressIndicator: showProgressIndicator ?? this.showProgressIndicator,
+      showChapterTitle: showChapterTitle ?? this.showChapterTitle,
     );
   }
 }

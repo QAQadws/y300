@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 16;
+  static const int dbVersion = 17;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -262,7 +262,15 @@ class ComicLocalDb {
         paragraph_spacing REAL NOT NULL,
         page_padding REAL NOT NULL,
         theme_mode TEXT NOT NULL,
-        font_family TEXT
+        font_family TEXT,
+        flow_mode TEXT,
+        theme_preset TEXT,
+        content_max_width REAL,
+        first_line_indent REAL,
+        font_weight INTEGER,
+        text_align TEXT,
+        show_progress_indicator INTEGER,
+        show_chapter_title INTEGER
       )
     ''');
 

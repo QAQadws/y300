@@ -23,9 +23,9 @@ class ReaderBottomOverlayPanel extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ReaderProgressControl(config: config.progress),
+              if (config.showProgress) ReaderProgressControl(config: config.progress),
               if (config.actions.isNotEmpty) ...[
-                const SizedBox(height: 6),
+                if (config.showProgress) const SizedBox(height: 6),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
