@@ -405,6 +405,7 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
     }
 
     final reference = preparation?.reference;
+    final uploadedAttachmentAids = _resolveUploadedAttachmentAids(current);
     final result = await _replyRepository!.sendReply(
       draft: ReplyDraft(
         fid: current.target.fid,
@@ -417,6 +418,7 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
         noticeAuthor: reference?.noticeAuthor,
         noticeTrimStr: reference?.noticeTrimStr,
         noticeAuthorMsg: reference?.noticeAuthorMsg,
+        uploadedAttachmentAids: uploadedAttachmentAids,
       ),
     );
     final afterSubmit = state.value ?? current;
@@ -552,5 +554,26 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
     _setDataState(sanitizedState);
     await _saveSnapshot(sanitizedState);
     return sanitizedState;
+  }
+
+  List<String> _resolveUploadedAttachmentAids(ReplyComposerState current) {
+    final service = _attachBbCodeService ?? const ReplyAttachBbCodeService();
+    final validAids = {
+      for (final attachment in current.imageAttachments)
+        if (attachment.canEnterSubmitPayload) attachment.aid!.trim(),
+    };
+    if (validAids.isEmpty) {
+      return const <String>[];
+    }
+
+    final seen = <String>{};
+    final resolved = <String>[];
+    for (final aid in service.extractAttachAids(current.message)) {
+      if (!validAids.contains(aid) || !seen.add(aid)) {
+        continue;
+      }
+      resolved.add(aid);
+    }
+    return resolved;
   }
 }

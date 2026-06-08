@@ -267,8 +267,168 @@ void main() {
 
       expect(result.sent, isTrue);
       expect(replyRepository.sentDrafts.single.message, '正文');
+      expect(replyRepository.sentDrafts.single.uploadedAttachmentAids, isEmpty);
       final state = container.read(replyComposerControllerProvider(args)).value;
       expect(state?.imageAttachments, isEmpty);
+    });
+
+    test('submit binds uploaded attachment aid when attach code remains', () async {
+      final draftRepository = _MemoryReplyDraftRepository();
+      final replyRepository = _FakeReplyRepository();
+      final args = _threadArgs(tid: '572063');
+      await draftRepository.saveDraft(
+        ReplyDraftSnapshot(
+          identity: args.identity,
+          message: '正文\n[attach]123456[/attach]',
+          useSignature: true,
+          updatedAt: DateTime.utc(2026, 6, 8),
+          imageAttachments: [
+            _uploadedAttachment(
+              localId: 'image-1',
+              aid: '123456',
+              uploadedAt: DateTime.now(),
+            ),
+          ],
+        ),
+      );
+      final container = _buildContainer(
+        draftRepository: draftRepository,
+        replyRepository: replyRepository,
+      );
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(replyComposerControllerProvider(args).future);
+
+      final result = await container
+          .read(replyComposerControllerProvider(args).notifier)
+          .submit();
+
+      expect(result.sent, isTrue);
+      expect(replyRepository.sentDrafts.single.uploadedAttachmentAids, [
+        '123456',
+      ]);
+    });
+
+    test('submit skips uploaded attachment aid when attach code is removed', () async {
+      final draftRepository = _MemoryReplyDraftRepository();
+      final replyRepository = _FakeReplyRepository();
+      final args = _threadArgs(tid: '572063');
+      await draftRepository.saveDraft(
+        ReplyDraftSnapshot(
+          identity: args.identity,
+          message: '正文',
+          useSignature: true,
+          updatedAt: DateTime.utc(2026, 6, 8),
+          imageAttachments: [
+            _uploadedAttachment(
+              localId: 'image-1',
+              aid: '123456',
+              uploadedAt: DateTime.now(),
+            ),
+          ],
+        ),
+      );
+      final container = _buildContainer(
+        draftRepository: draftRepository,
+        replyRepository: replyRepository,
+      );
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(replyComposerControllerProvider(args).future);
+
+      final result = await container
+          .read(replyComposerControllerProvider(args).notifier)
+          .submit();
+
+      expect(result.sent, isTrue);
+      expect(replyRepository.sentDrafts.single.uploadedAttachmentAids, isEmpty);
+    });
+
+    test('submit skips non-uploaded attachment statuses', () async {
+      final draftRepository = _MemoryReplyDraftRepository();
+      final replyRepository = _FakeReplyRepository();
+      final args = _threadArgs(tid: '572063');
+      await draftRepository.saveDraft(
+        ReplyDraftSnapshot(
+          identity: args.identity,
+          message: '正文\n[attach]123[/attach]\n[attach]456[/attach]',
+          useSignature: true,
+          updatedAt: DateTime.utc(2026, 6, 8),
+          imageAttachments: [
+            _attachmentWithStatus(
+              localId: 'local',
+              aid: '123',
+              status: ReplyImageAttachmentStatus.local,
+            ),
+            _attachmentWithStatus(
+              localId: 'failed',
+              aid: '456',
+              status: ReplyImageAttachmentStatus.failed,
+            ),
+          ],
+        ),
+      );
+      final container = _buildContainer(
+        draftRepository: draftRepository,
+        replyRepository: replyRepository,
+      );
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(replyComposerControllerProvider(args).future);
+
+      final result = await container
+          .read(replyComposerControllerProvider(args).notifier)
+          .submit();
+
+      expect(result.sent, isTrue);
+      expect(replyRepository.sentDrafts.single.uploadedAttachmentAids, isEmpty);
+    });
+
+    test('submit binds multiple uploaded aids by attach code source order', () async {
+      final draftRepository = _MemoryReplyDraftRepository();
+      final replyRepository = _FakeReplyRepository();
+      final args = _threadArgs(tid: '572063');
+      await draftRepository.saveDraft(
+        ReplyDraftSnapshot(
+          identity: args.identity,
+          message: '[attach]222[/attach]\n正文\n[attach]111[/attach]',
+          useSignature: true,
+          updatedAt: DateTime.utc(2026, 6, 8),
+          imageAttachments: [
+            _uploadedAttachment(
+              localId: 'first',
+              aid: '111',
+              uploadedAt: DateTime.now(),
+            ),
+            _uploadedAttachment(
+              localId: 'second',
+              aid: '222',
+              uploadedAt: DateTime.now(),
+            ),
+          ],
+        ),
+      );
+      final container = _buildContainer(
+        draftRepository: draftRepository,
+        replyRepository: replyRepository,
+      );
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(replyComposerControllerProvider(args).future);
+
+      final result = await container
+          .read(replyComposerControllerProvider(args).notifier)
+          .submit();
+
+      expect(result.sent, isTrue);
+      expect(replyRepository.sentDrafts.single.uploadedAttachmentAids, [
+        '222',
+        '111',
+      ]);
     });
 
     test('failed submit keeps draft and exposes error', () async {
@@ -300,6 +460,51 @@ void main() {
         '网络异常，请稍后重试',
       );
       expect((await draftRepository.loadDraft(args.identity))?.message, '失败也要保留');
+    });
+
+    test('failed submit keeps uploaded attachment draft metadata', () async {
+      final draftRepository = _MemoryReplyDraftRepository();
+      final replyRepository = _FakeReplyRepository(
+        result: const ApiFailure<ReplySubmissionResult>(
+          ApiError(type: ApiErrorType.network, message: '网络失败'),
+        ),
+      );
+      final args = _threadArgs(tid: '572063');
+      await draftRepository.saveDraft(
+        ReplyDraftSnapshot(
+          identity: args.identity,
+          message: '正文\n[attach]123456[/attach]',
+          useSignature: true,
+          updatedAt: DateTime.utc(2026, 6, 8),
+          imageAttachments: [
+            _uploadedAttachment(
+              localId: 'image-1',
+              aid: '123456',
+              uploadedAt: DateTime.now(),
+            ),
+          ],
+        ),
+      );
+      final container = _buildContainer(
+        draftRepository: draftRepository,
+        replyRepository: replyRepository,
+      );
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(replyComposerControllerProvider(args).future);
+
+      final result = await container
+          .read(replyComposerControllerProvider(args).notifier)
+          .submit();
+
+      expect(result.sent, isFalse);
+      expect(replyRepository.sentDrafts.single.uploadedAttachmentAids, [
+        '123456',
+      ]);
+      final saved = await draftRepository.loadDraft(args.identity);
+      expect(saved?.message, '正文\n[attach]123456[/attach]');
+      expect(saved?.imageAttachments, hasLength(1));
     });
 
     test('build prunes drafts and tolerates prune failure', () async {
@@ -780,13 +985,27 @@ ReplyImageAttachment _uploadedAttachment({
   required String aid,
   required DateTime uploadedAt,
 }) {
+  return _attachmentWithStatus(
+    localId: localId,
+    aid: aid,
+    status: ReplyImageAttachmentStatus.uploaded,
+    uploadedAt: uploadedAt,
+  );
+}
+
+ReplyImageAttachment _attachmentWithStatus({
+  required String localId,
+  required String aid,
+  required ReplyImageAttachmentStatus status,
+  DateTime? uploadedAt,
+}) {
   return ReplyImageAttachment(
     localId: localId,
     localPath: '/gallery/$localId.jpg',
     fileName: '$localId.jpg',
     mimeType: 'image/jpeg',
     order: 0,
-    status: ReplyImageAttachmentStatus.uploaded,
+    status: status,
     aid: aid,
     uploadedAt: uploadedAt,
   );

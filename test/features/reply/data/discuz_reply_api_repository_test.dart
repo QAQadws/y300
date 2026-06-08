@@ -250,6 +250,58 @@ void main() {
       expect(remoteDataSource.payloads.single.formHash, 'prepared-formhash');
       expect(remoteDataSource.payloads.single.noticeTrimStr, '[quote]引用[/quote]');
     });
+
+    test('passes uploaded attachment aids into submit payload', () async {
+      final remoteDataSource = _FakeReplyRemoteDataSource(
+        response: const ReplyRemoteResponse(
+          data: <String, dynamic>{
+            'Message': <String, dynamic>{
+              'messageval': 'post_reply_succeed',
+              'messagestr': '回复发布成功',
+            },
+          },
+          statusCode: 200,
+        ),
+      );
+      final repository = _buildRepositoryWithRemote(
+        remoteDataSource: remoteDataSource,
+      );
+
+      final result = await repository.sendReply(
+        draft: const ReplyDraft(
+          fid: '33',
+          tid: '570617',
+          message: '正文\n[attach]123456[/attach]',
+          uploadedAttachmentAids: ['123456'],
+        ),
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(remoteDataSource.payloads.single.uploadedAttachmentAids, [
+        '123456',
+      ]);
+    });
+
+    test('normalizes uploaded attachment aids in form data', () {
+      const payload = ReplySubmitPayload(
+        formHash: 'fe182126',
+        fid: '33',
+        tid: '570617',
+        message: '正文',
+        useSignature: true,
+        uploadedAttachmentAids: [' 123456 ', '', '123456', '456789'],
+      );
+
+      final formData = payload.toFormData();
+
+      expect(formData['allowphoto'], '1');
+      expect(formData['attachnew[123456][description]'], '');
+      expect(formData['attachnew[456789][description]'], '');
+      expect(
+        formData.keys.where((key) => key.startsWith('attachnew[')),
+        hasLength(2),
+      );
+    });
   });
 }
 

@@ -1,8 +1,24 @@
 class ReplyAttachBbCodeService {
   const ReplyAttachBbCodeService();
 
+  static final RegExp _attachPattern = RegExp(
+    r'\[attach\]([^\[]*)\[/attach\]',
+    caseSensitive: false,
+  );
+
   String attachCode(String aid) {
     return '[attach]${aid.trim()}[/attach]';
+  }
+
+  List<String> extractAttachAids(String message) {
+    if (message.isEmpty) {
+      return const <String>[];
+    }
+    return [
+      for (final match in _attachPattern.allMatches(message))
+        if ((match.group(1) ?? '').trim().isNotEmpty)
+          (match.group(1) ?? '').trim(),
+    ];
   }
 
   String appendAttachCodes(String message, List<String> aids) {
@@ -46,8 +62,10 @@ class ReplyAttachBbCodeService {
   }
 
   String? _exclusiveAttachAid(String line) {
-    final match = RegExp(r'^\s*\[attach\]([^\[]+)\[/attach\]\s*$')
-        .firstMatch(line);
+    final match = RegExp(
+      r'^\s*\[attach\]([^\[]+)\[/attach\]\s*$',
+      caseSensitive: false,
+    ).firstMatch(line);
     return match?.group(1)?.trim();
   }
 }

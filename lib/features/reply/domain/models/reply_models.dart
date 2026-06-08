@@ -63,6 +63,7 @@ class ReplyDraft {
     this.noticeAuthor,
     this.noticeTrimStr,
     this.noticeAuthorMsg,
+    this.uploadedAttachmentAids = const <String>[],
   });
 
   final String fid;
@@ -75,6 +76,7 @@ class ReplyDraft {
   final String? noticeAuthor;
   final String? noticeTrimStr;
   final String? noticeAuthorMsg;
+  final List<String> uploadedAttachmentAids;
 }
 
 class ReplyPreparation {

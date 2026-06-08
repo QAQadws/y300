@@ -48,5 +48,36 @@ void main() {
 
       expect(service.removeAttachCodes(message, ['999']), message);
     });
+
+    test('extracts a single attach aid', () {
+      expect(service.extractAttachAids('正文\n[attach]123[/attach]'), ['123']);
+    });
+
+    test('extracts multiple attach aids in source order', () {
+      expect(
+        service.extractAttachAids(
+          '[attach]123[/attach]\n正文\n[attach]456[/attach]',
+        ),
+        ['123', '456'],
+      );
+    });
+
+    test('filters blank attach aids', () {
+      expect(
+        service.extractAttachAids('[attach]   [/attach]\n[attach]123[/attach]'),
+        ['123'],
+      );
+    });
+
+    test('extracts attach aids with case insensitive tags', () {
+      expect(service.extractAttachAids('[ATTACH]123[/Attach]'), ['123']);
+    });
+
+    test('does not treat ordinary text or sticker code as attach aid', () {
+      expect(
+        service.extractAttachAids('正文{:9_656:}[b]粗体[/b]'),
+        isEmpty,
+      );
+    });
   });
 }

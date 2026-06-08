@@ -15,6 +15,7 @@ class ReplySubmitPayload {
     this.noticeAuthor,
     this.noticeTrimStr,
     this.noticeAuthorMsg,
+    this.uploadedAttachmentAids = const <String>[],
   });
 
   final String formHash;
@@ -27,8 +28,10 @@ class ReplySubmitPayload {
   final String? noticeAuthor;
   final String? noticeTrimStr;
   final String? noticeAuthorMsg;
+  final List<String> uploadedAttachmentAids;
 
   Map<String, String> toFormData() {
+    final attachmentAids = _normalizeAttachmentAids(uploadedAttachmentAids);
     return <String, String>{
       'formhash': formHash,
       'fid': fid,
@@ -36,6 +39,8 @@ class ReplySubmitPayload {
       'message': message,
       'replysubmit': 'yes',
       'usesig': useSignature ? '1' : '0',
+      if (attachmentAids.isNotEmpty) 'allowphoto': '1',
+      for (final aid in attachmentAids) 'attachnew[$aid][description]': '',
       if ((repPid ?? '').isNotEmpty) 'reppid': repPid!,
       if ((repPost ?? '').isNotEmpty) 'reppost': repPost!,
       if ((noticeAuthor ?? '').isNotEmpty) 'noticeauthor': noticeAuthor!,
@@ -61,7 +66,21 @@ class ReplySubmitPayload {
       noticeAuthor: draft.noticeAuthor,
       noticeTrimStr: draft.noticeTrimStr,
       noticeAuthorMsg: draft.noticeAuthorMsg,
+      uploadedAttachmentAids: draft.uploadedAttachmentAids,
     );
+  }
+
+  static List<String> _normalizeAttachmentAids(Iterable<String> aids) {
+    final seen = <String>{};
+    final normalized = <String>[];
+    for (final aid in aids) {
+      final trimmed = aid.trim();
+      if (trimmed.isEmpty || !seen.add(trimmed)) {
+        continue;
+      }
+      normalized.add(trimmed);
+    }
+    return normalized;
   }
 }
 

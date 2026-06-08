@@ -99,6 +99,50 @@ void main() {
       expect(adapter.lastBody, contains('noticeauthormsg='));
     });
 
+    test('passes uploaded attachment aids through form body', () async {
+      final adapter = _ReplyRemoteTestAdapter(responseJson: <String, dynamic>{});
+      final dataSource = _buildDataSource(adapter);
+
+      await dataSource.sendReply(
+        const ReplySubmitPayload(
+          formHash: 'fe182126',
+          fid: '33',
+          tid: '570617',
+          message: '测试回复',
+          useSignature: true,
+          uploadedAttachmentAids: ['123456', '456789'],
+        ),
+      );
+
+      expect(adapter.lastBody, contains('allowphoto=1'));
+      expect(
+        adapter.lastBody,
+        contains('attachnew%5B123456%5D%5Bdescription%5D='),
+      );
+      expect(
+        adapter.lastBody,
+        contains('attachnew%5B456789%5D%5Bdescription%5D='),
+      );
+    });
+
+    test('omits attachment fields when uploaded aids are empty', () async {
+      final adapter = _ReplyRemoteTestAdapter(responseJson: <String, dynamic>{});
+      final dataSource = _buildDataSource(adapter);
+
+      await dataSource.sendReply(
+        const ReplySubmitPayload(
+          formHash: 'fe182126',
+          fid: '33',
+          tid: '570617',
+          message: '测试回复',
+          useSignature: true,
+        ),
+      );
+
+      expect(adapter.lastBody, isNot(contains('allowphoto=')));
+      expect(adapter.lastBody, isNot(contains('attachnew')));
+    });
+
     test('adds cookies from cookie store and saves response cookies', () async {
       final adapter = _ReplyRemoteTestAdapter(
         responseJson: <String, dynamic>{},
