@@ -8,8 +8,10 @@ import 'package:y300/features/reply/data/reply_draft_repository.dart';
 import 'package:y300/features/reply/data/reply_image_picker.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
+import 'package:y300/features/reply/data/reply_upload_notification_service.dart';
 import 'package:y300/features/reply/data/sticker_picker_preferences_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
+import 'package:y300/features/reply/domain/services/reply_image_upload_coordinator.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 
@@ -127,20 +129,11 @@ void main() {
     ReplyComposerResult? poppedResult;
 
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          replyDraftRepositoryProvider.overrideWithValue(
-            _MemoryReplyDraftRepository(),
-          ),
-          replyRepositoryProvider.overrideWithValue(replyRepository),
-        ],
-        child: MaterialApp(
-          home: _ReplyComposerLauncher(
-            onResult: (result) {
-              poppedResult = result;
-            },
-          ),
-        ),
+      _buildLauncher(
+        replyRepository: replyRepository,
+        onResult: (result) {
+          poppedResult = result;
+        },
       ),
     );
 
@@ -169,17 +162,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          replyDraftRepositoryProvider.overrideWithValue(
-            _MemoryReplyDraftRepository(),
-          ),
-          replyRepositoryProvider.overrideWithValue(replyRepository),
-        ],
-        child: MaterialApp(
-          home: _ReplyComposerLauncher(onResult: (_) {}),
-        ),
-      ),
+      _buildLauncher(replyRepository: replyRepository),
     );
 
     await tester.tap(find.byKey(const Key('open-reply-composer-page')));
@@ -247,25 +230,9 @@ void main() {
     );
 
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          replyDraftRepositoryProvider.overrideWithValue(
-            _MemoryReplyDraftRepository(),
-          ),
-          replyRepositoryProvider.overrideWithValue(replyRepository),
-          stickerGroupsProvider.overrideWith((_) async => _stickerGroups),
-          stickerPickerPreferencesRepositoryProvider.overrideWithValue(
-            _FakeStickerPickerPreferencesRepository(),
-          ),
-          stickerPickerLastGroupIdProvider.overrideWith((ref) {
-            return ref
-                .read(stickerPickerPreferencesRepositoryProvider)
-                .loadLastGroupId();
-          }),
-        ],
-        child: MaterialApp(
-          home: _ReplyComposerLauncher(onResult: (_) {}),
-        ),
+      _buildLauncher(
+        replyRepository: replyRepository,
+        stickerGroups: _stickerGroups,
       ),
     );
 
@@ -373,6 +340,15 @@ void main() {
             ),
           ],
         ),
+        imageUploadCoordinator: _FakeReplyImageUploadCoordinator(
+          events: [
+            ReplyImageUploadEvent.started(
+              localId: '',
+              current: 1,
+              total: 1,
+            ),
+          ],
+        ),
       ),
     );
     await tester.pump();
@@ -383,10 +359,15 @@ void main() {
     expect(find.byKey(const Key('reply-composer-image-queue')), findsOneWidget);
     expect(find.text('first.jpg'), findsOneWidget);
     expect(find.textContaining('image/jpeg'), findsOneWidget);
-    expect(find.textContaining('等待上传'), findsOneWidget);
+    expect(find.textContaining('上传中'), findsOneWidget);
+    expect(
+      find.byKey(const Key('reply-composer-image-upload-progress')),
+      findsOneWidget,
+    );
+    expect(find.text('第 1/1 张'), findsOneWidget);
   });
 
-  testWidgets('ReplyComposerPage picking image does not change message or submit payload', (
+  testWidgets('ReplyComposerPage uploads image and appends attach code', (
     tester,
   ) async {
     final replyRepository = _FakeReplyRepository();
@@ -403,6 +384,21 @@ void main() {
             ),
           ],
         ),
+        imageUploadCoordinator: _FakeReplyImageUploadCoordinator(
+          events: [
+            ReplyImageUploadEvent.uploaded(
+              localId: '',
+              current: 1,
+              total: 1,
+              uploadedImage: ReplyUploadedImage(
+                localId: '',
+                aid: '123456',
+                uploadedAt: DateTime.utc(2026, 6, 8),
+              ),
+            ),
+            const ReplyImageUploadEvent.completed(total: 1),
+          ],
+        ),
       ),
     );
     await tester.pump();
@@ -414,10 +410,60 @@ void main() {
 
     await tester.tap(find.byKey(const Key('reply-composer-image-button')));
     await tester.pump();
+    await tester.pump();
+    final editable = tester.widget<EditableText>(find.byType(EditableText));
+    expect(editable.controller.text, '正文\n[attach]123456[/attach]');
     await tester.tap(find.byKey(const Key('reply-composer-send-button')));
     await tester.pumpAndSettle();
 
-    expect(replyRepository.sentDrafts.single.message, '正文');
+    expect(
+      replyRepository.sentDrafts.single.message,
+      '正文\n[attach]123456[/attach]',
+    );
+  });
+
+  testWidgets('ReplyComposerPage shows upload failure without changing message', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildPage(
+        imagePicker: _FakeReplyImagePicker(
+          images: const [
+            ReplyPickedImage(
+              path: '/gallery/first.jpg',
+              fileName: 'first.jpg',
+              mimeType: 'image/jpeg',
+              originalIndex: 0,
+            ),
+          ],
+        ),
+        imageUploadCoordinator: _FakeReplyImageUploadCoordinator(
+          events: [
+            ReplyImageUploadEvent.failed(
+              localId: '',
+              current: 1,
+              total: 1,
+              errorMessage: '图片上传失败',
+            ),
+            const ReplyImageUploadEvent.completed(total: 1),
+          ],
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('reply-composer-message-input')),
+      '正文',
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('reply-composer-image-button')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.textContaining('上传失败'), findsWidgets);
+    expect(find.text('正文'), findsOneWidget);
+    expect(find.textContaining('[attach]'), findsNothing);
   });
 
   testWidgets('ReplyComposerPage submits post reply with reference fields', (
@@ -531,6 +577,7 @@ Widget _buildPage({
   ReplyDraftRepository? draftRepository,
   ReplyRepository? replyRepository,
   ReplyImagePicker? imagePicker,
+  ReplyImageUploadCoordinator? imageUploadCoordinator,
   List<StickerGroup> stickerGroups = const [],
 }) {
   return ProviderScope(
@@ -543,6 +590,12 @@ Widget _buildPage({
       ),
       replyImagePickerProvider.overrideWithValue(
         imagePicker ?? _FakeReplyImagePicker(),
+      ),
+      replyImageUploadCoordinatorProvider.overrideWithValue(
+        imageUploadCoordinator ?? _FakeReplyImageUploadCoordinator(),
+      ),
+      replyUploadNotificationServiceProvider.overrideWithValue(
+        _FakeReplyUploadNotificationService(),
       ),
       stickerGroupsProvider.overrideWith((_) async => stickerGroups),
       stickerPickerPreferencesRepositoryProvider.overrideWithValue(
@@ -563,6 +616,8 @@ Widget _buildPage({
 Widget _buildLauncher({
   ReplyDraftRepository? draftRepository,
   ReplyRepository? replyRepository,
+  List<StickerGroup> stickerGroups = const [],
+  ValueChanged<ReplyComposerResult>? onResult,
 }) {
   return ProviderScope(
     overrides: [
@@ -573,7 +628,13 @@ Widget _buildLauncher({
         replyRepository ?? _FakeReplyRepository(),
       ),
       replyImagePickerProvider.overrideWithValue(_FakeReplyImagePicker()),
-      stickerGroupsProvider.overrideWith((_) async => const <StickerGroup>[]),
+      replyImageUploadCoordinatorProvider.overrideWithValue(
+        _FakeReplyImageUploadCoordinator(),
+      ),
+      replyUploadNotificationServiceProvider.overrideWithValue(
+        _FakeReplyUploadNotificationService(),
+      ),
+      stickerGroupsProvider.overrideWith((_) async => stickerGroups),
       stickerPickerPreferencesRepositoryProvider.overrideWithValue(
         _FakeStickerPickerPreferencesRepository(),
       ),
@@ -584,7 +645,7 @@ Widget _buildLauncher({
       }),
     ],
     child: MaterialApp(
-      home: _ReplyComposerLauncher(onResult: (_) {}),
+      home: _ReplyComposerLauncher(onResult: onResult ?? ((_) {})),
     ),
   );
 }
@@ -724,6 +785,85 @@ class _FakeReplyImagePicker implements ReplyImagePicker {
   Future<List<ReplyPickedImage>> pickImagesInOrder() async {
     return images;
   }
+}
+
+class _FakeReplyImageUploadCoordinator implements ReplyImageUploadCoordinator {
+  _FakeReplyImageUploadCoordinator({
+    this.events = const <ReplyImageUploadEvent>[],
+  });
+
+  final List<ReplyImageUploadEvent> events;
+
+  @override
+  void cancel() {}
+
+  @override
+  Stream<ReplyImageUploadEvent> uploadInOrder({
+    required String fid,
+    required List<ReplyImageAttachment> attachments,
+  }) async* {
+    for (final event in events) {
+      if (event.type == ReplyImageUploadEventType.completed) {
+        yield ReplyImageUploadEvent.completed(total: event.total);
+        continue;
+      }
+      final localId = event.localId.isNotEmpty
+          ? event.localId
+          : attachments[
+                  (event.current - 1).clamp(0, attachments.length - 1).toInt()]
+              .localId;
+      yield switch (event.type) {
+        ReplyImageUploadEventType.started => ReplyImageUploadEvent.started(
+            localId: localId,
+            current: event.current,
+            total: event.total,
+          ),
+        ReplyImageUploadEventType.progress => ReplyImageUploadEvent.progress(
+            localId: localId,
+            current: event.current,
+            total: event.total,
+            progress: event.progress ?? 0,
+          ),
+        ReplyImageUploadEventType.uploaded => ReplyImageUploadEvent.uploaded(
+            localId: localId,
+            current: event.current,
+            total: event.total,
+            uploadedImage: ReplyUploadedImage(
+              localId: localId,
+              aid: event.uploadedImage!.aid,
+              uploadedAt: event.uploadedImage!.uploadedAt,
+            ),
+          ),
+        ReplyImageUploadEventType.failed => ReplyImageUploadEvent.failed(
+            localId: localId,
+            current: event.current,
+            total: event.total,
+            errorMessage: event.errorMessage ?? '图片上传失败',
+          ),
+        ReplyImageUploadEventType.completed => ReplyImageUploadEvent.completed(
+            total: event.total,
+          ),
+      };
+    }
+  }
+}
+
+class _FakeReplyUploadNotificationService
+    implements ReplyUploadNotificationService {
+  @override
+  Future<void> clear() async {}
+
+  @override
+  Future<void> showFailure({
+    required int failedCount,
+    required int total,
+  }) async {}
+
+  @override
+  Future<void> showProgress({
+    required int current,
+    required int total,
+  }) async {}
 }
 
 class _FakeReplyRepository implements ReplyRepository {

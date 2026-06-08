@@ -28,6 +28,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
   ReplyComposerController? _controller;
   bool _didApplyRestoredDraft = false;
   bool _allowPopWithoutConfirm = false;
+  String? _lastAppliedStateMessage;
 
   @override
   void initState() {
@@ -58,7 +59,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
     _controller = controller;
     final state = asyncState.value;
     if (state != null) {
-      _applyRestoredDraftOnce(state);
+      _syncMessageController(state);
     }
 
     return PopScope(
@@ -106,7 +107,10 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
             stickers: _flattenStickers(stickerGroups),
             messageController: _messageController,
             onModeChanged: controller.switchMode,
-            onMessageChanged: controller.updateMessage,
+            onMessageChanged: (value) {
+              _lastAppliedStateMessage = value;
+              controller.updateMessage(value);
+            },
             onUseSignatureChanged: controller.toggleUseSignature,
             onRetryPrepare: controller.retryPreparePostReply,
             onStickerPressed: () {
@@ -124,8 +128,19 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
     ];
   }
 
-  void _applyRestoredDraftOnce(ReplyComposerState state) {
+  void _syncMessageController(ReplyComposerState state) {
     if (_didApplyRestoredDraft) {
+      if (_lastAppliedStateMessage == state.message ||
+          _messageController.text == state.message) {
+        _lastAppliedStateMessage = state.message;
+        return;
+      }
+      final nextOffset = state.message.length;
+      _messageController.value = TextEditingValue(
+        text: state.message,
+        selection: TextSelection.collapsed(offset: nextOffset),
+      );
+      _lastAppliedStateMessage = state.message;
       return;
     }
     _didApplyRestoredDraft = true;
@@ -133,6 +148,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
       text: state.message,
       selection: TextSelection.collapsed(offset: state.message.length),
     );
+    _lastAppliedStateMessage = state.message;
   }
 
   Future<void> _submit(
@@ -235,6 +251,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
       selection: TextSelection.collapsed(offset: nextOffset),
     );
     controller.updateMessage(nextText);
+    _lastAppliedStateMessage = nextText;
   }
 }
 
@@ -342,6 +359,7 @@ class _ReplyComposerBody extends StatelessWidget {
           if (state.imageAttachments.isNotEmpty) ...[
             const SizedBox(height: 12),
             _ReplyImageAttachmentQueue(
+              state: state,
               attachments: state.imageAttachments,
             ),
           ],
@@ -372,9 +390,11 @@ class _ReplyComposerBody extends StatelessWidget {
 
 class _ReplyImageAttachmentQueue extends StatelessWidget {
   const _ReplyImageAttachmentQueue({
+    required this.state,
     required this.attachments,
   });
 
+  final ReplyComposerState state;
   final List<ReplyImageAttachment> attachments;
 
   @override
@@ -388,7 +408,26 @@ class _ReplyImageAttachmentQueue extends StatelessWidget {
         color: colorScheme.surface,
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (state.isUploadingImages) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Text(
+                '第 ${state.imageUploadCurrent}/${state.imageUploadTotal} 张',
+                key: const Key('reply-composer-image-upload-count'),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: LinearProgressIndicator(
+                key: const Key('reply-composer-image-upload-progress'),
+                value: state.imageUploadTotal > 0
+                    ? state.imageUploadCurrent / state.imageUploadTotal
+                    : null,
+              ),
+            ),
+          ],
           for (final attachment in attachments)
             ListTile(
               key: Key(
@@ -396,12 +435,27 @@ class _ReplyImageAttachmentQueue extends StatelessWidget {
               ),
               leading: const Icon(Icons.image_outlined),
               title: Text(attachment.fileName),
-              subtitle: Text('${attachment.mimeType} · 等待上传'),
+              subtitle: Text(
+                '${attachment.mimeType} · ${_statusLabel(attachment)}',
+              ),
               dense: true,
             ),
         ],
       ),
     );
+  }
+
+  String _statusLabel(ReplyImageAttachment attachment) {
+    return switch (attachment.status) {
+      ReplyImageAttachmentStatus.local => '等待上传',
+      ReplyImageAttachmentStatus.uploading => '上传中',
+      ReplyImageAttachmentStatus.uploaded => '已上传',
+      ReplyImageAttachmentStatus.failed =>
+        attachment.errorMessage?.trim().isNotEmpty == true
+            ? '上传失败：${attachment.errorMessage}'
+            : '上传失败',
+      ReplyImageAttachmentStatus.expired => '已过期',
+    };
   }
 }
 

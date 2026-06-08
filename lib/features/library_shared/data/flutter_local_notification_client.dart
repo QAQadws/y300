@@ -11,11 +11,22 @@ import 'package:y300/features/library_shared/domain/services/library_task_notifi
 /// All plugin types are confined to this file so the rest of the notification
 /// stack stays platform agnostic and unit testable.
 class FlutterLocalNotificationClient implements LibraryTaskNotificationClient {
-  FlutterLocalNotificationClient({FlutterLocalNotificationsPlugin? plugin})
-      : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
+  FlutterLocalNotificationClient({
+    FlutterLocalNotificationsPlugin? plugin,
+    String channelId = FlutterLocalLibraryTaskNotificationService.channelId,
+    String channelName = FlutterLocalLibraryTaskNotificationService.channelName,
+    String channelDescription =
+        FlutterLocalLibraryTaskNotificationService.channelDescription,
+  })  : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
+        _channelId = channelId,
+        _channelName = channelName,
+        _channelDescription = channelDescription;
 
   final FlutterLocalNotificationsPlugin _plugin;
-  bool _channelCreated = false;
+  final String _channelId;
+  final String _channelName;
+  final String _channelDescription;
+  final Set<String> _createdChannelIds = <String>{};
 
   @override
   Future<void> initialize() async {
@@ -38,7 +49,8 @@ class FlutterLocalNotificationClient implements LibraryTaskNotificationClient {
   }
 
   Future<void> _ensureAndroidChannel() async {
-    if (_channelCreated || defaultTargetPlatform != TargetPlatform.android) {
+    if (_createdChannelIds.contains(_channelId) ||
+        defaultTargetPlatform != TargetPlatform.android) {
       return;
     }
     final android = _plugin.resolvePlatformSpecificImplementation<
@@ -47,17 +59,16 @@ class FlutterLocalNotificationClient implements LibraryTaskNotificationClient {
       return;
     }
     await android.createNotificationChannel(
-      const AndroidNotificationChannel(
-        FlutterLocalLibraryTaskNotificationService.channelId,
-        FlutterLocalLibraryTaskNotificationService.channelName,
-        description:
-            FlutterLocalLibraryTaskNotificationService.channelDescription,
+      AndroidNotificationChannel(
+        _channelId,
+        _channelName,
+        description: _channelDescription,
         importance: Importance.low,
         playSound: false,
         enableVibration: false,
       ),
     );
-    _channelCreated = true;
+    _createdChannelIds.add(_channelId);
   }
 
   @override
@@ -103,10 +114,9 @@ class FlutterLocalNotificationClient implements LibraryTaskNotificationClient {
   @override
   Future<void> show(LibraryTaskNotificationClientRequest request) async {
     final androidDetails = AndroidNotificationDetails(
-      FlutterLocalLibraryTaskNotificationService.channelId,
-      FlutterLocalLibraryTaskNotificationService.channelName,
-      channelDescription:
-          FlutterLocalLibraryTaskNotificationService.channelDescription,
+      _channelId,
+      _channelName,
+      channelDescription: _channelDescription,
       importance: Importance.low,
       priority: Priority.low,
       ongoing: request.ongoing,

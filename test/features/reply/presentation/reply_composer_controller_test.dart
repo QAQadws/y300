@@ -7,7 +7,9 @@ import 'package:y300/features/reply/data/reply_draft_repository.dart';
 import 'package:y300/features/reply/data/reply_image_picker.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
+import 'package:y300/features/reply/data/reply_upload_notification_service.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
+import 'package:y300/features/reply/domain/services/reply_image_upload_coordinator.dart';
 import 'package:y300/features/reply/presentation/reply_composer_controller.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 
@@ -215,7 +217,7 @@ void main() {
       expect(state.restoredDraft, isTrue);
     });
 
-    test('pickImages adds local image attachments in picker order', () async {
+    test('pickImages uploads selected images and appends attach codes', () async {
       final imagePicker = _FakeReplyImagePicker(
         images: const [
           ReplyPickedImage(
@@ -232,8 +234,46 @@ void main() {
           ),
         ],
       );
+      final uploadCoordinator = _FakeReplyImageUploadCoordinator(
+        events: [
+          ReplyImageUploadEvent.started(
+            localId: '',
+            current: 1,
+            total: 2,
+          ),
+          ReplyImageUploadEvent.uploaded(
+            localId: '',
+            current: 1,
+            total: 2,
+            uploadedImage: ReplyUploadedImage(
+              localId: '',
+              aid: '111',
+              uploadedAt: DateTime.utc(2026, 6, 8),
+            ),
+          ),
+          ReplyImageUploadEvent.started(
+            localId: '',
+            current: 2,
+            total: 2,
+          ),
+          ReplyImageUploadEvent.uploaded(
+            localId: '',
+            current: 2,
+            total: 2,
+            uploadedImage: ReplyUploadedImage(
+              localId: '',
+              aid: '222',
+              uploadedAt: DateTime.utc(2026, 6, 8),
+            ),
+          ),
+          const ReplyImageUploadEvent.completed(total: 2),
+        ],
+      );
       final args = _threadArgs(tid: '572063');
-      final container = _buildContainer(imagePicker: imagePicker);
+      final container = _buildContainer(
+        imagePicker: imagePicker,
+        imageUploadCoordinator: uploadCoordinator,
+      );
       addTearDown(container.dispose);
       final subscription = _keepComposerAlive(container, args);
       addTearDown(subscription.close);
@@ -242,6 +282,7 @@ void main() {
       await container
           .read(replyComposerControllerProvider(args).notifier)
           .pickImages();
+      await _drainMicrotasks();
 
       final state = container.read(replyComposerControllerProvider(args)).value!;
       expect(imagePicker.pickCallCount, 1);
@@ -253,11 +294,11 @@ void main() {
       expect(
         state.imageAttachments.map((item) => item.status),
         [
-          ReplyImageAttachmentStatus.local,
-          ReplyImageAttachmentStatus.local,
+          ReplyImageAttachmentStatus.uploaded,
+          ReplyImageAttachmentStatus.uploaded,
         ],
       );
-      expect(state.message, isEmpty);
+      expect(state.message, '[attach]111[/attach]\n[attach]222[/attach]');
     });
 
     test('pickImages cancellation does not change state or draft', () async {
@@ -283,6 +324,114 @@ void main() {
       expect(state.imageAttachments, isEmpty);
       expect(state.message, '正文');
       expect(await draftRepository.loadDraft(args.identity), isNull);
+    });
+
+    test('pickImages marks failed upload and keeps failed aid out of message', () async {
+      final imagePicker = _FakeReplyImagePicker(
+        images: const [
+          ReplyPickedImage(
+            path: '/gallery/first.jpg',
+            fileName: 'first.jpg',
+            mimeType: 'image/jpeg',
+            originalIndex: 0,
+          ),
+          ReplyPickedImage(
+            path: '/gallery/second.jpg',
+            fileName: 'second.jpg',
+            mimeType: 'image/jpeg',
+            originalIndex: 1,
+          ),
+        ],
+      );
+      final uploadCoordinator = _FakeReplyImageUploadCoordinator(
+        events: [
+          ReplyImageUploadEvent.failed(
+            localId: '',
+            current: 1,
+            total: 2,
+            errorMessage: '第一张失败',
+          ),
+          ReplyImageUploadEvent.uploaded(
+            localId: '',
+            current: 2,
+            total: 2,
+            uploadedImage: ReplyUploadedImage(
+              localId: '',
+              aid: '222',
+              uploadedAt: DateTime.utc(2026, 6, 8),
+            ),
+          ),
+          const ReplyImageUploadEvent.completed(total: 2),
+        ],
+      );
+      final args = _threadArgs(tid: '572063');
+      final container = _buildContainer(
+        imagePicker: imagePicker,
+        imageUploadCoordinator: uploadCoordinator,
+      );
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(replyComposerControllerProvider(args).future);
+
+      await container
+          .read(replyComposerControllerProvider(args).notifier)
+          .pickImages();
+      await _drainMicrotasks();
+
+      final state = container.read(replyComposerControllerProvider(args)).value!;
+      expect(
+        state.imageAttachments.map((attachment) => attachment.status),
+        [
+          ReplyImageAttachmentStatus.failed,
+          ReplyImageAttachmentStatus.uploaded,
+        ],
+      );
+      expect(state.message, '[attach]222[/attach]');
+      expect(state.imageUploadError, '第一张失败');
+    });
+
+    test('pickImages does not run while upload is active', () async {
+      final uploadCompleter = Completer<void>();
+      final imagePicker = _FakeReplyImagePicker(
+        images: const [
+          ReplyPickedImage(
+            path: '/gallery/first.jpg',
+            fileName: 'first.jpg',
+            mimeType: 'image/jpeg',
+            originalIndex: 0,
+          ),
+        ],
+      );
+      final uploadCoordinator = _FakeReplyImageUploadCoordinator(
+        events: const [
+          ReplyImageUploadEvent.started(
+            localId: '',
+            current: 1,
+            total: 1,
+          ),
+        ],
+        holdUntil: uploadCompleter.future,
+      );
+      final args = _threadArgs(tid: '572063');
+      final container = _buildContainer(
+        imagePicker: imagePicker,
+        imageUploadCoordinator: uploadCoordinator,
+      );
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(replyComposerControllerProvider(args).future);
+
+      final controller = container.read(
+        replyComposerControllerProvider(args).notifier,
+      );
+      unawaited(controller.pickImages());
+      await _drainMicrotasks();
+      await controller.pickImages();
+      uploadCompleter.complete();
+
+      expect(imagePicker.pickCallCount, 1);
     });
 
     test('pickImages exposes picker error', () async {
@@ -526,6 +675,8 @@ ProviderContainer _buildContainer({
   ReplyDraftRepository? draftRepository,
   ReplyRepository? replyRepository,
   ReplyImagePicker? imagePicker,
+  ReplyImageUploadCoordinator? imageUploadCoordinator,
+  ReplyUploadNotificationService? uploadNotificationService,
 }) {
   return ProviderContainer(
     overrides: [
@@ -537,6 +688,12 @@ ProviderContainer _buildContainer({
       ),
       replyImagePickerProvider.overrideWithValue(
         imagePicker ?? _FakeReplyImagePicker(),
+      ),
+      replyImageUploadCoordinatorProvider.overrideWithValue(
+        imageUploadCoordinator ?? _FakeReplyImageUploadCoordinator(),
+      ),
+      replyUploadNotificationServiceProvider.overrideWithValue(
+        uploadNotificationService ?? _FakeReplyUploadNotificationService(),
       ),
     ],
   );
@@ -552,9 +709,10 @@ ProviderSubscription<AsyncValue<ReplyComposerState>> _keepComposerAlive(
   );
 }
 
-Future<void> _drainMicrotasks() async {
-  await Future<void>.delayed(Duration.zero);
-  await Future<void>.delayed(Duration.zero);
+Future<void> _drainMicrotasks({int rounds = 4}) async {
+  for (var index = 0; index < rounds; index += 1) {
+    await Future<void>.delayed(Duration.zero);
+  }
 }
 
 class _MemoryReplyDraftRepository implements ReplyDraftRepository {
@@ -625,6 +783,113 @@ class _FakeReplyImagePicker implements ReplyImagePicker {
       throw error;
     }
     return images;
+  }
+}
+
+class _FakeReplyImageUploadCoordinator implements ReplyImageUploadCoordinator {
+  _FakeReplyImageUploadCoordinator({
+    this.events = const <ReplyImageUploadEvent>[],
+    this.holdUntil,
+  });
+
+  final List<ReplyImageUploadEvent> events;
+  final Future<void>? holdUntil;
+  bool cancelled = false;
+
+  @override
+  void cancel() {
+    cancelled = true;
+  }
+
+  @override
+  Stream<ReplyImageUploadEvent> uploadInOrder({
+    required String fid,
+    required List<ReplyImageAttachment> attachments,
+  }) async* {
+    for (var index = 0; index < events.length; index += 1) {
+      if (cancelled) {
+        return;
+      }
+      final event = events[index];
+      if (event.type == ReplyImageUploadEventType.completed) {
+        yield ReplyImageUploadEvent.completed(total: event.total);
+        continue;
+      }
+      final localId = event.localId.isNotEmpty
+          ? event.localId
+          : attachments[
+                  (event.current - 1).clamp(0, attachments.length - 1).toInt()]
+              .localId;
+      yield _eventWithLocalId(event, localId);
+    }
+    final holdUntil = this.holdUntil;
+    if (holdUntil != null) {
+      await holdUntil;
+    }
+  }
+
+  ReplyImageUploadEvent _eventWithLocalId(
+    ReplyImageUploadEvent event,
+    String localId,
+  ) {
+    return switch (event.type) {
+      ReplyImageUploadEventType.started => ReplyImageUploadEvent.started(
+          localId: localId,
+          current: event.current,
+          total: event.total,
+        ),
+      ReplyImageUploadEventType.progress => ReplyImageUploadEvent.progress(
+          localId: localId,
+          current: event.current,
+          total: event.total,
+          progress: event.progress ?? 0,
+        ),
+      ReplyImageUploadEventType.uploaded => ReplyImageUploadEvent.uploaded(
+          localId: localId,
+          current: event.current,
+          total: event.total,
+          uploadedImage: ReplyUploadedImage(
+            localId: localId,
+            aid: event.uploadedImage!.aid,
+            uploadedAt: event.uploadedImage!.uploadedAt,
+          ),
+        ),
+      ReplyImageUploadEventType.failed => ReplyImageUploadEvent.failed(
+          localId: localId,
+          current: event.current,
+          total: event.total,
+          errorMessage: event.errorMessage ?? '上传失败',
+        ),
+      ReplyImageUploadEventType.completed => ReplyImageUploadEvent.completed(
+          total: event.total,
+        ),
+    };
+  }
+}
+
+class _FakeReplyUploadNotificationService
+    implements ReplyUploadNotificationService {
+  final List<String> calls = <String>[];
+
+  @override
+  Future<void> clear() async {
+    calls.add('clear');
+  }
+
+  @override
+  Future<void> showFailure({
+    required int failedCount,
+    required int total,
+  }) async {
+    calls.add('failure:$failedCount/$total');
+  }
+
+  @override
+  Future<void> showProgress({
+    required int current,
+    required int total,
+  }) async {
+    calls.add('progress:$current/$total');
   }
 }
 

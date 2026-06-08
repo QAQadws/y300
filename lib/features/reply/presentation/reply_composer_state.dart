@@ -68,6 +68,9 @@ class ReplyComposerState {
     required this.isPreparing,
     required this.restoredDraft,
     required this.imageAttachments,
+    required this.isUploadingImages,
+    required this.imageUploadCurrent,
+    required this.imageUploadTotal,
     this.preparation,
     this.preparationError,
     this.errorMessage,
@@ -82,6 +85,9 @@ class ReplyComposerState {
     bool isPreparing = false,
     bool restoredDraft = false,
     List<ReplyImageAttachment> imageAttachments = const [],
+    bool isUploadingImages = false,
+    int imageUploadCurrent = 0,
+    int imageUploadTotal = 0,
     ReplyPreparation? preparation,
     String? preparationError,
   }) {
@@ -94,6 +100,9 @@ class ReplyComposerState {
       isPreparing: isPreparing,
       restoredDraft: restoredDraft,
       imageAttachments: imageAttachments,
+      isUploadingImages: isUploadingImages,
+      imageUploadCurrent: imageUploadCurrent,
+      imageUploadTotal: imageUploadTotal,
       preparation: preparation,
       preparationError: preparationError,
     );
@@ -107,12 +116,15 @@ class ReplyComposerState {
   final bool isPreparing;
   final bool restoredDraft;
   final List<ReplyImageAttachment> imageAttachments;
+  final bool isUploadingImages;
+  final int imageUploadCurrent;
+  final int imageUploadTotal;
   final ReplyPreparation? preparation;
   final String? preparationError;
   final String? errorMessage;
   final String? imageUploadError;
 
-  bool get canPickImages => !isSubmitting && !isPreparing;
+  bool get canPickImages => !isSubmitting && !isPreparing && !isUploadingImages;
 
   bool get canSubmit {
     if (message.trim().isEmpty || isSubmitting || isPreparing) {
@@ -132,6 +144,9 @@ class ReplyComposerState {
     bool? isPreparing,
     bool? restoredDraft,
     List<ReplyImageAttachment>? imageAttachments,
+    bool? isUploadingImages,
+    int? imageUploadCurrent,
+    int? imageUploadTotal,
     ReplyPreparation? preparation,
     String? preparationError,
     String? errorMessage,
@@ -150,6 +165,9 @@ class ReplyComposerState {
       isPreparing: isPreparing ?? this.isPreparing,
       restoredDraft: restoredDraft ?? this.restoredDraft,
       imageAttachments: imageAttachments ?? this.imageAttachments,
+      isUploadingImages: isUploadingImages ?? this.isUploadingImages,
+      imageUploadCurrent: imageUploadCurrent ?? this.imageUploadCurrent,
+      imageUploadTotal: imageUploadTotal ?? this.imageUploadTotal,
       preparation: clearPreparation ? null : preparation ?? this.preparation,
       preparationError: clearPreparationError
           ? null

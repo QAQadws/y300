@@ -6,7 +6,10 @@ import 'package:y300/features/reply/data/reply_draft_repository.dart';
 import 'package:y300/features/reply/data/reply_image_picker.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
+import 'package:y300/features/reply/data/reply_upload_notification_service.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
+import 'package:y300/features/reply/domain/services/reply_attach_bbcode_service.dart';
+import 'package:y300/features/reply/domain/services/reply_image_upload_coordinator.dart';
 import 'package:y300/features/reply/domain/services/reply_submission_error_presenter.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 
@@ -26,7 +29,12 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
   ReplyRepository? _replyRepository;
   ReplySubmissionErrorPresenter? _errorPresenter;
   ReplyImagePicker? _imagePicker;
+  ReplyImageUploadCoordinator? _imageUploadCoordinator;
+  ReplyUploadNotificationService? _uploadNotificationService;
+  ReplyAttachBbCodeService? _attachBbCodeService;
   ReplyComposerState? _latestState;
+  StreamSubscription<ReplyImageUploadEvent>? _imageUploadSubscription;
+  Set<String> _activeUploadLocalIds = const <String>{};
 
   @override
   FutureOr<ReplyComposerState> build() async {
@@ -34,8 +42,14 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
     _replyRepository = ref.read(replyRepositoryProvider);
     _errorPresenter = ref.read(replySubmissionErrorPresenterProvider);
     _imagePicker = ref.read(replyImagePickerProvider);
+    _imageUploadCoordinator = ref.read(replyImageUploadCoordinatorProvider);
+    _uploadNotificationService =
+        ref.read(replyUploadNotificationServiceProvider);
+    _attachBbCodeService = ref.read(replyAttachBbCodeServiceProvider);
     ref.onDispose(() {
       _saveTimer?.cancel();
+      _imageUploadCoordinator?.cancel();
+      unawaited(_imageUploadSubscription?.cancel());
       final current = _latestState;
       if (current != null) {
         unawaited(_saveSnapshot(current));
@@ -133,14 +147,192 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
       _setDataState(
         latest.copyWith(
           imageAttachments: attachments,
+          isUploadingImages: true,
+          imageUploadCurrent: 0,
+          imageUploadTotal: sortedPickedImages.length,
           clearImageUploadError: true,
         ),
       );
+      _startImageUpload(attachments.skip(existingCount).toList(growable: false));
     } on ReplyImagePickerException catch (_) {
+      final latest = state.value ?? current;
       _setDataState(
-        current.copyWith(imageUploadError: '选择图片失败，请重试'),
+        latest.copyWith(imageUploadError: '选择图片失败，请重试'),
       );
     }
+  }
+
+  void _startImageUpload(List<ReplyImageAttachment> attachments) {
+    if (attachments.isEmpty) {
+      return;
+    }
+    unawaited(_imageUploadSubscription?.cancel());
+    _activeUploadLocalIds = attachments
+        .map((attachment) => attachment.localId)
+        .toSet();
+    final stream = _imageUploadCoordinator!.uploadInOrder(
+      fid: _args.target.fid,
+      attachments: attachments,
+    );
+    _imageUploadSubscription = stream.listen(
+      _handleImageUploadEvent,
+      onError: (Object error, StackTrace stackTrace) {
+        final current = state.value ?? _latestState;
+        if (current == null) {
+          return;
+        }
+        _activeUploadLocalIds = const <String>{};
+        _setDataState(
+          current.copyWith(
+            isUploadingImages: false,
+            imageUploadError: '图片上传失败，请重试',
+          ),
+        );
+      },
+    );
+  }
+
+  void _handleImageUploadEvent(ReplyImageUploadEvent event) {
+    final current = state.value ?? _latestState;
+    if (current == null) {
+      return;
+    }
+    switch (event.type) {
+      case ReplyImageUploadEventType.started:
+        _setDataState(
+          current.copyWith(
+            imageAttachments: _replaceAttachmentStatus(
+              current.imageAttachments,
+              localId: event.localId,
+              status: ReplyImageAttachmentStatus.uploading,
+            ),
+            isUploadingImages: true,
+            imageUploadCurrent: event.current,
+            imageUploadTotal: event.total,
+          ),
+        );
+        unawaited(_uploadNotificationService?.showProgress(
+          current: event.current,
+          total: event.total,
+        ));
+        break;
+      case ReplyImageUploadEventType.progress:
+        _setDataState(
+          current.copyWith(
+            isUploadingImages: true,
+            imageUploadCurrent: event.current,
+            imageUploadTotal: event.total,
+          ),
+        );
+        unawaited(_uploadNotificationService?.showProgress(
+          current: event.current,
+          total: event.total,
+        ));
+        break;
+      case ReplyImageUploadEventType.uploaded:
+        final uploadedImage = event.uploadedImage;
+        if (uploadedImage == null) {
+          return;
+        }
+        final nextMessage = _attachBbCodeService!.appendAttachCodes(
+          current.message,
+          [uploadedImage.aid],
+        );
+        final nextState = current.copyWith(
+          message: nextMessage,
+          imageAttachments: _replaceAttachmentStatus(
+            current.imageAttachments,
+            localId: event.localId,
+            status: ReplyImageAttachmentStatus.uploaded,
+            aid: uploadedImage.aid,
+            uploadedAt: uploadedImage.uploadedAt,
+            clearErrorMessage: true,
+          ),
+          isUploadingImages: true,
+          imageUploadCurrent: event.current,
+          imageUploadTotal: event.total,
+        );
+        _setDataState(nextState);
+        _scheduleDraftSave();
+        unawaited(_uploadNotificationService?.showProgress(
+          current: event.current,
+          total: event.total,
+        ));
+        break;
+      case ReplyImageUploadEventType.failed:
+        _setDataState(
+          current.copyWith(
+            imageAttachments: _replaceAttachmentStatus(
+              current.imageAttachments,
+              localId: event.localId,
+              status: ReplyImageAttachmentStatus.failed,
+              errorMessage: event.errorMessage ?? '图片上传失败',
+            ),
+            isUploadingImages: true,
+            imageUploadCurrent: event.current,
+            imageUploadTotal: event.total,
+            imageUploadError: event.errorMessage ?? '图片上传失败，请重试',
+          ),
+        );
+        break;
+      case ReplyImageUploadEventType.completed:
+        final failedCount = (state.value ?? current)
+            .imageAttachments
+            .where(
+              (attachment) =>
+                  _activeUploadLocalIds.contains(attachment.localId) &&
+                  attachment.status == ReplyImageAttachmentStatus.failed,
+            )
+            .length;
+        _activeUploadLocalIds = const <String>{};
+        _setDataState(
+          current.copyWith(
+            isUploadingImages: false,
+            imageUploadCurrent: event.total,
+            imageUploadTotal: event.total,
+          ),
+        );
+        if (failedCount > 0) {
+          unawaited(_uploadNotificationService?.showFailure(
+            failedCount: failedCount,
+            total: event.total,
+          ));
+        } else {
+          unawaited(_uploadNotificationService?.clear());
+        }
+        break;
+    }
+  }
+
+  List<ReplyImageAttachment> _replaceAttachmentStatus(
+    List<ReplyImageAttachment> attachments, {
+    required String localId,
+    required ReplyImageAttachmentStatus status,
+    String? aid,
+    DateTime? uploadedAt,
+    String? errorMessage,
+    bool clearErrorMessage = false,
+  }) {
+    return [
+      for (final attachment in attachments)
+        if (attachment.localId == localId)
+          ReplyImageAttachment(
+            localId: attachment.localId,
+            localPath: attachment.localPath,
+            fileName: attachment.fileName,
+            mimeType: attachment.mimeType,
+            order: attachment.order,
+            status: status,
+            aid: aid ?? attachment.aid,
+            uploadedAt: uploadedAt ?? attachment.uploadedAt,
+            errorMessage: clearErrorMessage
+                ? null
+                : errorMessage ?? attachment.errorMessage,
+            cachePath: attachment.cachePath,
+          )
+        else
+          attachment,
+    ];
   }
 
   Future<void> flushDraft() async {
