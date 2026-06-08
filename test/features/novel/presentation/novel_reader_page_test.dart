@@ -256,7 +256,127 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repository.latestPreferences?.flowMode, NovelReaderFlowMode.pagedLtr);
+    expect(find.byKey(const Key('novel-reader-paged-view')), findsOneWidget);
+    expect(find.byKey(const Key('novel-reader-paragraph-list')), findsNothing);
+  });
+
+  testWidgets('NovelReaderPage renders paged mode and saves page index', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+      ),
+      firstParagraphs: List<String>.generate(
+        18,
+        (index) => '分页段落 $index ${List<String>.filled(70, '正文').join()}',
+      ),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-paged-view')), findsOneWidget);
+    expect(find.byKey(const Key('novel-reader-paragraph-list')), findsNothing);
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-next-button')));
+    await tester.pumpAndSettle();
+
+    expect(repository.readingProgress?.flowMode, NovelReaderFlowMode.pagedLtr);
+    expect(repository.readingProgress?.pageIndex, greaterThan(0));
+  });
+
+  testWidgets('NovelReaderPage restores saved paged page', (tester) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+      ),
+      firstParagraphs: List<String>.generate(
+        18,
+        (index) => '恢复分页段落 $index ${List<String>.filled(70, '正文').join()}',
+      ),
+      readingProgress: NovelReadingProgress(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+        scrollOffset: 0,
+        updatedAt: DateTime(2026, 6, 1),
+        flowMode: NovelReaderFlowMode.pagedLtr,
+        pageIndex: 1,
+      ),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    final currentLabel = tester.widget<Text>(
+      find.byKey(const Key('shared-reader-current-label')),
+    );
+    expect(currentLabel.data, '2');
+  });
+
+  testWidgets('NovelReaderPage right tap turns next page in paged LTR', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+      ),
+      firstParagraphs: List<String>.generate(
+        18,
+        (index) => '右翻分页段落 $index ${List<String>.filled(70, '正文').join()}',
+      ),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await tester.tapAt(const Offset(720, 300));
+    await tester.pump(const Duration(milliseconds: 420));
+    await tester.pumpAndSettle();
+    expect(repository.readingProgress?.flowMode, NovelReaderFlowMode.pagedLtr);
+    expect(repository.readingProgress?.pageIndex, greaterThan(0));
+  });
+
+  testWidgets('NovelReaderPage left tap turns next page in paged RTL', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedRtl,
+      ),
+      firstParagraphs: List<String>.generate(
+        18,
+        (index) => '左翻分页段落 $index ${List<String>.filled(70, '正文').join()}',
+      ),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await tester.tapAt(const Offset(80, 300));
+    await tester.pump(const Duration(milliseconds: 420));
+    await tester.pumpAndSettle();
+    expect(repository.readingProgress?.flowMode, NovelReaderFlowMode.pagedRtl);
+    expect(repository.readingProgress?.pageIndex, greaterThan(0));
+  });
+
+  testWidgets('NovelReaderPage vertical mode does not bind paged view', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      firstParagraphs: List<String>.generate(
+        18,
+        (index) => '滚动段落 $index ${List<String>.filled(70, '正文').join()}',
+      ),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
     expect(find.byKey(const Key('novel-reader-paragraph-list')), findsOneWidget);
+    expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
+
+    await tester.tapAt(const Offset(720, 300));
+    await tester.pumpAndSettle();
+
+    expect(repository.readingProgress?.pageIndex ?? 0, 0);
   });
 
   testWidgets('NovelReaderPage constrains wide content column', (tester) async {
@@ -724,6 +844,10 @@ class _FakeNovelRepository implements NovelRepository {
     required String novelId,
     required String episodeId,
     required double scrollOffset,
+    NovelReaderFlowMode flowMode = NovelReaderFlowMode.vertical,
+    int pageIndex = 0,
+    String? anchorNodeId,
+    double progressPercent = 0,
   }) async {
     savedProgressEpisodeIds.add(episodeId);
     lastSavedOffset = scrollOffset;
@@ -732,6 +856,10 @@ class _FakeNovelRepository implements NovelRepository {
       episodeId: episodeId,
       scrollOffset: scrollOffset,
       updatedAt: DateTime(2026, 6, 8),
+      flowMode: flowMode,
+      pageIndex: pageIndex,
+      anchorNodeId: anchorNodeId,
+      progressPercent: progressPercent,
     );
   }
 

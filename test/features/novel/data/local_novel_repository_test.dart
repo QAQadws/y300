@@ -89,6 +89,10 @@ void main() {
         novelId: 'novel:55:300',
         episodeId: episodes.first.episodeId,
         scrollOffset: 222.5,
+        flowMode: NovelReaderFlowMode.pagedLtr,
+        pageIndex: 3,
+        anchorNodeId: 'node-3',
+        progressPercent: 0.42,
       );
 
       final preferences = await repository.getReaderPreferences();
@@ -107,6 +111,35 @@ void main() {
       expect(progress, isNotNull);
       expect(progress!.episodeId, episodes.first.episodeId);
       expect(progress.scrollOffset, 222.5);
+      expect(progress.flowMode, NovelReaderFlowMode.pagedLtr);
+      expect(progress.pageIndex, 3);
+      expect(progress.anchorNodeId, 'node-3');
+      expect(progress.progressPercent, 0.42);
+    });
+
+    test('reading progress reads old rows with defaults', () async {
+      final db = await dbFuture;
+      await db.insert(
+        ComicLocalDb.novelReadingProgressTable,
+        <String, Object?>{
+          'novel_id': 'novel:old:progress',
+          'episode_id': 'episode-old',
+          'scroll_offset': 128.0,
+          'updated_at': DateTime(2026, 6, 1).millisecondsSinceEpoch,
+        },
+      );
+
+      final progress = await repository.getReadingProgress(
+        novelId: 'novel:old:progress',
+      );
+
+      expect(progress, isNotNull);
+      expect(progress!.episodeId, 'episode-old');
+      expect(progress.scrollOffset, 128);
+      expect(progress.flowMode, NovelReaderFlowMode.vertical);
+      expect(progress.pageIndex, 0);
+      expect(progress.anchorNodeId, isNull);
+      expect(progress.progressPercent, 0);
     });
 
     test('reader preferences read old rows with defaults', () async {

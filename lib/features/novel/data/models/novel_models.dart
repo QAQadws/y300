@@ -280,12 +280,20 @@ class NovelReadingProgress {
     required this.episodeId,
     required this.scrollOffset,
     required this.updatedAt,
+    this.flowMode = NovelReaderFlowMode.vertical,
+    this.pageIndex = 0,
+    this.anchorNodeId,
+    this.progressPercent = 0,
   });
 
   final String novelId;
   final String episodeId;
   final double scrollOffset;
   final DateTime updatedAt;
+  final NovelReaderFlowMode flowMode;
+  final int pageIndex;
+  final String? anchorNodeId;
+  final double progressPercent;
 }
 
 class NovelEpisodeRefreshResult {

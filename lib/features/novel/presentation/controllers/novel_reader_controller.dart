@@ -5,6 +5,7 @@ import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 
 class NovelReaderArgs {
   const NovelReaderArgs({
@@ -38,6 +39,7 @@ class NovelReaderViewState {
     required this.document,
     required this.preferences,
     required this.readingProgress,
+    required this.progressSnapshot,
     required this.currentOffset,
   });
 
@@ -48,6 +50,7 @@ class NovelReaderViewState {
   final NovelReaderDocument document;
   final NovelReaderPreferences preferences;
   final NovelReadingProgress? readingProgress;
+  final NovelReaderProgressSnapshot progressSnapshot;
   final double currentOffset;
 
   int get currentEpisodeIndex {
@@ -86,6 +89,7 @@ class NovelReaderViewState {
     NovelReaderPreferences? preferences,
     NovelReadingProgress? readingProgress,
     bool clearReadingProgress = false,
+    NovelReaderProgressSnapshot? progressSnapshot,
     double? currentOffset,
   }) {
     return NovelReaderViewState(
@@ -97,6 +101,7 @@ class NovelReaderViewState {
       preferences: preferences ?? this.preferences,
       readingProgress:
           clearReadingProgress ? null : (readingProgress ?? this.readingProgress),
+      progressSnapshot: progressSnapshot ?? this.progressSnapshot,
       currentOffset: currentOffset ?? this.currentOffset,
     );
   }
@@ -111,6 +116,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   NovelReaderController(this._args);
 
   final NovelReaderArgs _args;
+  final NovelReaderProgressPolicy _progressPolicy = const NovelReaderProgressPolicy();
   Timer? _saveDebounce;
 
   @override
@@ -125,7 +131,14 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       return;
     }
     await ref.read(novelRepositoryProvider).upsertReaderPreferences(preferences);
-    state = AsyncData(current.copyWith(preferences: preferences));
+    state = AsyncData(
+      current.copyWith(
+        preferences: preferences,
+        progressSnapshot: current.progressSnapshot.copyWith(
+          flowMode: preferences.flowMode,
+        ),
+      ),
+    );
   }
 
   Future<void> openEpisode(String episodeId) async {
@@ -168,33 +181,78 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     await openEpisode(next.episodeId);
   }
 
-  Future<void> onScrollOffsetChanged(double offset) async {
+  Future<void> onScrollOffsetChanged(
+    double offset, {
+    double maxScrollExtent = 0,
+  }) async {
     final current = state.value;
     if (current == null) {
       return;
     }
-    state = AsyncData(current.copyWith(currentOffset: offset));
+    final snapshot = _progressPolicy.verticalSnapshot(
+      novelId: _args.novelId,
+      episodeId: current.currentEpisode.episodeId,
+      scrollOffset: offset,
+      maxScrollExtent: maxScrollExtent,
+    );
+    state = AsyncData(
+      current.copyWith(
+        currentOffset: offset,
+        progressSnapshot: snapshot,
+      ),
+    );
 
     _saveDebounce?.cancel();
     _saveDebounce = Timer(const Duration(milliseconds: 200), () async {
-      await _saveReadingProgress(
-        episodeId: current.currentEpisode.episodeId,
-        offset: offset,
-      );
+      await _saveProgressSnapshot(snapshot);
     });
   }
 
   Future<void> saveCurrentOffsetNow(double offset) async {
+    return saveCurrentProgressNow(
+      _progressPolicy.verticalSnapshot(
+        novelId: _args.novelId,
+        episodeId: state.value?.currentEpisode.episodeId ?? _args.episodeId,
+        scrollOffset: offset,
+      ),
+    );
+  }
+
+  Future<void> saveCurrentProgressNow(
+    NovelReaderProgressSnapshot snapshot,
+  ) async {
     final current = state.value;
     if (current == null) {
       return;
     }
     _saveDebounce?.cancel();
-    state = AsyncData(current.copyWith(currentOffset: offset));
-    await _saveReadingProgress(
-      episodeId: current.currentEpisode.episodeId,
-      offset: offset,
+    state = AsyncData(
+      current.copyWith(
+        currentOffset: snapshot.scrollOffset,
+        progressSnapshot: snapshot,
+      ),
     );
+    await _saveProgressSnapshot(snapshot);
+  }
+
+  Future<void> onPagedPageChanged(
+    int pageIndex,
+    NovelReaderPageLayout layout,
+  ) async {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    final snapshot = _progressPolicy.pagedSnapshot(
+      novelId: _args.novelId,
+      episodeId: current.currentEpisode.episodeId,
+      flowMode: current.preferences.flowMode,
+      pageIndex: pageIndex,
+      layout: layout,
+    );
+    _saveDebounce?.cancel();
+    state = AsyncData(current.copyWith(progressSnapshot: snapshot));
+    await _saveProgressSnapshot(snapshot);
   }
 
   Future<NovelReaderViewState> _load(
@@ -239,7 +297,13 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       currentProgress: progress,
       preservedProgress: preservedProgress,
     );
-    final offset = restoreProgress?.scrollOffset ?? 0.0;
+    final progressSnapshot = _progressPolicy.fromReadingProgress(
+      novelId: _args.novelId,
+      episodeId: currentEpisode.episodeId,
+      flowMode: preferences.flowMode,
+      progress: restoreProgress,
+    );
+    final offset = progressSnapshot.scrollOffset;
 
     return NovelReaderViewState(
       novel: novel,
@@ -249,6 +313,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       document: document,
       preferences: preferences,
       readingProgress: progress,
+      progressSnapshot: progressSnapshot,
       currentOffset: offset,
     );
   }
@@ -267,14 +332,15 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     return null;
   }
 
-  Future<void> _saveReadingProgress({
-    required String episodeId,
-    required double offset,
-  }) {
+  Future<void> _saveProgressSnapshot(NovelReaderProgressSnapshot snapshot) {
     return ref.read(novelRepositoryProvider).saveReadingProgress(
           novelId: _args.novelId,
-          episodeId: episodeId,
-          scrollOffset: offset,
+          episodeId: snapshot.episodeId,
+          scrollOffset: snapshot.scrollOffset,
+          flowMode: snapshot.flowMode,
+          pageIndex: snapshot.pageIndex,
+          anchorNodeId: snapshot.anchorNodeId,
+          progressPercent: snapshot.progressPercent,
         );
   }
 }

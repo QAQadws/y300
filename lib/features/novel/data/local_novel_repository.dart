@@ -733,6 +733,10 @@ class LocalNovelRepository
     required String novelId,
     required String episodeId,
     required double scrollOffset,
+    NovelReaderFlowMode flowMode = NovelReaderFlowMode.vertical,
+    int pageIndex = 0,
+    String? anchorNodeId,
+    double progressPercent = 0,
   }) async {
     final db = await _dbFuture;
     await db.insert(
@@ -741,6 +745,10 @@ class LocalNovelRepository
         'novel_id': novelId,
         'episode_id': episodeId,
         'scroll_offset': scrollOffset,
+        'flow_mode': flowMode.storageValue,
+        'page_index': pageIndex < 0 ? 0 : pageIndex,
+        'anchor_node_id': _normalizeNullable(anchorNodeId),
+        'progress_percent': progressPercent.clamp(0.0, 1.0).toDouble(),
         'updated_at': DateTime.now().millisecondsSinceEpoch,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
@@ -771,6 +779,12 @@ class LocalNovelRepository
       episodeId: episodeId,
       scrollOffset: (row['scroll_offset'] as num?)?.toDouble() ?? 0,
       updatedAt: DateTime.fromMillisecondsSinceEpoch((row['updated_at'] as int?) ?? 0),
+      flowMode: NovelReaderFlowModeCodec.fromStorage(row['flow_mode'] as String?),
+      pageIndex:
+          ((row['page_index'] as num?)?.toInt() ?? 0).clamp(0, 1 << 30).toInt(),
+      anchorNodeId: _normalizeNullable(row['anchor_node_id'] as String?),
+      progressPercent:
+          ((row['progress_percent'] as num?)?.toDouble() ?? 0).clamp(0.0, 1.0).toDouble(),
     );
   }
 

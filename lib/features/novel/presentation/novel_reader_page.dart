@@ -7,6 +7,7 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
@@ -34,6 +35,15 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
   final NovelReaderThemeResolver _themeResolver = const NovelReaderThemeResolver();
   final NovelReaderTypographyResolver _typographyResolver =
       const NovelReaderTypographyResolver();
+  final NovelReaderPaginator _paginator = const NovelReaderPaginator();
+  final NovelReaderProgressPolicy _progressPolicy = const NovelReaderProgressPolicy();
+  PageController? _pageController;
+  NovelReaderPageLayout? _currentPagedLayout;
+  String? _pagedEpisodeId;
+  NovelReaderFlowMode? _pagedFlowMode;
+  int? _pagedPageCount;
+  final Set<PageController> _pendingPageControllerDisposals = <PageController>{};
+  int _currentPageIndex = 0;
   bool _hasRestoredOffset = false;
   bool _isProgrammaticScrollChange = false;
 
@@ -53,6 +63,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     _scrollController
       ..removeListener(_onScroll)
       ..dispose();
+    _pageController?.dispose();
     super.dispose();
   }
 
@@ -68,11 +79,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(child: Text('加载阅读器失败：$error')),
         data: (viewState) {
-          _restoreOffsetIfNeeded(
-            episodeId: viewState.currentEpisode.episodeId,
-            offset: viewState.currentOffset,
-          );
-
           final theme = Theme.of(context);
           final palette = _themeResolver.resolve(
             preferences: viewState.preferences,
@@ -86,17 +92,65 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
           );
           return ColoredBox(
             color: palette.background,
-            child: ReaderOverlayScaffold(
-              controller: _overlayController,
-              topBar: _buildTopBarConfig(viewState),
-              bottomBar: _buildBottomBarConfig(viewState, controller),
-              bottomSafeFraction: 0.18,
-              child: _buildReaderList(
-                viewState,
-                typography,
-                imageHeaderBuilder,
-                externalLauncher,
-              ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isPaged = _isPagedMode(viewState.preferences.flowMode);
+                if (!isPaged) {
+                  _currentPagedLayout = null;
+                  _resetPagedController();
+                  _restoreOffsetIfNeeded(
+                    episodeId: viewState.currentEpisode.episodeId,
+                    offset: viewState.currentOffset,
+                  );
+                }
+                final pagedLayout = isPaged
+                    ? _buildPagedLayout(viewState, typography, constraints)
+                    : null;
+                final pageIndex = pagedLayout == null
+                    ? 0
+                    : _ensurePagedController(viewState, pagedLayout);
+                return ReaderOverlayScaffold(
+                  controller: _overlayController,
+                  topBar: _buildTopBarConfig(viewState),
+                  bottomBar: _buildBottomBarConfig(
+                    viewState,
+                    controller,
+                    pagedLayout: pagedLayout,
+                    pageIndex: pageIndex,
+                  ),
+                  bottomSafeFraction: 0.18,
+                  onLeftTap: pagedLayout == null
+                      ? null
+                      : () => _handlePagedSideTap(
+                            isLeftTap: true,
+                            viewState: viewState,
+                            controller: controller,
+                            layout: pagedLayout,
+                          ),
+                  onRightTap: pagedLayout == null
+                      ? null
+                      : () => _handlePagedSideTap(
+                            isLeftTap: false,
+                            viewState: viewState,
+                            controller: controller,
+                            layout: pagedLayout,
+                          ),
+                  child: pagedLayout == null
+                      ? _buildReaderList(
+                          viewState,
+                          typography,
+                          imageHeaderBuilder,
+                          externalLauncher,
+                        )
+                      : _buildPagedReader(
+                          viewState,
+                          typography,
+                          imageHeaderBuilder,
+                          externalLauncher,
+                          pagedLayout,
+                        ),
+                );
+              },
             ),
           );
         },
@@ -140,8 +194,41 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
 
   ReaderBottomBarConfig _buildBottomBarConfig(
     NovelReaderViewState viewState,
-    NovelReaderController controller,
-  ) {
+    NovelReaderController controller, {
+    NovelReaderPageLayout? pagedLayout,
+    int pageIndex = 0,
+  }) {
+    if (pagedLayout != null) {
+      final current = pagedLayout.clampPageIndex(pageIndex);
+      return ReaderBottomBarConfig(
+        showProgress: viewState.preferences.showProgressIndicator,
+        progress: ReaderProgressConfig(
+          current: current + 1,
+          total: pagedLayout.pageCount,
+          previousEnabled: current > 0 || viewState.hasPreviousEpisode,
+          nextEnabled: current < pagedLayout.pageCount - 1 || viewState.hasNextEpisode,
+          previousTooltip: '上一页',
+          nextTooltip: '下一页',
+          onPrevious: () => _goToPreviousPageOrEpisode(
+            viewState: viewState,
+            controller: controller,
+            layout: pagedLayout,
+          ),
+          onNext: () => _goToNextPageOrEpisode(
+            viewState: viewState,
+            controller: controller,
+            layout: pagedLayout,
+          ),
+          onChanged: (_) {},
+          onChangeEnd: (value) => _jumpToPagedIndex(
+            value.round(),
+            controller: controller,
+            layout: pagedLayout,
+          ),
+        ),
+        actions: _buildBottomActions(viewState, controller),
+      );
+    }
     final total = viewState.episodes.isEmpty ? 1 : viewState.episodes.length;
     final currentIndex = viewState.currentEpisodeIndex;
     final current = currentIndex < 0 ? 1 : currentIndex + 1;
@@ -157,33 +244,40 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
         onChanged: (_) {},
         onChangeEnd: (value) => _openEpisodeBySlider(value, viewState, controller),
       ),
-      actions: [
-        ReaderToolbarAction(
-          id: 'catalog',
-          icon: Icons.format_list_bulleted,
-          label: '目录',
-          onPressed: () => _showChapterListSheet(viewState, controller),
-        ),
-        ReaderToolbarAction(
-          id: 'display',
-          icon: Icons.tune,
-          label: '显示',
-          onPressed: () => _showDisplaySettingsSheet(viewState, controller),
-        ),
-        ReaderToolbarAction(
-          id: 'cache',
-          icon: Icons.download_for_offline_outlined,
-          label: '缓存',
-          onPressed: () => _showPlaceholder('章节缓存将在后续阶段接入'),
-        ),
-        ReaderToolbarAction(
-          id: 'mode',
-          icon: Icons.view_stream_outlined,
-          label: '模式',
-          onPressed: () => _showPlaceholder('阅读模式将在后续阶段接入'),
-        ),
-      ],
+      actions: _buildBottomActions(viewState, controller),
     );
+  }
+
+  List<ReaderToolbarAction> _buildBottomActions(
+    NovelReaderViewState viewState,
+    NovelReaderController controller,
+  ) {
+    return [
+      ReaderToolbarAction(
+        id: 'catalog',
+        icon: Icons.format_list_bulleted,
+        label: '目录',
+        onPressed: () => _showChapterListSheet(viewState, controller),
+      ),
+      ReaderToolbarAction(
+        id: 'display',
+        icon: Icons.tune,
+        label: '显示',
+        onPressed: () => _showDisplaySettingsSheet(viewState, controller),
+      ),
+      ReaderToolbarAction(
+        id: 'cache',
+        icon: Icons.download_for_offline_outlined,
+        label: '缓存',
+        onPressed: () => _showPlaceholder('章节缓存将在后续阶段接入'),
+      ),
+      ReaderToolbarAction(
+        id: 'mode',
+        icon: Icons.view_stream_outlined,
+        label: '模式',
+        onPressed: () => _showPlaceholder('阅读模式将在后续阶段接入'),
+      ),
+    ];
   }
 
   Widget _buildReaderList(
@@ -229,7 +323,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
         Center(
           child: ConstrainedBox(
             key: const Key('novel-reader-content-column'),
-            constraints: BoxConstraints(maxWidth: typography.contentMaxWidth),
+            constraints: BoxConstraints(maxWidth: _safeContentMaxWidth(typography)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: children,
@@ -237,6 +331,166 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
           ),
         ),
       ],
+    );
+  }
+
+  NovelReaderPageLayout _buildPagedLayout(
+    NovelReaderViewState viewState,
+    NovelReaderTypography typography,
+    BoxConstraints constraints,
+  ) {
+    final horizontalPadding = viewState.preferences.pagePadding * 2;
+    final verticalPadding = viewState.preferences.pagePadding * 2;
+    final contentMaxWidth = _safeContentMaxWidth(typography);
+    final availableWidth = (constraints.maxWidth - horizontalPadding)
+        .clamp(160.0, contentMaxWidth)
+        .toDouble();
+    final availableHeight =
+        (constraints.maxHeight - verticalPadding).clamp(160.0, 10000.0).toDouble();
+    final layout = _paginator.paginate(
+      document: viewState.document,
+      typography: NovelReaderPaginationMetrics(
+        bodyFontSize: typography.body.fontSize ?? viewState.preferences.fontSize,
+        bodyLineHeight: typography.body.height ?? viewState.preferences.lineHeight,
+        headingFontSize:
+            typography.chapterTitle.fontSize ?? viewState.preferences.fontSize + 4,
+        headingLineHeight:
+            typography.chapterTitle.height ?? viewState.preferences.lineHeight,
+        paragraphSpacing: viewState.preferences.paragraphSpacing,
+      ),
+      viewportSize: NovelReaderViewport(
+        width: availableWidth,
+        height: availableHeight,
+      ),
+    );
+    _currentPagedLayout = layout;
+    return layout;
+  }
+
+  int _ensurePagedController(
+    NovelReaderViewState viewState,
+    NovelReaderPageLayout layout,
+  ) {
+    final flowMode = viewState.preferences.flowMode;
+    final episodeId = viewState.currentEpisode.episodeId;
+    final shouldReset = _pageController == null ||
+        _pagedEpisodeId != episodeId ||
+        _pagedFlowMode != flowMode;
+    if (shouldReset) {
+      final oldController = _pageController;
+      _currentPageIndex = _progressPolicy.restorePageIndex(
+        viewState.progressSnapshot,
+        layout: layout,
+      );
+      _pageController = PageController(initialPage: _currentPageIndex);
+      _pagedEpisodeId = episodeId;
+      _pagedFlowMode = flowMode;
+      _pagedPageCount = layout.pageCount;
+      if (oldController != null) {
+        _disposePageControllerAfterFrame(oldController);
+      }
+      return _currentPageIndex;
+    }
+
+    final pageCountChanged = _pagedPageCount != layout.pageCount;
+    final clamped = pageCountChanged
+        ? _progressPolicy.restorePageIndex(viewState.progressSnapshot, layout: layout)
+        : layout.clampPageIndex(_currentPageIndex);
+    _pagedPageCount = layout.pageCount;
+    if (clamped != _currentPageIndex) {
+      _currentPageIndex = clamped;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final controller = _pageController;
+        if (!mounted || controller == null || !controller.hasClients) {
+          return;
+        }
+        controller.jumpToPage(clamped);
+        unawaited(
+          ref
+              .read(novelReaderControllerProvider(_args).notifier)
+              .onPagedPageChanged(clamped, layout),
+        );
+      });
+    }
+    return _currentPageIndex;
+  }
+
+  void _resetPagedController() {
+    final oldController = _pageController;
+    if (oldController == null) {
+      return;
+    }
+    _pageController = null;
+    _pagedEpisodeId = null;
+    _pagedFlowMode = null;
+    _pagedPageCount = null;
+    _currentPageIndex = 0;
+    _disposePageControllerAfterFrame(oldController);
+  }
+
+  void _disposePageControllerAfterFrame(PageController controller) {
+    if (!_pendingPageControllerDisposals.add(controller)) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _pendingPageControllerDisposals.remove(controller);
+      controller.dispose();
+    });
+  }
+
+  Widget _buildPagedReader(
+    NovelReaderViewState viewState,
+    NovelReaderTypography typography,
+    ImageRequestHeaderBuilder imageHeaderBuilder,
+    ForumWebViewExternalLauncher externalLauncher,
+    NovelReaderPageLayout layout,
+  ) {
+    return PageView.builder(
+      key: const Key('novel-reader-paged-view'),
+      controller: _pageController,
+      reverse: viewState.preferences.flowMode == NovelReaderFlowMode.pagedRtl,
+      itemCount: layout.pageCount,
+      onPageChanged: (index) {
+        _currentPageIndex = layout.clampPageIndex(index);
+        _overlayController.hideMenu();
+        unawaited(
+          ref
+              .read(novelReaderControllerProvider(_args).notifier)
+              .onPagedPageChanged(_currentPageIndex, layout),
+        );
+      },
+      itemBuilder: (context, index) {
+        return SingleChildScrollView(
+          key: Key('novel-reader-page-$index'),
+          padding: EdgeInsets.all(viewState.preferences.pagePadding),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: _safeContentMaxWidth(typography)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (index == 0 && viewState.preferences.showChapterTitle) ...[
+                    Text(
+                      viewState.currentEpisode.episodeTitle,
+                      key: const Key('novel-reader-inline-chapter-title'),
+                      style: typography.chapterTitle,
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: viewState.preferences.paragraphSpacing * 1.6),
+                  ],
+                  NovelReaderDocumentView(
+                    document: layout.documentForPage(index),
+                    typography: typography,
+                    paragraphSpacing: viewState.preferences.paragraphSpacing,
+                    imageHeaderBuilder: imageHeaderBuilder,
+                    onLinkTap: (link) => _openReaderLink(link, externalLauncher),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -250,7 +504,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     _overlayController.hideMenu();
     ref
         .read(novelReaderControllerProvider(_args).notifier)
-        .onScrollOffsetChanged(_scrollController.offset);
+        .onScrollOffsetChanged(
+          _scrollController.offset,
+          maxScrollExtent: _scrollController.position.maxScrollExtent,
+        );
   }
 
   void _restoreOffsetIfNeeded({
@@ -280,11 +537,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
   }
 
   Future<void> _popReader() async {
-    if (_scrollController.hasClients) {
-      await ref
-          .read(novelReaderControllerProvider(_args).notifier)
-          .saveCurrentOffsetNow(_scrollController.offset);
-    }
+    await _saveVisibleProgressNow();
     if (!mounted) {
       return;
     }
@@ -318,11 +571,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
   }
 
   Future<void> _openDifferentEpisode(Future<void> Function() action) async {
-    if (_scrollController.hasClients) {
-      await ref
-          .read(novelReaderControllerProvider(_args).notifier)
-          .saveCurrentOffsetNow(_scrollController.offset);
-    }
+    await _saveVisibleProgressNow();
     _hasRestoredOffset = false;
     if (_scrollController.hasClients) {
       _isProgrammaticScrollChange = true;
@@ -334,6 +583,118 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     }
     _overlayController.hideMenu();
     await action();
+  }
+
+  Future<void> _saveVisibleProgressNow() async {
+    final viewState = ref.read(novelReaderControllerProvider(_args)).value;
+    if (viewState == null) {
+      return;
+    }
+    final controller = ref.read(novelReaderControllerProvider(_args).notifier);
+    if (!_isPagedMode(viewState.preferences.flowMode)) {
+      final offset = _scrollController.hasClients ? _scrollController.offset : 0.0;
+      final maxScrollExtent = _scrollController.hasClients
+          ? _scrollController.position.maxScrollExtent
+          : 0.0;
+      await controller.saveCurrentProgressNow(
+        _progressPolicy.verticalSnapshot(
+          novelId: widget.novelId,
+          episodeId: viewState.currentEpisode.episodeId,
+          scrollOffset: offset,
+          maxScrollExtent: maxScrollExtent,
+        ),
+      );
+      return;
+    }
+    final layout = _currentPagedLayout;
+    if (layout == null) {
+      return;
+    }
+    await controller.saveCurrentProgressNow(
+      _progressPolicy.pagedSnapshot(
+        novelId: widget.novelId,
+        episodeId: viewState.currentEpisode.episodeId,
+        flowMode: viewState.preferences.flowMode,
+        pageIndex: _currentPageIndex,
+        layout: layout,
+      ),
+    );
+  }
+
+  void _handlePagedSideTap({
+    required bool isLeftTap,
+    required NovelReaderViewState viewState,
+    required NovelReaderController controller,
+    required NovelReaderPageLayout layout,
+  }) {
+    final isRtl = viewState.preferences.flowMode == NovelReaderFlowMode.pagedRtl;
+    final shouldGoNext = isRtl ? isLeftTap : !isLeftTap;
+    if (shouldGoNext) {
+      _goToNextPageOrEpisode(
+        viewState: viewState,
+        controller: controller,
+        layout: layout,
+      );
+      return;
+    }
+    _goToPreviousPageOrEpisode(
+      viewState: viewState,
+      controller: controller,
+      layout: layout,
+    );
+  }
+
+  void _goToPreviousPageOrEpisode({
+    required NovelReaderViewState viewState,
+    required NovelReaderController controller,
+    required NovelReaderPageLayout layout,
+  }) {
+    final current = layout.clampPageIndex(_currentPageIndex);
+    if (current > 0) {
+      _jumpToPagedIndex(
+        current - 1,
+        controller: controller,
+        layout: layout,
+      );
+      return;
+    }
+    if (viewState.hasPreviousEpisode) {
+      unawaited(_openDifferentEpisode(() => controller.goToPreviousEpisode()));
+    }
+  }
+
+  void _goToNextPageOrEpisode({
+    required NovelReaderViewState viewState,
+    required NovelReaderController controller,
+    required NovelReaderPageLayout layout,
+  }) {
+    final current = layout.clampPageIndex(_currentPageIndex);
+    if (current < layout.pageCount - 1) {
+      _jumpToPagedIndex(
+        current + 1,
+        controller: controller,
+        layout: layout,
+      );
+      return;
+    }
+    if (viewState.hasNextEpisode) {
+      unawaited(_openDifferentEpisode(() => controller.goToNextEpisode()));
+    }
+  }
+
+  void _jumpToPagedIndex(
+    int pageIndex, {
+    required NovelReaderController controller,
+    required NovelReaderPageLayout layout,
+  }) {
+    final target = layout.clampPageIndex(pageIndex);
+    _currentPageIndex = target;
+    _overlayController.hideMenu();
+    final pageController = _pageController;
+    if (pageController != null && pageController.hasClients) {
+      pageController.jumpToPage(target);
+    }
+    unawaited(controller.onPagedPageChanged(target, layout));
   }
 
   Future<void> _showChapterListSheet(
@@ -428,6 +789,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     return widget.novelId;
   }
 
+  bool _isPagedMode(NovelReaderFlowMode flowMode) {
+    return flowMode != NovelReaderFlowMode.vertical;
+  }
+
+  double _safeContentMaxWidth(NovelReaderTypography typography) {
+    return typography.contentMaxWidth < 160 ? 160 : typography.contentMaxWidth;
+  }
 }
 
 class NovelReaderChapterListSheet extends StatefulWidget {

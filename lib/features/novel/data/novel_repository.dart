@@ -57,6 +57,10 @@ abstract class NovelRepository {
     required String novelId,
     required String episodeId,
     required double scrollOffset,
+    NovelReaderFlowMode flowMode = NovelReaderFlowMode.vertical,
+    int pageIndex = 0,
+    String? anchorNodeId,
+    double progressPercent = 0,
   });
 
   Future<NovelReadingProgress?> getReadingProgress({required String novelId});

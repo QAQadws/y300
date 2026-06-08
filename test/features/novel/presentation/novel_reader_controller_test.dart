@@ -5,6 +5,7 @@ import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 
@@ -57,6 +58,39 @@ void main() {
 
     expect(state.readingProgress?.episodeId, 'novel:49:100:5002');
     expect(state.currentOffset, 88);
+  });
+
+  test('NovelReaderController saves paged page progress immediately', () async {
+    final repository = _ControllerNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+      ),
+    );
+    final container = _buildContainer(repository: repository);
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
+
+    await container.read(provider.future);
+    final layout = NovelReaderPageLayout(
+      document: _document('novel:49:100:5001'),
+      pages: const <NovelReaderPageSlice>[
+        NovelReaderPageSlice(index: 0, nodes: <NovelReaderNode>[], anchorNodeId: 'a'),
+        NovelReaderPageSlice(index: 1, nodes: <NovelReaderNode>[], anchorNodeId: 'b'),
+      ],
+    );
+    await container.read(provider.notifier).onPagedPageChanged(1, layout);
+
+    final state = await container.read(provider.future);
+    expect(state.progressSnapshot.pageIndex, 1);
+    expect(state.progressSnapshot.anchorNodeId, 'b');
+    expect(repository.readingProgress?.flowMode, NovelReaderFlowMode.pagedLtr);
+    expect(repository.readingProgress?.pageIndex, 1);
   });
 
   test('openEpisodeFromCatalog loads target and preserves target progress', () async {
@@ -127,6 +161,14 @@ NovelReaderViewState _viewState({
     document: _document(currentEpisode.episodeId),
     preferences: NovelReaderPreferences.defaults(),
     readingProgress: null,
+    progressSnapshot: const NovelReaderProgressSnapshot(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+      flowMode: NovelReaderFlowMode.vertical,
+      scrollOffset: 0,
+      pageIndex: 0,
+      progressPercent: 0,
+    ),
     currentOffset: 0,
   );
 }
@@ -158,7 +200,8 @@ class _NoopNovelDownloadService implements NovelDownloadService {
 class _ControllerNovelRepository implements NovelRepository {
   _ControllerNovelRepository({
     this.readingProgress,
-  }) {
+    NovelReaderPreferences? preferences,
+  }) : preferences = preferences ?? NovelReaderPreferences.defaults() {
     contentsByEpisodeId = <String, NovelChapterContent>{
       for (final episode in episodes)
         episode.episodeId: _content(episode.episodeId, '${episode.episodeTitle}正文。'),
@@ -168,6 +211,7 @@ class _ControllerNovelRepository implements NovelRepository {
   final episodes = _episodes();
   late final Map<String, NovelChapterContent> contentsByEpisodeId;
   NovelReadingProgress? readingProgress;
+  NovelReaderPreferences preferences;
   final savedProgressEpisodeIds = <String>[];
 
   @override
@@ -208,7 +252,7 @@ class _ControllerNovelRepository implements NovelRepository {
 
   @override
   Future<NovelReaderPreferences> getReaderPreferences() async {
-    return NovelReaderPreferences.defaults();
+    return preferences;
   }
 
   @override
@@ -256,6 +300,10 @@ class _ControllerNovelRepository implements NovelRepository {
     required String novelId,
     required String episodeId,
     required double scrollOffset,
+    NovelReaderFlowMode flowMode = NovelReaderFlowMode.vertical,
+    int pageIndex = 0,
+    String? anchorNodeId,
+    double progressPercent = 0,
   }) async {
     savedProgressEpisodeIds.add(episodeId);
     readingProgress = NovelReadingProgress(
@@ -263,6 +311,10 @@ class _ControllerNovelRepository implements NovelRepository {
       episodeId: episodeId,
       scrollOffset: scrollOffset,
       updatedAt: DateTime(2026, 6, 8),
+      flowMode: flowMode,
+      pageIndex: pageIndex,
+      anchorNodeId: anchorNodeId,
+      progressPercent: progressPercent,
     );
   }
 
