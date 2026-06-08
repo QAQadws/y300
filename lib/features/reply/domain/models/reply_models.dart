@@ -132,6 +132,97 @@ class ReplyDraftSnapshot {
   bool get isEmpty => message.trim().isEmpty;
 }
 
+enum ReplyImageAttachmentStatus {
+  local,
+  uploading,
+  uploaded,
+  failed,
+  expired,
+}
+
+class ReplyImageAttachment {
+  const ReplyImageAttachment({
+    required this.localId,
+    required this.localPath,
+    required this.fileName,
+    required this.mimeType,
+    required this.order,
+    required this.status,
+    this.aid,
+    this.uploadedAt,
+    this.errorMessage,
+    this.cachePath,
+  });
+
+  final String localId;
+  final String localPath;
+  final String fileName;
+  final String mimeType;
+  final int order;
+  final ReplyImageAttachmentStatus status;
+  final String? aid;
+  final DateTime? uploadedAt;
+  final String? errorMessage;
+  final String? cachePath;
+
+  bool get isUploaded => status == ReplyImageAttachmentStatus.uploaded;
+
+  bool get hasAid => aid != null && aid!.trim().isNotEmpty;
+
+  bool get canEnterSubmitPayload => isUploaded && hasAid;
+
+  String get previewPath {
+    final cached = cachePath;
+    if (cached != null && cached.trim().isNotEmpty) {
+      return cached;
+    }
+    return localPath;
+  }
+}
+
+class ReplyAttachRemain {
+  const ReplyAttachRemain({
+    required this.size,
+    required this.count,
+  });
+
+  final int size;
+  final int count;
+
+  bool get hasSizeRemain => size < 0 || size > 0;
+
+  bool get hasCountRemain => count < 0 || count > 0;
+}
+
+class ReplyImageUploadPermission {
+  const ReplyImageUploadPermission({
+    required this.uid,
+    required this.uploadHash,
+    required this.allowedExtensions,
+    required this.attachRemain,
+    this.username,
+    this.formHash,
+  });
+
+  final String uid;
+  final String uploadHash;
+  final Set<String> allowedExtensions;
+  final ReplyAttachRemain attachRemain;
+  final String? username;
+  final String? formHash;
+
+  bool canUploadExtension(String extension) {
+    final normalized = extension.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return false;
+    }
+    if (normalized.startsWith('.')) {
+      return allowedExtensions.contains(normalized.substring(1));
+    }
+    return allowedExtensions.contains(normalized);
+  }
+}
+
 class ReplySubmissionResult {
   const ReplySubmissionResult({
     required this.message,
