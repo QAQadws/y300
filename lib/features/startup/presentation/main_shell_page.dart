@@ -14,6 +14,7 @@ import 'package:y300/features/library_shared/presentation/selection/shelf_select
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/features/novel/presentation/novel_tab_page.dart';
+import 'package:y300/features/reply/data/reply_providers.dart';
 
 final mainShellBackgroundTaskStarterProvider = Provider<Future<void> Function()>((ref) {
   return () => ref.read(comicSearchRefreshQueueServiceProvider).start();
@@ -28,6 +29,17 @@ final mainShellNotificationInitializerProvider =
     final service = ref.read(libraryTaskNotificationServiceProvider);
     await service.initialize();
     await service.ensurePermission();
+  };
+});
+
+final mainShellReplyDraftAttachmentMaintenanceStarterProvider =
+    Provider<Future<void> Function()>((ref) {
+  return () async {
+    try {
+      await ref.read(replyDraftAttachmentMaintenanceServiceProvider).maintain();
+    } catch (_) {
+      // 回复草稿附件维护是启动后的 best-effort 清理，失败不阻塞主壳。
+    }
   };
 });
 
@@ -50,6 +62,12 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     unawaited(ref.read(mainShellBackgroundTaskStarterProvider).call());
     // 初始化系统通知能力并请求权限；失败不应阻塞主壳，detach 执行即可。
     unawaited(ref.read(mainShellNotificationInitializerProvider).call());
+    // 清理遗忘回复草稿中的过期临时附件，避免只依赖用户重新打开草稿。
+    unawaited(
+      ref
+          .read(mainShellReplyDraftAttachmentMaintenanceStarterProvider)
+          .call(),
+    );
   }
 
   @override

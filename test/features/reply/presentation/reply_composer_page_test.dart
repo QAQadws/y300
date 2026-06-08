@@ -11,6 +11,7 @@ import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/data/reply_upload_notification_service.dart';
 import 'package:y300/features/reply/data/sticker_picker_preferences_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
+import 'package:y300/features/reply/domain/services/reply_draft_attachment_sanitizer.dart';
 import 'package:y300/features/reply/domain/services/reply_image_upload_coordinator.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
@@ -76,6 +77,70 @@ void main() {
       find.byKey(const Key('reply-composer-use-signature-switch')),
     );
     expect(switchTile.value, isFalse);
+  });
+
+  testWidgets('ReplyComposerPage restores uploaded image attachment queue', (
+    tester,
+  ) async {
+    final args = _threadArgs();
+    final draftRepository = _MemoryReplyDraftRepository();
+    await draftRepository.saveDraft(
+      ReplyDraftSnapshot(
+        identity: args.identity,
+        message: '正文\n[attach]123456[/attach]',
+        useSignature: true,
+        updatedAt: DateTime.utc(2026, 6, 8),
+        imageAttachments: [
+          _uploadedAttachment(
+            localId: 'image-1',
+            aid: '123456',
+            uploadedAt: DateTime.utc(2026, 6, 8, 10),
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      _buildPage(args: args, draftRepository: draftRepository),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('reply-composer-image-queue')), findsOneWidget);
+    expect(find.text('image-1.jpg'), findsOneWidget);
+    expect(find.textContaining('已上传'), findsOneWidget);
+  });
+
+  testWidgets('ReplyComposerPage omits expired restored image attachment', (
+    tester,
+  ) async {
+    final args = _threadArgs();
+    final draftRepository = _MemoryReplyDraftRepository(
+      now: () => DateTime.utc(2026, 6, 8, 12),
+    );
+    await draftRepository.saveDraft(
+      ReplyDraftSnapshot(
+        identity: args.identity,
+        message: '正文\n[attach]123456[/attach]',
+        useSignature: true,
+        updatedAt: DateTime.utc(2026, 6, 8),
+        imageAttachments: [
+          _uploadedAttachment(
+            localId: 'expired',
+            aid: '123456',
+            uploadedAt: DateTime.utc(2026, 6, 7, 12),
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      _buildPage(args: args, draftRepository: draftRepository),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('reply-composer-image-queue')), findsNothing);
+    expect(find.textContaining('[attach]123456[/attach]'), findsNothing);
+    expect(find.text('正文'), findsOneWidget);
   });
 
   testWidgets('ReplyComposerPage keeps send disabled for empty input', (
@@ -716,7 +781,14 @@ class _ReplyComposerLauncher extends StatelessWidget {
 }
 
 class _MemoryReplyDraftRepository implements ReplyDraftRepository {
+  _MemoryReplyDraftRepository({
+    DateTime Function()? now,
+  }) : _now = now;
+
   final Map<String, ReplyDraftSnapshot> _drafts = <String, ReplyDraftSnapshot>{};
+  final DateTime Function()? _now;
+  static const ReplyDraftAttachmentSanitizer _sanitizer =
+      ReplyDraftAttachmentSanitizer();
 
   @override
   Future<void> deleteDraft(ReplyDraftIdentity identity) async {
@@ -735,7 +807,29 @@ class _MemoryReplyDraftRepository implements ReplyDraftRepository {
 
   @override
   Future<ReplyDraftSnapshot?> loadDraft(ReplyDraftIdentity identity) async {
-    return _drafts[identity.storageKey];
+    final draft = _drafts[identity.storageKey];
+    final now = _now;
+    if (draft == null || now == null) {
+      return draft;
+    }
+    final result = _sanitizer.sanitize(
+      message: draft.message,
+      imageAttachments: draft.imageAttachments,
+      now: now(),
+    );
+    final sanitized = ReplyDraftSnapshot(
+      identity: draft.identity,
+      message: result.message,
+      useSignature: draft.useSignature,
+      updatedAt: draft.updatedAt,
+      imageAttachments: result.imageAttachments,
+    );
+    if (sanitized.isEmpty) {
+      _drafts.remove(identity.storageKey);
+      return null;
+    }
+    _drafts[identity.storageKey] = sanitized;
+    return sanitized;
   }
 
   @override
@@ -757,6 +851,23 @@ class _MemoryReplyDraftRepository implements ReplyDraftRepository {
     }
     _drafts[draft.identity.storageKey] = draft;
   }
+}
+
+ReplyImageAttachment _uploadedAttachment({
+  required String localId,
+  required String aid,
+  required DateTime uploadedAt,
+}) {
+  return ReplyImageAttachment(
+    localId: localId,
+    localPath: '/gallery/$localId.jpg',
+    fileName: '$localId.jpg',
+    mimeType: 'image/jpeg',
+    order: 0,
+    status: ReplyImageAttachmentStatus.uploaded,
+    aid: aid,
+    uploadedAt: uploadedAt,
+  );
 }
 
 class _FakeStickerPickerPreferencesRepository

@@ -122,14 +122,16 @@ class ReplyDraftSnapshot {
     required this.message,
     required this.useSignature,
     required this.updatedAt,
+    this.imageAttachments = const <ReplyImageAttachment>[],
   });
 
   final ReplyDraftIdentity identity;
   final String message;
   final bool useSignature;
   final DateTime updatedAt;
+  final List<ReplyImageAttachment> imageAttachments;
 
-  bool get isEmpty => message.trim().isEmpty;
+  bool get isEmpty => message.trim().isEmpty && imageAttachments.isEmpty;
 }
 
 enum ReplyImageAttachmentStatus {

@@ -40,6 +40,40 @@ void main() {
       expect(state.mode, ReplyComposerMode.source);
     });
 
+    test('restores draft image attachment queue on build', () async {
+      final draftRepository = _MemoryReplyDraftRepository();
+      final args = _threadArgs(tid: '572063');
+      await draftRepository.saveDraft(
+        ReplyDraftSnapshot(
+          identity: args.identity,
+          message: '正文\n[attach]123456[/attach]',
+          useSignature: true,
+          updatedAt: DateTime.utc(2026, 6, 8),
+          imageAttachments: [
+            _uploadedAttachment(
+              localId: 'image-1',
+              aid: '123456',
+              uploadedAt: DateTime.utc(2026, 6, 8, 10),
+            ),
+          ],
+        ),
+      );
+      final container = _buildContainer(draftRepository: draftRepository);
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+
+      final state = await container.read(
+        replyComposerControllerProvider(args).future,
+      );
+
+      expect(state.message, '正文\n[attach]123456[/attach]');
+      expect(state.imageAttachments, hasLength(1));
+      expect(state.imageAttachments.single.localId, 'image-1');
+      expect(state.imageAttachments.single.status,
+          ReplyImageAttachmentStatus.uploaded);
+    });
+
     test('different thread does not reuse draft', () async {
       final draftRepository = _MemoryReplyDraftRepository();
       await draftRepository.saveDraft(
@@ -82,6 +116,59 @@ void main() {
       final saved = await draftRepository.loadDraft(args.identity);
       expect(saved?.message, '新的草稿');
       expect(saved?.useSignature, isFalse);
+    });
+
+    test('flushDraft saves uploaded attachment metadata', () async {
+      final draftRepository = _MemoryReplyDraftRepository();
+      final imagePicker = _FakeReplyImagePicker(
+        images: const [
+          ReplyPickedImage(
+            path: '/gallery/first.jpg',
+            fileName: 'first.jpg',
+            mimeType: 'image/jpeg',
+            originalIndex: 0,
+          ),
+        ],
+      );
+      final uploadCoordinator = _FakeReplyImageUploadCoordinator(
+        events: [
+          ReplyImageUploadEvent.uploaded(
+            localId: '',
+            current: 1,
+            total: 1,
+            uploadedImage: ReplyUploadedImage(
+              localId: '',
+              aid: '123456',
+              uploadedAt: DateTime.utc(2026, 6, 8, 10),
+            ),
+          ),
+          const ReplyImageUploadEvent.completed(total: 1),
+        ],
+      );
+      final args = _threadArgs(tid: '572063');
+      final container = _buildContainer(
+        draftRepository: draftRepository,
+        imagePicker: imagePicker,
+        imageUploadCoordinator: uploadCoordinator,
+      );
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(replyComposerControllerProvider(args).future);
+      final controller = container.read(
+        replyComposerControllerProvider(args).notifier,
+      );
+
+      await controller.pickImages();
+      await _drainMicrotasks();
+      await controller.flushDraft();
+
+      final saved = await draftRepository.loadDraft(args.identity);
+      expect(saved?.message, '[attach]123456[/attach]');
+      expect(saved?.imageAttachments, hasLength(1));
+      expect(saved?.imageAttachments.single.aid, '123456');
+      expect(saved?.imageAttachments.single.uploadedAt,
+          DateTime.utc(2026, 6, 8, 10));
     });
 
     test('empty input does not submit', () async {
@@ -144,6 +231,44 @@ void main() {
       expect(replyRepository.sentDrafts.single.message, '提交内容');
       expect(replyRepository.sentDrafts.single.useSignature, isFalse);
       expect(await draftRepository.loadDraft(args.identity), isNull);
+    });
+
+    test('submit sanitizes expired attachments before sending', () async {
+      final draftRepository = _MemoryReplyDraftRepository();
+      final replyRepository = _FakeReplyRepository();
+      final args = _threadArgs(tid: '572063');
+      await draftRepository.saveDraft(
+        ReplyDraftSnapshot(
+          identity: args.identity,
+          message: '正文\n[attach]123456[/attach]',
+          useSignature: true,
+          updatedAt: DateTime.utc(2026, 6, 8),
+          imageAttachments: [
+            _uploadedAttachment(
+              localId: 'expired',
+              aid: '123456',
+              uploadedAt: DateTime.now().subtract(const Duration(hours: 24)),
+            ),
+          ],
+        ),
+      );
+      final container = _buildContainer(
+        draftRepository: draftRepository,
+        replyRepository: replyRepository,
+      );
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(replyComposerControllerProvider(args).future);
+
+      final result = await container
+          .read(replyComposerControllerProvider(args).notifier)
+          .submit();
+
+      expect(result.sent, isTrue);
+      expect(replyRepository.sentDrafts.single.message, '正文');
+      final state = container.read(replyComposerControllerProvider(args)).value;
+      expect(state?.imageAttachments, isEmpty);
     });
 
     test('failed submit keeps draft and exposes error', () async {
@@ -648,6 +773,23 @@ void main() {
       expect((await draftRepository.loadDraft(args.identity))?.message, '失败也保留');
     });
   });
+}
+
+ReplyImageAttachment _uploadedAttachment({
+  required String localId,
+  required String aid,
+  required DateTime uploadedAt,
+}) {
+  return ReplyImageAttachment(
+    localId: localId,
+    localPath: '/gallery/$localId.jpg',
+    fileName: '$localId.jpg',
+    mimeType: 'image/jpeg',
+    order: 0,
+    status: ReplyImageAttachmentStatus.uploaded,
+    aid: aid,
+    uploadedAt: uploadedAt,
+  );
 }
 
 ReplyComposerArgs _threadArgs({required String tid}) {

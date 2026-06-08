@@ -168,7 +168,8 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
     if (_allowPopWithoutConfirm) {
       return false;
     }
-    return state != null && state.message.trim().isNotEmpty;
+    return state != null &&
+        (state.message.trim().isNotEmpty || state.imageAttachments.isNotEmpty);
   }
 
   Future<void> _confirmAndPop(

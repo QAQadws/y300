@@ -3,11 +3,13 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/profile/data/profile_repository.dart';
 import 'package:y300/features/reply/data/discuz_reply_api_repository.dart';
 import 'package:y300/features/reply/data/reply_draft_repository.dart';
+import 'package:y300/features/reply/data/reply_draft_attachment_maintenance_service.dart';
 import 'package:y300/features/reply/data/reply_image_picker.dart';
 import 'package:y300/features/reply/data/reply_image_upload_remote_data_source.dart';
 import 'package:y300/features/reply/data/reply_image_upload_repository.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/data/reply_upload_notification_service.dart';
+import 'package:y300/features/reply/data/reply_upload_cache_storage.dart';
 import 'package:y300/features/reply/data/shared_preferences_reply_draft_repository.dart';
 import 'package:y300/features/reply/data/sticker_catalog_repository.dart';
 import 'package:y300/features/reply/data/sticker_picker_preferences_repository.dart';
@@ -56,8 +58,21 @@ final replySubmissionErrorPresenterProvider =
   return const ReplySubmissionErrorPresenter();
 });
 
-final replyDraftRepositoryProvider = Provider<ReplyDraftRepository>((_) {
-  return SharedPreferencesReplyDraftRepository();
+final replyUploadCacheStorageProvider = Provider<ReplyUploadCacheStorage>((_) {
+  return LocalReplyUploadCacheStorage();
+});
+
+final replyDraftRepositoryProvider = Provider<ReplyDraftRepository>((ref) {
+  return SharedPreferencesReplyDraftRepository(
+    cacheStorage: ref.read(replyUploadCacheStorageProvider),
+  );
+});
+
+final replyDraftAttachmentMaintenanceServiceProvider =
+    Provider<ReplyDraftAttachmentMaintenanceService>((ref) {
+  return SharedPreferencesReplyDraftAttachmentMaintenanceService(
+    cacheStorage: ref.read(replyUploadCacheStorageProvider),
+  );
 });
 
 final replyImagePickerProvider = Provider<ReplyImagePicker>((_) {

@@ -8,6 +8,7 @@ import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/data/reply_upload_notification_service.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
+import 'package:y300/features/reply/domain/services/reply_draft_attachment_sanitizer.dart';
 import 'package:y300/features/reply/domain/services/reply_attach_bbcode_service.dart';
 import 'package:y300/features/reply/domain/services/reply_image_upload_coordinator.dart';
 import 'package:y300/features/reply/domain/services/reply_submission_error_presenter.dart';
@@ -32,6 +33,8 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
   ReplyImageUploadCoordinator? _imageUploadCoordinator;
   ReplyUploadNotificationService? _uploadNotificationService;
   ReplyAttachBbCodeService? _attachBbCodeService;
+  final ReplyDraftAttachmentSanitizer _draftAttachmentSanitizer =
+      const ReplyDraftAttachmentSanitizer();
   ReplyComposerState? _latestState;
   StreamSubscription<ReplyImageUploadEvent>? _imageUploadSubscription;
   Set<String> _activeUploadLocalIds = const <String>{};
@@ -65,6 +68,8 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
       useSignature: snapshot?.useSignature ?? true,
       isPreparing: _shouldPreparePostReply,
       restoredDraft: restoredDraft,
+      imageAttachments:
+          snapshot?.imageAttachments ?? const <ReplyImageAttachment>[],
     );
     _latestState = initialState;
     if (_shouldPreparePostReply) {
@@ -352,14 +357,32 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
   }
 
   Future<ReplyComposerResult> submit() async {
-    final current = state.value;
-    if (current == null || current.isSubmitting) {
+    final stateValue = state.value;
+    if (stateValue == null || stateValue.isSubmitting) {
       return const ReplyComposerResult(sent: false, message: '');
     }
+    _saveTimer?.cancel();
+    _saveTimer = null;
+    _setDataState(
+      stateValue.copyWith(
+        isSubmitting: true,
+        clearErrorMessage: true,
+      ),
+    );
+
+    final current = await _sanitizeCurrentStateBeforeSubmit(
+      stateValue.copyWith(
+        isSubmitting: true,
+        clearErrorMessage: true,
+      ),
+    );
     final message = current.message.trim();
     if (message.isEmpty) {
       _setDataState(
-        current.copyWith(errorMessage: '请输入回复内容'),
+        current.copyWith(
+          isSubmitting: false,
+          errorMessage: '请输入回复内容',
+        ),
       );
       return const ReplyComposerResult(sent: false, message: '请输入回复内容');
     }
@@ -370,22 +393,16 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
         (current.isPreparing || preparation == null);
     if (missingPostReference) {
       _setDataState(
-        current.copyWith(errorMessage: '楼层回复引用准备失败，请重试'),
+        current.copyWith(
+          isSubmitting: false,
+          errorMessage: '楼层回复引用准备失败，请重试',
+        ),
       );
       return const ReplyComposerResult(
         sent: false,
         message: '楼层回复引用准备失败，请重试',
       );
     }
-
-    _saveTimer?.cancel();
-    _saveTimer = null;
-    _setDataState(
-      current.copyWith(
-        isSubmitting: true,
-        clearErrorMessage: true,
-      ),
-    );
 
     final reference = preparation?.reference;
     final result = await _replyRepository!.sendReply(
@@ -410,6 +427,7 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
         afterSubmit.copyWith(
           isSubmitting: false,
           message: '',
+          imageAttachments: const <ReplyImageAttachment>[],
           clearErrorMessage: true,
         ),
       );
@@ -506,10 +524,33 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
           message: value.message,
           useSignature: value.useSignature,
           updatedAt: DateTime.now(),
+          imageAttachments: value.imageAttachments,
         ),
       );
     } catch (_) {
       // 草稿保存失败不阻断编辑或发送；用户仍可继续完成当前回复。
     }
+  }
+
+  Future<ReplyComposerState> _sanitizeCurrentStateBeforeSubmit(
+    ReplyComposerState current,
+  ) async {
+    final result = _draftAttachmentSanitizer.sanitize(
+      message: current.message,
+      imageAttachments: current.imageAttachments,
+      now: DateTime.now(),
+    );
+    if (!result.changed) {
+      return current;
+    }
+
+    final sanitizedState = current.copyWith(
+      message: result.message,
+      imageAttachments: result.imageAttachments,
+      clearImageUploadError: true,
+    );
+    _setDataState(sanitizedState);
+    await _saveSnapshot(sanitizedState);
+    return sanitizedState;
   }
 }
