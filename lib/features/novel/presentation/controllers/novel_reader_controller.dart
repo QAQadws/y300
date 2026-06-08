@@ -37,6 +37,7 @@ class NovelReaderViewState {
     required this.currentContent,
     required this.document,
     required this.preferences,
+    required this.readingProgress,
     required this.currentOffset,
   });
 
@@ -46,7 +47,34 @@ class NovelReaderViewState {
   final NovelChapterContent currentContent;
   final NovelReaderDocument document;
   final NovelReaderPreferences preferences;
+  final NovelReadingProgress? readingProgress;
   final double currentOffset;
+
+  int get currentEpisodeIndex {
+    return episodes.indexWhere(
+      (episode) => episode.episodeId == currentEpisode.episodeId,
+    );
+  }
+
+  NovelEpisodeItem? get previousEpisode {
+    final index = currentEpisodeIndex;
+    if (index <= 0) {
+      return null;
+    }
+    return episodes[index - 1];
+  }
+
+  NovelEpisodeItem? get nextEpisode {
+    final index = currentEpisodeIndex;
+    if (index < 0 || index >= episodes.length - 1) {
+      return null;
+    }
+    return episodes[index + 1];
+  }
+
+  bool get hasPreviousEpisode => previousEpisode != null;
+
+  bool get hasNextEpisode => nextEpisode != null;
 
   NovelReaderViewState copyWith({
     NovelItem? novel,
@@ -56,6 +84,8 @@ class NovelReaderViewState {
     NovelChapterContent? currentContent,
     NovelReaderDocument? document,
     NovelReaderPreferences? preferences,
+    NovelReadingProgress? readingProgress,
+    bool clearReadingProgress = false,
     double? currentOffset,
   }) {
     return NovelReaderViewState(
@@ -65,6 +95,8 @@ class NovelReaderViewState {
       currentContent: currentContent ?? this.currentContent,
       document: document ?? this.document,
       preferences: preferences ?? this.preferences,
+      readingProgress:
+          clearReadingProgress ? null : (readingProgress ?? this.readingProgress),
       currentOffset: currentOffset ?? this.currentOffset,
     );
   }
@@ -101,8 +133,15 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     if (current == null || current.currentEpisode.episodeId == episodeId) {
       return;
     }
+    final preservedProgress = current.readingProgress;
     state = const AsyncLoading();
-    state = await AsyncValue.guard(() => _load(episodeId));
+    state = await AsyncValue.guard(
+      () => _load(episodeId, preservedProgress: preservedProgress),
+    );
+  }
+
+  Future<void> openEpisodeFromCatalog(String episodeId) {
+    return openEpisode(episodeId);
   }
 
   Future<void> goToPreviousEpisode() async {
@@ -110,13 +149,11 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     if (current == null) {
       return;
     }
-    final index = current.episodes.indexWhere(
-      (episode) => episode.episodeId == current.currentEpisode.episodeId,
-    );
-    if (index <= 0) {
+    final previous = current.previousEpisode;
+    if (previous == null) {
       return;
     }
-    await openEpisode(current.episodes[index - 1].episodeId);
+    await openEpisode(previous.episodeId);
   }
 
   Future<void> goToNextEpisode() async {
@@ -124,13 +161,11 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     if (current == null) {
       return;
     }
-    final index = current.episodes.indexWhere(
-      (episode) => episode.episodeId == current.currentEpisode.episodeId,
-    );
-    if (index < 0 || index >= current.episodes.length - 1) {
+    final next = current.nextEpisode;
+    if (next == null) {
       return;
     }
-    await openEpisode(current.episodes[index + 1].episodeId);
+    await openEpisode(next.episodeId);
   }
 
   Future<void> onScrollOffsetChanged(double offset) async {
@@ -162,7 +197,10 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     );
   }
 
-  Future<NovelReaderViewState> _load(String episodeId) async {
+  Future<NovelReaderViewState> _load(
+    String episodeId, {
+    NovelReadingProgress? preservedProgress,
+  }) async {
     final repository = ref.read(novelRepositoryProvider);
     NovelItem? novel;
     try {
@@ -196,9 +234,12 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
 
     final preferences = await repository.getReaderPreferences();
     final progress = await repository.getReadingProgress(novelId: _args.novelId);
-    final offset = progress != null && progress.episodeId == currentEpisode.episodeId
-        ? progress.scrollOffset
-        : 0.0;
+    final restoreProgress = _progressForEpisode(
+      episodeId: currentEpisode.episodeId,
+      currentProgress: progress,
+      preservedProgress: preservedProgress,
+    );
+    final offset = restoreProgress?.scrollOffset ?? 0.0;
 
     return NovelReaderViewState(
       novel: novel,
@@ -207,8 +248,23 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       currentContent: content,
       document: document,
       preferences: preferences,
+      readingProgress: progress,
       currentOffset: offset,
     );
+  }
+
+  NovelReadingProgress? _progressForEpisode({
+    required String episodeId,
+    required NovelReadingProgress? currentProgress,
+    required NovelReadingProgress? preservedProgress,
+  }) {
+    if (currentProgress?.episodeId == episodeId) {
+      return currentProgress;
+    }
+    if (preservedProgress?.episodeId == episodeId) {
+      return preservedProgress;
+    }
+    return null;
   }
 
   Future<void> _saveReadingProgress({

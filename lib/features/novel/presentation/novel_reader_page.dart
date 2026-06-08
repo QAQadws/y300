@@ -68,7 +68,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(child: Text('加载阅读器失败：$error')),
         data: (viewState) {
-          _restoreOffsetIfNeeded(viewState.currentOffset);
+          _restoreOffsetIfNeeded(
+            episodeId: viewState.currentEpisode.episodeId,
+            offset: viewState.currentOffset,
+          );
 
           final theme = Theme.of(context);
           final palette = _themeResolver.resolve(
@@ -139,16 +142,16 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     NovelReaderViewState viewState,
     NovelReaderController controller,
   ) {
-    final currentIndex = _currentEpisodeIndex(viewState);
     final total = viewState.episodes.isEmpty ? 1 : viewState.episodes.length;
+    final currentIndex = viewState.currentEpisodeIndex;
     final current = currentIndex < 0 ? 1 : currentIndex + 1;
     return ReaderBottomBarConfig(
       showProgress: viewState.preferences.showProgressIndicator,
       progress: ReaderProgressConfig(
         current: current,
         total: total,
-        previousEnabled: currentIndex > 0,
-        nextEnabled: currentIndex >= 0 && currentIndex < viewState.episodes.length - 1,
+        previousEnabled: viewState.hasPreviousEpisode,
+        nextEnabled: viewState.hasNextEpisode,
         onPrevious: () => _switchToPreviousEpisode(controller),
         onNext: () => _switchToNextEpisode(controller),
         onChanged: (_) {},
@@ -206,6 +209,17 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
         imageHeaderBuilder: imageHeaderBuilder,
         onLinkTap: (link) => _openReaderLink(link, externalLauncher),
       ),
+      if (viewState.nextEpisode != null) ...[
+        SizedBox(height: viewState.preferences.paragraphSpacing * 2),
+        NovelReaderNextChapterTransition(
+          nextEpisode: viewState.nextEpisode!,
+          onPressed: () => _openDifferentEpisode(
+            () => ref
+                .read(novelReaderControllerProvider(_args).notifier)
+                .goToNextEpisode(),
+          ),
+        ),
+      ],
     ];
     return ListView(
       key: const Key('novel-reader-paragraph-list'),
@@ -239,7 +253,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
         .onScrollOffsetChanged(_scrollController.offset);
   }
 
-  void _restoreOffsetIfNeeded(double offset) {
+  void _restoreOffsetIfNeeded({
+    required String episodeId,
+    required double offset,
+  }) {
     if (_hasRestoredOffset || offset <= 0) {
       return;
     }
@@ -247,10 +264,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
       if (!mounted || !_scrollController.hasClients || _hasRestoredOffset) {
         return;
       }
+      final current = ref.read(novelReaderControllerProvider(_args)).value;
+      if (current?.currentEpisode.episodeId != episodeId) {
+        return;
+      }
       final max = _scrollController.position.maxScrollExtent;
       _isProgrammaticScrollChange = true;
       try {
-        _scrollController.jumpTo(offset.clamp(0, max));
+        _scrollController.jumpTo(offset.clamp(0.0, max).toDouble());
       } finally {
         _isProgrammaticScrollChange = false;
       }
@@ -291,7 +312,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     if (episode.episodeId == viewState.currentEpisode.episodeId) {
       return;
     }
-    await _openDifferentEpisode(() => controller.openEpisode(episode.episodeId));
+    await _openDifferentEpisode(
+      () => controller.openEpisodeFromCatalog(episode.episodeId),
+    );
   }
 
   Future<void> _openDifferentEpisode(Future<void> Function() action) async {
@@ -325,7 +348,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     if (selected == null || selected.episodeId == viewState.currentEpisode.episodeId) {
       return;
     }
-    await _openDifferentEpisode(() => controller.openEpisode(selected.episodeId));
+    await _openDifferentEpisode(
+      () => controller.openEpisodeFromCatalog(selected.episodeId),
+    );
   }
 
   void _showDisplaySettingsSheet(
@@ -403,14 +428,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     return widget.novelId;
   }
 
-  int _currentEpisodeIndex(NovelReaderViewState viewState) {
-    return viewState.episodes.indexWhere(
-      (episode) => episode.episodeId == viewState.currentEpisode.episodeId,
-    );
-  }
 }
 
-class NovelReaderChapterListSheet extends StatelessWidget {
+class NovelReaderChapterListSheet extends StatefulWidget {
   const NovelReaderChapterListSheet({
     super.key,
     required this.viewState,
@@ -418,46 +438,185 @@ class NovelReaderChapterListSheet extends StatelessWidget {
 
   final NovelReaderViewState viewState;
 
+  static const double itemExtent = 72;
+
+  @override
+  State<NovelReaderChapterListSheet> createState() =>
+      _NovelReaderChapterListSheetState();
+}
+
+class _NovelReaderChapterListSheetState extends State<NovelReaderChapterListSheet> {
+  late final ScrollController _scrollController;
+  String _keyword = '';
+
+  NovelReaderViewState get viewState => widget.viewState;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToCurrentEpisode();
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final filteredEpisodes = _filteredEpisodes();
     return SafeArea(
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxHeight: MediaQuery.sizeOf(context).height * 0.72,
         ),
-        child: ListView(
+        child: Column(
           key: const Key('novel-reader-chapter-list-sheet'),
-          shrinkWrap: true,
           children: [
             ReaderSheetTitle(title: '目录'),
-            for (final episode in viewState.episodes)
-              ListTile(
-                key: Key('novel-reader-chapter-${episode.episodeId}'),
-                selected: episode.episodeId == viewState.currentEpisode.episodeId,
-                leading: Icon(
-                  episode.episodeId == viewState.currentEpisode.episodeId
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_unchecked,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: TextField(
+                key: const Key('novel-reader-chapter-search-field'),
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search),
+                  hintText: '搜索章节',
+                  isDense: true,
                 ),
-                title: Text(
-                  episode.episodeTitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: episode.datelineText == null
-                    ? null
-                    : Text(
-                        episode.datelineText!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                trailing: episode.episodeId == viewState.currentEpisode.episodeId
-                    ? const Text('当前')
-                    : null,
-                onTap: () => Navigator.of(context).pop(episode),
+                onChanged: (value) {
+                  setState(() {
+                    _keyword = value.trim();
+                  });
+                },
               ),
+            ),
+            Expanded(
+              child: filteredEpisodes.isEmpty
+                  ? const Center(
+                      key: Key('novel-reader-chapter-search-empty'),
+                      child: Text('没有匹配的章节'),
+                    )
+                  : ListView.builder(
+                      controller: _keyword.isEmpty ? _scrollController : null,
+                      itemExtent: NovelReaderChapterListSheet.itemExtent,
+                      itemCount: filteredEpisodes.length,
+                      itemBuilder: (context, index) {
+                        return _ChapterListTile(
+                          episode: filteredEpisodes[index],
+                          currentEpisodeId: viewState.currentEpisode.episodeId,
+                          readingProgressEpisodeId:
+                              viewState.readingProgress?.episodeId,
+                        );
+                      },
+                    ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _scrollToCurrentEpisode() {
+    if (!mounted || _keyword.isNotEmpty || !_scrollController.hasClients) {
+      return;
+    }
+    final offset = _currentEpisodeInitialOffset();
+    final max = _scrollController.position.maxScrollExtent;
+    if (max <= 0) {
+      return;
+    }
+    _scrollController.jumpTo(offset.clamp(0.0, max).toDouble());
+  }
+
+  double _currentEpisodeInitialOffset() {
+    final currentIndex = viewState.currentEpisodeIndex;
+    if (currentIndex <= 0) {
+      return 0;
+    }
+    final anchoredIndex = currentIndex <= 2 ? 0 : currentIndex - 2;
+    return anchoredIndex * NovelReaderChapterListSheet.itemExtent;
+  }
+
+  List<NovelEpisodeItem> _filteredEpisodes() {
+    final keyword = _keyword.toLowerCase();
+    if (keyword.isEmpty) {
+      return viewState.episodes;
+    }
+    return viewState.episodes.where((episode) {
+      return episode.episodeTitle.toLowerCase().contains(keyword) ||
+          (episode.datelineText ?? '').toLowerCase().contains(keyword) ||
+          (episode.sourcePid ?? '').toLowerCase().contains(keyword);
+    }).toList(growable: false);
+  }
+}
+
+class _ChapterListTile extends StatelessWidget {
+  const _ChapterListTile({
+    required this.episode,
+    required this.currentEpisodeId,
+    required this.readingProgressEpisodeId,
+  });
+
+  final NovelEpisodeItem episode;
+  final String currentEpisodeId;
+  final String? readingProgressEpisodeId;
+
+  @override
+  Widget build(BuildContext context) {
+    final isCurrent = episode.episodeId == currentEpisodeId;
+    final isLastRead =
+        !isCurrent && episode.episodeId == readingProgressEpisodeId;
+    return ListTile(
+      key: Key('novel-reader-chapter-${episode.episodeId}'),
+      selected: isCurrent,
+      leading: Icon(
+        isCurrent ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+      ),
+      title: Text(
+        episode.episodeTitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: episode.datelineText == null
+          ? null
+          : Text(
+              episode.datelineText!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+      trailing: isCurrent
+          ? const Text('当前')
+          : isLastRead
+              ? const Text('上次阅读')
+              : null,
+      onTap: () => Navigator.of(context).pop(episode),
+    );
+  }
+}
+
+class NovelReaderNextChapterTransition extends StatelessWidget {
+  const NovelReaderNextChapterTransition({
+    super.key,
+    required this.nextEpisode,
+    required this.onPressed,
+  });
+
+  final NovelEpisodeItem nextEpisode;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      key: const Key('novel-reader-next-chapter-transition'),
+      child: OutlinedButton.icon(
+        key: const Key('novel-reader-next-chapter-button'),
+        onPressed: onPressed,
+        icon: const Icon(Icons.arrow_forward),
+        label: Text('下一章：${nextEpisode.episodeTitle}'),
       ),
     );
   }

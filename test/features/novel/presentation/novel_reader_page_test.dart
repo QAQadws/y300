@@ -94,6 +94,126 @@ void main() {
     expect(repository.savedProgressEpisodeIds, contains('novel:49:100:5001'));
   });
 
+  testWidgets('NovelReaderPage catalog searches chapters and shows empty state', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository.threeEpisodes();
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-catalog')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-chapter-search-field')), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('novel-reader-chapter-search-field')),
+      '第3章',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-chapter-novel:49:100:5003')), findsOneWidget);
+    expect(find.byKey(const Key('novel-reader-chapter-novel:49:100:5001')), findsNothing);
+
+    await tester.enterText(
+      find.byKey(const Key('novel-reader-chapter-search-field')),
+      '5002',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-chapter-novel:49:100:5002')), findsOneWidget);
+    expect(find.byKey(const Key('novel-reader-chapter-novel:49:100:5003')), findsNothing);
+
+    await tester.enterText(
+      find.byKey(const Key('novel-reader-chapter-search-field')),
+      '不存在',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-chapter-search-empty')), findsOneWidget);
+  });
+
+  testWidgets('NovelReaderPage catalog marks last reading episode', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository.threeEpisodes(
+      readingProgress: NovelReadingProgress(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5003',
+        scrollOffset: 120,
+        updatedAt: DateTime(2026, 6, 1),
+      ),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-catalog')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('上次阅读'), findsOneWidget);
+  });
+
+  testWidgets('NovelReaderPage catalog opens near current chapter', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository.manyEpisodes(
+      count: 20,
+      currentIndex: 14,
+    );
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        initialEpisodeId: 'novel:49:100:5015',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-catalog')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-chapter-novel:49:100:5015')), findsOneWidget);
+    expect(find.text('当前'), findsOneWidget);
+    expect(find.byKey(const Key('novel-reader-chapter-novel:49:100:5001')), findsNothing);
+  });
+
+  testWidgets('NovelReaderPage bottom buttons and slider switch chapters', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository.threeEpisodes();
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    final previousButton = tester.widget<IconButton>(
+      find.byKey(const Key('shared-reader-prev-button')),
+    );
+    final nextButton = tester.widget<IconButton>(
+      find.byKey(const Key('shared-reader-next-button')),
+    );
+    expect(previousButton.onPressed, isNull);
+    expect(nextButton.onPressed, isNotNull);
+
+    await tester.tap(find.byKey(const Key('shared-reader-next-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('第三段。'), findsOneWidget);
+    await _showReaderMenu(tester);
+    final previousAfterSwitch = tester.widget<IconButton>(
+      find.byKey(const Key('shared-reader-prev-button')),
+    );
+    expect(previousAfterSwitch.onPressed, isNotNull);
+
+    await tester.drag(
+      find.byKey(const Key('shared-reader-progress-slider')),
+      const Offset(300, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('第五段。'), findsOneWidget);
+  });
+
   testWidgets('NovelReaderPage display sheet persists style changes', (
     tester,
   ) async {
@@ -220,6 +340,51 @@ void main() {
     expect(repository.lastSavedOffset, greaterThan(0));
   });
 
+  testWidgets('NovelReaderPage next chapter transition opens next episode', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository.threeEpisodes();
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('novel-reader-next-chapter-transition')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('novel-reader-next-chapter-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('第三段。'), findsOneWidget);
+  });
+
+  testWidgets('NovelReaderPage hides next chapter transition on last episode', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository.threeEpisodes();
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        initialEpisodeId: 'novel:49:100:5003',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('第五段。'), findsOneWidget);
+    await _showReaderMenu(tester);
+    final previousButton = tester.widget<IconButton>(
+      find.byKey(const Key('shared-reader-prev-button')),
+    );
+    final nextButton = tester.widget<IconButton>(
+      find.byKey(const Key('shared-reader-next-button')),
+    );
+    expect(previousButton.onPressed, isNotNull);
+    expect(nextButton.onPressed, isNull);
+    expect(
+      find.byKey(const Key('novel-reader-next-chapter-transition')),
+      findsNothing,
+    );
+  });
+
   testWidgets('NovelReaderPage prefers downloaded chapter json', (tester) async {
     await tester.pumpWidget(
       _buildReaderApp(
@@ -303,6 +468,7 @@ Widget _buildReaderApp({
   required _FakeNovelRepository repository,
   NovelDownloadService? downloadService,
   ThreadRepository? threadRepository,
+  String initialEpisodeId = 'novel:49:100:5001',
 }) {
   return ProviderScope(
     overrides: [
@@ -319,10 +485,10 @@ Widget _buildReaderApp({
       if (threadRepository != null)
         threadRepositoryProvider.overrideWithValue(threadRepository),
     ],
-    child: const MaterialApp(
+    child: MaterialApp(
       home: NovelReaderPage(
         novelId: 'novel:49:100',
-        initialEpisodeId: 'novel:49:100:5001',
+        initialEpisodeId: initialEpisodeId,
       ),
     ),
   );
@@ -401,13 +567,73 @@ class _FakeNovelRepository implements NovelRepository {
     List<String>? firstParagraphs,
     String? firstRawHtml,
     NovelReaderPreferences? preferences,
-  })  : firstParagraphs = firstParagraphs ?? const <String>['第一段。', '第二段。'],
-        firstRawHtml = firstRawHtml ??
-            _rawHtmlFromParagraphs(firstParagraphs ?? const <String>['第一段。', '第二段。']),
+    List<NovelEpisodeItem>? episodes,
+    Map<String, NovelChapterContent>? contentsByEpisodeId,
+    this.readingProgress,
+  })  : episodes = episodes ?? _defaultEpisodes(),
+        contentsByEpisodeId = contentsByEpisodeId ??
+            _defaultContents(
+              firstParagraphs: firstParagraphs,
+              firstRawHtml: firstRawHtml,
+            ),
         preferences = preferences ?? NovelReaderPreferences.defaults();
 
-  final List<String> firstParagraphs;
-  final String firstRawHtml;
+  factory _FakeNovelRepository.threeEpisodes({
+    NovelReadingProgress? readingProgress,
+  }) {
+    return _FakeNovelRepository(
+      episodes: _threeEpisodes(),
+      contentsByEpisodeId: _contentsForParagraphs(
+        const <String, List<String>>{
+          'novel:49:100:5001': <String>['第一段。', '第二段。'],
+          'novel:49:100:5002': <String>['第三段。', '第四段。'],
+          'novel:49:100:5003': <String>['第五段。', '第六段。'],
+        },
+      ),
+      readingProgress: readingProgress,
+    );
+  }
+
+  factory _FakeNovelRepository.manyEpisodes({
+    required int count,
+    required int currentIndex,
+  }) {
+    final episodes = List<NovelEpisodeItem>.generate(count, (index) {
+      final number = index + 1;
+      final pid = (5000 + number).toString();
+      return NovelEpisodeItem(
+        episodeId: 'novel:49:100:$pid',
+        novelId: 'novel:49:100',
+        sourceTid: '100',
+        sourcePid: pid,
+        sourcePage: 1,
+        episodeTitle: '第$number章',
+        orderIndex: index,
+        datelineText: '2026-05-${number.toString().padLeft(2, '0')}',
+      );
+    });
+    final contents = <String, NovelChapterContent>{
+      for (final episode in episodes)
+        episode.episodeId: _contentFromParagraphs(
+          episode.episodeId,
+          <String>['${episode.episodeTitle}正文。'],
+        ),
+    };
+    return _FakeNovelRepository(
+      episodes: episodes,
+      contentsByEpisodeId: contents,
+      readingProgress: NovelReadingProgress(
+        novelId: 'novel:49:100',
+        episodeId: episodes[currentIndex].episodeId,
+        scrollOffset: 0,
+        updatedAt: DateTime(2026, 6, 1),
+      ),
+    );
+  }
+
+  final List<NovelEpisodeItem> episodes;
+  final Map<String, NovelChapterContent> contentsByEpisodeId;
+  NovelReadingProgress? readingProgress;
   NovelReaderPreferences preferences;
   NovelReaderPreferences? latestPreferences;
   double lastSavedOffset = 0;
@@ -439,26 +665,13 @@ class _FakeNovelRepository implements NovelRepository {
       sourceFid: '49',
       title: '测试小说',
       updatedAt: DateTime(2026, 1, 1),
-      episodeCount: 2,
+      episodeCount: episodes.length,
     );
   }
 
   @override
   Future<NovelChapterContent?> getChapterContent({required String episodeId}) async {
-    if (episodeId == 'novel:49:100:5002') {
-      return const NovelChapterContent(
-        episodeId: 'novel:49:100:5002',
-        rawHtml: '<p>第三段。</p><p>第四段。</p>',
-        plainText: '第三段。\n第四段。',
-        paragraphs: <String>['第三段。', '第四段。'],
-      );
-    }
-    return NovelChapterContent(
-      episodeId: episodeId,
-      rawHtml: firstRawHtml,
-      plainText: firstParagraphs.join('\n'),
-      paragraphs: firstParagraphs,
-    );
+    return contentsByEpisodeId[episodeId];
   }
 
   @override
@@ -466,7 +679,81 @@ class _FakeNovelRepository implements NovelRepository {
     required String novelId,
     bool descending = false,
   }) async {
-    const episodes = <NovelEpisodeItem>[
+    return descending ? episodes.reversed.toList(growable: false) : episodes;
+  }
+
+  @override
+  Future<NovelReaderPreferences> getReaderPreferences() async => preferences;
+
+  @override
+  Future<List<NovelItem>> getShelfItems({String categoryId = 'default'}) async =>
+      const <NovelItem>[];
+
+  @override
+  Future<void> moveNovelToCategory({
+    required String novelId,
+    required String fromCategoryId,
+    required String toCategoryId,
+  }) async {}
+
+  @override
+  Future<NovelReadingProgress?> getReadingProgress({required String novelId}) async {
+    return readingProgress;
+  }
+
+  @override
+  Future<NovelEpisodeRefreshResult> refreshEpisodes({required String novelId}) async {
+    return NovelEpisodeRefreshResult(
+      insertedCount: 0,
+      updatedCount: 0,
+      totalCount: episodes.length,
+    );
+  }
+
+  @override
+  Future<void> removeFromShelf({required String novelId}) async {}
+
+  @override
+  Future<void> purgeWork({required String novelId}) async {}
+
+  @override
+  Future<void> renameCategory({required String categoryId, required String newName}) async {}
+
+  @override
+  Future<void> saveReadingProgress({
+    required String novelId,
+    required String episodeId,
+    required double scrollOffset,
+  }) async {
+    savedProgressEpisodeIds.add(episodeId);
+    lastSavedOffset = scrollOffset;
+    readingProgress = NovelReadingProgress(
+      novelId: novelId,
+      episodeId: episodeId,
+      scrollOffset: scrollOffset,
+      updatedAt: DateTime(2026, 6, 8),
+    );
+  }
+
+  @override
+  Future<void> upsertNovelBySeed({required NovelRefreshSeed seed}) async {}
+
+  @override
+  Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {
+    latestPreferences = preferences;
+    this.preferences = preferences;
+  }
+
+  static String _rawHtmlFromParagraphs(List<String> paragraphs) {
+    return paragraphs.map((paragraph) => '<p>$paragraph</p>').join();
+  }
+
+  static List<NovelEpisodeItem> _defaultEpisodes() {
+    return _threeEpisodes().take(2).toList(growable: false);
+  }
+
+  static List<NovelEpisodeItem> _threeEpisodes() {
+    return const <NovelEpisodeItem>[
       NovelEpisodeItem(
         episodeId: 'novel:49:100:5001',
         novelId: 'novel:49:100',
@@ -487,63 +774,59 @@ class _FakeNovelRepository implements NovelRepository {
         orderIndex: 1,
         datelineText: '2026-05-04',
       ),
+      NovelEpisodeItem(
+        episodeId: 'novel:49:100:5003',
+        novelId: 'novel:49:100',
+        sourceTid: '100',
+        sourcePid: '5003',
+        sourcePage: 1,
+        episodeTitle: '第3章',
+        orderIndex: 2,
+        datelineText: '2026-05-05',
+      ),
     ];
-    return descending ? episodes.reversed.toList(growable: false) : episodes;
   }
 
-  @override
-  Future<NovelReaderPreferences> getReaderPreferences() async => preferences;
-
-  @override
-  Future<List<NovelItem>> getShelfItems({String categoryId = 'default'}) async =>
-      const <NovelItem>[];
-
-  @override
-  Future<void> moveNovelToCategory({
-    required String novelId,
-    required String fromCategoryId,
-    required String toCategoryId,
-  }) async {}
-
-  @override
-  Future<NovelReadingProgress?> getReadingProgress({required String novelId}) async {
-    return null;
+  static Map<String, NovelChapterContent> _defaultContents({
+    List<String>? firstParagraphs,
+    String? firstRawHtml,
+  }) {
+    final paragraphs = firstParagraphs ?? const <String>['第一段。', '第二段。'];
+    final rawHtml = firstRawHtml ?? _rawHtmlFromParagraphs(paragraphs);
+    return <String, NovelChapterContent>{
+      'novel:49:100:5001': NovelChapterContent(
+        episodeId: 'novel:49:100:5001',
+        rawHtml: rawHtml,
+        plainText: paragraphs.join('\n'),
+        paragraphs: paragraphs,
+      ),
+      'novel:49:100:5002': const NovelChapterContent(
+        episodeId: 'novel:49:100:5002',
+        rawHtml: '<p>第三段。</p><p>第四段。</p>',
+        plainText: '第三段。\n第四段。',
+        paragraphs: <String>['第三段。', '第四段。'],
+      ),
+    };
   }
 
-  @override
-  Future<NovelEpisodeRefreshResult> refreshEpisodes({required String novelId}) async {
-    return const NovelEpisodeRefreshResult(insertedCount: 0, updatedCount: 0, totalCount: 2);
+  static Map<String, NovelChapterContent> _contentsForParagraphs(
+    Map<String, List<String>> source,
+  ) {
+    return <String, NovelChapterContent>{
+      for (final entry in source.entries)
+        entry.key: _contentFromParagraphs(entry.key, entry.value),
+    };
   }
 
-  @override
-  Future<void> removeFromShelf({required String novelId}) async {}
-
-  @override
-  Future<void> purgeWork({required String novelId}) async {}
-
-  @override
-  Future<void> renameCategory({required String categoryId, required String newName}) async {}
-
-  @override
-  Future<void> saveReadingProgress({
-    required String novelId,
-    required String episodeId,
-    required double scrollOffset,
-  }) async {
-    savedProgressEpisodeIds.add(episodeId);
-    lastSavedOffset = scrollOffset;
-  }
-
-  @override
-  Future<void> upsertNovelBySeed({required NovelRefreshSeed seed}) async {}
-
-  @override
-  Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {
-    latestPreferences = preferences;
-    this.preferences = preferences;
-  }
-
-  static String _rawHtmlFromParagraphs(List<String> paragraphs) {
-    return paragraphs.map((paragraph) => '<p>$paragraph</p>').join();
+  static NovelChapterContent _contentFromParagraphs(
+    String episodeId,
+    List<String> paragraphs,
+  ) {
+    return NovelChapterContent(
+      episodeId: episodeId,
+      rawHtml: _rawHtmlFromParagraphs(paragraphs),
+      plainText: paragraphs.join('\n'),
+      paragraphs: paragraphs,
+    );
   }
 }
