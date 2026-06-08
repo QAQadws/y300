@@ -7,6 +7,7 @@ import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/data/novel_shelf_category_assign_use_case_impl.dart';
 import 'package:y300/features/novel/data/novel_thread_gateway.dart';
 import 'package:y300/features/novel/domain/services/novel_episode_discovery_service.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 
 final novelEpisodeDiscoveryServiceProvider =
@@ -15,6 +16,10 @@ final novelEpisodeDiscoveryServiceProvider =
         imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
       );
     });
+
+final novelReaderDocumentParserProvider = Provider<NovelReaderDocumentParser>((ref) {
+  return const DiscuzNovelReaderDocumentParser();
+});
 
 final novelRepositoryProvider = Provider<NovelRepository>((ref) {
   return LocalNovelRepository(

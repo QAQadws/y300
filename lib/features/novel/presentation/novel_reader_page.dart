@@ -2,10 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_document_view.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_display_settings_sheet.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
@@ -55,6 +60,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
   Widget build(BuildContext context) {
     final state = ref.watch(novelReaderControllerProvider(_args));
     final controller = ref.read(novelReaderControllerProvider(_args).notifier);
+    final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
+    final externalLauncher = ref.watch(forumWebViewExternalLauncherProvider);
 
     return Scaffold(
       body: state.when(
@@ -81,7 +88,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
               topBar: _buildTopBarConfig(viewState),
               bottomBar: _buildBottomBarConfig(viewState, controller),
               bottomSafeFraction: 0.18,
-              child: _buildParagraphList(viewState, typography),
+              child: _buildReaderList(
+                viewState,
+                typography,
+                imageHeaderBuilder,
+                externalLauncher,
+              ),
             ),
           );
         },
@@ -171,9 +183,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     );
   }
 
-  Widget _buildParagraphList(
+  Widget _buildReaderList(
     NovelReaderViewState viewState,
     NovelReaderTypography typography,
+    ImageRequestHeaderBuilder imageHeaderBuilder,
+    ForumWebViewExternalLauncher externalLauncher,
   ) {
     final children = <Widget>[
       if (viewState.preferences.showChapterTitle) ...[
@@ -185,16 +199,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
         ),
         SizedBox(height: viewState.preferences.paragraphSpacing * 1.6),
       ],
-      for (var index = 0; index < viewState.currentContent.paragraphs.length; index++) ...[
-        _NovelParagraphText(
-          text: viewState.currentContent.paragraphs[index],
-          style: typography.body,
-          textAlign: typography.textAlign,
-          firstLineIndent: typography.firstLineIndent,
-        ),
-        if (index < viewState.currentContent.paragraphs.length - 1)
-          SizedBox(height: viewState.preferences.paragraphSpacing),
-      ],
+      NovelReaderDocumentView(
+        document: viewState.document,
+        typography: typography,
+        paragraphSpacing: viewState.preferences.paragraphSpacing,
+        imageHeaderBuilder: imageHeaderBuilder,
+        onLinkTap: (link) => _openReaderLink(link, externalLauncher),
+      ),
     ];
     return ListView(
       key: const Key('novel-reader-paragraph-list'),
@@ -348,6 +359,32 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     );
   }
 
+  Future<void> _openReaderLink(
+    NovelReaderLink link,
+    ForumWebViewExternalLauncher externalLauncher,
+  ) async {
+    final tid = link.tid;
+    if (tid != null && tid.trim().isNotEmpty) {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ThreadDetailPage(tid: tid, subject: link.text),
+        ),
+      );
+      return;
+    }
+    final uri = Uri.tryParse(link.url);
+    if (uri == null) {
+      return;
+    }
+    final launched = await externalLauncher.launch(uri);
+    if (!mounted || launched) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('链接打开失败')),
+    );
+  }
+
   void _showPlaceholder(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
@@ -369,41 +406,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
   int _currentEpisodeIndex(NovelReaderViewState viewState) {
     return viewState.episodes.indexWhere(
       (episode) => episode.episodeId == viewState.currentEpisode.episodeId,
-    );
-  }
-}
-
-class _NovelParagraphText extends StatelessWidget {
-  const _NovelParagraphText({
-    required this.text,
-    required this.style,
-    required this.textAlign,
-    required this.firstLineIndent,
-  });
-
-  final String text;
-  final TextStyle style;
-  final TextAlign textAlign;
-  final double firstLineIndent;
-
-  @override
-  Widget build(BuildContext context) {
-    if (firstLineIndent <= 0) {
-      return Text(
-        text,
-        style: style,
-        textAlign: textAlign,
-      );
-    }
-    return Text.rich(
-      TextSpan(
-        children: [
-          WidgetSpan(child: SizedBox(width: firstLineIndent)),
-          TextSpan(text: text),
-        ],
-      ),
-      style: style,
-      textAlign: textAlign,
     );
   }
 }

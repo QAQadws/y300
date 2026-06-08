@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 
 class NovelReaderArgs {
   const NovelReaderArgs({
@@ -34,6 +35,7 @@ class NovelReaderViewState {
     required this.episodes,
     required this.currentEpisode,
     required this.currentContent,
+    required this.document,
     required this.preferences,
     required this.currentOffset,
   });
@@ -42,6 +44,7 @@ class NovelReaderViewState {
   final List<NovelEpisodeItem> episodes;
   final NovelEpisodeItem currentEpisode;
   final NovelChapterContent currentContent;
+  final NovelReaderDocument document;
   final NovelReaderPreferences preferences;
   final double currentOffset;
 
@@ -51,6 +54,7 @@ class NovelReaderViewState {
     List<NovelEpisodeItem>? episodes,
     NovelEpisodeItem? currentEpisode,
     NovelChapterContent? currentContent,
+    NovelReaderDocument? document,
     NovelReaderPreferences? preferences,
     double? currentOffset,
   }) {
@@ -59,6 +63,7 @@ class NovelReaderViewState {
       episodes: episodes ?? this.episodes,
       currentEpisode: currentEpisode ?? this.currentEpisode,
       currentContent: currentContent ?? this.currentContent,
+      document: document ?? this.document,
       preferences: preferences ?? this.preferences,
       currentOffset: currentOffset ?? this.currentOffset,
     );
@@ -183,6 +188,11 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     if (content == null) {
       throw StateError('章节内容不存在');
     }
+    final document = ref.read(novelReaderDocumentParserProvider).parse(
+          episodeId: content.episodeId,
+          rawHtml: content.rawHtml,
+          fallbackParagraphs: content.paragraphs,
+        );
 
     final preferences = await repository.getReaderPreferences();
     final progress = await repository.getReadingProgress(novelId: _args.novelId);
@@ -195,6 +205,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       episodes: episodes,
       currentEpisode: currentEpisode,
       currentContent: content,
+      document: document,
       preferences: preferences,
       currentOffset: offset,
     );

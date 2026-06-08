@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
@@ -190,6 +193,9 @@ void main() {
         home: ProviderScope(
           overrides: [
             novelRepositoryProvider.overrideWithValue(repository),
+            imageRequestHeaderBuilderProvider.overrideWithValue(
+              const _StaticImageHeaderBuilder(),
+            ),
             novelDownloadServiceProvider.overrideWithValue(_NoopNovelDownloadService()),
           ],
           child: const NovelReaderPage(
@@ -233,6 +239,57 @@ void main() {
     expect(find.text('离线段。'), findsOneWidget);
     expect(find.text('第一段。'), findsNothing);
   });
+
+  testWidgets('NovelReaderPage renders downloaded chapter html document', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: _FakeNovelRepository(),
+        downloadService: _DownloadedNovelServiceFake(
+          const NovelChapterContent(
+            episodeId: 'novel:49:100:5001',
+            rawHtml: '''
+<h2>离线标题</h2>
+<blockquote>离线引用</blockquote>
+<p>离线正文</p>
+<img src="https://img.test/offline.jpg">
+''',
+            plainText: '离线标题\n离线引用\n离线正文',
+            paragraphs: <String>['旧离线段'],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('离线标题'), findsOneWidget);
+    expect(find.text('离线引用'), findsOneWidget);
+    expect(find.text('离线正文'), findsOneWidget);
+    expect(find.byKey(const Key('novel-reader-document-view')), findsOneWidget);
+  });
+
+  testWidgets('NovelReaderPage opens thread links from reader document', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: _FakeNovelRepository(
+          firstRawHtml:
+              '<p><a href="forum.php?mod=viewthread&amp;tid=200">跳转原帖</a></p>',
+          firstParagraphs: const <String>['跳转原帖'],
+        ),
+        threadRepository: _FakeThreadRepository(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('novel-reader-link-block')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+
+    expect(find.byType(ThreadDetailPage), findsOneWidget);
+  });
 }
 
 Future<void> _showReaderMenu(WidgetTester tester) async {
@@ -250,6 +307,12 @@ Widget _buildReaderApp({
   return ProviderScope(
     overrides: [
       novelRepositoryProvider.overrideWithValue(repository),
+      forumWebViewExternalLauncherProvider.overrideWithValue(
+        _FakeForumWebViewExternalLauncher(),
+      ),
+      imageRequestHeaderBuilderProvider.overrideWithValue(
+        const _StaticImageHeaderBuilder(),
+      ),
       novelDownloadServiceProvider.overrideWithValue(
         downloadService ?? _NoopNovelDownloadService(),
       ),
@@ -263,6 +326,20 @@ Widget _buildReaderApp({
       ),
     ),
   );
+}
+
+class _FakeForumWebViewExternalLauncher implements ForumWebViewExternalLauncher {
+  @override
+  Future<bool> launch(Uri uri) async => true;
+}
+
+class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
+  const _StaticImageHeaderBuilder();
+
+  @override
+  Future<Map<String, String>> buildHeaders(String imageUrl) async {
+    return const <String, String>{};
+  }
 }
 
 class _FakeThreadRepository implements ThreadRepository {
@@ -322,11 +399,15 @@ class _DownloadedNovelServiceFake extends _NoopNovelDownloadService {
 class _FakeNovelRepository implements NovelRepository {
   _FakeNovelRepository({
     List<String>? firstParagraphs,
+    String? firstRawHtml,
     NovelReaderPreferences? preferences,
   })  : firstParagraphs = firstParagraphs ?? const <String>['第一段。', '第二段。'],
+        firstRawHtml = firstRawHtml ??
+            _rawHtmlFromParagraphs(firstParagraphs ?? const <String>['第一段。', '第二段。']),
         preferences = preferences ?? NovelReaderPreferences.defaults();
 
   final List<String> firstParagraphs;
+  final String firstRawHtml;
   NovelReaderPreferences preferences;
   NovelReaderPreferences? latestPreferences;
   double lastSavedOffset = 0;
@@ -374,7 +455,7 @@ class _FakeNovelRepository implements NovelRepository {
     }
     return NovelChapterContent(
       episodeId: episodeId,
-      rawHtml: '<p>第一段。</p><p>第二段。</p>',
+      rawHtml: firstRawHtml,
       plainText: firstParagraphs.join('\n'),
       paragraphs: firstParagraphs,
     );
@@ -460,5 +541,9 @@ class _FakeNovelRepository implements NovelRepository {
   Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {
     latestPreferences = preferences;
     this.preferences = preferences;
+  }
+
+  static String _rawHtmlFromParagraphs(List<String> paragraphs) {
+    return paragraphs.map((paragraph) => '<p>$paragraph</p>').join();
   }
 }
