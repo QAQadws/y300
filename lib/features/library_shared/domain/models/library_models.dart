@@ -216,6 +216,21 @@ class LibraryDetailHeader {
   final bool inShelf;
 }
 
+/// 通用章节阅读进度展示模型。
+class LibraryChapterProgressInfo {
+  const LibraryChapterProgressInfo({
+    required this.label,
+    required this.isCurrent,
+    this.fraction,
+    this.semanticLabel,
+  });
+
+  final String label;
+  final bool isCurrent;
+  final double? fraction;
+  final String? semanticLabel;
+}
+
 /// 通用章节行模型。
 class LibraryChapterItem {
   const LibraryChapterItem({
@@ -231,6 +246,7 @@ class LibraryChapterItem {
     this.isRead = false,
     this.isDownloaded = false,
     this.isBookmarked = false,
+    this.progressInfo,
   });
 
   final String episodeId;
@@ -245,4 +261,5 @@ class LibraryChapterItem {
   final bool isRead;
   final bool isDownloaded;
   final bool isBookmarked;
+  final LibraryChapterProgressInfo? progressInfo;
 }

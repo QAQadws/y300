@@ -187,6 +187,9 @@ void main() {
 
     expect(tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor, pageBackground);
     expect(_headerGradient(tester).colors.last, pageBackground);
+    expect(tester.widget<ColoredBox>(
+      find.byKey(const Key('unified-detail-header-seam-bridge')),
+    ).color, pageBackground);
 
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
     await tester.pumpAndSettle();
@@ -226,6 +229,84 @@ void main() {
     );
   });
 
+  testWidgets('UnifiedDetailPage header seam bridge does not block actions', (tester) async {
+    final adapter = _FakeDetailAdapter()
+      ..refreshResult = DetailRefreshResult.queued(
+        estimatedDuration: const Duration(milliseconds: 10500),
+        queuePosition: 1,
+      );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('unified-detail-header-seam-bridge')), findsOneWidget);
+    await tester.tap(find.text('更新').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('更新预计耗时10.5s'), findsOneWidget);
+  });
+
+  testWidgets('UnifiedDetailPage renders chapter progress badge', (tester) async {
+    final adapter = _FakeDetailAdapter(
+      progressInfo: const LibraryChapterProgressInfo(
+        label: '第 3 页',
+        isCurrent: true,
+        fraction: 0.3,
+        semanticLabel: '当前读到第 3 页',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-progress-e1')), findsOneWidget);
+    expect(find.text('第 3 页'), findsOneWidget);
+  });
+
+  testWidgets('UnifiedDetailPage omits chapter progress badge when progress is null', (tester) async {
+    final adapter = _FakeDetailAdapter();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-progress-e1')), findsNothing);
+  });
+
   testWidgets('UnifiedDetailPage shows refresh queue snackbar', (tester) async {
     final adapter = _FakeDetailAdapter()
       ..refreshResult = DetailRefreshResult.queued(
@@ -252,12 +333,16 @@ void main() {
 }
 
 class _FakeDetailAdapter implements DetailModuleAdapter {
-  _FakeDetailAdapter({this.coverLocalPath});
+  _FakeDetailAdapter({
+    this.coverLocalPath,
+    this.progressInfo,
+  });
 
   int markReadCallCount = 0;
   int loadChaptersCallCount = 0;
   DetailRefreshResult refreshResult = DetailRefreshResult.immediate;
   final String? coverLocalPath;
+  final LibraryChapterProgressInfo? progressInfo;
 
   @override
   Future<void> clearAllReadState({required String workId}) async {}
@@ -294,7 +379,7 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
     required LibraryChapterSortOption sortOption,
   }) async {
     loadChaptersCallCount++;
-    return const [
+    return [
       LibraryChapterItem(
         episodeId: 'e1',
         workId: 'work-1',
@@ -302,6 +387,7 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
         orderIndex: 1,
         sourceTid: '100',
         sourcePid: '5001',
+        progressInfo: progressInfo,
       ),
     ];
   }

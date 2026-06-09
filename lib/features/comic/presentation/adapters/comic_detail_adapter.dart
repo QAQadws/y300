@@ -245,6 +245,7 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
       comicId: workId,
       descending: false,
     );
+    final progress = await _repository.getLastReadProgress(comicId: workId);
 
     final mapped = <LibraryChapterItem>[];
     for (final item in episodes) {
@@ -252,6 +253,7 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
         moduleKey: LibraryModuleKey.comic,
         episodeId: item.episodeId,
       );
+      final isRead = state?.isRead ?? false;
       mapped.add(
         LibraryChapterItem(
           episodeId: item.episodeId,
@@ -260,15 +262,49 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
           orderIndex: item.orderIndex,
           sourceTid: item.sourceTid,
           publishTimeText: item.publishTimeText,
-          isRead: state?.isRead ?? false,
+          isRead: isRead,
           isDownloaded: state?.isDownloaded ?? false,
           isBookmarked: state?.isBookmarked ?? false,
+          progressInfo: await _progressInfoForEpisode(
+            episode: item,
+            progress: progress,
+            isRead: isRead,
+          ),
         ),
       );
     }
 
     final filtered = _applyFilters(mapped, filters);
     return _sortChapters(filtered, sortOption);
+  }
+
+  Future<LibraryChapterProgressInfo?> _progressInfoForEpisode({
+    required ComicEpisodeItem episode,
+    required ComicReadingProgress? progress,
+    required bool isRead,
+  }) async {
+    if (isRead || progress == null || progress.episodeId != episode.episodeId) {
+      return null;
+    }
+    final rawImageIndex = progress.imageIndex < 0 ? 0 : progress.imageIndex;
+    final images = await _repository.getEpisodeImages(episodeId: episode.episodeId);
+    if (images.isEmpty) {
+      final pageNumber = rawImageIndex + 1;
+      return LibraryChapterProgressInfo(
+        label: '第 $pageNumber 页',
+        isCurrent: true,
+        semanticLabel: '当前读到第 $pageNumber 页',
+      );
+    }
+
+    final clampedImageIndex = rawImageIndex.clamp(0, images.length - 1).toInt();
+    final pageNumber = clampedImageIndex + 1;
+    return LibraryChapterProgressInfo(
+      label: '第 $pageNumber 页',
+      isCurrent: true,
+      fraction: pageNumber / images.length,
+      semanticLabel: '当前读到第 $pageNumber 页，共 ${images.length} 页',
+    );
   }
 
   @override

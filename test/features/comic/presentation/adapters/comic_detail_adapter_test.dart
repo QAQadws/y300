@@ -15,7 +15,9 @@ import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/adapters/comic_detail_adapter.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
+import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
@@ -386,6 +388,117 @@ void main() {
 
     expect(stateRepository.downloadedEpisodeIds, <String>['comic:1:90']);
   });
+
+  test('loadChapters maps current reading progress to chapter progress info', () async {
+    final repository = _FakeComicRepository(
+      progress: ComicReadingProgress(
+        comicId: 'comic:1',
+        episodeId: 'comic:1:90',
+        imageIndex: 2,
+        scrollOffset: 120,
+        updatedAt: DateTime(2026, 5, 12),
+      ),
+      imageCountByEpisodeId: const <String, int>{'comic:1:90': 5},
+    );
+    final adapter = ComicDetailAdapter(
+      repository,
+      stateRepository: _FakeLibraryStateRepository(),
+    );
+
+    final chapters = await adapter.loadChapters(
+      workId: 'comic:1',
+      filters: const LibraryFilterSet(),
+      sortOption: LibraryChapterSortOption.defaults,
+    );
+    final current = chapters.singleWhere((chapter) => chapter.episodeId == 'comic:1:90');
+
+    expect(current.progressInfo?.label, '第 3 页');
+    expect(current.progressInfo?.isCurrent, isTrue);
+    expect(current.progressInfo?.fraction, closeTo(3 / 5, 0.0001));
+  });
+
+  test('loadChapters clamps comic progress and hides it for read chapters', () async {
+    final repository = _FakeComicRepository(
+      progress: ComicReadingProgress(
+        comicId: 'comic:1',
+        episodeId: 'comic:1:90',
+        imageIndex: 99,
+        scrollOffset: 120,
+        updatedAt: DateTime(2026, 5, 12),
+      ),
+      imageCountByEpisodeId: const <String, int>{'comic:1:90': 5},
+    );
+    final adapter = ComicDetailAdapter(
+      repository,
+      stateRepository: _FakeLibraryStateRepository(
+        episodeStates: <String, LibraryEpisodeState>{
+          'comic:1:120': LibraryEpisodeState(
+            moduleKey: LibraryModuleKey.comic,
+            episodeId: 'comic:1:120',
+            workId: 'comic:1',
+            isRead: false,
+          ),
+        },
+      ),
+    );
+
+    final chapters = await adapter.loadChapters(
+      workId: 'comic:1',
+      filters: const LibraryFilterSet(),
+      sortOption: LibraryChapterSortOption.defaults,
+    );
+    final current = chapters.singleWhere((chapter) => chapter.episodeId == 'comic:1:90');
+
+    expect(current.progressInfo?.label, '第 5 页');
+    expect(current.progressInfo?.fraction, 1);
+
+    final readAdapter = ComicDetailAdapter(
+      repository,
+      stateRepository: _FakeLibraryStateRepository(
+        episodeStates: <String, LibraryEpisodeState>{
+          'comic:1:90': LibraryEpisodeState(
+            moduleKey: LibraryModuleKey.comic,
+            episodeId: 'comic:1:90',
+            workId: 'comic:1',
+            isRead: true,
+          ),
+        },
+      ),
+    );
+    final readChapters = await readAdapter.loadChapters(
+      workId: 'comic:1',
+      filters: const LibraryFilterSet(),
+      sortOption: LibraryChapterSortOption.defaults,
+    );
+
+    expect(
+      readChapters.singleWhere((chapter) => chapter.episodeId == 'comic:1:90').progressInfo,
+      isNull,
+    );
+  });
+
+  test('loadChapters ignores comic progress for missing episode', () async {
+    final adapter = ComicDetailAdapter(
+      _FakeComicRepository(
+        progress: ComicReadingProgress(
+          comicId: 'comic:1',
+          episodeId: 'missing',
+          imageIndex: 1,
+          scrollOffset: 120,
+          updatedAt: DateTime(2026, 5, 12),
+        ),
+      ),
+      stateRepository: _FakeLibraryStateRepository(),
+    );
+
+    final chapters = await adapter.loadChapters(
+      workId: 'comic:1',
+      filters: const LibraryFilterSet(),
+      sortOption: LibraryChapterSortOption.defaults,
+    );
+
+    expect(chapters.where((chapter) => chapter.progressInfo != null), isEmpty);
+  });
 }
 
 class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
@@ -561,10 +674,15 @@ class _FakeSearchQueueStateReader implements ComicSearchRefreshQueueStateReader 
 }
 
 class _FakeComicRepository implements ComicRepository {
-  _FakeComicRepository({this.progress, this.title = 'Test Comic'});
+  _FakeComicRepository({
+    this.progress,
+    this.title = 'Test Comic',
+    this.imageCountByEpisodeId = const <String, int>{},
+  });
 
   final ComicReadingProgress? progress;
   final String title;
+  final Map<String, int> imageCountByEpisodeId;
   bool mergeCalled = false;
   List<ComicEpisodeLink> lastMergedLinks = const [];
   String? lastFallbackTid;
@@ -649,16 +767,18 @@ class _FakeComicRepository implements ComicRepository {
   }
   @override
   Future<List<ComicEpisodeImageItem>> getEpisodeImages({required String episodeId}) async {
-    return <ComicEpisodeImageItem>[
-      ComicEpisodeImageItem(
+    final imageCount = imageCountByEpisodeId[episodeId] ?? 1;
+    return List<ComicEpisodeImageItem>.generate(
+      imageCount,
+      (index) => ComicEpisodeImageItem(
         episodeId: episodeId,
         imageUrl: episodeId.endsWith(':90')
-            ? 'https://img.test/90-1.jpg'
-            : 'https://img.test/120-1.jpg',
-        imageIndex: 0,
+            ? 'https://img.test/90-${index + 1}.jpg'
+            : 'https://img.test/120-${index + 1}.jpg',
+        imageIndex: index,
         cacheStatus: 'none',
       ),
-    ];
+    );
   }
   @override
   Future<ComicReadingProgress?> getLastReadProgress({required String comicId}) async => progress;

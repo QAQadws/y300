@@ -239,10 +239,10 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                       return ListTile(
                         key: ValueKey<String>('unified-detail-chapter-${chapter.episodeId}'),
                         title: Text(chapter.title),
-                        subtitle: Text(
-                          _chapterSubtitle(chapter),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        subtitle: _ChapterSubtitle(
+                          subtitle: _chapterSubtitle(chapter),
+                          progressInfo: chapter.progressInfo,
+                          episodeId: chapter.episodeId,
                         ),
                         trailing: IconButton(
                           tooltip: chapter.isDownloaded ? '已下载，点击删除下载' : '下载该章节',
@@ -1028,6 +1028,8 @@ class _DetailHeaderSection extends StatelessWidget {
     required this.onOpenThread,
   });
 
+  static const double _seamBridgeHeight = 6;
+
   final LibraryDetailHeader header;
   final LibraryModuleKey moduleKey;
   final double topInset;
@@ -1039,22 +1041,40 @@ class _DetailHeaderSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Stack(
       key: const Key('unified-detail-header-section'),
-      mainAxisSize: MainAxisSize.min,
+      clipBehavior: Clip.none,
       children: [
-        _HeroInfoSection(
-          header: header,
-          moduleKey: moduleKey,
-          topInset: topInset,
-          palette: palette,
-          imageHeaderBuilder: imageHeaderBuilder,
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _HeroInfoSection(
+              header: header,
+              moduleKey: moduleKey,
+              topInset: topInset,
+              palette: palette,
+              imageHeaderBuilder: imageHeaderBuilder,
+            ),
+            _HeaderActionsRow(
+              header: header,
+              onToggleShelf: onToggleShelf,
+              onRefresh: onRefresh,
+              onOpenThread: onOpenThread,
+            ),
+          ],
         ),
-        _HeaderActionsRow(
-          header: header,
-          onToggleShelf: onToggleShelf,
-          onRefresh: onRefresh,
-          onOpenThread: onOpenThread,
+        Positioned(
+          left: 0,
+          right: 0,
+          top: _HeroInfoSection.heightFor(topInset) - _seamBridgeHeight / 2,
+          height: _seamBridgeHeight,
+          child: IgnorePointer(
+            child: ColoredBox(
+              key: const Key('unified-detail-header-seam-bridge'),
+              color: palette.headerGradientEnd,
+              child: const SizedBox.expand(),
+            ),
+          ),
         ),
       ],
     );
@@ -1077,6 +1097,8 @@ class _HeroInfoSection extends StatelessWidget {
   // 封面与文字块的内边距
   static const EdgeInsets _contentPadding = EdgeInsets.fromLTRB(30, 0, 12, 30);
 
+  static double heightFor(double topInset) => topInset + kToolbarHeight + _heroExtraHeight;
+
   final LibraryDetailHeader header;
   final LibraryModuleKey moduleKey;
   final double topInset;
@@ -1091,7 +1113,7 @@ class _HeroInfoSection extends StatelessWidget {
         header.translationGroup?.trim().isNotEmpty == true ? header.translationGroup! : '未知汉化组';
 
     return SizedBox(
-      height: topInset + kToolbarHeight + _heroExtraHeight,
+      height: heightFor(topInset),
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -1134,20 +1156,14 @@ class _HeroInfoSection extends StatelessWidget {
               ],
             ),
           ),
-          // 底部收口带：强制与页面背景同色，消除分界线。
+          // 最终的边界覆盖由父级 seam bridge 完成；这里仅保证 hero
+          // 底部最后一行像素已经落到页面背景色。
           Align(
             alignment: Alignment.bottomCenter,
-            child: Container(
+            child: SizedBox(
               height: 1,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    palette.headerGradientEnd.withAlpha(0),
-                    palette.headerGradientEnd,
-                  ],
-                ),
+              child: ColoredBox(
+                color: palette.headerGradientEnd,
               ),
             ),
           ),
@@ -1471,6 +1487,89 @@ class _ActionChip extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ChapterSubtitle extends StatelessWidget {
+  const _ChapterSubtitle({
+    required this.subtitle,
+    required this.progressInfo,
+    required this.episodeId,
+  });
+
+  final String subtitle;
+  final LibraryChapterProgressInfo? progressInfo;
+  final String episodeId;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = progressInfo;
+    if (progress == null) {
+      return Text(
+        subtitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          subtitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 4),
+        _ChapterProgressBadge(
+          key: ValueKey<String>('unified-detail-chapter-progress-$episodeId'),
+          progress: progress,
+        ),
+      ],
+    );
+  }
+}
+
+class _ChapterProgressBadge extends StatelessWidget {
+  const _ChapterProgressBadge({
+    super.key,
+    required this.progress,
+  });
+
+  final LibraryChapterProgressInfo progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Text(
+      progress.label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: scheme.primary,
+            fontWeight: FontWeight.w600,
+          ),
+    );
+    final badge = Container(
+      constraints: const BoxConstraints(maxWidth: 120),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: scheme.primary.withAlpha(22),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: scheme.primary.withAlpha(64)),
+      ),
+      child: text,
+    );
+
+    final semanticLabel = progress.semanticLabel;
+    if (semanticLabel == null || semanticLabel.isEmpty) {
+      return badge;
+    }
+    return Semantics(
+      label: semanticLabel,
+      child: badge,
     );
   }
 }

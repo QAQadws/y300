@@ -4,6 +4,7 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
+import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 
@@ -66,6 +67,7 @@ class NovelDetailAdapter implements DetailModuleAdapter {
       novelId: workId,
       descending: false,
     );
+    final progress = await _repository.getReadingProgress(novelId: workId);
 
     final mapped = <LibraryChapterItem>[];
     for (final item in episodes) {
@@ -73,6 +75,7 @@ class NovelDetailAdapter implements DetailModuleAdapter {
         moduleKey: LibraryModuleKey.novel,
         episodeId: item.episodeId,
       );
+      final isRead = state?.isRead ?? false;
       mapped.add(
         LibraryChapterItem(
           episodeId: item.episodeId,
@@ -82,15 +85,64 @@ class NovelDetailAdapter implements DetailModuleAdapter {
           sourceTid: item.sourceTid,
           sourcePid: item.sourcePid,
           publishTimeText: item.datelineText,
-          isRead: state?.isRead ?? false,
+          isRead: isRead,
           isDownloaded: state?.isDownloaded ?? false,
           isBookmarked: state?.isBookmarked ?? false,
+          progressInfo: _progressInfoForEpisode(
+            episodeId: item.episodeId,
+            progress: progress,
+            isRead: isRead,
+          ),
         ),
       );
     }
 
     final filtered = _applyFilters(mapped, filters);
     return _sortChapters(filtered, sortOption);
+  }
+
+  LibraryChapterProgressInfo? _progressInfoForEpisode({
+    required String episodeId,
+    required NovelReadingProgress? progress,
+    required bool isRead,
+  }) {
+    if (isRead || progress == null || progress.episodeId != episodeId) {
+      return null;
+    }
+
+    final fraction = progress.progressPercent.clamp(0.0, 1.0).toDouble();
+    if (progress.flowMode != NovelReaderFlowMode.vertical) {
+      final pageNumber = (progress.pageIndex < 0 ? 0 : progress.pageIndex) + 1;
+      return LibraryChapterProgressInfo(
+        label: '第 $pageNumber 页',
+        isCurrent: true,
+        fraction: fraction,
+        semanticLabel: fraction > 0
+            ? '当前读到第 $pageNumber 页，已读 ${(fraction * 100).round()}%'
+            : '当前读到第 $pageNumber 页',
+      );
+    }
+
+    if (fraction > 0) {
+      final percent = (fraction * 100).round().clamp(1, 100);
+      return LibraryChapterProgressInfo(
+        label: '已读 $percent%',
+        isCurrent: true,
+        fraction: fraction,
+        semanticLabel: '当前章节已读 $percent%',
+      );
+    }
+
+    if (progress.scrollOffset > 0) {
+      return const LibraryChapterProgressInfo(
+        label: '阅读中',
+        isCurrent: true,
+        fraction: 0,
+        semanticLabel: '当前章节阅读中',
+      );
+    }
+
+    return null;
   }
 
   @override

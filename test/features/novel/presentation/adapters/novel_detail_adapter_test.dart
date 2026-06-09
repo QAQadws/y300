@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
@@ -39,9 +41,108 @@ void main() {
       'novel:1:2',
     ]);
   });
+
+  test('loadChapters maps paged novel progress to page label', () async {
+    final adapter = NovelDetailAdapter(
+      _FakeNovelRepository(
+        progress: NovelReadingProgress(
+          novelId: 'novel:1',
+          episodeId: 'novel:1:2',
+          scrollOffset: 0,
+          updatedAt: DateTime(2026, 6, 9),
+          flowMode: NovelReaderFlowMode.pagedLtr,
+          pageIndex: 2,
+          progressPercent: 0.35,
+        ),
+      ),
+      stateRepository: _RecordingLibraryStateRepository(),
+    );
+
+    final chapters = await adapter.loadChapters(
+      workId: 'novel:1',
+      filters: const LibraryFilterSet(),
+      sortOption: LibraryChapterSortOption.defaults,
+    );
+    final current = chapters.singleWhere((chapter) => chapter.episodeId == 'novel:1:2');
+
+    expect(current.progressInfo?.label, '第 3 页');
+    expect(current.progressInfo?.fraction, 0.35);
+    expect(current.progressInfo?.isCurrent, isTrue);
+  });
+
+  test('loadChapters maps vertical novel progress to percent label', () async {
+    final adapter = NovelDetailAdapter(
+      _FakeNovelRepository(
+        progress: NovelReadingProgress(
+          novelId: 'novel:1',
+          episodeId: 'novel:1:1',
+          scrollOffset: 120,
+          updatedAt: DateTime(2026, 6, 9),
+          progressPercent: 0.42,
+        ),
+      ),
+      stateRepository: _RecordingLibraryStateRepository(),
+    );
+
+    final chapters = await adapter.loadChapters(
+      workId: 'novel:1',
+      filters: const LibraryFilterSet(),
+      sortOption: LibraryChapterSortOption.defaults,
+    );
+    final current = chapters.singleWhere((chapter) => chapter.episodeId == 'novel:1:1');
+
+    expect(current.progressInfo?.label, '已读 42%');
+    expect(current.progressInfo?.fraction, 0.42);
+  });
+
+  test('loadChapters shows reading fallback and hides progress for read chapter', () async {
+    final progress = NovelReadingProgress(
+      novelId: 'novel:1',
+      episodeId: 'novel:1:1',
+      scrollOffset: 120,
+      updatedAt: DateTime(2026, 6, 9),
+    );
+    final adapter = NovelDetailAdapter(
+      _FakeNovelRepository(progress: progress),
+      stateRepository: _RecordingLibraryStateRepository(),
+    );
+
+    final chapters = await adapter.loadChapters(
+      workId: 'novel:1',
+      filters: const LibraryFilterSet(),
+      sortOption: LibraryChapterSortOption.defaults,
+    );
+
+    expect(chapters.first.progressInfo?.label, '阅读中');
+
+    final readAdapter = NovelDetailAdapter(
+      _FakeNovelRepository(progress: progress),
+      stateRepository: _RecordingLibraryStateRepository(
+        episodeStates: <String, LibraryEpisodeState>{
+          'novel:1:1': LibraryEpisodeState(
+            moduleKey: LibraryModuleKey.novel,
+            episodeId: 'novel:1:1',
+            workId: 'novel:1',
+            isRead: true,
+          ),
+        },
+      ),
+    );
+    final readChapters = await readAdapter.loadChapters(
+      workId: 'novel:1',
+      filters: const LibraryFilterSet(),
+      sortOption: LibraryChapterSortOption.defaults,
+    );
+
+    expect(readChapters.first.progressInfo, isNull);
+  });
 }
 
 class _FakeNovelRepository implements NovelRepository {
+  _FakeNovelRepository({this.progress});
+
+  final NovelReadingProgress? progress;
+
   @override
   Future<String> createCategory({required String name}) async => 'created';
 
@@ -104,7 +205,7 @@ class _FakeNovelRepository implements NovelRepository {
   Future<NovelReaderPreferences> getReaderPreferences() async => NovelReaderPreferences.defaults();
 
   @override
-  Future<NovelReadingProgress?> getReadingProgress({required String novelId}) async => null;
+  Future<NovelReadingProgress?> getReadingProgress({required String novelId}) async => progress;
 
   @override
   Future<List<NovelItem>> getShelfItems({String categoryId = 'default'}) async => const <NovelItem>[];
@@ -176,7 +277,12 @@ class _FakeNovelRepository implements NovelRepository {
 }
 
 class _RecordingLibraryStateRepository implements LibraryStateRepository {
+  _RecordingLibraryStateRepository({
+    this.episodeStates = const <String, LibraryEpisodeState>{},
+  });
+
   final List<String> unreadEpisodeIds = <String>[];
+  final Map<String, LibraryEpisodeState> episodeStates;
 
   @override
   Future<void> bindTagToWork({
@@ -226,7 +332,7 @@ class _RecordingLibraryStateRepository implements LibraryStateRepository {
   Future<LibraryEpisodeState?> getEpisodeState({
     required LibraryModuleKey moduleKey,
     required String episodeId,
-  }) async => null;
+  }) async => episodeStates[episodeId];
 
   @override
   Future<List<LibraryTag>> getTags() async => const <LibraryTag>[];
