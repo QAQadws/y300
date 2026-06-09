@@ -288,6 +288,119 @@ void main() {
     expect(find.text('第 3 页'), findsOneWidget);
   });
 
+  testWidgets('UnifiedDetailPage renders explicit chapter status badges', (tester) async {
+    final adapter = _FakeDetailAdapter(
+      progressInfo: const LibraryChapterProgressInfo(
+        label: '已读 42%',
+        isCurrent: true,
+        fraction: 0.42,
+      ),
+      isBookmarked: true,
+      isDownloaded: true,
+      isRead: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-progress-e1')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-bookmark-badge-e1')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-downloaded-badge-e1')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-read-badge-e1')), findsOneWidget);
+    expect(find.text('书签'), findsOneWidget);
+    expect(find.text('已下载'), findsOneWidget);
+    expect(find.text('已读'), findsOneWidget);
+  });
+
+  testWidgets('UnifiedDetailPage toggles chapter bookmark from row button', (tester) async {
+    final adapter = _FakeDetailAdapter();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-bookmark-button-e1')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -120));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-bookmark-badge-e1')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey<String>('unified-detail-chapter-bookmark-button-e1')));
+    await tester.pumpAndSettle();
+
+    expect(adapter.isBookmarked, isTrue);
+    expect(adapter.lastBookmarkEpisodeId, 'e1');
+    expect(adapter.loadChaptersCallCount, greaterThanOrEqualTo(2));
+    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-bookmark-badge-e1')), findsOneWidget);
+  });
+
+  testWidgets('UnifiedDetailPage keeps download action and downloaded badge', (tester) async {
+    final adapter = _FakeDetailAdapter();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byTooltip('下载该章节'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -120));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-downloaded-badge-e1')), findsNothing);
+
+    await tester.tap(find.byTooltip('下载该章节'));
+    await tester.pumpAndSettle();
+
+    expect(adapter.isDownloaded, isTrue);
+    expect(adapter.lastDownloadedEpisodeId, 'e1');
+    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-downloaded-badge-e1')), findsOneWidget);
+
+    await tester.tap(find.byTooltip('已下载，点击删除下载'));
+    await tester.pumpAndSettle();
+
+    expect(adapter.isDownloaded, isFalse);
+    expect(adapter.lastDeletedDownloadEpisodeId, 'e1');
+    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-downloaded-badge-e1')), findsNothing);
+  });
+
   testWidgets('UnifiedDetailPage omits chapter progress badge when progress is null', (tester) async {
     final adapter = _FakeDetailAdapter();
 
@@ -336,22 +449,36 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
   _FakeDetailAdapter({
     this.coverLocalPath,
     this.progressInfo,
+    this.isBookmarked = false,
+    this.isDownloaded = false,
+    this.isRead = false,
   });
 
   int markReadCallCount = 0;
   int loadChaptersCallCount = 0;
+  String? lastBookmarkEpisodeId;
+  String? lastDownloadedEpisodeId;
+  String? lastDeletedDownloadEpisodeId;
   DetailRefreshResult refreshResult = DetailRefreshResult.immediate;
   final String? coverLocalPath;
   final LibraryChapterProgressInfo? progressInfo;
+  bool isBookmarked;
+  bool isDownloaded;
+  bool isRead;
 
   @override
-  Future<void> clearAllReadState({required String workId}) async {}
+  Future<void> clearAllReadState({required String workId}) async {
+    isRead = false;
+  }
 
   @override
   Future<void> deleteChapterDownload({
     required String workId,
     required String episodeId,
-  }) async {}
+  }) async {
+    lastDeletedDownloadEpisodeId = episodeId;
+    isDownloaded = false;
+  }
 
   @override
   Future<void> downloadAll({required String workId}) async {}
@@ -387,6 +514,9 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
         orderIndex: 1,
         sourceTid: '100',
         sourcePid: '5001',
+        isBookmarked: isBookmarked,
+        isDownloaded: isDownloaded,
+        isRead: isRead,
         progressInfo: progressInfo,
       ),
     ];
@@ -418,14 +548,20 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
     required String workId,
     required String episodeId,
     required bool isBookmarked,
-  }) async {}
+  }) async {
+    lastBookmarkEpisodeId = episodeId;
+    this.isBookmarked = isBookmarked;
+  }
 
   @override
   Future<void> markChapterDownloaded({
     required String workId,
     required String episodeId,
     required bool isDownloaded,
-  }) async {}
+  }) async {
+    lastDownloadedEpisodeId = episodeId;
+    this.isDownloaded = isDownloaded;
+  }
 
   @override
   Future<void> markChapterRead({
@@ -434,6 +570,7 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
     required bool isRead,
   }) async {
     markReadCallCount++;
+    this.isRead = isRead;
   }
 
   @override

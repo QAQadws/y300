@@ -152,12 +152,10 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(
-      tester
-          .widget<ListTile>(
-            find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')),
-          )
-          .textColor,
-      isNull,
+      find.byKey(
+        const ValueKey<String>('unified-detail-chapter-read-badge-comic:1:e1'),
+      ),
+      findsNothing,
     );
 
     await tester.tap(find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')));
@@ -198,12 +196,10 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(
-      tester
-          .widget<ListTile>(
-            find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')),
-          )
-          .textColor,
-      isNotNull,
+      find.byKey(
+        const ValueKey<String>('unified-detail-chapter-read-badge-comic:1:e1'),
+      ),
+      findsOneWidget,
     );
   });
 }
