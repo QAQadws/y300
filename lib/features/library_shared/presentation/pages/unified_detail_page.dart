@@ -126,17 +126,8 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
           PopupMenuButton<String>(
             tooltip: '下载',
             icon: const Icon(Icons.file_download),
-            onSelected: (value) async {
-              if (value == 'download-unread') {
-                await widget.adapter.downloadUnread(workId: widget.workId);
-              } else if (value == 'download-all') {
-                await widget.adapter.downloadAll(workId: widget.workId);
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'download-unread', child: Text('未读')),
-              PopupMenuItem(value: 'download-all', child: Text('全部')),
-            ],
+            onSelected: _handleDownloadMenuAction,
+            itemBuilder: _downloadMenuItems,
           ),
           IconButton(
             icon: const Icon(Icons.filter_list),
@@ -196,12 +187,10 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                     ),
                   if (state.errorMessage != null && state.errorMessage!.isNotEmpty)
                     SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-                        child: Text(
-                          '加载失败：${state.errorMessage}',
-                          style: TextStyle(color: Theme.of(context).colorScheme.error),
-                        ),
+                      child: _DetailErrorPanel(
+                        message: state.errorMessage!,
+                        topPadding: header == null ? topInset + kToolbarHeight : 10,
+                        onRetry: _retryLoad,
                       ),
                     ),
                   if (header != null)
@@ -221,12 +210,14 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                       ),
                     ),
                   SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                      child: Text(
-                        '共 ${state.chapters.length} 章',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
+                    child: _ChapterToolbar(
+                      chapterCount: state.chapters.length,
+                      filterSummary: _chapterFilterSummary(state.filters),
+                      sortSummary: _chapterSortSummary(state.chapterSortOption),
+                      sortAscending: state.chapterSortOption.direction == LibrarySortDirection.asc,
+                      onFilterTap: _showChapterFilterSheet,
+                      onSortTap: _toggleChapterSortDirection,
+                      onDownloadSelected: _handleDownloadMenuAction,
                     ),
                   ),
                   SliverList.builder(
@@ -309,9 +300,15 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     }
 
     if (chapter.isDownloaded) {
-      await _controller.deleteChapterDownload(episodeId: chapter.episodeId);
-      if (mounted) {
-        setState(() {});
+      try {
+        await _controller.deleteChapterDownload(episodeId: chapter.episodeId);
+        if (mounted) {
+          setState(() {});
+        }
+      } catch (error) {
+        if (mounted) {
+          _showDetailSnackBar('删除下载失败：$error');
+        }
       }
       return;
     }
@@ -324,6 +321,10 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
         episodeId: chapter.episodeId,
         isDownloaded: true,
       );
+    } catch (error) {
+      if (mounted) {
+        _showDetailSnackBar('下载失败：$error');
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -342,6 +343,69 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     return '$date  Tid:${chapter.sourceTid ?? '-'}';
   }
 
+  List<PopupMenuEntry<String>> _downloadMenuItems(BuildContext _) {
+    return const [
+      PopupMenuItem(value: 'download-unread', child: Text('未读')),
+      PopupMenuItem(value: 'download-all', child: Text('全部')),
+    ];
+  }
+
+  Future<void> _handleDownloadMenuAction(String value) async {
+    try {
+      if (value == 'download-unread') {
+        await widget.adapter.downloadUnread(workId: widget.workId);
+        _showDetailSnackBar('已开始下载未读章节');
+        return;
+      }
+      if (value == 'download-all') {
+        await widget.adapter.downloadAll(workId: widget.workId);
+        _showDetailSnackBar('已开始下载全部章节');
+      }
+    } catch (error) {
+      if (mounted) {
+        _showDetailSnackBar('下载失败：$error');
+      }
+    }
+  }
+
+  Future<void> _toggleChapterSortDirection() async {
+    await _controller.toggleSortDirection();
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  String _chapterFilterSummary(LibraryFilterSet filters) {
+    if (filters.isDefault) {
+      return '全部章节';
+    }
+    final labels = <String>[
+      ?_filterSummaryPart('已下载', filters.downloaded),
+      ?_filterSummaryPart('未读', filters.unread),
+      ?_filterSummaryPart('已加书签', filters.bookmarked),
+    ];
+    return labels.isEmpty ? '全部章节' : labels.join(' / ');
+  }
+
+  String? _filterSummaryPart(String label, TriStateFilterValue value) {
+    return switch (value) {
+      TriStateFilterValue.ignore => null,
+      TriStateFilterValue.include => label,
+      TriStateFilterValue.exclude => '排除$label',
+    };
+  }
+
+  String _chapterSortSummary(LibraryChapterSortOption option) {
+    final field = switch (option.field) {
+      LibraryChapterSortField.chapterIndex => '章节',
+      LibraryChapterSortField.date => '日期',
+      LibraryChapterSortField.name => '名称',
+      LibraryChapterSortField.tid => '来源',
+    };
+    final direction = option.direction == LibrarySortDirection.asc ? '升序' : '降序';
+    return '$field$direction';
+  }
+
   Future<void> _showChapterFilterSheet() async {
     var selectedFilters = _controller.state.filters;
     var selectedSortField = _controller.state.chapterSortOption.field;
@@ -349,99 +413,115 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
 
     await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
+            final maxSheetHeight = MediaQuery.sizeOf(context).height * 0.86;
             return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _TriStateLine(
-                      label: '已下载',
-                      value: selectedFilters.downloaded,
-                      onChanged: (v) => setSheetState(
-                        () => selectedFilters = selectedFilters.copyWith(downloaded: v),
-                      ),
-                    ),
-                    _TriStateLine(
-                      label: '未读',
-                      value: selectedFilters.unread,
-                      onChanged: (v) => setSheetState(
-                        () => selectedFilters = selectedFilters.copyWith(unread: v),
-                      ),
-                    ),
-                    _TriStateLine(
-                      label: '已加书签',
-                      value: selectedFilters.bookmarked,
-                      onChanged: (v) => setSheetState(
-                        () => selectedFilters = selectedFilters.copyWith(bookmarked: v),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<LibraryChapterSortField>(
-                      initialValue: selectedSortField,
-                      items: const [
-                        DropdownMenuItem(value: LibraryChapterSortField.chapterIndex, child: Text('按章节编号')),
-                        DropdownMenuItem(value: LibraryChapterSortField.date, child: Text('按日期')),
-                        DropdownMenuItem(value: LibraryChapterSortField.name, child: Text('按名称')),
-                        DropdownMenuItem(value: LibraryChapterSortField.tid, child: Text('按来源')),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          setSheetState(() => selectedSortField = value);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxSheetHeight),
+                child: SingleChildScrollView(
+                  child: Padding(
+                    key: const Key('unified-detail-chapter-filter-sheet'),
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text('排序方向'),
-                        const Spacer(),
-                        SegmentedButton<LibrarySortDirection>(
-                          segments: const [
-                            ButtonSegment(value: LibrarySortDirection.asc, label: Text('升序')),
-                            ButtonSegment(value: LibrarySortDirection.desc, label: Text('降序')),
+                        const _SheetSectionHeader(title: '筛选'),
+                        _TriStateLine(
+                          lineKey: const Key('unified-detail-filter-downloaded'),
+                          label: '已下载',
+                          value: selectedFilters.downloaded,
+                          onChanged: (v) => setSheetState(
+                            () => selectedFilters = selectedFilters.copyWith(downloaded: v),
+                          ),
+                        ),
+                        _TriStateLine(
+                          lineKey: const Key('unified-detail-filter-unread'),
+                          label: '未读',
+                          value: selectedFilters.unread,
+                          onChanged: (v) => setSheetState(
+                            () => selectedFilters = selectedFilters.copyWith(unread: v),
+                          ),
+                        ),
+                        _TriStateLine(
+                          lineKey: const Key('unified-detail-filter-bookmarked'),
+                          label: '已加书签',
+                          value: selectedFilters.bookmarked,
+                          onChanged: (v) => setSheetState(
+                            () => selectedFilters = selectedFilters.copyWith(bookmarked: v),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const _SheetSectionHeader(title: '排序'),
+                        DropdownButtonFormField<LibraryChapterSortField>(
+                          key: const Key('unified-detail-sort-field'),
+                          initialValue: selectedSortField,
+                          items: const [
+                            DropdownMenuItem(value: LibraryChapterSortField.chapterIndex, child: Text('按章节编号')),
+                            DropdownMenuItem(value: LibraryChapterSortField.date, child: Text('按日期')),
+                            DropdownMenuItem(value: LibraryChapterSortField.name, child: Text('按名称')),
+                            DropdownMenuItem(value: LibraryChapterSortField.tid, child: Text('按来源')),
                           ],
-                          selected: <LibrarySortDirection>{selectedDirection},
-                          onSelectionChanged: (values) {
-                            setSheetState(() => selectedDirection = values.first);
+                          onChanged: (value) {
+                            if (value != null) {
+                              setSheetState(() => selectedSortField = value);
+                            }
                           },
                         ),
+                        const SizedBox(height: 8),
+                        Row(
+                          key: const Key('unified-detail-sort-direction'),
+                          children: [
+                            const Text('排序方向'),
+                            const Spacer(),
+                            SegmentedButton<LibrarySortDirection>(
+                              segments: const [
+                                ButtonSegment(value: LibrarySortDirection.asc, label: Text('升序')),
+                                ButtonSegment(value: LibrarySortDirection.desc, label: Text('降序')),
+                              ],
+                              selected: <LibrarySortDirection>{selectedDirection},
+                              onSelectionChanged: (values) {
+                                setSheetState(() => selectedDirection = values.first);
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => Navigator.of(sheetContext).pop(),
+                                child: const Text('取消'),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: FilledButton(
+                                key: const Key('unified-detail-apply-filter-sort'),
+                                onPressed: () async {
+                                  await _controller.updateFilters(selectedFilters);
+                                  await _controller.updateChapterSortField(selectedSortField);
+                                  final now = _controller.state.chapterSortOption.direction;
+                                  if (now != selectedDirection) {
+                                    await _controller.toggleSortDirection();
+                                  }
+                                  if (!mounted || !sheetContext.mounted) {
+                                    return;
+                                  }
+                                  Navigator.of(sheetContext).pop();
+                                  setState(() {});
+                                },
+                                child: const Text('应用'),
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => Navigator.of(sheetContext).pop(),
-                            child: const Text('取消'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: FilledButton(
-                            onPressed: () async {
-                              await _controller.updateFilters(selectedFilters);
-                              await _controller.updateChapterSortField(selectedSortField);
-                              final now = _controller.state.chapterSortOption.direction;
-                              if (now != selectedDirection) {
-                                await _controller.toggleSortDirection();
-                              }
-                              if (!mounted || !sheetContext.mounted) {
-                                return;
-                              }
-                              Navigator.of(sheetContext).pop();
-                              setState(() {});
-                            },
-                            child: const Text('应用'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
               ),
             );
@@ -535,17 +615,48 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   }
 
   Future<void> _refreshAndShowFeedback() async {
-    final result = await _controller.refresh();
+    try {
+      final result = await _controller.refresh();
+      if (!mounted) {
+        return;
+      }
+      _showDetailSnackBar(_refreshFeedbackMessage(result));
+      setState(() {});
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _showDetailSnackBar('更新失败：$error');
+      setState(() {});
+    }
+  }
+
+  String _refreshFeedbackMessage(DetailRefreshResult result) {
+    final message = result.message?.trim();
+    if (message != null && message.isNotEmpty) {
+      return message;
+    }
+    return switch (result.status) {
+      DetailRefreshStatus.immediate => '已更新',
+      DetailRefreshStatus.skipped => '暂无可更新内容',
+      DetailRefreshStatus.queued => '已加入更新队列',
+    };
+  }
+
+  Future<void> _retryLoad() async {
+    await _controller.reload();
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _showDetailSnackBar(String message) {
     if (!mounted) {
       return;
     }
-    final message = result.message?.trim();
-    if (message != null && message.isNotEmpty) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(message)));
-    }
-    setState(() {});
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _showEditMetadataSheet() async {
@@ -1482,6 +1593,210 @@ class _ActionChip extends StatelessWidget {
   }
 }
 
+class _DetailErrorPanel extends StatelessWidget {
+  const _DetailErrorPanel({
+    required this.message,
+    required this.topPadding,
+    required this.onRetry,
+  });
+
+  final String message;
+  final double topPadding;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      key: const Key('unified-detail-error-panel'),
+      padding: EdgeInsets.fromLTRB(16, topPadding, 16, 8),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: scheme.errorContainer.withAlpha(120),
+          border: Border.all(color: scheme.error.withAlpha(90)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.error_outline, color: scheme.error, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '加载失败：$message',
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onErrorContainer,
+                      ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                key: const Key('unified-detail-error-retry'),
+                onPressed: onRetry,
+                child: const Text('重试'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChapterToolbar extends StatelessWidget {
+  const _ChapterToolbar({
+    required this.chapterCount,
+    required this.filterSummary,
+    required this.sortSummary,
+    required this.sortAscending,
+    required this.onFilterTap,
+    required this.onSortTap,
+    required this.onDownloadSelected,
+  });
+
+  final int chapterCount;
+  final String filterSummary;
+  final String sortSummary;
+  final bool sortAscending;
+  final VoidCallback onFilterTap;
+  final VoidCallback onSortTap;
+  final ValueChanged<String> onDownloadSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      key: const Key('unified-detail-chapter-toolbar'),
+      padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '共 $chapterCount 章',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  filterSummary,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _ChapterToolbarButton(
+                icon: Icons.filter_list,
+                label: '筛选',
+                onTap: onFilterTap,
+              ),
+              const SizedBox(width: 6),
+              _ChapterToolbarButton(
+                icon: sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
+                label: sortSummary,
+                onTap: onSortTap,
+              ),
+              const SizedBox(width: 6),
+              PopupMenuButton<String>(
+                tooltip: '下载',
+                onSelected: onDownloadSelected,
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'download-unread', child: Text('未读')),
+                  PopupMenuItem(value: 'download-all', child: Text('全部')),
+                ],
+                child: const _ChapterToolbarButtonContent(
+                  icon: Icons.file_download,
+                  label: '下载',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChapterToolbarButton extends StatelessWidget {
+  const _ChapterToolbarButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: _ChapterToolbarButtonContent(icon: icon, label: label),
+    );
+  }
+}
+
+class _ChapterToolbarButtonContent extends StatelessWidget {
+  const _ChapterToolbarButtonContent({
+    required this.icon,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      constraints: const BoxConstraints(minHeight: 34, maxWidth: 96),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: scheme.onSurfaceVariant),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: scheme.onSurface,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DetailChapterTile extends StatelessWidget {
   const _DetailChapterTile({
     required this.tileKey,
@@ -1881,11 +2196,13 @@ class _TagChip extends StatelessWidget {
 
 class _TriStateLine extends StatelessWidget {
   const _TriStateLine({
+    required this.lineKey,
     required this.label,
     required this.value,
     required this.onChanged,
   });
 
+  final Key lineKey;
   final String label;
   final TriStateFilterValue value;
   final ValueChanged<TriStateFilterValue> onChanged;
@@ -1897,11 +2214,23 @@ class _TriStateLine extends StatelessWidget {
       TriStateFilterValue.include => Icons.check_box,
       TriStateFilterValue.exclude => Icons.indeterminate_check_box,
     };
+    final stateLabel = switch (value) {
+      TriStateFilterValue.ignore => '不限',
+      TriStateFilterValue.include => '只看$label',
+      TriStateFilterValue.exclude => '排除$label',
+    };
 
     return ListTile(
+      key: lineKey,
       dense: true,
       leading: Icon(icon),
       title: Text(label),
+      trailing: Text(
+        stateLabel,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+      ),
       onTap: () {
         final next = switch (value) {
           TriStateFilterValue.ignore => TriStateFilterValue.include,
@@ -1910,6 +2239,28 @@ class _TriStateLine extends StatelessWidget {
         };
         onChanged(next);
       },
+    );
+  }
+}
+
+class _SheetSectionHeader extends StatelessWidget {
+  const _SheetSectionHeader({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          title,
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+      ),
     );
   }
 }

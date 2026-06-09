@@ -47,7 +47,7 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')), findsOneWidget);
-    expect(find.byIcon(Icons.file_download), findsOneWidget);
+    expect(find.byIcon(Icons.file_download), findsAtLeastNWidgets(1));
   });
 
   testWidgets('ComicDetailPage can open reader from chapter row', (tester) async {
@@ -67,12 +67,8 @@ void main() {
     );
 
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')));
+    await _scrollFirstChapterIntoTapArea(tester);
+    await tester.tap(find.text('Episode 1'));
     // Reader content can keep an animated image placeholder alive while the
     // network image is unresolved in widget tests, so wait only for the route
     // transition frames instead of waiting for the whole tree to settle.
@@ -103,12 +99,8 @@ void main() {
     );
 
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')));
+    await _scrollFirstChapterIntoTapArea(tester);
+    await tester.tap(find.text('Episode 1'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(observer.pushCount, 2);
@@ -146,11 +138,7 @@ void main() {
     );
 
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await _scrollFirstChapterIntoTapArea(tester);
     expect(
       find.byKey(
         const ValueKey<String>('unified-detail-chapter-read-badge-comic:1:e1'),
@@ -158,7 +146,7 @@ void main() {
       findsNothing,
     );
 
-    await tester.tap(find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')));
+    await tester.tap(find.text('Episode 1'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
@@ -328,6 +316,19 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
     return const <ComicEpisodeLink>[];
   }
+}
+
+Future<void> _scrollFirstChapterIntoTapArea(WidgetTester tester) async {
+  final chapterFinder = find.byKey(
+    const ValueKey<String>('unified-detail-chapter-comic:1:e1'),
+  );
+  await tester.scrollUntilVisible(
+    chapterFinder,
+    300,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.drag(find.byType(CustomScrollView), const Offset(0, -120));
+  await tester.pumpAndSettle();
 }
 
 class _NoopComicDownloadService implements ComicDownloadService {

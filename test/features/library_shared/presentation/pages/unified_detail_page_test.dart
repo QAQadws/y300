@@ -70,8 +70,8 @@ void main() {
     expect(find.textContaining('Pid:5001'), findsOneWidget);
 
     expect(find.text('继续'), findsOneWidget);
-    expect(find.byIcon(Icons.file_download), findsOneWidget);
-    expect(find.byIcon(Icons.filter_list), findsOneWidget);
+    expect(find.byIcon(Icons.file_download), findsAtLeastNWidgets(1));
+    expect(find.byIcon(Icons.filter_list), findsAtLeastNWidgets(1));
     expect(find.byKey(const Key('unified-detail-tag-strip')), findsOneWidget);
     expect(find.text('韩国漫画'), findsOneWidget);
     expect(find.text('自定义标签'), findsOneWidget);
@@ -327,6 +327,187 @@ void main() {
     expect(find.text('已读'), findsOneWidget);
   });
 
+  testWidgets('UnifiedDetailPage chapter toolbar opens filter sheet and filters unread', (tester) async {
+    final adapter = _FakeDetailAdapter(
+      secondIsRead: true,
+      secondIsDownloaded: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('unified-detail-chapter-toolbar')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(find.byKey(const Key('unified-detail-chapter-toolbar')), findsOneWidget);
+    expect(find.text('共 2 章'), findsOneWidget);
+    expect(find.text('全部章节'), findsOneWidget);
+    expect(find.text('章节升序'), findsOneWidget);
+
+    await tester.tap(find.text('筛选').last);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('unified-detail-chapter-filter-sheet')), findsOneWidget);
+    expect(find.byKey(const Key('unified-detail-filter-downloaded')), findsOneWidget);
+    expect(find.byKey(const Key('unified-detail-filter-unread')), findsOneWidget);
+    expect(find.byKey(const Key('unified-detail-filter-bookmarked')), findsOneWidget);
+    expect(find.byKey(const Key('unified-detail-sort-field')), findsOneWidget);
+    expect(find.byKey(const Key('unified-detail-sort-direction')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('unified-detail-filter-unread')));
+    await tester.ensureVisible(find.byKey(const Key('unified-detail-apply-filter-sort')));
+    await tester.tap(find.byKey(const Key('unified-detail-apply-filter-sort')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('未读'), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-e1')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-e2')), findsNothing);
+    expect(adapter.lastFilters.unread, TriStateFilterValue.include);
+  });
+
+  testWidgets('UnifiedDetailPage chapter filter keeps bookmark semantics', (tester) async {
+    final adapter = _FakeDetailAdapter(
+      secondIsBookmarked: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('unified-detail-chapter-toolbar')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    await tester.tap(find.text('筛选').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('unified-detail-filter-bookmarked')));
+    await tester.ensureVisible(find.byKey(const Key('unified-detail-apply-filter-sort')));
+    await tester.tap(find.byKey(const Key('unified-detail-apply-filter-sort')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('已加书签'), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-e1')), findsNothing);
+    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-e2')), findsOneWidget);
+    expect(adapter.lastFilters.bookmarked, TriStateFilterValue.include);
+  });
+
+  testWidgets('UnifiedDetailPage chapter toolbar toggles sort direction', (tester) async {
+    final adapter = _FakeDetailAdapter(includeSecondChapter: true);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('unified-detail-chapter-toolbar')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(find.text('章节升序'), findsOneWidget);
+    var chapterTiles = tester.widgetList<Material>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Material &&
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>).value.startsWith('unified-detail-chapter-'),
+      ),
+    ).toList();
+    expect((chapterTiles.first.key! as ValueKey<String>).value, 'unified-detail-chapter-e1');
+
+    await tester.tap(find.text('章节升序'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('章节降序'), findsOneWidget);
+    chapterTiles = tester.widgetList<Material>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Material &&
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>).value.startsWith('unified-detail-chapter-'),
+      ),
+    ).toList();
+    expect((chapterTiles.first.key! as ValueKey<String>).value, 'unified-detail-chapter-e2');
+    expect(adapter.lastSortOption.direction, LibrarySortDirection.desc);
+  });
+
+  testWidgets('UnifiedDetailPage chapter filter sheet applies sort field and direction', (tester) async {
+    final adapter = _FakeDetailAdapter(includeSecondChapter: true);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('unified-detail-chapter-toolbar')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    await tester.tap(find.text('筛选').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('unified-detail-sort-field')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('按名称').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('降序').last);
+    await tester.ensureVisible(find.byKey(const Key('unified-detail-apply-filter-sort')));
+    await tester.tap(find.byKey(const Key('unified-detail-apply-filter-sort')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('名称降序'), findsOneWidget);
+    expect(adapter.lastSortOption.field, LibraryChapterSortField.name);
+    expect(adapter.lastSortOption.direction, LibrarySortDirection.desc);
+
+    final chapterTiles = tester.widgetList<Material>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Material &&
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>).value.startsWith('unified-detail-chapter-'),
+      ),
+    ).toList();
+    expect((chapterTiles.first.key! as ValueKey<String>).value, 'unified-detail-chapter-e2');
+  });
+
   testWidgets('UnifiedDetailPage toggles chapter bookmark from row button', (tester) async {
     final adapter = _FakeDetailAdapter();
 
@@ -443,6 +624,153 @@ void main() {
 
     expect(find.text('更新预计耗时10.5s'), findsOneWidget);
   });
+
+  testWidgets('UnifiedDetailPage shows refresh fallback snackbars', (tester) async {
+    final adapter = _FakeDetailAdapter();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('更新').first);
+    await tester.pumpAndSettle();
+    expect(find.text('已更新'), findsOneWidget);
+
+    adapter.refreshResult = DetailRefreshResult.skipped;
+    await tester.tap(find.text('更新').first);
+    await tester.pumpAndSettle();
+    expect(find.text('暂无可更新内容'), findsOneWidget);
+  });
+
+  testWidgets('UnifiedDetailPage shows error panel and retries initial load', (tester) async {
+    final adapter = _FakeDetailAdapter()..failLoadHeaderOnce = true;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('unified-detail-error-panel')), findsOneWidget);
+    expect(find.byKey(const Key('unified-detail-error-retry')), findsOneWidget);
+    expect(find.textContaining('加载失败'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('unified-detail-error-retry')));
+    await tester.tap(find.byKey(const Key('unified-detail-error-retry')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('unified-detail-error-panel')), findsNothing);
+    expect(find.text('测试作品'), findsWidgets);
+  });
+
+  testWidgets('UnifiedDetailPage keeps existing content when chapter reload fails', (tester) async {
+    final adapter = _FakeDetailAdapter();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-bookmark-button-e1')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -120));
+    await tester.pumpAndSettle();
+
+    adapter.failLoadChaptersOnce = true;
+    await tester.tap(find.byKey(const ValueKey<String>('unified-detail-chapter-bookmark-button-e1')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('unified-detail-error-panel')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-e1')), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('unified-detail-error-retry')));
+    await tester.tap(find.byKey(const Key('unified-detail-error-retry')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('unified-detail-error-panel')), findsNothing);
+  });
+
+  testWidgets('UnifiedDetailPage reports chapter download failures without stale spinner', (tester) async {
+    final adapter = _FakeDetailAdapter()..failMarkDownload = true;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byTooltip('下载该章节'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -120));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('下载该章节'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('下载失败'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-downloaded-badge-e1')), findsNothing);
+  });
+
+  testWidgets('UnifiedDetailPage reports delete download failures and keeps badge', (tester) async {
+    final adapter = _FakeDetailAdapter(
+      isDownloaded: true,
+    )..failDeleteDownload = true;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byTooltip('已下载，点击删除下载'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -120));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('已下载，点击删除下载'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('删除下载失败'), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-downloaded-badge-e1')), findsOneWidget);
+  });
 }
 
 class _FakeDetailAdapter implements DetailModuleAdapter {
@@ -452,6 +780,10 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
     this.isBookmarked = false,
     this.isDownloaded = false,
     this.isRead = false,
+    this.includeSecondChapter = false,
+    this.secondIsBookmarked = false,
+    this.secondIsDownloaded = false,
+    this.secondIsRead = false,
   });
 
   int markReadCallCount = 0;
@@ -459,12 +791,22 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
   String? lastBookmarkEpisodeId;
   String? lastDownloadedEpisodeId;
   String? lastDeletedDownloadEpisodeId;
+  LibraryFilterSet lastFilters = LibraryFilterSet.defaults;
+  LibraryChapterSortOption lastSortOption = LibraryChapterSortOption.defaults;
   DetailRefreshResult refreshResult = DetailRefreshResult.immediate;
+  bool failLoadHeaderOnce = false;
+  bool failLoadChaptersOnce = false;
+  bool failMarkDownload = false;
+  bool failDeleteDownload = false;
   final String? coverLocalPath;
   final LibraryChapterProgressInfo? progressInfo;
   bool isBookmarked;
   bool isDownloaded;
   bool isRead;
+  final bool includeSecondChapter;
+  final bool secondIsBookmarked;
+  final bool secondIsDownloaded;
+  final bool secondIsRead;
 
   @override
   Future<void> clearAllReadState({required String workId}) async {
@@ -476,6 +818,9 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
     required String workId,
     required String episodeId,
   }) async {
+    if (failDeleteDownload) {
+      throw StateError('delete failed');
+    }
     lastDeletedDownloadEpisodeId = episodeId;
     isDownloaded = false;
   }
@@ -505,8 +850,14 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
     required LibraryFilterSet filters,
     required LibraryChapterSortOption sortOption,
   }) async {
+    if (failLoadChaptersOnce) {
+      failLoadChaptersOnce = false;
+      throw StateError('chapters failed');
+    }
     loadChaptersCallCount++;
-    return [
+    lastFilters = filters;
+    lastSortOption = sortOption;
+    final chapters = [
       LibraryChapterItem(
         episodeId: 'e1',
         workId: 'work-1',
@@ -519,11 +870,50 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
         isRead: isRead,
         progressInfo: progressInfo,
       ),
+      if (includeSecondChapter || secondIsBookmarked || secondIsDownloaded || secondIsRead)
+        LibraryChapterItem(
+          episodeId: 'e2',
+          workId: 'work-1',
+          title: '第2章',
+          orderIndex: 2,
+          sourceTid: '101',
+          sourcePid: '5002',
+          isBookmarked: secondIsBookmarked,
+          isDownloaded: secondIsDownloaded,
+          isRead: secondIsRead,
+        ),
     ];
+    final filtered = chapters.where((chapter) {
+      return _match(filters.downloaded, chapter.isDownloaded) &&
+          _match(filters.unread, !chapter.isRead) &&
+          _match(filters.bookmarked, chapter.isBookmarked);
+    }).toList();
+    filtered.sort((a, b) {
+      final compared = switch (sortOption.field) {
+        LibraryChapterSortField.chapterIndex => a.orderIndex.compareTo(b.orderIndex),
+        LibraryChapterSortField.date => (a.publishTimeText ?? '').compareTo(b.publishTimeText ?? ''),
+        LibraryChapterSortField.name => a.title.compareTo(b.title),
+        LibraryChapterSortField.tid => (a.sourceTid ?? '').compareTo(b.sourceTid ?? ''),
+      };
+      return sortOption.direction == LibrarySortDirection.asc ? compared : -compared;
+    });
+    return filtered;
+  }
+
+  bool _match(TriStateFilterValue filter, bool actual) {
+    return switch (filter) {
+      TriStateFilterValue.ignore => true,
+      TriStateFilterValue.include => actual,
+      TriStateFilterValue.exclude => !actual,
+    };
   }
 
   @override
   Future<LibraryDetailHeader> loadHeader({required String workId}) async {
+    if (failLoadHeaderOnce) {
+      failLoadHeaderOnce = false;
+      throw StateError('header failed');
+    }
     return LibraryDetailHeader(
       workId: 'work-1',
       title: '测试作品',
@@ -559,6 +949,9 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
     required String episodeId,
     required bool isDownloaded,
   }) async {
+    if (failMarkDownload) {
+      throw StateError('download failed');
+    }
     lastDownloadedEpisodeId = episodeId;
     this.isDownloaded = isDownloaded;
   }
