@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 18;
+  static const int dbVersion = 19;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -19,6 +19,7 @@ class ComicLocalDb {
   static const String novelEpisodeContentTable = 'novel_episode_content';
   static const String readerPreferencesTable = 'reader_preferences';
   static const String novelReadingProgressTable = 'novel_reading_progress';
+  static const String readerBookmarksTable = 'reader_bookmarks';
   static const String novelCategoriesTable = 'novel_categories';
   static const String novelShelfItemsTable = 'novel_shelf_items';
   static const String libraryWorkStateTable = 'library_work_state';
@@ -165,6 +166,7 @@ class ComicLocalDb {
     await _createReadingProgressTable(db);
     await _createNovelTables(db);
     await _createNovelReadingProgressTable(db);
+    await _createReaderBookmarksTable(db);
     await _createNovelShelfTables(db);
     await _createLibraryStateTables(db);
     await _createPhase7PerformanceIndexes(db);
@@ -298,6 +300,32 @@ class ComicLocalDb {
         updated_at INTEGER NOT NULL
       )
     ''');
+  }
+
+  static Future<void> _createReaderBookmarksTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $readerBookmarksTable (
+        bookmark_id TEXT PRIMARY KEY,
+        novel_id TEXT NOT NULL,
+        episode_id TEXT NOT NULL,
+        node_id TEXT,
+        text_offset INTEGER NOT NULL DEFAULT 0,
+        page_index INTEGER NOT NULL DEFAULT 0,
+        scroll_offset REAL NOT NULL DEFAULT 0,
+        progress_percent REAL NOT NULL DEFAULT 0,
+        title TEXT NOT NULL,
+        snippet TEXT NOT NULL,
+        note TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (novel_id) REFERENCES $worksTable(work_id) ON DELETE CASCADE,
+        FOREIGN KEY (episode_id) REFERENCES $workEpisodesTable(episode_id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_reader_bookmarks_novel_episode ON '
+      '$readerBookmarksTable(novel_id, episode_id, created_at)',
+    );
   }
 
   /// Phase 1.2: 小说书架分类体系，和漫画分类能力对齐。
@@ -609,6 +637,7 @@ class ComicLocalDb {
     libraryEpisodeStateTable,
     libraryWorkStateTable,
     libraryDisplaySettingsTable,
+    readerBookmarksTable,
     novelEpisodeContentTable,
     workEpisodesTable,
     novelShelfItemsTable,

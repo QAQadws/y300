@@ -5,6 +5,7 @@ import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
@@ -126,6 +127,69 @@ void main() {
     expect(state.currentOffset, 88);
     expect(repository.savedProgressEpisodeIds, contains('novel:49:100:5001'));
   });
+
+  test('searchInCurrentChapter updates search results and selection', () async {
+    final repository = _ControllerNovelRepository();
+    repository.contentsByEpisodeId['novel:49:100:5001'] = _content(
+      'novel:49:100:5001',
+      '关键词在这里。关键词再次出现。',
+    );
+    final container = _buildContainer(repository: repository);
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
+
+    await container.read(provider.future);
+    container.read(provider.notifier).searchInCurrentChapter('关键词');
+    final state = container.read(provider).value!;
+
+    expect(state.searchResults, hasLength(2));
+    expect(state.currentSearchIndex, 0);
+    container
+        .read(provider.notifier)
+        .selectSearchResult(state.searchResults.last.resultId);
+    expect(container.read(provider).value!.currentSearchIndex, 1);
+  });
+
+  test('bookmark actions persist and reload state', () async {
+    final repository = _ControllerNovelRepository();
+    final container = _buildContainer(repository: repository);
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
+
+    await container.read(provider.future);
+    await container.read(provider.notifier).toggleCurrentEpisodeBookmark();
+    expect(container.read(provider).value!.hasCurrentEpisodeBookmark, isTrue);
+
+    await container.read(provider.notifier).addBookmarkAtCurrentPosition(
+          const NovelReaderTextAnchor(
+            episodeId: 'novel:49:100:5001',
+            nodeId: 'node-0',
+          ),
+        );
+    var state = container.read(provider).value!;
+    expect(state.currentEpisodeBookmarks.length, 2);
+
+    final positionBookmark = state.currentEpisodeBookmarks.firstWhere(
+      (bookmark) => bookmark.bookmarkId.startsWith('reader-bookmark:'),
+    );
+    await container
+        .read(provider.notifier)
+        .removeBookmark(positionBookmark.bookmarkId);
+    state = container.read(provider).value!;
+    expect(state.currentEpisodeBookmarks.length, 1);
+  });
 }
 
 ProviderSubscription<AsyncValue<NovelReaderViewState>> _keepReaderAlive(
@@ -213,6 +277,7 @@ class _ControllerNovelRepository implements NovelRepository {
   NovelReadingProgress? readingProgress;
   NovelReaderPreferences preferences;
   final savedProgressEpisodeIds = <String>[];
+  final bookmarks = <NovelReaderBookmark>[];
 
   @override
   Future<String> createCategory({required String name}) async => 'default';
@@ -323,6 +388,51 @@ class _ControllerNovelRepository implements NovelRepository {
 
   @override
   Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {}
+
+  @override
+  Future<void> addReaderBookmark({
+    required NovelReaderBookmark bookmark,
+  }) async {
+    bookmarks.removeWhere((item) => item.bookmarkId == bookmark.bookmarkId);
+    bookmarks.add(bookmark);
+  }
+
+  @override
+  Future<List<NovelReaderBookmark>> listReaderBookmarks({
+    required String novelId,
+  }) async {
+    return bookmarks.where((bookmark) => bookmark.novelId == novelId).toList();
+  }
+
+  @override
+  Future<void> removeReaderBookmark({
+    required String bookmarkId,
+  }) async {
+    bookmarks.removeWhere((bookmark) => bookmark.bookmarkId == bookmarkId);
+  }
+
+  @override
+  Future<void> toggleEpisodeBookmark({
+    required String novelId,
+    required String episodeId,
+    required bool isBookmarked,
+  }) async {
+    bookmarks.removeWhere((bookmark) => bookmark.bookmarkId == 'episode-bookmark:$episodeId');
+    if (isBookmarked) {
+      bookmarks.add(
+        NovelReaderBookmark(
+          bookmarkId: 'episode-bookmark:$episodeId',
+          novelId: novelId,
+          episodeId: episodeId,
+          anchor: NovelReaderTextAnchor(episodeId: episodeId),
+          title: episodeId,
+          snippet: '章节书签',
+          createdAt: DateTime(2026, 6, 8),
+          updatedAt: DateTime(2026, 6, 8),
+        ),
+      );
+    }
+  }
 }
 
 List<NovelEpisodeItem> _episodes() {

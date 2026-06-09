@@ -3,6 +3,7 @@
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 
 /// 小说仓储：封装小说书架、章节、正文、阅读偏好与阅读进度。
 abstract class NovelRepository {
@@ -64,6 +65,24 @@ abstract class NovelRepository {
   });
 
   Future<NovelReadingProgress?> getReadingProgress({required String novelId});
+
+  Future<List<NovelReaderBookmark>> listReaderBookmarks({
+    required String novelId,
+  });
+
+  Future<void> addReaderBookmark({
+    required NovelReaderBookmark bookmark,
+  });
+
+  Future<void> removeReaderBookmark({
+    required String bookmarkId,
+  });
+
+  Future<void> toggleEpisodeBookmark({
+    required String novelId,
+    required String episodeId,
+    required bool isBookmarked,
+  });
 }
 
 abstract class NovelShelfSnapshotRepository {

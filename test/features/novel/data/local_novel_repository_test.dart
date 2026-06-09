@@ -7,6 +7,7 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/novel/data/local_novel_repository.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/domain/services/novel_episode_discovery_service.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
@@ -140,6 +141,75 @@ void main() {
       expect(progress.pageIndex, 0);
       expect(progress.anchorNodeId, isNull);
       expect(progress.progressPercent, 0);
+    });
+
+    test('reader bookmarks can persist and are purged with work', () async {
+      await repository.upsertNovelBySeed(seed: const NovelRefreshSeed(fid: '49', tid: '200'));
+      await repository.refreshEpisodes(novelId: 'novel:49:200');
+      final episodes = await repository.getEpisodes(novelId: 'novel:49:200');
+      final now = DateTime(2026, 6, 8);
+      final bookmark = NovelReaderBookmark(
+        bookmarkId: 'bookmark-1',
+        novelId: 'novel:49:200',
+        episodeId: episodes.first.episodeId,
+        anchor: NovelReaderTextAnchor(
+          episodeId: episodes.first.episodeId,
+          nodeId: 'node-1',
+          textOffset: 3,
+          pageIndex: 2,
+          scrollOffset: 88,
+          progressPercent: 0.5,
+        ),
+        title: '第1章',
+        snippet: '这是书签片段',
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      await repository.addReaderBookmark(bookmark: bookmark);
+      var bookmarks = await repository.listReaderBookmarks(novelId: 'novel:49:200');
+
+      expect(bookmarks, hasLength(1));
+      expect(bookmarks.single.bookmarkId, 'bookmark-1');
+      expect(bookmarks.single.anchor.nodeId, 'node-1');
+      expect(bookmarks.single.anchor.pageIndex, 2);
+
+      await repository.removeReaderBookmark(bookmarkId: 'bookmark-1');
+      expect(await repository.listReaderBookmarks(novelId: 'novel:49:200'), isEmpty);
+
+      await repository.addReaderBookmark(bookmark: bookmark);
+      await repository.purgeWork(novelId: 'novel:49:200');
+      bookmarks = await repository.listReaderBookmarks(novelId: 'novel:49:200');
+      expect(bookmarks, isEmpty);
+    });
+
+    test('toggleEpisodeBookmark exposes existing episode bookmark state', () async {
+      await repository.upsertNovelBySeed(seed: const NovelRefreshSeed(fid: '49', tid: '200'));
+      await repository.refreshEpisodes(novelId: 'novel:49:200');
+      final episodes = await repository.getEpisodes(novelId: 'novel:49:200');
+
+      await repository.toggleEpisodeBookmark(
+        novelId: 'novel:49:200',
+        episodeId: episodes.first.episodeId,
+        isBookmarked: true,
+      );
+
+      var bookmarks = await repository.listReaderBookmarks(novelId: 'novel:49:200');
+      expect(
+        bookmarks.map((bookmark) => bookmark.bookmarkId),
+        contains('episode-bookmark:${episodes.first.episodeId}'),
+      );
+
+      await repository.toggleEpisodeBookmark(
+        novelId: 'novel:49:200',
+        episodeId: episodes.first.episodeId,
+        isBookmarked: false,
+      );
+      bookmarks = await repository.listReaderBookmarks(novelId: 'novel:49:200');
+      expect(
+        bookmarks.map((bookmark) => bookmark.bookmarkId),
+        isNot(contains('episode-bookmark:${episodes.first.episodeId}')),
+      );
     });
 
     test('reader preferences read old rows with defaults', () async {

@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/storage/data/storage_location_repository.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 
@@ -187,4 +188,24 @@ class _NovelDownloadRepositoryFake implements NovelRepository {
 
   @override
   Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {}
+
+  @override
+  Future<void> addReaderBookmark({required NovelReaderBookmark bookmark}) async {}
+
+  @override
+  Future<List<NovelReaderBookmark>> listReaderBookmarks({
+    required String novelId,
+  }) async {
+    return const <NovelReaderBookmark>[];
+  }
+
+  @override
+  Future<void> removeReaderBookmark({required String bookmarkId}) async {}
+
+  @override
+  Future<void> toggleEpisodeBookmark({
+    required String novelId,
+    required String episodeId,
+    required bool isBookmarked,
+  }) async {}
 }

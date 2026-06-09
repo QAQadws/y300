@@ -6,12 +6,14 @@ import 'package:y300/features/cache/domain/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/features/library_shared/data/local_library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_query_utils.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/domain/services/novel_episode_discovery_service.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
@@ -25,12 +27,14 @@ class LocalNovelRepository
     ImageCacheService? imageCacheService,
   })  : _threadGateway = threadGateway,
         _discoveryService = discoveryService,
-        _imageCacheService = imageCacheService;
+        _imageCacheService = imageCacheService,
+        _stateRepository = LocalLibraryStateRepository(_dbFuture);
 
   final Future<Database> _dbFuture;
   final NovelThreadGateway _threadGateway;
   final NovelEpisodeDiscoveryService _discoveryService;
   final ImageCacheService? _imageCacheService;
+  final LocalLibraryStateRepository _stateRepository;
 
   static const String _contentType = 'novel';
   static const int _maxRefreshPages = 20;
@@ -716,6 +720,11 @@ class LocalNovelRepository
     final db = await _dbFuture;
     await db.transaction((txn) async {
       await txn.delete(
+        ComicLocalDb.readerBookmarksTable,
+        where: 'novel_id = ?',
+        whereArgs: <Object>[novelId],
+      );
+      await txn.delete(
         ComicLocalDb.novelReadingProgressTable,
         where: 'novel_id = ?',
         whereArgs: <Object>[novelId],
@@ -788,6 +797,96 @@ class LocalNovelRepository
     );
   }
 
+  @override
+  Future<List<NovelReaderBookmark>> listReaderBookmarks({
+    required String novelId,
+  }) async {
+    final db = await _dbFuture;
+    final readerRows = await db.query(
+      ComicLocalDb.readerBookmarksTable,
+      where: 'novel_id = ?',
+      whereArgs: <Object>[novelId],
+      orderBy: 'created_at ASC',
+    );
+    final episodeRows = await db.rawQuery('''
+      SELECT e.episode_id, e.episode_title
+      FROM ${ComicLocalDb.workEpisodesTable} e
+      INNER JOIN ${ComicLocalDb.libraryEpisodeStateTable} state
+        ON state.episode_id = e.episode_id
+       AND state.content_type = ?
+       AND state.work_id = e.work_id
+      WHERE e.work_id = ?
+        AND e.content_type = ?
+        AND state.is_bookmarked = 1
+      ORDER BY e.order_index ASC
+    ''', <Object>[_contentType, novelId, _contentType]);
+    final readerBookmarks = readerRows
+        .map(_rowToReaderBookmark)
+        .whereType<NovelReaderBookmark>()
+        .toList(growable: false);
+    final episodeBookmarks = episodeRows
+        .map((row) => _rowToEpisodeBookmark(row, novelId: novelId))
+        .whereType<NovelReaderBookmark>()
+        .toList(growable: false);
+    return <NovelReaderBookmark>[
+      ...episodeBookmarks,
+      ...readerBookmarks,
+    ];
+  }
+
+  @override
+  Future<void> addReaderBookmark({
+    required NovelReaderBookmark bookmark,
+  }) async {
+    final db = await _dbFuture;
+    await db.insert(
+      ComicLocalDb.readerBookmarksTable,
+      <String, Object?>{
+        'bookmark_id': bookmark.bookmarkId,
+        'novel_id': bookmark.novelId,
+        'episode_id': bookmark.episodeId,
+        'node_id': _normalizeNullable(bookmark.anchor.nodeId),
+        'text_offset': bookmark.anchor.textOffset < 0 ? 0 : bookmark.anchor.textOffset,
+        'page_index': bookmark.anchor.pageIndex < 0 ? 0 : bookmark.anchor.pageIndex,
+        'scroll_offset': bookmark.anchor.scrollOffset < 0 ? 0 : bookmark.anchor.scrollOffset,
+        'progress_percent':
+            bookmark.anchor.progressPercent.clamp(0.0, 1.0).toDouble(),
+        'title': bookmark.title,
+        'snippet': bookmark.snippet,
+        'note': _normalizeNullable(bookmark.note),
+        'created_at': bookmark.createdAt.millisecondsSinceEpoch,
+        'updated_at': bookmark.updatedAt.millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  @override
+  Future<void> removeReaderBookmark({
+    required String bookmarkId,
+  }) async {
+    final db = await _dbFuture;
+    await db.delete(
+      ComicLocalDb.readerBookmarksTable,
+      where: 'bookmark_id = ?',
+      whereArgs: <Object>[bookmarkId],
+    );
+  }
+
+  @override
+  Future<void> toggleEpisodeBookmark({
+    required String novelId,
+    required String episodeId,
+    required bool isBookmarked,
+  }) async {
+    await _stateRepository.upsertEpisodeState(
+      moduleKey: LibraryModuleKey.novel,
+      episodeId: episodeId,
+      workId: novelId,
+      isBookmarked: isBookmarked,
+    );
+  }
+
   String _buildNovelId(String fid, String tid) => 'novel:$fid:$tid';
 
   NovelItem _rowToNovelItem(Map<String, Object?> row) {
@@ -846,6 +945,61 @@ class LocalNovelRepository
       lastFetchedAt: _toDateTime(row['fetched_updated_at']),
       hasTags: (row['has_tags'] as int? ?? 0) == 1,
       isDownloaded: (row['downloaded_count'] as int? ?? 0) > 0,
+    );
+  }
+
+  NovelReaderBookmark? _rowToReaderBookmark(Map<String, Object?> row) {
+    final bookmarkId = _normalizeNullable(row['bookmark_id'] as String?);
+    final novelId = _normalizeNullable(row['novel_id'] as String?);
+    final episodeId = _normalizeNullable(row['episode_id'] as String?);
+    if (bookmarkId == null || novelId == null || episodeId == null) {
+      return null;
+    }
+    return NovelReaderBookmark(
+      bookmarkId: bookmarkId,
+      novelId: novelId,
+      episodeId: episodeId,
+      anchor: NovelReaderTextAnchor(
+        episodeId: episodeId,
+        nodeId: _normalizeNullable(row['node_id'] as String?),
+        textOffset: ((row['text_offset'] as num?)?.toInt() ?? 0)
+            .clamp(0, 1 << 30)
+            .toInt(),
+        pageIndex: ((row['page_index'] as num?)?.toInt() ?? 0)
+            .clamp(0, 1 << 30)
+            .toInt(),
+        scrollOffset: ((row['scroll_offset'] as num?)?.toDouble() ?? 0)
+            .clamp(0.0, double.infinity)
+            .toDouble(),
+        progressPercent:
+            ((row['progress_percent'] as num?)?.toDouble() ?? 0).clamp(0.0, 1.0).toDouble(),
+      ),
+      title: (row['title'] as String?) ?? '',
+      snippet: (row['snippet'] as String?) ?? '',
+      note: _normalizeNullable(row['note'] as String?),
+      createdAt: DateTime.fromMillisecondsSinceEpoch((row['created_at'] as int?) ?? 0),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch((row['updated_at'] as int?) ?? 0),
+    );
+  }
+
+  NovelReaderBookmark? _rowToEpisodeBookmark(
+    Map<String, Object?> row, {
+    required String novelId,
+  }) {
+    final episodeId = _normalizeNullable(row['episode_id'] as String?);
+    if (episodeId == null) {
+      return null;
+    }
+    final updatedAt = DateTime.fromMillisecondsSinceEpoch(0);
+    return NovelReaderBookmark(
+      bookmarkId: 'episode-bookmark:$episodeId',
+      novelId: novelId,
+      episodeId: episodeId,
+      anchor: NovelReaderTextAnchor(episodeId: episodeId),
+      title: (row['episode_title'] as String?) ?? '章节书签',
+      snippet: '章节书签',
+      createdAt: updatedAt,
+      updatedAt: updatedAt,
     );
   }
 

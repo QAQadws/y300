@@ -498,7 +498,7 @@ void main() {
               uploadedImage: ReplyUploadedImage(
                 localId: '',
                 aid: '123456',
-                uploadedAt: DateTime.utc(2026, 6, 8),
+                uploadedAt: DateTime.now(),
               ),
             ),
             const ReplyImageUploadEvent.completed(total: 1),
@@ -514,8 +514,7 @@ void main() {
     await tester.pump();
 
     await tester.tap(find.byKey(const Key('reply-composer-image-button')));
-    await tester.pump();
-    await tester.pump();
+    await _pumpUntilMessageContains(tester, '[attach]123456[/attach]');
     final editable = tester.widget<EditableText>(find.byType(EditableText));
     expect(editable.controller.text, '正文\n[attach]123456[/attach]');
     await tester.tap(find.byKey(const Key('reply-composer-send-button')));
@@ -554,7 +553,7 @@ void main() {
                 uploadedImage: ReplyUploadedImage(
                   localId: '',
                   aid: '123456',
-                  uploadedAt: DateTime.utc(2026, 6, 8),
+                  uploadedAt: DateTime.now(),
                 ),
               ),
               const ReplyImageUploadEvent.completed(total: 1),
@@ -570,8 +569,7 @@ void main() {
       await tester.pump();
 
       await tester.tap(find.byKey(const Key('reply-composer-image-button')));
-      await tester.pump();
-      await tester.pump();
+      await _pumpUntilMessageContains(tester, '[attach]123456[/attach]');
       await tester.tap(find.text('预览'));
       await tester.pump();
 
@@ -788,6 +786,20 @@ Widget _buildPage({
       home: ReplyComposerPage(args: args ?? _threadArgs()),
     ),
   );
+}
+
+Future<void> _pumpUntilMessageContains(
+  WidgetTester tester,
+  String expected, {
+  int maxPumps = 12,
+}) async {
+  for (var i = 0; i < maxPumps; i += 1) {
+    await tester.pump();
+    final editable = tester.widget<EditableText>(find.byType(EditableText));
+    if (editable.controller.text.contains(expected)) {
+      return;
+    }
+  }
 }
 
 Widget _buildLauncher({

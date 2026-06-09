@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 
 class NovelReaderDocumentView extends StatelessWidget {
@@ -12,6 +13,8 @@ class NovelReaderDocumentView extends StatelessWidget {
     required this.paragraphSpacing,
     this.imageHeaderBuilder,
     this.onLinkTap,
+    this.highlightedResult,
+    this.nodeKeyBuilder,
   });
 
   final NovelReaderDocument document;
@@ -19,6 +22,8 @@ class NovelReaderDocumentView extends StatelessWidget {
   final double paragraphSpacing;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<NovelReaderLink>? onLinkTap;
+  final NovelReaderSearchResult? highlightedResult;
+  final Key Function(String nodeId)? nodeKeyBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +43,7 @@ class NovelReaderDocumentView extends StatelessWidget {
     switch (node.type) {
       case NovelReaderNodeType.heading:
         return NovelReaderParagraphBlock(
-          key: Key('novel-reader-node-${node.id}'),
+          key: _nodeKey(node.id),
           text: _textForNode(node),
           children: node.children,
           style: typography.chapterTitle,
@@ -46,14 +51,16 @@ class NovelReaderDocumentView extends StatelessWidget {
           textAlign: TextAlign.start,
           firstLineIndent: 0,
           onLinkTap: onLinkTap,
+          highlight: _highlightForNode(node),
         );
       case NovelReaderNodeType.quote:
         return NovelReaderQuoteBlock(
-          key: Key('novel-reader-node-${node.id}'),
+          key: _nodeKey(node.id),
           text: _textForNode(node),
           children: node.children,
           typography: typography,
           onLinkTap: onLinkTap,
+          highlight: _highlightForNode(node),
         );
       case NovelReaderNodeType.image:
         final image = node.image;
@@ -61,7 +68,7 @@ class NovelReaderDocumentView extends StatelessWidget {
           return const SizedBox.shrink();
         }
         return NovelReaderImageBlock(
-          key: Key('novel-reader-node-${node.id}'),
+          key: _nodeKey(node.id),
           image: image,
           imageHeaderBuilder: imageHeaderBuilder,
         );
@@ -69,7 +76,7 @@ class NovelReaderDocumentView extends StatelessWidget {
         final link = node.link;
         if (link == null) {
           return NovelReaderParagraphBlock(
-            key: Key('novel-reader-node-${node.id}'),
+            key: _nodeKey(node.id),
             text: _textForNode(node),
             children: node.children,
             style: typography.body,
@@ -77,24 +84,26 @@ class NovelReaderDocumentView extends StatelessWidget {
             textAlign: typography.textAlign,
             firstLineIndent: typography.firstLineIndent,
             onLinkTap: onLinkTap,
+            highlight: _highlightForNode(node),
           );
         }
         return NovelReaderLinkBlock(
-          key: Key('novel-reader-node-${node.id}'),
+          key: _nodeKey(node.id),
           link: link,
           typography: typography,
           onTap: onLinkTap,
+          highlighted: _highlightForNode(node) != null,
         );
       case NovelReaderNodeType.divider:
-        return Divider(key: Key('novel-reader-node-${node.id}'));
+        return Divider(key: _nodeKey(node.id));
       case NovelReaderNodeType.spacer:
         return SizedBox(
-          key: Key('novel-reader-node-${node.id}'),
+          key: _nodeKey(node.id),
           height: paragraphSpacing,
         );
       case NovelReaderNodeType.paragraph:
         return NovelReaderParagraphBlock(
-          key: Key('novel-reader-node-${node.id}'),
+          key: _nodeKey(node.id),
           text: _textForNode(node),
           children: node.children,
           style: typography.body,
@@ -102,8 +111,25 @@ class NovelReaderDocumentView extends StatelessWidget {
           textAlign: typography.textAlign,
           firstLineIndent: typography.firstLineIndent,
           onLinkTap: onLinkTap,
+          highlight: _highlightForNode(node),
         );
     }
+  }
+
+  static Key nodeKey(String nodeId) {
+    return Key('novel-reader-node-$nodeId');
+  }
+
+  Key _nodeKey(String nodeId) {
+    return nodeKeyBuilder?.call(nodeId) ?? nodeKey(nodeId);
+  }
+
+  NovelReaderSearchResult? _highlightForNode(NovelReaderNode node) {
+    final result = highlightedResult;
+    if (result == null || result.nodeId != node.id) {
+      return null;
+    }
+    return result;
   }
 
   String _textForNode(NovelReaderNode node) {
@@ -128,6 +154,7 @@ class NovelReaderParagraphBlock extends StatelessWidget {
     required this.textAlign,
     required this.firstLineIndent,
     this.onLinkTap,
+    this.highlight,
   });
 
   final String text;
@@ -137,13 +164,16 @@ class NovelReaderParagraphBlock extends StatelessWidget {
   final TextAlign textAlign;
   final double firstLineIndent;
   final ValueChanged<NovelReaderLink>? onLinkTap;
+  final NovelReaderSearchResult? highlight;
 
   @override
   Widget build(BuildContext context) {
     final spans = <InlineSpan>[
       if (firstLineIndent > 0) WidgetSpan(child: SizedBox(width: firstLineIndent)),
-      if (children.isEmpty)
-        TextSpan(text: text)
+      if (highlight != null)
+        ..._highlightedTextSpans()
+      else if (children.isEmpty)
+        ..._highlightedTextSpans()
       else
         for (final child in children) ..._spansForChild(child),
     ];
@@ -152,6 +182,29 @@ class NovelReaderParagraphBlock extends StatelessWidget {
       style: style,
       textAlign: textAlign,
     );
+  }
+
+  List<InlineSpan> _highlightedTextSpans() {
+    final result = highlight;
+    if (result == null) {
+      return <InlineSpan>[TextSpan(text: text)];
+    }
+    final start = result.matchStart.clamp(0, text.length).toInt();
+    final end = result.matchEnd.clamp(start, text.length).toInt();
+    if (start == end) {
+      return <InlineSpan>[TextSpan(text: text)];
+    }
+    return <InlineSpan>[
+      if (start > 0) TextSpan(text: text.substring(0, start)),
+      TextSpan(
+        text: text.substring(start, end),
+        style: const TextStyle(
+          backgroundColor: Color(0x66FFD54F),
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      if (end < text.length) TextSpan(text: text.substring(end)),
+    ];
   }
 
   List<InlineSpan> _spansForChild(NovelReaderNode child) {
@@ -227,12 +280,14 @@ class NovelReaderQuoteBlock extends StatelessWidget {
     this.children = const <NovelReaderNode>[],
     required this.typography,
     this.onLinkTap,
+    this.highlight,
   });
 
   final String text;
   final List<NovelReaderNode> children;
   final NovelReaderTypography typography;
   final ValueChanged<NovelReaderLink>? onLinkTap;
+  final NovelReaderSearchResult? highlight;
 
   @override
   Widget build(BuildContext context) {
@@ -252,6 +307,7 @@ class NovelReaderQuoteBlock extends StatelessWidget {
           textAlign: TextAlign.start,
           firstLineIndent: 0,
           onLinkTap: onLinkTap,
+          highlight: highlight,
         ),
       ),
     );
@@ -295,11 +351,13 @@ class NovelReaderLinkBlock extends StatelessWidget {
     required this.link,
     required this.typography,
     this.onTap,
+    this.highlighted = false,
   });
 
   final NovelReaderLink link;
   final NovelReaderTypography typography;
   final ValueChanged<NovelReaderLink>? onTap;
+  final bool highlighted;
 
   @override
   Widget build(BuildContext context) {
@@ -311,7 +369,9 @@ class NovelReaderLinkBlock extends StatelessWidget {
         icon: const Icon(Icons.link),
         label: Text(
           link.text,
-          style: typography.link,
+          style: highlighted
+              ? typography.link.copyWith(backgroundColor: const Color(0x66FFD54F))
+              : typography.link,
         ),
       ),
     );

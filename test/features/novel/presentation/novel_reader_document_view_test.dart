@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_document_view.dart';
 
@@ -137,6 +138,39 @@ void main() {
     final image = tester.widget<LibraryCachedImage>(find.byType(LibraryCachedImage));
     expect(image.imageUrl, 'https://img.test/novel.jpg');
     expect(image.headerBuilder, headerBuilder);
+  });
+
+  testWidgets('NovelReaderDocumentView accepts highlighted search result', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NovelReaderDocumentView(
+          document: _document(
+            nodes: const <NovelReaderNode>[
+              NovelReaderNode(
+                id: 'p',
+                type: NovelReaderNodeType.paragraph,
+                text: '关键词在这里',
+              ),
+            ],
+          ),
+          typography: _typography(),
+          paragraphSpacing: 8,
+          highlightedResult: const NovelReaderSearchResult(
+            resultId: 'r1',
+            keyword: '关键词',
+            anchor: NovelReaderTextAnchor(episodeId: 'ep1', nodeId: 'p'),
+            snippet: '关键词在这里',
+            matchStart: 0,
+            matchEnd: 3,
+            nodeId: 'p',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.textContaining('关键词在这里'), findsOneWidget);
   });
 }
 

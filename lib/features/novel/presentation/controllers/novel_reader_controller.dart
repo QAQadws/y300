@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
+import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 
 class NovelReaderArgs {
@@ -41,6 +43,11 @@ class NovelReaderViewState {
     required this.readingProgress,
     required this.progressSnapshot,
     required this.currentOffset,
+    this.bookmarks = const <NovelReaderBookmark>[],
+    this.currentEpisodeBookmarks = const <NovelReaderBookmark>[],
+    this.searchResults = const <NovelReaderSearchResult>[],
+    this.currentSearchIndex = -1,
+    this.searchKeyword = '',
   });
 
   final NovelItem? novel;
@@ -52,6 +59,11 @@ class NovelReaderViewState {
   final NovelReadingProgress? readingProgress;
   final NovelReaderProgressSnapshot progressSnapshot;
   final double currentOffset;
+  final List<NovelReaderBookmark> bookmarks;
+  final List<NovelReaderBookmark> currentEpisodeBookmarks;
+  final List<NovelReaderSearchResult> searchResults;
+  final int currentSearchIndex;
+  final String searchKeyword;
 
   int get currentEpisodeIndex {
     return episodes.indexWhere(
@@ -79,6 +91,23 @@ class NovelReaderViewState {
 
   bool get hasNextEpisode => nextEpisode != null;
 
+  bool get hasCurrentEpisodeBookmark {
+    return currentEpisodeBookmarks.any(
+      (bookmark) => bookmark.bookmarkId.startsWith('episode-bookmark:'),
+    );
+  }
+
+  Set<String> get bookmarkEpisodeIds {
+    return bookmarks.map((bookmark) => bookmark.episodeId).toSet();
+  }
+
+  NovelReaderSearchResult? get currentSearchResult {
+    if (currentSearchIndex < 0 || currentSearchIndex >= searchResults.length) {
+      return null;
+    }
+    return searchResults[currentSearchIndex];
+  }
+
   NovelReaderViewState copyWith({
     NovelItem? novel,
     bool clearNovel = false,
@@ -91,6 +120,11 @@ class NovelReaderViewState {
     bool clearReadingProgress = false,
     NovelReaderProgressSnapshot? progressSnapshot,
     double? currentOffset,
+    List<NovelReaderBookmark>? bookmarks,
+    List<NovelReaderBookmark>? currentEpisodeBookmarks,
+    List<NovelReaderSearchResult>? searchResults,
+    int? currentSearchIndex,
+    String? searchKeyword,
   }) {
     return NovelReaderViewState(
       novel: clearNovel ? null : (novel ?? this.novel),
@@ -103,6 +137,12 @@ class NovelReaderViewState {
           clearReadingProgress ? null : (readingProgress ?? this.readingProgress),
       progressSnapshot: progressSnapshot ?? this.progressSnapshot,
       currentOffset: currentOffset ?? this.currentOffset,
+      bookmarks: bookmarks ?? this.bookmarks,
+      currentEpisodeBookmarks:
+          currentEpisodeBookmarks ?? this.currentEpisodeBookmarks,
+      searchResults: searchResults ?? this.searchResults,
+      currentSearchIndex: currentSearchIndex ?? this.currentSearchIndex,
+      searchKeyword: searchKeyword ?? this.searchKeyword,
     );
   }
 }
@@ -255,6 +295,111 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     await _saveProgressSnapshot(snapshot);
   }
 
+  void searchInCurrentChapter(String keyword) {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    final results = ref.read(novelReaderSearchServiceProvider).search(
+          document: current.document,
+          keyword: keyword,
+        );
+    state = AsyncData(
+      current.copyWith(
+        searchKeyword: keyword.trim(),
+        searchResults: results,
+        currentSearchIndex: results.isEmpty ? -1 : 0,
+      ),
+    );
+  }
+
+  void clearSearch() {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    state = AsyncData(
+      current.copyWith(
+        searchKeyword: '',
+        searchResults: const <NovelReaderSearchResult>[],
+        currentSearchIndex: -1,
+      ),
+    );
+  }
+
+  void selectSearchResult(String resultId) {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    final index = current.searchResults.indexWhere(
+      (result) => result.resultId == resultId,
+    );
+    if (index < 0) {
+      return;
+    }
+    state = AsyncData(current.copyWith(currentSearchIndex: index));
+  }
+
+  Future<void> addBookmarkAtCurrentPosition(
+    NovelReaderTextAnchor anchor, {
+    String? note,
+  }) async {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    final now = DateTime.now();
+    final bookmark = NovelReaderBookmark(
+      bookmarkId: 'reader-bookmark:${now.microsecondsSinceEpoch}',
+      novelId: _args.novelId,
+      episodeId: current.currentEpisode.episodeId,
+      anchor: anchor.copyWith(episodeId: current.currentEpisode.episodeId),
+      title: current.currentEpisode.episodeTitle,
+      snippet: _snippetForAnchor(current.document, anchor),
+      note: note,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final repository = ref.read(novelRepositoryProvider);
+    await repository.addReaderBookmark(bookmark: bookmark);
+    await _reloadBookmarks(repository);
+  }
+
+  Future<void> removeBookmark(String bookmarkId) async {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    final repository = ref.read(novelRepositoryProvider);
+    final bookmark = _findBookmark(current.bookmarks, bookmarkId);
+    if (bookmark?.bookmarkId.startsWith('episode-bookmark:') == true) {
+      await repository.toggleEpisodeBookmark(
+        novelId: _args.novelId,
+        episodeId: bookmark!.episodeId,
+        isBookmarked: false,
+      );
+      await _reloadBookmarks(repository);
+      return;
+    }
+    await repository.removeReaderBookmark(bookmarkId: bookmarkId);
+    await _reloadBookmarks(repository);
+  }
+
+  Future<void> toggleCurrentEpisodeBookmark() async {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    final repository = ref.read(novelRepositoryProvider);
+    await repository.toggleEpisodeBookmark(
+      novelId: _args.novelId,
+      episodeId: current.currentEpisode.episodeId,
+      isBookmarked: !current.hasCurrentEpisodeBookmark,
+    );
+    await _reloadBookmarks(repository);
+  }
+
   Future<NovelReaderViewState> _load(
     String episodeId, {
     NovelReadingProgress? preservedProgress,
@@ -304,6 +449,11 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       progress: restoreProgress,
     );
     final offset = progressSnapshot.scrollOffset;
+    final bookmarks = await repository.listReaderBookmarks(novelId: _args.novelId);
+    final currentEpisodeBookmarks = _bookmarksForEpisode(
+      bookmarks,
+      currentEpisode.episodeId,
+    );
 
     return NovelReaderViewState(
       novel: novel,
@@ -315,6 +465,11 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       readingProgress: progress,
       progressSnapshot: progressSnapshot,
       currentOffset: offset,
+      bookmarks: bookmarks,
+      currentEpisodeBookmarks: currentEpisodeBookmarks,
+      searchResults: const <NovelReaderSearchResult>[],
+      currentSearchIndex: -1,
+      searchKeyword: '',
     );
   }
 
@@ -342,5 +497,81 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
           anchorNodeId: snapshot.anchorNodeId,
           progressPercent: snapshot.progressPercent,
         );
+  }
+
+  Future<void> _reloadBookmarks(NovelRepository repository) async {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    final bookmarks = await repository.listReaderBookmarks(novelId: _args.novelId);
+    state = AsyncData(
+      current.copyWith(
+        bookmarks: bookmarks,
+        currentEpisodeBookmarks: _bookmarksForEpisode(
+          bookmarks,
+          current.currentEpisode.episodeId,
+        ),
+      ),
+    );
+  }
+
+  List<NovelReaderBookmark> _bookmarksForEpisode(
+    List<NovelReaderBookmark> bookmarks,
+    String episodeId,
+  ) {
+    return bookmarks
+        .where((bookmark) => bookmark.episodeId == episodeId)
+        .toList(growable: false);
+  }
+
+  NovelReaderBookmark? _findBookmark(
+    List<NovelReaderBookmark> bookmarks,
+    String bookmarkId,
+  ) {
+    for (final bookmark in bookmarks) {
+      if (bookmark.bookmarkId == bookmarkId) {
+        return bookmark;
+      }
+    }
+    return null;
+  }
+
+  String _snippetForAnchor(
+    NovelReaderDocument document,
+    NovelReaderTextAnchor anchor,
+  ) {
+    final nodeId = anchor.nodeId;
+    if (nodeId != null) {
+      for (final node in document.nodes) {
+        if (node.id == nodeId) {
+          final text = _textForNode(node).trim();
+          if (text.isNotEmpty) {
+            final start = anchor.textOffset.clamp(0, text.length).toInt();
+            final end = (start + 36).clamp(0, text.length).toInt();
+            return text.substring(start, end);
+          }
+        }
+      }
+    }
+    final plainText = document.plainText.trim();
+    if (plainText.isEmpty) {
+      return '当前位置';
+    }
+    return plainText.length <= 36 ? plainText : plainText.substring(0, 36);
+  }
+
+  String _textForNode(NovelReaderNode node) {
+    final ownText = node.text;
+    if (ownText != null && ownText.isNotEmpty) {
+      return ownText;
+    }
+    if (node.link != null) {
+      return node.link!.text;
+    }
+    return node.children
+        .map(_textForNode)
+        .where((text) => text.trim().isNotEmpty)
+        .join('\n');
   }
 }

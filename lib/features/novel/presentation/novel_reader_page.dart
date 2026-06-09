@@ -7,6 +7,7 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
@@ -43,6 +44,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
   NovelReaderFlowMode? _pagedFlowMode;
   int? _pagedPageCount;
   final Set<PageController> _pendingPageControllerDisposals = <PageController>{};
+  final Map<String, GlobalKey> _nodeKeys = <String, GlobalKey>{};
   int _currentPageIndex = 0;
   bool _hasRestoredOffset = false;
   bool _isProgrammaticScrollChange = false;
@@ -166,15 +168,17 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
       actions: [
         ReaderToolbarAction(
           id: 'bookmark',
-          icon: Icons.bookmark_border,
+          icon: viewState.hasCurrentEpisodeBookmark
+              ? Icons.bookmark
+              : Icons.bookmark_border,
           label: '书签',
-          onPressed: () => _showPlaceholder('书签功能将在后续阶段接入'),
+          onPressed: () => _toggleEpisodeBookmark(viewState),
         ),
         ReaderToolbarAction(
           id: 'search',
           icon: Icons.search,
           label: '搜索',
-          onPressed: () => _showPlaceholder('本章搜索将在后续阶段接入'),
+          onPressed: () => _showSearchSheet(viewState),
         ),
         ReaderToolbarAction(
           id: 'open-thread',
@@ -260,6 +264,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
         onPressed: () => _showChapterListSheet(viewState, controller),
       ),
       ReaderToolbarAction(
+        id: 'bookmark',
+        icon: Icons.bookmarks_outlined,
+        label: '书签',
+        onPressed: () => _showBookmarkSheet(viewState, controller),
+      ),
+      ReaderToolbarAction(
         id: 'display',
         icon: Icons.tune,
         label: '显示',
@@ -302,6 +312,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
         paragraphSpacing: viewState.preferences.paragraphSpacing,
         imageHeaderBuilder: imageHeaderBuilder,
         onLinkTap: (link) => _openReaderLink(link, externalLauncher),
+        highlightedResult: viewState.currentSearchResult,
+        nodeKeyBuilder: _nodeKeyFor,
       ),
       if (viewState.nextEpisode != null) ...[
         SizedBox(height: viewState.preferences.paragraphSpacing * 2),
@@ -484,6 +496,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
                     paragraphSpacing: viewState.preferences.paragraphSpacing,
                     imageHeaderBuilder: imageHeaderBuilder,
                     onLinkTap: (link) => _openReaderLink(link, externalLauncher),
+                    highlightedResult: viewState.currentSearchResult,
+                    nodeKeyBuilder: _nodeKeyFor,
                   ),
                 ],
               ),
@@ -709,9 +723,85 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     if (selected == null || selected.episodeId == viewState.currentEpisode.episodeId) {
       return;
     }
+    if (!mounted) {
+      return;
+    }
     await _openDifferentEpisode(
       () => controller.openEpisodeFromCatalog(selected.episodeId),
     );
+  }
+
+  Future<void> _showSearchSheet(NovelReaderViewState viewState) async {
+    _overlayController.hideMenu();
+    final controller = ref.read(novelReaderControllerProvider(_args).notifier);
+    final selected = await showModalBottomSheet<NovelReaderSearchResult>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => NovelReaderSearchSheet(
+        initialKeyword: viewState.searchKeyword,
+        initialResults: viewState.searchResults,
+        onSearch: (keyword) {
+          controller.searchInCurrentChapter(keyword);
+          return ref.read(novelReaderControllerProvider(_args)).value?.searchResults ??
+              const <NovelReaderSearchResult>[];
+        },
+        onClear: controller.clearSearch,
+      ),
+    );
+    if (selected == null) {
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    controller.selectSearchResult(selected.resultId);
+    await _jumpToAnchor(selected.anchor);
+  }
+
+  Future<void> _showBookmarkSheet(
+    NovelReaderViewState viewState,
+    NovelReaderController controller,
+  ) async {
+    _overlayController.hideMenu();
+    final action = await showModalBottomSheet<_BookmarkSheetAction>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => NovelReaderBookmarkSheet(
+        bookmarks: viewState.currentEpisodeBookmarks,
+      ),
+    );
+    if (action == null) {
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    switch (action.type) {
+      case _BookmarkSheetActionType.add:
+        await controller.addBookmarkAtCurrentPosition(_currentAnchor(viewState));
+        if (!mounted) {
+          return;
+        }
+        _showPlaceholder('已添加书签');
+        break;
+      case _BookmarkSheetActionType.open:
+        final bookmark = action.bookmark;
+        if (bookmark != null) {
+          await _jumpToAnchor(bookmark.anchor);
+        }
+        break;
+      case _BookmarkSheetActionType.remove:
+        final bookmark = action.bookmark;
+        if (bookmark != null) {
+          await controller.removeBookmark(bookmark.bookmarkId);
+          if (!mounted) {
+            return;
+          }
+          _showPlaceholder('已移除书签');
+        }
+        break;
+    }
   }
 
   void _showDisplaySettingsSheet(
@@ -732,6 +822,95 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _toggleEpisodeBookmark(NovelReaderViewState viewState) async {
+    final controller = ref.read(novelReaderControllerProvider(_args).notifier);
+    await controller.toggleCurrentEpisodeBookmark();
+    if (!mounted) {
+      return;
+    }
+    final latest = ref.read(novelReaderControllerProvider(_args)).value;
+    final isBookmarked =
+        latest?.hasCurrentEpisodeBookmark ?? !viewState.hasCurrentEpisodeBookmark;
+    _showPlaceholder(isBookmarked ? '已添加书签' : '已移除书签');
+  }
+
+  GlobalKey _nodeKeyFor(String nodeId) {
+    return _nodeKeys.putIfAbsent(nodeId, () => GlobalKey());
+  }
+
+  NovelReaderTextAnchor _currentAnchor(NovelReaderViewState viewState) {
+    final layout = _currentPagedLayout;
+    if (_isPagedMode(viewState.preferences.flowMode) && layout != null) {
+      final pageIndex = layout.clampPageIndex(_currentPageIndex);
+      return NovelReaderTextAnchor(
+        episodeId: viewState.currentEpisode.episodeId,
+        nodeId: layout.anchorForPage(pageIndex),
+        pageIndex: pageIndex,
+        progressPercent:
+            layout.pageCount <= 1 ? 0 : pageIndex / (layout.pageCount - 1),
+      );
+    }
+    final offset = _scrollController.hasClients ? _scrollController.offset : 0.0;
+    final max = _scrollController.hasClients
+        ? _scrollController.position.maxScrollExtent
+        : 0.0;
+    return NovelReaderTextAnchor(
+      episodeId: viewState.currentEpisode.episodeId,
+      scrollOffset: offset,
+      progressPercent: max <= 0 ? 0 : (offset / max).clamp(0.0, 1.0).toDouble(),
+    );
+  }
+
+  Future<void> _jumpToAnchor(NovelReaderTextAnchor anchor) async {
+    final viewState = ref.read(novelReaderControllerProvider(_args)).value;
+    if (viewState == null) {
+      return;
+    }
+    if (anchor.episodeId != viewState.currentEpisode.episodeId) {
+      await _openDifferentEpisode(
+        () => ref
+            .read(novelReaderControllerProvider(_args).notifier)
+            .openEpisodeFromCatalog(anchor.episodeId),
+      );
+      if (!mounted) {
+        return;
+      }
+    }
+    final latest = ref.read(novelReaderControllerProvider(_args)).value;
+    if (latest == null) {
+      return;
+    }
+    if (_isPagedMode(latest.preferences.flowMode)) {
+      final layout = _currentPagedLayout;
+      if (layout == null) {
+        return;
+      }
+      final anchorIndex = layout.pageIndexForAnchor(anchor.nodeId);
+      _jumpToPagedIndex(
+        anchorIndex >= 0 ? anchorIndex : anchor.pageIndex,
+        controller: ref.read(novelReaderControllerProvider(_args).notifier),
+        layout: layout,
+      );
+      return;
+    }
+    final nodeId = anchor.nodeId;
+    if (nodeId != null) {
+      final context = _nodeKeys[nodeId]?.currentContext;
+      if (context != null && context.mounted) {
+        await Scrollable.ensureVisible(
+          context,
+          duration: const Duration(milliseconds: 220),
+          alignment: 0.16,
+        );
+        return;
+      }
+    }
+    if (_scrollController.hasClients) {
+      final max = _scrollController.position.maxScrollExtent;
+      _scrollController.jumpTo(anchor.scrollOffset.clamp(0.0, max).toDouble());
+    }
   }
 
   Future<void> _openSourceThread(NovelReaderViewState viewState) async {
@@ -878,6 +1057,7 @@ class _NovelReaderChapterListSheetState extends State<NovelReaderChapterListShee
                           currentEpisodeId: viewState.currentEpisode.episodeId,
                           readingProgressEpisodeId:
                               viewState.readingProgress?.episodeId,
+                          bookmarkEpisodeIds: viewState.bookmarkEpisodeIds,
                         );
                       },
                     ),
@@ -927,22 +1107,29 @@ class _ChapterListTile extends StatelessWidget {
     required this.episode,
     required this.currentEpisodeId,
     required this.readingProgressEpisodeId,
+    required this.bookmarkEpisodeIds,
   });
 
   final NovelEpisodeItem episode;
   final String currentEpisodeId;
   final String? readingProgressEpisodeId;
+  final Set<String> bookmarkEpisodeIds;
 
   @override
   Widget build(BuildContext context) {
     final isCurrent = episode.episodeId == currentEpisodeId;
     final isLastRead =
         !isCurrent && episode.episodeId == readingProgressEpisodeId;
+    final isBookmarked = bookmarkEpisodeIds.contains(episode.episodeId);
     return ListTile(
       key: Key('novel-reader-chapter-${episode.episodeId}'),
       selected: isCurrent,
       leading: Icon(
-        isCurrent ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+        isBookmarked
+            ? Icons.bookmark
+            : isCurrent
+                ? Icons.radio_button_checked
+                : Icons.radio_button_unchecked,
       ),
       title: Text(
         episode.episodeTitle,
@@ -956,11 +1143,17 @@ class _ChapterListTile extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-      trailing: isCurrent
-          ? const Text('当前')
-          : isLastRead
-              ? const Text('上次阅读')
-              : null,
+      trailing: Wrap(
+        spacing: 6,
+        children: [
+          if (isBookmarked)
+            Text(
+              '书签',
+              key: Key('novel-reader-chapter-bookmark-${episode.episodeId}'),
+            ),
+          if (isCurrent) const Text('当前') else if (isLastRead) const Text('上次阅读'),
+        ],
+      ),
       onTap: () => Navigator.of(context).pop(episode),
     );
   }
@@ -988,4 +1181,207 @@ class NovelReaderNextChapterTransition extends StatelessWidget {
       ),
     );
   }
+}
+
+class NovelReaderSearchSheet extends StatefulWidget {
+  const NovelReaderSearchSheet({
+    super.key,
+    required this.initialKeyword,
+    required this.initialResults,
+    required this.onSearch,
+    required this.onClear,
+  });
+
+  final String initialKeyword;
+  final List<NovelReaderSearchResult> initialResults;
+  final List<NovelReaderSearchResult> Function(String keyword) onSearch;
+  final VoidCallback onClear;
+
+  @override
+  State<NovelReaderSearchSheet> createState() => _NovelReaderSearchSheetState();
+}
+
+class _NovelReaderSearchSheetState extends State<NovelReaderSearchSheet> {
+  late final TextEditingController _controller;
+  late List<NovelReaderSearchResult> _results;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialKeyword);
+    _results = widget.initialResults;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+        ),
+        child: Column(
+          key: const Key('novel-reader-search-sheet'),
+          children: [
+            ReaderSheetTitle(title: '本章搜索'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: TextField(
+                key: const Key('novel-reader-search-field'),
+                controller: _controller,
+                autofocus: true,
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _controller.text.trim().isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () {
+                            _controller.clear();
+                            widget.onClear();
+                            setState(
+                              () => _results = const <NovelReaderSearchResult>[],
+                            );
+                          },
+                        ),
+                  hintText: '搜索当前章节',
+                  isDense: true,
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _results = widget.onSearch(value);
+                  });
+                },
+              ),
+            ),
+            Expanded(
+              child: _results.isEmpty
+                  ? const Center(
+                      key: Key('novel-reader-search-empty'),
+                      child: Text('没有搜索结果'),
+                    )
+                  : ListView.builder(
+                      itemCount: _results.length,
+                      itemBuilder: (context, index) {
+                        final result = _results[index];
+                        return ListTile(
+                          key: Key('novel-reader-search-result-${result.resultId}'),
+                          leading: Text('${index + 1}'),
+                          title: Text(
+                            result.snippet,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text('位置 ${result.anchor.textOffset}'),
+                          onTap: () => Navigator.of(context).pop(result),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class NovelReaderBookmarkSheet extends StatelessWidget {
+  const NovelReaderBookmarkSheet({
+    super.key,
+    required this.bookmarks,
+  });
+
+  final List<NovelReaderBookmark> bookmarks;
+
+  @override
+  Widget build(BuildContext context) {
+    final positionBookmarks = bookmarks
+        .where((bookmark) => !bookmark.bookmarkId.startsWith('episode-bookmark:'))
+        .toList(growable: false);
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+        ),
+        child: Column(
+          key: const Key('novel-reader-bookmark-sheet'),
+          children: [
+            ReaderSheetTitle(title: '书签'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: FilledButton.icon(
+                key: const Key('novel-reader-add-position-bookmark'),
+                onPressed: () => Navigator.of(context).pop(
+                  const _BookmarkSheetAction.add(),
+                ),
+                icon: const Icon(Icons.bookmark_add_outlined),
+                label: const Text('添加当前位置'),
+              ),
+            ),
+            Expanded(
+              child: positionBookmarks.isEmpty
+                  ? const Center(
+                      key: Key('novel-reader-bookmark-empty'),
+                      child: Text('本章还没有位置书签'),
+                    )
+                  : ListView.builder(
+                      itemCount: positionBookmarks.length,
+                      itemBuilder: (context, index) {
+                        final bookmark = positionBookmarks[index];
+                        return ListTile(
+                          key: Key('novel-reader-bookmark-${bookmark.bookmarkId}'),
+                          leading: const Icon(Icons.bookmark),
+                          title: Text(
+                            bookmark.snippet,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(bookmark.title),
+                          onTap: () => Navigator.of(context).pop(
+                            _BookmarkSheetAction.open(bookmark),
+                          ),
+                          trailing: IconButton(
+                            key: Key(
+                              'novel-reader-remove-bookmark-${bookmark.bookmarkId}',
+                            ),
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () => Navigator.of(context).pop(
+                              _BookmarkSheetAction.remove(bookmark),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+enum _BookmarkSheetActionType {
+  add,
+  open,
+  remove,
+}
+
+class _BookmarkSheetAction {
+  const _BookmarkSheetAction.add()
+      : type = _BookmarkSheetActionType.add,
+        bookmark = null;
+
+  const _BookmarkSheetAction.open(this.bookmark)
+      : type = _BookmarkSheetActionType.open;
+
+  const _BookmarkSheetAction.remove(this.bookmark)
+      : type = _BookmarkSheetActionType.remove;
+
+  final _BookmarkSheetActionType type;
+  final NovelReaderBookmark? bookmark;
 }

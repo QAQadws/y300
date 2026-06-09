@@ -9,6 +9,7 @@ import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
@@ -575,6 +576,121 @@ void main() {
 
     expect(find.byType(ThreadDetailPage), findsOneWidget);
   });
+
+  testWidgets('NovelReaderPage searches current chapter and highlights result', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      firstParagraphs: const <String>['关键词在这里。', '关键词再次出现。'],
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-top-action-search')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-search-sheet')), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('novel-reader-search-field')),
+      '关键词',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-search-empty')), findsNothing);
+    await tester.tap(
+      find.byKey(
+        const Key('novel-reader-search-result-novel:49:100:5001:node-1:0'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-search-sheet')), findsNothing);
+    expect(find.textContaining('关键词在这里'), findsOneWidget);
+  });
+
+  testWidgets('NovelReaderPage toggles episode bookmark', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository.threeEpisodes();
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-top-action-bookmark')));
+    await tester.pumpAndSettle();
+
+    expect(
+      repository.bookmarks.map((bookmark) => bookmark.bookmarkId),
+      contains('episode-bookmark:novel:49:100:5001'),
+    );
+  });
+
+  testWidgets('NovelReaderPage catalog shows bookmark badge', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository.threeEpisodes();
+    repository.bookmarks.add(
+      NovelReaderBookmark(
+        bookmarkId: 'episode-bookmark:novel:49:100:5001',
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+        anchor: const NovelReaderTextAnchor(episodeId: 'novel:49:100:5001'),
+        title: '第1章',
+        snippet: '章节书签',
+        createdAt: DateTime(2026, 6, 8),
+        updatedAt: DateTime(2026, 6, 8),
+      ),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-catalog')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(
+        const Key('novel-reader-chapter-bookmark-novel:49:100:5001'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('NovelReaderPage adds and removes position bookmark', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository();
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-bookmark')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('novel-reader-add-position-bookmark')));
+    await tester.pumpAndSettle();
+
+    final position = repository.bookmarks.singleWhere(
+      (bookmark) => bookmark.bookmarkId.startsWith('reader-bookmark:'),
+    );
+
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-bookmark')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(Key('novel-reader-remove-bookmark-${position.bookmarkId}')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      repository.bookmarks.where(
+        (bookmark) => bookmark.bookmarkId == position.bookmarkId,
+      ),
+      isEmpty,
+    );
+  });
 }
 
 Future<void> _showReaderMenu(WidgetTester tester) async {
@@ -758,6 +874,7 @@ class _FakeNovelRepository implements NovelRepository {
   NovelReaderPreferences? latestPreferences;
   double lastSavedOffset = 0;
   final savedProgressEpisodeIds = <String>[];
+  final bookmarks = <NovelReaderBookmark>[];
 
   @override
   Future<String> createCategory({required String name}) async => 'default';
@@ -870,6 +987,55 @@ class _FakeNovelRepository implements NovelRepository {
   Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {
     latestPreferences = preferences;
     this.preferences = preferences;
+  }
+
+  @override
+  Future<void> addReaderBookmark({
+    required NovelReaderBookmark bookmark,
+  }) async {
+    bookmarks.removeWhere((item) => item.bookmarkId == bookmark.bookmarkId);
+    bookmarks.add(bookmark);
+  }
+
+  @override
+  Future<List<NovelReaderBookmark>> listReaderBookmarks({
+    required String novelId,
+  }) async {
+    return bookmarks.where((bookmark) => bookmark.novelId == novelId).toList();
+  }
+
+  @override
+  Future<void> removeReaderBookmark({
+    required String bookmarkId,
+  }) async {
+    bookmarks.removeWhere((bookmark) => bookmark.bookmarkId == bookmarkId);
+  }
+
+  @override
+  Future<void> toggleEpisodeBookmark({
+    required String novelId,
+    required String episodeId,
+    required bool isBookmarked,
+  }) async {
+    bookmarks.removeWhere(
+      (bookmark) => bookmark.bookmarkId == 'episode-bookmark:$episodeId',
+    );
+    if (!isBookmarked) {
+      return;
+    }
+    final episode = episodes.firstWhere((item) => item.episodeId == episodeId);
+    bookmarks.add(
+      NovelReaderBookmark(
+        bookmarkId: 'episode-bookmark:$episodeId',
+        novelId: novelId,
+        episodeId: episodeId,
+        anchor: NovelReaderTextAnchor(episodeId: episodeId),
+        title: episode.episodeTitle,
+        snippet: '章节书签',
+        createdAt: DateTime(2026, 6, 8),
+        updatedAt: DateTime(2026, 6, 8),
+      ),
+    );
   }
 
   static String _rawHtmlFromParagraphs(List<String> paragraphs) {

@@ -21,7 +21,8 @@ void main() {
     expect(tableNames.contains(ComicLocalDb.novelEpisodeContentTable), isTrue);
     expect(tableNames.contains(ComicLocalDb.readerPreferencesTable), isTrue);
     expect(tableNames.contains(ComicLocalDb.novelReadingProgressTable), isTrue);
-    expect(ComicLocalDb.dbVersion, 18);
+    expect(tableNames.contains(ComicLocalDb.readerBookmarksTable), isTrue);
+    expect(ComicLocalDb.dbVersion, 19);
 
     final indexRows = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='index'");
     final indexNames = indexRows
@@ -31,6 +32,7 @@ void main() {
     expect(indexNames.contains('idx_work_type_updated'), isTrue);
     expect(indexNames.contains('idx_episode_work_order'), isTrue);
     expect(indexNames.contains('idx_episode_tid_pid'), isTrue);
+    expect(indexNames.contains('idx_reader_bookmarks_novel_episode'), isTrue);
 
     final progressColumns = await db.rawQuery(
       'PRAGMA table_info(${ComicLocalDb.novelReadingProgressTable})',
