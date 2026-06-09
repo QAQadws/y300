@@ -58,6 +58,8 @@ class ReaderProgressConfig {
     this.interactionLocked = false,
     this.previousTooltip = '上一章',
     this.nextTooltip = '下一章',
+    this.previousIcon = Icons.skip_previous,
+    this.nextIcon = Icons.skip_next,
   });
 
   final int current;
@@ -72,4 +74,6 @@ class ReaderProgressConfig {
   final bool interactionLocked;
   final String previousTooltip;
   final String nextTooltip;
+  final IconData previousIcon;
+  final IconData nextIcon;
 }

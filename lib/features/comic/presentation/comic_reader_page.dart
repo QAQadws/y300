@@ -10,12 +10,19 @@ import 'package:y300/features/comic/domain/services/comic_reader_chapter_preload
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/comic/presentation/models/reader_preferences.dart';
 import 'package:y300/features/comic/presentation/providers/reader_preferences_provider.dart';
-import 'package:y300/features/comic/presentation/widgets/reader_bottom_panel.dart';
 import 'package:y300/features/comic/presentation/widgets/reader_page_indicator_overlay.dart';
-import 'package:y300/features/comic/presentation/widgets/reader_tap_zones.dart';
-import 'package:y300/features/comic/presentation/widgets/reader_top_bar.dart';
 import 'package:y300/features/comic/presentation/widgets/reader_zoomable_image.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+
+enum _ComicReaderMoreAction {
+  markReadToggle,
+  setCurrentPageAsCover,
+  cacheEpisode,
+  cacheUnread,
+  clearEpisodeCache,
+  retryFailedImages,
+}
 
 class ComicReaderPage extends ConsumerStatefulWidget {
   const ComicReaderPage({
@@ -31,8 +38,7 @@ class ComicReaderPage extends ConsumerStatefulWidget {
   ConsumerState<ComicReaderPage> createState() => _ComicReaderPageState();
 }
 
-class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
-    with SingleTickerProviderStateMixin {
+class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
   late final ScrollController _scrollController;
   PageController? _pageController;
   int _lastKnownIndex = 0;
@@ -46,11 +52,8 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
   bool _isSliderCommitInFlight = false;
   int? _pendingCommittedIndex;
 
-  bool _isMenuVisible = false;
   bool _isPageIndicatorHighlighted = false;
-  late final AnimationController _menuAnimationController;
-  late final Animation<Offset> _topMenuSlideAnimation;
-  late final Animation<Offset> _bottomMenuSlideAnimation;
+  late final ReaderOverlayController _overlayController;
   final Set<int> _reportedVisibleImageIndexes = <int>{};
   // Keep per-image zoom flags so page-level gestures can be coordinated
   // without coupling gesture logic into image rendering code.
@@ -67,28 +70,8 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
   void initState() {
     super.initState();
     _scrollController = ScrollController()..addListener(_onVerticalScroll);
-    _menuAnimationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 240),
-    );
-    _topMenuSlideAnimation = Tween<Offset>(
-      begin: const Offset(0, -1),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _menuAnimationController,
-        curve: Curves.easeOutCubic,
-      ),
-    );
-    _bottomMenuSlideAnimation = Tween<Offset>(
-      begin: const Offset(0, 1),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _menuAnimationController,
-        curve: Curves.easeOutCubic,
-      ),
-    );
+    _overlayController = ReaderOverlayController()
+      ..addListener(_onOverlayVisibilityChanged);
   }
 
   @override
@@ -101,7 +84,9 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
       ..removeListener(_onVerticalScroll)
       ..dispose();
     _pageController?.dispose();
-    _menuAnimationController.dispose();
+    _overlayController
+      ..removeListener(_onOverlayVisibilityChanged)
+      ..dispose();
     _pageIndicatorDimTimer?.cancel();
     super.dispose();
   }
@@ -131,16 +116,27 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
 
           return Stack(
             children: [
-              ReaderTapZones(
-                onCenterTap: _toggleReaderMenu,
+              ReaderOverlayScaffold(
+                controller: _overlayController,
+                topBar: _buildTopBarConfig(viewState),
+                bottomBar: _buildBottomBarConfig(viewState, preferences),
                 onLeftTap: mode == ReaderModePreference.vertical
                     ? null
-                    : () => _turnPageByTap(mode: mode, viewState: viewState, isLeftTap: true),
+                    : () => _turnPageByTap(
+                          mode: mode,
+                          viewState: viewState,
+                          isLeftTap: true,
+                        ),
                 onRightTap: mode == ReaderModePreference.vertical
                     ? null
-                    : () => _turnPageByTap(mode: mode, viewState: viewState, isLeftTap: false),
-                bottomSafeFraction: mode == ReaderModePreference.vertical ? 0.2 : 0,
-                enabled: !_isAnyImageZoomed,
+                    : () => _turnPageByTap(
+                          mode: mode,
+                          viewState: viewState,
+                          isLeftTap: false,
+                        ),
+                bottomSafeFraction:
+                    mode == ReaderModePreference.vertical ? 0.2 : 0,
+                tapZonesEnabled: !_isAnyImageZoomed,
                 child: _buildReaderContentLayer(
                   viewState: viewState,
                   mode: mode,
@@ -149,13 +145,12 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
                 ),
               ),
               ReaderPageIndicatorOverlay(
-                visible: !_isMenuVisible && preferences.showPageIndicator,
+                visible: !_overlayController.isMenuVisible &&
+                    preferences.showPageIndicator,
                 highlighted: _isPageIndicatorHighlighted,
                 currentPage: viewState.currentImageIndex + 1,
                 totalPages: viewState.images.length,
               ),
-              _buildReaderTopOverlayLayer(viewState),
-              _buildReaderBottomOverlayLayer(viewState, preferences),
             ],
           );
         },
@@ -166,6 +161,101 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
   Widget _buildReaderLoadingState(ReaderPreferences preferences) {
     return _ReaderOpeningPlaceholder(
       background: _readerBackgroundColor(preferences),
+    );
+  }
+
+  ReaderTopBarConfig _buildTopBarConfig(ComicReaderViewState viewState) {
+    return ReaderTopBarConfig(
+      title: viewState.comicTitle,
+      subtitle: viewState.episodeTitle,
+      onBack: () => _popReader(_exitResultFor(viewState)),
+      onTitleTap: () => _popReader(_exitResultFor(viewState)),
+      actions: [
+        ReaderToolbarAction(
+          id: 'bookmark',
+          icon: viewState.isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+          label: viewState.isBookmarked ? '取消书签' : '添加书签',
+          onPressed: () => _controller().toggleBookmark(),
+        ),
+        ReaderToolbarAction(
+          id: 'open-thread',
+          icon: Icons.open_in_new,
+          label: '打开原帖',
+          onPressed: () => _openSourceThread(viewState),
+        ),
+        ReaderToolbarAction(
+          id: 'more',
+          icon: Icons.more_vert,
+          label: '更多',
+          onPressed: () => unawaited(_showMoreActionSheet(viewState)),
+        ),
+      ],
+    );
+  }
+
+  ReaderBottomBarConfig _buildBottomBarConfig(
+    ComicReaderViewState viewState,
+    ReaderPreferences preferences,
+  ) {
+    final currentIndex = _sliderPreviewIndex ?? viewState.currentImageIndex;
+    final total = viewState.images.length;
+    final mode = preferences.readerMode;
+    return ReaderBottomBarConfig(
+      progress: ReaderProgressConfig(
+        current: currentIndex + 1,
+        total: total,
+        previousTooltip: viewState.hasPreviousEpisode ? '上一话' : '已是第一话',
+        nextTooltip: _nextEpisodeTooltip(viewState),
+        nextIcon: _nextEpisodeIcon(viewState.nextChapterPreload.status),
+        previousEnabled: viewState.hasPreviousEpisode,
+        nextEnabled: viewState.hasNextEpisode,
+        interactionLocked: _isSliderCommitInFlight,
+        onPrevious: () => _openAdjacentEpisode(viewState, previous: true),
+        onNext: () => _openAdjacentEpisode(viewState, previous: false),
+        onChangeStart: (value) => _onProgressChangeStart(value, total),
+        onChanged: (value) => _onProgressChanged(value, total),
+        onChangeEnd: (value) => _onProgressChangeEnd(
+          sliderValue: value,
+          mode: mode,
+          viewState: viewState,
+        ),
+      ),
+      actions: [
+        ReaderToolbarAction(
+          id: 'mode',
+          icon: _modeIcon(mode),
+          label: _modeLabel(mode),
+          onPressed: () => _showModeSheet(viewState),
+        ),
+        ReaderToolbarAction(
+          id: 'catalog',
+          icon: Icons.format_list_bulleted,
+          label: '章节',
+          onPressed: () => _showChapterListSheet(viewState),
+        ),
+        ReaderToolbarAction(
+          id: 'display',
+          icon: Icons.tune,
+          label: '显示',
+          onPressed: () => _showDisplaySettingsSheet(preferences, viewState),
+        ),
+        ReaderToolbarAction(
+          id: 'cache',
+          icon: Icons.download_for_offline_outlined,
+          label: '缓存',
+          onPressed: () => _controller().cacheCurrentEpisode(),
+        ),
+      ],
+    );
+  }
+
+  ComicReaderExitResult _exitResultFor(ComicReaderViewState viewState) {
+    return ComicReaderExitResult(
+      comicId: viewState.comicId,
+      lastReadEpisodeId: viewState.episodeId,
+      completedEpisodeIds: viewState.isCurrentEpisodeRead
+          ? <String>[viewState.episodeId]
+          : const <String>[],
     );
   }
 
@@ -319,6 +409,63 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     ComicReaderViewState viewState,
   ) {
     return '${viewState.episodeId}:${mode.name}:${viewState.currentImageIndex}';
+  }
+
+  IconData _modeIcon(ReaderModePreference mode) {
+    switch (mode) {
+      case ReaderModePreference.vertical:
+        return Icons.view_stream_outlined;
+      case ReaderModePreference.ltr:
+        return Icons.swipe_left_outlined;
+      case ReaderModePreference.rtl:
+        return Icons.swipe_right_outlined;
+    }
+  }
+
+  String _modeLabel(ReaderModePreference mode) {
+    switch (mode) {
+      case ReaderModePreference.vertical:
+        return '垂直';
+      case ReaderModePreference.ltr:
+        return '左到右';
+      case ReaderModePreference.rtl:
+        return '右到左';
+    }
+  }
+
+  IconData _nextEpisodeIcon(ComicReaderChapterPreloadStatus status) {
+    switch (status) {
+      case ComicReaderChapterPreloadStatus.loadingImages:
+      case ComicReaderChapterPreloadStatus.preloadingPages:
+        return Icons.downloading_outlined;
+      case ComicReaderChapterPreloadStatus.ready:
+        return Icons.offline_bolt_outlined;
+      case ComicReaderChapterPreloadStatus.failed:
+        return Icons.error_outline;
+      case ComicReaderChapterPreloadStatus.unavailable:
+      case ComicReaderChapterPreloadStatus.idle:
+      case ComicReaderChapterPreloadStatus.imagesReady:
+        return Icons.skip_next;
+    }
+  }
+
+  String _nextEpisodeTooltip(ComicReaderViewState viewState) {
+    if (!viewState.hasNextEpisode) {
+      return '已是最后一话';
+    }
+    switch (viewState.nextChapterPreload.status) {
+      case ComicReaderChapterPreloadStatus.loadingImages:
+      case ComicReaderChapterPreloadStatus.preloadingPages:
+        return '下一话预加载中';
+      case ComicReaderChapterPreloadStatus.ready:
+        return '下一话已预加载';
+      case ComicReaderChapterPreloadStatus.failed:
+        return '下一话预加载失败，点击加载';
+      case ComicReaderChapterPreloadStatus.unavailable:
+      case ComicReaderChapterPreloadStatus.idle:
+      case ComicReaderChapterPreloadStatus.imagesReady:
+        return '下一话';
+    }
   }
 
   void _onVerticalScroll() {
@@ -683,129 +830,92 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     }
   }
 
-  Widget _buildReaderTopOverlayLayer(ComicReaderViewState viewState) {
-    return Positioned(
-      key: const Key('comic-reader-top-overlay'),
-      top: 0,
-      left: 0,
-      right: 0,
-      child: IgnorePointer(
-        ignoring: !_isMenuVisible,
-        child: SlideTransition(
-          position: _topMenuSlideAnimation,
-          child: ReaderTopBar(
-            comicTitle: viewState.comicTitle,
-            episodeTitle: viewState.episodeTitle,
-            isBookmarked: viewState.isBookmarked,
-            isCurrentEpisodeRead: viewState.isCurrentEpisodeRead,
-            failedImageCount: viewState.failedImageCount,
-            onBack: () => _popReader(
-              ComicReaderExitResult(
-                comicId: viewState.comicId,
-                lastReadEpisodeId: viewState.episodeId,
-                completedEpisodeIds: viewState.isCurrentEpisodeRead
-                    ? <String>[viewState.episodeId]
-                    : const <String>[],
-              ),
-            ),
-            onOpenDetail: () => _popReader(
-              ComicReaderExitResult(
-                comicId: viewState.comicId,
-                lastReadEpisodeId: viewState.episodeId,
-                completedEpisodeIds: viewState.isCurrentEpisodeRead
-                    ? <String>[viewState.episodeId]
-                    : const <String>[],
-              ),
-            ),
-            onToggleBookmark: () => _controller().toggleBookmark(),
-            onOpenThread: () => _openSourceThread(viewState),
-            onMoreActionSelected: (action) => _handleReaderMoreAction(
-              action,
-              viewState,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildReaderBottomOverlayLayer(
-    ComicReaderViewState viewState,
-    ReaderPreferences preferences,
-  ) {
-    final currentIndex = _sliderPreviewIndex ?? viewState.currentImageIndex;
-    final total = viewState.images.length;
-    final mode = preferences.readerMode;
-
-    return Positioned(
-      key: const Key('comic-reader-bottom-overlay'),
-      left: 0,
-      right: 0,
-      bottom: 0,
-      child: IgnorePointer(
-        ignoring: !_isMenuVisible,
-        child: SlideTransition(
-          position: _bottomMenuSlideAnimation,
-          child: ReaderBottomPanel(
-            currentMode: mode,
-            currentPage: currentIndex + 1,
-            totalPages: total,
-            hasPreviousEpisode: viewState.hasPreviousEpisode,
-            hasNextEpisode: viewState.hasNextEpisode,
-            nextChapterPreload: viewState.nextChapterPreload,
-            onPreviousEpisode: () => _openAdjacentEpisode(
-              viewState,
-              previous: true,
-            ),
-            onNextEpisode: () => _openAdjacentEpisode(
-              viewState,
-              previous: false,
-            ),
-            onOpenModeSheet: () => _showModeSheet(viewState),
-            onOpenChapterList: () => _showChapterListSheet(viewState),
-            onOpenDisplaySettings: () => _showDisplaySettingsSheet(preferences, viewState),
-            onCacheEpisode: () => _controller().cacheCurrentEpisode(),
-            onProgressChangeStart: (value) => _onProgressChangeStart(value, total),
-            onProgressChanged: (value) => _onProgressChanged(value, total),
-            onProgressChangeEnd: (value) => _onProgressChangeEnd(
-              sliderValue: value,
-              mode: mode,
-              viewState: viewState,
-            ),
-            isProgressInteractionLocked: _isSliderCommitInFlight,
-          ),
-        ),
-      ),
-    );
-  }
-
   Future<void> _handleReaderMoreAction(
-    ReaderMoreAction action,
+    _ComicReaderMoreAction action,
     ComicReaderViewState viewState,
   ) async {
     switch (action) {
-      case ReaderMoreAction.markReadToggle:
+      case _ComicReaderMoreAction.markReadToggle:
         await _controller().setCurrentEpisodeRead(!viewState.isCurrentEpisodeRead);
         break;
-      case ReaderMoreAction.setCurrentPageAsCover:
+      case _ComicReaderMoreAction.setCurrentPageAsCover:
         await _controller().setCurrentImageAsCover();
         break;
-      case ReaderMoreAction.cacheEpisode:
+      case _ComicReaderMoreAction.cacheEpisode:
         await _controller().cacheCurrentEpisode();
         break;
-      case ReaderMoreAction.cacheUnread:
+      case _ComicReaderMoreAction.cacheUnread:
         await _controller().cacheAllUnread();
         break;
-      case ReaderMoreAction.clearEpisodeCache:
+      case _ComicReaderMoreAction.clearEpisodeCache:
         await _controller().clearCurrentEpisodeCache();
         break;
-      case ReaderMoreAction.retryFailedImages:
+      case _ComicReaderMoreAction.retryFailedImages:
         await _controller().retryFailedImages();
         break;
     }
   }
 
+  Future<void> _showMoreActionSheet(ComicReaderViewState viewState) async {
+    _overlayController.hideMenu();
+    final action = await showModalBottomSheet<_ComicReaderMoreAction>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => ReaderActionSheet<_ComicReaderMoreAction>(
+        title: '更多操作',
+        items: [
+          ReaderActionSheetItem<_ComicReaderMoreAction>(
+            id: 'mark-read-toggle',
+            value: _ComicReaderMoreAction.markReadToggle,
+            icon: viewState.isCurrentEpisodeRead
+                ? Icons.radio_button_unchecked
+                : Icons.check_circle_outline,
+            label: viewState.isCurrentEpisodeRead ? '标记本章未读' : '标记本章已读',
+          ),
+          const ReaderActionSheetItem<_ComicReaderMoreAction>(
+            id: 'set-cover',
+            value: _ComicReaderMoreAction.setCurrentPageAsCover,
+            icon: Icons.image_outlined,
+            label: '将当前页设为封面',
+          ),
+          const ReaderActionSheetItem<_ComicReaderMoreAction>(
+            id: 'cache-episode',
+            value: _ComicReaderMoreAction.cacheEpisode,
+            icon: Icons.download_for_offline_outlined,
+            label: '缓存本章',
+          ),
+          const ReaderActionSheetItem<_ComicReaderMoreAction>(
+            id: 'cache-unread',
+            value: _ComicReaderMoreAction.cacheUnread,
+            icon: Icons.download_done_outlined,
+            label: '缓存未读章节',
+          ),
+          const ReaderActionSheetItem<_ComicReaderMoreAction>(
+            id: 'clear-cache',
+            value: _ComicReaderMoreAction.clearEpisodeCache,
+            icon: Icons.cleaning_services_outlined,
+            label: '清除本章缓存',
+          ),
+          ReaderActionSheetItem<_ComicReaderMoreAction>(
+            id: 'retry-failed',
+            value: _ComicReaderMoreAction.retryFailedImages,
+            icon: Icons.refresh,
+            label: viewState.failedImageCount > 0
+                ? '重试失败图片（${viewState.failedImageCount}）'
+                : '重试失败图片',
+            enabled: viewState.failedImageCount > 0,
+          ),
+        ],
+      ),
+    );
+    if (action == null || !mounted) {
+      return;
+    }
+    await _handleReaderMoreAction(action, viewState);
+  }
+
   Future<void> _openSourceThread(ComicReaderViewState viewState) async {
+    _overlayController.hideMenu();
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => ThreadDetailPage(
@@ -861,6 +971,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
   }
 
   Future<void> _showModeSheet(ComicReaderViewState viewState) async {
+    _overlayController.hideMenu();
     final currentMode =
         ref.read(readerPreferencesControllerProvider).value?.readerMode ??
             ReaderModePreference.vertical;
@@ -906,6 +1017,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
   }
 
   Future<void> _showChapterListSheet(ComicReaderViewState viewState) async {
+    _overlayController.hideMenu();
     final selected = await showModalBottomSheet<ComicReaderChapterEntry>(
       context: context,
       showDragHandle: true,
@@ -953,6 +1065,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     ReaderPreferences preferences,
     ComicReaderViewState viewState,
   ) {
+    _overlayController.hideMenu();
     final preferencesController =
         ref.read(readerPreferencesControllerProvider.notifier);
     unawaited(
@@ -974,25 +1087,17 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage>
     );
   }
 
-  void _toggleReaderMenu() {
-    setState(() {
-      _isMenuVisible = !_isMenuVisible;
-    });
-    if (_isMenuVisible) {
-      _menuAnimationController.forward();
+  void _hideReaderMenuForContentMotion() {
+    if (!_overlayController.isMenuVisible || _isSliderCommitInFlight) {
       return;
     }
-    _menuAnimationController.reverse();
+    _overlayController.hideMenu();
   }
 
-  void _hideReaderMenuForContentMotion() {
-    if (!_isMenuVisible || _isSliderCommitInFlight) {
-      return;
+  void _onOverlayVisibilityChanged() {
+    if (mounted) {
+      setState(() {});
     }
-    setState(() {
-      _isMenuVisible = false;
-    });
-    _menuAnimationController.reverse();
   }
 
   void _pulsePageIndicator() {

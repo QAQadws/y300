@@ -1,5 +1,56 @@
 import 'package:flutter/material.dart';
 
+class ReaderActionSheetItem<T extends Object> {
+  const ReaderActionSheetItem({
+    required this.id,
+    required this.value,
+    required this.icon,
+    required this.label,
+    this.enabled = true,
+  });
+
+  final String id;
+  final T value;
+  final IconData icon;
+  final String label;
+  final bool enabled;
+}
+
+class ReaderActionSheet<T extends Object> extends StatelessWidget {
+  const ReaderActionSheet({
+    super.key,
+    required this.title,
+    required this.items,
+  });
+
+  final String title;
+  final List<ReaderActionSheetItem<T>> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: ListView(
+        key: const Key('shared-reader-action-sheet'),
+        shrinkWrap: true,
+        padding: const EdgeInsets.only(bottom: 12),
+        children: [
+          ReaderSheetTitle(title: title),
+          for (final item in items)
+            ListTile(
+              key: Key('shared-reader-action-${item.id}'),
+              leading: Icon(item.icon),
+              title: Text(item.label),
+              enabled: item.enabled,
+              onTap: item.enabled
+                  ? () => Navigator.of(context).pop<T>(item.value)
+                  : null,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class ReaderSheetTitle extends StatelessWidget {
   const ReaderSheetTitle({
     super.key,

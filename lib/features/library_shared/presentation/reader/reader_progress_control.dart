@@ -23,7 +23,7 @@ class ReaderProgressControl extends StatelessWidget {
           tooltip: config.previousTooltip,
           onPressed:
               config.previousEnabled ? config.onPrevious : null,
-          icon: const Icon(Icons.skip_previous),
+          icon: Icon(config.previousIcon),
         ),
         Expanded(
           child: DecoratedBox(
@@ -78,7 +78,7 @@ class ReaderProgressControl extends StatelessWidget {
           key: const Key('shared-reader-next-button'),
           tooltip: config.nextTooltip,
           onPressed: config.nextEnabled ? config.onNext : null,
-          icon: const Icon(Icons.skip_next),
+          icon: Icon(config.nextIcon),
         ),
       ],
     );

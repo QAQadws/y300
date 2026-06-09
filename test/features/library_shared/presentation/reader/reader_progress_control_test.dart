@@ -75,6 +75,26 @@ void main() {
     expect(next.onPressed, isNull);
   });
 
+  testWidgets('ReaderProgressControl supports custom button icons', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildProgress(
+        config: ReaderProgressConfig(
+          current: 1,
+          total: 5,
+          previousIcon: Icons.arrow_back,
+          nextIcon: Icons.downloading_outlined,
+          onChanged: (_) {},
+          onChangeEnd: (_) {},
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.arrow_back), findsOneWidget);
+    expect(find.byIcon(Icons.downloading_outlined), findsOneWidget);
+  });
+
   testWidgets('ReaderProgressControl clamps non-positive total to one', (
     tester,
   ) async {

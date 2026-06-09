@@ -37,7 +37,7 @@ void main() {
     // The tap-zone keys are geometry anchors; tapping coordinates keeps the
     // test aligned with the pass-through gesture layer.
     final center = tester.getCenter(
-      find.byKey(const Key('comic-reader-center-tap-zone')),
+      find.byKey(const Key('shared-reader-center-tap-zone')),
     );
     await tester.tapAt(center);
     await tester.pump();
@@ -106,26 +106,26 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('comic-reader-image-list')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-center-tap-zone')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-top-overlay')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-bottom-overlay')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-center-tap-zone')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-top-overlay')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-bottom-overlay')), findsOneWidget);
     expect(find.byKey(const Key('comic-reader-page-indicator-overlay')), findsOneWidget);
     expect(find.byKey(const Key('comic-reader-next-chapter-transition')), findsNothing);
 
     await openReaderMenu(tester);
 
-    expect(find.byKey(const Key('comic-reader-top-comic-title')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-bookmark-button')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-open-thread-button')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-prev-episode-button')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-next-episode-button')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-mode-switch')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-chapter-list-button')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-display-settings-button')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-bottom-cache-button')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-progress-slider')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-current-page-label')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-total-page-label')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-top-title')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-top-action-bookmark')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-top-action-open-thread')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-prev-button')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-next-button')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-bottom-action-mode')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-bottom-action-catalog')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-bottom-action-display')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-bottom-action-cache')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-progress-slider')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-current-label')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-total-label')), findsOneWidget);
   });
 
   testWidgets('ComicReaderPage shows next chapter transition for vertical mode', (tester) async {
@@ -229,7 +229,7 @@ void main() {
     expect(find.byKey(const Key('comic-reader-image-list')), findsOneWidget);
 
     await openReaderMenu(tester);
-    await tapVisibleByKey(tester, const Key('comic-reader-mode-switch'));
+    await tapVisibleByKey(tester, const Key('shared-reader-bottom-action-mode'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey<String>('comic-reader-mode-rtl')));
     await tester.pumpAndSettle();
@@ -256,14 +256,15 @@ void main() {
 
     await tester.pumpAndSettle();
     await openReaderMenu(tester);
-    await tapVisibleByKey(tester, const Key('comic-reader-chapter-list-button'));
+    await tapVisibleByKey(tester, const Key('shared-reader-bottom-action-catalog'));
     await tester.pumpAndSettle();
 
     expect(find.text('章节列表'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey<String>('comic-reader-chapter-yamibo:100:101')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('comic-reader-display-settings-button')));
+    await openReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-display')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('comic-reader-display-settings-sheet')), findsOneWidget);
@@ -291,9 +292,9 @@ void main() {
 
     await tester.pumpAndSettle();
     await openReaderMenu(tester);
-    await tapVisibleByKey(tester, const Key('comic-reader-more-button'));
+    await tapVisibleByKey(tester, const Key('shared-reader-top-action-more'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('comic-reader-set-cover')));
+    await tester.tap(find.byKey(const Key('shared-reader-action-set-cover')));
     await tester.pumpAndSettle();
 
     expect(repository.lastCustomCoverLocalPath, '/protected/cover.jpg');
@@ -320,18 +321,18 @@ void main() {
     await tester.pumpAndSettle();
     await openReaderMenu(tester);
 
-    expect(find.byKey(const Key('comic-reader-current-page-label')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-total-page-label')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-current-label')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-total-label')), findsOneWidget);
 
     await dragVisibleByKey(
       tester,
-      const Key('comic-reader-progress-slider'),
+      const Key('shared-reader-progress-slider'),
       const Offset(300, 0),
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('comic-reader-current-page-label')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-total-page-label')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-current-label')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-total-label')), findsOneWidget);
   });
 
   testWidgets('ComicReaderPage renders zoomable image wrapper in reader content', (tester) async {
@@ -447,20 +448,20 @@ void main() {
     await tester.pumpAndSettle();
     await openReaderMenu(tester);
 
-    final sliderFinder = find.byKey(const Key('comic-reader-progress-slider'));
+    final sliderFinder = find.byKey(const Key('shared-reader-progress-slider'));
     expect(sliderFinder, findsOneWidget);
 
     await dragVisibleByKey(
       tester,
-      const Key('comic-reader-progress-slider'),
+      const Key('shared-reader-progress-slider'),
       const Offset(280, 0),
     );
     await tester.pump();
 
     // During commit phase, slider and labels should remain stable and visible.
-    expect(find.byKey(const Key('comic-reader-progress-slider')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-current-page-label')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-total-page-label')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-progress-slider')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-current-label')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-total-label')), findsOneWidget);
   });
 }
 
