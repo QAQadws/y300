@@ -8,6 +8,7 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/presentation/controllers/unified_detail_controller.dart';
+import 'package:y300/features/library_shared/presentation/detail/unified_detail_palette.dart';
 
 /// 统一详情页骨架（Phase 4）
 ///
@@ -86,23 +87,31 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     final state = _controller.state;
     final header = state.header;
     final topInset = MediaQuery.of(context).padding.top;
+    final detailPalette = const UnifiedDetailPaletteResolver().resolve(Theme.of(context));
+    final appBarForeground = _showCollapsedTitle
+        ? detailPalette.collapsedAppBarForeground
+        : detailPalette.onHeader;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
+      backgroundColor: detailPalette.pageBackground,
       appBar: AppBar(
         backgroundColor: _showCollapsedTitle
-            ? Theme.of(context).colorScheme.surface
+            ? detailPalette.collapsedAppBarBackground
             : Colors.transparent,
         forceMaterialTransparency: !_showCollapsedTitle,
         elevation: _showCollapsedTitle ? 1 : 0,
         scrolledUnderElevation: 0,
         shadowColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
+        foregroundColor: appBarForeground,
         iconTheme: IconThemeData(
-          color: _showCollapsedTitle
-              ? Theme.of(context).colorScheme.onSurface
-              : Colors.white,
+          color: appBarForeground,
         ),
+        titleTextStyle: Theme.of(context).textTheme.titleLarge?.copyWith(
+              color: appBarForeground,
+              fontWeight: FontWeight.w600,
+            ),
         title: AnimatedOpacity(
           duration: const Duration(milliseconds: 180),
           opacity: _showCollapsedTitle ? 1 : 0,
@@ -172,6 +181,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         header: header,
                         moduleKey: widget.adapter.moduleKey,
                         topInset: topInset,
+                        palette: detailPalette,
                         imageHeaderBuilder: widget.imageHeaderBuilder,
                         onToggleShelf: () => _showMoveCategorySheet(),
                         onRefresh: _refreshAndShowFeedback,
@@ -1011,6 +1021,7 @@ class _DetailHeaderSection extends StatelessWidget {
     required this.header,
     required this.moduleKey,
     required this.topInset,
+    required this.palette,
     required this.imageHeaderBuilder,
     required this.onToggleShelf,
     required this.onRefresh,
@@ -1020,6 +1031,7 @@ class _DetailHeaderSection extends StatelessWidget {
   final LibraryDetailHeader header;
   final LibraryModuleKey moduleKey;
   final double topInset;
+  final UnifiedDetailPalette palette;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final VoidCallback onToggleShelf;
   final VoidCallback onRefresh;
@@ -1035,6 +1047,7 @@ class _DetailHeaderSection extends StatelessWidget {
           header: header,
           moduleKey: moduleKey,
           topInset: topInset,
+          palette: palette,
           imageHeaderBuilder: imageHeaderBuilder,
         ),
         _HeaderActionsRow(
@@ -1054,6 +1067,7 @@ class _HeroInfoSection extends StatelessWidget {
     required this.header,
     required this.moduleKey,
     required this.topInset,
+    required this.palette,
     required this.imageHeaderBuilder,
   });
 
@@ -1066,6 +1080,7 @@ class _HeroInfoSection extends StatelessWidget {
   final LibraryDetailHeader header;
   final LibraryModuleKey moduleKey;
   final double topInset;
+  final UnifiedDetailPalette palette;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
 
   @override
@@ -1087,6 +1102,7 @@ class _HeroInfoSection extends StatelessWidget {
             coverLocalPath: header.coverLocalPath,
             customCoverLocalPath: header.customCoverLocalPath,
             hasCover: _hasCover(header),
+            palette: palette,
             imageHeaderBuilder: imageHeaderBuilder,
           ),
           Padding(
@@ -1098,6 +1114,7 @@ class _HeroInfoSection extends StatelessWidget {
                   url: _preferredRemoteUrl(header),
                   localPath: _preferredLocalPath(header),
                   moduleKey: moduleKey,
+                  palette: palette,
                   imageHeaderBuilder: imageHeaderBuilder,
                 ),
                 const SizedBox(width: 12),
@@ -1110,6 +1127,7 @@ class _HeroInfoSection extends StatelessWidget {
                       title: title,
                       author: author,
                       translationGroup: group,
+                      foregroundColor: palette.onHeader,
                     ),
                   ),
                 ),
@@ -1126,8 +1144,8 @@ class _HeroInfoSection extends StatelessWidget {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Theme.of(context).colorScheme.surface.withAlpha(0),
-                    Theme.of(context).colorScheme.surface,
+                    palette.headerGradientEnd.withAlpha(0),
+                    palette.headerGradientEnd,
                   ],
                 ),
               ),
@@ -1169,19 +1187,21 @@ class _HeroMetaColumn extends StatelessWidget {
     required this.title,
     required this.author,
     required this.translationGroup,
+    required this.foregroundColor,
   });
 
   final LibraryModuleKey moduleKey;
   final String title;
   final String author;
   final String translationGroup;
+  final Color foregroundColor;
 
   @override
   Widget build(BuildContext context) {
     final groupLabel = moduleKey == LibraryModuleKey.comic ? translationGroup : '原作者作品';
 
     return DefaultTextStyle(
-      style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+      style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: foregroundColor),
       child: Column(
         key: const Key('unified-detail-hero-meta'),
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1193,7 +1213,7 @@ class _HeroMetaColumn extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: Colors.white,
+                  color: foregroundColor,
                   fontWeight: FontWeight.w700,
                 ),
           ),
@@ -1201,7 +1221,7 @@ class _HeroMetaColumn extends StatelessWidget {
           Row(
             key: const Key('unified-detail-author-row'),
             children: [
-              const Icon(Icons.person_outlined, size: 18, color: Colors.white),
+              Icon(Icons.person_outlined, size: 18, color: foregroundColor),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -1216,7 +1236,7 @@ class _HeroMetaColumn extends StatelessWidget {
           Row(
             key: const Key('unified-detail-group-row'),
             children: [
-              const Icon(Icons.group_outlined, size: 18, color: Colors.white),
+              Icon(Icons.group_outlined, size: 18, color: foregroundColor),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -1241,6 +1261,7 @@ class _DetailHeaderBackground extends StatelessWidget {
     required this.coverLocalPath,
     required this.customCoverLocalPath,
     required this.hasCover,
+    required this.palette,
     required this.imageHeaderBuilder,
   });
 
@@ -1253,13 +1274,14 @@ class _DetailHeaderBackground extends StatelessWidget {
   final String? coverLocalPath;
   final String? customCoverLocalPath;
   final bool hasCover;
+  final UnifiedDetailPalette palette;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
 
   @override
   Widget build(BuildContext context) {
     if (!hasCover) {
       return Container(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        color: palette.headerFallbackBackground,
         alignment: Alignment.center,
         child: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
       );
@@ -1276,22 +1298,23 @@ class _DetailHeaderBackground extends StatelessWidget {
               localPath: _preferredLocalPath,
               imageUrl: _preferredRemoteUrl,
               fit: BoxFit.cover,
-              placeholder: Container(color: Theme.of(context).colorScheme.surfaceContainerHighest),
+              placeholder: Container(color: palette.headerPlaceholderBackground),
               headerBuilder: imageHeaderBuilder,
             ),
           ),
         ),
         DecoratedBox(
+          key: const Key('unified-detail-header-gradient'),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                Colors.black.withAlpha(35),
-                Theme.of(context).colorScheme.surface.withAlpha(150),
-                Theme.of(context).colorScheme.surface,
+                palette.headerGradientStart,
+                palette.headerGradientMiddle,
+                palette.headerGradientEnd,
               ],
-              // 最后一段必须落到纯 surface，避免底部出现“线”。
+              // 最后一段必须落到页面背景，避免动态主题下出现固定白边。
               stops: const [0.0, 0.72, 1.0],
             ),
           ),
@@ -1366,11 +1389,13 @@ class _CoverImage extends StatelessWidget {
     required this.url,
     required this.localPath,
     required this.moduleKey,
+    required this.palette,
     required this.imageHeaderBuilder,
   });
   final String? url;
   final String? localPath;
   final LibraryModuleKey moduleKey;
+  final UnifiedDetailPalette palette;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
 
   @override
@@ -1383,7 +1408,7 @@ class _CoverImage extends StatelessWidget {
         child: (url == null || url!.trim().isEmpty) &&
                 (localPath == null || localPath!.trim().isEmpty)
             ? Container(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                color: palette.headerPlaceholderBackground,
                 child: moduleKey == LibraryModuleKey.novel
                     ? Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -1406,7 +1431,7 @@ class _CoverImage extends StatelessWidget {
                 imageUrl: url,
                 fit: BoxFit.cover,
                 placeholder: Container(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  color: palette.headerPlaceholderBackground,
                   child: const Icon(Icons.broken_image_outlined),
                 ),
                 headerBuilder: imageHeaderBuilder,

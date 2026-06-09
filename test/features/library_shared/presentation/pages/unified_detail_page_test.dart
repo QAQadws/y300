@@ -162,6 +162,70 @@ void main() {
     expect(find.text('新标题'), findsWidgets);
   });
 
+  testWidgets('UnifiedDetailPage header gradient follows scaffold background', (tester) async {
+    const pageBackground = Color(0xFF123456);
+    final adapter = _FakeDetailAdapter(
+      coverLocalPath: 'missing-y300-detail-cover.png',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
+          scaffoldBackgroundColor: pageBackground,
+        ),
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor, pageBackground);
+    expect(_headerGradient(tester).colors.last, pageBackground);
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<AppBar>(find.byType(AppBar)).backgroundColor, pageBackground);
+  });
+
+  testWidgets('UnifiedDetailPage no-cover header remains available with custom theme', (tester) async {
+    const pageBackground = Color(0xFFF1F3F5);
+    final adapter = _FakeDetailAdapter();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
+          scaffoldBackgroundColor: pageBackground,
+        ),
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('unified-detail-header-section')), findsOneWidget);
+    expect(find.byKey(const Key('unified-detail-hero-title')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('unified-detail-header-section')),
+        matching: find.byKey(const Key('unified-detail-header-actions-row')),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('UnifiedDetailPage shows refresh queue snackbar', (tester) async {
     final adapter = _FakeDetailAdapter()
       ..refreshResult = DetailRefreshResult.queued(
@@ -188,9 +252,12 @@ void main() {
 }
 
 class _FakeDetailAdapter implements DetailModuleAdapter {
+  _FakeDetailAdapter({this.coverLocalPath});
+
   int markReadCallCount = 0;
   int loadChaptersCallCount = 0;
   DetailRefreshResult refreshResult = DetailRefreshResult.immediate;
+  final String? coverLocalPath;
 
   @override
   Future<void> clearAllReadState({required String workId}) async {}
@@ -245,6 +312,7 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
       workId: 'work-1',
       title: '测试作品',
       author: '作者A',
+      coverLocalPath: coverLocalPath,
       inShelf: true,
       intro: '这是一段简介',
       sourceTypeId: '398',
@@ -383,5 +451,13 @@ class _EditableDetailAdapter extends _FakeDetailAdapter implements DetailMetadat
     author = customAuthor ?? '来源作者';
     translationGroup = customTranslationGroup ?? '来源汉化组';
   }
+}
+
+LinearGradient _headerGradient(WidgetTester tester) {
+  final gradientBox = tester.widget<DecoratedBox>(
+    find.byKey(const Key('unified-detail-header-gradient')),
+  );
+  final decoration = gradientBox.decoration as BoxDecoration;
+  return decoration.gradient! as LinearGradient;
 }
 
