@@ -10,6 +10,7 @@ import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/data/novel_reader_cache_service.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_document_view.dart';
@@ -79,7 +80,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     return Scaffold(
       body: state.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('加载阅读器失败：$error')),
+        error: (error, _) => NovelReaderErrorView(
+          error: error,
+          onRetry: () => ref.invalidate(novelReaderControllerProvider(_args)),
+          onRefreshEpisodes: () => ref
+              .read(novelReaderControllerProvider(_args).notifier)
+              .refreshCurrentEpisode(),
+          onOpenThread: () => _openFallbackSourceThread(),
+        ),
         data: (viewState) {
           final theme = Theme.of(context);
           final palette = _themeResolver.resolve(
@@ -190,7 +198,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
           id: 'more',
           icon: Icons.more_vert,
           label: '更多',
-          onPressed: () => _showPlaceholder('更多阅读操作将在后续阶段接入'),
+          onPressed: () => _showReaderSnackBar('更多阅读操作将在后续阶段接入'),
         ),
       ],
     );
@@ -277,15 +285,19 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
       ),
       ReaderToolbarAction(
         id: 'cache',
-        icon: Icons.download_for_offline_outlined,
+        icon: viewState.isCurrentEpisodeDownloaded
+            ? Icons.download_done
+            : Icons.download_for_offline_outlined,
         label: '缓存',
-        onPressed: () => _showPlaceholder('章节缓存将在后续阶段接入'),
+        onPressed: () {
+          unawaited(_showCacheSheet(viewState, controller));
+        },
       ),
       ReaderToolbarAction(
         id: 'mode',
         icon: Icons.view_stream_outlined,
         label: '模式',
-        onPressed: () => _showPlaceholder('阅读模式将在后续阶段接入'),
+        onPressed: () => _showReaderSnackBar('阅读模式将在后续阶段接入'),
       ),
     ];
   }
@@ -783,7 +795,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
         if (!mounted) {
           return;
         }
-        _showPlaceholder('已添加书签');
+        _showReaderSnackBar('已添加书签');
         break;
       case _BookmarkSheetActionType.open:
         final bookmark = action.bookmark;
@@ -798,10 +810,100 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
           if (!mounted) {
             return;
           }
-          _showPlaceholder('已移除书签');
+          _showReaderSnackBar('已移除书签');
         }
         break;
     }
+  }
+
+  Future<void> _showCacheSheet(
+    NovelReaderViewState viewState,
+    NovelReaderController controller,
+  ) async {
+    _overlayController.hideMenu();
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => Consumer(
+        builder: (context, ref, _) {
+          final latest =
+              ref.watch(novelReaderControllerProvider(_args)).value ?? viewState;
+          return NovelReaderCacheSheet(
+            viewState: latest,
+            onCacheCurrent: () => unawaited(
+              _handleCacheAction(
+                _CacheSheetAction.cacheCurrent,
+                controller,
+              ),
+            ),
+            onCacheFollowing: () => unawaited(
+              _handleCacheAction(
+                _CacheSheetAction.cacheFollowing,
+                controller,
+              ),
+            ),
+            onDeleteCurrent: () => unawaited(
+              _handleCacheAction(
+                _CacheSheetAction.deleteCurrent,
+                controller,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _handleCacheAction(
+    _CacheSheetAction action,
+    NovelReaderController controller,
+  ) async {
+    switch (action) {
+      case _CacheSheetAction.cacheCurrent:
+        final result = await controller.cacheCurrentEpisode();
+        if (!mounted) {
+          return;
+        }
+        _showReaderSnackBar(_cacheResultMessage(result, success: '本章已缓存'));
+        break;
+      case _CacheSheetAction.cacheFollowing:
+        final result = await controller.cacheFollowingEpisodes();
+        if (!mounted) {
+          return;
+        }
+        _showReaderSnackBar(
+          _cacheResultMessage(
+            result,
+            success: result.totalCount == 0
+                ? '没有后续章节'
+                : '已缓存 ${result.successCount}/${result.totalCount} 章',
+          ),
+        );
+        break;
+      case _CacheSheetAction.deleteCurrent:
+        final result = await controller.deleteCurrentEpisodeCache();
+        if (!mounted) {
+          return;
+        }
+        _showReaderSnackBar(_cacheResultMessage(result, success: '已删除本章缓存'));
+        break;
+    }
+  }
+
+  String _cacheResultMessage(
+    NovelReaderCacheResult result, {
+    required String success,
+  }) {
+    if (result.totalCount == 0) {
+      return success;
+    }
+    if (result.failureCount == 0 && result.successCount > 0) {
+      return success;
+    }
+    if (result.successCount > 0) {
+      return '已完成 ${result.successCount} 章，失败 ${result.failureCount} 章';
+    }
+    return result.errorMessage ?? '缓存操作失败';
   }
 
   void _showDisplaySettingsSheet(
@@ -833,7 +935,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     final latest = ref.read(novelReaderControllerProvider(_args)).value;
     final isBookmarked =
         latest?.hasCurrentEpisodeBookmark ?? !viewState.hasCurrentEpisodeBookmark;
-    _showPlaceholder(isBookmarked ? '已添加书签' : '已移除书签');
+    _showReaderSnackBar(isBookmarked ? '已添加书签' : '已移除书签');
   }
 
   GlobalKey _nodeKeyFor(String nodeId) {
@@ -924,6 +1026,22 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     );
   }
 
+  Future<void> _openFallbackSourceThread() async {
+    final viewState = ref.read(novelReaderControllerProvider(_args)).value;
+    if (viewState != null) {
+      await _openSourceThread(viewState);
+      return;
+    }
+    final tid = _sourceTidFromId(widget.initialEpisodeId) ??
+        _sourceTidFromId(widget.novelId) ??
+        widget.novelId;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ThreadDetailPage(tid: tid, subject: widget.novelId),
+      ),
+    );
+  }
+
   Future<void> _openReaderLink(
     NovelReaderLink link,
     ForumWebViewExternalLauncher externalLauncher,
@@ -945,15 +1063,19 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     if (!mounted || launched) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('链接打开失败')),
-    );
+    _showReaderSnackBar('链接打开失败');
   }
 
-  void _showPlaceholder(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+  void _showReaderSnackBar(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 120),
+        ),
+      );
   }
 
   String _novelTitle(NovelReaderViewState viewState) {
@@ -966,6 +1088,15 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
       return episodeTitle;
     }
     return widget.novelId;
+  }
+
+  String? _sourceTidFromId(String value) {
+    final parts = value.split(':');
+    if (parts.length >= 3 && parts.first == 'novel') {
+      final tid = parts[2].trim();
+      return tid.isEmpty ? null : tid;
+    }
+    return null;
   }
 
   bool _isPagedMode(NovelReaderFlowMode flowMode) {
@@ -1058,6 +1189,7 @@ class _NovelReaderChapterListSheetState extends State<NovelReaderChapterListShee
                           readingProgressEpisodeId:
                               viewState.readingProgress?.episodeId,
                           bookmarkEpisodeIds: viewState.bookmarkEpisodeIds,
+                          downloadedEpisodeIds: viewState.downloadedEpisodeIds,
                         );
                       },
                     ),
@@ -1108,12 +1240,14 @@ class _ChapterListTile extends StatelessWidget {
     required this.currentEpisodeId,
     required this.readingProgressEpisodeId,
     required this.bookmarkEpisodeIds,
+    required this.downloadedEpisodeIds,
   });
 
   final NovelEpisodeItem episode;
   final String currentEpisodeId;
   final String? readingProgressEpisodeId;
   final Set<String> bookmarkEpisodeIds;
+  final Set<String> downloadedEpisodeIds;
 
   @override
   Widget build(BuildContext context) {
@@ -1121,6 +1255,7 @@ class _ChapterListTile extends StatelessWidget {
     final isLastRead =
         !isCurrent && episode.episodeId == readingProgressEpisodeId;
     final isBookmarked = bookmarkEpisodeIds.contains(episode.episodeId);
+    final isDownloaded = downloadedEpisodeIds.contains(episode.episodeId);
     return ListTile(
       key: Key('novel-reader-chapter-${episode.episodeId}'),
       selected: isCurrent,
@@ -1150,6 +1285,11 @@ class _ChapterListTile extends StatelessWidget {
             Text(
               '书签',
               key: Key('novel-reader-chapter-bookmark-${episode.episodeId}'),
+            ),
+          if (isDownloaded)
+            Text(
+              '已缓存',
+              key: Key('novel-reader-chapter-downloaded-${episode.episodeId}'),
             ),
           if (isCurrent) const Text('当前') else if (isLastRead) const Text('上次阅读'),
         ],
@@ -1181,6 +1321,188 @@ class NovelReaderNextChapterTransition extends StatelessWidget {
       ),
     );
   }
+}
+
+class NovelReaderErrorView extends StatelessWidget {
+  const NovelReaderErrorView({
+    super.key,
+    required this.error,
+    required this.onRetry,
+    required this.onRefreshEpisodes,
+    required this.onOpenThread,
+  });
+
+  final Object error;
+  final VoidCallback onRetry;
+  final VoidCallback onRefreshEpisodes;
+  final VoidCallback onOpenThread;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Center(
+        child: SingleChildScrollView(
+          key: const Key('novel-reader-error-view'),
+          padding: const EdgeInsets.all(24),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.menu_book_outlined, size: 42),
+                  const SizedBox(height: 16),
+                  Text(
+                    '章节暂时无法显示',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    error.toString(),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 20),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      FilledButton.icon(
+                        key: const Key('novel-reader-error-retry'),
+                        onPressed: onRetry,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('重试'),
+                      ),
+                      OutlinedButton.icon(
+                        key: const Key('novel-reader-error-refresh-episodes'),
+                        onPressed: onRefreshEpisodes,
+                        icon: const Icon(Icons.sync),
+                        label: const Text('刷新章节'),
+                      ),
+                      OutlinedButton.icon(
+                        key: const Key('novel-reader-error-open-thread'),
+                        onPressed: onOpenThread,
+                        icon: const Icon(Icons.open_in_new),
+                        label: const Text('打开原帖'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class NovelReaderCacheSheet extends StatelessWidget {
+  const NovelReaderCacheSheet({
+    super.key,
+    required this.viewState,
+    required this.onCacheCurrent,
+    required this.onCacheFollowing,
+    required this.onDeleteCurrent,
+  });
+
+  final NovelReaderViewState viewState;
+  final VoidCallback onCacheCurrent;
+  final VoidCallback onCacheFollowing;
+  final VoidCallback onDeleteCurrent;
+
+  @override
+  Widget build(BuildContext context) {
+    final isCaching = viewState.isCachingEpisodes;
+    final progressText = viewState.cacheTotal <= 0
+        ? '准备缓存'
+        : '第 ${viewState.cacheCurrent}/${viewState.cacheTotal} 章';
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+        ),
+        child: SingleChildScrollView(
+          key: const Key('novel-reader-cache-sheet'),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ReaderSheetTitle(title: '章节缓存'),
+              ListTile(
+                key: const Key('novel-reader-cache-status'),
+                leading: Icon(
+                  viewState.isCurrentEpisodeDownloaded
+                      ? Icons.download_done
+                      : Icons.download_for_offline_outlined,
+                ),
+                title: Text(
+                  viewState.isCurrentEpisodeDownloaded ? '本章已缓存' : '本章未缓存',
+                ),
+                subtitle: Text(viewState.currentEpisode.episodeTitle),
+              ),
+              if (isCaching) ...[
+                const SizedBox(height: 8),
+                LinearProgressIndicator(
+                  key: const Key('novel-reader-cache-progress'),
+                  value: viewState.cacheTotal <= 0
+                      ? null
+                      : (viewState.cacheCurrent / viewState.cacheTotal)
+                          .clamp(0.0, 1.0)
+                          .toDouble(),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  progressText,
+                  key: const Key('novel-reader-cache-progress-label'),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+              if (viewState.cacheError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  viewState.cacheError!,
+                  key: const Key('novel-reader-cache-error'),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                key: const Key('novel-reader-cache-current'),
+                onPressed: isCaching ? null : onCacheCurrent,
+                icon: const Icon(Icons.download_for_offline),
+                label: const Text('缓存本章'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                key: const Key('novel-reader-cache-following'),
+                onPressed: isCaching ? null : onCacheFollowing,
+                icon: const Icon(Icons.playlist_add_check),
+                label: const Text('缓存后续 5 章'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                key: const Key('novel-reader-cache-delete-current'),
+                onPressed: isCaching || !viewState.isCurrentEpisodeDownloaded
+                    ? null
+                    : onDeleteCurrent,
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('删除本章缓存'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+enum _CacheSheetAction {
+  cacheCurrent,
+  cacheFollowing,
+  deleteCurrent,
 }
 
 class NovelReaderSearchSheet extends StatefulWidget {

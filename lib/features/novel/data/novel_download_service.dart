@@ -1,16 +1,12 @@
 import 'dart:convert';
 import 'dart:io' as io;
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
-import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
-import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 
@@ -347,11 +343,3 @@ class _NovelDownloadedChapterDraft {
     };
   }
 }
-
-final novelDownloadServiceProvider = Provider<NovelDownloadService>((ref) {
-  return DefaultNovelDownloadService(
-    repository: ref.watch(novelRepositoryProvider),
-    storageService: ref.watch(downloadStorageServiceProvider),
-    imageCacheService: ref.watch(imageCacheServiceProvider),
-  );
-});

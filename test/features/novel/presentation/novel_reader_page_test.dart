@@ -5,6 +5,10 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
+import 'package:y300/features/library_shared/data/library_state_providers.dart';
+import 'package:y300/features/library_shared/data/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
@@ -438,6 +442,9 @@ void main() {
               const _StaticImageHeaderBuilder(),
             ),
             novelDownloadServiceProvider.overrideWithValue(_NoopNovelDownloadService()),
+            libraryStateRepositoryProvider.overrideWithValue(
+              _MemoryLibraryStateRepository(),
+            ),
           ],
           child: const NovelReaderPage(
             novelId: 'novel:49:100',
@@ -691,6 +698,128 @@ void main() {
       isEmpty,
     );
   });
+
+  testWidgets('NovelReaderPage opens cache sheet and caches current chapter', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository();
+    final downloadService = _RecordingNovelDownloadService();
+    final stateRepository = _MemoryLibraryStateRepository();
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        downloadService: downloadService,
+        stateRepository: stateRepository,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-cache')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-cache-sheet')), findsOneWidget);
+    expect(find.text('本章未缓存'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('novel-reader-cache-current')));
+    await tester.pumpAndSettle();
+
+    expect(downloadService.downloadedEpisodeIds, <String>['novel:49:100:5001']);
+    expect(find.text('本章已缓存'), findsAtLeastNWidgets(1));
+    await _closeBottomSheet(tester);
+    await _showReaderMenu(tester);
+    final bottomGate = tester.widget<IgnorePointer>(
+      find.byKey(const Key('shared-reader-bottom-overlay-hit-test-gate')),
+    );
+    expect(bottomGate.ignoring, isFalse);
+    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-catalog')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(
+        const Key('novel-reader-chapter-downloaded-novel:49:100:5001'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('NovelReaderPage deletes current chapter cache', (tester) async {
+    final repository = _FakeNovelRepository();
+    final downloadService = _RecordingNovelDownloadService();
+    final stateRepository = _MemoryLibraryStateRepository();
+    await stateRepository.upsertEpisodeState(
+      moduleKey: LibraryModuleKey.novel,
+      episodeId: 'novel:49:100:5001',
+      workId: 'novel:49:100',
+      isDownloaded: true,
+      downloadedAt: DateTime(2026, 6, 8),
+    );
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        downloadService: downloadService,
+        stateRepository: stateRepository,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-cache')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('本章已缓存'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('novel-reader-cache-delete-current')));
+    await tester.pumpAndSettle();
+
+    expect(downloadService.deletedEpisodeIds, <String>['novel:49:100:5001']);
+    expect(find.text('本章未缓存'), findsOneWidget);
+    final state = await stateRepository.getEpisodeState(
+      moduleKey: LibraryModuleKey.novel,
+      episodeId: 'novel:49:100:5001',
+    );
+    expect(state?.isDownloaded, isFalse);
+  });
+
+  testWidgets('NovelReaderPage caches following chapters from cache sheet', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository.threeEpisodes();
+    final downloadService = _RecordingNovelDownloadService();
+    final stateRepository = _MemoryLibraryStateRepository();
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        downloadService: downloadService,
+        stateRepository: stateRepository,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-cache')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('novel-reader-cache-following')));
+    await tester.pumpAndSettle();
+
+    expect(
+      downloadService.downloadedEpisodeIds,
+      <String>['novel:49:100:5002', 'novel:49:100:5003'],
+    );
+    expect(find.text('已缓存 2/2 章'), findsOneWidget);
+  });
+
+  testWidgets('NovelReaderPage error view can refresh chapters', (tester) async {
+    final repository = _FakeNovelRepository(
+      contentsByEpisodeId: const <String, NovelChapterContent>{},
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-error-view')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('novel-reader-error-refresh-episodes')));
+    await tester.pumpAndSettle();
+
+    expect(repository.refreshCount, 1);
+  });
 }
 
 Future<void> _showReaderMenu(WidgetTester tester) async {
@@ -700,9 +829,18 @@ Future<void> _showReaderMenu(WidgetTester tester) async {
   await tester.pump();
 }
 
+Future<void> _closeBottomSheet(WidgetTester tester) async {
+  final sheet = find.byKey(const Key('novel-reader-cache-sheet'));
+  expect(sheet, findsOneWidget);
+  Navigator.of(tester.element(sheet)).pop();
+  await tester.pumpAndSettle();
+  expect(find.byKey(const Key('novel-reader-cache-sheet')), findsNothing);
+}
+
 Widget _buildReaderApp({
   required _FakeNovelRepository repository,
   NovelDownloadService? downloadService,
+  LibraryStateRepository? stateRepository,
   ThreadRepository? threadRepository,
   String initialEpisodeId = 'novel:49:100:5001',
 }) {
@@ -717,6 +855,9 @@ Widget _buildReaderApp({
       ),
       novelDownloadServiceProvider.overrideWithValue(
         downloadService ?? _NoopNovelDownloadService(),
+      ),
+      libraryStateRepositoryProvider.overrideWithValue(
+        stateRepository ?? _MemoryLibraryStateRepository(),
       ),
       if (threadRepository != null)
         threadRepositoryProvider.overrideWithValue(threadRepository),
@@ -768,10 +909,16 @@ class _FakeThreadRepository implements ThreadRepository {
 
 class _NoopNovelDownloadService implements NovelDownloadService {
   @override
-  Future<void> deleteChapterDownload({required String novelId, required String episodeId}) async {}
+  Future<void> deleteChapterDownload({
+    required String novelId,
+    required String episodeId,
+  }) async {}
 
   @override
-  Future<DownloadedNovelChapter> downloadChapter({required String novelId, required String episodeId}) {
+  Future<DownloadedNovelChapter> downloadChapter({
+    required String novelId,
+    required String episodeId,
+  }) {
     throw UnimplementedError();
   }
 
@@ -795,6 +942,198 @@ class _DownloadedNovelServiceFake extends _NoopNovelDownloadService {
     required String episodeId,
   }) async {
     return content.episodeId == episodeId ? content : null;
+  }
+}
+
+class _RecordingNovelDownloadService extends _NoopNovelDownloadService {
+  final downloadedEpisodeIds = <String>[];
+  final deletedEpisodeIds = <String>[];
+
+  @override
+  Future<DownloadedNovelChapter> downloadChapter({
+    required String novelId,
+    required String episodeId,
+  }) async {
+    downloadedEpisodeIds.add(episodeId);
+    return DownloadedNovelChapter(
+      novelId: novelId,
+      episodeId: episodeId,
+      chapterPath: '/tmp/$episodeId.json',
+    );
+  }
+
+  @override
+  Future<void> deleteChapterDownload({
+    required String novelId,
+    required String episodeId,
+  }) async {
+    deletedEpisodeIds.add(episodeId);
+  }
+}
+
+class _MemoryLibraryStateRepository implements LibraryStateRepository {
+  final Map<String, LibraryEpisodeState> _episodeStates =
+      <String, LibraryEpisodeState>{};
+
+  @override
+  Future<void> upsertEpisodeState({
+    required LibraryModuleKey moduleKey,
+    required String episodeId,
+    required String workId,
+    bool? isRead,
+    bool? isDownloaded,
+    bool? isBookmarked,
+    DateTime? readAt,
+    DateTime? downloadedAt,
+  }) async {
+    final old = _episodeStates[episodeId];
+    _episodeStates[episodeId] = LibraryEpisodeState(
+      moduleKey: moduleKey,
+      episodeId: episodeId,
+      workId: workId,
+      isRead: isRead ?? old?.isRead ?? false,
+      isDownloaded: isDownloaded ?? old?.isDownloaded ?? false,
+      isBookmarked: isBookmarked ?? old?.isBookmarked ?? false,
+      readAt: isRead == false ? null : readAt ?? old?.readAt,
+      downloadedAt: isDownloaded == false
+          ? null
+          : downloadedAt ?? old?.downloadedAt,
+    );
+  }
+
+  @override
+  Future<LibraryEpisodeState?> getEpisodeState({
+    required LibraryModuleKey moduleKey,
+    required String episodeId,
+  }) async {
+    final state = _episodeStates[episodeId];
+    return state?.moduleKey == moduleKey ? state : null;
+  }
+
+  @override
+  Future<void> upsertWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    String? lastReadEpisodeId,
+    DateTime? lastReadAt,
+    DateTime? checkUpdatedAt,
+    DateTime? fetchedUpdatedAt,
+    String? introText,
+  }) async {}
+
+  @override
+  Future<LibraryWorkState?> getWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return null;
+  }
+
+  @override
+  Future<int> countUnreadEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<int> countReadEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<int> countDownloadedEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return _episodeStates.values
+        .where(
+          (state) =>
+              state.moduleKey == moduleKey &&
+              state.workId == workId &&
+              state.isDownloaded,
+        )
+        .length;
+  }
+
+  @override
+  Future<void> setWorksReadState({
+    required LibraryModuleKey moduleKey,
+    required Set<String> workIds,
+    required bool isRead,
+    DateTime? readAt,
+  }) async {}
+
+  @override
+  Future<void> purgeWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {}
+
+  @override
+  Future<void> upsertDisplaySettings({
+    required LibraryModuleKey moduleKey,
+    required LibraryDisplayMode displayMode,
+    required int gridColumns,
+  }) async {}
+
+  @override
+  Future<LibraryModuleDisplaySettings> getDisplaySettings({
+    required LibraryModuleKey moduleKey,
+    required LibraryDisplayMode defaultDisplayMode,
+  }) async {
+    return LibraryModuleDisplaySettings(
+      moduleKey: moduleKey,
+      displayMode: defaultDisplayMode,
+      gridColumns: 3,
+      updatedAt: DateTime(2026, 6, 8),
+    );
+  }
+
+  @override
+  Future<String> createTag({required String name}) async => 'tag';
+
+  @override
+  Future<List<LibraryTag>> getTags() async => const <LibraryTag>[];
+
+  @override
+  Future<void> renameTag({required String tagId, required String newName}) async {}
+
+  @override
+  Future<void> deleteTag({required String tagId}) async {}
+
+  @override
+  Future<void> bindTagToWork({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    required String tagId,
+  }) async {}
+
+  @override
+  Future<void> unbindTagFromWork({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    required String tagId,
+  }) async {}
+
+  @override
+  Future<List<LibraryTag>> getWorkTags({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return const <LibraryTag>[];
+  }
+
+  @override
+  Future<bool> hasAnyTag({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return false;
   }
 }
 
@@ -873,6 +1212,7 @@ class _FakeNovelRepository implements NovelRepository {
   NovelReaderPreferences preferences;
   NovelReaderPreferences? latestPreferences;
   double lastSavedOffset = 0;
+  int refreshCount = 0;
   final savedProgressEpisodeIds = <String>[];
   final bookmarks = <NovelReaderBookmark>[];
 
@@ -940,6 +1280,7 @@ class _FakeNovelRepository implements NovelRepository {
 
   @override
   Future<NovelEpisodeRefreshResult> refreshEpisodes({required String novelId}) async {
+    refreshCount += 1;
     return NovelEpisodeRefreshResult(
       insertedCount: 0,
       updatedCount: 0,

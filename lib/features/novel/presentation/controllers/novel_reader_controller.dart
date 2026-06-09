@@ -1,8 +1,8 @@
 ﻿import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/data/novel_reader_cache_service.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
@@ -48,6 +48,11 @@ class NovelReaderViewState {
     this.searchResults = const <NovelReaderSearchResult>[],
     this.currentSearchIndex = -1,
     this.searchKeyword = '',
+    this.downloadedEpisodeIds = const <String>{},
+    this.isCachingEpisodes = false,
+    this.cacheCurrent = 0,
+    this.cacheTotal = 0,
+    this.cacheError,
   });
 
   final NovelItem? novel;
@@ -64,6 +69,11 @@ class NovelReaderViewState {
   final List<NovelReaderSearchResult> searchResults;
   final int currentSearchIndex;
   final String searchKeyword;
+  final Set<String> downloadedEpisodeIds;
+  final bool isCachingEpisodes;
+  final int cacheCurrent;
+  final int cacheTotal;
+  final String? cacheError;
 
   int get currentEpisodeIndex {
     return episodes.indexWhere(
@@ -90,6 +100,10 @@ class NovelReaderViewState {
   bool get hasPreviousEpisode => previousEpisode != null;
 
   bool get hasNextEpisode => nextEpisode != null;
+
+  bool get isCurrentEpisodeDownloaded {
+    return downloadedEpisodeIds.contains(currentEpisode.episodeId);
+  }
 
   bool get hasCurrentEpisodeBookmark {
     return currentEpisodeBookmarks.any(
@@ -125,6 +139,12 @@ class NovelReaderViewState {
     List<NovelReaderSearchResult>? searchResults,
     int? currentSearchIndex,
     String? searchKeyword,
+    Set<String>? downloadedEpisodeIds,
+    bool? isCachingEpisodes,
+    int? cacheCurrent,
+    int? cacheTotal,
+    String? cacheError,
+    bool clearCacheError = false,
   }) {
     return NovelReaderViewState(
       novel: clearNovel ? null : (novel ?? this.novel),
@@ -143,6 +163,11 @@ class NovelReaderViewState {
       searchResults: searchResults ?? this.searchResults,
       currentSearchIndex: currentSearchIndex ?? this.currentSearchIndex,
       searchKeyword: searchKeyword ?? this.searchKeyword,
+      downloadedEpisodeIds: downloadedEpisodeIds ?? this.downloadedEpisodeIds,
+      isCachingEpisodes: isCachingEpisodes ?? this.isCachingEpisodes,
+      cacheCurrent: cacheCurrent ?? this.cacheCurrent,
+      cacheTotal: cacheTotal ?? this.cacheTotal,
+      cacheError: clearCacheError ? null : (cacheError ?? this.cacheError),
     );
   }
 }
@@ -400,6 +425,50 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     await _reloadBookmarks(repository);
   }
 
+  Future<NovelReaderCacheResult> cacheCurrentEpisode() {
+    return _runCacheOperation(
+      (service, current) => service.cacheCurrentEpisode(
+        novelId: _args.novelId,
+        episodeId: current.currentEpisode.episodeId,
+        onProgress: _updateCacheProgress,
+      ),
+    );
+  }
+
+  Future<NovelReaderCacheResult> cacheFollowingEpisodes({int count = 5}) {
+    return _runCacheOperation(
+      (service, current) => service.cacheFollowingEpisodes(
+        novelId: _args.novelId,
+        episodeId: current.currentEpisode.episodeId,
+        count: count,
+        onProgress: _updateCacheProgress,
+      ),
+    );
+  }
+
+  Future<NovelReaderCacheResult> deleteCurrentEpisodeCache() {
+    return _runCacheOperation(
+      (service, current) => service.deleteCurrentEpisodeCache(
+        novelId: _args.novelId,
+        episodeId: current.currentEpisode.episodeId,
+        onProgress: _updateCacheProgress,
+      ),
+    );
+  }
+
+  Future<void> refreshCurrentEpisode() async {
+    final current = state.value;
+    final repository = ref.read(novelRepositoryProvider);
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      await repository.refreshEpisodes(novelId: _args.novelId);
+      return _load(
+        current?.currentEpisode.episodeId ?? _args.episodeId,
+        preservedProgress: current?.readingProgress,
+      );
+    });
+  }
+
   Future<NovelReaderViewState> _load(
     String episodeId, {
     NovelReadingProgress? preservedProgress,
@@ -415,6 +484,9 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       novelId: _args.novelId,
       descending: false,
     );
+    if (episodes.isEmpty) {
+      throw StateError('小说章节目录为空');
+    }
     final currentEpisode = episodes.firstWhere(
       (episode) => episode.episodeId == episodeId,
       orElse: () => episodes.first,
@@ -454,6 +526,11 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       bookmarks,
       currentEpisode.episodeId,
     );
+    final downloadedEpisodeIds =
+        await ref.read(novelReaderCacheServiceProvider).getDownloadedEpisodeIds(
+              novelId: _args.novelId,
+              episodeIds: episodes.map((episode) => episode.episodeId),
+            );
 
     return NovelReaderViewState(
       novel: novel,
@@ -470,6 +547,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       searchResults: const <NovelReaderSearchResult>[],
       currentSearchIndex: -1,
       searchKeyword: '',
+      downloadedEpisodeIds: downloadedEpisodeIds,
     );
   }
 
@@ -573,5 +651,70 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
         .map(_textForNode)
         .where((text) => text.trim().isNotEmpty)
         .join('\n');
+  }
+
+  Future<NovelReaderCacheResult> _runCacheOperation(
+    Future<NovelReaderCacheResult> Function(
+      NovelReaderCacheService service,
+      NovelReaderViewState current,
+    ) operation,
+  ) async {
+    final current = state.value;
+    if (current == null || current.isCachingEpisodes) {
+      return const NovelReaderCacheResult.empty();
+    }
+    state = AsyncData(
+      current.copyWith(
+        isCachingEpisodes: true,
+        cacheCurrent: 0,
+        cacheTotal: 0,
+        clearCacheError: true,
+      ),
+    );
+    final service = ref.read(novelReaderCacheServiceProvider);
+    late final NovelReaderCacheResult result;
+    try {
+      result = await operation(service, current);
+    } catch (error) {
+      result = NovelReaderCacheResult(
+        totalCount: 1,
+        successCount: 0,
+        failureCount: 1,
+        errorMessage: error.toString(),
+      );
+    }
+    final latest = state.value ?? current;
+    var downloadedEpisodeIds = latest.downloadedEpisodeIds;
+    try {
+      downloadedEpisodeIds = await service.getDownloadedEpisodeIds(
+        novelId: _args.novelId,
+        episodeIds: latest.episodes.map((episode) => episode.episodeId),
+      );
+    } catch (_) {}
+    state = AsyncData(
+      latest.copyWith(
+        downloadedEpisodeIds: downloadedEpisodeIds,
+        isCachingEpisodes: false,
+        cacheCurrent: result.totalCount,
+        cacheTotal: result.totalCount,
+        cacheError: result.hasFailures ? result.errorMessage ?? '部分章节缓存失败' : null,
+        clearCacheError: !result.hasFailures,
+      ),
+    );
+    return result;
+  }
+
+  void _updateCacheProgress(int current, int total) {
+    final viewState = state.value;
+    if (viewState == null) {
+      return;
+    }
+    state = AsyncData(
+      viewState.copyWith(
+        isCachingEpisodes: true,
+        cacheCurrent: current,
+        cacheTotal: total,
+      ),
+    );
   }
 }

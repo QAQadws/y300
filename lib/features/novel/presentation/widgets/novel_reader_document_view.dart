@@ -314,7 +314,7 @@ class NovelReaderQuoteBlock extends StatelessWidget {
   }
 }
 
-class NovelReaderImageBlock extends StatelessWidget {
+class NovelReaderImageBlock extends StatefulWidget {
   const NovelReaderImageBlock({
     super.key,
     required this.image,
@@ -325,21 +325,41 @@ class NovelReaderImageBlock extends StatelessWidget {
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
 
   @override
+  State<NovelReaderImageBlock> createState() => _NovelReaderImageBlockState();
+}
+
+class _NovelReaderImageBlockState extends State<NovelReaderImageBlock> {
+  int _retryToken = 0;
+
+  @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: image.altText,
+      label: widget.image.altText,
       child: LibraryCachedImage(
-        imageUrl: image.url,
+        key: ValueKey('novel-reader-image-${widget.image.url}-$_retryToken'),
+        imageUrl: widget.image.url,
         fit: BoxFit.contain,
         placeholder: const SizedBox(
           height: 80,
           child: Center(child: Icon(Icons.image_outlined)),
         ),
-        errorPlaceholder: const SizedBox(
-          height: 80,
-          child: Center(child: Icon(Icons.broken_image_outlined)),
+        errorPlaceholder: SizedBox(
+          key: const Key('novel-reader-image-error'),
+          height: 96,
+          child: Center(
+            child: TextButton.icon(
+              key: const Key('novel-reader-image-retry'),
+              onPressed: () {
+                setState(() {
+                  _retryToken += 1;
+                });
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('图片加载失败，点击重试'),
+            ),
+          ),
         ),
-        headerBuilder: imageHeaderBuilder,
+        headerBuilder: widget.imageHeaderBuilder,
       ),
     );
   }

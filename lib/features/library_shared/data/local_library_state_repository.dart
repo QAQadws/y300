@@ -96,6 +96,10 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
     final nextReadAt = isRead == false
         ? null
         : readAt?.millisecondsSinceEpoch ?? old?.readAt?.millisecondsSinceEpoch;
+    final nextDownloadedAt = isDownloaded == false
+        ? null
+        : downloadedAt?.millisecondsSinceEpoch ??
+            old?.downloadedAt?.millisecondsSinceEpoch;
 
     await db.insert(
       ComicLocalDb.libraryEpisodeStateTable,
@@ -107,8 +111,7 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
         'is_downloaded': nextDownloaded ? 1 : 0,
         'is_bookmarked': nextBookmarked ? 1 : 0,
         'read_at': nextReadAt,
-        'downloaded_at':
-            downloadedAt?.millisecondsSinceEpoch ?? old?.downloadedAt?.millisecondsSinceEpoch,
+        'downloaded_at': nextDownloadedAt,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );

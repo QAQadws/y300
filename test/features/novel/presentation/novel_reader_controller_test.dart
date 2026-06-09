@@ -1,5 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/library_shared/data/library_state_providers.dart';
+import 'package:y300/features/library_shared/data/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
@@ -190,6 +194,71 @@ void main() {
     state = container.read(provider).value!;
     expect(state.currentEpisodeBookmarks.length, 1);
   });
+
+  test('cacheCurrentEpisode updates downloaded state', () async {
+    final repository = _ControllerNovelRepository();
+    final downloadService = _RecordingNovelDownloadService();
+    final stateRepository = _MemoryLibraryStateRepository();
+    final container = _buildContainer(
+      repository: repository,
+      downloadService: downloadService,
+      stateRepository: stateRepository,
+    );
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
+
+    await container.read(provider.future);
+    final result = await container.read(provider.notifier).cacheCurrentEpisode();
+    final state = container.read(provider).value!;
+
+    expect(result.successCount, 1);
+    expect(downloadService.downloadedEpisodeIds, <String>['novel:49:100:5001']);
+    expect(state.isCurrentEpisodeDownloaded, isTrue);
+    expect(state.isCachingEpisodes, isFalse);
+  });
+
+  test('deleteCurrentEpisodeCache clears downloaded state', () async {
+    final repository = _ControllerNovelRepository();
+    final downloadService = _RecordingNovelDownloadService();
+    final stateRepository = _MemoryLibraryStateRepository();
+    await stateRepository.upsertEpisodeState(
+      moduleKey: LibraryModuleKey.novel,
+      episodeId: 'novel:49:100:5001',
+      workId: 'novel:49:100',
+      isDownloaded: true,
+      downloadedAt: DateTime(2026, 6, 8),
+    );
+    final container = _buildContainer(
+      repository: repository,
+      downloadService: downloadService,
+      stateRepository: stateRepository,
+    );
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
+
+    final initial = await container.read(provider.future);
+    expect(initial.isCurrentEpisodeDownloaded, isTrue);
+
+    final result =
+        await container.read(provider.notifier).deleteCurrentEpisodeCache();
+    final state = container.read(provider).value!;
+
+    expect(result.successCount, 1);
+    expect(downloadService.deletedEpisodeIds, <String>['novel:49:100:5001']);
+    expect(state.isCurrentEpisodeDownloaded, isFalse);
+  });
 }
 
 ProviderSubscription<AsyncValue<NovelReaderViewState>> _keepReaderAlive(
@@ -204,11 +273,18 @@ ProviderSubscription<AsyncValue<NovelReaderViewState>> _keepReaderAlive(
 
 ProviderContainer _buildContainer({
   required _ControllerNovelRepository repository,
+  NovelDownloadService? downloadService,
+  LibraryStateRepository? stateRepository,
 }) {
   return ProviderContainer(
     overrides: [
       novelRepositoryProvider.overrideWithValue(repository),
-      novelDownloadServiceProvider.overrideWithValue(_NoopNovelDownloadService()),
+      novelDownloadServiceProvider.overrideWithValue(
+        downloadService ?? _NoopNovelDownloadService(),
+      ),
+      libraryStateRepositoryProvider.overrideWithValue(
+        stateRepository ?? _MemoryLibraryStateRepository(),
+      ),
     ],
   );
 }
@@ -258,6 +334,210 @@ class _NoopNovelDownloadService implements NovelDownloadService {
     required String episodeId,
   }) async {
     return null;
+  }
+}
+
+class _RecordingNovelDownloadService implements NovelDownloadService {
+  final downloadedEpisodeIds = <String>[];
+  final deletedEpisodeIds = <String>[];
+
+  @override
+  Future<void> deleteChapterDownload({
+    required String novelId,
+    required String episodeId,
+  }) async {
+    deletedEpisodeIds.add(episodeId);
+  }
+
+  @override
+  Future<DownloadedNovelChapter> downloadChapter({
+    required String novelId,
+    required String episodeId,
+  }) async {
+    downloadedEpisodeIds.add(episodeId);
+    return DownloadedNovelChapter(
+      novelId: novelId,
+      episodeId: episodeId,
+      chapterPath: '/tmp/$episodeId.json',
+    );
+  }
+
+  @override
+  Future<NovelChapterContent?> getDownloadedChapterContent({
+    required String novelId,
+    required String episodeId,
+  }) async {
+    return null;
+  }
+}
+
+class _MemoryLibraryStateRepository implements LibraryStateRepository {
+  final Map<String, LibraryEpisodeState> _episodeStates =
+      <String, LibraryEpisodeState>{};
+
+  @override
+  Future<void> upsertEpisodeState({
+    required LibraryModuleKey moduleKey,
+    required String episodeId,
+    required String workId,
+    bool? isRead,
+    bool? isDownloaded,
+    bool? isBookmarked,
+    DateTime? readAt,
+    DateTime? downloadedAt,
+  }) async {
+    final old = _episodeStates[episodeId];
+    _episodeStates[episodeId] = LibraryEpisodeState(
+      moduleKey: moduleKey,
+      episodeId: episodeId,
+      workId: workId,
+      isRead: isRead ?? old?.isRead ?? false,
+      isDownloaded: isDownloaded ?? old?.isDownloaded ?? false,
+      isBookmarked: isBookmarked ?? old?.isBookmarked ?? false,
+      readAt: isRead == false ? null : readAt ?? old?.readAt,
+      downloadedAt: isDownloaded == false
+          ? null
+          : downloadedAt ?? old?.downloadedAt,
+    );
+  }
+
+  @override
+  Future<LibraryEpisodeState?> getEpisodeState({
+    required LibraryModuleKey moduleKey,
+    required String episodeId,
+  }) async {
+    final state = _episodeStates[episodeId];
+    return state?.moduleKey == moduleKey ? state : null;
+  }
+
+  @override
+  Future<void> upsertWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    String? lastReadEpisodeId,
+    DateTime? lastReadAt,
+    DateTime? checkUpdatedAt,
+    DateTime? fetchedUpdatedAt,
+    String? introText,
+  }) async {}
+
+  @override
+  Future<LibraryWorkState?> getWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return null;
+  }
+
+  @override
+  Future<int> countUnreadEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<int> countReadEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<int> countDownloadedEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return _episodeStates.values
+        .where(
+          (state) =>
+              state.moduleKey == moduleKey &&
+              state.workId == workId &&
+              state.isDownloaded,
+        )
+        .length;
+  }
+
+  @override
+  Future<void> setWorksReadState({
+    required LibraryModuleKey moduleKey,
+    required Set<String> workIds,
+    required bool isRead,
+    DateTime? readAt,
+  }) async {}
+
+  @override
+  Future<void> purgeWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    _episodeStates.removeWhere(
+      (_, state) => state.moduleKey == moduleKey && state.workId == workId,
+    );
+  }
+
+  @override
+  Future<void> upsertDisplaySettings({
+    required LibraryModuleKey moduleKey,
+    required LibraryDisplayMode displayMode,
+    required int gridColumns,
+  }) async {}
+
+  @override
+  Future<LibraryModuleDisplaySettings> getDisplaySettings({
+    required LibraryModuleKey moduleKey,
+    required LibraryDisplayMode defaultDisplayMode,
+  }) async {
+    return LibraryModuleDisplaySettings(
+      moduleKey: moduleKey,
+      displayMode: defaultDisplayMode,
+      gridColumns: 3,
+      updatedAt: DateTime(2026, 6, 8),
+    );
+  }
+
+  @override
+  Future<String> createTag({required String name}) async => 'tag';
+
+  @override
+  Future<List<LibraryTag>> getTags() async => const <LibraryTag>[];
+
+  @override
+  Future<void> renameTag({required String tagId, required String newName}) async {}
+
+  @override
+  Future<void> deleteTag({required String tagId}) async {}
+
+  @override
+  Future<void> bindTagToWork({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    required String tagId,
+  }) async {}
+
+  @override
+  Future<void> unbindTagFromWork({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    required String tagId,
+  }) async {}
+
+  @override
+  Future<List<LibraryTag>> getWorkTags({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return const <LibraryTag>[];
+  }
+
+  @override
+  Future<bool> hasAnyTag({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    return false;
   }
 }
 
