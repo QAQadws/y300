@@ -1,3 +1,30 @@
+import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+
+export 'package:y300/features/composer_shared/domain/models/sticker_models.dart'
+    show StickerGroup, StickerItem;
+
+/// reply 模块仍然需要的"业务身份/提交载荷"类型保留在这里。
+///
+/// 通用模型（图片附件、表情、草稿身份、上传权限等）已经迁移到
+/// `features/composer_shared/domain/models`，这里通过 typedef 把旧类型名
+/// 映射到新位置，避免一次性改动所有调用方。Phase 2 会推进到子类化时再
+/// 把这些 typedef 收敛掉。
+
+// ── 通用模型的 re-export（来自 composer_shared，供 reply 旧代码继续调用）──
+typedef ReplyImageAttachment = ComposerImageAttachment;
+typedef ReplyImageAttachmentStatus = ComposerImageAttachmentStatus;
+typedef ReplyAttachRemain = ComposerAttachRemain;
+typedef ReplyImageUploadPermission = ComposerImageUploadPermission;
+typedef ReplyPickedImage = ComposerPickedImage;
+typedef ReplyLocalImageFile = ComposerLocalImageFile;
+typedef ReplyImageUploadResponse = ComposerImageUploadResponse;
+typedef ReplyUploadedImage = ComposerUploadedImage;
+typedef ReplyDraftIdentity = ComposerDraftIdentity;
+typedef ReplyDraftSnapshot = ComposerDraftSnapshot;
+
+// ── reply 专属模型 ─────────────────────────────────────────────────────────
+
 enum ReplyTargetKind {
   thread,
   post,
@@ -91,220 +118,10 @@ class ReplyPreparation {
   final String? subject;
 }
 
-class ReplyDraftIdentity {
-  const ReplyDraftIdentity.thread({
-    required this.fid,
-    required this.tid,
-  }) : repquote = null;
-
-  const ReplyDraftIdentity.post({
-    required this.fid,
-    required this.tid,
-    required this.repquote,
-  });
-
-  final String fid;
-  final String tid;
-  final String? repquote;
-
-  bool get isThreadReply => repquote == null || repquote!.trim().isEmpty;
-  bool get isPostReply => !isThreadReply;
-
-  String get storageKey {
-    if (isThreadReply) {
-      return 'thread:$fid:$tid';
-    }
-    return 'post:$fid:$tid:$repquote';
-  }
-}
-
-class ReplyDraftSnapshot {
-  const ReplyDraftSnapshot({
-    required this.identity,
-    required this.message,
-    required this.useSignature,
-    required this.updatedAt,
-    this.imageAttachments = const <ReplyImageAttachment>[],
-  });
-
-  final ReplyDraftIdentity identity;
-  final String message;
-  final bool useSignature;
-  final DateTime updatedAt;
-  final List<ReplyImageAttachment> imageAttachments;
-
-  bool get isEmpty => message.trim().isEmpty && imageAttachments.isEmpty;
-}
-
-enum ReplyImageAttachmentStatus {
-  local,
-  uploading,
-  uploaded,
-  failed,
-  expired,
-}
-
-class ReplyImageAttachment {
-  const ReplyImageAttachment({
-    required this.localId,
-    required this.localPath,
-    required this.fileName,
-    required this.mimeType,
-    required this.order,
-    required this.status,
-    this.aid,
-    this.uploadedAt,
-    this.errorMessage,
-    this.cachePath,
-  });
-
-  final String localId;
-  final String localPath;
-  final String fileName;
-  final String mimeType;
-  final int order;
-  final ReplyImageAttachmentStatus status;
-  final String? aid;
-  final DateTime? uploadedAt;
-  final String? errorMessage;
-  final String? cachePath;
-
-  bool get isUploaded => status == ReplyImageAttachmentStatus.uploaded;
-
-  bool get hasAid => aid != null && aid!.trim().isNotEmpty;
-
-  bool get canEnterSubmitPayload => isUploaded && hasAid;
-
-  String get previewPath {
-    final cached = cachePath;
-    if (cached != null && cached.trim().isNotEmpty) {
-      return cached;
-    }
-    return localPath;
-  }
-}
-
-class ReplyAttachRemain {
-  const ReplyAttachRemain({
-    required this.size,
-    required this.count,
-  });
-
-  final int size;
-  final int count;
-
-  bool get hasSizeRemain => size < 0 || size > 0;
-
-  bool get hasCountRemain => count < 0 || count > 0;
-}
-
-class ReplyImageUploadPermission {
-  const ReplyImageUploadPermission({
-    required this.uid,
-    required this.uploadHash,
-    required this.allowedExtensions,
-    required this.attachRemain,
-    this.username,
-    this.formHash,
-  });
-
-  final String uid;
-  final String uploadHash;
-  final Set<String> allowedExtensions;
-  final ReplyAttachRemain attachRemain;
-  final String? username;
-  final String? formHash;
-
-  bool canUploadExtension(String extension) {
-    final normalized = extension.trim().toLowerCase();
-    if (normalized.isEmpty) {
-      return false;
-    }
-    if (normalized.startsWith('.')) {
-      return allowedExtensions.contains(normalized.substring(1));
-    }
-    return allowedExtensions.contains(normalized);
-  }
-}
-
-class ReplyPickedImage {
-  const ReplyPickedImage({
-    required this.path,
-    required this.fileName,
-    required this.mimeType,
-    required this.originalIndex,
-  });
-
-  final String path;
-  final String fileName;
-  final String mimeType;
-  final int originalIndex;
-}
-
-class ReplyLocalImageFile {
-  const ReplyLocalImageFile({
-    required this.path,
-    required this.fileName,
-    required this.mimeType,
-  });
-
-  final String path;
-  final String fileName;
-  final String mimeType;
-}
-
-class ReplyImageUploadResponse {
-  const ReplyImageUploadResponse({
-    required this.aid,
-    required this.rawBody,
-    required this.statusCode,
-  });
-
-  final String aid;
-  final Object? rawBody;
-  final int? statusCode;
-}
-
-class ReplyUploadedImage {
-  const ReplyUploadedImage({
-    required this.localId,
-    required this.aid,
-    required this.uploadedAt,
-  });
-
-  final String localId;
-  final String aid;
-  final DateTime uploadedAt;
-}
-
 class ReplySubmissionResult {
   const ReplySubmissionResult({
     required this.message,
   });
 
   final String message;
-}
-
-class StickerGroup {
-  const StickerGroup({
-    required this.id,
-    required this.title,
-    required this.stickers,
-  });
-
-  final String id;
-  final String title;
-  final List<StickerItem> stickers;
-}
-
-class StickerItem {
-  const StickerItem({
-    required this.code,
-    required this.assetPath,
-    required this.rawCodePattern,
-  });
-
-  final String code;
-  final String assetPath;
-  final String rawCodePattern;
 }

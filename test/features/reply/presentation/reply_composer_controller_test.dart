@@ -3,13 +3,16 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/reply/data/reply_draft_repository.dart';
-import 'package:y300/features/reply/data/reply_image_picker.dart';
+import 'package:y300/features/composer_shared/data/composer_draft_repository.dart';
+import 'package:y300/features/composer_shared/data/composer_image_picker.dart';
+import 'package:y300/features/composer_shared/data/composer_providers.dart';
+import 'package:y300/features/composer_shared/data/composer_upload_notification_service.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
-import 'package:y300/features/reply/data/reply_upload_notification_service.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
-import 'package:y300/features/reply/domain/services/reply_image_upload_coordinator.dart';
 import 'package:y300/features/reply/presentation/reply_composer_controller.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 
@@ -132,7 +135,7 @@ void main() {
       );
       final uploadCoordinator = _FakeReplyImageUploadCoordinator(
         events: [
-          ReplyImageUploadEvent.uploaded(
+          ComposerImageUploadEvent.uploaded(
             localId: '',
             current: 1,
             total: 1,
@@ -142,7 +145,7 @@ void main() {
               uploadedAt: DateTime.utc(2026, 6, 8, 10),
             ),
           ),
-          const ReplyImageUploadEvent.completed(total: 1),
+          const ComposerImageUploadEvent.completed(total: 1),
         ],
       );
       final args = _threadArgs(tid: '572063');
@@ -566,12 +569,12 @@ void main() {
       );
       final uploadCoordinator = _FakeReplyImageUploadCoordinator(
         events: [
-          ReplyImageUploadEvent.started(
+          ComposerImageUploadEvent.started(
             localId: '',
             current: 1,
             total: 2,
           ),
-          ReplyImageUploadEvent.uploaded(
+          ComposerImageUploadEvent.uploaded(
             localId: '',
             current: 1,
             total: 2,
@@ -581,12 +584,12 @@ void main() {
               uploadedAt: DateTime.utc(2026, 6, 8),
             ),
           ),
-          ReplyImageUploadEvent.started(
+          ComposerImageUploadEvent.started(
             localId: '',
             current: 2,
             total: 2,
           ),
-          ReplyImageUploadEvent.uploaded(
+          ComposerImageUploadEvent.uploaded(
             localId: '',
             current: 2,
             total: 2,
@@ -596,7 +599,7 @@ void main() {
               uploadedAt: DateTime.utc(2026, 6, 8),
             ),
           ),
-          const ReplyImageUploadEvent.completed(total: 2),
+          const ComposerImageUploadEvent.completed(total: 2),
         ],
       );
       final args = _threadArgs(tid: '572063');
@@ -675,13 +678,13 @@ void main() {
       );
       final uploadCoordinator = _FakeReplyImageUploadCoordinator(
         events: [
-          ReplyImageUploadEvent.failed(
+          ComposerImageUploadEvent.failed(
             localId: '',
             current: 1,
             total: 2,
             errorMessage: '第一张失败',
           ),
-          ReplyImageUploadEvent.uploaded(
+          ComposerImageUploadEvent.uploaded(
             localId: '',
             current: 2,
             total: 2,
@@ -691,7 +694,7 @@ void main() {
               uploadedAt: DateTime.utc(2026, 6, 8),
             ),
           ),
-          const ReplyImageUploadEvent.completed(total: 2),
+          const ComposerImageUploadEvent.completed(total: 2),
         ],
       );
       final args = _threadArgs(tid: '572063');
@@ -735,7 +738,7 @@ void main() {
       );
       final uploadCoordinator = _FakeReplyImageUploadCoordinator(
         events: const [
-          ReplyImageUploadEvent.started(
+          ComposerImageUploadEvent.started(
             localId: '',
             current: 1,
             total: 1,
@@ -766,7 +769,7 @@ void main() {
 
     test('pickImages exposes picker error', () async {
       final imagePicker = _FakeReplyImagePicker(
-        error: const ReplyImagePickerException('failed'),
+        error: const ComposerImagePickerException('failed'),
       );
       final args = _threadArgs(tid: '572063');
       final container = _buildContainer(imagePicker: imagePicker);
@@ -1033,27 +1036,27 @@ ReplyComposerArgs _postArgs() {
 }
 
 ProviderContainer _buildContainer({
-  ReplyDraftRepository? draftRepository,
+  ComposerDraftRepository? draftRepository,
   ReplyRepository? replyRepository,
-  ReplyImagePicker? imagePicker,
-  ReplyImageUploadCoordinator? imageUploadCoordinator,
-  ReplyUploadNotificationService? uploadNotificationService,
+  ComposerImagePicker? imagePicker,
+  ComposerImageUploadCoordinator? imageUploadCoordinator,
+  ComposerUploadNotificationService? uploadNotificationService,
 }) {
   return ProviderContainer(
     overrides: [
-      replyDraftRepositoryProvider.overrideWithValue(
+      composerDraftRepositoryProvider.overrideWithValue(
         draftRepository ?? _MemoryReplyDraftRepository(),
       ),
       replyRepositoryProvider.overrideWithValue(
         replyRepository ?? _FakeReplyRepository(),
       ),
-      replyImagePickerProvider.overrideWithValue(
+      composerImagePickerProvider.overrideWithValue(
         imagePicker ?? _FakeReplyImagePicker(),
       ),
-      replyImageUploadCoordinatorProvider.overrideWithValue(
+      composerImageUploadCoordinatorProvider.overrideWithValue(
         imageUploadCoordinator ?? _FakeReplyImageUploadCoordinator(),
       ),
-      replyUploadNotificationServiceProvider.overrideWithValue(
+      composerUploadNotificationServiceProvider.overrideWithValue(
         uploadNotificationService ?? _FakeReplyUploadNotificationService(),
       ),
     ],
@@ -1076,18 +1079,19 @@ Future<void> _drainMicrotasks({int rounds = 4}) async {
   }
 }
 
-class _MemoryReplyDraftRepository implements ReplyDraftRepository {
-  final Map<String, ReplyDraftSnapshot> _drafts = <String, ReplyDraftSnapshot>{};
+class _MemoryReplyDraftRepository implements ComposerDraftRepository {
+  final Map<String, ComposerDraftSnapshot> _drafts =
+      <String, ComposerDraftSnapshot>{};
   bool throwOnPrune = false;
   int pruneCallCount = 0;
 
   @override
-  Future<void> deleteDraft(ReplyDraftIdentity identity) async {
+  Future<void> deleteDraft(ComposerDraftIdentity identity) async {
     _drafts.remove(identity.storageKey);
   }
 
   @override
-  Future<List<ReplyDraftSnapshot>> listDraftsForThread({
+  Future<List<ComposerDraftSnapshot>> listDraftsForThread({
     required String fid,
     required String tid,
   }) async {
@@ -1097,12 +1101,12 @@ class _MemoryReplyDraftRepository implements ReplyDraftRepository {
   }
 
   @override
-  Future<ReplyDraftSnapshot?> loadDraft(ReplyDraftIdentity identity) async {
+  Future<ComposerDraftSnapshot?> loadDraft(ComposerDraftIdentity identity) async {
     return _drafts[identity.storageKey];
   }
 
   @override
-  Future<ReplyDraftPruneResult> pruneDrafts({
+  Future<ComposerDraftPruneResult> pruneDrafts({
     Duration maxAge = const Duration(days: 30),
     int maxCount = 100,
   }) async {
@@ -1110,14 +1114,14 @@ class _MemoryReplyDraftRepository implements ReplyDraftRepository {
     if (throwOnPrune) {
       throw StateError('prune failed');
     }
-    return ReplyDraftPruneResult(
+    return ComposerDraftPruneResult(
       removedCount: 0,
       keptCount: _drafts.length,
     );
   }
 
   @override
-  Future<void> saveDraft(ReplyDraftSnapshot draft) async {
+  Future<void> saveDraft(ComposerDraftSnapshot draft) async {
     if (draft.isEmpty) {
       _drafts.remove(draft.identity.storageKey);
       return;
@@ -1126,18 +1130,18 @@ class _MemoryReplyDraftRepository implements ReplyDraftRepository {
   }
 }
 
-class _FakeReplyImagePicker implements ReplyImagePicker {
+class _FakeReplyImagePicker implements ComposerImagePicker {
   _FakeReplyImagePicker({
-    this.images = const <ReplyPickedImage>[],
+    this.images = const <ComposerPickedImage>[],
     this.error,
   });
 
-  final List<ReplyPickedImage> images;
-  final ReplyImagePickerException? error;
+  final List<ComposerPickedImage> images;
+  final ComposerImagePickerException? error;
   int pickCallCount = 0;
 
   @override
-  Future<List<ReplyPickedImage>> pickImagesInOrder() async {
+  Future<List<ComposerPickedImage>> pickImagesInOrder() async {
     pickCallCount += 1;
     final error = this.error;
     if (error != null) {
@@ -1147,13 +1151,13 @@ class _FakeReplyImagePicker implements ReplyImagePicker {
   }
 }
 
-class _FakeReplyImageUploadCoordinator implements ReplyImageUploadCoordinator {
+class _FakeReplyImageUploadCoordinator implements ComposerImageUploadCoordinator {
   _FakeReplyImageUploadCoordinator({
-    this.events = const <ReplyImageUploadEvent>[],
+    this.events = const <ComposerImageUploadEvent>[],
     this.holdUntil,
   });
 
-  final List<ReplyImageUploadEvent> events;
+  final List<ComposerImageUploadEvent> events;
   final Future<void>? holdUntil;
   bool cancelled = false;
 
@@ -1163,17 +1167,17 @@ class _FakeReplyImageUploadCoordinator implements ReplyImageUploadCoordinator {
   }
 
   @override
-  Stream<ReplyImageUploadEvent> uploadInOrder({
+  Stream<ComposerImageUploadEvent> uploadInOrder({
     required String fid,
-    required List<ReplyImageAttachment> attachments,
+    required List<ComposerImageAttachment> attachments,
   }) async* {
     for (var index = 0; index < events.length; index += 1) {
       if (cancelled) {
         return;
       }
       final event = events[index];
-      if (event.type == ReplyImageUploadEventType.completed) {
-        yield ReplyImageUploadEvent.completed(total: event.total);
+      if (event.type == ComposerImageUploadEventType.completed) {
+        yield ComposerImageUploadEvent.completed(total: event.total);
         continue;
       }
       final localId = event.localId.isNotEmpty
@@ -1189,39 +1193,39 @@ class _FakeReplyImageUploadCoordinator implements ReplyImageUploadCoordinator {
     }
   }
 
-  ReplyImageUploadEvent _eventWithLocalId(
-    ReplyImageUploadEvent event,
+  ComposerImageUploadEvent _eventWithLocalId(
+    ComposerImageUploadEvent event,
     String localId,
   ) {
     return switch (event.type) {
-      ReplyImageUploadEventType.started => ReplyImageUploadEvent.started(
+      ComposerImageUploadEventType.started => ComposerImageUploadEvent.started(
           localId: localId,
           current: event.current,
           total: event.total,
         ),
-      ReplyImageUploadEventType.progress => ReplyImageUploadEvent.progress(
+      ComposerImageUploadEventType.progress => ComposerImageUploadEvent.progress(
           localId: localId,
           current: event.current,
           total: event.total,
           progress: event.progress ?? 0,
         ),
-      ReplyImageUploadEventType.uploaded => ReplyImageUploadEvent.uploaded(
+      ComposerImageUploadEventType.uploaded => ComposerImageUploadEvent.uploaded(
           localId: localId,
           current: event.current,
           total: event.total,
-          uploadedImage: ReplyUploadedImage(
+          uploadedImage: ComposerUploadedImage(
             localId: localId,
             aid: event.uploadedImage!.aid,
             uploadedAt: event.uploadedImage!.uploadedAt,
           ),
         ),
-      ReplyImageUploadEventType.failed => ReplyImageUploadEvent.failed(
+      ComposerImageUploadEventType.failed => ComposerImageUploadEvent.failed(
           localId: localId,
           current: event.current,
           total: event.total,
           errorMessage: event.errorMessage ?? '上传失败',
         ),
-      ReplyImageUploadEventType.completed => ReplyImageUploadEvent.completed(
+      ComposerImageUploadEventType.completed => ComposerImageUploadEvent.completed(
           total: event.total,
         ),
     };
@@ -1229,7 +1233,7 @@ class _FakeReplyImageUploadCoordinator implements ReplyImageUploadCoordinator {
 }
 
 class _FakeReplyUploadNotificationService
-    implements ReplyUploadNotificationService {
+    implements ComposerUploadNotificationService {
   final List<String> calls = <String>[];
 
   @override

@@ -14,7 +14,7 @@ import 'package:y300/features/library_shared/presentation/selection/shelf_select
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/features/novel/presentation/novel_tab_page.dart';
-import 'package:y300/features/reply/data/reply_providers.dart';
+import 'package:y300/features/composer_shared/data/composer_providers.dart';
 
 final mainShellBackgroundTaskStarterProvider = Provider<Future<void> Function()>((ref) {
   return () => ref.read(comicSearchRefreshQueueServiceProvider).start();
@@ -36,7 +36,9 @@ final mainShellReplyDraftAttachmentMaintenanceStarterProvider =
     Provider<Future<void> Function()>((ref) {
   return () async {
     try {
-      await ref.read(replyDraftAttachmentMaintenanceServiceProvider).maintain();
+      await ref
+          .read(composerDraftAttachmentMaintenanceServiceProvider)
+          .maintain();
     } catch (_) {
       // 回复草稿附件维护是启动后的 best-effort 清理，失败不阻塞主壳。
     }

@@ -9,10 +9,12 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/forum_favorite_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
+import 'package:y300/features/composer_shared/data/composer_draft_repository.dart';
+import 'package:y300/features/composer_shared/data/composer_providers.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
-import 'package:y300/features/reply/data/reply_draft_repository.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
@@ -1407,7 +1409,7 @@ Widget _buildTestApp({
   ForumFavoriteRepository? favoriteRepository,
   ForumWebViewExternalLauncher? launcher,
   ReplyRepository? replyRepository,
-  ReplyDraftRepository? replyDraftRepository,
+  ComposerDraftRepository? replyDraftRepository,
 }) {
   return ProviderScope(
     overrides: [
@@ -1425,8 +1427,8 @@ Widget _buildTestApp({
       replyRepositoryProvider.overrideWithValue(
         replyRepository ?? _FakeReplyRepository(),
       ),
-      replyDraftRepositoryProvider.overrideWithValue(
-        replyDraftRepository ?? _MemoryReplyDraftRepository(),
+      composerDraftRepositoryProvider.overrideWithValue(
+        replyDraftRepository ?? _MemoryComposerDraftRepository(),
       ),
     ],
     child: const MaterialApp(home: ForumWebViewPage()),
@@ -1440,7 +1442,7 @@ Widget _buildRoutedTestApp({
   ForumFavoriteRepository? favoriteRepository,
   ForumWebViewExternalLauncher? launcher,
   ReplyRepository? replyRepository,
-  ReplyDraftRepository? replyDraftRepository,
+  ComposerDraftRepository? replyDraftRepository,
 }) {
   return ProviderScope(
     overrides: [
@@ -1458,8 +1460,8 @@ Widget _buildRoutedTestApp({
       replyRepositoryProvider.overrideWithValue(
         replyRepository ?? _FakeReplyRepository(),
       ),
-      replyDraftRepositoryProvider.overrideWithValue(
-        replyDraftRepository ?? _MemoryReplyDraftRepository(),
+      composerDraftRepositoryProvider.overrideWithValue(
+        replyDraftRepository ?? _MemoryComposerDraftRepository(),
       ),
     ],
     child: MaterialApp(
@@ -1650,16 +1652,16 @@ class _FakeForumWebViewExternalLauncher
   }
 }
 
-class _MemoryReplyDraftRepository implements ReplyDraftRepository {
-  final Map<String, ReplyDraftSnapshot> _drafts = <String, ReplyDraftSnapshot>{};
+class _MemoryComposerDraftRepository implements ComposerDraftRepository {
+  final Map<String, ComposerDraftSnapshot> _drafts = <String, ComposerDraftSnapshot>{};
 
   @override
-  Future<void> deleteDraft(ReplyDraftIdentity identity) async {
+  Future<void> deleteDraft(ComposerDraftIdentity identity) async {
     _drafts.remove(identity.storageKey);
   }
 
   @override
-  Future<List<ReplyDraftSnapshot>> listDraftsForThread({
+  Future<List<ComposerDraftSnapshot>> listDraftsForThread({
     required String fid,
     required String tid,
   }) async {
@@ -1669,23 +1671,23 @@ class _MemoryReplyDraftRepository implements ReplyDraftRepository {
   }
 
   @override
-  Future<ReplyDraftSnapshot?> loadDraft(ReplyDraftIdentity identity) async {
+  Future<ComposerDraftSnapshot?> loadDraft(ComposerDraftIdentity identity) async {
     return _drafts[identity.storageKey];
   }
 
   @override
-  Future<ReplyDraftPruneResult> pruneDrafts({
+  Future<ComposerDraftPruneResult> pruneDrafts({
     Duration maxAge = const Duration(days: 30),
     int maxCount = 100,
   }) async {
-    return ReplyDraftPruneResult(
+    return ComposerDraftPruneResult(
       removedCount: 0,
       keptCount: _drafts.length,
     );
   }
 
   @override
-  Future<void> saveDraft(ReplyDraftSnapshot draft) async {
+  Future<void> saveDraft(ComposerDraftSnapshot draft) async {
     if (draft.isEmpty) {
       _drafts.remove(draft.identity.storageKey);
       return;

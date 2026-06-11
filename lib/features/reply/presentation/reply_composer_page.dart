@@ -2,14 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/reply/data/reply_providers.dart';
+import 'package:y300/features/composer_shared/data/composer_providers.dart';
+import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/bbcode_preview_panel.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/sticker_picker_sheet.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
-import 'package:y300/features/reply/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/reply/presentation/reply_composer_controller.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
-import 'package:y300/features/reply/presentation/widgets/bbcode_preview_panel.dart';
 import 'package:y300/features/reply/presentation/widgets/reply_editor_toolbar.dart';
-import 'package:y300/features/reply/presentation/widgets/sticker_picker_sheet.dart';
 
 class ReplyComposerPage extends ConsumerStatefulWidget {
   const ReplyComposerPage({

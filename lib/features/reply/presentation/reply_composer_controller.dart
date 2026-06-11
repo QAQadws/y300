@@ -2,16 +2,17 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/reply/data/reply_draft_repository.dart';
-import 'package:y300/features/reply/data/reply_image_picker.dart';
+import 'package:y300/features/composer_shared/data/composer_draft_repository.dart';
+import 'package:y300/features/composer_shared/data/composer_image_picker.dart';
+import 'package:y300/features/composer_shared/data/composer_providers.dart';
+import 'package:y300/features/composer_shared/data/composer_upload_notification_service.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_service.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_draft_attachment_sanitizer.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_submission_error_presenter.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
-import 'package:y300/features/reply/data/reply_upload_notification_service.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
-import 'package:y300/features/reply/domain/services/reply_draft_attachment_sanitizer.dart';
-import 'package:y300/features/reply/domain/services/reply_attach_bbcode_service.dart';
-import 'package:y300/features/reply/domain/services/reply_image_upload_coordinator.dart';
-import 'package:y300/features/reply/domain/services/reply_submission_error_presenter.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 
 final replyComposerControllerProvider = AsyncNotifierProvider.autoDispose
@@ -26,29 +27,29 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
 
   final ReplyComposerArgs _args;
   Timer? _saveTimer;
-  ReplyDraftRepository? _draftRepository;
+  ComposerDraftRepository? _draftRepository;
   ReplyRepository? _replyRepository;
-  ReplySubmissionErrorPresenter? _errorPresenter;
-  ReplyImagePicker? _imagePicker;
-  ReplyImageUploadCoordinator? _imageUploadCoordinator;
-  ReplyUploadNotificationService? _uploadNotificationService;
-  ReplyAttachBbCodeService? _attachBbCodeService;
-  final ReplyDraftAttachmentSanitizer _draftAttachmentSanitizer =
-      const ReplyDraftAttachmentSanitizer();
+  ComposerSubmissionErrorPresenter? _errorPresenter;
+  ComposerImagePicker? _imagePicker;
+  ComposerImageUploadCoordinator? _imageUploadCoordinator;
+  ComposerUploadNotificationService? _uploadNotificationService;
+  ComposerAttachBbCodeService? _attachBbCodeService;
+  final ComposerDraftAttachmentSanitizer _draftAttachmentSanitizer =
+      const ComposerDraftAttachmentSanitizer();
   ReplyComposerState? _latestState;
-  StreamSubscription<ReplyImageUploadEvent>? _imageUploadSubscription;
+  StreamSubscription<ComposerImageUploadEvent>? _imageUploadSubscription;
   Set<String> _activeUploadLocalIds = const <String>{};
 
   @override
   FutureOr<ReplyComposerState> build() async {
-    _draftRepository = ref.read(replyDraftRepositoryProvider);
+    _draftRepository = ref.read(composerDraftRepositoryProvider);
     _replyRepository = ref.read(replyRepositoryProvider);
-    _errorPresenter = ref.read(replySubmissionErrorPresenterProvider);
-    _imagePicker = ref.read(replyImagePickerProvider);
-    _imageUploadCoordinator = ref.read(replyImageUploadCoordinatorProvider);
+    _errorPresenter = ref.read(composerSubmissionErrorPresenterProvider);
+    _imagePicker = ref.read(composerImagePickerProvider);
+    _imageUploadCoordinator = ref.read(composerImageUploadCoordinatorProvider);
     _uploadNotificationService =
-        ref.read(replyUploadNotificationServiceProvider);
-    _attachBbCodeService = ref.read(replyAttachBbCodeServiceProvider);
+        ref.read(composerUploadNotificationServiceProvider);
+    _attachBbCodeService = ref.read(composerAttachBbCodeServiceProvider);
     ref.onDispose(() {
       _saveTimer?.cancel();
       _imageUploadCoordinator?.cancel();
@@ -159,7 +160,7 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
         ),
       );
       _startImageUpload(attachments.skip(existingCount).toList(growable: false));
-    } on ReplyImagePickerException catch (_) {
+    } on ComposerImagePickerException catch (_) {
       final latest = state.value ?? current;
       _setDataState(
         latest.copyWith(imageUploadError: '选择图片失败，请重试'),
@@ -197,13 +198,13 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
     );
   }
 
-  void _handleImageUploadEvent(ReplyImageUploadEvent event) {
+  void _handleImageUploadEvent(ComposerImageUploadEvent event) {
     final current = state.value ?? _latestState;
     if (current == null) {
       return;
     }
     switch (event.type) {
-      case ReplyImageUploadEventType.started:
+      case ComposerImageUploadEventType.started:
         _setDataState(
           current.copyWith(
             imageAttachments: _replaceAttachmentStatus(
@@ -221,7 +222,7 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
           total: event.total,
         ));
         break;
-      case ReplyImageUploadEventType.progress:
+      case ComposerImageUploadEventType.progress:
         _setDataState(
           current.copyWith(
             isUploadingImages: true,
@@ -234,7 +235,7 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
           total: event.total,
         ));
         break;
-      case ReplyImageUploadEventType.uploaded:
+      case ComposerImageUploadEventType.uploaded:
         final uploadedImage = event.uploadedImage;
         if (uploadedImage == null) {
           return;
@@ -264,7 +265,7 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
           total: event.total,
         ));
         break;
-      case ReplyImageUploadEventType.failed:
+      case ComposerImageUploadEventType.failed:
         _setDataState(
           current.copyWith(
             imageAttachments: _replaceAttachmentStatus(
@@ -280,7 +281,7 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
           ),
         );
         break;
-      case ReplyImageUploadEventType.completed:
+      case ComposerImageUploadEventType.completed:
         final failedCount = (state.value ?? current)
             .imageAttachments
             .where(
@@ -557,7 +558,7 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
   }
 
   List<String> _resolveUploadedAttachmentAids(ReplyComposerState current) {
-    final service = _attachBbCodeService ?? const ReplyAttachBbCodeService();
+    final service = _attachBbCodeService ?? const ComposerAttachBbCodeService();
     final validAids = {
       for (final attachment in current.imageAttachments)
         if (attachment.canEnterSubmitPayload) attachment.aid!.trim(),
