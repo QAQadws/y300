@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_submission_error_presenter.dart';
 
 void main() {
@@ -64,6 +65,91 @@ void main() {
         ),
         '回复需要审核',
       );
+    });
+
+    group('newThread kind', () {
+      test('translates post_type_isnull to "请先选择" guidance', () {
+        expect(
+          presenter.present(
+            const ApiError(
+              type: ApiErrorType.business,
+              code: 'post_type_isnull',
+              message: '请选择主题分类',
+            ),
+            kind: ComposerKind.newThread,
+          ),
+          contains('请先选择'),
+        );
+      });
+
+      test('translates post_flood_ctrl to "发帖过于频繁"', () {
+        expect(
+          presenter.present(
+            const ApiError(
+              type: ApiErrorType.business,
+              code: 'post_flood_ctrl',
+              message: 'flood',
+            ),
+            kind: ComposerKind.newThread,
+          ),
+          contains('发帖过于频繁'),
+        );
+      });
+
+      test('translates postperm_login_nopermission to "请先登录或检查发帖权限"', () {
+        expect(
+          presenter.present(
+            const ApiError(
+              type: ApiErrorType.business,
+              code: 'postperm_login_nopermission',
+              message: 'no permission',
+            ),
+            kind: ComposerKind.newThread,
+          ),
+          contains('请先登录'),
+        );
+      });
+
+      test('uses 发帖 wording for permission errors detected via message text',
+          () {
+        expect(
+          presenter.present(
+            const ApiError(
+              type: ApiErrorType.business,
+              message: '没有权限',
+            ),
+            kind: ComposerKind.newThread,
+          ),
+          contains('无法发帖'),
+        );
+      });
+
+      test('uses 发帖 wording for credential errors', () {
+        expect(
+          presenter.present(
+            const ApiError(
+              type: ApiErrorType.business,
+              message: 'formhash error',
+            ),
+            kind: ComposerKind.newThread,
+          ),
+          contains('发帖凭证'),
+        );
+      });
+
+      test('seccode requires fallback to web', () {
+        expect(
+          presenter.present(
+            const ApiError(
+              type: ApiErrorType.business,
+              code: 'seccode_invalid',
+              message: 'seccode',
+            ),
+            kind: ComposerKind.newThread,
+          ),
+          contains('验证码'),
+        );
+      });
     });
   });
 }
