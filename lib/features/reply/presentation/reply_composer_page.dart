@@ -4,7 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/data/composer_providers.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
+import 'package:y300/features/composer_shared/presentation/controllers/composer_editor_mode.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/bbcode_preview_panel.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_image_attachment_queue.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_load_error_view.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_mode_switch.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_restored_draft_banner.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/sticker_picker_sheet.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_controller.dart';
@@ -98,8 +103,9 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
         ),
         body: asyncState.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => _ReplyComposerErrorView(
+          error: (error, _) => ComposerLoadErrorView(
             message: '加载草稿失败：$error',
+            textKey: const Key('reply-composer-load-error'),
           ),
           data: (state) => _ReplyComposerBody(
             state: state,
@@ -273,7 +279,7 @@ class _ReplyComposerBody extends StatelessWidget {
   final ForumBbCodeRenderer bbCodeRenderer;
   final List<StickerItem> stickers;
   final TextEditingController messageController;
-  final ValueChanged<ReplyComposerMode> onModeChanged;
+  final ValueChanged<ComposerEditorMode> onModeChanged;
   final ValueChanged<String> onMessageChanged;
   final ValueChanged<bool> onUseSignatureChanged;
   final VoidCallback onRetryPrepare;
@@ -293,7 +299,9 @@ class _ReplyComposerBody extends StatelessWidget {
             const SizedBox(height: 12),
           ],
           if (state.restoredDraft) ...[
-            const _RestoredDraftBanner(),
+            const ComposerRestoredDraftBanner(
+              textKey: Key('reply-composer-restored-draft-banner'),
+            ),
             const SizedBox(height: 12),
           ],
           if (state.imageUploadError != null &&
@@ -305,29 +313,11 @@ class _ReplyComposerBody extends StatelessWidget {
             ),
             const SizedBox(height: 12),
           ],
-          Align(
-            alignment: Alignment.centerLeft,
-            child: SegmentedButton<ReplyComposerMode>(
-              key: const Key('reply-composer-mode-switch'),
-              segments: const [
-                ButtonSegment<ReplyComposerMode>(
-                  value: ReplyComposerMode.source,
-                  label: Text('源码'),
-                  icon: Icon(Icons.edit_note),
-                ),
-                ButtonSegment<ReplyComposerMode>(
-                  value: ReplyComposerMode.preview,
-                  label: Text('预览'),
-                  icon: Icon(Icons.visibility),
-                ),
-              ],
-              selected: {state.mode},
-              onSelectionChanged: state.isSubmitting || state.isPreparing
-                  ? null
-                  : (selection) {
-                      onModeChanged(selection.single);
-                    },
-            ),
+          ComposerModeSwitch(
+            widgetKey: const Key('reply-composer-mode-switch'),
+            mode: state.mode,
+            onModeChanged: onModeChanged,
+            enabled: !state.isSubmitting && !state.isPreparing,
           ),
           const SizedBox(height: 12),
           ReplyEditorToolbar(
@@ -335,7 +325,7 @@ class _ReplyComposerBody extends StatelessWidget {
             onStickerPressed: onStickerPressed,
           ),
           const SizedBox(height: 12),
-          if (state.mode == ReplyComposerMode.source)
+          if (state.mode == ComposerEditorMode.source)
             TextField(
               key: const Key('reply-composer-message-input'),
               controller: messageController,
@@ -360,9 +350,18 @@ class _ReplyComposerBody extends StatelessWidget {
             ),
           if (state.imageAttachments.isNotEmpty) ...[
             const SizedBox(height: 12),
-            _ReplyImageAttachmentQueue(
-              state: state,
+            ComposerImageAttachmentQueue(
+              containerKey: const Key('reply-composer-image-queue'),
+              uploadCountKey: const Key('reply-composer-image-upload-count'),
+              uploadProgressKey:
+                  const Key('reply-composer-image-upload-progress'),
+              tileKeyBuilder: (attachment) => Key(
+                'reply-composer-image-attachment-${attachment.localId}',
+              ),
               attachments: state.imageAttachments,
+              isUploadingImages: state.isUploadingImages,
+              imageUploadCurrent: state.imageUploadCurrent,
+              imageUploadTotal: state.imageUploadTotal,
             ),
           ],
           const SizedBox(height: 12),
@@ -385,100 +384,6 @@ class _ReplyComposerBody extends StatelessWidget {
             ),
           ],
         ],
-      ),
-    );
-  }
-}
-
-class _ReplyImageAttachmentQueue extends StatelessWidget {
-  const _ReplyImageAttachmentQueue({
-    required this.state,
-    required this.attachments,
-  });
-
-  final ReplyComposerState state;
-  final List<ReplyImageAttachment> attachments;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      key: const Key('reply-composer-image-queue'),
-      decoration: BoxDecoration(
-        border: Border.all(color: colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-        color: colorScheme.surface,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (state.isUploadingImages) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Text(
-                '第 ${state.imageUploadCurrent}/${state.imageUploadTotal} 张',
-                key: const Key('reply-composer-image-upload-count'),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: LinearProgressIndicator(
-                key: const Key('reply-composer-image-upload-progress'),
-                value: state.imageUploadTotal > 0
-                    ? state.imageUploadCurrent / state.imageUploadTotal
-                    : null,
-              ),
-            ),
-          ],
-          for (final attachment in attachments)
-            ListTile(
-              key: Key(
-                'reply-composer-image-attachment-${attachment.localId}',
-              ),
-              leading: const Icon(Icons.image_outlined),
-              title: Text(attachment.fileName),
-              subtitle: Text(
-                '${attachment.mimeType} · ${_statusLabel(attachment)}',
-              ),
-              dense: true,
-            ),
-        ],
-      ),
-    );
-  }
-
-  String _statusLabel(ReplyImageAttachment attachment) {
-    return switch (attachment.status) {
-      ReplyImageAttachmentStatus.local => '等待上传',
-      ReplyImageAttachmentStatus.uploading => '上传中',
-      ReplyImageAttachmentStatus.uploaded => '已上传',
-      ReplyImageAttachmentStatus.failed =>
-        attachment.errorMessage?.trim().isNotEmpty == true
-            ? '上传失败：${attachment.errorMessage}'
-            : '上传失败',
-      ReplyImageAttachmentStatus.expired => '已过期',
-    };
-  }
-}
-
-class _RestoredDraftBanner extends StatelessWidget {
-  const _RestoredDraftBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(color: colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-        color: colorScheme.surface,
-      ),
-      child: const Padding(
-        padding: EdgeInsets.all(12),
-        child: Text(
-          '已恢复未发送草稿',
-          key: Key('reply-composer-restored-draft-banner'),
-        ),
       ),
     );
   }
@@ -574,28 +479,6 @@ class _ReplyReferenceStatus extends StatelessWidget {
           key: const Key('reply-composer-reference-banner'),
           maxLines: 3,
           overflow: TextOverflow.ellipsis,
-        ),
-      ),
-    );
-  }
-}
-
-class _ReplyComposerErrorView extends StatelessWidget {
-  const _ReplyComposerErrorView({
-    required this.message,
-  });
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(
-          message,
-          key: const Key('reply-composer-load-error'),
-          textAlign: TextAlign.center,
         ),
       ),
     );

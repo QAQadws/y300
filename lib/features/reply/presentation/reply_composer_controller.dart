@@ -2,14 +2,13 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/composer_shared/data/composer_draft_repository.dart';
-import 'package:y300/features/composer_shared/data/composer_image_picker.dart';
-import 'package:y300/features/composer_shared/data/composer_providers.dart';
-import 'package:y300/features/composer_shared/data/composer_upload_notification_service.dart';
-import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_service.dart';
-import 'package:y300/features/composer_shared/domain/services/composer_draft_attachment_sanitizer.dart';
-import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_submission_error_presenter.dart';
+import 'package:y300/features/composer_shared/data/composer_providers.dart';
+import 'package:y300/features/composer_shared/presentation/controllers/composer_controller_base.dart';
+import 'package:y300/features/composer_shared/presentation/controllers/composer_state_patch.dart';
+import 'package:y300/features/composer_shared/presentation/controllers/composer_submission_outcome.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
@@ -20,440 +19,129 @@ final replyComposerControllerProvider = AsyncNotifierProvider.autoDispose
       (args) => ReplyComposerController(args),
     );
 
-class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
+/// 回复编辑器控制器。Phase 2：通用流程下沉到 [ComposerControllerBase]，
+/// 这里只保留楼层引用准备 + reply 专属的 submit 调用。
+class ReplyComposerController
+    extends ComposerControllerBase<ReplyComposerState> {
   ReplyComposerController(this._args);
 
-  static const Duration _saveDebounce = Duration(milliseconds: 700);
-
   final ReplyComposerArgs _args;
-  Timer? _saveTimer;
-  ComposerDraftRepository? _draftRepository;
   ReplyRepository? _replyRepository;
   ComposerSubmissionErrorPresenter? _errorPresenter;
-  ComposerImagePicker? _imagePicker;
-  ComposerImageUploadCoordinator? _imageUploadCoordinator;
-  ComposerUploadNotificationService? _uploadNotificationService;
-  ComposerAttachBbCodeService? _attachBbCodeService;
-  final ComposerDraftAttachmentSanitizer _draftAttachmentSanitizer =
-      const ComposerDraftAttachmentSanitizer();
-  ReplyComposerState? _latestState;
-  StreamSubscription<ComposerImageUploadEvent>? _imageUploadSubscription;
-  Set<String> _activeUploadLocalIds = const <String>{};
 
   @override
+  ComposerDraftIdentity get draftIdentity => _args.identity;
+
+  @override
+  String get uploadFid => _args.target.fid;
+
+  @override
+  @override
   FutureOr<ReplyComposerState> build() async {
-    _draftRepository = ref.read(composerDraftRepositoryProvider);
     _replyRepository = ref.read(replyRepositoryProvider);
     _errorPresenter = ref.read(composerSubmissionErrorPresenterProvider);
-    _imagePicker = ref.read(composerImagePickerProvider);
-    _imageUploadCoordinator = ref.read(composerImageUploadCoordinatorProvider);
-    _uploadNotificationService =
-        ref.read(composerUploadNotificationServiceProvider);
-    _attachBbCodeService = ref.read(composerAttachBbCodeServiceProvider);
-    ref.onDispose(() {
-      _saveTimer?.cancel();
-      _imageUploadCoordinator?.cancel();
-      unawaited(_imageUploadSubscription?.cancel());
-      final current = _latestState;
-      if (current != null) {
-        unawaited(_saveSnapshot(current));
-      }
-    });
+    return super.build();
+  }
 
-    await _pruneDraftsIfNeeded();
-    final snapshot = await _draftRepository!.loadDraft(_args.identity);
-    final restoredDraft = snapshot != null && !snapshot.isEmpty;
-    final initialState = ReplyComposerState.initial(
+  @override
+  Future<ReplyComposerState> buildInitialState({
+    required ComposerDraftSnapshot? restoredDraft,
+  }) async {
+    return ReplyComposerState.initial(
       target: _args.target,
-      message: snapshot?.message ?? '',
-      useSignature: snapshot?.useSignature ?? true,
+      message: restoredDraft?.message ?? '',
+      useSignature: restoredDraft?.useSignature ?? true,
       isPreparing: _shouldPreparePostReply,
-      restoredDraft: restoredDraft,
+      restoredDraft: restoredDraft != null,
       imageAttachments:
-          snapshot?.imageAttachments ?? const <ReplyImageAttachment>[],
+          restoredDraft?.imageAttachments ?? const <ComposerImageAttachment>[],
     );
-    _latestState = initialState;
+  }
+
+  @override
+  void onAfterBuild(ReplyComposerState initial) {
     if (_shouldPreparePostReply) {
+      // 沿用回复页原有时序：用 microtask 把楼层引用准备推迟到 build 完成之后，
+      // 但仍然在调用方的下一个 await 间隙之前执行。
       unawaited(Future<void>.microtask(_preparePostReply));
     }
-    return initialState;
   }
 
-  void updateMessage(String value) {
-    final current = state.value;
-    if (current == null) {
-      return;
-    }
-    _setDataState(
-      current.copyWith(
-        message: value,
-        clearErrorMessage: true,
-      ),
-    );
-    _scheduleDraftSave();
-  }
-
-  void toggleUseSignature(bool value) {
-    final current = state.value;
-    if (current == null) {
-      return;
-    }
-    _setDataState(
-      current.copyWith(
-        useSignature: value,
-        clearErrorMessage: true,
-      ),
-    );
-    _scheduleDraftSave();
-  }
-
-  void switchMode(ReplyComposerMode mode) {
-    final current = state.value;
-    if (current == null || current.mode == mode) {
-      return;
-    }
-    _setDataState(current.copyWith(mode: mode));
-  }
-
-  Future<void> retryPreparePostReply() {
-    return _preparePostReply();
-  }
-
-  Future<void> pickImages() async {
-    final current = state.value;
-    if (current == null || !current.canPickImages) {
-      return;
-    }
-
-    try {
-      final pickedImages = await _imagePicker!.pickImagesInOrder();
-      if (pickedImages.isEmpty) {
-        return;
-      }
-      final latest = state.value ?? current;
-      if (!latest.canPickImages) {
-        return;
-      }
-      final baseTime = DateTime.now().microsecondsSinceEpoch;
-      final existingCount = latest.imageAttachments.length;
-      final sortedPickedImages = pickedImages.toList(growable: false)
-        ..sort((a, b) => a.originalIndex.compareTo(b.originalIndex));
-      final attachments = [
-        ...latest.imageAttachments,
-        for (var index = 0; index < sortedPickedImages.length; index += 1)
-          ReplyImageAttachment(
-            localId: 'picked-$baseTime-${existingCount + index}',
-            localPath: sortedPickedImages[index].path,
-            fileName: sortedPickedImages[index].fileName,
-            mimeType: sortedPickedImages[index].mimeType,
-            order: existingCount + index,
-            status: ReplyImageAttachmentStatus.local,
-          ),
-      ];
-      _setDataState(
-        latest.copyWith(
-          imageAttachments: attachments,
-          isUploadingImages: true,
-          imageUploadCurrent: 0,
-          imageUploadTotal: sortedPickedImages.length,
-          clearImageUploadError: true,
-        ),
-      );
-      _startImageUpload(attachments.skip(existingCount).toList(growable: false));
-    } on ComposerImagePickerException catch (_) {
-      final latest = state.value ?? current;
-      _setDataState(
-        latest.copyWith(imageUploadError: '选择图片失败，请重试'),
-      );
-    }
-  }
-
-  void _startImageUpload(List<ReplyImageAttachment> attachments) {
-    if (attachments.isEmpty) {
-      return;
-    }
-    unawaited(_imageUploadSubscription?.cancel());
-    _activeUploadLocalIds = attachments
-        .map((attachment) => attachment.localId)
-        .toSet();
-    final stream = _imageUploadCoordinator!.uploadInOrder(
-      fid: _args.target.fid,
-      attachments: attachments,
-    );
-    _imageUploadSubscription = stream.listen(
-      _handleImageUploadEvent,
-      onError: (Object error, StackTrace stackTrace) {
-        final current = state.value ?? _latestState;
-        if (current == null) {
-          return;
-        }
-        _activeUploadLocalIds = const <String>{};
-        _setDataState(
-          current.copyWith(
-            isUploadingImages: false,
-            imageUploadError: '图片上传失败，请重试',
-          ),
-        );
-      },
+  @override
+  ReplyComposerState applyPatch(
+    ReplyComposerState current,
+    ComposerStatePatch patch,
+  ) {
+    return current.copyWith(
+      message: patch.message,
+      useSignature: patch.useSignature,
+      isSubmitting: patch.isSubmitting,
+      mode: patch.mode,
+      restoredDraft: patch.restoredDraft,
+      imageAttachments: patch.imageAttachments,
+      isUploadingImages: patch.isUploadingImages,
+      imageUploadCurrent: patch.imageUploadCurrent,
+      imageUploadTotal: patch.imageUploadTotal,
+      errorMessage: patch.errorMessage,
+      imageUploadError: patch.imageUploadError,
+      clearErrorMessage: patch.clearErrorMessage,
+      clearImageUploadError: patch.clearImageUploadError,
     );
   }
 
-  void _handleImageUploadEvent(ComposerImageUploadEvent event) {
-    final current = state.value ?? _latestState;
-    if (current == null) {
-      return;
-    }
-    switch (event.type) {
-      case ComposerImageUploadEventType.started:
-        _setDataState(
-          current.copyWith(
-            imageAttachments: _replaceAttachmentStatus(
-              current.imageAttachments,
-              localId: event.localId,
-              status: ReplyImageAttachmentStatus.uploading,
-            ),
-            isUploadingImages: true,
-            imageUploadCurrent: event.current,
-            imageUploadTotal: event.total,
-          ),
-        );
-        unawaited(_uploadNotificationService?.showProgress(
-          current: event.current,
-          total: event.total,
-        ));
-        break;
-      case ComposerImageUploadEventType.progress:
-        _setDataState(
-          current.copyWith(
-            isUploadingImages: true,
-            imageUploadCurrent: event.current,
-            imageUploadTotal: event.total,
-          ),
-        );
-        unawaited(_uploadNotificationService?.showProgress(
-          current: event.current,
-          total: event.total,
-        ));
-        break;
-      case ComposerImageUploadEventType.uploaded:
-        final uploadedImage = event.uploadedImage;
-        if (uploadedImage == null) {
-          return;
-        }
-        final nextMessage = _attachBbCodeService!.appendAttachCodes(
-          current.message,
-          [uploadedImage.aid],
-        );
-        final nextState = current.copyWith(
-          message: nextMessage,
-          imageAttachments: _replaceAttachmentStatus(
-            current.imageAttachments,
-            localId: event.localId,
-            status: ReplyImageAttachmentStatus.uploaded,
-            aid: uploadedImage.aid,
-            uploadedAt: uploadedImage.uploadedAt,
-            clearErrorMessage: true,
-          ),
-          isUploadingImages: true,
-          imageUploadCurrent: event.current,
-          imageUploadTotal: event.total,
-        );
-        _setDataState(nextState);
-        _scheduleDraftSave();
-        unawaited(_uploadNotificationService?.showProgress(
-          current: event.current,
-          total: event.total,
-        ));
-        break;
-      case ComposerImageUploadEventType.failed:
-        _setDataState(
-          current.copyWith(
-            imageAttachments: _replaceAttachmentStatus(
-              current.imageAttachments,
-              localId: event.localId,
-              status: ReplyImageAttachmentStatus.failed,
-              errorMessage: event.errorMessage ?? '图片上传失败',
-            ),
-            isUploadingImages: true,
-            imageUploadCurrent: event.current,
-            imageUploadTotal: event.total,
-            imageUploadError: event.errorMessage ?? '图片上传失败，请重试',
-          ),
-        );
-        break;
-      case ComposerImageUploadEventType.completed:
-        final failedCount = (state.value ?? current)
-            .imageAttachments
-            .where(
-              (attachment) =>
-                  _activeUploadLocalIds.contains(attachment.localId) &&
-                  attachment.status == ReplyImageAttachmentStatus.failed,
-            )
-            .length;
-        _activeUploadLocalIds = const <String>{};
-        _setDataState(
-          current.copyWith(
-            isUploadingImages: false,
-            imageUploadCurrent: event.total,
-            imageUploadTotal: event.total,
-          ),
-        );
-        if (failedCount > 0) {
-          unawaited(_uploadNotificationService?.showFailure(
-            failedCount: failedCount,
-            total: event.total,
-          ));
-        } else {
-          unawaited(_uploadNotificationService?.clear());
-        }
-        break;
-    }
+  @override
+  bool canPickImages(ReplyComposerState state) {
+    return state.canPickImages;
   }
 
-  List<ReplyImageAttachment> _replaceAttachmentStatus(
-    List<ReplyImageAttachment> attachments, {
-    required String localId,
-    required ReplyImageAttachmentStatus status,
-    String? aid,
-    DateTime? uploadedAt,
-    String? errorMessage,
-    bool clearErrorMessage = false,
-  }) {
-    return [
-      for (final attachment in attachments)
-        if (attachment.localId == localId)
-          ReplyImageAttachment(
-            localId: attachment.localId,
-            localPath: attachment.localPath,
-            fileName: attachment.fileName,
-            mimeType: attachment.mimeType,
-            order: attachment.order,
-            status: status,
-            aid: aid ?? attachment.aid,
-            uploadedAt: uploadedAt ?? attachment.uploadedAt,
-            errorMessage: clearErrorMessage
-                ? null
-                : errorMessage ?? attachment.errorMessage,
-            cachePath: attachment.cachePath,
-          )
-        else
-          attachment,
-    ];
-  }
-
-  Future<void> flushDraft() async {
-    _saveTimer?.cancel();
-    _saveTimer = null;
-    final current = _latestState;
-    if (current == null) {
-      return;
+  @override
+  String? preflightValidate(ReplyComposerState state) {
+    if (state.message.trim().isEmpty) {
+      return '请输入回复内容';
     }
-    await _saveSnapshot(current);
-  }
-
-  Future<void> discardDraft() async {
-    _saveTimer?.cancel();
-    _saveTimer = null;
-    await _draftRepository?.deleteDraft(_args.identity);
-  }
-
-  Future<ReplyComposerResult> submit() async {
-    final stateValue = state.value;
-    if (stateValue == null || stateValue.isSubmitting) {
-      return const ReplyComposerResult(sent: false, message: '');
-    }
-    _saveTimer?.cancel();
-    _saveTimer = null;
-    _setDataState(
-      stateValue.copyWith(
-        isSubmitting: true,
-        clearErrorMessage: true,
-      ),
-    );
-
-    final current = await _sanitizeCurrentStateBeforeSubmit(
-      stateValue.copyWith(
-        isSubmitting: true,
-        clearErrorMessage: true,
-      ),
-    );
-    final message = current.message.trim();
-    if (message.isEmpty) {
-      _setDataState(
-        current.copyWith(
-          isSubmitting: false,
-          errorMessage: '请输入回复内容',
-        ),
-      );
-      return const ReplyComposerResult(sent: false, message: '请输入回复内容');
-    }
-
-    final preparation = current.preparation;
     final missingPostReference =
-        current.target.isPostReply &&
-        (current.isPreparing || preparation == null);
+        state.target.isPostReply &&
+        (state.isPreparing || state.preparation == null);
     if (missingPostReference) {
-      _setDataState(
-        current.copyWith(
-          isSubmitting: false,
-          errorMessage: '楼层回复引用准备失败，请重试',
-        ),
-      );
-      return const ReplyComposerResult(
-        sent: false,
-        message: '楼层回复引用准备失败，请重试',
-      );
+      return '楼层回复引用准备失败，请重试';
     }
+    return null;
+  }
 
-    final reference = preparation?.reference;
-    final uploadedAttachmentAids = _resolveUploadedAttachmentAids(current);
+  @override
+  Future<ComposerSubmissionOutcome> performSubmit({
+    required ReplyComposerState state,
+    required List<String> uploadedAids,
+  }) async {
+    final reference = state.preparation?.reference;
     final result = await _replyRepository!.sendReply(
       draft: ReplyDraft(
-        fid: current.target.fid,
-        tid: current.target.tid,
-        message: message,
-        useSignature: current.useSignature,
+        fid: state.target.fid,
+        tid: state.target.tid,
+        message: state.message.trim(),
+        useSignature: state.useSignature,
         formHash: reference?.formHash,
         repPid: reference?.repPid,
         repPost: reference?.repPost,
         noticeAuthor: reference?.noticeAuthor,
         noticeTrimStr: reference?.noticeTrimStr,
         noticeAuthorMsg: reference?.noticeAuthorMsg,
-        uploadedAttachmentAids: uploadedAttachmentAids,
+        uploadedAttachmentAids: uploadedAids,
       ),
     );
-    final afterSubmit = state.value ?? current;
-
     if (result case ApiSuccess<ReplySubmissionResult>(:final data)) {
-      await discardDraft();
-      _setDataState(
-        afterSubmit.copyWith(
-          isSubmitting: false,
-          message: '',
-          imageAttachments: const <ReplyImageAttachment>[],
-          clearErrorMessage: true,
-        ),
-      );
-      return ReplyComposerResult.sent(
-        data.message.isEmpty ? '回复成功' : data.message,
+      return ComposerSubmissionOutcome.success(
+        message: data.message.isEmpty ? '回复成功' : data.message,
       );
     }
-
     final error = (result as ApiFailure<ReplySubmissionResult>).error;
     final errorMessage = _errorPresenter?.present(error) ?? error.message;
-    _setDataState(
-      afterSubmit.copyWith(
-        isSubmitting: false,
-        errorMessage: errorMessage,
-      ),
-    );
-    await _saveSnapshot(afterSubmit.copyWith(isSubmitting: false));
-    return ReplyComposerResult(sent: false, message: errorMessage);
+    return ComposerSubmissionOutcome.failure(errorMessage: errorMessage);
   }
 
-  void _setDataState(ReplyComposerState value) {
-    _latestState = value;
-    state = AsyncData(value);
+  /// 楼层引用准备：reply 专属流程，发帖页不会用到。
+  Future<void> retryPreparePostReply() {
+    return _preparePostReply();
   }
 
   bool get _shouldPreparePostReply {
@@ -465,9 +153,9 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
     if (replyFormUri == null || !_args.target.isPostReply) {
       return;
     }
-    final current = state.value ?? _latestState;
+    final current = state.value ?? latestState;
     if (current != null) {
-      _setDataState(
+      _setReplyState(
         current.copyWith(
           isPreparing: true,
           clearPreparation: true,
@@ -480,12 +168,12 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
     final result = await _replyRepository!.preparePostReply(
       replyFormUri: replyFormUri,
     );
-    final latest = state.value ?? _latestState;
+    final latest = state.value ?? latestState;
     if (latest == null) {
       return;
     }
     if (result case ApiSuccess<ReplyPreparation>(:final data)) {
-      _setDataState(
+      _setReplyState(
         latest.copyWith(
           isPreparing: false,
           preparation: data,
@@ -495,7 +183,7 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
       return;
     }
     final error = (result as ApiFailure<ReplyPreparation>).error;
-    _setDataState(
+    _setReplyState(
       latest.copyWith(
         isPreparing: false,
         preparationError: error.message,
@@ -504,77 +192,20 @@ class ReplyComposerController extends AsyncNotifier<ReplyComposerState> {
     );
   }
 
-  Future<void> _pruneDraftsIfNeeded() async {
-    try {
-      await _draftRepository?.pruneDrafts();
-    } catch (_) {
-      // 草稿清理失败不阻断回复页加载，后续保存会继续覆盖当前草稿。
-    }
+  /// reply 专属字段（preparation / preparationError）走自己的 setter，
+  /// 不经过 [ComposerStatePatch]，避免污染基类抽象。
+  void _setReplyState(ReplyComposerState value) {
+    setStateValue(value);
   }
 
-  void _scheduleDraftSave() {
-    _saveTimer?.cancel();
-    _saveTimer = Timer(_saveDebounce, () {
-      unawaited(flushDraft());
-    });
+  /// 兼容旧调用点：基类 [submit] 返回 [ComposerSubmitInvocationResult]，
+  /// reply 这里把它窄化为 [ReplyComposerResult]，旧页面/测试不需要改签名。
+  @override
+  Future<ReplyComposerResult> submit() async {
+    final result = await super.submit();
+    return ReplyComposerResult.fromInvocation(result);
   }
 
-  Future<void> _saveSnapshot(ReplyComposerState value) async {
-    try {
-      await _draftRepository?.saveDraft(
-        ReplyDraftSnapshot(
-          identity: _args.identity,
-          message: value.message,
-          useSignature: value.useSignature,
-          updatedAt: DateTime.now(),
-          imageAttachments: value.imageAttachments,
-        ),
-      );
-    } catch (_) {
-      // 草稿保存失败不阻断编辑或发送；用户仍可继续完成当前回复。
-    }
-  }
-
-  Future<ReplyComposerState> _sanitizeCurrentStateBeforeSubmit(
-    ReplyComposerState current,
-  ) async {
-    final result = _draftAttachmentSanitizer.sanitize(
-      message: current.message,
-      imageAttachments: current.imageAttachments,
-      now: DateTime.now(),
-    );
-    if (!result.changed) {
-      return current;
-    }
-
-    final sanitizedState = current.copyWith(
-      message: result.message,
-      imageAttachments: result.imageAttachments,
-      clearImageUploadError: true,
-    );
-    _setDataState(sanitizedState);
-    await _saveSnapshot(sanitizedState);
-    return sanitizedState;
-  }
-
-  List<String> _resolveUploadedAttachmentAids(ReplyComposerState current) {
-    final service = _attachBbCodeService ?? const ComposerAttachBbCodeService();
-    final validAids = {
-      for (final attachment in current.imageAttachments)
-        if (attachment.canEnterSubmitPayload) attachment.aid!.trim(),
-    };
-    if (validAids.isEmpty) {
-      return const <String>[];
-    }
-
-    final seen = <String>{};
-    final resolved = <String>[];
-    for (final aid in service.extractAttachAids(current.message)) {
-      if (!validAids.contains(aid) || !seen.add(aid)) {
-        continue;
-      }
-      resolved.add(aid);
-    }
-    return resolved;
-  }
+  /// 历史方法名，仍然可用，等同于 [submit]。
+  Future<ReplyComposerResult> submitReply() => submit();
 }

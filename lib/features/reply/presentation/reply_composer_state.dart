@@ -1,9 +1,11 @@
+import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/presentation/controllers/composer_editor_mode.dart';
+import 'package:y300/features/composer_shared/presentation/controllers/composer_state_base.dart';
+import 'package:y300/features/composer_shared/presentation/controllers/composer_submission_outcome.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 
-enum ReplyComposerMode {
-  source,
-  preview,
-}
+/// reply 沿用的"源码 / 预览"模式枚举别名，避免一次性改动所有调用点。
+typedef ReplyComposerMode = ComposerEditorMode;
 
 class ReplyComposerArgs {
   const ReplyComposerArgs({
@@ -58,33 +60,33 @@ class ReplyComposerArgs {
       );
 }
 
-class ReplyComposerState {
+class ReplyComposerState extends ComposerStateBase {
   const ReplyComposerState({
     required this.target,
-    required this.message,
-    required this.useSignature,
-    required this.isSubmitting,
-    required this.mode,
+    required super.message,
+    required super.useSignature,
+    required super.isSubmitting,
+    required super.mode,
     required this.isPreparing,
-    required this.restoredDraft,
-    required this.imageAttachments,
-    required this.isUploadingImages,
-    required this.imageUploadCurrent,
-    required this.imageUploadTotal,
+    required super.restoredDraft,
+    required super.imageAttachments,
+    required super.isUploadingImages,
+    required super.imageUploadCurrent,
+    required super.imageUploadTotal,
     this.preparation,
     this.preparationError,
-    this.errorMessage,
-    this.imageUploadError,
+    super.errorMessage,
+    super.imageUploadError,
   });
 
   factory ReplyComposerState.initial({
     required ReplyTarget target,
     String message = '',
     bool useSignature = true,
-    ReplyComposerMode mode = ReplyComposerMode.source,
+    ComposerEditorMode mode = ComposerEditorMode.source,
     bool isPreparing = false,
     bool restoredDraft = false,
-    List<ReplyImageAttachment> imageAttachments = const [],
+    List<ComposerImageAttachment> imageAttachments = const [],
     bool isUploadingImages = false,
     int imageUploadCurrent = 0,
     int imageUploadTotal = 0,
@@ -109,20 +111,9 @@ class ReplyComposerState {
   }
 
   final ReplyTarget target;
-  final String message;
-  final bool useSignature;
-  final bool isSubmitting;
-  final ReplyComposerMode mode;
   final bool isPreparing;
-  final bool restoredDraft;
-  final List<ReplyImageAttachment> imageAttachments;
-  final bool isUploadingImages;
-  final int imageUploadCurrent;
-  final int imageUploadTotal;
   final ReplyPreparation? preparation;
   final String? preparationError;
-  final String? errorMessage;
-  final String? imageUploadError;
 
   bool get canPickImages => !isSubmitting && !isPreparing && !isUploadingImages;
 
@@ -140,10 +131,10 @@ class ReplyComposerState {
     String? message,
     bool? useSignature,
     bool? isSubmitting,
-    ReplyComposerMode? mode,
+    ComposerEditorMode? mode,
     bool? isPreparing,
     bool? restoredDraft,
-    List<ReplyImageAttachment>? imageAttachments,
+    List<ComposerImageAttachment>? imageAttachments,
     bool? isUploadingImages,
     int? imageUploadCurrent,
     int? imageUploadTotal,
@@ -179,15 +170,21 @@ class ReplyComposerState {
   }
 }
 
-class ReplyComposerResult {
+class ReplyComposerResult extends ComposerSubmitInvocationResult {
   const ReplyComposerResult({
-    required this.sent,
-    required this.message,
+    required super.sent,
+    required super.message,
   });
 
   const ReplyComposerResult.sent(String message)
       : this(sent: true, message: message);
 
-  final bool sent;
-  final String message;
+  factory ReplyComposerResult.fromInvocation(
+    ComposerSubmitInvocationResult invocation,
+  ) {
+    return ReplyComposerResult(
+      sent: invocation.sent,
+      message: invocation.message,
+    );
+  }
 }
