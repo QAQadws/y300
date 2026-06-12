@@ -12,6 +12,7 @@ import 'package:y300/features/forum/domain/services/forum_webview_early_script_b
 import 'package:y300/features/forum/domain/services/forum_webview_navigation_header_builder.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_network_policy_resolver.dart';
+import 'package:y300/features/forum/domain/services/forum_webview_post_navigator.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_reply_navigator.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_script_injector.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_thread_menu_bridge.dart';
@@ -22,6 +23,9 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_external_
 import 'package:y300/features/forum/presentation/webview/forum_webview_resource_diagnostic_recorder.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_state.dart';
 import 'package:y300/features/forum/presentation/webview/runtime/forum_webview_loading_mask.dart';
+import 'package:y300/features/posting/domain/models/posting_target.dart';
+import 'package:y300/features/posting/presentation/posting_composer_page.dart';
+import 'package:y300/features/posting/presentation/posting_composer_state.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
@@ -365,6 +369,12 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       unawaited(_openPostReplyComposer(context, postReplyRequest));
       return ForumWebViewNavigationDecision.prevent;
     }
+    final newThreadRequest =
+        ref.read(forumWebViewPostNavigatorProvider).resolveNewThread(url);
+    if (newThreadRequest != null) {
+      unawaited(_openPostingComposer(context, newThreadRequest));
+      return ForumWebViewNavigationDecision.prevent;
+    }
     if (navigator.isManagedSite(uri)) {
       return ForumWebViewNavigationDecision.navigate;
     }
@@ -665,6 +675,42 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         result.message.trim().isEmpty ? '回复成功' : result.message,
       );
     }
+    await driver.reload();
+  }
+
+  Future<void> _openPostingComposer(
+    BuildContext context,
+    ForumWebViewPostRequest request,
+  ) async {
+    if (!mounted) {
+      return;
+    }
+    final driver = ref.read(forumWebViewDriverProvider);
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final result = await navigator.push<PostingComposerResult>(
+      MaterialPageRoute<PostingComposerResult>(
+        builder: (_) => PostingComposerPage(
+          args: PostingComposerArgs(
+            target: PostingTarget(
+              fid: request.fid,
+              sourceUri: request.sourceUri,
+            ),
+          ),
+        ),
+      ),
+    );
+    if (!mounted || result == null || !result.sent) {
+      return;
+    }
+    if (messenger != null) {
+      _showSnackBar(
+        messenger,
+        result.message.trim().isEmpty ? '发布成功' : result.message,
+      );
+    }
+    // 方案 §4.2 本期保持简单：仅刷新当前 WebView。新帖 tid 已经在
+    // PostingComposerResult.tid 里，可以在 Phase 7 改成 navigate 到该 tid。
     await driver.reload();
   }
 

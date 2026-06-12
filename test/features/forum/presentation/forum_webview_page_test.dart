@@ -15,6 +15,10 @@ import 'package:y300/features/composer_shared/domain/models/composer_draft_model
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
+import 'package:y300/features/posting/data/new_thread_repository.dart';
+import 'package:y300/features/posting/data/posting_form_metadata_repository.dart';
+import 'package:y300/features/posting/data/posting_providers.dart';
+import 'package:y300/features/posting/domain/models/posting_models.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
@@ -964,6 +968,97 @@ void main() {
     expect(driver.reloadCallCount, 1);
   });
 
+  testWidgets(
+    'ForumWebViewPage intercepts newthread navigation and reloads after sent',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '主题标题';
+      final newThreadRepository = _FakeNewThreadRepository();
+      final metadataRepository = _FakePostingFormMetadataRepository(
+        metadata: const NewThreadFormMetadata(
+          fid: '33',
+          forumName: '日常版',
+          formHash: 'fh',
+          threadTypes: <ThreadType>[],
+          threadSorts: <ThreadSort>[],
+          typeRequired: false,
+          sortRequired: false,
+        ),
+      );
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          driver: driver,
+          newThreadRepository: newThreadRepository,
+          postingFormMetadataRepository: metadataRepository,
+        ),
+      );
+      await tester.pump();
+
+      // WebView 拦截到形如 forum.php?mod=post&action=newthread&fid=33&mobile=2 的 URL，
+      // 应该 prevent 并打开自制发帖页。`&amp;` HTML 转义场景同时覆盖。
+      final decision = await driver.dispatchNavigationRequest(
+        'https://bbs.yamibo.com/forum.php?mod=post&amp;action=newthread'
+        '&amp;fid=33&amp;mobile=2',
+      );
+      await tester.pumpAndSettle();
+
+      expect(decision, ForumWebViewNavigationDecision.prevent);
+      expect(find.text('发帖 — 日常版'), findsOneWidget);
+      expect(metadataRepository.callCount, 1);
+
+      await tester.enterText(
+        find.byKey(const Key('posting-composer-subject-input')),
+        '来自 WebView 的标题',
+      );
+      await tester.enterText(
+        find.byKey(const Key('posting-composer-message-input')),
+        '来自 WebView 的正文',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('posting-composer-send-button')));
+      await tester.pumpAndSettle();
+
+      expect(newThreadRepository.submittedPayloads, hasLength(1));
+      expect(
+        newThreadRepository.submittedPayloads.single.fid,
+        '33',
+      );
+      expect(
+        newThreadRepository.submittedPayloads.single.subject,
+        '来自 WebView 的标题',
+      );
+      expect(
+        newThreadRepository.submittedPayloads.single.message,
+        '来自 WebView 的正文',
+      );
+      expect(
+        newThreadRepository.submittedPayloads.single.formHash,
+        'fh',
+      );
+      // 提交成功 → SnackBar + WebView reload。
+      expect(driver.reloadCallCount, 1);
+      expect(find.text('发布成功'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'ForumWebViewPage does not intercept reply newthread without fid',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '论坛首页';
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
+
+      // mod=post & action=newthread 但 fid 为空 → navigator 返回 null，
+      // 当前是站内 URL 应该回退到 navigate（让 WebView 自己渲染兜底）。
+      final decision = await driver.dispatchNavigationRequest(
+        'https://bbs.yamibo.com/forum.php?mod=post&action=newthread',
+      );
+
+      expect(decision, ForumWebViewNavigationDecision.navigate);
+      expect(find.text('发帖 — 日常版'), findsNothing);
+    },
+  );
+
   testWidgets('ForumWebViewPage thread detail more menu shows author order and home actions', (
     tester,
   ) async {
@@ -1410,6 +1505,8 @@ Widget _buildTestApp({
   ForumWebViewExternalLauncher? launcher,
   ReplyRepository? replyRepository,
   ComposerDraftRepository? replyDraftRepository,
+  PostingFormMetadataRepository? postingFormMetadataRepository,
+  NewThreadRepository? newThreadRepository,
 }) {
   return ProviderScope(
     overrides: [
@@ -1429,6 +1526,12 @@ Widget _buildTestApp({
       ),
       composerDraftRepositoryProvider.overrideWithValue(
         replyDraftRepository ?? _MemoryComposerDraftRepository(),
+      ),
+      postingFormMetadataRepositoryProvider.overrideWithValue(
+        postingFormMetadataRepository ?? _FakePostingFormMetadataRepository(),
+      ),
+      newThreadRepositoryProvider.overrideWithValue(
+        newThreadRepository ?? _FakeNewThreadRepository(),
       ),
     ],
     child: const MaterialApp(home: ForumWebViewPage()),
@@ -1443,6 +1546,8 @@ Widget _buildRoutedTestApp({
   ForumWebViewExternalLauncher? launcher,
   ReplyRepository? replyRepository,
   ComposerDraftRepository? replyDraftRepository,
+  PostingFormMetadataRepository? postingFormMetadataRepository,
+  NewThreadRepository? newThreadRepository,
 }) {
   return ProviderScope(
     overrides: [
@@ -1462,6 +1567,12 @@ Widget _buildRoutedTestApp({
       ),
       composerDraftRepositoryProvider.overrideWithValue(
         replyDraftRepository ?? _MemoryComposerDraftRepository(),
+      ),
+      postingFormMetadataRepositoryProvider.overrideWithValue(
+        postingFormMetadataRepository ?? _FakePostingFormMetadataRepository(),
+      ),
+      newThreadRepositoryProvider.overrideWithValue(
+        newThreadRepository ?? _FakeNewThreadRepository(),
       ),
     ],
     child: MaterialApp(
@@ -1892,5 +2003,56 @@ class _FakeForumFavoriteRepository implements ForumFavoriteRepository {
           .toList();
     }
     return result;
+  }
+}
+
+class _FakePostingFormMetadataRepository
+    implements PostingFormMetadataRepository {
+  _FakePostingFormMetadataRepository({this.metadata});
+
+  final NewThreadFormMetadata? metadata;
+  int callCount = 0;
+
+  @override
+  Future<ApiResult<NewThreadFormMetadata>> getFormMetadata({
+    required String fid,
+  }) async {
+    callCount += 1;
+    final value = metadata ??
+        NewThreadFormMetadata(
+          fid: fid,
+          forumName: '集成测试版块',
+          formHash: 'fh-int',
+          threadTypes: const <ThreadType>[],
+          threadSorts: const <ThreadSort>[],
+          typeRequired: false,
+          sortRequired: false,
+        );
+    return ApiSuccess<NewThreadFormMetadata>(value);
+  }
+}
+
+class _FakeNewThreadRepository implements NewThreadRepository {
+  _FakeNewThreadRepository({
+    ApiResult<NewThreadSubmissionResult>? result,
+  }) : _result = result ??
+            const ApiSuccess<NewThreadSubmissionResult>(
+              NewThreadSubmissionResult(
+                tid: '900001',
+                pid: '910001',
+                message: '发布成功',
+              ),
+            );
+
+  final ApiResult<NewThreadSubmissionResult> _result;
+  final List<NewThreadDraftPayload> submittedPayloads =
+      <NewThreadDraftPayload>[];
+
+  @override
+  Future<ApiResult<NewThreadSubmissionResult>> submit({
+    required NewThreadDraftPayload payload,
+  }) async {
+    submittedPayloads.add(payload);
+    return _result;
   }
 }
