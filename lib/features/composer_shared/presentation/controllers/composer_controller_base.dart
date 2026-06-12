@@ -117,6 +117,19 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
   /// （例如 reply 的楼层引用准备）。默认 no-op。
   void onAfterBuild(TState initial) {}
 
+  /// 子类钩子：草稿落盘时把当前 state 中的"标题"返回。
+  /// reply 一直是空字符串；posting 返回主题标题。
+  String draftSubjectFor(TState value) => '';
+
+  /// 子类钩子：草稿落盘时把当前 state 中的"额外 KV"返回。
+  /// reply 一直是空 map；posting 把 typeid / 选项等放进去。
+  Map<String, String> draftExtrasFor(TState value) =>
+      const <String, String>{};
+
+  /// 子类钩子：提交成功后基类已经清空 message / 附件，子类可以在此把
+  /// 业务专属字段（如发帖标题、所选分类）也重置到"空白"。默认 no-op。
+  TState resetAfterSuccess(TState value) => value;
+
 
   // ── 通用 mutators ─────────────────────────────────────────────
   void updateMessage(String value) {
@@ -193,6 +206,8 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
         ComposerDraftSnapshot(
           identity: draftIdentity,
           message: value.message,
+          subject: draftSubjectFor(value),
+          extras: draftExtrasFor(value),
           useSignature: value.useSignature,
           updatedAt: DateTime.now(),
           imageAttachments: value.imageAttachments,
@@ -481,7 +496,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
 
     if (outcome.success) {
       await discardDraft();
-      _setDataState(applyPatch(
+      final reset = applyPatch(
         afterSubmit,
         ComposerStatePatch(
           isSubmitting: false,
@@ -489,7 +504,8 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
           imageAttachments: const <ComposerImageAttachment>[],
           clearErrorMessage: true,
         ),
-      ));
+      );
+      _setDataState(resetAfterSuccess(reset));
       return ComposerSubmitInvocationResult.sent(
         outcome.successMessage ?? '',
       );

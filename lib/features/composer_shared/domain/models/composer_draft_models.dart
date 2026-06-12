@@ -1,41 +1,97 @@
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 
-/// 草稿身份。Phase 1 复用既有 reply 草稿的命名规则
-/// （`thread:fid:tid` / `post:fid:tid:repquote`），
-/// 后续阶段会扩展为统一的 `ComposerScope`，目前先保持线协议兼容。
+/// 草稿身份。
+///
+/// Phase 1 沿用既有 reply 草稿的命名规则
+/// （`thread:fid:tid` / `post:fid:tid:repquote`），Phase 4 在此基础上扩展出
+/// `newthread:fid` 形态来承载发帖草稿。三种身份共用同一份持久化层，
+/// 避免后续再做"发帖与回复草稿存储分裂"的迁移工作。
 class ComposerDraftIdentity {
-  const ComposerDraftIdentity.thread({
+  const ComposerDraftIdentity._({
+    required this.kind,
     required this.fid,
-    required this.tid,
-  }) : repquote = null;
-
-  const ComposerDraftIdentity.post({
-    required this.fid,
-    required this.tid,
-    required this.repquote,
+    this.tid,
+    this.repquote,
   });
 
+  const ComposerDraftIdentity.thread({
+    required String fid,
+    required String tid,
+  }) : this._(kind: ComposerDraftKind.threadReply, fid: fid, tid: tid);
+
+  const ComposerDraftIdentity.post({
+    required String fid,
+    required String tid,
+    required String repquote,
+  }) : this._(
+          kind: ComposerDraftKind.postReply,
+          fid: fid,
+          tid: tid,
+          repquote: repquote,
+        );
+
+  /// 发帖草稿身份；`tid` / `repquote` 都为空。同一个 fid 上同时只保留一份发帖草稿。
+  const ComposerDraftIdentity.newThread({
+    required String fid,
+  }) : this._(kind: ComposerDraftKind.newThread, fid: fid);
+
+  final ComposerDraftKind kind;
   final String fid;
-  final String tid;
+  final String? tid;
   final String? repquote;
 
-  bool get isThreadReply => repquote == null || repquote!.trim().isEmpty;
-  bool get isPostReply => !isThreadReply;
+  bool get isThreadReply => kind == ComposerDraftKind.threadReply;
+  bool get isPostReply => kind == ComposerDraftKind.postReply;
+  bool get isNewThread => kind == ComposerDraftKind.newThread;
 
   String get storageKey {
-    if (isThreadReply) {
-      return 'thread:$fid:$tid';
+    switch (kind) {
+      case ComposerDraftKind.threadReply:
+        return 'thread:$fid:$tid';
+      case ComposerDraftKind.postReply:
+        return 'post:$fid:$tid:$repquote';
+      case ComposerDraftKind.newThread:
+        return 'newthread:$fid';
     }
-    return 'post:$fid:$tid:$repquote';
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) {
+      return true;
+    }
+    return other is ComposerDraftIdentity &&
+        other.kind == kind &&
+        other.fid == fid &&
+        other.tid == tid &&
+        other.repquote == repquote;
+  }
+
+  @override
+  int get hashCode => Object.hash(kind, fid, tid, repquote);
 }
 
+enum ComposerDraftKind {
+  threadReply,
+  postReply,
+  newThread,
+}
+
+/// 编辑器持久化的"通用草稿快照"。
+///
+/// Phase 4 在原 reply 字段的基础上扩展了 [subject] 与 [extras]：
+/// - [subject]：发帖标题；reply 永远为空字符串。
+/// - [extras]：发帖类目、可选项等小型 KV，预留给"投票 / 悬赏"等扩展。
+///   存储时与 reply 字段写在同一个 JSON 中，老版本 reply 草稿读出时自动回退到 `''`/`{}`，
+///   保证升级不丢失既有草稿。
 class ComposerDraftSnapshot {
   const ComposerDraftSnapshot({
     required this.identity,
     required this.message,
     required this.useSignature,
     required this.updatedAt,
+    this.subject = '',
+    this.extras = const <String, String>{},
     this.imageAttachments = const <ComposerImageAttachment>[],
   });
 
@@ -43,7 +99,14 @@ class ComposerDraftSnapshot {
   final String message;
   final bool useSignature;
   final DateTime updatedAt;
+  final String subject;
+  final Map<String, String> extras;
   final List<ComposerImageAttachment> imageAttachments;
 
-  bool get isEmpty => message.trim().isEmpty && imageAttachments.isEmpty;
+  /// 草稿是否"实质为空"：标题、正文、附件都为空，可以被存储层删除。
+  bool get isEmpty {
+    return subject.trim().isEmpty &&
+        message.trim().isEmpty &&
+        imageAttachments.isEmpty;
+  }
 }

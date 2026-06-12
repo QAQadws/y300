@@ -219,6 +219,8 @@ class SharedPreferencesComposerDraftRepository
       snapshot: ComposerDraftSnapshot(
         identity: snapshot.identity,
         message: result.message,
+        subject: snapshot.subject,
+        extras: snapshot.extras,
         useSignature: snapshot.useSignature,
         updatedAt: snapshot.updatedAt,
         imageAttachments: result.imageAttachments,
