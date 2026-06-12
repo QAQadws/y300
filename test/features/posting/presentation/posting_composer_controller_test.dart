@@ -432,5 +432,78 @@ void main() {
       expect(state.message, '[b]源码[/b]');
     });
 
+    test('canSubmit blocks when subject or message exceeds metadata limits',
+        () async {
+      final args = _args();
+      final metadata = _metadataWithLengthLimits(
+        maxSubjectLength: 5,
+        maxMessageLength: 10,
+      );
+      final container = _buildContainer(
+        metadataRepository: _FakeMetadataRepository.success(metadata),
+      );
+      addTearDown(container.dispose);
+      final subscription = _keepAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(postingComposerControllerProvider(args).future);
+      await _drain();
+
+      final controller = container.read(
+        postingComposerControllerProvider(args).notifier,
+      );
+      controller.updateSubject('在限内');
+      controller.updateMessage('正文不超长');
+
+      var state =
+          container.read(postingComposerControllerProvider(args)).value!;
+      expect(state.canSubmit, isTrue);
+
+      controller.updateSubject('这个标题太长会被拒绝');
+      state = container.read(postingComposerControllerProvider(args)).value!;
+      expect(state.canSubmit, isFalse, reason: '标题超出 maxSubjectLength=5');
+
+      controller.updateSubject('短标题');
+      controller.updateMessage('这条正文超过版块的字数限制了哈哈');
+      state = container.read(postingComposerControllerProvider(args)).value!;
+      expect(state.canSubmit, isFalse, reason: '正文超出 maxMessageLength=10');
+    });
+
+    test(
+      'preflight returns over-limit message when subject exceeds threshold',
+      () async {
+        final newThreadRepository = _FakeNewThreadRepository();
+        final args = _args();
+        final container = _buildContainer(
+          metadataRepository: _FakeMetadataRepository.success(
+            _metadataWithLengthLimits(maxSubjectLength: 5),
+          ),
+          newThreadRepository: newThreadRepository,
+        );
+        addTearDown(container.dispose);
+        final subscription = _keepAlive(container, args);
+        addTearDown(subscription.close);
+        await container.read(postingComposerControllerProvider(args).future);
+        await _drain();
+
+        final controller = container.read(
+          postingComposerControllerProvider(args).notifier,
+        );
+        controller.updateSubject('六个字符的标题');
+        controller.updateMessage('正文');
+
+        final result = await controller.submit();
+
+        expect(result.sent, isFalse);
+        expect(newThreadRepository.submittedPayloads, isEmpty);
+        expect(
+          container
+              .read(postingComposerControllerProvider(args))
+              .value
+              ?.errorMessage,
+          contains('标题超出版块上限'),
+        );
+      },
+    );
+
   });
 }

@@ -138,6 +138,15 @@ class PostingComposerState extends ComposerStateBase {
         return false;
       }
     }
+    // 字数上限——metadata 可能没有声明（hasXxxLimit 已经把 <=0 当成不限制）。
+    if (metadata!.hasSubjectLimit &&
+        subject.trim().length > metadata!.maxSubjectLength) {
+      return false;
+    }
+    if (metadata!.hasMessageLimit &&
+        message.trim().length > metadata!.maxMessageLength) {
+      return false;
+    }
     return true;
   }
 

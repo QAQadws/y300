@@ -33,10 +33,12 @@ class FlutterLocalComposerUploadNotificationService
         _failureClearDelay = failureClearDelay;
 
   static const int notificationId = 3101;
-  // 渠道 ID 沿用 reply_uploads，避免在用户系统通知设置里出现两个权限项。
+  // 渠道 ID 沿用 reply_uploads，避免在用户系统通知设置里出现两个权限项；
+  // Phase 7 之后回复 / 发帖共用同一个 service，渠道名改成更通用的描述，
+  // 用户在系统通知设置里看到的就是"编辑器图片上传"而不是仅限"回复"。
   static const String channelId = 'reply_uploads';
-  static const String channelName = '回复图片上传';
-  static const String channelDescription = '回复页图片上传进度';
+  static const String channelName = '编辑器图片上传';
+  static const String channelDescription = '回复 / 发帖页图片上传进度';
   static const Duration defaultFailureClearDelay = Duration(seconds: 2);
 
   final LibraryTaskNotificationClient _client;

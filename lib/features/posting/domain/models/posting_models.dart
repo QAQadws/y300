@@ -56,6 +56,8 @@ class NewThreadFormMetadata {
     required this.threadSorts,
     required this.typeRequired,
     required this.sortRequired,
+    this.maxSubjectLength = 0,
+    this.maxMessageLength = 0,
   });
 
   final String fid;
@@ -65,6 +67,17 @@ class NewThreadFormMetadata {
   final List<ThreadSort> threadSorts;
   final bool typeRequired;
   final bool sortRequired;
+
+  /// 标题字符上限。`<=0` 表示版块没有声明上限或 metadata 没解析出，
+  /// 上层必须按"无限制"处理——而不是按 0 当成"标题不能写"。
+  final int maxSubjectLength;
+
+  /// 正文字符上限。`<=0` 同样表示无限制。Discuz 字段 `forumdisplay.maxpostsize`
+  /// 是字节而不是字符；本期暂按字符做近似校验，避免对中文字节数引入二次换算。
+  final int maxMessageLength;
+
+  bool get hasSubjectLimit => maxSubjectLength > 0;
+  bool get hasMessageLimit => maxMessageLength > 0;
 }
 
 /// 发帖提交载荷。

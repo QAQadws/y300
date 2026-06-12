@@ -83,4 +83,54 @@ void main() {
     expect(metadata.threadSorts.single.name, '日常');
     expect(metadata.sortRequired, isTrue);
   });
+
+  test('reads forum.maxsubject and forum.maxpostsize as length thresholds', () {
+    final metadata = parser.parse(
+      fid: '33',
+      variables: <String, dynamic>{
+        'formhash': 'fh-5',
+        'forum': <String, dynamic>{
+          'name': '随便聊聊',
+          'maxsubject': '80',
+          'maxpostsize': 5000,
+        },
+      },
+    );
+    expect(metadata.maxSubjectLength, 80);
+    expect(metadata.maxMessageLength, 5000);
+    expect(metadata.hasSubjectLimit, isTrue);
+    expect(metadata.hasMessageLimit, isTrue);
+  });
+
+  test('falls back to top-level Variables for length thresholds', () {
+    final metadata = parser.parse(
+      fid: '33',
+      variables: <String, dynamic>{
+        'formhash': 'fh-6',
+        'forum': <String, dynamic>{'name': '随便聊聊'},
+        'maxsubject': '60',
+        'maxpostsize': '4000',
+      },
+    );
+    expect(metadata.maxSubjectLength, 60);
+    expect(metadata.maxMessageLength, 4000);
+  });
+
+  test('treats missing or non-positive thresholds as no limit', () {
+    final metadata = parser.parse(
+      fid: '33',
+      variables: <String, dynamic>{
+        'formhash': 'fh-7',
+        'forum': <String, dynamic>{
+          'name': '随便聊聊',
+          'maxsubject': -1,
+          'maxpostsize': 'NaN',
+        },
+      },
+    );
+    expect(metadata.maxSubjectLength, 0);
+    expect(metadata.maxMessageLength, 0);
+    expect(metadata.hasSubjectLimit, isFalse);
+    expect(metadata.hasMessageLimit, isFalse);
+  });
 }

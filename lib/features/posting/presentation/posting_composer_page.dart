@@ -373,9 +373,11 @@ class _PostingComposerBody extends StatelessWidget {
           ],
           ThreadSubjectField(
             fieldKey: const Key('posting-composer-subject-input'),
+            counterTextKey: const Key('posting-composer-subject-counter'),
             controller: subjectController,
             enabled: !disabled,
             onChanged: onSubjectChanged,
+            maxLength: state.metadata?.maxSubjectLength ?? 0,
           ),
           const SizedBox(height: 12),
           if (state.metadata != null && state.metadata!.threadTypes.isNotEmpty)
@@ -428,6 +430,14 @@ class _PostingComposerBody extends StatelessWidget {
               renderer: bbCodeRenderer,
               stickers: stickers,
               imageAttachments: state.imageAttachments,
+            ),
+          // 正文字数计数（仅当 metadata 声明了上限）。源码 / 预览模式都展示，
+          // 让用户在预览页也能看到提交前的字数对比。
+          if (state.metadata?.hasMessageLimit ?? false)
+            _MessageCounter(
+              counterKey: const Key('posting-composer-message-counter'),
+              currentLength: state.message.length,
+              maxLength: state.metadata!.maxMessageLength,
             ),
           if (state.imageAttachments.isNotEmpty) ...[
             const SizedBox(height: 12),
@@ -509,6 +519,38 @@ class _PostingComposerBody extends StatelessWidget {
       return const SizedBox(height: 12);
     }
     return const SizedBox.shrink();
+  }
+}
+
+/// 正文字数 / 上限提示行。仅在 metadata 声明了上限时由调用方渲染。
+class _MessageCounter extends StatelessWidget {
+  const _MessageCounter({
+    required this.counterKey,
+    required this.currentLength,
+    required this.maxLength,
+  });
+
+  final Key counterKey;
+  final int currentLength;
+  final int maxLength;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final exceeded = currentLength > maxLength;
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Text(
+          '$currentLength / $maxLength',
+          key: counterKey,
+          style: TextStyle(
+            color: exceeded ? colorScheme.error : colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
   }
 }
 

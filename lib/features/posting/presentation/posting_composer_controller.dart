@@ -290,22 +290,34 @@ class PostingComposerController
   // PLACEHOLDER_PHASE_4_SUBMIT
   @override
   String? preflightValidate(PostingComposerState state) {
-    if (state.subject.trim().isEmpty) {
+    final subject = state.subject.trim();
+    if (subject.isEmpty) {
       return '请输入标题';
     }
-    if (state.message.trim().isEmpty) {
+    final message = state.message.trim();
+    if (message.isEmpty) {
       return '请输入正文';
     }
-    if (state.metadata == null) {
+    final metadata = state.metadata;
+    if (metadata == null) {
       return state.metadataError == null
           ? '发帖表单还在加载，请稍候再试'
           : '发帖表单加载失败：${state.metadataError}';
     }
-    if (state.metadata!.typeRequired) {
+    if (metadata.typeRequired) {
       final typeid = state.selectedTypeId?.trim() ?? '';
       if (typeid.isEmpty || typeid == '0') {
         return '该版块要求选择主题分类，请先选择';
       }
+    }
+    // metadata 可能没有声明上限——`hasSubjectLimit` 已经把 `<=0` 当作"不限制"。
+    if (metadata.hasSubjectLimit &&
+        subject.length > metadata.maxSubjectLength) {
+      return '标题超出版块上限（最多 ${metadata.maxSubjectLength} 字符）';
+    }
+    if (metadata.hasMessageLimit &&
+        message.length > metadata.maxMessageLength) {
+      return '正文超出版块上限（最多 ${metadata.maxMessageLength} 字符）';
     }
     return null;
   }

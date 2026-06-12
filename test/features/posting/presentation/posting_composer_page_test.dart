@@ -201,6 +201,59 @@ void main() {
   );
 
   testWidgets(
+    'PostingComposerPage shows length counters when metadata declares limits',
+    (tester) async {
+      await tester.pumpWidget(
+        _buildPage(
+          metadataRepository: _FakeMetadataRepository.success(
+            const NewThreadFormMetadata(
+              fid: '33',
+              forumName: '日常版',
+              formHash: 'fh',
+              threadTypes: <ThreadType>[],
+              threadSorts: <ThreadSort>[],
+              typeRequired: false,
+              sortRequired: false,
+              maxSubjectLength: 5,
+              maxMessageLength: 10,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 没输入时计数显示 0/limit。
+      expect(
+        find.byKey(const Key('posting-composer-subject-counter')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('posting-composer-message-counter')),
+        findsOneWidget,
+      );
+      expect(find.text('0 / 5'), findsOneWidget);
+      expect(find.text('0 / 10'), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const Key('posting-composer-subject-input')),
+        '六个字符的标题',
+      );
+      await tester.enterText(
+        find.byKey(const Key('posting-composer-message-input')),
+        '正文',
+      );
+      await tester.pump();
+
+      // 标题超限后发送按钮禁用，计数行能看到当前长度 / 上限。
+      expect(find.text('7 / 5'), findsOneWidget);
+      final sendButton = tester.widget<IconButton>(
+        find.byKey(const Key('posting-composer-send-button')),
+      );
+      expect(sendButton.onPressed, isNull);
+    },
+  );
+
+  testWidgets(
     'PostingComposerPage uploads picked image and renders attachment queue',
     (tester) async {
       final imagePicker = _FakeImagePicker(

@@ -31,6 +31,23 @@ NewThreadFormMetadata _metadataNoTypes() {
   );
 }
 
+NewThreadFormMetadata _metadataWithLengthLimits({
+  int maxSubjectLength = 0,
+  int maxMessageLength = 0,
+}) {
+  return NewThreadFormMetadata(
+    fid: '33',
+    forumName: '版块名',
+    formHash: 'fh',
+    threadTypes: const <ThreadType>[],
+    threadSorts: const <ThreadSort>[],
+    typeRequired: false,
+    sortRequired: false,
+    maxSubjectLength: maxSubjectLength,
+    maxMessageLength: maxMessageLength,
+  );
+}
+
 ProviderContainer _buildContainer({
   ComposerDraftRepository? draftRepository,
   PostingFormMetadataRepository? metadataRepository,
