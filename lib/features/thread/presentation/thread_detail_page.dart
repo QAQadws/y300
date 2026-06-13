@@ -8,7 +8,6 @@ import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 import 'package:y300/shared/widgets/shelf/candidate_shelf_action_row.dart';
-import 'package:y300/shared/widgets/app_skeleton.dart';
 
 class ThreadDetailPage extends ConsumerWidget {
   const ThreadDetailPage({super.key, required this.tid, this.subject = ''});
@@ -80,7 +79,7 @@ class ThreadDetailPage extends ConsumerWidget {
         children: [
           Expanded(
             child: (asyncState.isLoading && state.posts.isEmpty)
-                ? const ForumHomeSkeleton(key: Key('thread-detail-skeleton'))
+                ? const SizedBox.shrink()
                 : state.errorMessage != null && state.posts.isEmpty
                 ? _ThreadErrorView(
                     message: state.errorMessage!,

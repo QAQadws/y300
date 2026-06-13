@@ -32,7 +32,7 @@ import 'package:y300/features/startup/presentation/main_shell_page.dart';
 import 'package:y300/features/startup/presentation/startup_page.dart';
 
 void main() {
-  testWidgets('StartupPage should show skeleton and call onCompleted', (tester) async {
+  testWidgets('StartupPage should show title text and call onCompleted', (tester) async {
     var completed = false;
 
     await tester.pumpWidget(
@@ -48,7 +48,7 @@ void main() {
     );
 
     expect(find.text('Y300'), findsOneWidget);
-    expect(find.byKey(const Key('startup-forum-skeleton')), findsOneWidget);
+    expect(find.text('正在初始化论坛数据...'), findsOneWidget);
     expect(completed, isFalse);
 
     await tester.pump(const Duration(milliseconds: 901));

@@ -5,7 +5,6 @@ import 'package:y300/features/forum/presentation/forum_display_state.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
-import 'package:y300/shared/widgets/app_skeleton.dart';
 
 class ForumDisplayPage extends ConsumerWidget {
   const ForumDisplayPage({super.key, required this.fid, this.title = ''});
@@ -42,7 +41,7 @@ class ForumDisplayPage extends ConsumerWidget {
         ],
       ),
       body: (asyncState.isLoading && state.threads.isEmpty)
-          ? const ForumHomeSkeleton(key: Key('forum-display-skeleton'))
+          ? const SizedBox.shrink()
           : state.errorMessage != null && state.threads.isEmpty
           ? _ForumDisplayErrorView(
               message: state.errorMessage!,

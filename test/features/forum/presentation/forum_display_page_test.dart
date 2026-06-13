@@ -10,13 +10,14 @@ import 'package:y300/features/forum/presentation/forum_display_page.dart';
 
 void main() {
   group('ForumDisplayPage', () {
-    testWidgets('shows skeleton first then list', (tester) async {
+    testWidgets('stays buildable first then renders list', (tester) async {
       final completer = Completer<ApiResult<ForumDisplayData>>();
       final repository = _FakeForumDisplayRepository((fid, page) => completer.future);
 
       await tester.pumpWidget(_buildTestApp(repository));
 
-      expect(find.byKey(const Key('forum-display-skeleton')), findsOneWidget);
+      expect(find.byType(Scaffold), findsOneWidget);
+      expect(find.byKey(const Key('forum-display-list')), findsNothing);
 
       completer.complete(
         ApiSuccess(

@@ -51,15 +51,7 @@ void main() {
     await tester.pumpWidget(_buildTestApp(driver: driver));
 
     expect(find.byKey(const Key('forum-webview-bootstrap-placeholder')), findsOneWidget);
-    final placeholder = tester.widget<ColoredBox>(
-      find.byKey(const Key('forum-webview-bootstrap-placeholder')),
-    );
-    expect(
-      placeholder.color,
-      Theme.of(
-        tester.element(find.byKey(const Key('forum-webview-bootstrap-placeholder'))),
-      ).colorScheme.surface,
-    );
+    expect(find.byKey(const Key('forum-webview-bootstrap-placeholder-list')), findsOneWidget);
     expect(find.byKey(const Key('forum-webview-surface')), findsNothing);
     expect(driver.buildWidgetCallCount, 0);
 
@@ -290,15 +282,7 @@ void main() {
 
     expect(find.byKey(const Key('forum-webview-loading-mask')), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
-    final mask = tester.widget<ColoredBox>(
-      find.byKey(const Key('forum-webview-loading-mask')),
-    );
-    expect(
-      mask.color,
-      Theme.of(
-        tester.element(find.byKey(const Key('forum-webview-loading-mask'))),
-      ).colorScheme.surface,
-    );
+    expect(find.byKey(const Key('forum-webview-bootstrap-placeholder-list')), findsWidgets);
 
     await driver.dispatchPageStarted(
       'https://bbs.yamibo.com/index.php?mobile=2',

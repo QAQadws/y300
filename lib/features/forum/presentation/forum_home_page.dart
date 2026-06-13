@@ -6,7 +6,6 @@ import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
-import 'package:y300/shared/widgets/app_skeleton.dart';
 
 class ForumHomePage extends ConsumerWidget {
   const ForumHomePage({super.key});
@@ -34,7 +33,7 @@ class ForumHomePage extends ConsumerWidget {
         ],
       ),
       body: state.when(
-        loading: () => const ForumHomeSkeleton(key: Key('forum-home-skeleton')),
+        loading: () => const SizedBox.shrink(),
         error: (error, _) => _ForumHomeErrorView(
           message: error.toString(),
           onRetry: () => ref.read(forumHomeControllerProvider.notifier).refresh(),

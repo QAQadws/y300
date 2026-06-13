@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/startup/presentation/main_shell_page.dart';
-import 'package:y300/shared/widgets/app_skeleton.dart';
 
 /// MVP 启动页：承担品牌展示和冷启动过渡
 class StartupPage extends StatefulWidget {
@@ -55,10 +54,7 @@ class _StartupPageState extends State<StartupPage> {
                 '正在初始化论坛数据...',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              const SizedBox(height: 20),
-              const Expanded(
-                child: ForumHomeSkeleton(key: Key('startup-forum-skeleton')),
-              ),
+              const Spacer(),
             ],
           ),
         ),

@@ -11,13 +11,14 @@ import 'package:y300/features/forum/presentation/forum_home_page.dart';
 
 void main() {
   group('ForumHomePage', () {
-    testWidgets('shows loading skeleton before data returns', (tester) async {
+    testWidgets('stays buildable before data returns and then renders list', (tester) async {
       final completer = Completer<ApiResult<ForumHomePayload>>();
       final repository = _FakeForumHomeRepository(() => completer.future);
 
       await tester.pumpWidget(_buildTestApp(repository));
 
-      expect(find.byKey(const Key('forum-home-skeleton')), findsOneWidget);
+      expect(find.byType(Scaffold), findsOneWidget);
+      expect(find.byKey(const Key('forum-home-list')), findsNothing);
 
       completer.complete(ApiSuccess(_loggedOutPayload()));
       await tester.pumpAndSettle();
