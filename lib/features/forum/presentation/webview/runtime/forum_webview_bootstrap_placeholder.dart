@@ -1,16 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
 import 'package:y300/app/theme/app_theme.dart';
+import 'package:y300/app/theme/app_theme_tokens.dart';
 
 class ForumWebViewBootstrapPlaceholder extends StatelessWidget {
   const ForumWebViewBootstrapPlaceholder({super.key});
 
   static const List<int> _sectionItemCounts = <int>[2, 2, 7];
+  static const double _carouselColorLerp = 0.8;
+  static const double _sectionHeaderColorLerp = 0.6;
+  static const double _sectionBackgroundColorLerp = 0.35;
+  static const double _sectionItemBlockColorLerp = 0.8;
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
+    final carouselColor =
+        Color.lerp(
+          AppThemeTokens.appBarBackground,
+          backgroundColor,
+          _carouselColorLerp,
+        ) ??
+        AppThemeTokens.appBarBackground;
     return ColoredBox(
       color: backgroundColor,
       child: ListView(
@@ -24,7 +35,7 @@ class ForumWebViewBootstrapPlaceholder extends StatelessWidget {
               aspectRatio: 3 / 1,
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainerHighest,
+                  color: carouselColor,
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
@@ -50,26 +61,22 @@ class SubformShow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
+    final headerColor =
+        Color.lerp(
+          AppThemeTokens.appBarBackground,
+          backgroundColor,
+          ForumWebViewBootstrapPlaceholder._sectionHeaderColorLerp,
+        ) ??
+        AppThemeTokens.appBarBackground;
     return SizedBox(
       width: double.infinity,
       height: 44,
-      child: Row(
-        children: [
-          _PlaceholderBlock(
-            width: 14,
-            height: 14,
-            color: colorScheme.outlineVariant,
-            borderRadius: BorderRadius.circular(999),
-          ),
-          const SizedBox(width: 12),
-          _PlaceholderBlock(
-            width: 112,
-            height: 16,
-            color: colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(4),
-          ),
-        ],
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: headerColor,
+          borderRadius: BorderRadius.circular(3),
+        ),
       ),
     );
   }
@@ -86,6 +93,14 @@ class SubForm extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
+    final itemBlockColor =
+        Color.lerp(
+          AppThemeTokens.appBarBackground,
+          backgroundColor,
+          ForumWebViewBootstrapPlaceholder._sectionItemBlockColorLerp,
+        ) ??
+        AppThemeTokens.appBarBackground;
     return Container(
       width: double.infinity,
       height: 64,
@@ -103,47 +118,10 @@ class SubForm extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _PlaceholderBlock(
-            width: 28,
-            height: 28,
-            color: colorScheme.surfaceContainerHighest,
+            width: 40,
+            height: 44,
+            color: itemBlockColor,
             borderRadius: BorderRadius.circular(4),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: _PlaceholderBlock(
-                        height: 14,
-                        color: colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    _PlaceholderBlock(
-                      width: 40,
-                      height: 12,
-                      color: colorScheme.outlineVariant.withValues(alpha: 0.8),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                FractionallySizedBox(
-                  widthFactor: 0.72,
-                  alignment: Alignment.centerLeft,
-                  child: _PlaceholderBlock(
-                    height: 12,
-                    color: colorScheme.outlineVariant.withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              ],
-            ),
           ),
         ],
       ),
@@ -163,9 +141,16 @@ class _ForumPlaceholderSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
+    final sectionBackgroundColor =
+        Color.lerp(
+          AppThemeTokens.forumWebviewSectionBackground,
+          backgroundColor,
+          ForumWebViewBootstrapPlaceholder._sectionBackgroundColorLerp,
+        ) ??
+        AppThemeTokens.forumWebviewSectionBackground;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(top: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -174,11 +159,8 @@ class _ForumPlaceholderSection extends StatelessWidget {
           ),
           DecoratedBox(
             decoration: BoxDecoration(
-              color: colorScheme.surface,
+              color: sectionBackgroundColor,
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: colorScheme.outlineVariant.withValues(alpha: 0.5),
-              ),
             ),
             child: Column(
               children: List<Widget>.generate(itemCount, (rowIndex) {
@@ -242,4 +224,74 @@ Widget forumWebViewBootstrapPlaceholderPreviewShell(Widget child) {
 )
 Widget forumWebViewBootstrapPlaceholderPreview() {
   return const ForumWebViewBootstrapPlaceholder();
+}
+
+@Preview(
+  name: 'Forum webview section header',
+  group: 'Forum/WebView',
+  size: Size(393, 120),
+  wrapper: forumWebViewBootstrapPlaceholderPreviewShell,
+)
+Widget forumWebViewSectionHeaderPreview() {
+  return const Padding(
+    padding: EdgeInsets.symmetric(horizontal: 10),
+    child: SubformShow(),
+  );
+}
+
+@Preview(
+  name: 'Forum webview list rows',
+  group: 'Forum/WebView',
+  size: Size(393, 180),
+  wrapper: forumWebViewBootstrapPlaceholderPreviewShell,
+)
+Widget forumWebViewListRowsPreview() {
+  return const Padding(
+    padding: EdgeInsets.symmetric(horizontal: 10),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SubForm(showDivider: true),
+        SubForm(showDivider: false),
+      ],
+    ),
+  );
+}
+
+@Preview(
+  name: 'Forum webview section',
+  group: 'Forum/WebView',
+  size: Size(393, 320),
+  wrapper: forumWebViewBootstrapPlaceholderPreviewShell,
+)
+Widget forumWebViewSectionPreview() {
+  return const Padding(
+    padding: EdgeInsets.symmetric(horizontal: 10),
+    child: _ForumPlaceholderSection(
+      sectionIndex: 0,
+      itemCount: 3,
+    ),
+  );
+}
+
+@Preview(
+  name: 'Forum webview placeholder block',
+  group: 'Forum/WebView',
+  size: Size(220, 120),
+  wrapper: forumWebViewBootstrapPlaceholderPreviewShell,
+)
+Widget forumWebViewPlaceholderBlockPreview() {
+  return Builder(
+    builder: (context) {
+      final colorScheme = Theme.of(context).colorScheme;
+      return Center(
+        child: _PlaceholderBlock(
+          width: 120,
+          height: 16,
+          color: colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(4),
+        ),
+      );
+    },
+  );
 }

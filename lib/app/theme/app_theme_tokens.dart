@@ -8,5 +8,6 @@ final class AppThemeTokens {
   static const Color appBarBackground = Color(0xFF531104);
   static const Color appBarForeground = Color(0xFFF8F8E1);
   static const Color scaffoldBackground = Color(0xFFF8F8E1);
+  static const Color forumWebviewSectionBackground = Color(0xFFFEF2DB);
   static const Color navigationBarBackground = Color(0xFFFDE6B9);
 }
