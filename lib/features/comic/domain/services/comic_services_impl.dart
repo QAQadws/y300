@@ -14,6 +14,7 @@ import 'package:y300/features/comic/domain/models/comic_parsing_debug_models.dar
 import 'package:y300/features/comic/domain/services/comic_catalog_miss_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
+import 'package:y300/features/comic/domain/services/comic_incremental_episode_discovery.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_link_merger.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_refresh_service.dart';
 import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
@@ -381,6 +382,18 @@ final comicEpisodeDiscoveryServiceProvider = Provider<ComicEpisodeDiscoveryServi
     fetchThreadDetail: (tid) => ref.read(threadRepositoryProvider).getThreadDetail(tid: tid, page: 1),
     opPostParser: opPostParser,
     catalogHtmlFetcher: DioCatalogHtmlFetcher(),
+  );
+});
+
+final comicIncrementalEpisodeDiscoveryProvider =
+    Provider<ComicIncrementalEpisodeDiscovery>((ref) {
+  return ComicIncrementalEpisodeDiscovery(
+    fetchThreadDetail: (tid) =>
+        ref.read(threadRepositoryProvider).getThreadDetail(tid: tid, page: 1),
+    opPostParser: ComicConsecutiveOpPostParser(
+      engine: ComicPostParsingEngine(),
+      imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
+    ),
   );
 });
 

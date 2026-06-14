@@ -22,7 +22,7 @@ void main() {
     expect(tableNames.contains(ComicLocalDb.readerPreferencesTable), isTrue);
     expect(tableNames.contains(ComicLocalDb.novelReadingProgressTable), isTrue);
     expect(tableNames.contains(ComicLocalDb.readerBookmarksTable), isTrue);
-    expect(ComicLocalDb.dbVersion, 19);
+    expect(ComicLocalDb.dbVersion, 20);
 
     final indexRows = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='index'");
     final indexNames = indexRows
