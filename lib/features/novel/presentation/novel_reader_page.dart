@@ -560,7 +560,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     final selected = await showModalBottomSheet<NovelEpisodeItem>(
       context: context,
       showDragHandle: true,
-      builder: (context) => NovelReaderChapterListSheet(viewState: viewState),
+      builder: (context) => Consumer(
+        builder: (context, ref, _) {
+          final latest =
+              ref.watch(novelReaderControllerProvider(_args)).value ?? viewState;
+          return NovelReaderChapterListSheet(viewState: latest);
+        },
+      ),
     );
     if (selected == null || selected.episodeId == viewState.currentEpisode.episodeId) {
       return;
@@ -609,8 +615,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     final action = await showModalBottomSheet<_BookmarkSheetAction>(
       context: context,
       showDragHandle: true,
-      builder: (context) => NovelReaderBookmarkSheet(
-        bookmarks: viewState.currentEpisodeBookmarks,
+      builder: (context) => Consumer(
+        builder: (context, ref, _) {
+          final latest =
+              ref.watch(novelReaderControllerProvider(_args)).value ?? viewState;
+          return NovelReaderBookmarkSheet(
+            bookmarks: latest.currentEpisodeBookmarks,
+          );
+        },
       ),
     );
     if (action == null) {

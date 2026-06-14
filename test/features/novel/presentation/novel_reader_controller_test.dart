@@ -16,6 +16,8 @@ import 'package:y300/features/novel/domain/services/novel_reader_progress_policy
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_transition_state.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 
 void main() {
@@ -250,9 +252,11 @@ void main() {
         episodeId: 'novel:49:100:5001',
       ),
     );
+    final hydrationService = _ControlledNovelReaderSupplementalHydrationService();
     final container = _buildContainer(
       repository: repository,
       bootstrapService: bootstrapService,
+      supplementalHydrationService: hydrationService,
     );
     addTearDown(container.dispose);
     const args = NovelReaderArgs(
@@ -270,12 +274,27 @@ void main() {
     expect(state.novel, isNull);
     expect(state.bookmarks, isEmpty);
 
-    bootstrapService.completeInitialSupplemental(
-      _supplementalBootstrap(episodeId: 'novel:49:100:5001'),
+    hydrationService.completeInitialBookmarks(
+      _supplementalBookmarks(episodeId: 'novel:49:100:5001'),
     );
     await Future<void>.delayed(Duration.zero);
+    var hydrated = container.read(provider).value!;
+    expect(hydrated.bookmarks, isNotEmpty);
+    expect(hydrated.currentEpisodeBookmarks, isNotEmpty);
+    expect(hydrated.downloadedEpisodeIds, isEmpty);
+    expect(hydrated.novel, isNull);
 
-    final hydrated = container.read(provider).value!;
+    hydrationService.completeInitialDownloadedEpisodeIds(
+      const <String>{'novel:49:100:5001'},
+    );
+    await Future<void>.delayed(Duration.zero);
+    hydrated = container.read(provider).value!;
+    expect(hydrated.downloadedEpisodeIds, contains('novel:49:100:5001'));
+
+    hydrationService.completeInitialNovel(_supplementalNovel());
+    await Future<void>.delayed(Duration.zero);
+
+    hydrated = container.read(provider).value!;
     expect(hydrated.isHydratingSupplemental, isFalse);
     expect(hydrated.novel?.title, '测试小说');
     expect(hydrated.downloadedEpisodeIds, contains('novel:49:100:5001'));
@@ -288,9 +307,11 @@ void main() {
         episodeId: 'novel:49:100:5001',
       ),
     );
+    final hydrationService = _ControlledNovelReaderSupplementalHydrationService();
     final container = _buildContainer(
       repository: repository,
       bootstrapService: bootstrapService,
+      supplementalHydrationService: hydrationService,
     );
     addTearDown(container.dispose);
     const args = NovelReaderArgs(
@@ -302,9 +323,13 @@ void main() {
     addTearDown(subscription.close);
 
     await container.read(provider.future);
-    bootstrapService.completeInitialSupplemental(
-      _supplementalBootstrap(episodeId: 'novel:49:100:5001'),
+    hydrationService.completeInitialBookmarks(
+      _supplementalBookmarks(episodeId: 'novel:49:100:5001'),
     );
+    hydrationService.completeInitialDownloadedEpisodeIds(
+      const <String>{'novel:49:100:5001'},
+    );
+    hydrationService.completeInitialNovel(_supplementalNovel());
     await Future<void>.delayed(Duration.zero);
 
     final future = container
@@ -385,9 +410,11 @@ void main() {
         episodeId: 'novel:49:100:5001',
       ),
     );
+    final hydrationService = _ControlledNovelReaderSupplementalHydrationService();
     final container = _buildContainer(
       repository: repository,
       bootstrapService: bootstrapService,
+      supplementalHydrationService: hydrationService,
     );
     addTearDown(container.dispose);
     const args = NovelReaderArgs(
@@ -412,12 +439,16 @@ void main() {
     );
     await switchFuture;
 
-    bootstrapService.completeInitialSupplemental(
-      _supplementalBootstrap(
+    hydrationService.completeInitialBookmarks(
+      _supplementalBookmarks(
         episodeId: 'novel:49:100:5001',
-        downloadedEpisodeIds: const <String>{'novel:49:100:5001'},
-        novelTitle: '旧章节小说',
       ),
+    );
+    hydrationService.completeInitialDownloadedEpisodeIds(
+      const <String>{'novel:49:100:5001'},
+    );
+    hydrationService.completeInitialNovel(
+      _supplementalNovel(novelTitle: '旧章节小说'),
     );
     await Future<void>.delayed(Duration.zero);
 
@@ -425,6 +456,43 @@ void main() {
     expect(state.currentEpisode.episodeId, 'novel:49:100:5002');
     expect(state.novel, isNull);
     expect(state.downloadedEpisodeIds, isEmpty);
+  });
+
+  test('supplemental phase failure does not block later phases', () async {
+    final repository = _ControllerNovelRepository();
+    final bootstrapService = _ControlledNovelReaderBootstrapService(
+      initialCritical: _criticalBootstrap(
+        episodeId: 'novel:49:100:5001',
+      ),
+    );
+    final hydrationService = _ControlledNovelReaderSupplementalHydrationService();
+    hydrationService.failInitialBookmarks(StateError('bookmark failed'));
+    final container = _buildContainer(
+      repository: repository,
+      bootstrapService: bootstrapService,
+      supplementalHydrationService: hydrationService,
+    );
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
+
+    await container.read(provider.future);
+    hydrationService.completeInitialDownloadedEpisodeIds(
+      const <String>{'novel:49:100:5001'},
+    );
+    hydrationService.completeInitialNovel(_supplementalNovel());
+    await Future<void>.delayed(Duration.zero);
+
+    final state = container.read(provider).value!;
+    expect(state.bookmarks, isEmpty);
+    expect(state.downloadedEpisodeIds, contains('novel:49:100:5001'));
+    expect(state.novel?.title, '测试小说');
+    expect(state.isHydratingSupplemental, isFalse);
   });
 
   test('refreshCurrentEpisode failure keeps old content and avoids AsyncError', () async {
@@ -609,6 +677,8 @@ ProviderContainer _buildContainer({
   NovelDownloadService? downloadService,
   LibraryStateRepository? stateRepository,
   NovelReaderBootstrapService? bootstrapService,
+  NovelReaderSupplementalHydrationService? supplementalHydrationService,
+  NovelReaderDocumentBuildService? documentBuildService,
 }) {
   return ProviderContainer(
     overrides: [
@@ -621,6 +691,14 @@ ProviderContainer _buildContainer({
       ),
       if (bootstrapService != null)
         novelReaderBootstrapServiceProvider.overrideWithValue(bootstrapService),
+      if (supplementalHydrationService != null)
+        novelReaderSupplementalHydrationServiceProvider.overrideWithValue(
+          supplementalHydrationService,
+        ),
+      if (documentBuildService != null)
+        novelReaderDocumentBuildServiceProvider.overrideWithValue(
+          documentBuildService,
+        ),
     ],
   );
 }
@@ -1066,14 +1144,9 @@ class _ControlledNovelReaderBootstrapService
 
   final NovelReaderCriticalBootstrap _initialCritical;
   bool _hasServedInitialCritical = false;
-  final Completer<NovelReaderSupplementalBootstrap> _initialSupplementalCompleter =
-      Completer<NovelReaderSupplementalBootstrap>();
   final Map<String, Completer<NovelReaderCriticalBootstrap>> _criticalCompleters =
       <String, Completer<NovelReaderCriticalBootstrap>>{};
   final Map<String, Object> _criticalFailures = <String, Object>{};
-  final Map<String, Completer<NovelReaderSupplementalBootstrap>>
-      _supplementalCompleters =
-      <String, Completer<NovelReaderSupplementalBootstrap>>{};
 
   @override
   Future<NovelReaderCriticalBootstrap> loadCritical(
@@ -1093,27 +1166,6 @@ class _ControlledNovelReaderBootstrapService
       Completer<NovelReaderCriticalBootstrap>.new,
     );
     return completer.future;
-  }
-
-  @override
-  Future<NovelReaderSupplementalBootstrap> loadSupplemental(
-    NovelReaderLoadContext context,
-    NovelReaderCriticalBootstrap critical,
-  ) {
-    if (critical.currentEpisode.episodeId == _initialCritical.currentEpisode.episodeId) {
-      return _initialSupplementalCompleter.future;
-    }
-    final completer = _supplementalCompleters.putIfAbsent(
-      critical.currentEpisode.episodeId,
-      Completer<NovelReaderSupplementalBootstrap>.new,
-    );
-    return completer.future;
-  }
-
-  void completeInitialSupplemental(NovelReaderSupplementalBootstrap value) {
-    if (!_initialSupplementalCompleter.isCompleted) {
-      _initialSupplementalCompleter.complete(value);
-    }
   }
 
   void completeEpisodeCritical(
@@ -1234,44 +1286,152 @@ NovelReaderCriticalBootstrap _criticalBootstrap({
   );
 }
 
-NovelReaderSupplementalBootstrap _supplementalBootstrap({
+List<NovelReaderBookmark> _supplementalBookmarks({
   required String episodeId,
-  String novelTitle = '测试小说',
-  Set<String> downloadedEpisodeIds = const <String>{'novel:49:100:5001'},
 }) {
-  return NovelReaderSupplementalBootstrap(
-    novel: NovelItem(
+  return <NovelReaderBookmark>[
+    NovelReaderBookmark(
+      bookmarkId: 'episode-bookmark:$episodeId',
       novelId: 'novel:49:100',
-      sourceTid: '100',
-      sourceFid: '49',
-      title: novelTitle,
-      updatedAt: DateTime(2026, 1, 1),
-      episodeCount: _episodes().length,
+      episodeId: episodeId,
+      anchor: NovelReaderTextAnchor(episodeId: episodeId),
+      title: '章节书签',
+      snippet: '章节书签',
+      createdAt: DateTime(2026, 6, 8),
+      updatedAt: DateTime(2026, 6, 8),
     ),
-    bookmarks: <NovelReaderBookmark>[
-      NovelReaderBookmark(
-        bookmarkId: 'episode-bookmark:$episodeId',
-        novelId: 'novel:49:100',
-        episodeId: episodeId,
-        anchor: NovelReaderTextAnchor(episodeId: episodeId),
-        title: '章节书签',
-        snippet: '章节书签',
-        createdAt: DateTime(2026, 6, 8),
-        updatedAt: DateTime(2026, 6, 8),
-      ),
-    ],
-    currentEpisodeBookmarks: <NovelReaderBookmark>[
-      NovelReaderBookmark(
-        bookmarkId: 'episode-bookmark:$episodeId',
-        novelId: 'novel:49:100',
-        episodeId: episodeId,
-        anchor: NovelReaderTextAnchor(episodeId: episodeId),
-        title: '章节书签',
-        snippet: '章节书签',
-        createdAt: DateTime(2026, 6, 8),
-        updatedAt: DateTime(2026, 6, 8),
-      ),
-    ],
-    downloadedEpisodeIds: downloadedEpisodeIds,
+  ];
+}
+
+NovelItem _supplementalNovel({
+  String novelTitle = '测试小说',
+}) {
+  return NovelItem(
+    novelId: 'novel:49:100',
+    sourceTid: '100',
+    sourceFid: '49',
+    title: novelTitle,
+    updatedAt: DateTime(2026, 1, 1),
+    episodeCount: _episodes().length,
   );
+}
+
+class _ControlledNovelReaderSupplementalHydrationService
+    implements NovelReaderSupplementalHydrationService {
+  final _HydrationSequence<List<NovelReaderBookmark>> _bookmarkSequence =
+      _HydrationSequence<List<NovelReaderBookmark>>();
+  final _HydrationSequence<Set<String>> _downloadedEpisodeIdsSequence =
+      _HydrationSequence<Set<String>>();
+  final _HydrationSequence<NovelItem?> _novelSequence =
+      _HydrationSequence<NovelItem?>();
+
+  @override
+  Future<List<NovelReaderBookmark>> loadBookmarks({
+    required String novelId,
+  }) {
+    return _bookmarkSequence.take();
+  }
+
+  @override
+  Future<Set<String>> loadDownloadedEpisodeIds({
+    required String novelId,
+    required Iterable<String> episodeIds,
+  }) {
+    return _downloadedEpisodeIdsSequence.take();
+  }
+
+  @override
+  Future<NovelItem?> loadNovel({
+    required String novelId,
+  }) {
+    return _novelSequence.take();
+  }
+
+  void completeInitialBookmarks(List<NovelReaderBookmark> value) {
+    _bookmarkSequence.completeAt(0, value);
+  }
+
+  void failInitialBookmarks(Object error) {
+    _bookmarkSequence.completeErrorAt(0, error);
+  }
+
+  void completeInitialDownloadedEpisodeIds(Set<String> value) {
+    _downloadedEpisodeIdsSequence.completeAt(0, value);
+  }
+
+  void completeInitialNovel(NovelItem? value) {
+    _novelSequence.completeAt(0, value);
+  }
+}
+
+class _HydrationSequence<T> {
+  final List<_PendingHydrationOutcome<T>?> _pendingOutcomes =
+      <_PendingHydrationOutcome<T>?>[];
+  final List<Completer<T>?> _completers = <Completer<T>?>[];
+  int _nextTakeIndex = 0;
+
+  Future<T> take() {
+    final index = _nextTakeIndex++;
+    _ensureIndex(index);
+    final pendingOutcome = _pendingOutcomes[index];
+    if (pendingOutcome != null) {
+      return pendingOutcome.toFuture();
+    }
+    final completer = Completer<T>();
+    _completers[index] = completer;
+    return completer.future;
+  }
+
+  void completeAt(int index, T value) {
+    _ensureIndex(index);
+    final completer = _completers[index];
+    if (completer != null && !completer.isCompleted) {
+      completer.complete(value);
+      return;
+    }
+    _pendingOutcomes[index] = _PendingHydrationValue<T>(value);
+  }
+
+  void completeErrorAt(int index, Object error) {
+    _ensureIndex(index);
+    final completer = _completers[index];
+    if (completer != null && !completer.isCompleted) {
+      completer.completeError(error);
+      return;
+    }
+    _pendingOutcomes[index] = _PendingHydrationError<T>(error);
+  }
+
+  void _ensureIndex(int index) {
+    while (_pendingOutcomes.length <= index) {
+      _pendingOutcomes.add(null);
+      _completers.add(null);
+    }
+  }
+}
+
+abstract class _PendingHydrationOutcome<T> {
+  Future<T> toFuture();
+}
+
+class _PendingHydrationValue<T> implements _PendingHydrationOutcome<T> {
+  _PendingHydrationValue(this.value);
+
+  final T value;
+
+  @override
+  Future<T> toFuture() {
+    return Future<T>.value(value);
+  }
+}
+
+class _PendingHydrationError<T> implements _PendingHydrationOutcome<T> {
+  _PendingHydrationError(this.error);
+
+  final Object error;
+
+  @override
+  Future<T> toFuture() {
+    return Future<T>.error(error);
+  }
 }

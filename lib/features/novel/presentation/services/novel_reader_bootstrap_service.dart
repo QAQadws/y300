@@ -1,11 +1,9 @@
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_download_service.dart';
-import 'package:y300/features/novel/data/novel_reader_cache_service.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
-import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
-import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
 
 class NovelReaderLoadContext {
   const NovelReaderLoadContext({
@@ -43,28 +41,9 @@ class NovelReaderCriticalBootstrap {
   final double currentOffset;
 }
 
-class NovelReaderSupplementalBootstrap {
-  const NovelReaderSupplementalBootstrap({
-    this.novel,
-    this.bookmarks = const <NovelReaderBookmark>[],
-    this.currentEpisodeBookmarks = const <NovelReaderBookmark>[],
-    this.downloadedEpisodeIds = const <String>{},
-  });
-
-  final NovelItem? novel;
-  final List<NovelReaderBookmark> bookmarks;
-  final List<NovelReaderBookmark> currentEpisodeBookmarks;
-  final Set<String> downloadedEpisodeIds;
-}
-
 abstract interface class NovelReaderBootstrapService {
   Future<NovelReaderCriticalBootstrap> loadCritical(
     NovelReaderLoadContext context,
-  );
-
-  Future<NovelReaderSupplementalBootstrap> loadSupplemental(
-    NovelReaderLoadContext context,
-    NovelReaderCriticalBootstrap critical,
   );
 }
 
@@ -72,19 +51,16 @@ class DefaultNovelReaderBootstrapService implements NovelReaderBootstrapService 
   DefaultNovelReaderBootstrapService({
     required NovelRepository repository,
     required NovelDownloadService downloadService,
-    required NovelReaderDocumentParser documentParser,
-    required NovelReaderCacheService cacheService,
+    required NovelReaderDocumentBuildService documentBuildService,
     NovelReaderProgressPolicy progressPolicy = const NovelReaderProgressPolicy(),
   }) : _repository = repository,
        _downloadService = downloadService,
-       _documentParser = documentParser,
-       _cacheService = cacheService,
+       _documentBuildService = documentBuildService,
        _progressPolicy = progressPolicy;
 
   final NovelRepository _repository;
   final NovelDownloadService _downloadService;
-  final NovelReaderDocumentParser _documentParser;
-  final NovelReaderCacheService _cacheService;
+  final NovelReaderDocumentBuildService _documentBuildService;
   final NovelReaderProgressPolicy _progressPolicy;
 
   @override
@@ -112,10 +88,12 @@ class DefaultNovelReaderBootstrapService implements NovelReaderBootstrapService 
       throw StateError('章节内容不存在');
     }
 
-    final document = _documentParser.parse(
-      episodeId: content.episodeId,
-      rawHtml: content.rawHtml,
-      fallbackParagraphs: content.paragraphs,
+    final document = await _documentBuildService.build(
+      NovelReaderDocumentBuildRequest(
+        episodeId: content.episodeId,
+        rawHtml: content.rawHtml,
+        fallbackParagraphs: content.paragraphs,
+      ),
     );
     final persistedPreferences = await _repository.getReaderPreferences();
     final readingProgress = await _repository.getReadingProgress(
@@ -146,35 +124,6 @@ class DefaultNovelReaderBootstrapService implements NovelReaderBootstrapService 
     );
   }
 
-  @override
-  Future<NovelReaderSupplementalBootstrap> loadSupplemental(
-    NovelReaderLoadContext context,
-    NovelReaderCriticalBootstrap critical,
-  ) async {
-    NovelItem? novel;
-    try {
-      novel = await _repository.getDetail(novelId: context.novelId);
-    } catch (_) {
-      novel = null;
-    }
-    final bookmarks = await _repository.listReaderBookmarks(
-      novelId: context.novelId,
-    );
-    final downloadedEpisodeIds = await _cacheService.getDownloadedEpisodeIds(
-      novelId: context.novelId,
-      episodeIds: critical.episodes.map((episode) => episode.episodeId),
-    );
-    return NovelReaderSupplementalBootstrap(
-      novel: novel,
-      bookmarks: bookmarks,
-      currentEpisodeBookmarks: _bookmarksForEpisode(
-        bookmarks,
-        critical.currentEpisode.episodeId,
-      ),
-      downloadedEpisodeIds: downloadedEpisodeIds,
-    );
-  }
-
   NovelReadingProgress? _progressForEpisode({
     required String episodeId,
     required NovelReadingProgress? currentProgress,
@@ -187,14 +136,5 @@ class DefaultNovelReaderBootstrapService implements NovelReaderBootstrapService 
       return preservedProgress;
     }
     return null;
-  }
-
-  List<NovelReaderBookmark> _bookmarksForEpisode(
-    List<NovelReaderBookmark> bookmarks,
-    String episodeId,
-  ) {
-    return bookmarks
-        .where((bookmark) => bookmark.episodeId == episodeId)
-        .toList(growable: false);
   }
 }

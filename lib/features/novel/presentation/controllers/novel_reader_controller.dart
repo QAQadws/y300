@@ -655,7 +655,6 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     required int sessionToken,
   }) {
     unawaited(() async {
-      await Future<void>.delayed(Duration.zero);
       if (!ref.mounted || sessionToken != _activeSessionToken) {
         return;
       }
@@ -672,40 +671,81 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     required NovelReaderCriticalBootstrap critical,
     required int sessionToken,
   }) async {
+    final hydrationService = ref.read(
+      novelReaderSupplementalHydrationServiceProvider,
+    );
     try {
-      final supplemental = await ref
-          .read(novelReaderBootstrapServiceProvider)
-          .loadSupplemental(context, critical);
-      if (!ref.mounted) {
-        return;
-      }
-      final current = state.value;
-      if (current == null ||
-          !_canApplySupplemental(
-            current: current,
-            sessionToken: sessionToken,
-            episodeId: critical.currentEpisode.episodeId,
-          )) {
-        return;
-      }
-      _mergeSupplemental(current, supplemental);
-    } catch (_) {
-      if (!ref.mounted) {
-        return;
-      }
-      final current = state.value;
-      if (current == null ||
-          !_canApplySupplemental(
-            current: current,
-            sessionToken: sessionToken,
-            episodeId: critical.currentEpisode.episodeId,
-          )) {
-        return;
-      }
-      state = AsyncData(
-        current.copyWith(isHydratingSupplemental: false),
+      final bookmarks = await hydrationService.loadBookmarks(
+        novelId: context.novelId,
       );
+      _mergeSupplementalBookmarks(
+        sessionToken: sessionToken,
+        episodeId: critical.currentEpisode.episodeId,
+        bookmarks: bookmarks,
+      );
+    } catch (_) {}
+    if (!_isSupplementalRequestCurrent(
+      sessionToken: sessionToken,
+      episodeId: critical.currentEpisode.episodeId,
+    )) {
+      return;
     }
+
+    try {
+      final downloadedEpisodeIds = await hydrationService.loadDownloadedEpisodeIds(
+        novelId: context.novelId,
+        episodeIds: critical.episodes.map((episode) => episode.episodeId),
+      );
+      _mergeSupplementalDownloadedEpisodes(
+        sessionToken: sessionToken,
+        episodeId: critical.currentEpisode.episodeId,
+        downloadedEpisodeIds: downloadedEpisodeIds,
+      );
+    } catch (_) {}
+    if (!_isSupplementalRequestCurrent(
+      sessionToken: sessionToken,
+      episodeId: critical.currentEpisode.episodeId,
+    )) {
+      return;
+    }
+
+    try {
+      final novel = await hydrationService.loadNovel(novelId: context.novelId);
+      _mergeSupplementalNovel(
+        sessionToken: sessionToken,
+        episodeId: critical.currentEpisode.episodeId,
+        novel: novel,
+      );
+    } catch (_) {}
+    if (!_isSupplementalRequestCurrent(
+      sessionToken: sessionToken,
+      episodeId: critical.currentEpisode.episodeId,
+    )) {
+      return;
+    }
+
+    _completeSupplementalHydration(
+      sessionToken: sessionToken,
+      episodeId: critical.currentEpisode.episodeId,
+    );
+  }
+
+  bool _isSupplementalRequestCurrent({
+    required int sessionToken,
+    required String episodeId,
+  }) {
+    if (!ref.mounted) {
+      return false;
+    }
+    final current = state.value;
+    if (current == null) {
+      return false;
+    }
+    return _canApplySupplemental(
+      current: current,
+      sessionToken: sessionToken,
+      episodeId: episodeId,
+    );
   }
 
   bool _canApplySupplemental({
@@ -717,18 +757,100 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
         current.currentEpisode.episodeId == episodeId;
   }
 
-  void _mergeSupplemental(
-    NovelReaderViewState current,
-    NovelReaderSupplementalBootstrap supplemental,
-  ) {
+  void _mergeSupplementalBookmarks({
+    required int sessionToken,
+    required String episodeId,
+    required List<NovelReaderBookmark> bookmarks,
+  }) {
+    if (!ref.mounted) {
+      return;
+    }
+    final current = state.value;
+    if (current == null ||
+        !_canApplySupplemental(
+          current: current,
+          sessionToken: sessionToken,
+          episodeId: episodeId,
+        )) {
+      return;
+    }
     state = AsyncData(
       current.copyWith(
-        novel: supplemental.novel,
-        bookmarks: supplemental.bookmarks,
-        currentEpisodeBookmarks: supplemental.currentEpisodeBookmarks,
-        downloadedEpisodeIds: supplemental.downloadedEpisodeIds,
-        isHydratingSupplemental: false,
+        bookmarks: bookmarks,
+        currentEpisodeBookmarks: _bookmarksForEpisode(
+          bookmarks,
+          current.currentEpisode.episodeId,
+        ),
       ),
+    );
+  }
+
+  void _mergeSupplementalDownloadedEpisodes({
+    required int sessionToken,
+    required String episodeId,
+    required Set<String> downloadedEpisodeIds,
+  }) {
+    if (!ref.mounted) {
+      return;
+    }
+    final current = state.value;
+    if (current == null ||
+        !_canApplySupplemental(
+          current: current,
+          sessionToken: sessionToken,
+          episodeId: episodeId,
+        )) {
+      return;
+    }
+    state = AsyncData(
+      current.copyWith(
+        downloadedEpisodeIds: downloadedEpisodeIds,
+      ),
+    );
+  }
+
+  void _mergeSupplementalNovel({
+    required int sessionToken,
+    required String episodeId,
+    required NovelItem? novel,
+  }) {
+    if (!ref.mounted) {
+      return;
+    }
+    final current = state.value;
+    if (current == null ||
+        !_canApplySupplemental(
+          current: current,
+          sessionToken: sessionToken,
+          episodeId: episodeId,
+        )) {
+      return;
+    }
+    state = AsyncData(
+      current.copyWith(
+        novel: novel,
+      ),
+    );
+  }
+
+  void _completeSupplementalHydration({
+    required int sessionToken,
+    required String episodeId,
+  }) {
+    if (!ref.mounted) {
+      return;
+    }
+    final current = state.value;
+    if (current == null ||
+        !_canApplySupplemental(
+          current: current,
+          sessionToken: sessionToken,
+          episodeId: episodeId,
+        )) {
+      return;
+    }
+    state = AsyncData(
+      current.copyWith(isHydratingSupplemental: false),
     );
   }
 

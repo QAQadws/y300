@@ -17,11 +17,14 @@ import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_layout_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_layout_request.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_layout_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
@@ -1217,6 +1220,125 @@ void main() {
 
     expect(repository.refreshCount, 1);
   });
+
+  testWidgets('NovelReaderPage large document build delay still enters reader', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      firstRawHtml: '<p>${List<String>.filled(15000, '文').join()}</p>',
+      firstParagraphs: const <String>['大章节正文'],
+    );
+    final documentBuildService = _DelayedNovelReaderDocumentBuildService(
+      const Duration(milliseconds: 120),
+    );
+
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        documentBuildService: documentBuildService,
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 140));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-paragraph-list')), findsOneWidget);
+    expect(find.textContaining('文'), findsOneWidget);
+  });
+
+  testWidgets('NovelReaderPage chapter sheet updates bookmark badge after late hydration', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository.threeEpisodes();
+    final hydrationService = _ControlledNovelReaderSupplementalHydrationService();
+
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        supplementalHydrationService: hydrationService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-catalog')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('novel-reader-chapter-bookmark-novel:49:100:5001')),
+      findsNothing,
+    );
+
+    hydrationService.completeBookmarks(<NovelReaderBookmark>[
+      NovelReaderBookmark(
+        bookmarkId: 'episode-bookmark:novel:49:100:5001',
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+        anchor: const NovelReaderTextAnchor(episodeId: 'novel:49:100:5001'),
+        title: '章节书签',
+        snippet: '章节书签',
+        createdAt: DateTime(2026, 6, 8),
+        updatedAt: DateTime(2026, 6, 8),
+      ),
+    ]);
+    hydrationService.completeDownloadedEpisodeIds(
+      const <String>{'novel:49:100:5001'},
+    );
+    hydrationService.completeNovelTitle('测试小说');
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('novel-reader-chapter-bookmark-novel:49:100:5001')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('novel-reader-chapter-downloaded-novel:49:100:5001')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('NovelReaderPage bookmark sheet updates after late hydration', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository.threeEpisodes();
+    final hydrationService = _ControlledNovelReaderSupplementalHydrationService();
+
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        supplementalHydrationService: hydrationService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-bookmark')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-bookmark-empty')), findsOneWidget);
+
+    hydrationService.completeBookmarks(<NovelReaderBookmark>[
+      NovelReaderBookmark(
+        bookmarkId: 'reader-bookmark:1',
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+        anchor: const NovelReaderTextAnchor(episodeId: 'novel:49:100:5001'),
+        title: '第1章',
+        snippet: '晚到位置书签',
+        createdAt: DateTime(2026, 6, 8),
+        updatedAt: DateTime(2026, 6, 8),
+      ),
+    ]);
+    hydrationService.completeDownloadedEpisodeIds(const <String>{});
+    hydrationService.completeNovelTitle('测试小说');
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-bookmark-empty')), findsNothing);
+    expect(find.text('晚到位置书签'), findsOneWidget);
+  });
 }
 
 Future<void> _showReaderMenu(WidgetTester tester) async {
@@ -1240,6 +1362,8 @@ Widget _buildReaderApp({
   LibraryStateRepository? stateRepository,
   ThreadRepository? threadRepository,
   NovelReaderLayoutService? layoutService,
+  NovelReaderDocumentBuildService? documentBuildService,
+  NovelReaderSupplementalHydrationService? supplementalHydrationService,
   String initialEpisodeId = 'novel:49:100:5001',
 }) {
   return ProviderScope(
@@ -1256,6 +1380,14 @@ Widget _buildReaderApp({
       ),
       if (layoutService != null)
         novelReaderLayoutServiceProvider.overrideWithValue(layoutService),
+      if (documentBuildService != null)
+        novelReaderDocumentBuildServiceProvider.overrideWithValue(
+          documentBuildService,
+        ),
+      if (supplementalHydrationService != null)
+        novelReaderSupplementalHydrationServiceProvider.overrideWithValue(
+          supplementalHydrationService,
+        ),
       libraryStateRepositoryProvider.overrideWithValue(
         stateRepository ?? _MemoryLibraryStateRepository(),
       ),
@@ -2003,5 +2135,82 @@ class _ControlledNovelReaderLayoutService implements NovelReaderLayoutService {
       ),
       pages: resolvedPages,
     );
+  }
+}
+
+class _DelayedNovelReaderDocumentBuildService
+    implements NovelReaderDocumentBuildService {
+  _DelayedNovelReaderDocumentBuildService(this.delay);
+
+  final Duration delay;
+
+  @override
+  Future<NovelReaderDocument> build(
+    NovelReaderDocumentBuildRequest request,
+  ) async {
+    await Future<void>.delayed(delay);
+    return const DiscuzNovelReaderDocumentParser().parse(
+      episodeId: request.episodeId,
+      rawHtml: request.rawHtml,
+      fallbackParagraphs: request.fallbackParagraphs,
+    );
+  }
+}
+
+class _ControlledNovelReaderSupplementalHydrationService
+    implements NovelReaderSupplementalHydrationService {
+  final Completer<List<NovelReaderBookmark>> _bookmarksCompleter =
+      Completer<List<NovelReaderBookmark>>();
+  final Completer<Set<String>> _downloadedEpisodeIdsCompleter =
+      Completer<Set<String>>();
+  final Completer<NovelItem?> _novelCompleter = Completer<NovelItem?>();
+
+  @override
+  Future<List<NovelReaderBookmark>> loadBookmarks({
+    required String novelId,
+  }) {
+    return _bookmarksCompleter.future;
+  }
+
+  @override
+  Future<Set<String>> loadDownloadedEpisodeIds({
+    required String novelId,
+    required Iterable<String> episodeIds,
+  }) {
+    return _downloadedEpisodeIdsCompleter.future;
+  }
+
+  @override
+  Future<NovelItem?> loadNovel({
+    required String novelId,
+  }) {
+    return _novelCompleter.future;
+  }
+
+  void completeBookmarks(List<NovelReaderBookmark> value) {
+    if (!_bookmarksCompleter.isCompleted) {
+      _bookmarksCompleter.complete(value);
+    }
+  }
+
+  void completeDownloadedEpisodeIds(Set<String> value) {
+    if (!_downloadedEpisodeIdsCompleter.isCompleted) {
+      _downloadedEpisodeIdsCompleter.complete(value);
+    }
+  }
+
+  void completeNovelTitle(String title) {
+    if (!_novelCompleter.isCompleted) {
+      _novelCompleter.complete(
+        NovelItem(
+          novelId: 'novel:49:100',
+          sourceTid: '100',
+          sourceFid: '49',
+          title: title,
+          updatedAt: DateTime(2026, 1, 1),
+          episodeCount: 3,
+        ),
+      );
+    }
   }
 }
