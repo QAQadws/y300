@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
@@ -8,6 +8,8 @@ import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_transition_state.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_preference_impact_analyzer.dart';
 
 class NovelReaderArgs {
@@ -51,6 +53,8 @@ class NovelReaderViewState {
     this.currentSearchIndex = -1,
     this.searchKeyword = '',
     this.downloadedEpisodeIds = const <String>{},
+    this.transition,
+    this.isHydratingSupplemental = false,
     this.isCachingEpisodes = false,
     this.cacheCurrent = 0,
     this.cacheTotal = 0,
@@ -73,6 +77,8 @@ class NovelReaderViewState {
   final int currentSearchIndex;
   final String searchKeyword;
   final Set<String> downloadedEpisodeIds;
+  final NovelReaderTransitionState? transition;
+  final bool isHydratingSupplemental;
   final bool isCachingEpisodes;
   final int cacheCurrent;
   final int cacheTotal;
@@ -146,6 +152,9 @@ class NovelReaderViewState {
     int? currentSearchIndex,
     String? searchKeyword,
     Set<String>? downloadedEpisodeIds,
+    NovelReaderTransitionState? transition,
+    bool clearTransition = false,
+    bool? isHydratingSupplemental,
     bool? isCachingEpisodes,
     int? cacheCurrent,
     int? cacheTotal,
@@ -173,6 +182,9 @@ class NovelReaderViewState {
       currentSearchIndex: currentSearchIndex ?? this.currentSearchIndex,
       searchKeyword: searchKeyword ?? this.searchKeyword,
       downloadedEpisodeIds: downloadedEpisodeIds ?? this.downloadedEpisodeIds,
+      transition: clearTransition ? null : (transition ?? this.transition),
+      isHydratingSupplemental:
+          isHydratingSupplemental ?? this.isHydratingSupplemental,
       isCachingEpisodes: isCachingEpisodes ?? this.isCachingEpisodes,
       cacheCurrent: cacheCurrent ?? this.cacheCurrent,
       cacheTotal: cacheTotal ?? this.cacheTotal,
@@ -190,15 +202,18 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   NovelReaderController(this._args);
 
   final NovelReaderArgs _args;
-  final NovelReaderProgressPolicy _progressPolicy = const NovelReaderProgressPolicy();
+  final NovelReaderProgressPolicy _progressPolicy =
+      const NovelReaderProgressPolicy();
   final NovelReaderPreferenceImpactAnalyzer _preferenceImpactAnalyzer =
       const DefaultNovelReaderPreferenceImpactAnalyzer();
   Timer? _saveDebounce;
+  int _activeSessionToken = 0;
+  int _transitionRequestSerial = 0;
 
   @override
   FutureOr<NovelReaderViewState> build() async {
     ref.onDispose(() => _saveDebounce?.cancel());
-    return _load(_args.episodeId);
+    return _loadInitialCriticalState(_args.episodeId);
   }
 
   void previewPreferences(NovelReaderPreferences next) {
@@ -275,44 +290,46 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     );
   }
 
-  Future<void> openEpisode(String episodeId) async {
+  Future<bool> openEpisode(String episodeId) async {
     final current = state.value;
-    if (current == null || current.currentEpisode.episodeId == episodeId) {
-      return;
+    if (current == null) {
+      return false;
     }
-    final preservedProgress = current.readingProgress;
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(
-      () => _load(episodeId, preservedProgress: preservedProgress),
+    if (current.currentEpisode.episodeId == episodeId) {
+      return true;
+    }
+    return _runEpisodeTransition(
+      episodeId: episodeId,
+      kind: NovelReaderTransitionKind.switchingEpisode,
     );
   }
 
-  Future<void> openEpisodeFromCatalog(String episodeId) {
+  Future<bool> openEpisodeFromCatalog(String episodeId) {
     return openEpisode(episodeId);
   }
 
-  Future<void> goToPreviousEpisode() async {
+  Future<bool> goToPreviousEpisode() async {
     final current = state.value;
     if (current == null) {
-      return;
+      return false;
     }
     final previous = current.previousEpisode;
     if (previous == null) {
-      return;
+      return true;
     }
-    await openEpisode(previous.episodeId);
+    return openEpisode(previous.episodeId);
   }
 
-  Future<void> goToNextEpisode() async {
+  Future<bool> goToNextEpisode() async {
     final current = state.value;
     if (current == null) {
-      return;
+      return false;
     }
     final next = current.nextEpisode;
     if (next == null) {
-      return;
+      return true;
     }
-    await openEpisode(next.episodeId);
+    return openEpisode(next.episodeId);
   }
 
   Future<void> onScrollOffsetChanged(
@@ -525,114 +542,245 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     );
   }
 
-  Future<void> refreshCurrentEpisode() async {
+  Future<bool> refreshCurrentEpisode() async {
     final current = state.value;
     final repository = ref.read(novelRepositoryProvider);
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(() async {
-      await repository.refreshEpisodes(novelId: _args.novelId);
-      return _load(
-        current?.currentEpisode.episodeId ?? _args.episodeId,
-        preservedProgress: current?.readingProgress,
-      );
-    });
+    if (current == null) {
+      state = const AsyncLoading();
+      state = await AsyncValue.guard(() async {
+        await repository.refreshEpisodes(novelId: _args.novelId);
+        return _loadInitialCriticalState(_args.episodeId);
+      });
+      return state.hasValue;
+    }
+    return _runEpisodeTransition(
+      episodeId: current.currentEpisode.episodeId,
+      kind: NovelReaderTransitionKind.refreshingEpisode,
+      refreshEpisodes: true,
+    );
   }
 
-  Future<NovelReaderViewState> _load(
+  Future<NovelReaderViewState> _loadInitialCriticalState(
     String episodeId, {
     NovelReadingProgress? preservedProgress,
   }) async {
-    final repository = ref.read(novelRepositoryProvider);
-    NovelItem? novel;
-    try {
-      novel = await repository.getDetail(novelId: _args.novelId);
-    } catch (_) {
-      novel = null;
-    }
-    final episodes = await repository.getEpisodes(
+    final context = NovelReaderLoadContext(
       novelId: _args.novelId,
-      descending: false,
-    );
-    if (episodes.isEmpty) {
-      throw StateError('小说章节目录为空');
-    }
-    final currentEpisode = episodes.firstWhere(
-      (episode) => episode.episodeId == episodeId,
-      orElse: () => episodes.first,
-    );
-
-    final downloadService = ref.read(novelDownloadServiceProvider);
-    final content = await downloadService.getDownloadedChapterContent(
-          novelId: _args.novelId,
-          episodeId: currentEpisode.episodeId,
-        ) ??
-        await repository.getChapterContent(episodeId: currentEpisode.episodeId);
-    if (content == null) {
-      throw StateError('章节内容不存在');
-    }
-    final document = ref.read(novelReaderDocumentParserProvider).parse(
-          episodeId: content.episodeId,
-          rawHtml: content.rawHtml,
-          fallbackParagraphs: content.paragraphs,
-        );
-
-    final preferences = await repository.getReaderPreferences();
-    final progress = await repository.getReadingProgress(novelId: _args.novelId);
-    final restoreProgress = _progressForEpisode(
-      episodeId: currentEpisode.episodeId,
-      currentProgress: progress,
+      requestedEpisodeId: episodeId,
       preservedProgress: preservedProgress,
     );
-    final progressSnapshot = _progressPolicy.fromReadingProgress(
-      novelId: _args.novelId,
-      episodeId: currentEpisode.episodeId,
-      flowMode: preferences.flowMode,
-      progress: restoreProgress,
+    final critical = await _loadCriticalBootstrap(context);
+    if (!ref.mounted) {
+      return _initialStateFromCritical(critical);
+    }
+    final sessionToken = _activeSessionToken + 1;
+    _activeSessionToken = sessionToken;
+    final viewState = _initialStateFromCritical(critical);
+    _scheduleHydrateSupplemental(
+      context: context,
+      critical: critical,
+      sessionToken: sessionToken,
     );
-    final offset = progressSnapshot.scrollOffset;
-    final bookmarks = await repository.listReaderBookmarks(novelId: _args.novelId);
-    final currentEpisodeBookmarks = _bookmarksForEpisode(
-      bookmarks,
-      currentEpisode.episodeId,
-    );
-    final downloadedEpisodeIds =
-        await ref.read(novelReaderCacheServiceProvider).getDownloadedEpisodeIds(
-              novelId: _args.novelId,
-              episodeIds: episodes.map((episode) => episode.episodeId),
-            );
+    return viewState;
+  }
 
-    return NovelReaderViewState(
-      novel: novel,
-      episodes: episodes,
-      currentEpisode: currentEpisode,
-      currentContent: content,
-      document: document,
-      persistedPreferences: preferences,
-      effectivePreferences: preferences,
-      readingProgress: progress,
-      progressSnapshot: progressSnapshot,
-      currentOffset: offset,
-      bookmarks: bookmarks,
-      currentEpisodeBookmarks: currentEpisodeBookmarks,
-      searchResults: const <NovelReaderSearchResult>[],
-      currentSearchIndex: -1,
-      searchKeyword: '',
-      downloadedEpisodeIds: downloadedEpisodeIds,
+  Future<NovelReaderCriticalBootstrap> _loadCriticalBootstrap(
+    NovelReaderLoadContext context,
+  ) {
+    return ref.read(novelReaderBootstrapServiceProvider).loadCritical(context);
+  }
+
+  Future<bool> _runEpisodeTransition({
+    required String episodeId,
+    required NovelReaderTransitionKind kind,
+    bool refreshEpisodes = false,
+  }) async {
+    final current = state.value;
+    if (current == null) {
+      return false;
+    }
+    final serial = ++_transitionRequestSerial;
+    final context = NovelReaderLoadContext(
+      novelId: _args.novelId,
+      requestedEpisodeId: episodeId,
+      preservedProgress: current.readingProgress,
+    );
+    state = AsyncData(
+      current.copyWith(
+        transition: NovelReaderTransitionState(
+          kind: kind,
+          targetEpisodeId: episodeId,
+        ),
+      ),
+    );
+    try {
+      if (refreshEpisodes) {
+        await ref.read(novelRepositoryProvider).refreshEpisodes(
+              novelId: _args.novelId,
+            );
+        if (!ref.mounted) {
+          return false;
+        }
+      }
+      final critical = await _loadCriticalBootstrap(context);
+      if (!ref.mounted || serial != _transitionRequestSerial) {
+        return false;
+      }
+      final sessionToken = _activeSessionToken + 1;
+      _activeSessionToken = sessionToken;
+      final nextState = _transitionedStateFromCritical(
+        previous: current,
+        critical: critical,
+      );
+      state = AsyncData(nextState);
+      _scheduleHydrateSupplemental(
+        context: context,
+        critical: critical,
+        sessionToken: sessionToken,
+      );
+      return true;
+    } catch (_) {
+      if (serial != _transitionRequestSerial) {
+        return false;
+      }
+      final latest = state.value ?? current;
+      state = AsyncData(latest.copyWith(clearTransition: true));
+      return false;
+    }
+  }
+
+  void _scheduleHydrateSupplemental({
+    required NovelReaderLoadContext context,
+    required NovelReaderCriticalBootstrap critical,
+    required int sessionToken,
+  }) {
+    unawaited(() async {
+      await Future<void>.delayed(Duration.zero);
+      if (!ref.mounted || sessionToken != _activeSessionToken) {
+        return;
+      }
+      await _hydrateSupplemental(
+        context: context,
+        critical: critical,
+        sessionToken: sessionToken,
+      );
+    }());
+  }
+
+  Future<void> _hydrateSupplemental({
+    required NovelReaderLoadContext context,
+    required NovelReaderCriticalBootstrap critical,
+    required int sessionToken,
+  }) async {
+    try {
+      final supplemental = await ref
+          .read(novelReaderBootstrapServiceProvider)
+          .loadSupplemental(context, critical);
+      if (!ref.mounted) {
+        return;
+      }
+      final current = state.value;
+      if (current == null ||
+          !_canApplySupplemental(
+            current: current,
+            sessionToken: sessionToken,
+            episodeId: critical.currentEpisode.episodeId,
+          )) {
+        return;
+      }
+      _mergeSupplemental(current, supplemental);
+    } catch (_) {
+      if (!ref.mounted) {
+        return;
+      }
+      final current = state.value;
+      if (current == null ||
+          !_canApplySupplemental(
+            current: current,
+            sessionToken: sessionToken,
+            episodeId: critical.currentEpisode.episodeId,
+          )) {
+        return;
+      }
+      state = AsyncData(
+        current.copyWith(isHydratingSupplemental: false),
+      );
+    }
+  }
+
+  bool _canApplySupplemental({
+    required NovelReaderViewState current,
+    required int sessionToken,
+    required String episodeId,
+  }) {
+    return sessionToken == _activeSessionToken &&
+        current.currentEpisode.episodeId == episodeId;
+  }
+
+  void _mergeSupplemental(
+    NovelReaderViewState current,
+    NovelReaderSupplementalBootstrap supplemental,
+  ) {
+    state = AsyncData(
+      current.copyWith(
+        novel: supplemental.novel,
+        bookmarks: supplemental.bookmarks,
+        currentEpisodeBookmarks: supplemental.currentEpisodeBookmarks,
+        downloadedEpisodeIds: supplemental.downloadedEpisodeIds,
+        isHydratingSupplemental: false,
+      ),
     );
   }
 
-  NovelReadingProgress? _progressForEpisode({
-    required String episodeId,
-    required NovelReadingProgress? currentProgress,
-    required NovelReadingProgress? preservedProgress,
+  NovelReaderViewState _initialStateFromCritical(
+    NovelReaderCriticalBootstrap critical,
+  ) {
+    return NovelReaderViewState(
+      novel: null,
+      episodes: critical.episodes,
+      currentEpisode: critical.currentEpisode,
+      currentContent: critical.currentContent,
+      document: critical.document,
+      persistedPreferences: critical.persistedPreferences,
+      effectivePreferences: critical.effectivePreferences,
+      readingProgress: critical.readingProgress,
+      progressSnapshot: critical.progressSnapshot,
+      currentOffset: critical.currentOffset,
+      currentEpisodeBookmarks: const <NovelReaderBookmark>[],
+      searchResults: const <NovelReaderSearchResult>[],
+      currentSearchIndex: -1,
+      searchKeyword: '',
+      downloadedEpisodeIds: const <String>{},
+      transition: null,
+      isHydratingSupplemental: true,
+    );
+  }
+
+  NovelReaderViewState _transitionedStateFromCritical({
+    required NovelReaderViewState previous,
+    required NovelReaderCriticalBootstrap critical,
   }) {
-    if (currentProgress?.episodeId == episodeId) {
-      return currentProgress;
-    }
-    if (preservedProgress?.episodeId == episodeId) {
-      return preservedProgress;
-    }
-    return null;
+    final currentEpisodeBookmarks = _bookmarksForEpisode(
+      previous.bookmarks,
+      critical.currentEpisode.episodeId,
+    );
+    return previous.copyWith(
+      episodes: critical.episodes,
+      currentEpisode: critical.currentEpisode,
+      currentContent: critical.currentContent,
+      document: critical.document,
+      persistedPreferences: critical.persistedPreferences,
+      effectivePreferences: critical.effectivePreferences,
+      readingProgress: critical.readingProgress,
+      progressSnapshot: critical.progressSnapshot,
+      currentOffset: critical.currentOffset,
+      currentEpisodeBookmarks: currentEpisodeBookmarks,
+      searchKeyword: '',
+      searchResults: const <NovelReaderSearchResult>[],
+      currentSearchIndex: -1,
+      clearTransition: true,
+      isHydratingSupplemental: true,
+    );
   }
 
   Future<void> _saveProgressSnapshot(NovelReaderProgressSnapshot snapshot) {
@@ -767,7 +915,8 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
         isCachingEpisodes: false,
         cacheCurrent: result.totalCount,
         cacheTotal: result.totalCount,
-        cacheError: result.hasFailures ? result.errorMessage ?? '部分章节缓存失败' : null,
+        cacheError:
+            result.hasFailures ? result.errorMessage ?? '部分章节缓存失败' : null,
         clearCacheError: !result.hasFailures,
       ),
     );

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
@@ -12,6 +14,8 @@ import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_transition_state.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap_service.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 
 void main() {
@@ -239,6 +243,225 @@ void main() {
     expect(repository.savedProgressEpisodeIds, contains('novel:49:100:5001'));
   });
 
+  test('initial build publishes critical state before supplemental completes', () async {
+    final repository = _ControllerNovelRepository();
+    final bootstrapService = _ControlledNovelReaderBootstrapService(
+      initialCritical: _criticalBootstrap(
+        episodeId: 'novel:49:100:5001',
+      ),
+    );
+    final container = _buildContainer(
+      repository: repository,
+      bootstrapService: bootstrapService,
+    );
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
+
+    final state = await container.read(provider.future);
+
+    expect(state.currentEpisode.episodeId, 'novel:49:100:5001');
+    expect(state.isHydratingSupplemental, isTrue);
+    expect(state.novel, isNull);
+    expect(state.bookmarks, isEmpty);
+
+    bootstrapService.completeInitialSupplemental(
+      _supplementalBootstrap(episodeId: 'novel:49:100:5001'),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    final hydrated = container.read(provider).value!;
+    expect(hydrated.isHydratingSupplemental, isFalse);
+    expect(hydrated.novel?.title, '测试小说');
+    expect(hydrated.downloadedEpisodeIds, contains('novel:49:100:5001'));
+  });
+
+  test('openEpisodeFromCatalog keeps old content and sets switching transition before critical resolves', () async {
+    final repository = _ControllerNovelRepository();
+    final bootstrapService = _ControlledNovelReaderBootstrapService(
+      initialCritical: _criticalBootstrap(
+        episodeId: 'novel:49:100:5001',
+      ),
+    );
+    final container = _buildContainer(
+      repository: repository,
+      bootstrapService: bootstrapService,
+    );
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
+
+    await container.read(provider.future);
+    bootstrapService.completeInitialSupplemental(
+      _supplementalBootstrap(episodeId: 'novel:49:100:5001'),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    final future = container
+        .read(provider.notifier)
+        .openEpisodeFromCatalog('novel:49:100:5002');
+    final transitioning = container.read(provider).value!;
+
+    expect(container.read(provider).isLoading, isFalse);
+    expect(transitioning.currentEpisode.episodeId, 'novel:49:100:5001');
+    expect(
+      transitioning.transition?.kind,
+      NovelReaderTransitionKind.switchingEpisode,
+    );
+    expect(
+      transitioning.transition?.targetEpisodeId,
+      'novel:49:100:5002',
+    );
+
+    bootstrapService.completeEpisodeCritical(
+      'novel:49:100:5002',
+      _criticalBootstrap(
+        episodeId: 'novel:49:100:5002',
+        paragraphText: '第二章正文。',
+      ),
+    );
+    final didSucceed = await future;
+
+    expect(didSucceed, isTrue);
+    final switched = container.read(provider).value!;
+    expect(switched.currentEpisode.episodeId, 'novel:49:100:5002');
+    expect(switched.transition, isNull);
+    expect(switched.searchKeyword, isEmpty);
+    expect(switched.searchResults, isEmpty);
+    expect(switched.currentSearchIndex, -1);
+    expect(switched.isHydratingSupplemental, isTrue);
+  });
+
+  test('openEpisodeFromCatalog failure keeps old chapter and clears transition', () async {
+    final repository = _ControllerNovelRepository();
+    final bootstrapService = _ControlledNovelReaderBootstrapService(
+      initialCritical: _criticalBootstrap(
+        episodeId: 'novel:49:100:5001',
+      ),
+    );
+    bootstrapService.failEpisodeCritical(
+      'novel:49:100:5002',
+      StateError('critical failed'),
+    );
+    final container = _buildContainer(
+      repository: repository,
+      bootstrapService: bootstrapService,
+    );
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
+
+    await container.read(provider.future);
+
+    final didSucceed = await container
+        .read(provider.notifier)
+        .openEpisodeFromCatalog('novel:49:100:5002');
+
+    expect(didSucceed, isFalse);
+    final state = container.read(provider).value!;
+    expect(state.currentEpisode.episodeId, 'novel:49:100:5001');
+    expect(state.transition, isNull);
+  });
+
+  test('stale supplemental does not override newer chapter state', () async {
+    final repository = _ControllerNovelRepository();
+    final bootstrapService = _ControlledNovelReaderBootstrapService(
+      initialCritical: _criticalBootstrap(
+        episodeId: 'novel:49:100:5001',
+      ),
+    );
+    final container = _buildContainer(
+      repository: repository,
+      bootstrapService: bootstrapService,
+    );
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
+
+    await container.read(provider.future);
+
+    final switchFuture = container
+        .read(provider.notifier)
+        .openEpisodeFromCatalog('novel:49:100:5002');
+    bootstrapService.completeEpisodeCritical(
+      'novel:49:100:5002',
+      _criticalBootstrap(
+        episodeId: 'novel:49:100:5002',
+        paragraphText: '第二章正文。',
+      ),
+    );
+    await switchFuture;
+
+    bootstrapService.completeInitialSupplemental(
+      _supplementalBootstrap(
+        episodeId: 'novel:49:100:5001',
+        downloadedEpisodeIds: const <String>{'novel:49:100:5001'},
+        novelTitle: '旧章节小说',
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    final state = container.read(provider).value!;
+    expect(state.currentEpisode.episodeId, 'novel:49:100:5002');
+    expect(state.novel, isNull);
+    expect(state.downloadedEpisodeIds, isEmpty);
+  });
+
+  test('refreshCurrentEpisode failure keeps old content and avoids AsyncError', () async {
+    final repository = _ControllerNovelRepository();
+    final bootstrapService = _ControlledNovelReaderBootstrapService(
+      initialCritical: _criticalBootstrap(
+        episodeId: 'novel:49:100:5001',
+      ),
+    );
+    bootstrapService.failEpisodeCritical(
+      'novel:49:100:5001',
+      StateError('refresh failed'),
+    );
+    final container = _buildContainer(
+      repository: repository,
+      bootstrapService: bootstrapService,
+    );
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
+
+    await container.read(provider.future);
+
+    final didSucceed = await container.read(provider.notifier).refreshCurrentEpisode();
+
+    expect(didSucceed, isFalse);
+    expect(container.read(provider).hasError, isFalse);
+    final state = container.read(provider).value!;
+    expect(state.currentEpisode.episodeId, 'novel:49:100:5001');
+    expect(state.transition, isNull);
+  });
+
   test('searchInCurrentChapter updates search results and selection', () async {
     final repository = _ControllerNovelRepository();
     repository.contentsByEpisodeId['novel:49:100:5001'] = _content(
@@ -320,7 +543,9 @@ void main() {
     final subscription = _keepReaderAlive(container, args);
     addTearDown(subscription.close);
 
-    await container.read(provider.future);
+    final initial = await container.read(provider.future);
+    expect(initial.isHydratingSupplemental, isTrue);
+    expect(initial.isCurrentEpisodeDownloaded, isFalse);
     final result = await container.read(provider.notifier).cacheCurrentEpisode();
     final state = container.read(provider).value!;
 
@@ -356,7 +581,8 @@ void main() {
     addTearDown(subscription.close);
 
     final initial = await container.read(provider.future);
-    expect(initial.isCurrentEpisodeDownloaded, isTrue);
+    expect(initial.isHydratingSupplemental, isTrue);
+    expect(initial.isCurrentEpisodeDownloaded, isFalse);
 
     final result =
         await container.read(provider.notifier).deleteCurrentEpisodeCache();
@@ -382,6 +608,7 @@ ProviderContainer _buildContainer({
   required _ControllerNovelRepository repository,
   NovelDownloadService? downloadService,
   LibraryStateRepository? stateRepository,
+  NovelReaderBootstrapService? bootstrapService,
 }) {
   return ProviderContainer(
     overrides: [
@@ -392,6 +619,8 @@ ProviderContainer _buildContainer({
       libraryStateRepositoryProvider.overrideWithValue(
         stateRepository ?? _MemoryLibraryStateRepository(),
       ),
+      if (bootstrapService != null)
+        novelReaderBootstrapServiceProvider.overrideWithValue(bootstrapService),
     ],
   );
 }
@@ -829,6 +1058,83 @@ class _ControllerNovelRepository implements NovelRepository {
   }
 }
 
+class _ControlledNovelReaderBootstrapService
+    implements NovelReaderBootstrapService {
+  _ControlledNovelReaderBootstrapService({
+    required NovelReaderCriticalBootstrap initialCritical,
+  }) : _initialCritical = initialCritical;
+
+  final NovelReaderCriticalBootstrap _initialCritical;
+  bool _hasServedInitialCritical = false;
+  final Completer<NovelReaderSupplementalBootstrap> _initialSupplementalCompleter =
+      Completer<NovelReaderSupplementalBootstrap>();
+  final Map<String, Completer<NovelReaderCriticalBootstrap>> _criticalCompleters =
+      <String, Completer<NovelReaderCriticalBootstrap>>{};
+  final Map<String, Object> _criticalFailures = <String, Object>{};
+  final Map<String, Completer<NovelReaderSupplementalBootstrap>>
+      _supplementalCompleters =
+      <String, Completer<NovelReaderSupplementalBootstrap>>{};
+
+  @override
+  Future<NovelReaderCriticalBootstrap> loadCritical(
+    NovelReaderLoadContext context,
+  ) {
+    if (!_hasServedInitialCritical &&
+        context.requestedEpisodeId == _initialCritical.currentEpisode.episodeId) {
+      _hasServedInitialCritical = true;
+      return Future<NovelReaderCriticalBootstrap>.value(_initialCritical);
+    }
+    final failure = _criticalFailures[context.requestedEpisodeId];
+    if (failure != null) {
+      return Future<NovelReaderCriticalBootstrap>.error(failure);
+    }
+    final completer = _criticalCompleters.putIfAbsent(
+      context.requestedEpisodeId,
+      Completer<NovelReaderCriticalBootstrap>.new,
+    );
+    return completer.future;
+  }
+
+  @override
+  Future<NovelReaderSupplementalBootstrap> loadSupplemental(
+    NovelReaderLoadContext context,
+    NovelReaderCriticalBootstrap critical,
+  ) {
+    if (critical.currentEpisode.episodeId == _initialCritical.currentEpisode.episodeId) {
+      return _initialSupplementalCompleter.future;
+    }
+    final completer = _supplementalCompleters.putIfAbsent(
+      critical.currentEpisode.episodeId,
+      Completer<NovelReaderSupplementalBootstrap>.new,
+    );
+    return completer.future;
+  }
+
+  void completeInitialSupplemental(NovelReaderSupplementalBootstrap value) {
+    if (!_initialSupplementalCompleter.isCompleted) {
+      _initialSupplementalCompleter.complete(value);
+    }
+  }
+
+  void completeEpisodeCritical(
+    String episodeId,
+    NovelReaderCriticalBootstrap value,
+  ) {
+    _criticalCompleters.putIfAbsent(
+      episodeId,
+      Completer<NovelReaderCriticalBootstrap>.new,
+    );
+    final completer = _criticalCompleters[episodeId]!;
+    if (!completer.isCompleted) {
+      completer.complete(value);
+    }
+  }
+
+  void failEpisodeCritical(String episodeId, Object error) {
+    _criticalFailures[episodeId] = error;
+  }
+}
+
 List<NovelEpisodeItem> _episodes() {
   return const <NovelEpisodeItem>[
     NovelEpisodeItem(
@@ -886,5 +1192,86 @@ NovelReaderDocument _document(String episodeId) {
     ],
     plainText: '正文。',
     wordCount: 3,
+  );
+}
+
+NovelReaderCriticalBootstrap _criticalBootstrap({
+  required String episodeId,
+  String paragraphText = '正文。',
+  NovelReaderPreferences? preferences,
+  NovelReadingProgress? readingProgress,
+}) {
+  final resolvedPreferences = preferences ?? NovelReaderPreferences.defaults();
+  final progress = const NovelReaderProgressPolicy().fromReadingProgress(
+    novelId: 'novel:49:100',
+    episodeId: episodeId,
+    flowMode: resolvedPreferences.flowMode,
+    progress: readingProgress,
+  );
+  final episode = _episodes().firstWhere((item) => item.episodeId == episodeId);
+  return NovelReaderCriticalBootstrap(
+    episodes: _episodes(),
+    currentEpisode: episode,
+    currentContent: _content(episodeId, paragraphText),
+    document: NovelReaderDocument(
+      episodeId: episodeId,
+      rawHtmlHash: 'test-$episodeId',
+      nodes: <NovelReaderNode>[
+        NovelReaderNode(
+          id: 'node-0',
+          type: NovelReaderNodeType.paragraph,
+          text: paragraphText,
+        ),
+      ],
+      plainText: paragraphText,
+      wordCount: paragraphText.length,
+    ),
+    persistedPreferences: resolvedPreferences,
+    effectivePreferences: resolvedPreferences,
+    readingProgress: readingProgress,
+    progressSnapshot: progress,
+    currentOffset: progress.scrollOffset,
+  );
+}
+
+NovelReaderSupplementalBootstrap _supplementalBootstrap({
+  required String episodeId,
+  String novelTitle = '测试小说',
+  Set<String> downloadedEpisodeIds = const <String>{'novel:49:100:5001'},
+}) {
+  return NovelReaderSupplementalBootstrap(
+    novel: NovelItem(
+      novelId: 'novel:49:100',
+      sourceTid: '100',
+      sourceFid: '49',
+      title: novelTitle,
+      updatedAt: DateTime(2026, 1, 1),
+      episodeCount: _episodes().length,
+    ),
+    bookmarks: <NovelReaderBookmark>[
+      NovelReaderBookmark(
+        bookmarkId: 'episode-bookmark:$episodeId',
+        novelId: 'novel:49:100',
+        episodeId: episodeId,
+        anchor: NovelReaderTextAnchor(episodeId: episodeId),
+        title: '章节书签',
+        snippet: '章节书签',
+        createdAt: DateTime(2026, 6, 8),
+        updatedAt: DateTime(2026, 6, 8),
+      ),
+    ],
+    currentEpisodeBookmarks: <NovelReaderBookmark>[
+      NovelReaderBookmark(
+        bookmarkId: 'episode-bookmark:$episodeId',
+        novelId: 'novel:49:100',
+        episodeId: episodeId,
+        anchor: NovelReaderTextAnchor(episodeId: episodeId),
+        title: '章节书签',
+        snippet: '章节书签',
+        createdAt: DateTime(2026, 6, 8),
+        updatedAt: DateTime(2026, 6, 8),
+      ),
+    ],
+    downloadedEpisodeIds: downloadedEpisodeIds,
   );
 }

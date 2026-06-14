@@ -83,9 +83,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
         error: (error, _) => NovelReaderErrorView(
           error: error,
           onRetry: () => ref.invalidate(novelReaderControllerProvider(_args)),
-          onRefreshEpisodes: () => ref
-              .read(novelReaderControllerProvider(_args).notifier)
-              .refreshCurrentEpisode(),
+          onRefreshEpisodes: () => _refreshFromErrorView(),
           onOpenThread: () => _openFallbackSourceThread(),
         ),
         data: (viewState) {
@@ -119,7 +117,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
                 final pageIndex = pagedLayout == null
                     ? 0
                     : _ensurePagedController(viewState, pagedLayout);
-                return ReaderOverlayScaffold(
+                final reader = ReaderOverlayScaffold(
                   controller: _overlayController,
                   topBar: _buildTopBarConfig(viewState),
                   bottomBar: _buildBottomBarConfig(
@@ -159,6 +157,38 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
                           externalLauncher,
                           pagedLayout,
                         ),
+                );
+                return Stack(
+                  children: [
+                    Positioned.fill(child: reader),
+                    if (viewState.transition != null)
+                      Positioned.fill(
+                        child: AbsorbPointer(
+                          child: ColoredBox(
+                            key: const Key('novel-reader-transition-mask'),
+                            color: palette.background.withValues(alpha: 0.18),
+                            child: const Center(
+                              child: DecoratedBox(
+                                key: Key('novel-reader-transition-indicator'),
+                                decoration: BoxDecoration(
+                                  color: Colors.black12,
+                                  borderRadius: BorderRadius.all(
+                                    Radius.circular(12),
+                                  ),
+                                ),
+                                child: Padding(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 16,
+                                  ),
+                                  child: CircularProgressIndicator(),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 );
               },
             ),
@@ -543,12 +573,17 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     if (_hasRestoredOffset || offset <= 0) {
       return;
     }
+    final current = ref.read(novelReaderControllerProvider(_args)).value;
+    if (current?.transition != null) {
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients || _hasRestoredOffset) {
         return;
       }
-      final current = ref.read(novelReaderControllerProvider(_args)).value;
-      if (current?.currentEpisode.episodeId != episodeId) {
+      final latest = ref.read(novelReaderControllerProvider(_args)).value;
+      if (latest?.transition != null ||
+          latest?.currentEpisode.episodeId != episodeId) {
         return;
       }
       final max = _scrollController.position.maxScrollExtent;
@@ -596,7 +631,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     );
   }
 
-  Future<void> _openDifferentEpisode(Future<void> Function() action) async {
+  Future<void> _openDifferentEpisode(Future<bool> Function() action) async {
     await _saveVisibleProgressNow();
     _hasRestoredOffset = false;
     if (_scrollController.hasClients) {
@@ -608,7 +643,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
       }
     }
     _overlayController.hideMenu();
-    await action();
+    final didSucceed = await action();
+    if (!mounted || didSucceed) {
+      return;
+    }
+    _showReaderSnackBar('章节切换失败，已保留当前章节');
   }
 
   Future<void> _saveVisibleProgressNow() async {
@@ -1090,6 +1129,16 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
           margin: const EdgeInsets.fromLTRB(16, 0, 16, 120),
         ),
       );
+  }
+
+  Future<void> _refreshFromErrorView() async {
+    final didSucceed = await ref
+        .read(novelReaderControllerProvider(_args).notifier)
+        .refreshCurrentEpisode();
+    if (!mounted || didSucceed) {
+      return;
+    }
+    _showReaderSnackBar('章节刷新失败，已保留当前章节');
   }
 
   String _novelTitle(NovelReaderViewState viewState) {

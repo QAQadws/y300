@@ -12,6 +12,7 @@ import 'package:y300/features/novel/data/novel_thread_gateway.dart';
 import 'package:y300/features/novel/domain/services/novel_episode_discovery_service.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_search_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap_service.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 
@@ -43,6 +44,17 @@ final novelReaderCacheServiceProvider = Provider<NovelReaderCacheService>((ref) 
     downloadService: ref.watch(novelDownloadServiceProvider),
     repository: ref.watch(novelRepositoryProvider),
     stateRepository: ref.watch(libraryStateRepositoryProvider),
+  );
+});
+
+final novelReaderBootstrapServiceProvider = Provider<NovelReaderBootstrapService>((
+  ref,
+) {
+  return DefaultNovelReaderBootstrapService(
+    repository: ref.watch(novelRepositoryProvider),
+    downloadService: ref.watch(novelDownloadServiceProvider),
+    documentParser: ref.watch(novelReaderDocumentParserProvider),
+    cacheService: ref.watch(novelReaderCacheServiceProvider),
   );
 });
 

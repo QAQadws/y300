@@ -80,7 +80,9 @@ void main() {
   testWidgets('NovelReaderPage opens catalog and switches chapter', (
     tester,
   ) async {
-    final repository = _FakeNovelRepository();
+    final repository = _FakeNovelRepository(
+      chapterLoadDelay: const Duration(milliseconds: 120),
+    );
     await tester.pumpWidget(_buildReaderApp(repository: repository));
     await tester.pumpAndSettle();
 
@@ -92,6 +94,13 @@ void main() {
     expect(find.text('当前'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('novel-reader-chapter-novel:49:100:5002')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('novel-reader-transition-mask')), findsOneWidget);
+    expect(find.text('第一段。'), findsOneWidget);
+    expect(find.byKey(const Key('novel-reader-transition-indicator')), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 140));
     await tester.pumpAndSettle();
 
     expect(find.text('第三段。'), findsOneWidget);
@@ -186,7 +195,9 @@ void main() {
   testWidgets('NovelReaderPage bottom buttons and slider switch chapters', (
     tester,
   ) async {
-    final repository = _FakeNovelRepository.threeEpisodes();
+    final repository = _FakeNovelRepository.threeEpisodes(
+      chapterLoadDelay: const Duration(milliseconds: 120),
+    );
     await tester.pumpWidget(_buildReaderApp(repository: repository));
     await tester.pumpAndSettle();
 
@@ -201,6 +212,12 @@ void main() {
     expect(nextButton.onPressed, isNotNull);
 
     await tester.tap(find.byKey(const Key('shared-reader-next-button')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('novel-reader-transition-mask')), findsOneWidget);
+    expect(find.text('第一段。'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 140));
     await tester.pumpAndSettle();
 
     expect(find.text('第三段。'), findsOneWidget);
@@ -214,9 +231,41 @@ void main() {
       find.byKey(const Key('shared-reader-progress-slider')),
       const Offset(300, 0),
     );
+    await tester.pump();
+    expect(find.byKey(const Key('novel-reader-transition-mask')), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 140));
     await tester.pumpAndSettle();
 
     expect(find.text('第五段。'), findsOneWidget);
+  });
+
+  testWidgets('NovelReaderPage chapter switch failure keeps old content and shows snackbar', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository.threeEpisodes(
+      failedEpisodeIds: const <String>{'novel:49:100:5002'},
+      chapterLoadDelay: const Duration(milliseconds: 120),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-catalog')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('novel-reader-chapter-novel:49:100:5002')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('novel-reader-transition-mask')), findsOneWidget);
+    expect(find.text('第一段。'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 140));
+    await tester.pumpAndSettle();
+
+    expect(find.text('第一段。'), findsOneWidget);
+    expect(find.text('第三段。'), findsNothing);
+    expect(find.text('章节切换失败，已保留当前章节'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
   testWidgets('NovelReaderPage display sheet previews theme and saves on confirm', (
@@ -1271,6 +1320,8 @@ class _FakeNovelRepository implements NovelRepository {
     List<NovelEpisodeItem>? episodes,
     Map<String, NovelChapterContent>? contentsByEpisodeId,
     this.readingProgress,
+    this.chapterLoadDelay = Duration.zero,
+    this.failedEpisodeIds = const <String>{},
   })  : episodes = episodes ?? _defaultEpisodes(),
         contentsByEpisodeId = contentsByEpisodeId ??
             _defaultContents(
@@ -1281,6 +1332,8 @@ class _FakeNovelRepository implements NovelRepository {
 
   factory _FakeNovelRepository.threeEpisodes({
     NovelReadingProgress? readingProgress,
+    Duration chapterLoadDelay = Duration.zero,
+    Set<String> failedEpisodeIds = const <String>{},
   }) {
     return _FakeNovelRepository(
       episodes: _threeEpisodes(),
@@ -1292,6 +1345,8 @@ class _FakeNovelRepository implements NovelRepository {
         },
       ),
       readingProgress: readingProgress,
+      chapterLoadDelay: chapterLoadDelay,
+      failedEpisodeIds: failedEpisodeIds,
     );
   }
 
@@ -1329,12 +1384,16 @@ class _FakeNovelRepository implements NovelRepository {
         scrollOffset: 0,
         updatedAt: DateTime(2026, 6, 1),
       ),
+      chapterLoadDelay: Duration.zero,
+      failedEpisodeIds: const <String>{},
     );
   }
 
   final List<NovelEpisodeItem> episodes;
   final Map<String, NovelChapterContent> contentsByEpisodeId;
   NovelReadingProgress? readingProgress;
+  final Duration chapterLoadDelay;
+  final Set<String> failedEpisodeIds;
   NovelReaderPreferences preferences;
   NovelReaderPreferences? latestPreferences;
   int upsertPreferencesCallCount = 0;
@@ -1375,6 +1434,12 @@ class _FakeNovelRepository implements NovelRepository {
 
   @override
   Future<NovelChapterContent?> getChapterContent({required String episodeId}) async {
+    if (chapterLoadDelay > Duration.zero) {
+      await Future<void>.delayed(chapterLoadDelay);
+    }
+    if (failedEpisodeIds.contains(episodeId)) {
+      throw StateError('章节内容不存在');
+    }
     return contentsByEpisodeId[episodeId];
   }
 
