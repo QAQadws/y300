@@ -99,8 +99,19 @@ final class ComicTitleRules {
     return input.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
+  static String normalizeHtmlEntities(String input) {
+    // 论坛标题里偶尔会残留 HTML 实体，先解码常见实体避免污染书名匹配。
+    var decoded = input;
+    while (decoded.contains('&amp;')) {
+      decoded = decoded.replaceAll('&amp;', '&');
+    }
+    return decoded;
+  }
+
   static String normalizeForMatching(String input) {
-    return normalizeWhitespace(normalizeAsciiVariants(input));
+    return normalizeWhitespace(
+      normalizeAsciiVariants(normalizeHtmlEntities(input)),
+    );
   }
 
   static String trimOuterSeparators(String input) {

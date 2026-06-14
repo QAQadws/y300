@@ -102,6 +102,15 @@ final List<ComicTitleParserCase> currentComicSubjectParserCases =
     // 由 author 字段保留 last-bracket 语义记录 `嶋水えけ`。
     expectedAuthor: '嶋水えけ',
   ),
+  const ComicTitleParserCase(
+    id: 'html_amp_entity_is_decoded_in_normalized_title',
+    rawTitle:
+        '【提灯喵汉化组】[tMnR]无法传达的爱恋 完结番外－这份思念传达后的那线未来 &amp; 第七卷后记',
+    expectedNormalizedTitle:
+        '无法传达的爱恋 完结番外－这份思念传达后的那线未来 & 第七卷后记',
+    expectedTranslationGroup: '提灯喵汉化组',
+    expectedAuthor: 'tMnR',
+  ),
 ];
 
 final List<ComicTitleRuleSummaryCase> stageOneComicTitleRuleSummaryCases =
@@ -416,6 +425,18 @@ final List<ComicTitleAnalyzerCase> stageOneComicTitleAnalyzerCases =
     expectedCleanBookName: '憧憬随冬意渐浓',
     expectedSearchKeyword: '憧憬随冬意渐浓',
     expectedAuthorPrefix: '夏村東和',
+    expectedEpisodeLabel: null,
+    expectedChapterNumber: null,
+    expectedPossibleChapterNumbers: <double>[],
+  ),
+  const ComicTitleAnalyzerCase(
+    id: 'real_sample_html_amp_entity_is_decoded',
+    rawTitle:
+        '【提灯喵汉化组】[tMnR]无法传达的爱恋 完结番外－这份思念传达后的那线未来 &amp; 第七卷后记',
+    expectedCleanBookName:
+        '无法传达的爱恋 完结番外－这份思念传达后的那线未来 & 第七卷后记',
+    expectedSearchKeyword: '无法传达的爱恋 完结番外－这份思念传',
+    expectedAuthorPrefix: 'tMnR',
     expectedEpisodeLabel: null,
     expectedChapterNumber: null,
     expectedPossibleChapterNumbers: <double>[],

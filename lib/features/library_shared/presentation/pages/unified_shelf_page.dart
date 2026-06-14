@@ -1183,6 +1183,7 @@ class _WorkList extends StatelessWidget {
                 color: scheme.surfaceContainerHighest.withAlpha(64),
                 child: ListTile(
                   key: ValueKey<String>('unified-shelf-list-tile-${item.workId}'),
+                  minTileHeight: 72,
                   selected: selected,
                   onTap: () async => onTapItem(item.workId),
                   onLongPress: selectionEnabled
@@ -1191,7 +1192,7 @@ class _WorkList extends StatelessWidget {
                   leading: leading,
                   title: Text(
                     item.title,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                   trailing: _UnreadBadge(count: item.unreadCount),
