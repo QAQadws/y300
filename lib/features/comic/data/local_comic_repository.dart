@@ -374,6 +374,15 @@ class LocalComicRepository
   }
 
   @override
+  Future<Set<String>> getKnownEpisodeTids({required String comicId}) async {
+    final episodes = await _episodeStore.getComicEpisodes(
+      comicId: comicId,
+      descending: false,
+    );
+    return episodes.map((e) => e.sourceTid).toSet();
+  }
+
+  @override
   Future<LibraryShelfSnapshot> queryShelfSnapshot({
     required LibraryFilterSet filters,
     required LibraryShelfSortOption sortOption,

@@ -6,6 +6,8 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/bulk_download_use_case.dart';
+import 'package:y300/features/comic/domain/services/comic_incremental_episode_discovery.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
 import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
@@ -32,25 +34,27 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
     this._repository, {
     ComicEpisodeRefreshService? refreshService,
     ComicSearchRefreshQueueEnqueuer? searchQueue,
-    ComicSearchRefreshQueueStateReader? searchQueueState,
     ComicFirstEpisodeCoverService? firstEpisodeCoverService,
     ComicRefreshOutcomeApplier? refreshOutcomeApplier,
     ComicDownloadService? downloadService,
     ImageCacheService? imageCacheService,
     ReadingStateBatchWriter? readingStateBatchWriter,
     BulkDownloadUseCase? bulkDownloadUseCase,
+    ComicIncrementalEpisodeDiscovery? incrementalDiscovery,
+    ComicEpisodeDiscoveryService? discoveryService,
     ComicReaderFeatureFlags featureFlags = ComicReaderFeatureFlags.defaults,
     ComicTitleAnalyzer titleAnalyzer = const PetitComicTitleAnalyzer(),
     required LibraryStateRepository stateRepository,
   })  : _refreshService = refreshService,
         _searchQueue = searchQueue,
-        _searchQueueState = searchQueueState,
         _firstEpisodeCoverService = firstEpisodeCoverService,
         _refreshOutcomeApplier = refreshOutcomeApplier,
         _downloadService = downloadService,
         _imageCacheService = imageCacheService,
         _readingStateBatchWriter = readingStateBatchWriter,
         _bulkDownloadUseCase = bulkDownloadUseCase,
+        _incrementalDiscovery = incrementalDiscovery,
+        _discoveryService = discoveryService,
         _featureFlags = featureFlags,
         _titleAnalyzer = titleAnalyzer,
         _stateRepository = stateRepository;
@@ -58,13 +62,14 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
   final ComicRepository _repository;
   final ComicEpisodeRefreshService? _refreshService;
   final ComicSearchRefreshQueueEnqueuer? _searchQueue;
-  final ComicSearchRefreshQueueStateReader? _searchQueueState;
   final ComicFirstEpisodeCoverService? _firstEpisodeCoverService;
   final ComicRefreshOutcomeApplier? _refreshOutcomeApplier;
   final ComicDownloadService? _downloadService;
   final ImageCacheService? _imageCacheService;
   final ReadingStateBatchWriter? _readingStateBatchWriter;
   final BulkDownloadUseCase? _bulkDownloadUseCase;
+  final ComicIncrementalEpisodeDiscovery? _incrementalDiscovery;
+  final ComicEpisodeDiscoveryService? _discoveryService;
   final ComicReaderFeatureFlags _featureFlags;
   final ComicTitleAnalyzer _titleAnalyzer;
   final LibraryStateRepository _stateRepository;
@@ -536,59 +541,119 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
       }
     }
 
-    // Step 2: 回退到现有 catalog-only 路径
-    final catalog = await refreshService.fetchCatalogOnly(request);
-    if (catalog.catalogMatched && catalog.links.isNotEmpty) {
+    // Step 2: 获取当前帖详情（为增量发现提供解析数据）
+    final parsedRoot = await _fetchAndParseCurrentThread(detail.sourceTid);
+
+    // Step 2.5: catalogUrl 动态补全
+    final discoveredCatalogUrl = parsedRoot?.catalogUrl;
+    if (discoveredCatalogUrl != null && discoveredCatalogUrl.isNotEmpty) {
+      // 持久化新发现的 catalogUrl，下次刷新可直接走快速路径
+      await _repository.updateCatalogUrl(
+        comicId: workId,
+        catalogUrl: discoveredCatalogUrl,
+      );
+      // 立即尝试 catalog 快速路径
+      final catalogRetry = await refreshService
+          .fetchCatalogDirect(discoveredCatalogUrl);
+      if (catalogRetry.catalogMatched && catalogRetry.hasLinks) {
+        await _applyRefreshOutcome(
+          applier: refreshOutcomeApplier,
+          comicId: workId,
+          sourceTid: detail.sourceTid,
+          links: catalogRetry.links,
+          source: catalogRetry.source,
+          reason: 'comic_detail_catalog_retry_refresh',
+          catalogUrl: catalogRetry.catalogUrl,
+        );
+        return DetailRefreshResult.immediate;
+      }
+    }
+
+    // Step 3: 入搜索队列（异步，不阻塞后续步骤）
+    final searchQueue = _searchQueue;
+    int? enqueuedPosition;
+    Duration? enqueuedDuration;
+    if (searchQueue != null) {
+      final queued = await searchQueue.enqueue(
+        request: request,
+        title: _queueTitle(detail),
+        origin: ComicSearchRefreshOrigin.detailManual,
+      );
+      enqueuedPosition = queued.position;
+      enqueuedDuration = queued.estimatedDuration;
+    }
+
+    // Step 4: 增量章节发现
+    final knownTids = await _getKnownEpisodeTids(workId);
+    final incrementalLinks = await _runIncrementalDiscovery(
+      parsedRoot: parsedRoot,
+      knownTids: knownTids,
+    );
+
+    // Step 5: 合并增量结果
+    if (incrementalLinks.isNotEmpty) {
       await _applyRefreshOutcome(
         applier: refreshOutcomeApplier,
         comicId: workId,
         sourceTid: detail.sourceTid,
-        links: catalog.links,
-        source: catalog.source,
-        reason: 'comic_detail_catalog_refresh_completed',
-        catalogUrl: catalog.catalogUrl,
+        links: incrementalLinks,
+        source: ComicEpisodeRefreshSource.currentOnly,
+        reason: 'comic_detail_incremental_refresh',
       );
       return DetailRefreshResult.immediate;
     }
 
-    if (_searchQueueHasBacklog) {
-      final searchQueue = _searchQueue;
-      if (searchQueue != null) {
-        final queued = await searchQueue.enqueue(
-          request: request,
-          title: _queueTitle(detail),
-          origin: ComicSearchRefreshOrigin.detailManual,
-        );
-        return DetailRefreshResult.queued(
-          queuePosition: queued.position,
-          estimatedDuration: queued.estimatedDuration,
-        );
-      }
-    }
-
-    // 队列为空时，详情页手动更新应立即消费一次搜索/当前帖策略。
-    // 只有已有队列积压时才入队，避免空队列也显示“更新预计耗时10.5s”。
-    final fallback = await refreshService.fetchSearchAndCurrentOnly(request);
-    if (!fallback.hasLinks) {
-      return const DetailRefreshResult(
-        status: DetailRefreshStatus.skipped,
-        message: '未提取到新的章节链接',
+    // 无增量结果：返回队列状态
+    if (enqueuedPosition != null) {
+      return DetailRefreshResult.queued(
+        queuePosition: enqueuedPosition,
+        estimatedDuration: enqueuedDuration ?? Duration.zero,
       );
     }
-    await _applyRefreshOutcome(
-      applier: refreshOutcomeApplier,
-      comicId: workId,
-      sourceTid: detail.sourceTid,
-      links: fallback.links,
-      source: fallback.source,
-      reason: 'comic_detail_search_refresh_completed',
-      catalogUrl: fallback.catalogUrl,
+    return const DetailRefreshResult(
+      status: DetailRefreshStatus.skipped,
+      message: '未提取到新的章节链接',
     );
-    return DetailRefreshResult.immediate;
   }
 
-  bool get _searchQueueHasBacklog {
-    return _searchQueueState?.snapshot.value.active ?? false;
+  Future<ParsedThreadResult?> _fetchAndParseCurrentThread(String tid) async {
+    final discoveryService = _discoveryService;
+    if (discoveryService == null) return null;
+    return discoveryService.fetchAndParseThread(tid);
+  }
+
+  Future<Set<String>> _getKnownEpisodeTids(String comicId) async {
+    return _repository.getKnownEpisodeTids(comicId: comicId);
+  }
+
+  Future<List<ComicEpisodeLink>> _runIncrementalDiscovery({
+    required ParsedThreadResult? parsedRoot,
+    required Set<String> knownTids,
+  }) async {
+    final incrementalDiscovery = _incrementalDiscovery;
+    if (parsedRoot == null || incrementalDiscovery == null) {
+      return const <ComicEpisodeLink>[];
+    }
+
+    final episodeLinks = parsedRoot.episodeLinks;
+    final recursiveCandidates = parsedRoot.recursiveTidCandidates;
+
+    // 判断模式
+    if (episodeLinks.length >= 3 || recursiveCandidates.length > 1) {
+      // Direct 模式：多个跳转链接
+      return incrementalDiscovery.discoverDirectIncremental(
+        currentLinks: episodeLinks,
+        knownTids: knownTids,
+      );
+    } else if (recursiveCandidates.length == 1) {
+      // Recursive 模式：单链
+      return incrementalDiscovery.discoverRecursiveIncremental(
+        startTid: recursiveCandidates.first,
+        knownTids: knownTids,
+      );
+    }
+
+    return const <ComicEpisodeLink>[];
   }
 
   Future<void> _applyRefreshOutcome({

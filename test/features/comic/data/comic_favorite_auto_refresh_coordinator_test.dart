@@ -66,6 +66,94 @@ void main() {
       expect(searchQueue.enqueuedTitles, isEmpty);
     });
 
+    test('catalog direct fast path when catalogUrl is provided', () async {
+      const directLinks = <ComicEpisodeLink>[
+        ComicEpisodeLink(url: 'thread-301-1-1.html', rawText: 'Episode 1'),
+      ];
+      final refreshService = _FakeRefreshService(
+        catalogOutcome: const ComicEpisodeRefreshOutcome(
+          source: ComicEpisodeRefreshSource.empty,
+          links: <ComicEpisodeLink>[],
+        ),
+        directOutcome: const ComicEpisodeRefreshOutcome(
+          source: ComicEpisodeRefreshSource.catalog,
+          links: directLinks,
+          catalogMatched: true,
+          catalogUrl: 'https://example.com/catalog',
+        ),
+      );
+      final searchQueue = _RecordingSearchQueue();
+      final applier = _RecordingRefreshOutcomeApplier();
+      final bus = LibraryShelfRefreshBus();
+      addTearDown(bus.dispose);
+      final coordinator = ComicFavoriteAutoRefreshCoordinator(
+        refreshService: refreshService,
+        searchQueue: searchQueue,
+        refreshOutcomeApplier: applier,
+        shelfRefreshBus: bus,
+        catalogMissPolicy: const DefaultComicCatalogMissPolicy(
+          longRunningTagName: longRunningTagName,
+        ),
+        titleAnalyzer: const PetitComicTitleAnalyzer(),
+      );
+
+      final result = await coordinator.refreshFavoriteComic(
+        comicId: 'comic:5',
+        sourceTid: '100',
+        favoriteTitle: 'Direct Catalog Title',
+        catalogUrl: 'https://example.com/catalog',
+      );
+
+      expect(result.status, ComicFavoriteAutoRefreshStatus.catalogMerged);
+      expect(result.linkCount, 1);
+      expect(applier.requests.single.reason, 'favorite_comic_catalog_direct_refresh');
+      expect(applier.requests.single.links, directLinks);
+      expect(refreshService.directCalls, 1);
+      expect(refreshService.catalogRequests, isEmpty);
+      expect(searchQueue.enqueuedTitles, isEmpty);
+    });
+
+    test('catalogUrl persistence when fetchCatalogOnly discovers new catalogUrl', () async {
+      const links = <ComicEpisodeLink>[
+        ComicEpisodeLink(url: 'thread-401-1-1.html', rawText: 'Episode 1'),
+      ];
+      final refreshService = _FakeRefreshService(
+        catalogOutcome: const ComicEpisodeRefreshOutcome(
+          source: ComicEpisodeRefreshSource.catalog,
+          links: links,
+          catalogMatched: true,
+          catalogUrl: 'https://example.com/new-catalog',
+        ),
+      );
+      final searchQueue = _RecordingSearchQueue();
+      final applier = _RecordingRefreshOutcomeApplier();
+      final bus = LibraryShelfRefreshBus();
+      addTearDown(bus.dispose);
+      final catalogUrlUpdater = _RecordingCatalogUrlUpdater();
+      final coordinator = ComicFavoriteAutoRefreshCoordinator(
+        refreshService: refreshService,
+        searchQueue: searchQueue,
+        refreshOutcomeApplier: applier,
+        shelfRefreshBus: bus,
+        catalogMissPolicy: const DefaultComicCatalogMissPolicy(
+          longRunningTagName: longRunningTagName,
+        ),
+        titleAnalyzer: const PetitComicTitleAnalyzer(),
+        catalogUrlUpdater: catalogUrlUpdater,
+      );
+
+      final result = await coordinator.refreshFavoriteComic(
+        comicId: 'comic:6',
+        sourceTid: '100',
+        favoriteTitle: 'New Catalog Title',
+      );
+
+      expect(result.status, ComicFavoriteAutoRefreshStatus.catalogMerged);
+      expect(catalogUrlUpdater.updates, hasLength(1));
+      expect(catalogUrlUpdater.updates.single.comicId, 'comic:6');
+      expect(catalogUrlUpdater.updates.single.catalogUrl, 'https://example.com/new-catalog');
+    });
+
     test('catalog miss uses cleaned favorite title for queue and parsed source title for search', () async {
       final refreshService = _FakeRefreshService(
         catalogOutcome: const ComicEpisodeRefreshOutcome(
@@ -244,12 +332,17 @@ ThreadDetailData _detail({
 }
 
 class _FakeRefreshService implements ComicEpisodeRefreshService {
-  _FakeRefreshService({required ComicEpisodeRefreshOutcome catalogOutcome})
-      : _catalogOutcome = catalogOutcome;
+  _FakeRefreshService({
+    required ComicEpisodeRefreshOutcome catalogOutcome,
+    ComicEpisodeRefreshOutcome? directOutcome,
+  })  : _catalogOutcome = catalogOutcome,
+        _directOutcome = directOutcome;
 
   final ComicEpisodeRefreshOutcome _catalogOutcome;
+  final ComicEpisodeRefreshOutcome? _directOutcome;
   final List<ComicEpisodeRefreshRequest> catalogRequests =
       <ComicEpisodeRefreshRequest>[];
+  int directCalls = 0;
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
@@ -281,7 +374,8 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(String catalogUrl) async {
-    return const ComicEpisodeRefreshOutcome(
+    directCalls++;
+    return _directOutcome ?? const ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.empty,
       links: <ComicEpisodeLink>[],
     );
@@ -349,5 +443,26 @@ class _RecordingSearchQueue implements ComicSearchRefreshQueueEnqueuer {
       estimatedDuration: const Duration(seconds: 21),
       deduplicated: false,
     );
+  }
+}
+
+class _CatalogUrlUpdate {
+  const _CatalogUrlUpdate({
+    required this.comicId,
+    required this.catalogUrl,
+  });
+  final String comicId;
+  final String catalogUrl;
+}
+
+class _RecordingCatalogUrlUpdater implements CatalogUrlUpdater {
+  final List<_CatalogUrlUpdate> updates = <_CatalogUrlUpdate>[];
+
+  @override
+  Future<void> updateCatalogUrl({
+    required String comicId,
+    required String catalogUrl,
+  }) async {
+    updates.add(_CatalogUrlUpdate(comicId: comicId, catalogUrl: catalogUrl));
   }
 }

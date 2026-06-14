@@ -9,6 +9,17 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
+/// 抽象 catalogUrl 持久化接口。
+///
+/// [ComicRepository] 已有 `updateCatalogUrl` 方法，
+/// `LocalComicRepository` 自动满足。
+abstract class CatalogUrlUpdater {
+  Future<void> updateCatalogUrl({
+    required String comicId,
+    required String catalogUrl,
+  });
+}
+
 enum ComicFavoriteAutoRefreshStatus {
   catalogMerged,
   queuedForSearch,
@@ -42,12 +53,14 @@ class ComicFavoriteAutoRefreshCoordinator {
     required LibraryShelfRefreshBus shelfRefreshBus,
     required ComicCatalogMissPolicy catalogMissPolicy,
     required ComicTitleAnalyzer titleAnalyzer,
+    CatalogUrlUpdater? catalogUrlUpdater,
   })  : _refreshService = refreshService,
         _searchQueue = searchQueue,
         _refreshOutcomeApplier = refreshOutcomeApplier,
         _shelfRefreshBus = shelfRefreshBus,
         _catalogMissPolicy = catalogMissPolicy,
-        _titleAnalyzer = titleAnalyzer;
+        _titleAnalyzer = titleAnalyzer,
+        _catalogUrlUpdater = catalogUrlUpdater;
 
   final ComicEpisodeRefreshService _refreshService;
   final ComicSearchRefreshQueueEnqueuer _searchQueue;
@@ -55,6 +68,7 @@ class ComicFavoriteAutoRefreshCoordinator {
   final LibraryShelfRefreshBus _shelfRefreshBus;
   final ComicCatalogMissPolicy _catalogMissPolicy;
   final ComicTitleAnalyzer _titleAnalyzer;
+  final CatalogUrlUpdater? _catalogUrlUpdater;
 
   Future<ComicFavoriteAutoRefreshResult> refreshAfterFavoriteIngest({
     required String comicId,
@@ -62,6 +76,7 @@ class ComicFavoriteAutoRefreshCoordinator {
     required String favoriteTitle,
     String? sourceTagName,
     bool forceSearchOnCatalogMiss = false,
+    String? catalogUrl,
   }) async {
     return refreshFavoriteComic(
       comicId: comicId,
@@ -70,6 +85,7 @@ class ComicFavoriteAutoRefreshCoordinator {
       sourceTitle: detail.subject,
       sourceTagName: sourceTagName,
       forceSearchOnCatalogMiss: forceSearchOnCatalogMiss,
+      catalogUrl: catalogUrl,
     );
   }
 
@@ -80,6 +96,7 @@ class ComicFavoriteAutoRefreshCoordinator {
     String? sourceTitle,
     String? sourceTagName,
     bool forceSearchOnCatalogMiss = false,
+    String? catalogUrl,
   }) async {
     final titles = _resolveTitles(
       favoriteTitle: favoriteTitle,
@@ -91,10 +108,46 @@ class ComicFavoriteAutoRefreshCoordinator {
       sourceTid: sourceTid,
       displayTitle: titles.searchTitle,
       sourceTitle: titles.sourceTitle,
+      catalogUrl: catalogUrl,
     );
 
+    // 优先 catalog 快速路径
+    if (catalogUrl != null && catalogUrl.isNotEmpty) {
+      final catalogDirect = await _refreshService.fetchCatalogDirect(catalogUrl);
+      if (catalogDirect.catalogMatched && catalogDirect.hasLinks) {
+        await _refreshOutcomeApplier.apply(
+          ComicRefreshApplyRequest(
+            comicId: comicId,
+            sourceTid: sourceTid,
+            links: catalogDirect.links,
+            source: catalogDirect.source,
+            mutationSource: LibraryMutationSource.favoriteSync,
+            reason: 'favorite_comic_catalog_direct_refresh',
+            catalogUrl: catalogDirect.catalogUrl,
+          ),
+        );
+        return ComicFavoriteAutoRefreshResult(
+          status: ComicFavoriteAutoRefreshStatus.catalogMerged,
+          linkCount: catalogDirect.links.length,
+        );
+      }
+    }
+
+    // catalog 快速路径失败 -> 回退到 fetchCatalogOnly
     final catalog = await _refreshService.fetchCatalogOnly(request);
     if (catalog.catalogMatched && catalog.hasLinks) {
+      // 如果本次发现了新的 catalogUrl（之前为 null 或不同），持久化
+      if (catalog.catalogUrl != null &&
+          catalog.catalogUrl != catalogUrl &&
+          catalog.catalogUrl!.isNotEmpty) {
+        final updater = _catalogUrlUpdater;
+        if (updater != null) {
+          await updater.updateCatalogUrl(
+            comicId: comicId,
+            catalogUrl: catalog.catalogUrl!,
+          );
+        }
+      }
       await _refreshOutcomeApplier.apply(
         ComicRefreshApplyRequest(
           comicId: comicId,
@@ -116,10 +169,6 @@ class ComicFavoriteAutoRefreshCoordinator {
       sourceTagName: sourceTagName,
       forceSearchOnCatalogMiss: forceSearchOnCatalogMiss,
     )) {
-      // Historical/full sync keeps the conservative tag gate to avoid flooding
-      // search. Directly added favorites can set forceSearchOnCatalogMiss so
-      // the one comic the user just collected gets the same update treatment as
-      // a detail-page manual refresh.
       _shelfRefreshBus.notify(
         modules: const <LibraryModuleKey>{
           LibraryModuleKey.comic,
@@ -140,9 +189,6 @@ class ComicFavoriteAutoRefreshCoordinator {
       title: titles.queueTitle,
       origin: ComicSearchRefreshOrigin.favoriteSync,
     );
-    // The comic has already been ingested into the shelf.  Notify immediately
-    // so the user can see the new favorite while the search queue completes
-    // chapters and cover promotion in the background.
     _shelfRefreshBus.notify(
       modules: const <LibraryModuleKey>{
         LibraryModuleKey.comic,

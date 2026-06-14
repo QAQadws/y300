@@ -1,4 +1,5 @@
-﻿import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
+﻿import 'package:y300/features/comic/data/comic_favorite_auto_refresh_coordinator.dart';
+import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
@@ -6,7 +7,7 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 
 /// 漫画仓库：封装书架数据访问，屏蔽具体存储实现。
-abstract class ComicRepository {
+abstract class ComicRepository implements CatalogUrlUpdater {
   Future<List<ComicShelfCategory>> getCategories();
 
   Future<String> createCategory({required String name});
@@ -136,10 +137,17 @@ abstract class ComicRepository {
   ///
   /// 用于 catalog 快速路径：首次发现或更新时持久化，
   /// 下次刷新可直接解析 catalog HTML 而不请求帖子详情。
+  @override
   Future<void> updateCatalogUrl({
     required String comicId,
     required String catalogUrl,
   });
+
+  /// 获取本地已知章节的 sourceTid 集合。
+  ///
+  /// 用于增量章节发现：与帖子内解析出的链接做差集，
+  /// 快速识别新增章节而无需全量比对。
+  Future<Set<String>> getKnownEpisodeTids({required String comicId});
 }
 
 abstract class ComicShelfSnapshotRepository {

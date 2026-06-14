@@ -405,9 +405,39 @@ class ComicEpisodeDiscoveryService {
   String? _extractTidFromUrl(String url) {
     return _urlParser.extractTid(url);
   }
+
+  /// 获取并解析帖子详情，返回跳转链接和候选 tid。
+  ///
+  /// 用于增量发现：adapter 调用后根据 [ParsedThreadResult] 决定
+  /// direct/recursive 增量策略。返回 null 表示请求或解析失败。
+  Future<ParsedThreadResult?> fetchAndParseThread(String tid) async {
+    final root = await _fetchAndParse(tid);
+    if (root == null) return null;
+    return ParsedThreadResult(
+      episodeLinks: root.parsed.episodeLinks,
+      recursiveTidCandidates: root.recursiveTidCandidates,
+      catalogUrl: root.parsed.catalogUrl,
+    );
+  }
 }
 
 typedef ThreadDetailFetcher = Future<ApiResult<ThreadDetailData>> Function(String tid);
+
+/// 帖子解析结果（public），用于增量发现。
+///
+/// 由 [ComicEpisodeDiscoveryService.fetchAndParseThread] 返回，
+/// 包含帖子内的跳转链接、递归候选 tid 和 catalogUrl。
+class ParsedThreadResult {
+  const ParsedThreadResult({
+    required this.episodeLinks,
+    required this.recursiveTidCandidates,
+    required this.catalogUrl,
+  });
+
+  final List<ComicEpisodeLink> episodeLinks;
+  final List<String> recursiveTidCandidates;
+  final String? catalogUrl;
+}
 
 class _ParsedThreadRoot {
   const _ParsedThreadRoot({

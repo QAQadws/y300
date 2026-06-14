@@ -408,6 +408,7 @@ class _RecordingAutoRefreshCoordinator
 
   @override
   Future<ComicFavoriteAutoRefreshResult> refreshAfterFavoriteIngest({
+    String? catalogUrl,
     required String comicId,
     required ThreadDetailData detail,
     required String favoriteTitle,
@@ -430,6 +431,7 @@ class _RecordingAutoRefreshCoordinator
 
   @override
   Future<ComicFavoriteAutoRefreshResult> refreshFavoriteComic({
+    String? catalogUrl,
     required String comicId,
     required String sourceTid,
     required String favoriteTitle,
@@ -466,6 +468,7 @@ class _ThrowingAutoRefreshCoordinator
 
   @override
   Future<ComicFavoriteAutoRefreshResult> refreshAfterFavoriteIngest({
+    String? catalogUrl,
     required String comicId,
     required ThreadDetailData detail,
     required String favoriteTitle,
@@ -477,6 +480,7 @@ class _ThrowingAutoRefreshCoordinator
 
   @override
   Future<ComicFavoriteAutoRefreshResult> refreshFavoriteComic({
+    String? catalogUrl,
     required String comicId,
     required String sourceTid,
     required String favoriteTitle,
