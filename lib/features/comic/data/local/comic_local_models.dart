@@ -26,6 +26,7 @@
     required this.createdAt,
     required this.updatedAt,
     required this.lastReadEpisodeId,
+    this.catalogUrl,
   });
 
   final String comicId;
@@ -54,6 +55,7 @@
   final int createdAt;
   final int updatedAt;
   final String? lastReadEpisodeId;
+  final String? catalogUrl;
 
   Map<String, Object?> toMap() {
     return <String, Object?>{
@@ -83,6 +85,7 @@
       'created_at': createdAt,
       'updated_at': updatedAt,
       'last_read_episode_id': lastReadEpisodeId,
+      'catalog_url': catalogUrl,
     };
   }
 
@@ -114,6 +117,7 @@
       createdAt: map['created_at'] as int,
       updatedAt: map['updated_at'] as int,
       lastReadEpisodeId: map['last_read_episode_id'] as String?,
+      catalogUrl: map['catalog_url'] as String?,
     );
   }
 }

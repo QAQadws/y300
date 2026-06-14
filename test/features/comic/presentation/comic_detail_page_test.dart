@@ -316,6 +316,14 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
     return const <ComicEpisodeLink>[];
   }
+
+  @override
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(String catalogUrl) async {
+    return const ComicEpisodeRefreshOutcome(
+      source: ComicEpisodeRefreshSource.empty,
+      links: <ComicEpisodeLink>[],
+    );
+  }
 }
 
 Future<void> _scrollFirstChapterIntoTapArea(WidgetTester tester) async {
@@ -540,6 +548,9 @@ class _FakeComicRepository implements ComicRepository {
       updatedAt: DateTime(2026, 1, 1),
     );
   }
+
+  @override
+  Future<void> updateCatalogUrl({required String comicId, required String catalogUrl}) async {}
 }
 
 class _FakeLibraryStateRepository implements LibraryStateRepository {

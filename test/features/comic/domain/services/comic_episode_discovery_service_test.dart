@@ -187,6 +187,46 @@ void main() {
       expect(result.strategy, EpisodeDiscoveryStrategy.direct);
       expect(result.episodeLinks, isEmpty);
     });
+    test('discoverFromCatalogUrl returns episode links from catalog page', () async {
+      final service = ComicEpisodeDiscoveryService(
+        fetchThreadDetail: _fakeThreadFetcher(detailsByTid: <String, ThreadDetailData>{}),
+        opPostParser: ComicConsecutiveOpPostParser(engine: ComicPostParsingEngine()),
+        catalogHtmlFetcher: _FakeCatalogHtmlFetcher({
+          'https://bbs.yamibo.com/misc.php?mod=tag&id=99999&type=thread&page=1': '''
+<html><body>
+<table>
+<tr><th><a href="thread-1001-1-1.html">第1话</a></th></tr>
+<tr><th><a href="thread-1002-1-1.html">第2话</a></th></tr>
+<tr><th><a href="thread-1003-1-1.html">第3话</a></th></tr>
+</table>
+</body></html>
+''',
+        }),
+      );
+
+      final links = await service.discoverFromCatalogUrl(
+        'https://bbs.yamibo.com/misc.php?mod=tag&id=99999',
+      );
+
+      expect(links, hasLength(3));
+      expect(links[0].url, contains('thread-1001-1-1.html'));
+      expect(links[1].url, contains('thread-1002-1-1.html'));
+      expect(links[2].url, contains('thread-1003-1-1.html'));
+    });
+
+    test('discoverFromCatalogUrl returns empty when catalog has no episodes', () async {
+      final service = ComicEpisodeDiscoveryService(
+        fetchThreadDetail: _fakeThreadFetcher(detailsByTid: <String, ThreadDetailData>{}),
+        opPostParser: ComicConsecutiveOpPostParser(engine: ComicPostParsingEngine()),
+        catalogHtmlFetcher: _FakeCatalogHtmlFetcher(<String, String>{}),
+      );
+
+      final links = await service.discoverFromCatalogUrl(
+        'https://bbs.yamibo.com/misc.php?mod=tag&id=00000',
+      );
+
+      expect(links, isEmpty);
+    });
   });
 }
 

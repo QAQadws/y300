@@ -720,6 +720,9 @@ class _FakeComicRepository implements ComicRepository {
     required int imageIndex,
     required double scrollOffset,
   }) async {}
+
+  @override
+  Future<void> updateCatalogUrl({required String comicId, required String catalogUrl}) async {}
 }
 
 class _FakeNovelRepository implements NovelRepository {

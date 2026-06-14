@@ -24,6 +24,7 @@
     this.customCoverSourceImageUrl,
     required this.updatedAt,
     required this.episodeCount,
+    this.catalogUrl,
   });
 
   final String comicId;
@@ -55,6 +56,7 @@
   final String? customCoverSourceImageUrl;
   final DateTime updatedAt;
   final int episodeCount;
+  final String? catalogUrl;
 
   String get displayTitle => title;
   String? get displayAuthor => author;

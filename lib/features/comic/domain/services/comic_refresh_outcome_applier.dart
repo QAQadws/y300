@@ -18,6 +18,7 @@ class ComicRefreshApplyRequest {
     required this.source,
     required this.mutationSource,
     required this.reason,
+    this.catalogUrl,
   });
 
   final String comicId;
@@ -26,6 +27,9 @@ class ComicRefreshApplyRequest {
   final ComicEpisodeRefreshSource source;
   final LibraryMutationSource mutationSource;
   final String reason;
+  /// 本次刷新发现或使用的 catalogUrl。非空时持久化到本地，
+  /// 以便下次刷新可直接走 catalog 快速路径。
+  final String? catalogUrl;
 }
 
 class ComicRefreshApplyResult {
@@ -75,6 +79,15 @@ class DefaultComicRefreshOutcomeApplier
   ) async {
     if (request.links.isEmpty) {
       return const ComicRefreshApplyResult.skipped();
+    }
+
+    // 持久化 catalogUrl（发现或更新时写入，以便下次走 catalog 快速路径）
+    final catalogUrl = request.catalogUrl;
+    if (catalogUrl != null && catalogUrl.isNotEmpty) {
+      await _repository.updateCatalogUrl(
+        comicId: request.comicId,
+        catalogUrl: catalogUrl,
+      );
     }
 
     final mergeResult = await _repository.mergeEpisodesFromLinks(

@@ -131,6 +131,15 @@ abstract class ComicRepository {
     required List<ComicEpisodeLink> episodeLinks,
     required String fallbackSourceTid,
   });
+
+  /// 更新漫画的目录 URL（catalogUrl）。
+  ///
+  /// 用于 catalog 快速路径：首次发现或更新时持久化，
+  /// 下次刷新可直接解析 catalog HTML 而不请求帖子详情。
+  Future<void> updateCatalogUrl({
+    required String comicId,
+    required String catalogUrl,
+  });
 }
 
 abstract class ComicShelfSnapshotRepository {

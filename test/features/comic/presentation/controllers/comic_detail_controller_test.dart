@@ -185,6 +185,11 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
   ) async {
     return outcome;
   }
+
+  @override
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(String catalogUrl) async {
+    return outcome;
+  }
 }
 
 class _ThrowingRefreshService implements ComicEpisodeRefreshService {
@@ -220,6 +225,11 @@ class _ThrowingRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request,
   ) async {
+    throw StateError('refresh failed');
+  }
+
+  @override
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(String catalogUrl) async {
     throw StateError('refresh failed');
   }
 }

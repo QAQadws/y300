@@ -142,6 +142,61 @@ void main() {
       expect(repository.mergeCallCount, 1);
       expect(bus.signal.value, isNull);
     });
+    test('persists catalogUrl when provided', () async {
+      final repository = _RecordingComicRepository();
+      final promoter = _RecordingCoverPromoter(promoteResult: true);
+      final bus = LibraryShelfRefreshBus();
+      addTearDown(bus.dispose);
+      final applier = DefaultComicRefreshOutcomeApplier(
+        repository: repository,
+        firstEpisodeCoverPromoter: promoter,
+        shelfRefreshBus: bus,
+      );
+
+      await applier.apply(
+        const ComicRefreshApplyRequest(
+          comicId: 'comic:1',
+          sourceTid: '100',
+          links: <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: '第1话'),
+          ],
+          source: ComicEpisodeRefreshSource.catalog,
+          mutationSource: LibraryMutationSource.comicRefresh,
+          reason: 'comic_detail_catalog_refresh_completed',
+          catalogUrl: 'https://bbs.yamibo.com/misc.php?mod=tag&id=123',
+        ),
+      );
+
+      expect(repository.lastCatalogUrlComicId, 'comic:1');
+      expect(repository.lastUpdatedCatalogUrl, 'https://bbs.yamibo.com/misc.php?mod=tag&id=123');
+    });
+
+    test('does not persist catalogUrl when null', () async {
+      final repository = _RecordingComicRepository();
+      final promoter = _RecordingCoverPromoter(promoteResult: true);
+      final bus = LibraryShelfRefreshBus();
+      addTearDown(bus.dispose);
+      final applier = DefaultComicRefreshOutcomeApplier(
+        repository: repository,
+        firstEpisodeCoverPromoter: promoter,
+        shelfRefreshBus: bus,
+      );
+
+      await applier.apply(
+        const ComicRefreshApplyRequest(
+          comicId: 'comic:1',
+          sourceTid: '100',
+          links: <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: '第1话'),
+          ],
+          source: ComicEpisodeRefreshSource.search,
+          mutationSource: LibraryMutationSource.comicRefresh,
+          reason: 'comic_detail_search_refresh_completed',
+        ),
+      );
+
+      expect(repository.lastUpdatedCatalogUrl, isNull);
+    });
   });
 }
 
@@ -150,6 +205,8 @@ class _RecordingComicRepository implements ComicRepository {
   String? lastComicId;
   String? lastFallbackSourceTid;
   List<ComicEpisodeLink> lastLinks = const <ComicEpisodeLink>[];
+  String? lastUpdatedCatalogUrl;
+  String? lastCatalogUrlComicId;
 
   @override
   Future<ComicEpisodeRefreshResult> mergeEpisodesFromLinks({
@@ -175,6 +232,12 @@ class _RecordingComicRepository implements ComicRepository {
 
   @override
   Future<void> purgeWork({required String comicId}) async {}
+
+  @override
+  Future<void> updateCatalogUrl({required String comicId, required String catalogUrl}) async {
+    lastCatalogUrlComicId = comicId;
+    lastUpdatedCatalogUrl = catalogUrl;
+  }
 }
 
 class _ThrowingComicRepository extends _RecordingComicRepository {

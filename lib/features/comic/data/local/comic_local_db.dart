@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 19;
+  static const int dbVersion = 20;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -84,7 +84,8 @@ class ComicLocalDb {
         metadata_updated_at INTEGER,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
-        last_read_episode_id TEXT
+        last_read_episode_id TEXT,
+        catalog_url TEXT
       )
     ''');
 

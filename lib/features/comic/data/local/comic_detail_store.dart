@@ -232,6 +232,7 @@ class ComicDetailStore {
         c.custom_cover_source_episode_id,
         c.custom_cover_source_image_index,
         c.custom_cover_source_image_url,
+        c.catalog_url,
         c.updated_at,
         COUNT(e.episode_id) AS episode_count
       FROM ${ComicLocalDb.comicsTable} c
@@ -277,6 +278,7 @@ class ComicDetailStore {
           row['custom_cover_source_image_index'] as int?,
       customCoverSourceImageUrl:
           row['custom_cover_source_image_url'] as String?,
+      catalogUrl: row['catalog_url'] as String?,
       updatedAt: DateTime.fromMillisecondsSinceEpoch(
         row['updated_at'] as int,
       ),
@@ -361,6 +363,7 @@ class ComicDetailStore {
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       lastReadEpisodeId: existing?.lastReadEpisodeId,
+      catalogUrl: parsedPost.catalogUrl ?? existing?.catalogUrl,
     );
 
     await executor.insert(
@@ -419,5 +422,22 @@ class ComicDetailStore {
       return fromContent;
     }
     return null;
+  }
+
+  /// 更新漫画的 catalogUrl（发现或更新时调用）。
+  Future<void> updateCatalogUrl({
+    required String comicId,
+    required String catalogUrl,
+  }) async {
+    final db = await _dbFuture;
+    await db.update(
+      ComicLocalDb.comicsTable,
+      <String, Object?>{
+        'catalog_url': catalogUrl,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'comic_id = ?',
+      whereArgs: <Object>[comicId],
+    );
   }
 }

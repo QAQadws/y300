@@ -1292,6 +1292,9 @@ class _ReaderRepoForControllerTest
   }) async {
     progressWrites.add(_ProgressWrite(imageIndex: imageIndex, scrollOffset: scrollOffset));
   }
+
+  @override
+  Future<void> updateCatalogUrl({required String comicId, required String catalogUrl}) async {}
 }
 
 Future<void> _waitForCacheStatusWrites({

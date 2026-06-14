@@ -1114,6 +1114,14 @@ class _BackfillRefreshService implements ComicEpisodeRefreshService {
   }
 
   @override
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(String catalogUrl) async {
+    return const ComicEpisodeRefreshOutcome(
+      source: ComicEpisodeRefreshSource.empty,
+      links: <ComicEpisodeLink>[],
+    );
+  }
+
+  @override
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request,
   ) async {
@@ -1150,6 +1158,11 @@ class _ThrowingRefreshService implements ComicEpisodeRefreshService {
 
   @override
   Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
+    throw StateError('refresh failed');
+  }
+
+  @override
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(String catalogUrl) async {
     throw StateError('refresh failed');
   }
 

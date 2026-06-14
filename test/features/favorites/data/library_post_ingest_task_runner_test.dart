@@ -533,6 +533,14 @@ class _NoopRefreshService implements ComicEpisodeRefreshService {
   }
 
   @override
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(String catalogUrl) async {
+    return const ComicEpisodeRefreshOutcome(
+      source: ComicEpisodeRefreshSource.empty,
+      links: <ComicEpisodeLink>[],
+    );
+  }
+
+  @override
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request,
   ) async {

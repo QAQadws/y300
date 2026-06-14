@@ -23,6 +23,14 @@ abstract class ComicEpisodeRefreshService {
     ComicEpisodeRefreshRequest request,
   );
 
+  /// Catalog 快速路径：直接解析持久化的 catalogUrl HTML。
+  ///
+  /// 不请求帖子详情，适用于已持久化 catalogUrl 的场景。
+  /// 失败时返回空结果，调用方应回退到 [fetchCatalogOnly]。
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(
+    String catalogUrl,
+  );
+
   Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid);
 }
 
@@ -39,12 +47,16 @@ class ComicEpisodeRefreshOutcome {
     required this.links,
     this.usedSearch = false,
     this.catalogMatched = false,
+    this.catalogUrl,
   });
 
   final ComicEpisodeRefreshSource source;
   final List<ComicEpisodeLink> links;
   final bool usedSearch;
   final bool catalogMatched;
+  /// 本次刷新过程中发现或使用的 catalogUrl。
+  /// 调用方可据此持久化，以便下次走 catalog 快速路径。
+  final String? catalogUrl;
 
   bool get hasLinks => links.isNotEmpty;
 }
@@ -57,6 +69,7 @@ class ComicEpisodeRefreshRequest {
     this.sourceTitle,
     this.customTitle,
     this.customSearchTitle,
+    this.catalogUrl,
   });
 
   final String? comicId;
@@ -65,6 +78,8 @@ class ComicEpisodeRefreshRequest {
   final String? sourceTitle;
   final String? customTitle;
   final String? customSearchTitle;
+  /// 已持久化的 catalogUrl，调用方从 ComicDetail 获取并传入。
+  final String? catalogUrl;
 }
 
 class ThreadSeed {

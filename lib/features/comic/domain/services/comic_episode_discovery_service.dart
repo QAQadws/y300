@@ -20,10 +20,13 @@ class EpisodeDiscoveryResult {
   const EpisodeDiscoveryResult({
     required this.strategy,
     required this.episodeLinks,
+    this.catalogUrl,
   });
 
   final EpisodeDiscoveryStrategy strategy;
   final List<ComicEpisodeLink> episodeLinks;
+  /// 本次发现过程中解析出的 catalogUrl（可能为 null）。
+  final String? catalogUrl;
 }
 
 class EpisodeDiscoveryConfig {
@@ -107,6 +110,13 @@ class ComicEpisodeDiscoveryService {
     return discoverFromTidWithPreference(tid: tid, preferCatalogFirst: false);
   }
 
+  /// 直接通过 catalogUrl 发现章节列表。
+  ///
+  /// 不需要先请求帖子详情。可独立调用，用于 catalog 快速路径。
+  Future<List<ComicEpisodeLink>> discoverFromCatalogUrl(String catalogUrl) {
+    return _discoverFromCatalog(catalogUrl);
+  }
+
   Future<EpisodeDiscoveryResult> discoverFromTidWithPreference({
     required String tid,
     required bool preferCatalogFirst,
@@ -128,6 +138,7 @@ class ComicEpisodeDiscoveryService {
         return EpisodeDiscoveryResult(
           strategy: EpisodeDiscoveryStrategy.catalog,
           episodeLinks: catalogLinks,
+          catalogUrl: root.parsed.catalogUrl,
         );
       }
     }
@@ -136,6 +147,7 @@ class ComicEpisodeDiscoveryService {
       return EpisodeDiscoveryResult(
         strategy: EpisodeDiscoveryStrategy.direct,
         episodeLinks: root.parsed.episodeLinks,
+        catalogUrl: root.parsed.catalogUrl,
       );
     }
 
@@ -144,6 +156,7 @@ class ComicEpisodeDiscoveryService {
       return EpisodeDiscoveryResult(
         strategy: EpisodeDiscoveryStrategy.recursive,
         episodeLinks: recursiveLinks,
+        catalogUrl: root.parsed.catalogUrl,
       );
     }
 
@@ -153,6 +166,7 @@ class ComicEpisodeDiscoveryService {
         return EpisodeDiscoveryResult(
           strategy: EpisodeDiscoveryStrategy.catalog,
           episodeLinks: catalogLinks,
+          catalogUrl: root.parsed.catalogUrl,
         );
       }
     }
@@ -160,6 +174,7 @@ class ComicEpisodeDiscoveryService {
     return EpisodeDiscoveryResult(
       strategy: EpisodeDiscoveryStrategy.direct,
       episodeLinks: root.parsed.episodeLinks,
+      catalogUrl: root.parsed.catalogUrl,
     );
   }
 

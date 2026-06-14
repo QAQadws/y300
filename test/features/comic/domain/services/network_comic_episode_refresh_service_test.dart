@@ -968,6 +968,57 @@ void main() {
       expect(linkMerger.sortCallCount, 1);
       expect(linkMerger.mergeCallCount, greaterThanOrEqualTo(2));
     });
+
+    test('fetchCatalogDirect returns catalog outcome when links found', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{},
+        byCatalogUrl: <String, List<ComicEpisodeLink>>{
+          'https://bbs.yamibo.com/misc.php?mod=tag&id=123': const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: '第1话'),
+            ComicEpisodeLink(url: 'thread-102-1-1.html', rawText: '第2话'),
+          ],
+        },
+      );
+      final service = _buildService(
+        discoveryService: discovery,
+        searchService: _FakeDiscuzSearchService(
+          response: const DiscuzSearchResponse(items: <DiscuzSearchResultItem>[], rateLimited: false),
+        ),
+      );
+
+      final outcome = await service.fetchCatalogDirect(
+        'https://bbs.yamibo.com/misc.php?mod=tag&id=123',
+      );
+
+      expect(outcome.catalogMatched, isTrue);
+      expect(outcome.hasLinks, isTrue);
+      expect(outcome.source, ComicEpisodeRefreshSource.catalog);
+      expect(outcome.links, hasLength(2));
+      expect(outcome.catalogUrl, 'https://bbs.yamibo.com/misc.php?mod=tag&id=123');
+      expect(discovery.requestedCatalogUrls, contains('https://bbs.yamibo.com/misc.php?mod=tag&id=123'));
+    });
+
+    test('fetchCatalogDirect returns empty when catalog has no links', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{},
+        byCatalogUrl: <String, List<ComicEpisodeLink>>{},
+      );
+      final service = _buildService(
+        discoveryService: discovery,
+        searchService: _FakeDiscuzSearchService(
+          response: const DiscuzSearchResponse(items: <DiscuzSearchResultItem>[], rateLimited: false),
+        ),
+      );
+
+      final outcome = await service.fetchCatalogDirect(
+        'https://bbs.yamibo.com/misc.php?mod=tag&id=999',
+      );
+
+      expect(outcome.catalogMatched, isFalse);
+      expect(outcome.hasLinks, isFalse);
+      expect(outcome.source, ComicEpisodeRefreshSource.empty);
+      expect(outcome.catalogUrl, 'https://bbs.yamibo.com/misc.php?mod=tag&id=999');
+    });
   });
 }
 
@@ -1004,6 +1055,7 @@ class _FakeDiscoveryService extends ComicEpisodeDiscoveryService {
   _FakeDiscoveryService({
     required this.byTid,
     this.strategyByTid = const <String, EpisodeDiscoveryStrategy>{},
+    this.byCatalogUrl = const <String, List<ComicEpisodeLink>>{},
   }) : super(
          fetchThreadDetail: (_) async => const ApiFailure<ThreadDetailData>(
            ApiError(type: ApiErrorType.business, message: 'unused'),
@@ -1016,7 +1068,9 @@ class _FakeDiscoveryService extends ComicEpisodeDiscoveryService {
 
   final Map<String, List<ComicEpisodeLink>> byTid;
   final Map<String, EpisodeDiscoveryStrategy> strategyByTid;
+  final Map<String, List<ComicEpisodeLink>> byCatalogUrl;
   final List<String> requestedTids = <String>[];
+  final List<String> requestedCatalogUrls = <String>[];
   final Map<String, bool> catalogFallbackAllowedByTid = <String, bool>{};
 
   @override
@@ -1040,6 +1094,12 @@ class _FakeDiscoveryService extends ComicEpisodeDiscoveryService {
       strategy: strategyByTid[tid] ?? EpisodeDiscoveryStrategy.direct,
       episodeLinks: byTid[tid] ?? const <ComicEpisodeLink>[],
     );
+  }
+
+  @override
+  Future<List<ComicEpisodeLink>> discoverFromCatalogUrl(String catalogUrl) async {
+    requestedCatalogUrls.add(catalogUrl);
+    return byCatalogUrl[catalogUrl] ?? const <ComicEpisodeLink>[];
   }
 }
 

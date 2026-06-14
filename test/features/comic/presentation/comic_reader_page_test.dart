@@ -863,6 +863,9 @@ class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
       updatedAt: DateTime(2026, 1, 1),
     );
   }
+
+  @override
+  Future<void> updateCatalogUrl({required String comicId, required String catalogUrl}) async {}
 }
 
 class _ReaderBlockingRepository extends _ReaderFakeRepository {

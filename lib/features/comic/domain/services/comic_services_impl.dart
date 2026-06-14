@@ -99,6 +99,7 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
         source: ComicEpisodeRefreshSource.catalog,
         links: current.episodeLinks,
         catalogMatched: true,
+        catalogUrl: current.catalogUrl,
       );
     }
 
@@ -121,9 +122,10 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
         request,
         'strategy=catalog-only miss current=${current.episodeLinks.length}',
       );
-      return const ComicEpisodeRefreshOutcome(
+      return ComicEpisodeRefreshOutcome(
         source: ComicEpisodeRefreshSource.empty,
-        links: <ComicEpisodeLink>[],
+        links: const <ComicEpisodeLink>[],
+        catalogUrl: current.catalogUrl,
       );
     }
     _logRefresh(
@@ -134,6 +136,7 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
       source: ComicEpisodeRefreshSource.catalog,
       links: current.episodeLinks,
       catalogMatched: true,
+      catalogUrl: current.catalogUrl,
     );
   }
 
@@ -143,6 +146,26 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   ) async {
     final current = await _discoverCurrentOnly(request);
     return _fetchSearchAndCurrentOnly(request, current: current);
+  }
+
+  @override
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(
+    String catalogUrl,
+  ) async {
+    final links = await _discoveryService.discoverFromCatalogUrl(catalogUrl);
+    if (links.isEmpty) {
+      return ComicEpisodeRefreshOutcome(
+        source: ComicEpisodeRefreshSource.empty,
+        links: const <ComicEpisodeLink>[],
+        catalogUrl: catalogUrl,
+      );
+    }
+    return ComicEpisodeRefreshOutcome(
+      source: ComicEpisodeRefreshSource.catalog,
+      links: links,
+      catalogMatched: true,
+      catalogUrl: catalogUrl,
+    );
   }
 
   Future<EpisodeDiscoveryResult> _discoverCatalogFirst(
@@ -185,6 +208,7 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
         source: ComicEpisodeRefreshSource.search,
         links: merged,
         usedSearch: true,
+        catalogUrl: current.catalogUrl,
       );
     }
 
@@ -199,6 +223,7 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
           : ComicEpisodeRefreshSource.currentOnly,
       links: current.episodeLinks,
       usedSearch: searchResult.usedSearch,
+      catalogUrl: current.catalogUrl,
     );
   }
 

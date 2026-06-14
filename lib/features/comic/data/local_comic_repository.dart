@@ -363,6 +363,17 @@ class LocalComicRepository
   }
 
   @override
+  Future<void> updateCatalogUrl({
+    required String comicId,
+    required String catalogUrl,
+  }) {
+    return _detailStore.updateCatalogUrl(
+      comicId: comicId,
+      catalogUrl: catalogUrl,
+    );
+  }
+
+  @override
   Future<LibraryShelfSnapshot> queryShelfSnapshot({
     required LibraryFilterSet filters,
     required LibraryShelfSortOption sortOption,

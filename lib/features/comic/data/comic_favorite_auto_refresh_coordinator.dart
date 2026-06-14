@@ -103,6 +103,7 @@ class ComicFavoriteAutoRefreshCoordinator {
           source: catalog.source,
           mutationSource: LibraryMutationSource.favoriteSync,
           reason: 'favorite_comic_catalog_refresh_completed',
+          catalogUrl: catalog.catalogUrl,
         ),
       );
       return ComicFavoriteAutoRefreshResult(

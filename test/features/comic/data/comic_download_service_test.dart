@@ -240,4 +240,6 @@ class _ComicDownloadRepositoryFake implements ComicRepository, ComicEpisodeImage
   Future<void> updateGridColumnCount({required int columnCount}) async {}
   @override
   Future<void> updateLastReadProgress({required String comicId, required String episodeId, required int imageIndex, required double scrollOffset}) async {}
+  @override
+  Future<void> updateCatalogUrl({required String comicId, required String catalogUrl}) async {}
 }

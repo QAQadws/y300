@@ -586,6 +586,16 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid) async {
     return fetchEpisodeLinks(ComicEpisodeRefreshRequest(sourceTid: tid));
   }
+
+  @override
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(String catalogUrl) async {
+    return ComicEpisodeRefreshOutcome(
+      source: ComicEpisodeRefreshSource.catalog,
+      links: const <ComicEpisodeLink>[],
+      catalogMatched: true,
+      catalogUrl: catalogUrl,
+    );
+  }
 }
 
 class _RecordingRefreshOutcomeApplier implements ComicRefreshOutcomeApplier {
@@ -806,6 +816,8 @@ class _FakeComicRepository implements ComicRepository {
   Future<void> updateGridColumnCount({required int columnCount}) async {}
   @override
   Future<void> updateLastReadProgress({required String comicId, required String episodeId, required int imageIndex, required double scrollOffset}) async {}
+  @override
+  Future<void> updateCatalogUrl({required String comicId, required String catalogUrl}) async {}
 }
 
 class _FakeComicRepositoryWithCoverWriter extends _FakeComicRepository

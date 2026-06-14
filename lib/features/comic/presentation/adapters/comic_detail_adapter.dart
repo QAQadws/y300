@@ -517,6 +517,26 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
       return DetailRefreshResult.skipped;
     }
     final request = _buildRefreshRequest(detail);
+
+    // Step 1: Catalog 快速路径（有持久化 catalogUrl 时跳过帖子详情请求）
+    final catalogUrl = detail.catalogUrl;
+    if (catalogUrl != null && catalogUrl.isNotEmpty) {
+      final direct = await refreshService.fetchCatalogDirect(catalogUrl);
+      if (direct.catalogMatched && direct.hasLinks) {
+        await _applyRefreshOutcome(
+          applier: refreshOutcomeApplier,
+          comicId: workId,
+          sourceTid: detail.sourceTid,
+          links: direct.links,
+          source: direct.source,
+          reason: 'comic_detail_catalog_direct_refresh',
+          catalogUrl: direct.catalogUrl,
+        );
+        return DetailRefreshResult.immediate;
+      }
+    }
+
+    // Step 2: 回退到现有 catalog-only 路径
     final catalog = await refreshService.fetchCatalogOnly(request);
     if (catalog.catalogMatched && catalog.links.isNotEmpty) {
       await _applyRefreshOutcome(
@@ -526,6 +546,7 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
         links: catalog.links,
         source: catalog.source,
         reason: 'comic_detail_catalog_refresh_completed',
+        catalogUrl: catalog.catalogUrl,
       );
       return DetailRefreshResult.immediate;
     }
@@ -561,6 +582,7 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
       links: fallback.links,
       source: fallback.source,
       reason: 'comic_detail_search_refresh_completed',
+      catalogUrl: fallback.catalogUrl,
     );
     return DetailRefreshResult.immediate;
   }
@@ -576,6 +598,7 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
     required List<ComicEpisodeLink> links,
     required ComicEpisodeRefreshSource source,
     required String reason,
+    String? catalogUrl,
   }) async {
     await applier.apply(
       ComicRefreshApplyRequest(
@@ -585,6 +608,7 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
         source: source,
         mutationSource: LibraryMutationSource.comicRefresh,
         reason: reason,
+        catalogUrl: catalogUrl,
       ),
     );
   }
@@ -600,6 +624,7 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
       customSearchTitle: _featureFlags.readerCustomMetadataEnabled
           ? detail.customSearchTitle
           : null,
+      catalogUrl: detail.catalogUrl,
     );
   }
 
