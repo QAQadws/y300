@@ -53,8 +53,8 @@
 ## 强制约束
 
 当不只是微调代码而是写了较多的代码时
-请执行flutter analyze和flutter test来确保你写的代码的正确性，发现问题就修正，然后继续flutter analyze和flutter test，如此往复来修复代码
-- 写完代码后，把验证交给用户。用户会运行测试、分析或格式化检查，并把输出贴回来供继续修复。
+要写好测试
+然后请执行flutter analyze和flutter test来确保你写的代码的正确性，发现问题就修正，然后继续flutter analyze和flutter test，如此往复来修复代码
 ## 工程实现要求
 
 实现代码改动时：

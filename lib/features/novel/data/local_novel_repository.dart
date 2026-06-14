@@ -37,7 +37,7 @@ class LocalNovelRepository
   final LocalLibraryStateRepository _stateRepository;
 
   static const String _contentType = 'novel';
-  static const int _maxRefreshPages = 20;
+  static const int _maxRefreshPages = 10;
   static const String _defaultCategoryId = 'default';
 
   @override

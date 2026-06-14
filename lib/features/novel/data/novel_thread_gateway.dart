@@ -20,6 +20,7 @@ class ApiNovelThreadGateway implements NovelThreadGateway {
         'tid': tid,
         'page': page,
         'version': 1,
+        'ppp': 200,
       },
       parser: (response) =>
           ThreadDetailData.fromVariables(response.variables, page: page),
