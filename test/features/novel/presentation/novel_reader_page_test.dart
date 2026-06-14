@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,7 +16,12 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_layout_key.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_layout_request.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_layout_service.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
@@ -440,6 +447,181 @@ void main() {
     expect(repository.upsertPreferencesCallCount, 0);
   });
 
+  testWidgets('NovelReaderPage paged mode shows layout loading before first layout resolves', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+      ),
+      firstParagraphs: List<String>.generate(
+        12,
+        (index) => '首屏分页段落 $index ${List<String>.filled(60, '正文').join()}',
+      ),
+    );
+    final layoutService = _ControlledNovelReaderLayoutService(
+      contentsByEpisodeId: repository.contentsByEpisodeId,
+    );
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        layoutService: layoutService,
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('novel-reader-paged-layout-loading')), findsOneWidget);
+    expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
+
+    layoutService.completeEpisode('novel:49:100:5001');
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-paged-layout-loading')), findsNothing);
+    expect(find.byKey(const Key('novel-reader-paged-view')), findsOneWidget);
+  });
+
+  testWidgets('NovelReaderPage paged mode keeps old layout and shows reflow mask on preference preview', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+      ),
+      firstParagraphs: List<String>.generate(
+        14,
+        (index) => '重排分页段落 $index ${List<String>.filled(70, '正文').join()}',
+      ),
+    );
+    final layoutService = _ControlledNovelReaderLayoutService(
+      contentsByEpisodeId: repository.contentsByEpisodeId,
+    );
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        layoutService: layoutService,
+      ),
+    );
+    await tester.pump();
+    layoutService.completeEpisode('novel:49:100:5001');
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-paged-view')), findsOneWidget);
+    expect(layoutService.requestCountByEpisodeId['novel:49:100:5001'], 1);
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-display')));
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.descendant(
+        of: find.byKey(const Key('novel-reader-font-size-slider')),
+        matching: find.byType(Slider),
+      ),
+      const Offset(120, 0),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('novel-reader-paged-view')), findsOneWidget);
+    expect(find.byKey(const Key('novel-reader-paged-reflow-mask')), findsOneWidget);
+    expect(
+      layoutService.requestCountByEpisodeId['novel:49:100:5001'],
+      greaterThan(1),
+    );
+
+    layoutService.completeEpisode('novel:49:100:5001');
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-paged-reflow-mask')), findsNothing);
+    expect(find.byKey(const Key('novel-reader-paged-view')), findsOneWidget);
+  });
+
+  testWidgets('NovelReaderPage paged mode bookmark rebuild does not request new layout', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+      ),
+    );
+    final layoutService = _ControlledNovelReaderLayoutService(
+      contentsByEpisodeId: repository.contentsByEpisodeId,
+    );
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        layoutService: layoutService,
+      ),
+    );
+    await tester.pump();
+    layoutService.completeEpisode('novel:49:100:5001');
+    await tester.pumpAndSettle();
+
+    final before = layoutService.requestCountByEpisodeId['novel:49:100:5001'];
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-top-action-bookmark')));
+    await tester.pumpAndSettle();
+
+    expect(
+      layoutService.requestCountByEpisodeId['novel:49:100:5001'],
+      before,
+    );
+  });
+
+  testWidgets('NovelReaderPage chapter switch in paged mode hides old chapter until new layout resolves', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository.threeEpisodes(
+      chapterLoadDelay: const Duration(milliseconds: 120),
+      readingProgress: NovelReadingProgress(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+        scrollOffset: 0,
+        updatedAt: DateTime(2026, 6, 1),
+        flowMode: NovelReaderFlowMode.pagedLtr,
+        pageIndex: 0,
+      ),
+    );
+    repository.preferences = repository.preferences.copyWith(
+      flowMode: NovelReaderFlowMode.pagedLtr,
+    );
+    final layoutService = _ControlledNovelReaderLayoutService(
+      contentsByEpisodeId: repository.contentsByEpisodeId,
+    );
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        layoutService: layoutService,
+      ),
+    );
+    await tester.pump();
+    layoutService.completeEpisode('novel:49:100:5001');
+    await tester.pumpAndSettle();
+
+    expect(find.text('第一段。'), findsOneWidget);
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-catalog')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('novel-reader-chapter-novel:49:100:5002')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('novel-reader-transition-mask')), findsOneWidget);
+    expect(find.text('第一段。'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 140));
+    await tester.pump();
+
+    expect(find.byKey(const Key('novel-reader-transition-mask')), findsNothing);
+    expect(find.byKey(const Key('novel-reader-paged-layout-loading')), findsOneWidget);
+    expect(find.text('第一段。'), findsNothing);
+    expect(find.text('第三段。'), findsNothing);
+
+    layoutService.completeEpisode('novel:49:100:5002');
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-paged-layout-loading')), findsNothing);
+    expect(find.text('第三段。'), findsOneWidget);
+    expect(find.text('第一段。'), findsNothing);
+  });
+
   testWidgets('NovelReaderPage renders paged mode and saves page index', (
     tester,
   ) async {
@@ -452,7 +634,17 @@ void main() {
         (index) => '分页段落 $index ${List<String>.filled(70, '正文').join()}',
       ),
     );
-    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    final layoutService = _ControlledNovelReaderLayoutService(
+      contentsByEpisodeId: repository.contentsByEpisodeId,
+    );
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        layoutService: layoutService,
+      ),
+    );
+    await tester.pump();
+    layoutService.completeEpisode('novel:49:100:5001');
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('novel-reader-paged-view')), findsOneWidget);
@@ -484,7 +676,17 @@ void main() {
         pageIndex: 1,
       ),
     );
-    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    final layoutService = _ControlledNovelReaderLayoutService(
+      contentsByEpisodeId: repository.contentsByEpisodeId,
+    );
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        layoutService: layoutService,
+      ),
+    );
+    await tester.pump();
+    layoutService.completeEpisode('novel:49:100:5001');
     await tester.pumpAndSettle();
 
     await _showReaderMenu(tester);
@@ -506,7 +708,17 @@ void main() {
         (index) => '右翻分页段落 $index ${List<String>.filled(70, '正文').join()}',
       ),
     );
-    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    final layoutService = _ControlledNovelReaderLayoutService(
+      contentsByEpisodeId: repository.contentsByEpisodeId,
+    );
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        layoutService: layoutService,
+      ),
+    );
+    await tester.pump();
+    layoutService.completeEpisode('novel:49:100:5001');
     await tester.pumpAndSettle();
 
     await tester.tapAt(const Offset(720, 300));
@@ -528,7 +740,17 @@ void main() {
         (index) => '左翻分页段落 $index ${List<String>.filled(70, '正文').join()}',
       ),
     );
-    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    final layoutService = _ControlledNovelReaderLayoutService(
+      contentsByEpisodeId: repository.contentsByEpisodeId,
+    );
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        layoutService: layoutService,
+      ),
+    );
+    await tester.pump();
+    layoutService.completeEpisode('novel:49:100:5001');
     await tester.pumpAndSettle();
 
     await tester.tapAt(const Offset(80, 300));
@@ -1017,6 +1239,7 @@ Widget _buildReaderApp({
   NovelDownloadService? downloadService,
   LibraryStateRepository? stateRepository,
   ThreadRepository? threadRepository,
+  NovelReaderLayoutService? layoutService,
   String initialEpisodeId = 'novel:49:100:5001',
 }) {
   return ProviderScope(
@@ -1031,6 +1254,8 @@ Widget _buildReaderApp({
       novelDownloadServiceProvider.overrideWithValue(
         downloadService ?? _NoopNovelDownloadService(),
       ),
+      if (layoutService != null)
+        novelReaderLayoutServiceProvider.overrideWithValue(layoutService),
       libraryStateRepositoryProvider.overrideWithValue(
         stateRepository ?? _MemoryLibraryStateRepository(),
       ),
@@ -1655,6 +1880,128 @@ class _FakeNovelRepository implements NovelRepository {
       rawHtml: _rawHtmlFromParagraphs(paragraphs),
       plainText: paragraphs.join('\n'),
       paragraphs: paragraphs,
+    );
+  }
+}
+
+class _ControlledNovelReaderLayoutService implements NovelReaderLayoutService {
+  _ControlledNovelReaderLayoutService({
+    required Map<String, NovelChapterContent> contentsByEpisodeId,
+  }) : _contentsByEpisodeId = contentsByEpisodeId;
+
+  final Map<String, NovelChapterContent> _contentsByEpisodeId;
+  final Map<String, int> requestCountByEpisodeId = <String, int>{};
+  final Map<String, NovelReaderLayoutRequest> latestRequestByEpisodeId =
+      <String, NovelReaderLayoutRequest>{};
+  final Map<String, int> _pendingCompletionPagesByEpisodeId = <String, int>{};
+  final Map<NovelReaderLayoutKey, Completer<NovelReaderPageLayout>> _completers =
+      <NovelReaderLayoutKey, Completer<NovelReaderPageLayout>>{};
+  final Map<NovelReaderLayoutKey, NovelReaderPageLayout> _resolvedLayouts =
+      <NovelReaderLayoutKey, NovelReaderPageLayout>{};
+
+  @override
+  Future<NovelReaderPageLayout> resolve(NovelReaderLayoutRequest request) {
+    final episodeId = request.episodeId;
+    final key = request.key;
+    requestCountByEpisodeId.update(episodeId, (value) => value + 1, ifAbsent: () => 1);
+    latestRequestByEpisodeId[episodeId] = request;
+    final cached = _resolvedLayouts[key];
+    if (cached != null) {
+      return Future<NovelReaderPageLayout>.value(cached);
+    }
+    final completer = _completers.putIfAbsent(
+      key,
+      Completer<NovelReaderPageLayout>.new,
+    );
+    final pendingPages = _pendingCompletionPagesByEpisodeId.remove(episodeId);
+    if (pendingPages != null) {
+      _completeRequest(request, pages: pendingPages);
+    }
+    return completer.future;
+  }
+
+  @override
+  void evictEpisode(String episodeId) {
+    _resolvedLayouts.removeWhere((key, _) => key.episodeId == episodeId);
+    _completers.removeWhere((key, _) => key.episodeId == episodeId);
+    latestRequestByEpisodeId.remove(episodeId);
+    _pendingCompletionPagesByEpisodeId.remove(episodeId);
+  }
+
+  @override
+  void clear() {
+    _resolvedLayouts.clear();
+    _completers.clear();
+    latestRequestByEpisodeId.clear();
+    _pendingCompletionPagesByEpisodeId.clear();
+  }
+
+  void completeEpisode(String episodeId, {int pages = 3}) {
+    final request = latestRequestByEpisodeId[episodeId];
+    if (request == null) {
+      _pendingCompletionPagesByEpisodeId[episodeId] = pages;
+      return;
+    }
+    _completeRequest(request, pages: pages);
+  }
+
+  void _completeRequest(NovelReaderLayoutRequest request, {required int pages}) {
+    final layout = _buildLayout(
+      request: request,
+      content: _contentsByEpisodeId[request.episodeId]!,
+      pages: pages,
+    );
+    final key = request.key;
+    _resolvedLayouts[key] = layout;
+    final completer = _completers.putIfAbsent(
+      key,
+      Completer<NovelReaderPageLayout>.new,
+    );
+    if (!completer.isCompleted) {
+      completer.complete(layout);
+    }
+  }
+
+  NovelReaderPageLayout _buildLayout({
+    required NovelReaderLayoutRequest request,
+    required NovelChapterContent content,
+    required int pages,
+  }) {
+    final sourceNodes = request.document.nodes;
+    final resolvedNodes = sourceNodes.isEmpty
+        ? <NovelReaderNode>[
+            NovelReaderNode(
+              id: '${request.episodeId}-node-0',
+              type: NovelReaderNodeType.paragraph,
+              text: content.paragraphs.isEmpty ? content.plainText : content.paragraphs.first,
+            ),
+          ]
+        : sourceNodes;
+    final resolvedPages = List<NovelReaderPageSlice>.generate(pages, (index) {
+      final node = index < resolvedNodes.length
+          ? resolvedNodes[index]
+          : NovelReaderNode(
+              id: '${request.episodeId}-node-$index',
+              type: NovelReaderNodeType.paragraph,
+              text: content.paragraphs.isEmpty
+                  ? '${content.plainText} 第${index + 1}页'
+                  : content.paragraphs[index % content.paragraphs.length],
+            );
+      return NovelReaderPageSlice(
+        index: index,
+        nodes: <NovelReaderNode>[node],
+        anchorNodeId: node.id,
+      );
+    });
+    return NovelReaderPageLayout(
+      document: NovelReaderDocument(
+        episodeId: request.document.episodeId,
+        rawHtmlHash: request.document.rawHtmlHash,
+        nodes: resolvedPages.expand((page) => page.nodes).toList(growable: false),
+        plainText: content.plainText,
+        wordCount: content.plainText.length,
+      ),
+      pages: resolvedPages,
     );
   }
 }

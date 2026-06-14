@@ -62,6 +62,7 @@ class NovelReaderPaginationMetrics {
     required this.headingFontSize,
     required this.headingLineHeight,
     required this.paragraphSpacing,
+    this.firstPageReservedHeight = 0,
   });
 
   final double bodyFontSize;
@@ -69,6 +70,7 @@ class NovelReaderPaginationMetrics {
   final double headingFontSize;
   final double headingLineHeight;
   final double paragraphSpacing;
+  final double firstPageReservedHeight;
 }
 
 class NovelReaderPageSlice {
@@ -154,6 +156,10 @@ class NovelReaderPaginator {
     final pages = <NovelReaderPageSlice>[];
     var currentNodes = <NovelReaderNode>[];
     var currentHeight = 0.0;
+    var currentPageHeightLimit = _pageHeightLimit(
+      safeHeight,
+      reservedHeight: typography.firstPageReservedHeight,
+    );
 
     for (final node in document.nodes) {
       final nodeHeight = _estimateNodeHeight(
@@ -164,10 +170,11 @@ class NovelReaderPaginator {
       );
       final spacing = currentNodes.isEmpty ? 0.0 : typography.paragraphSpacing;
       if (currentNodes.isNotEmpty &&
-          currentHeight + spacing + nodeHeight > safeHeight) {
+          currentHeight + spacing + nodeHeight > currentPageHeightLimit) {
         pages.add(_slice(pages.length, currentNodes));
         currentNodes = <NovelReaderNode>[node];
         currentHeight = nodeHeight;
+        currentPageHeightLimit = safeHeight;
         continue;
       }
       currentNodes.add(node);
@@ -183,6 +190,14 @@ class NovelReaderPaginator {
       );
     }
     return NovelReaderPageLayout(document: document, pages: pages);
+  }
+
+  double _pageHeightLimit(
+    double safeHeight, {
+    required double reservedHeight,
+  }) {
+    final effectiveReserved = reservedHeight.clamp(0.0, safeHeight - 80.0).toDouble();
+    return math.max(80.0, safeHeight - effectiveReserved);
   }
 
   NovelReaderPageSlice _slice(int index, List<NovelReaderNode> nodes) {
