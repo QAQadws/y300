@@ -65,6 +65,113 @@ void main() {
     expect(state.currentOffset, 88);
   });
 
+  test('NovelReaderController previewPreferences only updates effective state', () async {
+    final repository = _ControllerNovelRepository();
+    final container = _buildContainer(repository: repository);
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
+
+    final initial = await container.read(provider.future);
+    final next = initial.persistedPreferences.copyWith(
+      themePreset: NovelReaderThemePreset.sepia,
+      flowMode: NovelReaderFlowMode.pagedLtr,
+    );
+
+    container.read(provider.notifier).previewPreferences(next);
+    final state = container.read(provider).value!;
+
+    expect(state.persistedPreferences, initial.persistedPreferences);
+    expect(state.effectivePreferences, next);
+    expect(state.progressSnapshot.flowMode, NovelReaderFlowMode.pagedLtr);
+    expect(repository.latestPreferences, isNull);
+    expect(repository.upsertPreferencesCallCount, 0);
+  });
+
+  test('NovelReaderController commitPreferences persists once and syncs state', () async {
+    final repository = _ControllerNovelRepository();
+    final container = _buildContainer(repository: repository);
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
+
+    final initial = await container.read(provider.future);
+    final next = initial.persistedPreferences.copyWith(
+      themePreset: NovelReaderThemePreset.dark,
+    );
+
+    container.read(provider.notifier).previewPreferences(next);
+    await container.read(provider.notifier).commitPreferences(next);
+    final state = container.read(provider).value!;
+
+    expect(repository.latestPreferences, next);
+    expect(repository.upsertPreferencesCallCount, 1);
+    expect(state.persistedPreferences, next);
+    expect(state.effectivePreferences, next);
+  });
+
+  test('NovelReaderController revertPreferencePreview rolls back effective state', () async {
+    final repository = _ControllerNovelRepository();
+    final container = _buildContainer(repository: repository);
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
+
+    final initial = await container.read(provider.future);
+    final next = initial.persistedPreferences.copyWith(
+      flowMode: NovelReaderFlowMode.pagedLtr,
+    );
+
+    container.read(provider.notifier).previewPreferences(next);
+    container.read(provider.notifier).revertPreferencePreview();
+    final state = container.read(provider).value!;
+
+    expect(state.persistedPreferences, initial.persistedPreferences);
+    expect(state.effectivePreferences, initial.persistedPreferences);
+    expect(state.progressSnapshot.flowMode, initial.persistedPreferences.flowMode);
+    expect(repository.upsertPreferencesCallCount, 0);
+  });
+
+  test('NovelReaderController preview and commit are no-op for equal preferences', () async {
+    final repository = _ControllerNovelRepository();
+    final container = _buildContainer(repository: repository);
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
+
+    final initial = await container.read(provider.future);
+
+    container.read(provider.notifier).previewPreferences(initial.effectivePreferences);
+    await container
+        .read(provider.notifier)
+        .commitPreferences(initial.persistedPreferences);
+    final state = container.read(provider).value!;
+
+    expect(state.persistedPreferences, initial.persistedPreferences);
+    expect(state.effectivePreferences, initial.effectivePreferences);
+    expect(repository.upsertPreferencesCallCount, 0);
+  });
+
   test('NovelReaderController saves paged page progress immediately', () async {
     final repository = _ControllerNovelRepository(
       preferences: NovelReaderPreferences.defaults().copyWith(
@@ -299,7 +406,8 @@ NovelReaderViewState _viewState({
     currentEpisode: currentEpisode,
     currentContent: _content(currentEpisode.episodeId, '正文。'),
     document: _document(currentEpisode.episodeId),
-    preferences: NovelReaderPreferences.defaults(),
+    persistedPreferences: NovelReaderPreferences.defaults(),
+    effectivePreferences: NovelReaderPreferences.defaults(),
     readingProgress: null,
     progressSnapshot: const NovelReaderProgressSnapshot(
       novelId: 'novel:49:100',
@@ -556,6 +664,8 @@ class _ControllerNovelRepository implements NovelRepository {
   late final Map<String, NovelChapterContent> contentsByEpisodeId;
   NovelReadingProgress? readingProgress;
   NovelReaderPreferences preferences;
+  NovelReaderPreferences? latestPreferences;
+  int upsertPreferencesCallCount = 0;
   final savedProgressEpisodeIds = <String>[];
   final bookmarks = <NovelReaderBookmark>[];
 
@@ -667,7 +777,11 @@ class _ControllerNovelRepository implements NovelRepository {
   Future<void> upsertNovelBySeed({required NovelRefreshSeed seed}) async {}
 
   @override
-  Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {}
+  Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {
+    upsertPreferencesCallCount += 1;
+    latestPreferences = preferences;
+    this.preferences = preferences;
+  }
 
   @override
   Future<void> addReaderBookmark({

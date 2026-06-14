@@ -906,24 +906,38 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     return result.errorMessage ?? '缓存操作失败';
   }
 
-  void _showDisplaySettingsSheet(
+  Future<void> _showDisplaySettingsSheet(
     NovelReaderViewState viewState,
     NovelReaderController controller,
-  ) {
+  ) async {
     _overlayController.hideMenu();
-    unawaited(
-      showModalBottomSheet<void>(
-        context: context,
-        showDragHandle: true,
-        isScrollControlled: true,
-        builder: (context) => SafeArea(
-          child: NovelReaderDisplaySettingsSheet(
-            preferences: viewState.preferences,
-            onPreferencesChanged: controller.updatePreferences,
-          ),
+    final draft = await showModalBottomSheet<NovelReaderPreferences>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: NovelReaderDisplaySettingsSheet(
+          initialPreferences: viewState.persistedPreferences,
+          onPreviewRequested: controller.previewPreferences,
         ),
       ),
     );
+    if (!mounted) {
+      return;
+    }
+    if (draft == null) {
+      controller.revertPreferencePreview();
+      return;
+    }
+    try {
+      await controller.commitPreferences(draft);
+    } catch (_) {
+      controller.revertPreferencePreview();
+      if (!mounted) {
+        return;
+      }
+      _showReaderSnackBar('显示设置保存失败');
+    }
   }
 
   Future<void> _toggleEpisodeBookmark(NovelReaderViewState viewState) async {

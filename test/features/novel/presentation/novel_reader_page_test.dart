@@ -219,7 +219,7 @@ void main() {
     expect(find.text('第五段。'), findsOneWidget);
   });
 
-  testWidgets('NovelReaderPage display sheet persists style changes', (
+  testWidgets('NovelReaderPage display sheet previews theme and saves on confirm', (
     tester,
   ) async {
     final repository = _FakeNovelRepository();
@@ -240,11 +240,26 @@ void main() {
     await tester.tap(find.byKey(const Key('novel-theme-sepia')));
     await tester.pumpAndSettle();
 
+    expect(repository.latestPreferences, isNull);
+    expect(repository.upsertPreferencesCallCount, 0);
+    expect(
+      find.byKey(const Key('novel-reader-display-settings-save')),
+      findsOneWidget,
+    );
+
+    await tester.ensureVisible(
+      find.byKey(const Key('novel-reader-display-settings-save')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('novel-reader-display-settings-save')));
+    await tester.pumpAndSettle();
+
     expect(repository.latestPreferences?.themeMode, 'sepia');
     expect(repository.latestPreferences?.themePreset, NovelReaderThemePreset.sepia);
+    expect(repository.upsertPreferencesCallCount, 1);
   });
 
-  testWidgets('NovelReaderPage display sheet persists reading mode preference', (
+  testWidgets('NovelReaderPage display sheet previews reading mode and cancels rollback', (
     tester,
   ) async {
     final repository = _FakeNovelRepository();
@@ -260,9 +275,120 @@ void main() {
     await tester.tap(find.text('分页'));
     await tester.pumpAndSettle();
 
-    expect(repository.latestPreferences?.flowMode, NovelReaderFlowMode.pagedLtr);
     expect(find.byKey(const Key('novel-reader-paged-view')), findsOneWidget);
     expect(find.byKey(const Key('novel-reader-paragraph-list')), findsNothing);
+
+    expect(repository.latestPreferences, isNull);
+    expect(repository.upsertPreferencesCallCount, 0);
+
+    await tester.ensureVisible(
+      find.byKey(const Key('novel-reader-display-settings-cancel')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('novel-reader-display-settings-cancel')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-paragraph-list')), findsOneWidget);
+    expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
+    expect(repository.latestPreferences, isNull);
+  });
+
+  testWidgets('NovelReaderPage display sheet saves reading mode only on confirm', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository();
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-display')));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('分页'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('分页'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const Key('novel-reader-display-settings-save')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('novel-reader-display-settings-save')));
+    await tester.pumpAndSettle();
+
+    expect(repository.latestPreferences?.flowMode, NovelReaderFlowMode.pagedLtr);
+    expect(repository.upsertPreferencesCallCount, 1);
+    expect(find.byKey(const Key('novel-reader-paged-view')), findsOneWidget);
+    expect(find.byKey(const Key('novel-reader-paragraph-list')), findsNothing);
+  });
+
+  testWidgets('NovelReaderPage display sheet slider preview does not persist until save', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository();
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-display')));
+    await tester.pumpAndSettle();
+
+    final saveButtonFinder = find.byKey(
+      const Key('novel-reader-display-settings-save'),
+    );
+    FilledButton saveButton() =>
+        tester.widget<FilledButton>(saveButtonFinder);
+    expect(saveButton().onPressed, isNull);
+
+    await tester.drag(
+      find.descendant(
+        of: find.byKey(const Key('novel-reader-font-size-slider')),
+        matching: find.byType(Slider),
+      ),
+      const Offset(120, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repository.latestPreferences, isNull);
+    expect(repository.upsertPreferencesCallCount, 0);
+    expect(saveButton().onPressed, isNotNull);
+
+    await tester.ensureVisible(saveButtonFinder);
+    await tester.pumpAndSettle();
+    await tester.tap(saveButtonFinder);
+    await tester.pumpAndSettle();
+
+    expect(repository.latestPreferences, isNotNull);
+    expect(repository.latestPreferences?.fontSize, isNot(18));
+    expect(repository.upsertPreferencesCallCount, 1);
+  });
+
+  testWidgets('NovelReaderPage display sheet barrier dismiss rolls back preview', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository();
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-display')));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('分页'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('分页'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-paged-view')), findsOneWidget);
+    expect(repository.latestPreferences, isNull);
+
+    await tester.tapAt(const Offset(24, 24));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-display-settings-sheet')), findsNothing);
+    expect(find.byKey(const Key('novel-reader-paragraph-list')), findsOneWidget);
+    expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
+    expect(repository.latestPreferences, isNull);
+    expect(repository.upsertPreferencesCallCount, 0);
   });
 
   testWidgets('NovelReaderPage renders paged mode and saves page index', (
@@ -1211,6 +1337,7 @@ class _FakeNovelRepository implements NovelRepository {
   NovelReadingProgress? readingProgress;
   NovelReaderPreferences preferences;
   NovelReaderPreferences? latestPreferences;
+  int upsertPreferencesCallCount = 0;
   double lastSavedOffset = 0;
   int refreshCount = 0;
   final savedProgressEpisodeIds = <String>[];
@@ -1326,6 +1453,7 @@ class _FakeNovelRepository implements NovelRepository {
 
   @override
   Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {
+    upsertPreferencesCallCount += 1;
     latestPreferences = preferences;
     this.preferences = preferences;
   }

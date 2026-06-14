@@ -8,6 +8,7 @@ import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_preference_impact_analyzer.dart';
 
 class NovelReaderArgs {
   const NovelReaderArgs({
@@ -39,7 +40,8 @@ class NovelReaderViewState {
     required this.currentEpisode,
     required this.currentContent,
     required this.document,
-    required this.preferences,
+    required this.persistedPreferences,
+    required this.effectivePreferences,
     required this.readingProgress,
     required this.progressSnapshot,
     required this.currentOffset,
@@ -60,7 +62,8 @@ class NovelReaderViewState {
   final NovelEpisodeItem currentEpisode;
   final NovelChapterContent currentContent;
   final NovelReaderDocument document;
-  final NovelReaderPreferences preferences;
+  final NovelReaderPreferences persistedPreferences;
+  final NovelReaderPreferences effectivePreferences;
   final NovelReadingProgress? readingProgress;
   final NovelReaderProgressSnapshot progressSnapshot;
   final double currentOffset;
@@ -111,6 +114,8 @@ class NovelReaderViewState {
     );
   }
 
+  NovelReaderPreferences get preferences => effectivePreferences;
+
   Set<String> get bookmarkEpisodeIds {
     return bookmarks.map((bookmark) => bookmark.episodeId).toSet();
   }
@@ -129,7 +134,8 @@ class NovelReaderViewState {
     NovelEpisodeItem? currentEpisode,
     NovelChapterContent? currentContent,
     NovelReaderDocument? document,
-    NovelReaderPreferences? preferences,
+    NovelReaderPreferences? persistedPreferences,
+    NovelReaderPreferences? effectivePreferences,
     NovelReadingProgress? readingProgress,
     bool clearReadingProgress = false,
     NovelReaderProgressSnapshot? progressSnapshot,
@@ -152,7 +158,10 @@ class NovelReaderViewState {
       currentEpisode: currentEpisode ?? this.currentEpisode,
       currentContent: currentContent ?? this.currentContent,
       document: document ?? this.document,
-      preferences: preferences ?? this.preferences,
+      persistedPreferences:
+          persistedPreferences ?? this.persistedPreferences,
+      effectivePreferences:
+          effectivePreferences ?? this.effectivePreferences,
       readingProgress:
           clearReadingProgress ? null : (readingProgress ?? this.readingProgress),
       progressSnapshot: progressSnapshot ?? this.progressSnapshot,
@@ -182,6 +191,8 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
 
   final NovelReaderArgs _args;
   final NovelReaderProgressPolicy _progressPolicy = const NovelReaderProgressPolicy();
+  final NovelReaderPreferenceImpactAnalyzer _preferenceImpactAnalyzer =
+      const DefaultNovelReaderPreferenceImpactAnalyzer();
   Timer? _saveDebounce;
 
   @override
@@ -190,17 +201,75 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     return _load(_args.episodeId);
   }
 
-  Future<void> updatePreferences(NovelReaderPreferences preferences) async {
+  void previewPreferences(NovelReaderPreferences next) {
     final current = state.value;
     if (current == null) {
       return;
     }
-    await ref.read(novelRepositoryProvider).upsertReaderPreferences(preferences);
+    final diff = _preferenceImpactAnalyzer.compare(
+      current.effectivePreferences,
+      next,
+    );
+    if (!diff.hasChanges) {
+      return;
+    }
     state = AsyncData(
       current.copyWith(
-        preferences: preferences,
+        effectivePreferences: next,
         progressSnapshot: current.progressSnapshot.copyWith(
-          flowMode: preferences.flowMode,
+          flowMode: next.flowMode,
+        ),
+      ),
+    );
+  }
+
+  Future<void> commitPreferences(NovelReaderPreferences next) async {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    final persistedDiff = _preferenceImpactAnalyzer.compare(
+      current.persistedPreferences,
+      next,
+    );
+    if (!persistedDiff.hasChanges) {
+      if (current.effectivePreferences == current.persistedPreferences) {
+        return;
+      }
+      state = AsyncData(
+        current.copyWith(
+          effectivePreferences: current.persistedPreferences,
+          progressSnapshot: current.progressSnapshot.copyWith(
+            flowMode: current.persistedPreferences.flowMode,
+          ),
+        ),
+      );
+      return;
+    }
+    await ref.read(novelRepositoryProvider).upsertReaderPreferences(next);
+    final latest = state.value ?? current;
+    state = AsyncData(
+      latest.copyWith(
+        persistedPreferences: next,
+        effectivePreferences: next,
+        progressSnapshot: latest.progressSnapshot.copyWith(
+          flowMode: next.flowMode,
+        ),
+      ),
+    );
+  }
+
+  void revertPreferencePreview() {
+    final current = state.value;
+    if (current == null ||
+        current.effectivePreferences == current.persistedPreferences) {
+      return;
+    }
+    state = AsyncData(
+      current.copyWith(
+        effectivePreferences: current.persistedPreferences,
+        progressSnapshot: current.progressSnapshot.copyWith(
+          flowMode: current.persistedPreferences.flowMode,
         ),
       ),
     );
@@ -311,7 +380,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     final snapshot = _progressPolicy.pagedSnapshot(
       novelId: _args.novelId,
       episodeId: current.currentEpisode.episodeId,
-      flowMode: current.preferences.flowMode,
+      flowMode: current.effectivePreferences.flowMode,
       pageIndex: pageIndex,
       layout: layout,
     );
@@ -538,7 +607,8 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       currentEpisode: currentEpisode,
       currentContent: content,
       document: document,
-      preferences: preferences,
+      persistedPreferences: preferences,
+      effectivePreferences: preferences,
       readingProgress: progress,
       progressSnapshot: progressSnapshot,
       currentOffset: offset,

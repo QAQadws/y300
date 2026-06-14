@@ -238,6 +238,44 @@ class NovelReaderPreferences {
 
   String get themeMode => themePreset.storageValue;
 
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) {
+      return true;
+    }
+    return other is NovelReaderPreferences &&
+        other.fontSize == fontSize &&
+        other.lineHeight == lineHeight &&
+        other.paragraphSpacing == paragraphSpacing &&
+        other.pagePadding == pagePadding &&
+        other.fontFamily == fontFamily &&
+        other.flowMode == flowMode &&
+        other.themePreset == themePreset &&
+        other.contentMaxWidth == contentMaxWidth &&
+        other.firstLineIndent == firstLineIndent &&
+        other.fontWeight == fontWeight &&
+        other.textAlign == textAlign &&
+        other.showProgressIndicator == showProgressIndicator &&
+        other.showChapterTitle == showChapterTitle;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        fontSize,
+        lineHeight,
+        paragraphSpacing,
+        pagePadding,
+        fontFamily,
+        flowMode,
+        themePreset,
+        contentMaxWidth,
+        firstLineIndent,
+        fontWeight,
+        textAlign,
+        showProgressIndicator,
+        showChapterTitle,
+      );
+
   NovelReaderPreferences copyWith({
     double? fontSize,
     double? lineHeight,
