@@ -206,13 +206,14 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       const NovelReaderProgressPolicy();
   final NovelReaderPreferenceImpactAnalyzer _preferenceImpactAnalyzer =
       const DefaultNovelReaderPreferenceImpactAnalyzer();
-  Timer? _saveDebounce;
+  final Map<String, NovelReadingProgress> _knownReadingProgressByEpisodeId =
+      <String, NovelReadingProgress>{};
   int _activeSessionToken = 0;
   int _transitionRequestSerial = 0;
 
   @override
   FutureOr<NovelReaderViewState> build() async {
-    ref.onDispose(() => _saveDebounce?.cancel());
+    ref.onDispose(ref.read(novelReaderProgressCommitterProvider).cancel);
     return _loadInitialCriticalState(_args.episodeId);
   }
 
@@ -346,17 +347,8 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       scrollOffset: offset,
       maxScrollExtent: maxScrollExtent,
     );
-    state = AsyncData(
-      current.copyWith(
-        currentOffset: offset,
-        progressSnapshot: snapshot,
-      ),
-    );
-
-    _saveDebounce?.cancel();
-    _saveDebounce = Timer(const Duration(milliseconds: 200), () async {
-      await _saveProgressSnapshot(snapshot);
-    });
+    _applyProgressSnapshot(snapshot);
+    ref.read(novelReaderProgressCommitterProvider).schedule(snapshot);
   }
 
   Future<void> saveCurrentOffsetNow(double offset) async {
@@ -372,18 +364,9 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   Future<void> saveCurrentProgressNow(
     NovelReaderProgressSnapshot snapshot,
   ) async {
-    final current = state.value;
-    if (current == null) {
-      return;
-    }
-    _saveDebounce?.cancel();
-    state = AsyncData(
-      current.copyWith(
-        currentOffset: snapshot.scrollOffset,
-        progressSnapshot: snapshot,
-      ),
-    );
-    await _saveProgressSnapshot(snapshot);
+    _applyProgressSnapshot(snapshot);
+    await ref.read(novelReaderProgressCommitterProvider).flush(snapshot);
+    _syncPersistedReadingProgress(snapshot);
   }
 
   Future<void> onPagedPageChanged(
@@ -401,9 +384,8 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       pageIndex: pageIndex,
       layout: layout,
     );
-    _saveDebounce?.cancel();
-    state = AsyncData(current.copyWith(progressSnapshot: snapshot));
-    await _saveProgressSnapshot(snapshot);
+    _applyProgressSnapshot(snapshot);
+    ref.read(novelReaderProgressCommitterProvider).schedule(snapshot);
   }
 
   void searchInCurrentChapter(String keyword) {
@@ -603,7 +585,10 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     final context = NovelReaderLoadContext(
       novelId: _args.novelId,
       requestedEpisodeId: episodeId,
-      preservedProgress: current.readingProgress,
+      preservedProgress: _preservedProgressForEpisode(
+        episodeId: episodeId,
+        current: current,
+      ),
     );
     state = AsyncData(
       current.copyWith(
@@ -857,6 +842,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   NovelReaderViewState _initialStateFromCritical(
     NovelReaderCriticalBootstrap critical,
   ) {
+    _rememberReadingProgress(critical.readingProgress);
     return NovelReaderViewState(
       novel: null,
       episodes: critical.episodes,
@@ -882,6 +868,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     required NovelReaderViewState previous,
     required NovelReaderCriticalBootstrap critical,
   }) {
+    _rememberReadingProgress(critical.readingProgress);
     final currentEpisodeBookmarks = _bookmarksForEpisode(
       previous.bookmarks,
       critical.currentEpisode.episodeId,
@@ -905,16 +892,70 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     );
   }
 
-  Future<void> _saveProgressSnapshot(NovelReaderProgressSnapshot snapshot) {
-    return ref.read(novelRepositoryProvider).saveReadingProgress(
-          novelId: _args.novelId,
-          episodeId: snapshot.episodeId,
-          scrollOffset: snapshot.scrollOffset,
-          flowMode: snapshot.flowMode,
-          pageIndex: snapshot.pageIndex,
-          anchorNodeId: snapshot.anchorNodeId,
-          progressPercent: snapshot.progressPercent,
-        );
+  void _applyProgressSnapshot(NovelReaderProgressSnapshot snapshot) {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    state = AsyncData(
+      current.copyWith(
+        currentOffset: snapshot.scrollOffset,
+        progressSnapshot: snapshot,
+      ),
+    );
+  }
+
+  void _syncPersistedReadingProgress(NovelReaderProgressSnapshot snapshot) {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    final readingProgress = _readingProgressFromSnapshot(snapshot);
+    _rememberReadingProgress(readingProgress);
+    state = AsyncData(
+      current.copyWith(
+        readingProgress: readingProgress,
+      ),
+    );
+  }
+
+  NovelReadingProgress _readingProgressFromSnapshot(
+    NovelReaderProgressSnapshot snapshot,
+  ) {
+    return NovelReadingProgress(
+      novelId: snapshot.novelId,
+      episodeId: snapshot.episodeId,
+      scrollOffset: snapshot.scrollOffset,
+      updatedAt: DateTime.now(),
+      flowMode: snapshot.flowMode,
+      pageIndex: snapshot.pageIndex,
+      anchorNodeId: snapshot.anchorNodeId,
+      progressPercent: snapshot.progressPercent,
+    );
+  }
+
+  NovelReadingProgress? _preservedProgressForEpisode({
+    required String episodeId,
+    required NovelReaderViewState current,
+  }) {
+    final cached = _knownReadingProgressByEpisodeId[episodeId];
+    if (cached != null) {
+      return cached;
+    }
+    if (current.readingProgress?.episodeId == episodeId) {
+      return current.readingProgress;
+    }
+    if (current.progressSnapshot.episodeId == episodeId) {
+      return _readingProgressFromSnapshot(current.progressSnapshot);
+    }
+    return null;
+  }
+
+  void _rememberReadingProgress(NovelReadingProgress? progress) {
+    if (progress == null) {
+      return;
+    }
+    _knownReadingProgressByEpisodeId[progress.episodeId] = progress;
   }
 
   Future<void> _reloadBookmarks(NovelRepository repository) async {

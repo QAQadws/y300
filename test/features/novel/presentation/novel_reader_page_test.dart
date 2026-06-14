@@ -625,7 +625,7 @@ void main() {
     expect(find.text('第一段。'), findsNothing);
   });
 
-  testWidgets('NovelReaderPage renders paged mode and saves page index', (
+  testWidgets('NovelReaderPage renders paged mode and flushes page index on exit', (
     tester,
   ) async {
     final repository = _FakeNovelRepository(
@@ -655,6 +655,10 @@ void main() {
 
     await _showReaderMenu(tester);
     await tester.tap(find.byKey(const Key('shared-reader-next-button')));
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-top-back-button')));
     await tester.pumpAndSettle();
 
     expect(repository.readingProgress?.flowMode, NovelReaderFlowMode.pagedLtr);
@@ -863,6 +867,70 @@ void main() {
     await _showReaderMenu(tester);
 
     await tester.tap(find.byKey(const Key('shared-reader-top-back-button')));
+    await tester.pumpAndSettle();
+
+    expect(repository.lastSavedOffset, greaterThan(0));
+  });
+
+  testWidgets('NovelReaderPage system pop saves progress before pop', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      firstParagraphs: List<String>.generate(30, (index) => '第一章段落 $index'),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProviderScope(
+          overrides: [
+            novelRepositoryProvider.overrideWithValue(repository),
+            imageRequestHeaderBuilderProvider.overrideWithValue(
+              const _StaticImageHeaderBuilder(),
+            ),
+            novelDownloadServiceProvider.overrideWithValue(_NoopNovelDownloadService()),
+            libraryStateRepositoryProvider.overrideWithValue(
+              _MemoryLibraryStateRepository(),
+            ),
+          ],
+          child: const NovelReaderPage(
+            novelId: 'novel:49:100',
+            initialEpisodeId: 'novel:49:100:5001',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const Key('novel-reader-paragraph-list')),
+      const Offset(0, -220),
+    );
+    await tester.pump();
+
+    final navigator = Navigator.of(
+      tester.element(find.byType(NovelReaderPage)),
+    );
+    navigator.maybePop();
+    await tester.pumpAndSettle();
+
+    expect(repository.lastSavedOffset, greaterThan(0));
+  });
+
+  testWidgets('NovelReaderPage flushes progress when app goes inactive', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      firstParagraphs: List<String>.generate(30, (index) => '第一章段落 $index'),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const Key('novel-reader-paragraph-list')),
+      const Offset(0, -220),
+    );
+    await tester.pump();
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     await tester.pumpAndSettle();
 
     expect(repository.lastSavedOffset, greaterThan(0));

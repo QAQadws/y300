@@ -24,6 +24,32 @@ class NovelReaderProgressSnapshot {
 
   bool get isPaged => flowMode != NovelReaderFlowMode.vertical;
 
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) {
+      return true;
+    }
+    return other is NovelReaderProgressSnapshot &&
+        other.novelId == novelId &&
+        other.episodeId == episodeId &&
+        other.flowMode == flowMode &&
+        other.scrollOffset == scrollOffset &&
+        other.pageIndex == pageIndex &&
+        other.anchorNodeId == anchorNodeId &&
+        other.progressPercent == progressPercent;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        novelId,
+        episodeId,
+        flowMode,
+        scrollOffset,
+        pageIndex,
+        anchorNodeId,
+        progressPercent,
+      );
+
   NovelReaderProgressSnapshot copyWith({
     NovelReaderFlowMode? flowMode,
     double? scrollOffset,

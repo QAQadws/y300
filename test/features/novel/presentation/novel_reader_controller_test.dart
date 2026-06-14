@@ -17,6 +17,7 @@ import 'package:y300/features/novel/presentation/controllers/novel_reader_contro
 import 'package:y300/features/novel/presentation/models/novel_reader_transition_state.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_progress_committer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 
@@ -178,13 +179,17 @@ void main() {
     expect(repository.upsertPreferencesCallCount, 0);
   });
 
-  test('NovelReaderController saves paged page progress immediately', () async {
+  test('NovelReaderController schedules paged page progress without immediate persistence', () async {
     final repository = _ControllerNovelRepository(
       preferences: NovelReaderPreferences.defaults().copyWith(
         flowMode: NovelReaderFlowMode.pagedLtr,
       ),
     );
-    final container = _buildContainer(repository: repository);
+    final progressCommitter = _FakeNovelReaderProgressCommitter();
+    final container = _buildContainer(
+      repository: repository,
+      progressCommitter: progressCommitter,
+    );
     addTearDown(container.dispose);
     const args = NovelReaderArgs(
       novelId: 'novel:49:100',
@@ -207,8 +212,98 @@ void main() {
     final state = await container.read(provider.future);
     expect(state.progressSnapshot.pageIndex, 1);
     expect(state.progressSnapshot.anchorNodeId, 'b');
-    expect(repository.readingProgress?.flowMode, NovelReaderFlowMode.pagedLtr);
-    expect(repository.readingProgress?.pageIndex, 1);
+    expect(progressCommitter.scheduleCallCount, 1);
+    expect(progressCommitter.flushCallCount, 0);
+    expect(progressCommitter.latestScheduledSnapshot?.flowMode, NovelReaderFlowMode.pagedLtr);
+    expect(progressCommitter.latestScheduledSnapshot?.pageIndex, 1);
+    expect(repository.readingProgress, isNull);
+  });
+
+  test('NovelReaderController saveCurrentProgressNow flushes and syncs readingProgress', () async {
+    final repository = _ControllerNovelRepository();
+    final progressCommitter = _FakeNovelReaderProgressCommitter();
+    final container = _buildContainer(
+      repository: repository,
+      progressCommitter: progressCommitter,
+    );
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
+
+    await container.read(provider.future);
+    const snapshot = NovelReaderProgressSnapshot(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+      flowMode: NovelReaderFlowMode.vertical,
+      scrollOffset: 42,
+      pageIndex: 0,
+      progressPercent: 0.5,
+    );
+
+    await container.read(provider.notifier).saveCurrentProgressNow(snapshot);
+
+    final state = container.read(provider).value!;
+    expect(progressCommitter.flushCallCount, 1);
+    expect(progressCommitter.latestFlushedSnapshot, snapshot);
+    expect(state.progressSnapshot, snapshot);
+    expect(state.currentOffset, 42);
+    expect(state.readingProgress?.episodeId, 'novel:49:100:5001');
+    expect(state.readingProgress?.scrollOffset, 42);
+  });
+
+  test('NovelReaderController onScrollOffsetChanged schedules progress update', () async {
+    final repository = _ControllerNovelRepository();
+    final progressCommitter = _FakeNovelReaderProgressCommitter();
+    final container = _buildContainer(
+      repository: repository,
+      progressCommitter: progressCommitter,
+    );
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
+
+    await container.read(provider.future);
+    await container.read(provider.notifier).onScrollOffsetChanged(
+      24,
+      maxScrollExtent: 120,
+    );
+
+    final state = container.read(provider).value!;
+    expect(state.currentOffset, 24);
+    expect(state.progressSnapshot.scrollOffset, 24);
+    expect(progressCommitter.scheduleCallCount, 1);
+    expect(progressCommitter.flushCallCount, 0);
+    expect(repository.readingProgress, isNull);
+  });
+
+  test('NovelReaderController dispose cancels progress committer', () async {
+    final repository = _ControllerNovelRepository();
+    final progressCommitter = _FakeNovelReaderProgressCommitter();
+    final container = _buildContainer(
+      repository: repository,
+      progressCommitter: progressCommitter,
+    );
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final subscription = _keepReaderAlive(container, args);
+
+    await container.read(novelReaderControllerProvider(args).future);
+    subscription.close();
+    container.dispose();
+
+    expect(progressCommitter.cancelCallCount, 1);
   });
 
   test('openEpisodeFromCatalog loads target and preserves target progress', () async {
@@ -679,6 +774,7 @@ ProviderContainer _buildContainer({
   NovelReaderBootstrapService? bootstrapService,
   NovelReaderSupplementalHydrationService? supplementalHydrationService,
   NovelReaderDocumentBuildService? documentBuildService,
+  NovelReaderProgressCommitter? progressCommitter,
 }) {
   return ProviderContainer(
     overrides: [
@@ -699,6 +795,8 @@ ProviderContainer _buildContainer({
         novelReaderDocumentBuildServiceProvider.overrideWithValue(
           documentBuildService,
         ),
+      if (progressCommitter != null)
+        novelReaderProgressCommitterProvider.overrideWithValue(progressCommitter),
     ],
   );
 }
@@ -1361,6 +1459,32 @@ class _ControlledNovelReaderSupplementalHydrationService
 
   void completeInitialNovel(NovelItem? value) {
     _novelSequence.completeAt(0, value);
+  }
+}
+
+class _FakeNovelReaderProgressCommitter
+    implements NovelReaderProgressCommitter {
+  int scheduleCallCount = 0;
+  int flushCallCount = 0;
+  int cancelCallCount = 0;
+  NovelReaderProgressSnapshot? latestScheduledSnapshot;
+  NovelReaderProgressSnapshot? latestFlushedSnapshot;
+
+  @override
+  void cancel() {
+    cancelCallCount += 1;
+  }
+
+  @override
+  Future<void> flush(NovelReaderProgressSnapshot snapshot) async {
+    flushCallCount += 1;
+    latestFlushedSnapshot = snapshot;
+  }
+
+  @override
+  void schedule(NovelReaderProgressSnapshot snapshot) {
+    scheduleCallCount += 1;
+    latestScheduledSnapshot = snapshot;
   }
 }
 

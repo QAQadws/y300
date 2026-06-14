@@ -32,7 +32,8 @@ class NovelReaderPage extends ConsumerStatefulWidget {
   ConsumerState<NovelReaderPage> createState() => _NovelReaderPageState();
 }
 
-class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
+class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
+    with WidgetsBindingObserver {
   late final ScrollController _scrollController;
   late final ReaderOverlayController _overlayController;
   late final NovelReaderPagedSurfaceController _pagedSurfaceController;
@@ -43,6 +44,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
   final Map<String, GlobalKey> _nodeKeys = <String, GlobalKey>{};
   bool _hasRestoredOffset = false;
   bool _isProgrammaticScrollChange = false;
+  bool _allowPopAfterProgressFlush = false;
+  bool _isHandlingPop = false;
 
   NovelReaderArgs get _args =>
       NovelReaderArgs(novelId: widget.novelId, episodeId: widget.initialEpisodeId);
@@ -50,6 +53,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _overlayController = ReaderOverlayController();
     _pagedSurfaceController = NovelReaderPagedSurfaceController();
     _scrollController = ScrollController()..addListener(_onScroll);
@@ -57,6 +61,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _overlayController.dispose();
     _pagedSurfaceController.dispose();
     _scrollController
@@ -66,136 +71,153 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
+      unawaited(_saveVisibleProgressNow());
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final state = ref.watch(novelReaderControllerProvider(_args));
     final controller = ref.read(novelReaderControllerProvider(_args).notifier);
     final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
     final externalLauncher = ref.watch(forumWebViewExternalLauncherProvider);
 
-    return Scaffold(
-      body: state.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => NovelReaderErrorView(
-          error: error,
-          onRetry: () => ref.invalidate(novelReaderControllerProvider(_args)),
-          onRefreshEpisodes: () => _refreshFromErrorView(),
-          onOpenThread: () => _openFallbackSourceThread(),
-        ),
-        data: (viewState) {
-          final theme = Theme.of(context);
-          final palette = _themeResolver.resolve(
-            preferences: viewState.preferences,
-            theme: theme,
-            platformBrightness: MediaQuery.platformBrightnessOf(context),
-          );
-          final typography = _typographyResolver.resolve(
-            preferences: viewState.preferences,
-            theme: theme,
-            palette: palette,
-          );
-          return ColoredBox(
-            color: palette.background,
-            child: Builder(
-              builder: (context) {
-                final isPaged = _isPagedMode(viewState.preferences.flowMode);
-                if (!isPaged) {
-                  _pagedSurfaceController.reset();
-                  _restoreOffsetIfNeeded(
-                    episodeId: viewState.currentEpisode.episodeId,
-                    offset: viewState.currentOffset,
-                  );
-                }
-                final reader = ListenableBuilder(
-                  listenable: _pagedSurfaceController,
-                  builder: (context, _) {
-                    final pagedInteractionEnabled = isPaged &&
-                        !_pagedSurfaceController.isResolving &&
-                        _pagedSurfaceController.currentLayout != null;
-                    return ReaderOverlayScaffold(
-                      controller: _overlayController,
-                      topBar: _buildTopBarConfig(viewState),
-                      bottomBar: _buildBottomBarConfig(
-                        viewState,
-                        controller,
-                        isPaged: isPaged,
-                      ),
-                      bottomSafeFraction: 0.18,
-                      onLeftTap: !pagedInteractionEnabled
-                          ? null
-                          : () => unawaited(
-                                _handlePagedReaderTap(
-                                  isLeftTap: true,
-                                  viewState: viewState,
-                                  controller: controller,
-                                ),
-                              ),
-                      onRightTap: !pagedInteractionEnabled
-                          ? null
-                          : () => unawaited(
-                                _handlePagedReaderTap(
-                                  isLeftTap: false,
-                                  viewState: viewState,
-                                  controller: controller,
-                                ),
-                              ),
-                      child: !isPaged
-                          ? _buildReaderList(
-                              viewState,
-                              typography,
-                              imageHeaderBuilder,
-                              externalLauncher,
-                            )
-                          : NovelReaderPagedSurface(
-                              controller: _pagedSurfaceController,
-                              viewState: viewState,
-                              typography: typography,
-                              backgroundColor: palette.background,
-                              imageHeaderBuilder: imageHeaderBuilder,
-                              onLinkTap: (link) =>
-                                  _openReaderLink(link, externalLauncher),
-                              onPageChanged: controller.onPagedPageChanged,
-                              onInteraction: _overlayController.hideMenu,
-                              nodeKeyBuilder: _nodeKeyFor,
-                            ),
+    return PopScope<void>(
+      canPop: _allowPopAfterProgressFlush,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) {
+          return;
+        }
+        unawaited(_flushProgressAndPop());
+      },
+      child: Scaffold(
+        body: state.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, _) => NovelReaderErrorView(
+            error: error,
+            onRetry: () => ref.invalidate(novelReaderControllerProvider(_args)),
+            onRefreshEpisodes: () => _refreshFromErrorView(),
+            onOpenThread: () => _openFallbackSourceThread(),
+          ),
+          data: (viewState) {
+            final theme = Theme.of(context);
+            final palette = _themeResolver.resolve(
+              preferences: viewState.preferences,
+              theme: theme,
+              platformBrightness: MediaQuery.platformBrightnessOf(context),
+            );
+            final typography = _typographyResolver.resolve(
+              preferences: viewState.preferences,
+              theme: theme,
+              palette: palette,
+            );
+            return ColoredBox(
+              color: palette.background,
+              child: Builder(
+                builder: (context) {
+                  final isPaged = _isPagedMode(viewState.preferences.flowMode);
+                  if (!isPaged) {
+                    _pagedSurfaceController.reset();
+                    _restoreOffsetIfNeeded(
+                      episodeId: viewState.currentEpisode.episodeId,
+                      offset: viewState.currentOffset,
                     );
-                  },
-                );
-                return Stack(
-                  children: [
-                    Positioned.fill(child: reader),
-                    if (viewState.transition != null)
-                      Positioned.fill(
-                        child: AbsorbPointer(
-                          child: ColoredBox(
-                            key: const Key('novel-reader-transition-mask'),
-                            color: palette.background.withValues(alpha: 0.18),
-                            child: const Center(
-                              child: DecoratedBox(
-                                key: Key('novel-reader-transition-indicator'),
-                                decoration: BoxDecoration(
-                                  color: Colors.black12,
-                                  borderRadius: BorderRadius.all(
-                                    Radius.circular(12),
+                  }
+                  final reader = ListenableBuilder(
+                    listenable: _pagedSurfaceController,
+                    builder: (context, _) {
+                      final pagedInteractionEnabled = isPaged &&
+                          !_pagedSurfaceController.isResolving &&
+                          _pagedSurfaceController.currentLayout != null;
+                      return ReaderOverlayScaffold(
+                        controller: _overlayController,
+                        topBar: _buildTopBarConfig(viewState),
+                        bottomBar: _buildBottomBarConfig(
+                          viewState,
+                          controller,
+                          isPaged: isPaged,
+                        ),
+                        bottomSafeFraction: 0.18,
+                        onLeftTap: !pagedInteractionEnabled
+                            ? null
+                            : () => unawaited(
+                                  _handlePagedReaderTap(
+                                    isLeftTap: true,
+                                    viewState: viewState,
+                                    controller: controller,
                                   ),
                                 ),
-                                child: Padding(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: 20,
-                                    vertical: 16,
+                        onRightTap: !pagedInteractionEnabled
+                            ? null
+                            : () => unawaited(
+                                  _handlePagedReaderTap(
+                                    isLeftTap: false,
+                                    viewState: viewState,
+                                    controller: controller,
                                   ),
-                                  child: CircularProgressIndicator(),
+                                ),
+                        child: !isPaged
+                            ? _buildReaderList(
+                                viewState,
+                                typography,
+                                imageHeaderBuilder,
+                                externalLauncher,
+                              )
+                            : NovelReaderPagedSurface(
+                                controller: _pagedSurfaceController,
+                                viewState: viewState,
+                                typography: typography,
+                                backgroundColor: palette.background,
+                                imageHeaderBuilder: imageHeaderBuilder,
+                                onLinkTap: (link) =>
+                                    _openReaderLink(link, externalLauncher),
+                                onPageChanged: controller.onPagedPageChanged,
+                                onInteraction: _overlayController.hideMenu,
+                                nodeKeyBuilder: _nodeKeyFor,
+                              ),
+                      );
+                    },
+                  );
+                  return Stack(
+                    children: [
+                      Positioned.fill(child: reader),
+                      if (viewState.transition != null)
+                        Positioned.fill(
+                          child: AbsorbPointer(
+                            child: ColoredBox(
+                              key: const Key('novel-reader-transition-mask'),
+                              color: palette.background.withValues(alpha: 0.18),
+                              child: const Center(
+                                child: DecoratedBox(
+                                  key: Key('novel-reader-transition-indicator'),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black12,
+                                    borderRadius: BorderRadius.all(
+                                      Radius.circular(12),
+                                    ),
+                                  ),
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 16,
+                                    ),
+                                    child: CircularProgressIndicator(),
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                  ],
-                );
-              },
-            ),
-          );
-        },
+                    ],
+                  );
+                },
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -438,11 +460,24 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
   }
 
   Future<void> _popReader() async {
-    await _saveVisibleProgressNow();
-    if (!mounted) {
+    await _flushProgressAndPop();
+  }
+
+  Future<void> _flushProgressAndPop() async {
+    if (_isHandlingPop) {
       return;
     }
-    Navigator.of(context).pop();
+    _isHandlingPop = true;
+    try {
+      await _saveVisibleProgressNow();
+      if (!mounted) {
+        return;
+      }
+      _allowPopAfterProgressFlush = true;
+      Navigator.of(context).pop();
+    } finally {
+      _isHandlingPop = false;
+    }
   }
 
   Future<void> _switchToPreviousEpisode(NovelReaderController controller) async {
