@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
@@ -294,7 +295,9 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
     return const ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.empty,
@@ -304,7 +307,9 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
     return const ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.empty,
@@ -318,7 +323,11 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   }
 
   @override
-  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(String catalogUrl) async {
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(
+    String catalogUrl, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
+  ) async {
     return const ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.empty,
       links: <ComicEpisodeLink>[],

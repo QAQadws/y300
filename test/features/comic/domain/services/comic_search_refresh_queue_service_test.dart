@@ -7,6 +7,7 @@ import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applie
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
 void main() {
@@ -156,7 +157,9 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
     return const ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.empty,
@@ -184,7 +187,11 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
   }
 
   @override
-  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(String catalogUrl) async {
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(
+    String catalogUrl, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
+  ) async {
     return const ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.empty,
       links: <ComicEpisodeLink>[],
@@ -193,7 +200,9 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
     return _outcome;
   }
@@ -217,7 +226,9 @@ class _ThrowingRefreshService extends _FakeRefreshService {
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
     throw StateError('boom');
   }

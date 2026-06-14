@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/comic/data/comic_refresh_outcome_providers.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
@@ -153,7 +154,9 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
     return outcome;
   }
@@ -181,13 +184,19 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
     return outcome;
   }
 
   @override
-  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(String catalogUrl) async {
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(
+    String catalogUrl, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
+  ) async {
     return outcome;
   }
 }
@@ -197,7 +206,9 @@ class _ThrowingRefreshService implements ComicEpisodeRefreshService {
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
     throw StateError('refresh failed');
   }
@@ -223,13 +234,19 @@ class _ThrowingRefreshService implements ComicEpisodeRefreshService {
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
     throw StateError('refresh failed');
   }
 
   @override
-  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(String catalogUrl) async {
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(
+    String catalogUrl, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
+  ) async {
     throw StateError('refresh failed');
   }
 }

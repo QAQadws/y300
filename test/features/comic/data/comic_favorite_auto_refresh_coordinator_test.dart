@@ -7,6 +7,7 @@ import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_m
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
@@ -300,6 +301,61 @@ void main() {
       expect(bus.signal.value?.workId, 'comic:4');
       expect(bus.signal.value?.tid, '100');
     });
+
+    test('bootstrap initial catalog miss runs inline governed search instead of queueing', () async {
+      final governor = _RecordingGovernor();
+      final refreshService = _FakeRefreshService(
+        catalogOutcome: const ComicEpisodeRefreshOutcome(
+          source: ComicEpisodeRefreshSource.empty,
+          links: <ComicEpisodeLink>[],
+        ),
+        searchOutcome: const ComicEpisodeRefreshOutcome(
+          source: ComicEpisodeRefreshSource.search,
+          links: <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-888-1-1.html', rawText: 'Episode 8'),
+          ],
+          usedSearch: true,
+        ),
+      );
+      final searchQueue = _RecordingSearchQueue();
+      final applier = _RecordingRefreshOutcomeApplier();
+      final bus = LibraryShelfRefreshBus();
+      addTearDown(bus.dispose);
+      final coordinator = ComicFavoriteAutoRefreshCoordinator(
+        refreshService: refreshService,
+        searchQueue: searchQueue,
+        refreshOutcomeApplier: applier,
+        shelfRefreshBus: bus,
+        catalogMissPolicy: const DefaultComicCatalogMissPolicy(
+          longRunningTagName: longRunningTagName,
+        ),
+        titleAnalyzer: const PetitComicTitleAnalyzer(),
+      );
+
+      final result = await coordinator.refreshAfterFavoriteIngest(
+        comicId: 'comic:inline',
+        detail: _detail(subject: '[Scan] Inline Search Comic EP 03'),
+        favoriteTitle: 'Inline Search Comic EP 03',
+        sourceTagName: longRunningTagName,
+        executionContext: FavoriteSyncExecutionContext.bootstrapInitial(
+          governor: governor,
+        ),
+      );
+
+      expect(result.status, ComicFavoriteAutoRefreshStatus.searchMerged);
+      expect(result.linkCount, 1);
+      expect(searchQueue.enqueuedRequests, isEmpty);
+      expect(refreshService.searchRequests, hasLength(1));
+      expect(
+        governor.kinds,
+        contains(FavoriteFirstSyncRequestKind.comicForumSearch),
+      );
+      expect(
+        applier.requests.single.reason,
+        'favorite_comic_search_refresh_completed',
+      );
+      expect(bus.signal.value, isNull);
+    });
   });
 }
 
@@ -335,18 +391,25 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
   _FakeRefreshService({
     required ComicEpisodeRefreshOutcome catalogOutcome,
     ComicEpisodeRefreshOutcome? directOutcome,
+    ComicEpisodeRefreshOutcome? searchOutcome,
   })  : _catalogOutcome = catalogOutcome,
-        _directOutcome = directOutcome;
+        _directOutcome = directOutcome,
+        _searchOutcome = searchOutcome;
 
   final ComicEpisodeRefreshOutcome _catalogOutcome;
   final ComicEpisodeRefreshOutcome? _directOutcome;
+  final ComicEpisodeRefreshOutcome? _searchOutcome;
   final List<ComicEpisodeRefreshRequest> catalogRequests =
+      <ComicEpisodeRefreshRequest>[];
+  final List<ComicEpisodeRefreshRequest> searchRequests =
       <ComicEpisodeRefreshRequest>[];
   int directCalls = 0;
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
     catalogRequests.add(request);
     return _catalogOutcome;
@@ -373,7 +436,11 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
   }
 
   @override
-  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(String catalogUrl) async {
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(
+    String catalogUrl, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
+  ) async {
     directCalls++;
     return _directOutcome ?? const ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.empty,
@@ -383,12 +450,29 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
-    return const ComicEpisodeRefreshOutcome(
-      source: ComicEpisodeRefreshSource.empty,
-      links: <ComicEpisodeLink>[],
-    );
+    searchRequests.add(request);
+    final governor = executionContext?.governor;
+    if (governor != null) {
+      return governor.run(
+        kind: FavoriteFirstSyncRequestKind.comicForumSearch,
+        action: () async {
+          return _searchOutcome ??
+              const ComicEpisodeRefreshOutcome(
+                source: ComicEpisodeRefreshSource.empty,
+                links: <ComicEpisodeLink>[],
+              );
+        },
+      );
+    }
+    return _searchOutcome ??
+        const ComicEpisodeRefreshOutcome(
+          source: ComicEpisodeRefreshSource.empty,
+          links: <ComicEpisodeLink>[],
+        );
   }
 }
 
@@ -464,5 +548,19 @@ class _RecordingCatalogUrlUpdater implements CatalogUrlUpdater {
     required String catalogUrl,
   }) async {
     updates.add(_CatalogUrlUpdate(comicId: comicId, catalogUrl: catalogUrl));
+  }
+}
+
+class _RecordingGovernor implements FavoriteFirstSyncRequestGovernor {
+  final List<FavoriteFirstSyncRequestKind> kinds =
+      <FavoriteFirstSyncRequestKind>[];
+
+  @override
+  Future<T> run<T>({
+    required FavoriteFirstSyncRequestKind kind,
+    required Future<T> Function() action,
+  }) async {
+    kinds.add(kind);
+    return action();
   }
 }

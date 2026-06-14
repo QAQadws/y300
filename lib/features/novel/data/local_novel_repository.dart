@@ -6,6 +6,7 @@ import 'package:y300/features/cache/domain/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/library_shared/data/local_library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -532,8 +533,15 @@ class LocalNovelRepository
   }
 
   @override
-  Future<void> upsertNovelBySeed({required NovelRefreshSeed seed}) async {
-    final detail = await _threadGateway.getThreadDetail(tid: seed.tid, page: 1);
+  Future<void> upsertNovelBySeed({
+    required NovelRefreshSeed seed,
+    FavoriteSyncExecutionContext? executionContext,
+  }) async {
+    final detail = await _runThreadRequest(
+      executionContext: executionContext,
+      kind: FavoriteFirstSyncRequestKind.novelSeedDetail,
+      action: () => _threadGateway.getThreadDetail(tid: seed.tid, page: 1),
+    );
     final db = await _dbFuture;
     final now = DateTime.now().millisecondsSinceEpoch;
     final novelId = _buildNovelId(seed.fid, seed.tid);
@@ -581,13 +589,19 @@ class LocalNovelRepository
   }
 
   @override
-  Future<NovelEpisodeRefreshResult> refreshEpisodes({required String novelId}) async {
+  Future<NovelEpisodeRefreshResult> refreshEpisodes({
+    required String novelId,
+    FavoriteSyncExecutionContext? executionContext,
+  }) async {
     final detail = await getDetail(novelId: novelId);
     if (detail == null) {
       throw StateError('小说不存在');
     }
 
-    final pages = await _fetchPages(tid: detail.sourceTid);
+    final pages = await _fetchPages(
+      tid: detail.sourceTid,
+      executionContext: executionContext,
+    );
     final plan = _discoveryService.buildPlan(novelId: novelId, pages: pages);
     final db = await _dbFuture;
     var inserted = 0;
@@ -1011,10 +1025,17 @@ class LocalNovelRepository
     return (countResult.first['count'] as int?) ?? 0;
   }
 
-  Future<List<ThreadDetailData>> _fetchPages({required String tid}) async {
+  Future<List<ThreadDetailData>> _fetchPages({
+    required String tid,
+    FavoriteSyncExecutionContext? executionContext,
+  }) async {
     final pages = <ThreadDetailData>[];
     for (var page = 1; page <= _maxRefreshPages; page++) {
-      final detail = await _threadGateway.getThreadDetail(tid: tid, page: page);
+      final detail = await _runThreadRequest(
+        executionContext: executionContext,
+        kind: FavoriteFirstSyncRequestKind.novelEpisodePage,
+        action: () => _threadGateway.getThreadDetail(tid: tid, page: page),
+      );
       if (detail.posts.isEmpty) {
         break;
       }
@@ -1050,6 +1071,18 @@ class LocalNovelRepository
   String? _normalizeNullable(String? value) {
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
+
+  Future<T> _runThreadRequest<T>({
+    required FavoriteSyncExecutionContext? executionContext,
+    required FavoriteFirstSyncRequestKind kind,
+    required Future<T> Function() action,
+  }) {
+    final governor = executionContext?.governor;
+    if (governor == null) {
+      return action();
+    }
+    return governor.run(kind: kind, action: action);
   }
 
   DateTime? _toDateTime(Object? value) {

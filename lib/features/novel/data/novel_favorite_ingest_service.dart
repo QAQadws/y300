@@ -1,11 +1,13 @@
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
 abstract class NovelFavoriteIngestService {
   Future<String> upsertFromThreadDetail({
     required ThreadDetailData detail,
     String? sourceTagName,
+    FavoriteSyncExecutionContext? executionContext,
   });
 
   Future<void> removeFromShelf({required String workId});
@@ -20,6 +22,7 @@ class RepositoryNovelFavoriteIngestService implements NovelFavoriteIngestService
   Future<String> upsertFromThreadDetail({
     required ThreadDetailData detail,
     String? sourceTagName,
+    FavoriteSyncExecutionContext? executionContext,
   }) async {
     final novelId = buildNovelWorkId(fid: detail.fid, tid: detail.tid);
     await _repository.upsertNovelBySeed(
@@ -29,8 +32,12 @@ class RepositoryNovelFavoriteIngestService implements NovelFavoriteIngestService
         typeid: detail.typeid,
         tagName: sourceTagName,
       ),
+      executionContext: executionContext,
     );
-    await _repository.refreshEpisodes(novelId: novelId);
+    await _repository.refreshEpisodes(
+      novelId: novelId,
+      executionContext: executionContext,
+    );
     return novelId;
   }
 

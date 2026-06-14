@@ -9,6 +9,7 @@ import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_m
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/favorites/data/library_post_ingest_task_runner.dart';
 import 'package:y300/features/favorites/domain/favorite_content_ingest.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -414,6 +415,7 @@ class _RecordingAutoRefreshCoordinator
     required String favoriteTitle,
     String? sourceTagName,
     bool forceSearchOnCatalogMiss = false,
+    FavoriteSyncExecutionContext? executionContext,
   }) async {
     afterIngestCalls.add(
       _AutoRefreshCallRecord(
@@ -438,6 +440,7 @@ class _RecordingAutoRefreshCoordinator
     String? sourceTitle,
     String? sourceTagName,
     bool forceSearchOnCatalogMiss = false,
+    FavoriteSyncExecutionContext? executionContext,
   }) async {
     backfillCalls.add(
       _BackfillCallRecord(
@@ -474,6 +477,7 @@ class _ThrowingAutoRefreshCoordinator
     required String favoriteTitle,
     String? sourceTagName,
     bool forceSearchOnCatalogMiss = false,
+    FavoriteSyncExecutionContext? executionContext,
   }) {
     throw StateError('refresh failed');
   }
@@ -487,6 +491,7 @@ class _ThrowingAutoRefreshCoordinator
     String? sourceTitle,
     String? sourceTagName,
     bool forceSearchOnCatalogMiss = false,
+    FavoriteSyncExecutionContext? executionContext,
   }) {
     throw StateError('refresh failed');
   }
@@ -506,7 +511,9 @@ class _NoopRefreshOutcomeApplier implements ComicRefreshOutcomeApplier {
 class _NoopRefreshService implements ComicEpisodeRefreshService {
   @override
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
     return const ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.empty,
@@ -537,7 +544,11 @@ class _NoopRefreshService implements ComicEpisodeRefreshService {
   }
 
   @override
-  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(String catalogUrl) async {
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(
+    String catalogUrl, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
+  ) async {
     return const ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.empty,
       links: <ComicEpisodeLink>[],
@@ -546,7 +557,9 @@ class _NoopRefreshService implements ComicEpisodeRefreshService {
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
     return const ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.empty,

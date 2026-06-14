@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
@@ -671,7 +672,10 @@ class _FakeNovelRepository implements NovelRepository {
   Future<NovelReadingProgress?> getReadingProgress({required String novelId}) async => null;
 
   @override
-  Future<NovelEpisodeRefreshResult> refreshEpisodes({required String novelId}) async {
+  Future<NovelEpisodeRefreshResult> refreshEpisodes({
+    required String novelId,
+    FavoriteSyncExecutionContext? executionContext,
+  }) async {
     refreshCalled = true;
     return const NovelEpisodeRefreshResult(insertedCount: 1, updatedCount: 0, totalCount: 1);
   }
@@ -701,7 +705,10 @@ class _FakeNovelRepository implements NovelRepository {
   }) async {}
 
   @override
-  Future<void> upsertNovelBySeed({required NovelRefreshSeed seed}) async {
+  Future<void> upsertNovelBySeed({
+    required NovelRefreshSeed seed,
+    FavoriteSyncExecutionContext? executionContext,
+  }) async {
     upsertCalled = true;
     _ids.add('novel:${seed.fid}:${seed.tid}');
   }

@@ -6,6 +6,7 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/catalog_thread_html_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
@@ -113,8 +114,11 @@ class ComicEpisodeDiscoveryService {
   /// 直接通过 catalogUrl 发现章节列表。
   ///
   /// 不需要先请求帖子详情。可独立调用，用于 catalog 快速路径。
-  Future<List<ComicEpisodeLink>> discoverFromCatalogUrl(String catalogUrl) {
-    return _discoverFromCatalog(catalogUrl);
+  Future<List<ComicEpisodeLink>> discoverFromCatalogUrl(
+    String catalogUrl, {
+    FavoriteFirstSyncRequestGovernor? governor,
+  }) {
+    return _discoverFromCatalog(catalogUrl, governor: governor);
   }
 
   Future<EpisodeDiscoveryResult> discoverFromTidWithPreference({
@@ -123,8 +127,9 @@ class ComicEpisodeDiscoveryService {
     // Search/current-only refresh needs current-post links without letting the
     // same catalog fallback run twice. The default keeps legacy discovery.
     bool allowCatalogFallback = true,
+    FavoriteFirstSyncRequestGovernor? governor,
   }) async {
-    final root = await _fetchAndParse(tid);
+    final root = await _fetchAndParse(tid, governor: governor);
     if (root == null) {
       return const EpisodeDiscoveryResult(
         strategy: EpisodeDiscoveryStrategy.direct,
@@ -133,7 +138,10 @@ class ComicEpisodeDiscoveryService {
     }
 
     if (allowCatalogFallback && preferCatalogFirst && root.parsed.catalogUrl != null) {
-      final catalogLinks = await _discoverFromCatalog(root.parsed.catalogUrl);
+      final catalogLinks = await _discoverFromCatalog(
+        root.parsed.catalogUrl,
+        governor: governor,
+      );
       if (catalogLinks.isNotEmpty) {
         return EpisodeDiscoveryResult(
           strategy: EpisodeDiscoveryStrategy.catalog,
@@ -151,7 +159,7 @@ class ComicEpisodeDiscoveryService {
       );
     }
 
-    final recursiveLinks = await _discoverRecursive(root);
+    final recursiveLinks = await _discoverRecursive(root, governor: governor);
     if (recursiveLinks.length > root.parsed.episodeLinks.length) {
       return EpisodeDiscoveryResult(
         strategy: EpisodeDiscoveryStrategy.recursive,
@@ -161,7 +169,10 @@ class ComicEpisodeDiscoveryService {
     }
 
     if (allowCatalogFallback) {
-      final catalogLinks = await _discoverFromCatalog(root.parsed.catalogUrl);
+      final catalogLinks = await _discoverFromCatalog(
+        root.parsed.catalogUrl,
+        governor: governor,
+      );
       if (catalogLinks.isNotEmpty) {
         return EpisodeDiscoveryResult(
           strategy: EpisodeDiscoveryStrategy.catalog,
@@ -202,7 +213,10 @@ class ComicEpisodeDiscoveryService {
     return int.tryParse(match.group(1) ?? '');
   }
 
-  Future<List<ComicEpisodeLink>> _discoverRecursive(_ParsedThreadRoot root) async {
+  Future<List<ComicEpisodeLink>> _discoverRecursive(
+    _ParsedThreadRoot root, {
+    FavoriteFirstSyncRequestGovernor? governor,
+  }) async {
     if (!_shouldTryRecursive(root)) {
       return root.parsed.episodeLinks;
     }
@@ -248,7 +262,7 @@ class ComicEpisodeDiscoveryService {
         depth < _config.maxRecursiveDepth &&
         consecutiveFailures < _config.maxConsecutiveFailures) {
       final currentTid = queue.removeFirst();
-      final parsed = await _fetchAndParse(currentTid);
+      final parsed = await _fetchAndParse(currentTid, governor: governor);
       depth += 1;
       if (parsed == null) {
         consecutiveFailures += 1;
@@ -268,7 +282,10 @@ class ComicEpisodeDiscoveryService {
     return merged.values.toList(growable: false);
   }
 
-  Future<List<ComicEpisodeLink>> _discoverFromCatalog(String? catalogUrl) async {
+  Future<List<ComicEpisodeLink>> _discoverFromCatalog(
+    String? catalogUrl, {
+    FavoriteFirstSyncRequestGovernor? governor,
+  }) async {
     if (catalogUrl == null || catalogUrl.isEmpty) {
       return const <ComicEpisodeLink>[];
     }
@@ -285,7 +302,10 @@ class ComicEpisodeDiscoveryService {
         continue;
       }
 
-      final html = await _catalogHtmlFetcher.fetchHtml(pageUrl);
+      final html = await _runCatalogRequest(
+        governor: governor,
+        action: () => _catalogHtmlFetcher.fetchHtml(pageUrl),
+      );
       if (html == null || html.isEmpty) {
         continue;
       }
@@ -352,8 +372,14 @@ class ComicEpisodeDiscoveryService {
     return uri.replace(queryParameters: params);
   }
 
-  Future<_ParsedThreadRoot?> _fetchAndParse(String tid) async {
-    final result = await _fetchThreadDetail(tid);
+  Future<_ParsedThreadRoot?> _fetchAndParse(
+    String tid, {
+    FavoriteFirstSyncRequestGovernor? governor,
+  }) async {
+    final result = await _runThreadRequest(
+      governor: governor,
+      action: () => _fetchThreadDetail(tid),
+    );
     return result.when(
       success: (data) {
         final parsed = _opPostParser.parse(
@@ -417,6 +443,32 @@ class ComicEpisodeDiscoveryService {
       episodeLinks: root.parsed.episodeLinks,
       recursiveTidCandidates: root.recursiveTidCandidates,
       catalogUrl: root.parsed.catalogUrl,
+    );
+  }
+
+  Future<T> _runThreadRequest<T>({
+    required FavoriteFirstSyncRequestGovernor? governor,
+    required Future<T> Function() action,
+  }) {
+    if (governor == null) {
+      return action();
+    }
+    return governor.run(
+      kind: FavoriteFirstSyncRequestKind.comicThreadDetail,
+      action: action,
+    );
+  }
+
+  Future<T> _runCatalogRequest<T>({
+    required FavoriteFirstSyncRequestGovernor? governor,
+    required Future<T> Function() action,
+  }) {
+    if (governor == null) {
+      return action();
+    }
+    return governor.run(
+      kind: FavoriteFirstSyncRequestKind.comicCatalogHtml,
+      action: action,
     );
   }
 }

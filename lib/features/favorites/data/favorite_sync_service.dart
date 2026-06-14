@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/favorites/data/favorite_detail_context_loader.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/favorites/data/favorite_repository.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
@@ -85,6 +86,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     LibraryShelfRefreshBus? shelfRefreshBus,
     DownloadStorageService? downloadStorageService,
     int detailBatchLimit = 20,
+    FavoriteFirstSyncRequestGovernor Function()? governorFactory,
   })  : _remoteRepository = remoteRepository,
         _localRepository = localRepository,
         _detailContextLoader = detailContextLoader,
@@ -92,7 +94,9 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         _postIngestTaskRunner = postIngestTaskRunner,
         _shelfRefreshBus = shelfRefreshBus,
         _downloadStorageService = downloadStorageService,
-        _detailBatchLimit = detailBatchLimit;
+        _detailBatchLimit = detailBatchLimit,
+        _governorFactory =
+            governorFactory ?? (() => DefaultFavoriteFirstSyncRequestGovernor());
 
   final FavoriteRepository _remoteRepository;
   final LocalFavoriteRepository _localRepository;
@@ -102,6 +106,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   final LibraryShelfRefreshBus? _shelfRefreshBus;
   final DownloadStorageService? _downloadStorageService;
   final int _detailBatchLimit;
+  final FavoriteFirstSyncRequestGovernor Function() _governorFactory;
   final ValueNotifier<FavoriteSyncProgress> _progress = ValueNotifier<FavoriteSyncProgress>(
     FavoriteSyncProgress.idle,
   );
@@ -111,17 +116,22 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
 
   @override
   Future<void> runBackgroundMaintenance() async {
-    try {
-      await _backfillExistingComicAutoRefreshIfNeeded();
-    } catch (_) {
-      // 后台维护不改变收藏同步主状态；失败时保留全局 marker 为空，
-      // 下一次进入收藏页或手动同步仍可继续尝试。
-    }
+    await runBackgroundMaintenanceWithContext(
+      context: const FavoriteSyncExecutionContext.automaticResume(),
+    );
   }
 
   @override
   Future<FavoriteSyncResult> sync() async {
-    return _runSync(() => _syncInternal());
+    return _runSync(() async {
+      final snapshot = await _localRepository.getSyncSnapshot();
+      final context = snapshot == null
+          ? FavoriteSyncExecutionContext.bootstrapInitial(
+              governor: _governorFactory(),
+            )
+          : const FavoriteSyncExecutionContext.automaticResume();
+      return _syncInternal(context: context);
+    });
   }
 
   @override
@@ -139,6 +149,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         // first sync while still forcing the just-favorited comic through the
         // search queue if catalog discovery misses.
         return _syncInternal(
+          context: const FavoriteSyncExecutionContext.manualRecentAdd(),
           forceComicSearchOnCatalogMissTids: <String>{normalizedTid},
         );
       }
@@ -180,6 +191,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   }
 
   Future<FavoriteSyncResult> _syncInternal({
+    required FavoriteSyncExecutionContext context,
     Set<String> forceComicSearchOnCatalogMissTids = const <String>{},
   }) async {
     _emitProgress(
@@ -189,7 +201,10 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         current: 0,
       ),
     );
-    final firstPageResult = await _remoteRepository.getFavoriteThreads(page: 1);
+    final firstPageResult = await _runFavoriteListRequest(
+      context: context,
+      page: 1,
+    );
     if (firstPageResult is ApiFailure<FavoriteThreadsPage>) {
       throw _FavoriteSyncFailure(firstPageResult.error.message);
     }
@@ -213,12 +228,13 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
 
     final pages = <FavoriteThreadsPage>[firstPage];
     if (mode == FavoriteSyncMode.fullDiff) {
-      pages.addAll(await _fetchRemainingPages(firstPage));
+      pages.addAll(await _fetchRemainingPages(firstPage, context: context));
     } else {
       pages.addAll(
         await _fetchIncrementalPages(
           firstPage: firstPage,
           activeBefore: activeBefore,
+          context: context,
         ),
       );
     }
@@ -249,11 +265,12 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     await _removeModuleShelfItems(removedRecords);
 
     final firstFullSync = snapshot == null && mode == FavoriteSyncMode.fullDiff;
-    await runBackgroundMaintenance();
+    await runBackgroundMaintenanceWithContext(context: context);
     final newlySeenTids = mode == FavoriteSyncMode.incremental
         ? remoteTids.difference(activeBefore)
         : const <String>{};
     final detailResult = await _fillMissingDetails(
+      context: context,
       mergeIngestedComics: !firstFullSync,
       forceComicSearchOnCatalogMissTids: <String>{
         ...forceComicSearchOnCatalogMissTids,
@@ -297,6 +314,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   }
 
   Future<FavoriteSyncResult> _syncRecentlyAddedThreadInternal(String tid) async {
+    const context = FavoriteSyncExecutionContext.manualRecentAdd();
     _emitProgress(
       const FavoriteSyncProgress(
         phase: FavoriteSyncProgressPhase.fetchingList,
@@ -304,7 +322,10 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         current: 0,
       ),
     );
-    final firstPageResult = await _remoteRepository.getFavoriteThreads(page: 1);
+    final firstPageResult = await _runFavoriteListRequest(
+      context: context,
+      page: 1,
+    );
     if (firstPageResult is ApiFailure<FavoriteThreadsPage>) {
       throw _FavoriteSyncFailure(firstPageResult.error.message);
     }
@@ -326,7 +347,10 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
           current: pages.length,
         ),
       );
-      final result = await _remoteRepository.getFavoriteThreads(page: nextPageNumber);
+      final result = await _runFavoriteListRequest(
+        context: context,
+        page: nextPageNumber,
+      );
       if (result is ApiFailure<FavoriteThreadsPage>) {
         throw _FavoriteSyncFailure(result.error.message);
       }
@@ -361,7 +385,10 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       // row. Seed the local cache from the thread detail so the shelf updates
       // immediately, then let later list syncs fill favid/remote ordering.
       try {
-        preloadedDetail = await _loadTargetDetailOrNull(tid);
+        preloadedDetail = await _loadTargetDetailOrNull(
+          tid,
+          context: context,
+        );
         if (preloadedDetail != null) {
           upsertedCount += await _upsertRecentlyFavoritedThreadFromDetail(
             tid: tid,
@@ -386,11 +413,12 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         ),
       );
       try {
-        final loaded = await _fillOneDetail(
-          record,
-          mergeIngestedComics: true,
-          forceComicSearchOnCatalogMiss: true,
-          preloadedDetail: preloadedDetail,
+          final loaded = await _fillOneDetail(
+            record,
+            context: context,
+            mergeIngestedComics: true,
+            forceComicSearchOnCatalogMiss: true,
+            preloadedDetail: preloadedDetail,
         );
         if (loaded) {
           detailLoadedCount = 1;
@@ -450,6 +478,9 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
 
   Future<List<FavoriteThreadsPage>> _fetchRemainingPages(
     FavoriteThreadsPage firstPage,
+    {
+    required FavoriteSyncExecutionContext context,
+  }
   ) async {
     final pages = <FavoriteThreadsPage>[];
     var current = firstPage;
@@ -464,7 +495,10 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
           total: estimatedTotal,
         ),
       );
-      final result = await _remoteRepository.getFavoriteThreads(page: nextPageNumber);
+      final result = await _runFavoriteListRequest(
+        context: context,
+        page: nextPageNumber,
+      );
       if (result is ApiFailure<FavoriteThreadsPage>) {
         throw _FavoriteSyncFailure(result.error.message);
       }
@@ -485,6 +519,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   Future<List<FavoriteThreadsPage>> _fetchIncrementalPages({
     required FavoriteThreadsPage firstPage,
     required Set<String> activeBefore,
+    required FavoriteSyncExecutionContext context,
   }) async {
     final pages = <FavoriteThreadsPage>[];
     var current = firstPage;
@@ -497,7 +532,10 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
           current: pages.length + 1,
         ),
       );
-      final result = await _remoteRepository.getFavoriteThreads(page: nextPageNumber);
+      final result = await _runFavoriteListRequest(
+        context: context,
+        page: nextPageNumber,
+      );
       if (result is ApiFailure<FavoriteThreadsPage>) {
         throw _FavoriteSyncFailure(result.error.message);
       }
@@ -521,8 +559,14 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     return page.items.any((item) => item.tid.trim() == tid);
   }
 
-  Future<ThreadDetailData?> _loadTargetDetailOrNull(String tid) async {
-    final result = await _detailContextLoader.loadDetail(tid);
+  Future<ThreadDetailData?> _loadTargetDetailOrNull(
+    String tid, {
+    required FavoriteSyncExecutionContext context,
+  }) async {
+    final result = await _detailContextLoader.loadDetail(
+      tid,
+      executionContext: context,
+    );
     if (result is ApiFailure<ThreadDetailData>) {
       return null;
     }
@@ -563,6 +607,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   }
 
   Future<_DetailFillResult> _fillMissingDetails({
+    required FavoriteSyncExecutionContext context,
     bool mergeIngestedComics = true,
     Set<String> forceComicSearchOnCatalogMissTids = const <String>{},
   }) async {
@@ -596,6 +641,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         try {
           final loaded = await _fillOneDetail(
             record,
+            context: context,
             mergeIngestedComics: mergeIngestedComics,
             forceComicSearchOnCatalogMiss:
                 forceComicSearchOnCatalogMissTids.contains(record.tid),
@@ -632,6 +678,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
 
   Future<bool> _fillOneDetail(
     FavoriteThreadCacheRecord record, {
+    required FavoriteSyncExecutionContext context,
     required bool mergeIngestedComics,
     bool forceComicSearchOnCatalogMiss = false,
     ThreadDetailData? preloadedDetail,
@@ -639,16 +686,18 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     final result = await _detailContextLoader.load(
       record,
       preloadedDetail: preloadedDetail,
+      executionContext: context,
     );
     return result.when(
-      success: (context) async {
-        final ingestHandler = _contentIngestRegistry.handlerFor(context.kind);
+      success: (detailContext) async {
+        final ingestHandler = _contentIngestRegistry.handlerFor(detailContext.kind);
         final ingestResult = await ingestHandler.ingest(
           FavoriteContentIngestRequest(
-            context: context,
+            context: detailContext,
             options: FavoriteIngestOptions(
               mergeIngestedComic: mergeIngestedComics,
               forceComicSearchOnCatalogMiss: forceComicSearchOnCatalogMiss,
+              executionContext: context,
             ),
           ),
         );
@@ -657,15 +706,16 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         // 合并目标 workId，写回收藏缓存的 work_id 字段。
         final taskReport = await _postIngestTaskRunner.runAll(
           ingestResult.postTasks,
+          executionContext: context,
         );
         final finalWorkId = taskReport.resolvedWorkId ?? ingestResult.workId;
 
         await _localRepository.updateThreadDetailMeta(
-          tid: context.record.tid,
-          fid: context.detail.fid,
-          typeid: context.detail.typeid,
-          tagName: context.tagName,
-          contentKind: context.kind,
+          tid: detailContext.record.tid,
+          fid: detailContext.detail.fid,
+          typeid: detailContext.detail.typeid,
+          tagName: detailContext.tagName,
+          contentKind: detailContext.kind,
           workId: finalWorkId,
         );
         return true;
@@ -682,7 +732,9 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     );
   }
 
-  Future<void> _backfillExistingComicAutoRefreshIfNeeded() async {
+  Future<void> _backfillExistingComicAutoRefreshIfNeeded({
+    required FavoriteSyncExecutionContext context,
+  }) async {
     if (await _localRepository.hasCompletedComicAutoRefreshBackfill()) {
       return;
     }
@@ -726,6 +778,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
               sourceTagName: record.sourceTagName,
             ),
           ],
+          executionContext: context,
         );
         if (report.failures.isNotEmpty) {
           failedTids.add(record.tid);
@@ -776,6 +829,31 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
 
   void _emitProgress(FavoriteSyncProgress progress) {
     _progress.value = progress;
+  }
+
+  Future<ApiResult<FavoriteThreadsPage>> _runFavoriteListRequest({
+    required FavoriteSyncExecutionContext context,
+    required int page,
+  }) {
+    final governor = context.governor;
+    if (governor == null) {
+      return _remoteRepository.getFavoriteThreads(page: page);
+    }
+    return governor.run(
+      kind: FavoriteFirstSyncRequestKind.favoriteListPage,
+      action: () => _remoteRepository.getFavoriteThreads(page: page),
+    );
+  }
+
+  Future<void> runBackgroundMaintenanceWithContext({
+    required FavoriteSyncExecutionContext context,
+  }) async {
+    try {
+      await _backfillExistingComicAutoRefreshIfNeeded(context: context);
+    } catch (_) {
+      // 后台维护不改变收藏同步主状态；失败时保留全局 marker 为空，
+      // 下一次进入收藏页或手动同步仍可继续尝试。
+    }
   }
 
   void _notifyFavoriteShelfChanged({

@@ -1,4 +1,5 @@
 import 'package:y300/features/favorites/domain/favorite_content_ingest.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 
 /// 任务执行结果。
 ///
@@ -45,5 +46,8 @@ abstract class LibraryPostIngestTaskRunner {
 
   Future<LibraryPostIngestTaskReport> runAll(
     List<LibraryPostIngestTask> tasks,
+    {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   );
 }

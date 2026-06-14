@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/data/comic_favorite_ingest_service.dart';
 import 'package:y300/features/favorites/data/favorite_content_ingest_registry.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
 import 'package:y300/features/favorites/domain/favorite_content_ingest.dart';
 import 'package:y300/features/favorites/domain/favorite_detail_context.dart';
@@ -203,6 +204,7 @@ class _FakeComicIngestService implements ComicFavoriteIngestService {
   Future<String> upsertFromThreadDetail({
     required ThreadDetailData detail,
     String? sourceTagName,
+    FavoriteSyncExecutionContext? executionContext,
   }) async {
     upsertedTids.add(detail.tid);
     return 'yamibo:${detail.tid}';
@@ -222,6 +224,7 @@ class _FakeNovelIngestService implements NovelFavoriteIngestService {
   Future<String> upsertFromThreadDetail({
     required ThreadDetailData detail,
     String? sourceTagName,
+    FavoriteSyncExecutionContext? executionContext,
   }) async {
     upsertedTids.add(detail.tid);
     return 'novel:${detail.fid}:${detail.tid}';

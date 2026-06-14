@@ -17,6 +17,7 @@ import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
 import 'package:y300/features/favorites/data/favorite_content_ingest_registry.dart';
 import 'package:y300/features/favorites/data/favorite_detail_context_loader.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/favorites/data/favorite_repository.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/library_post_ingest_task_runner.dart';
@@ -70,6 +71,90 @@ void main() {
     expect(comicIngest.upsertedTids, <String>['100']);
     expect(novelIngest.upsertedTids, <String>['200']);
     expect(local.records['300']?.contentKind, ThreadContentKind.forum);
+  });
+
+  test('first sync creates and uses bootstrap governor when snapshot is null', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(page: 1, totalCount: 1, items: <FavoriteThread>[
+        _favoriteThread(tid: '100', title: '漫画'),
+      ]),
+    });
+    final governor = _RecordingGovernor();
+    final local = _MemoryLocalFavoriteRepository();
+    final service = _service(
+      remoteRepository: remote,
+      localRepository: local,
+      governorFactory: () => governor,
+      detailBatchLimit: 10,
+    );
+
+    await service.sync();
+
+    expect(
+      governor.kinds,
+      containsAll(<FavoriteFirstSyncRequestKind>[
+        FavoriteFirstSyncRequestKind.favoriteListPage,
+        FavoriteFirstSyncRequestKind.favoriteThreadDetail,
+      ]),
+    );
+  });
+
+  test('incremental sync does not create governor when snapshot exists', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(page: 1, totalCount: 1, items: <FavoriteThread>[
+        _favoriteThread(tid: '100', title: '漫画'),
+      ]),
+    });
+    final local = _MemoryLocalFavoriteRepository(
+      snapshot: FavoriteSyncSnapshot(
+        syncKey: favoriteSyncKey,
+        remoteCount: 1,
+        localActiveCount: 1,
+        lastSyncedAt: DateTime(2026, 1, 1),
+      ),
+      seedRecords: <FavoriteThreadCacheRecord>[
+        _cacheRecord(
+          tid: '100',
+          title: '漫画',
+          contentKind: ThreadContentKind.comic,
+          workId: 'yamibo:100',
+          detailLoadedAt: DateTime(2026, 1, 1),
+        ),
+      ],
+    );
+    var created = 0;
+    final service = _service(
+      remoteRepository: remote,
+      localRepository: local,
+      governorFactory: () {
+        created++;
+        return _RecordingGovernor();
+      },
+      detailBatchLimit: 10,
+    );
+
+    await service.sync();
+
+    expect(created, 0);
+  });
+
+  test('syncRecentlyAddedThread does not use bootstrap governor when snapshot is null', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(page: 1, totalCount: 1, items: <FavoriteThread>[
+        _favoriteThread(tid: '100', title: '漫画'),
+      ]),
+    });
+    final governor = _RecordingGovernor();
+    final service = _service(
+      remoteRepository: remote,
+      localRepository: _MemoryLocalFavoriteRepository(),
+      governorFactory: () => governor,
+      detailBatchLimit: 10,
+    );
+
+    await service.syncRecentlyAddedThread(tid: '100');
+
+    expect(governor.kinds, isEmpty);
   });
 
   test('remote list failure fails sync before detail ingestion', () async {
@@ -363,7 +448,7 @@ void main() {
     expect(bus.signal.value?.payload['detailLoadedCount'], 1);
   });
 
-  test('first sync queues catalog miss only when comic tag is long-running', () async {
+  test('first sync inlines catalog miss search only when comic tag is long-running', () async {
     final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
       1: _page(page: 1, totalCount: 1, items: <FavoriteThread>[
         _favoriteThread(tid: '100', title: '[Fav] Long Comic EP 02'),
@@ -372,11 +457,25 @@ void main() {
     final queue = _RecordingSearchQueue();
     final bus = LibraryShelfRefreshBus();
     addTearDown(bus.dispose);
+    final signals = <LibraryShelfRefreshSignal>[];
+    bus.signal.addListener(() {
+      final signal = bus.signal.value;
+      if (signal != null) {
+        signals.add(signal);
+      }
+    });
     final coordinator = ComicFavoriteAutoRefreshCoordinator(
       refreshService: _BackfillRefreshService(
         catalogOutcome: const ComicEpisodeRefreshOutcome(
           source: ComicEpisodeRefreshSource.empty,
           links: <ComicEpisodeLink>[],
+        ),
+        searchOutcome: const ComicEpisodeRefreshOutcome(
+          source: ComicEpisodeRefreshSource.search,
+          links: <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-201-1-1.html', rawText: 'Episode 2'),
+          ],
+          usedSearch: true,
         ),
       ),
       searchQueue: queue,
@@ -401,9 +500,19 @@ void main() {
 
     await service.sync();
 
-    expect(queue.enqueuedTitles, <String>['Long Comic']);
-    expect(queue.enqueuedRequests.single.comicId, 'yamibo:100');
-    expect(queue.enqueuedRequests.single.sourceTid, '100');
+    expect(queue.enqueuedRequests, isEmpty);
+    expect(
+      signals.any(
+        (signal) => signal.reason == 'favorite_comic_catalog_miss_search_skipped',
+      ),
+      isFalse,
+    );
+    expect(
+      signals.any(
+        (signal) => signal.reason == 'favorite_comic_search_refresh_completed',
+      ),
+      isTrue,
+    );
   });
 
   test('first sync skips catalog miss search for non long-running comic tag', () async {
@@ -875,6 +984,7 @@ NetworkFavoriteSyncService _service({
   LibraryShelfRefreshBus? shelfRefreshBus,
   DownloadStorageService? downloadStorageService,
   int detailBatchLimit = 20,
+  FavoriteFirstSyncRequestGovernor Function()? governorFactory,
 }) {
   final resolvedComicIngestService =
       comicIngestService ?? _FakeComicIngestService();
@@ -898,6 +1008,7 @@ NetworkFavoriteSyncService _service({
     shelfRefreshBus: shelfRefreshBus,
     downloadStorageService: downloadStorageService,
     detailBatchLimit: detailBatchLimit,
+    governorFactory: governorFactory,
   );
 }
 
@@ -999,7 +1110,11 @@ class _FakeComicIngestService implements ComicFavoriteIngestService {
   final List<String> removedWorkIds = <String>[];
 
   @override
-  Future<String> upsertFromThreadDetail({required ThreadDetailData detail, String? sourceTagName}) async {
+  Future<String> upsertFromThreadDetail({
+    required ThreadDetailData detail,
+    String? sourceTagName,
+    FavoriteSyncExecutionContext? executionContext,
+  }) async {
     upsertedTids.add(detail.tid);
     return 'yamibo:${detail.tid}';
   }
@@ -1070,7 +1185,11 @@ class _FakeNovelIngestService implements NovelFavoriteIngestService {
   final List<String> removedWorkIds = <String>[];
 
   @override
-  Future<String> upsertFromThreadDetail({required ThreadDetailData detail, String? sourceTagName}) async {
+  Future<String> upsertFromThreadDetail({
+    required ThreadDetailData detail,
+    String? sourceTagName,
+    FavoriteSyncExecutionContext? executionContext,
+  }) async {
     upsertedTids.add(detail.tid);
     return 'novel:${detail.fid}:${detail.tid}';
   }
@@ -1082,14 +1201,20 @@ class _FakeNovelIngestService implements NovelFavoriteIngestService {
 }
 
 class _BackfillRefreshService implements ComicEpisodeRefreshService {
-  _BackfillRefreshService({required ComicEpisodeRefreshOutcome catalogOutcome})
-      : _catalogOutcome = catalogOutcome;
+  _BackfillRefreshService({
+    required ComicEpisodeRefreshOutcome catalogOutcome,
+    ComicEpisodeRefreshOutcome? searchOutcome,
+  })  : _catalogOutcome = catalogOutcome,
+        _searchOutcome = searchOutcome;
 
   final ComicEpisodeRefreshOutcome _catalogOutcome;
+  final ComicEpisodeRefreshOutcome? _searchOutcome;
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
     return _catalogOutcome;
   }
@@ -1114,7 +1239,11 @@ class _BackfillRefreshService implements ComicEpisodeRefreshService {
   }
 
   @override
-  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(String catalogUrl) async {
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(
+    String catalogUrl, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
+  ) async {
     return const ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.empty,
       links: <ComicEpisodeLink>[],
@@ -1123,12 +1252,15 @@ class _BackfillRefreshService implements ComicEpisodeRefreshService {
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
-    return const ComicEpisodeRefreshOutcome(
-      source: ComicEpisodeRefreshSource.empty,
-      links: <ComicEpisodeLink>[],
-    );
+    return _searchOutcome ??
+        const ComicEpisodeRefreshOutcome(
+          source: ComicEpisodeRefreshSource.empty,
+          links: <ComicEpisodeLink>[],
+        );
   }
 }
 
@@ -1137,7 +1269,9 @@ class _ThrowingRefreshService implements ComicEpisodeRefreshService {
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
     throw StateError('refresh failed');
   }
@@ -1162,15 +1296,35 @@ class _ThrowingRefreshService implements ComicEpisodeRefreshService {
   }
 
   @override
-  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(String catalogUrl) async {
+  Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(
+    String catalogUrl, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
+  ) async {
     throw StateError('refresh failed');
   }
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
     throw StateError('refresh failed');
+  }
+}
+
+class _RecordingGovernor implements FavoriteFirstSyncRequestGovernor {
+  final List<FavoriteFirstSyncRequestKind> kinds =
+      <FavoriteFirstSyncRequestKind>[];
+
+  @override
+  Future<T> run<T>({
+    required FavoriteFirstSyncRequestKind kind,
+    required Future<T> Function() action,
+  }) async {
+    kinds.add(kind);
+    return action();
   }
 }
 

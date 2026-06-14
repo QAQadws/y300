@@ -1,5 +1,6 @@
 import 'package:y300/features/comic/data/comic_favorite_auto_refresh_coordinator.dart';
 import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/favorites/domain/favorite_content_ingest.dart';
 import 'package:y300/features/favorites/domain/library_post_ingest_task_runner.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -49,6 +50,9 @@ class DefaultLibraryPostIngestTaskRunner implements LibraryPostIngestTaskRunner 
   @override
   Future<LibraryPostIngestTaskReport> runAll(
     List<LibraryPostIngestTask> tasks,
+    {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
     if (tasks.isEmpty) {
       return LibraryPostIngestTaskReport.empty;
@@ -60,9 +64,12 @@ class DefaultLibraryPostIngestTaskRunner implements LibraryPostIngestTaskRunner 
     for (final task in tasks) {
       try {
         if (task is ComicAutoRefreshTask) {
-          await _runComicAutoRefresh(task);
+          await _runComicAutoRefresh(task, executionContext: executionContext);
         } else if (task is ComicAutoRefreshBackfillTask) {
-          await _runComicAutoRefreshBackfill(task);
+          await _runComicAutoRefreshBackfill(
+            task,
+            executionContext: executionContext,
+          );
         } else if (task is ComicDuplicateMergeTask) {
           final merged = await _runComicDuplicateMerge(task);
           // 只有真正合并发生时才覆盖 workId；未变化或失败保留原 id。
@@ -97,7 +104,10 @@ class DefaultLibraryPostIngestTaskRunner implements LibraryPostIngestTaskRunner 
     );
   }
 
-  Future<void> _runComicAutoRefresh(ComicAutoRefreshTask task) async {
+  Future<void> _runComicAutoRefresh(
+    ComicAutoRefreshTask task, {
+    FavoriteSyncExecutionContext? executionContext,
+  }) async {
     final coordinator = _comicAutoRefreshCoordinator;
     if (coordinator == null) {
       return;
@@ -108,11 +118,14 @@ class DefaultLibraryPostIngestTaskRunner implements LibraryPostIngestTaskRunner 
       favoriteTitle: task.favoriteTitle,
       sourceTagName: task.sourceTagName,
       forceSearchOnCatalogMiss: task.forceSearchOnCatalogMiss,
+      executionContext: executionContext,
     );
   }
 
   Future<void> _runComicAutoRefreshBackfill(
-    ComicAutoRefreshBackfillTask task,
+    ComicAutoRefreshBackfillTask task, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
     final coordinator = _comicAutoRefreshCoordinator;
     if (coordinator == null) {
@@ -124,6 +137,7 @@ class DefaultLibraryPostIngestTaskRunner implements LibraryPostIngestTaskRunner 
       favoriteTitle: task.favoriteTitle,
       sourceTitle: task.sourceTitle,
       sourceTagName: task.sourceTagName,
+      executionContext: executionContext,
     );
   }
 

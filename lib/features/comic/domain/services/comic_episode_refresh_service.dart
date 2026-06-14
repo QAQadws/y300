@@ -1,4 +1,5 @@
 import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 
 abstract class ComicEpisodeRefreshService {
   Future<List<ComicEpisodeLink>> fetchEpisodeLinks(
@@ -14,13 +15,17 @@ abstract class ComicEpisodeRefreshService {
   /// Runs only strategy 1. A miss intentionally returns an empty outcome so
   /// callers can enqueue search without spending a search request here.
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   );
 
   /// Runs strategy 2 and strategy 3 for callers that already decided catalog
   /// refresh should not run immediately, such as the future search queue.
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   );
 
   /// Catalog 快速路径：直接解析持久化的 catalogUrl HTML。
@@ -28,7 +33,9 @@ abstract class ComicEpisodeRefreshService {
   /// 不请求帖子详情，适用于已持久化 catalogUrl 的场景。
   /// 失败时返回空结果，调用方应回退到 [fetchCatalogOnly]。
   Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(
-    String catalogUrl,
+    String catalogUrl, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   );
 
   Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid);

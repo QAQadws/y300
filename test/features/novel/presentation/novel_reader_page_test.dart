@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
@@ -1896,7 +1897,10 @@ class _FakeNovelRepository implements NovelRepository {
   }
 
   @override
-  Future<NovelEpisodeRefreshResult> refreshEpisodes({required String novelId}) async {
+  Future<NovelEpisodeRefreshResult> refreshEpisodes({
+    required String novelId,
+    FavoriteSyncExecutionContext? executionContext,
+  }) async {
     refreshCount += 1;
     return NovelEpisodeRefreshResult(
       insertedCount: 0,
@@ -1939,7 +1943,10 @@ class _FakeNovelRepository implements NovelRepository {
   }
 
   @override
-  Future<void> upsertNovelBySeed({required NovelRefreshSeed seed}) async {}
+  Future<void> upsertNovelBySeed({
+    required NovelRefreshSeed seed,
+    FavoriteSyncExecutionContext? executionContext,
+  }) async {}
 
   @override
   Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {

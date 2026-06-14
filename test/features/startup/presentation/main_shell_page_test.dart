@@ -14,6 +14,7 @@ import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/favorites/data/favorite_providers.dart';
 import 'package:y300/features/favorites/data/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/local_favorite_repository.dart';
@@ -779,7 +780,10 @@ class _FakeNovelRepository implements NovelRepository {
   Future<NovelReadingProgress?> getReadingProgress({required String novelId}) async => null;
 
   @override
-  Future<NovelEpisodeRefreshResult> refreshEpisodes({required String novelId}) async {
+  Future<NovelEpisodeRefreshResult> refreshEpisodes({
+    required String novelId,
+    FavoriteSyncExecutionContext? executionContext,
+  }) async {
     return const NovelEpisodeRefreshResult(insertedCount: 0, updatedCount: 0, totalCount: 0);
   }
 
@@ -804,7 +808,10 @@ class _FakeNovelRepository implements NovelRepository {
   }) async {}
 
   @override
-  Future<void> upsertNovelBySeed({required NovelRefreshSeed seed}) async {}
+  Future<void> upsertNovelBySeed({
+    required NovelRefreshSeed seed,
+    FavoriteSyncExecutionContext? executionContext,
+  }) async {}
 
   @override
   Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {}

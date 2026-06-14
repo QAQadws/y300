@@ -1,4 +1,5 @@
 import 'package:y300/features/favorites/domain/favorite_detail_context.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
@@ -94,10 +95,12 @@ class FavoriteIngestOptions {
   const FavoriteIngestOptions({
     this.mergeIngestedComic = true,
     this.forceComicSearchOnCatalogMiss = false,
+    this.executionContext,
   });
 
   final bool mergeIngestedComic;
   final bool forceComicSearchOnCatalogMiss;
+  final FavoriteSyncExecutionContext? executionContext;
 }
 
 class FavoriteContentIngestRequest {

@@ -9,6 +9,7 @@ import 'package:y300/features/comic/domain/services/comic_refresh_keyword_resolv
 import 'package:y300/features/comic/domain/services/comic_search_candidate_ranker.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/search/data/discuz_search_service.dart';
@@ -1087,6 +1088,7 @@ class _FakeDiscoveryService extends ComicEpisodeDiscoveryService {
     required String tid,
     required bool preferCatalogFirst,
     bool allowCatalogFallback = true,
+    FavoriteFirstSyncRequestGovernor? governor,
   }) async {
     requestedTids.add(tid);
     catalogFallbackAllowedByTid[tid] = allowCatalogFallback;
@@ -1097,7 +1099,11 @@ class _FakeDiscoveryService extends ComicEpisodeDiscoveryService {
   }
 
   @override
-  Future<List<ComicEpisodeLink>> discoverFromCatalogUrl(String catalogUrl) async {
+  Future<List<ComicEpisodeLink>> discoverFromCatalogUrl(
+    String catalogUrl, {
+    FavoriteFirstSyncRequestGovernor? governor,
+  }
+  ) async {
     requestedCatalogUrls.add(catalogUrl);
     return byCatalogUrl[catalogUrl] ?? const <ComicEpisodeLink>[];
   }

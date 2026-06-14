@@ -24,6 +24,7 @@ import 'package:y300/features/comic/domain/services/comic_refresh_keyword_resolv
 import 'package:y300/features/comic/domain/services/comic_search_candidate_ranker.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/data/discuz_search_service.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
@@ -87,7 +88,10 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   ) async {
     // 当前帖的连续跳转链接常只覆盖“上一话/历史话”，不能作为完整章节表。
     // 因此仅在目录解析成功时直接信任；否则继续走搜索补全，并按 tid 合并。
-    final current = await _discoverCatalogFirst(request);
+    final current = await _discoverCatalogFirst(
+      request,
+      executionContext: null,
+    );
     final catalogMatched =
         current.strategy == EpisodeDiscoveryStrategy.catalog &&
         current.episodeLinks.isNotEmpty;
@@ -112,9 +116,14 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
-    final current = await _discoverCatalogFirst(request);
+    final current = await _discoverCatalogFirst(
+      request,
+      executionContext: executionContext,
+    );
     final catalogMatched =
         current.strategy == EpisodeDiscoveryStrategy.catalog &&
         current.episodeLinks.isNotEmpty;
@@ -143,17 +152,31 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
-    ComicEpisodeRefreshRequest request,
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
-    final current = await _discoverCurrentOnly(request);
-    return _fetchSearchAndCurrentOnly(request, current: current);
+    final current = await _discoverCurrentOnly(
+      request,
+      executionContext: executionContext,
+    );
+    return _fetchSearchAndCurrentOnly(
+      request,
+      current: current,
+      executionContext: executionContext,
+    );
   }
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(
-    String catalogUrl,
+    String catalogUrl, {
+    FavoriteSyncExecutionContext? executionContext,
+  }
   ) async {
-    final links = await _discoveryService.discoverFromCatalogUrl(catalogUrl);
+    final links = await _discoveryService.discoverFromCatalogUrl(
+      catalogUrl,
+      governor: executionContext?.governor,
+    );
     if (links.isEmpty) {
       return ComicEpisodeRefreshOutcome(
         source: ComicEpisodeRefreshSource.empty,
@@ -170,29 +193,37 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   }
 
   Future<EpisodeDiscoveryResult> _discoverCatalogFirst(
-    ComicEpisodeRefreshRequest request,
-  ) {
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }) {
     return _discoveryService.discoverFromTidWithPreference(
       tid: request.sourceTid,
       preferCatalogFirst: true,
+      governor: executionContext?.governor,
     );
   }
 
   Future<EpisodeDiscoveryResult> _discoverCurrentOnly(
-    ComicEpisodeRefreshRequest request,
-  ) {
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }) {
     return _discoveryService.discoverFromTidWithPreference(
       tid: request.sourceTid,
       preferCatalogFirst: false,
       allowCatalogFallback: false,
+      governor: executionContext?.governor,
     );
   }
 
   Future<ComicEpisodeRefreshOutcome> _fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request, {
     required EpisodeDiscoveryResult current,
+    FavoriteSyncExecutionContext? executionContext,
   }) async {
-    final searchResult = await _searchFallbackFromCurrentTid(request);
+    final searchResult = await _searchFallbackFromCurrentTid(
+      request,
+      executionContext: executionContext,
+    );
     final searchLinks = searchResult.links;
     if (searchLinks.isNotEmpty) {
       final merged = _episodeLinkMerger.merge(
@@ -234,9 +265,13 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   }
 
   Future<_SearchFallbackResult> _searchFallbackFromCurrentTid(
-    ComicEpisodeRefreshRequest request,
-  ) async {
-    final thread = await _fetchThreadDetail(request.sourceTid);
+    ComicEpisodeRefreshRequest request, {
+    FavoriteSyncExecutionContext? executionContext,
+  }) async {
+    final thread = await _fetchThreadDetail(
+      request.sourceTid,
+      executionContext: executionContext,
+    );
     if (thread == null) {
       return const _SearchFallbackResult.empty();
     }
@@ -249,10 +284,13 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
         'keyword=${keyword.value} source=${keyword.source.name}',
       );
 
-      final search = await _searchService.searchForum(
-        keyword: keyword.value,
-        context: const DiscuzSearchContext.curForum(srhfid: '30'),
-        enforceRateLimit: true,
+      final search = await _runSearch(
+        executionContext: executionContext,
+        action: () => _searchService.searchForum(
+          keyword: keyword.value,
+          context: const DiscuzSearchContext.curForum(srhfid: '30'),
+          enforceRateLimit: true,
+        ),
       );
       usedSearch = true;
       if (search.rateLimited || search.items.isEmpty) {
@@ -293,6 +331,7 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
         final result = await _discoveryService.discoverFromTidWithPreference(
           tid: candidate.item.tid,
           preferCatalogFirst: true,
+          governor: executionContext?.governor,
         );
         if (result.episodeLinks.isNotEmpty) {
           collectedLinks = _episodeLinkMerger.merge(
@@ -340,12 +379,46 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
     );
   }
 
-  Future<ThreadSeed?> _fetchThreadDetail(String tid) async {
+  Future<ThreadSeed?> _fetchThreadDetail(
+    String tid, {
+    FavoriteSyncExecutionContext? executionContext,
+  }) async {
     final fetcher = _threadSeedFetcher;
     if (fetcher != null) {
-      return fetcher(tid);
+      return _runSeedFetch(
+        executionContext: executionContext,
+        action: () => fetcher(tid),
+      );
     }
     return null;
+  }
+
+  Future<T> _runSearch<T>({
+    required FavoriteSyncExecutionContext? executionContext,
+    required Future<T> Function() action,
+  }) {
+    final governor = executionContext?.governor;
+    if (governor == null) {
+      return action();
+    }
+    return governor.run(
+      kind: FavoriteFirstSyncRequestKind.comicForumSearch,
+      action: action,
+    );
+  }
+
+  Future<T> _runSeedFetch<T>({
+    required FavoriteSyncExecutionContext? executionContext,
+    required Future<T> Function() action,
+  }) {
+    final governor = executionContext?.governor;
+    if (governor == null) {
+      return action();
+    }
+    return governor.run(
+      kind: FavoriteFirstSyncRequestKind.comicThreadDetail,
+      action: action,
+    );
   }
 
   void _logRefresh(ComicEpisodeRefreshRequest request, String message) {

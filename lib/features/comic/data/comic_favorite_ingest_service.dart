@@ -3,12 +3,14 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_post_aggregation_service.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
 abstract class ComicFavoriteIngestService {
   Future<String> upsertFromThreadDetail({
     required ThreadDetailData detail,
     String? sourceTagName,
+    FavoriteSyncExecutionContext? executionContext,
   });
 
   Future<void> removeFromShelf({required String workId});
@@ -34,6 +36,7 @@ class RepositoryComicFavoriteIngestService implements ComicFavoriteIngestService
   Future<String> upsertFromThreadDetail({
     required ThreadDetailData detail,
     String? sourceTagName,
+    FavoriteSyncExecutionContext? executionContext,
   }) async {
     final comicId = buildComicWorkId(detail.tid);
     final aggregation = _aggregationService.build(detail.posts);

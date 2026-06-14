@@ -3,6 +3,7 @@ import 'dart:io' as io;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
@@ -159,7 +160,10 @@ class _NovelDownloadRepositoryFake implements NovelRepository {
   }) async {}
 
   @override
-  Future<NovelEpisodeRefreshResult> refreshEpisodes({required String novelId}) async {
+  Future<NovelEpisodeRefreshResult> refreshEpisodes({
+    required String novelId,
+    FavoriteSyncExecutionContext? executionContext,
+  }) async {
     return const NovelEpisodeRefreshResult(insertedCount: 0, updatedCount: 0, totalCount: 1);
   }
 
@@ -184,7 +188,10 @@ class _NovelDownloadRepositoryFake implements NovelRepository {
   }) async {}
 
   @override
-  Future<void> upsertNovelBySeed({required NovelRefreshSeed seed}) async {}
+  Future<void> upsertNovelBySeed({
+    required NovelRefreshSeed seed,
+    FavoriteSyncExecutionContext? executionContext,
+  }) async {}
 
   @override
   Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {}

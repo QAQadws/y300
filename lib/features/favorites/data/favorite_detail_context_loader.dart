@@ -1,4 +1,5 @@
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
 import 'package:y300/features/favorites/domain/favorite_detail_context.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
@@ -10,11 +11,15 @@ typedef FavoriteThreadDetailLoader =
 typedef FavoriteTagLookupLoader = Future<ForumTagLookup> Function();
 
 abstract class FavoriteDetailContextLoader {
-  Future<ApiResult<ThreadDetailData>> loadDetail(String tid);
+  Future<ApiResult<ThreadDetailData>> loadDetail(
+    String tid, {
+    FavoriteSyncExecutionContext? executionContext,
+  });
 
   Future<ApiResult<FavoriteDetailContext>> load(
     FavoriteThreadCacheRecord record, {
     ThreadDetailData? preloadedDetail,
+    FavoriteSyncExecutionContext? executionContext,
   });
 }
 
@@ -33,20 +38,34 @@ class DefaultFavoriteDetailContextLoader
   final ThreadContentClassifier _classifier;
 
   @override
-  Future<ApiResult<ThreadDetailData>> loadDetail(String tid) {
-    return _loadThreadDetail(tid);
+  Future<ApiResult<ThreadDetailData>> loadDetail(
+    String tid, {
+    FavoriteSyncExecutionContext? executionContext,
+  }) {
+    final governor = executionContext?.governor;
+    if (governor == null) {
+      return _loadThreadDetail(tid);
+    }
+    return governor.run(
+      kind: FavoriteFirstSyncRequestKind.favoriteThreadDetail,
+      action: () => _loadThreadDetail(tid),
+    );
   }
 
   @override
   Future<ApiResult<FavoriteDetailContext>> load(
     FavoriteThreadCacheRecord record, {
     ThreadDetailData? preloadedDetail,
+    FavoriteSyncExecutionContext? executionContext,
   }) async {
     final ApiResult<ThreadDetailData> detailResult;
     if (preloadedDetail != null) {
       detailResult = ApiSuccess<ThreadDetailData>(preloadedDetail);
     } else {
-      detailResult = await loadDetail(record.tid);
+      detailResult = await loadDetail(
+        record.tid,
+        executionContext: executionContext,
+      );
     }
     if (detailResult is ApiFailure<ThreadDetailData>) {
       return ApiFailure<FavoriteDetailContext>(detailResult.error);
