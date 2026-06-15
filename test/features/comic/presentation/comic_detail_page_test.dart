@@ -12,6 +12,7 @@ import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_reader_exit_result.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
@@ -221,7 +222,13 @@ class _FakeComicReaderService implements ComicReaderService {
   }
 
   @override
-  Future<List<String>> fetchEpisodeImagesByTid(String tid) async => const <String>[];
+  Future<ComicEpisodeImagesFetchResult> fetchEpisodeImages(String tid) async =>
+      const ComicEpisodeImagesFetched(<String>[]);
+
+  @override
+  // ignore: deprecated_member_use
+  Future<List<String>> fetchEpisodeImagesByTid(String tid) async =>
+      (await fetchEpisodeImages(tid)).imageUrlsOrEmpty;
 
   @override
   Future<void> prefetchImages({required List<String> imageUrls}) async {}

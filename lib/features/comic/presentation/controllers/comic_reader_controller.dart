@@ -9,6 +9,8 @@ import 'package:y300/features/comic/data/comic_download_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_images_unavailable.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_chapter_preload.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_events.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
@@ -239,14 +241,14 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   final ComicReaderArgs _args;
   static const ComicReaderChapterPreloadPolicy _chapterPreloadPolicy =
       ComicReaderChapterPreloadPolicy();
-  late final ComicRepository _repository;
-  late final ComicReaderService _readerService;
-  late final ComicDownloadService _downloadService;
-  late final ComicReadingStateWriter _readingStateWriter;
-  late final ImageCacheService _imageCacheService;
-  late final ComicReaderEventLogger _eventLogger;
-  late final ComicReaderFeatureFlags _featureFlags;
-  late final ComicReaderPreloadQueue _preloadQueue;
+  late ComicRepository _repository;
+  late ComicReaderService _readerService;
+  late ComicDownloadService _downloadService;
+  late ComicReadingStateWriter _readingStateWriter;
+  late ImageCacheService _imageCacheService;
+  late ComicReaderEventLogger _eventLogger;
+  late ComicReaderFeatureFlags _featureFlags;
+  late ComicReaderPreloadQueue _preloadQueue;
   Timer? _progressPersistDebounceTimer;
   int _persistVersion = 0;
   final Set<String> _completedEpisodeIds = <String>{};
@@ -1953,16 +1955,28 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (images.isNotEmpty) {
       return images;
     }
-    final fetched = await _readerService.fetchEpisodeImagesByTid(episode.sourceTid);
-    if (!ref.mounted) {
-      return const <ComicEpisodeImageItem>[];
+    final fetchResult = await _readerService.fetchEpisodeImages(episode.sourceTid);
+    switch (fetchResult) {
+      case ComicEpisodeImagesFetchFailed(:final reason, :final message):
+        // 让 AsyncValue 进入 error 态，UI 渲染重试入口；不再把瞬时网络错
+        // 误悄悄塞成"当前章节没有可阅读图片"。
+        throw ComicEpisodeImagesUnavailable(reason: reason, message: message);
+      case ComicEpisodeImagesFetched(:final imageUrls):
+        if (imageUrls.isEmpty) {
+          // 真没图：合法空态。
+          return const <ComicEpisodeImageItem>[];
+        }
+        // 落库是副作用，跟 controller 生命周期解耦——哪怕用户在动画里返
+        // 回了，下次进入也能直接命中 DB，不用再发一次 viewthread。
+        await _repository.saveEpisodeImages(
+          episodeId: episode.episodeId,
+          imageUrls: imageUrls,
+        );
+        if (!ref.mounted) {
+          return const <ComicEpisodeImageItem>[];
+        }
+        return _repository.getEpisodeImages(episodeId: episode.episodeId);
     }
-    if (fetched.isEmpty) {
-      return const <ComicEpisodeImageItem>[];
-    }
-    await _repository.saveEpisodeImages(episodeId: episode.episodeId, imageUrls: fetched);
-    images = await _repository.getEpisodeImages(episodeId: episode.episodeId);
-    return images;
   }
 
   Future<ComicImageCacheResult> _cacheReaderImage(ComicReaderImageState image) {

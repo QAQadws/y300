@@ -10,6 +10,8 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_images_unavailable.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_chapter_preload.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
@@ -804,6 +806,155 @@ void main() {
       isTrue,
     );
   });
+
+  test(
+    '_ensureEpisodeImages 在 fetch 失败时把 AsyncValue 推入 error 态而非"空列表"',
+    () async {
+      final repository = _ReaderRepoForControllerTest(
+        emptyEpisodeIds: const <String>{'yamibo:100:101'},
+      );
+      final service = _ReaderServiceSpy()
+        ..fetchResultBuilder = (_) =>
+            const ComicEpisodeImagesFetchFailed(
+              reason: ComicEpisodeImagesFetchFailureReason.network,
+              message: '模拟超时',
+            );
+      final writer = _ReadingStateWriterSpy(repository);
+      final container = ProviderContainer(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(repository),
+          comicReadingStateWriterProvider.overrideWithValue(writer),
+          comicReaderServiceProvider.overrideWith((ref) async => service),
+          comicDownloadServiceProvider
+              .overrideWithValue(_NoopComicDownloadService()),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      const args = ComicReaderArgs(
+        comicId: 'yamibo:100',
+        episodeId: 'yamibo:100:101',
+      );
+      final subscription = container.listen<AsyncValue<ComicReaderViewState>>(
+        comicReaderControllerProvider(args),
+        (previous, next) {},
+        fireImmediately: true,
+      );
+      addTearDown(subscription.close);
+
+      // 等待 AsyncValue 落定为 error；不要直接 await `.future`——
+      // 那条路径在某些 riverpod 版本上对 build() 的 throw 不会立即 reject。
+      await _waitForCondition(
+        () => container.read(comicReaderControllerProvider(args)).hasError,
+        label: 'reader controller surfaces fetch failure as AsyncError',
+      );
+
+      final asyncValue = container.read(comicReaderControllerProvider(args));
+      final error = asyncValue.error;
+      expect(error, isA<ComicEpisodeImagesUnavailable>());
+      final unavailable = error as ComicEpisodeImagesUnavailable;
+      expect(unavailable.reason, ComicEpisodeImagesFetchFailureReason.network);
+      expect(unavailable.isRetryable, isTrue);
+      expect(unavailable.message, '模拟超时');
+
+      // 失败也得有源头记录，避免静默吞错。
+      expect(service.fetchEpisodeImagesCalls, <String>['101']);
+      // DB 没有写入，且不会留下脏数据。
+      expect(repository.savedImageUrlsByEpisode, isEmpty);
+    },
+  );
+
+  test(
+    '_ensureEpisodeImages 拉取成功时把图片落库且 AsyncData 携带新图',
+    () async {
+      const fetchedUrls = <String>[
+        'https://img.test/101-network-1.jpg',
+        'https://img.test/101-network-2.jpg',
+      ];
+      final repository = _ReaderRepoForControllerTest(
+        emptyEpisodeIds: const <String>{'yamibo:100:101'},
+      );
+      final service = _ReaderServiceSpy()
+        ..fetchResultBuilder = (_) =>
+            const ComicEpisodeImagesFetched(fetchedUrls);
+      final writer = _ReadingStateWriterSpy(repository);
+      final container = ProviderContainer(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(repository),
+          comicReadingStateWriterProvider.overrideWithValue(writer),
+          comicReaderServiceProvider.overrideWith((ref) async => service),
+          comicDownloadServiceProvider
+              .overrideWithValue(_NoopComicDownloadService()),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      const args = ComicReaderArgs(
+        comicId: 'yamibo:100',
+        episodeId: 'yamibo:100:101',
+      );
+      final subscription = container.listen<AsyncValue<ComicReaderViewState>>(
+        comicReaderControllerProvider(args),
+        (previous, next) {},
+        fireImmediately: true,
+      );
+      addTearDown(subscription.close);
+
+      final viewState =
+          await container.read(comicReaderControllerProvider(args).future);
+
+      expect(
+        viewState.images.map((image) => image.imageUrl).toList(),
+        fetchedUrls,
+      );
+      // 关键点：落库不能跟 controller 生命周期耦合——这是 bug 修复的核心。
+      expect(repository.savedImageUrlsByEpisode['yamibo:100:101'], fetchedUrls);
+    },
+  );
+
+  test(
+    '_ensureEpisodeImages 拉取成功但首楼真无图时 AsyncData 为空列表（不进 error 态）',
+    () async {
+      final repository = _ReaderRepoForControllerTest(
+        emptyEpisodeIds: const <String>{'yamibo:100:101'},
+      );
+      final service = _ReaderServiceSpy()
+        ..fetchResultBuilder = (_) => const ComicEpisodeImagesFetched(<String>[]);
+      final writer = _ReadingStateWriterSpy(repository);
+      final container = ProviderContainer(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(repository),
+          comicReadingStateWriterProvider.overrideWithValue(writer),
+          comicReaderServiceProvider.overrideWith((ref) async => service),
+          comicDownloadServiceProvider
+              .overrideWithValue(_NoopComicDownloadService()),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      const args = ComicReaderArgs(
+        comicId: 'yamibo:100',
+        episodeId: 'yamibo:100:101',
+      );
+      final subscription = container.listen<AsyncValue<ComicReaderViewState>>(
+        comicReaderControllerProvider(args),
+        (previous, next) {},
+        fireImmediately: true,
+      );
+      addTearDown(subscription.close);
+
+      final viewState =
+          await container.read(comicReaderControllerProvider(args).future);
+
+      // 这是合法空态——UI 仍然走"当前章节没有可阅读图片"的提示，但不会抛错。
+      expect(viewState.images, isEmpty);
+      // 真空时不应该有任何持久化写入（避免污染 DB）。
+      expect(repository.savedImageUrlsByEpisode, isEmpty);
+    },
+  );
 }
 
 class _NoopComicDownloadService implements ComicDownloadService {
@@ -841,6 +992,10 @@ class _DownloadedComicServiceFake extends _NoopComicDownloadService {
 class _ReaderServiceSpy implements ComicReaderService {
   final List<String> cachedImageUrls = <String>[];
   final List<List<String>> prefetchedBatches = <List<String>>[];
+  final List<String> fetchEpisodeImagesCalls = <String>[];
+
+  /// 测试可注入的拉取结果——空时默认返回 `Fetched([])`，等价于"成功但首楼无图"。
+  ComicEpisodeImagesFetchResult Function(String tid)? fetchResultBuilder;
 
   @override
   Future<ComicImageCacheResult> cacheImage({
@@ -858,9 +1013,19 @@ class _ReaderServiceSpy implements ComicReaderService {
   }
 
   @override
-  Future<List<String>> fetchEpisodeImagesByTid(String tid) async {
-    return const <String>[];
+  Future<ComicEpisodeImagesFetchResult> fetchEpisodeImages(String tid) async {
+    fetchEpisodeImagesCalls.add(tid);
+    final builder = fetchResultBuilder;
+    if (builder != null) {
+      return builder(tid);
+    }
+    return const ComicEpisodeImagesFetched(<String>[]);
   }
+
+  @override
+  // ignore: deprecated_member_use
+  Future<List<String>> fetchEpisodeImagesByTid(String tid) async =>
+      (await fetchEpisodeImages(tid)).imageUrlsOrEmpty;
 
   @override
   Future<void> prefetchImages({required List<String> imageUrls}) async {
@@ -1046,6 +1211,7 @@ class _ReaderRepoForControllerTest
     this.lastImageWidth,
     this.lastImageHeight,
     this.imageCount = 5,
+    this.emptyEpisodeIds = const <String>{},
   });
 
   final bool singlePage;
@@ -1054,10 +1220,14 @@ class _ReaderRepoForControllerTest
   final int? lastImageWidth;
   final int? lastImageHeight;
   final int imageCount;
+  /// 这些 episode 在 fetch+save 之前，DB 视为空。用来模拟"首次进入未缓存"。
+  final Set<String> emptyEpisodeIds;
   final List<_ProgressWrite> progressWrites = <_ProgressWrite>[];
   final List<_CacheStatusWrite> cacheStatusWrites = <_CacheStatusWrite>[];
   final List<_ImageMetadataWrite> imageMetadataWrites = <_ImageMetadataWrite>[];
   final List<String> clearedEpisodeIds = <String>[];
+  /// 追踪每个 episode 通过 [saveEpisodeImages] 持久化的 URL，做断言用。
+  final Map<String, List<String>> savedImageUrlsByEpisode = <String, List<String>>{};
   String? lastCustomCoverLocalPath;
 
   @override
@@ -1158,6 +1328,22 @@ class _ReaderRepoForControllerTest
 
   @override
   Future<List<ComicEpisodeImageItem>> getEpisodeImages({required String episodeId}) async {
+    // 模拟"DB 起初无图，等 saveEpisodeImages 写入后再有图"——用来跑
+    // _ensureEpisodeImages 的 fetch+save 路径。
+    if (emptyEpisodeIds.contains(episodeId)) {
+      final saved = savedImageUrlsByEpisode[episodeId];
+      if (saved == null || saved.isEmpty) {
+        return const <ComicEpisodeImageItem>[];
+      }
+      return List<ComicEpisodeImageItem>.generate(saved.length, (index) {
+        return ComicEpisodeImageItem(
+          episodeId: episodeId,
+          imageUrl: saved[index],
+          imageIndex: index,
+          cacheStatus: 'none',
+        );
+      });
+    }
     if (singlePage) {
       return const <ComicEpisodeImageItem>[
         ComicEpisodeImageItem(
@@ -1230,7 +1416,9 @@ class _ReaderRepoForControllerTest
   Future<void> renameCategory({required String categoryId, required String newName}) async {}
 
   @override
-  Future<void> saveEpisodeImages({required String episodeId, required List<String> imageUrls}) async {}
+  Future<void> saveEpisodeImages({required String episodeId, required List<String> imageUrls}) async {
+    savedImageUrlsByEpisode[episodeId] = List<String>.unmodifiable(imageUrls);
+  }
 
   @override
   Future<void> updateCustomCover({required String comicId, required String? customCoverImageUrl}) async {}

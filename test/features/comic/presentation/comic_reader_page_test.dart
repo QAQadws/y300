@@ -13,6 +13,7 @@ import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/comic_reader_page.dart';
@@ -499,12 +500,17 @@ class _ReaderFakeService implements ComicReaderService {
   }
 
   @override
-  Future<List<String>> fetchEpisodeImagesByTid(String tid) async {
-    return const <String>[
+  Future<ComicEpisodeImagesFetchResult> fetchEpisodeImages(String tid) async {
+    return const ComicEpisodeImagesFetched(<String>[
       'https://img.test/101-1.jpg',
       'https://img.test/101-2.jpg',
-    ];
+    ]);
   }
+
+  @override
+  // ignore: deprecated_member_use
+  Future<List<String>> fetchEpisodeImagesByTid(String tid) async =>
+      (await fetchEpisodeImages(tid)).imageUrlsOrEmpty;
 
   @override
   Future<void> prefetchImages({required List<String> imageUrls}) async {}

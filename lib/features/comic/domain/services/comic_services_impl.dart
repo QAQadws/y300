@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/foundation.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/site_url_resolver.dart';
@@ -20,6 +21,7 @@ import 'package:y300/features/comic/domain/services/comic_episode_refresh_servic
 import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
 import 'package:y300/features/comic/domain/services/comic_detector.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_keyword_resolver.dart';
 import 'package:y300/features/comic/domain/services/comic_search_candidate_ranker.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
@@ -566,7 +568,21 @@ final comicEpisodeRefreshServiceProvider = Provider<ComicEpisodeRefreshService>(
 });
 
 abstract class ComicReaderService {
-  Future<List<String>> fetchEpisodeImagesByTid(String tid);
+  /// 拉取单话首楼图片，区分"成功（含真无图）"和各类失败原因。
+  /// 这是新接口；旧的 [fetchEpisodeImagesByTid] 改为默认实现转发到这里，
+  /// 保持向后兼容直至所有调用方迁移完毕。
+  Future<ComicEpisodeImagesFetchResult> fetchEpisodeImages(String tid);
+
+  /// 旧版便捷方法：失败和真空都返回空列表。
+  ///
+  /// 调用方失去了区分网络抖动与"首楼真无图"的能力，新代码请直接用
+  /// [fetchEpisodeImages]。子类不需要重写本方法，默认实现已经基于新接口。
+  @Deprecated(
+    'Use fetchEpisodeImages to distinguish transient failures from empty content.',
+  )
+  Future<List<String>> fetchEpisodeImagesByTid(String tid) async {
+    return (await fetchEpisodeImages(tid)).imageUrlsOrEmpty;
+  }
 
   Future<ComicImageCacheResult> cacheImage({
     required String imageUrl,
@@ -626,21 +642,58 @@ class NetworkComicReaderService implements ComicReaderService {
   final ForumImageSourcePipeline _imageSourcePipeline;
 
   @override
-  Future<List<String>> fetchEpisodeImagesByTid(String tid) async {
+  Future<ComicEpisodeImagesFetchResult> fetchEpisodeImages(String tid) async {
     final result = await _threadRepository.getThreadDetail(tid: tid, page: 1);
     return result.when(
       success: (data) {
         final firstPost = data.posts.where((post) => post.isFirst).firstOrNull;
         if (firstPost == null) {
-          return const <String>[];
+          // 首楼没识别出来通常是 Discuz 解析口径异常，不是真的没图——
+          // 当作 parse 失败上抛，UI 才会给出"页面结构异常"的明确提示。
+          return const ComicEpisodeImagesFetchFailed(
+            reason: ComicEpisodeImagesFetchFailureReason.parse,
+            message: '首楼帖未识别',
+          );
         }
-        return _imageSourcePipeline
+        final imageUrls = _imageSourcePipeline
             .collectFromPost(firstPost)
             .map((source) => source.normalizedUrl)
             .toList(growable: false);
+        return ComicEpisodeImagesFetched(imageUrls);
       },
-      failure: (_) => const <String>[],
+      failure: (error) => ComicEpisodeImagesFetchFailed(
+        reason: _mapApiErrorTypeToFetchFailureReason(error.type),
+        message: error.message,
+      ),
     );
+  }
+
+  // ignore: deprecated_member_use_from_same_package
+  @Deprecated(
+    'Use fetchEpisodeImages to distinguish transient failures from empty content.',
+  )
+  @override
+  // ignore: deprecated_member_use_from_same_package
+  Future<List<String>> fetchEpisodeImagesByTid(String tid) async {
+    return (await fetchEpisodeImages(tid)).imageUrlsOrEmpty;
+  }
+
+  /// 把核心网络层的 `ApiErrorType` 翻译到域内 reason，避免 comic domain
+  /// 直接依赖 `lib/core/network/api_result.dart`。映射保持稳定的纯函数。
+  ComicEpisodeImagesFetchFailureReason _mapApiErrorTypeToFetchFailureReason(
+    ApiErrorType type,
+  ) {
+    return switch (type) {
+      ApiErrorType.network ||
+      ApiErrorType.timeout =>
+        ComicEpisodeImagesFetchFailureReason.network,
+      ApiErrorType.unauthorized => ComicEpisodeImagesFetchFailureReason.auth,
+      ApiErrorType.server => ComicEpisodeImagesFetchFailureReason.server,
+      ApiErrorType.parse => ComicEpisodeImagesFetchFailureReason.parse,
+      ApiErrorType.business ||
+      ApiErrorType.unknown =>
+        ComicEpisodeImagesFetchFailureReason.unknown,
+    };
   }
 
   @override

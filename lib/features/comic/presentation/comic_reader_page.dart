@@ -6,6 +6,7 @@ import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/comic/domain/models/comic_reader_exit_result.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_images_unavailable.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_chapter_preload.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/comic/presentation/models/reader_preferences.dart';
@@ -104,7 +105,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     return Scaffold(
       body: state.when(
         loading: () => _buildReaderLoadingState(preferences),
-        error: (error, stackTrace) => Center(child: Text('加载阅读器失败：$error')),
+        error: (error, stackTrace) => _buildReaderErrorState(error),
         data: (viewState) {
           if (viewState.images.isEmpty) {
             return const Center(child: Text('当前章节没有可阅读图片'));
@@ -161,6 +162,40 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
   Widget _buildReaderLoadingState(ReaderPreferences preferences) {
     return _ReaderOpeningPlaceholder(
       background: _readerBackgroundColor(preferences),
+    );
+  }
+
+  /// 阅读器错误态。
+  ///
+  /// 拉单话图片失败时（[ComicEpisodeImagesUnavailable]）显示具体根因 + 重
+  /// 试按钮——避免和"首楼真无图"混为一谈，也省得用户必须靠"返回再点"
+  /// 才能触发新的尝试。
+  /// 解析失败（reason == parse）重试无意义，按钮不出。
+  Widget _buildReaderErrorState(Object error) {
+    final hint = error is ComicEpisodeImagesUnavailable
+        ? error.displayHint
+        : '加载阅读器失败：$error';
+    final retryable =
+        error is! ComicEpisodeImagesUnavailable || error.isRetryable;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(hint, textAlign: TextAlign.center),
+            if (retryable) ...[
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => ref.invalidate(
+                  comicReaderControllerProvider(_readerArgs),
+                ),
+                child: const Text('重试'),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
