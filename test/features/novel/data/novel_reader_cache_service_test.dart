@@ -8,6 +8,7 @@ import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/novel_reader_cache_service.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 
 void main() {
@@ -293,6 +294,7 @@ class _NovelCacheRepositoryFake implements NovelRepository {
   @override
   Future<NovelEpisodeRefreshResult> refreshEpisodes({
     required String novelId,
+    NovelEpisodeRefreshMode mode = NovelEpisodeRefreshMode.full,
     FavoriteSyncExecutionContext? executionContext,
   }) async {
     return NovelEpisodeRefreshResult(

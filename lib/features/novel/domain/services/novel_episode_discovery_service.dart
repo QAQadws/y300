@@ -32,6 +32,7 @@ class NovelEpisodeDiscoveryService {
   NovelRefreshPlan buildPlan({
     required String novelId,
     required List<ThreadDetailData> pages,
+    NovelDiscoveryOptions options = NovelDiscoveryOptions.defaults,
   }) {
     if (pages.isEmpty) {
       throw StateError('线程页面为空，无法生成章节计划');
@@ -42,17 +43,21 @@ class NovelEpisodeDiscoveryService {
     final builder = _NovelRefreshPlanBuilder(
       firstPage: firstPage,
       pageCount: pages.length,
+      orderIndexOffset: options.orderIndexOffset,
+      suppressFirstChapterMetadata: options.skipFirstChapterMetadata,
     );
     final allPosts = _flattenPosts(pages);
     final postsByPid = <String, _PostOnPage>{
       for (final item in allPosts) item.post.pid: item,
     };
     final firstPagePosts = pages.first.posts;
-    final catalogEntries = _catalogExtractor.extract(
-      threadTid: firstPage.tid,
-      opAuthorId: opAuthorId,
-      posts: firstPagePosts,
-    );
+    final catalogEntries = options.skipCatalogExtraction
+        ? const <NovelCatalogEntry>[]
+        : _catalogExtractor.extract(
+            threadTid: firstPage.tid,
+            opAuthorId: opAuthorId,
+            posts: firstPagePosts,
+          );
 
     if (catalogEntries.isNotEmpty) {
       _collectCatalogMeta(
@@ -215,10 +220,22 @@ class _NovelRefreshPlanBuilder {
   _NovelRefreshPlanBuilder({
     required this.firstPage,
     required this.pageCount,
+    this.orderIndexOffset = 0,
+    this.suppressFirstChapterMetadata = false,
   });
 
   final ThreadDetailData firstPage;
   final int pageCount;
+
+  /// 新章节的起始 orderIndex（含）。
+  ///
+  /// `episodeCount` 投影成 `_episodes.length + orderIndexOffset`，让规则收到的
+  /// `currentOrderIndex` 与最终写入的 `NovelEpisodeDraft.orderIndex` 都自动平移。
+  final int orderIndexOffset;
+
+  /// 不收 cover/intro 信号 —— 增量刷新场景下显式压制。
+  final bool suppressFirstChapterMetadata;
+
   final List<NovelEpisodeDraft> _episodes = <NovelEpisodeDraft>[];
   final List<NovelParsingSignal> _signals = <NovelParsingSignal>[];
   final List<String> _inlineImageUrls = <String>[];
@@ -229,7 +246,7 @@ class _NovelRefreshPlanBuilder {
   int _totalOpPosts = 0;
   int _fallbackTitleCount = 0;
 
-  int get episodeCount => _episodes.length;
+  int get episodeCount => _episodes.length + orderIndexOffset;
 
   void addPostStats({
     required int totalAnchors,
@@ -243,8 +260,10 @@ class _NovelRefreshPlanBuilder {
 
   void acceptMeta(NovelRuleResult result) {
     _signals.addAll(result.signals);
-    _intro ??= _normalizeNullable(result.intro);
-    _coverImageUrl ??= _normalizeNullable(result.coverImageUrl);
+    if (!suppressFirstChapterMetadata) {
+      _intro ??= _normalizeNullable(result.intro);
+      _coverImageUrl ??= _normalizeNullable(result.coverImageUrl);
+    }
     if (result.usedFallbackTitle) {
       _fallbackTitleCount += 1;
     }

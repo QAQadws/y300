@@ -602,6 +602,7 @@ class LocalNovelRepository
   @override
   Future<NovelEpisodeRefreshResult> refreshEpisodes({
     required String novelId,
+    NovelEpisodeRefreshMode mode = NovelEpisodeRefreshMode.full,
     FavoriteSyncExecutionContext? executionContext,
   }) async {
     final detail = await getDetail(novelId: novelId);
@@ -609,6 +610,35 @@ class LocalNovelRepository
       throw StateError('小说不存在');
     }
 
+    // 增量模式有三种降级到 full 的情况，全部由仓库内部判定，调用方不感知：
+    //   1) 本地零章节 —— 没有起点
+    //   2) 已知最大 source_page <= 1 —— 单页内全量与增量等价
+    //   3) catalog 模式（page=1 上 >= 2 个章节）—— 目录散落多页，
+    //      跳过首页会让 rule 链生成与目录不一致的标题，发生标题漂移
+    final resolved = mode == NovelEpisodeRefreshMode.incremental
+        ? await _resolveIncrementalContext(novelId: novelId)
+        : null;
+
+    if (resolved != null) {
+      return _refreshEpisodesIncremental(
+        novelId: novelId,
+        detail: detail,
+        context: resolved,
+        executionContext: executionContext,
+      );
+    }
+    return _refreshEpisodesFull(
+      novelId: novelId,
+      detail: detail,
+      executionContext: executionContext,
+    );
+  }
+
+  Future<NovelEpisodeRefreshResult> _refreshEpisodesFull({
+    required String novelId,
+    required NovelItem detail,
+    FavoriteSyncExecutionContext? executionContext,
+  }) async {
     final pages = await _fetchPages(
       tid: detail.sourceTid,
       executionContext: executionContext,
@@ -732,6 +762,179 @@ class LocalNovelRepository
       insertedCount: inserted,
       updatedCount: updated,
       totalCount: total.length,
+    );
+  }
+
+  /// 增量刷新：保留所有旧章节，只把从 [_IncrementalRefreshContext.startPage]
+  /// 起重新解析得到的章节合并写回；标题仍走 sanitizer，封面/简介/作者不动。
+  Future<NovelEpisodeRefreshResult> _refreshEpisodesIncremental({
+    required String novelId,
+    required NovelItem detail,
+    required _IncrementalRefreshContext context,
+    FavoriteSyncExecutionContext? executionContext,
+  }) async {
+    final pages = await _fetchPages(
+      tid: detail.sourceTid,
+      startPage: context.startPage,
+      executionContext: executionContext,
+    );
+
+    final db = await _dbFuture;
+
+    // 起点页已经被论坛删了或越过了末页 —— 帖子层面没新内容，但论坛 subject
+    // 字段可能仍然在变（楼主在标题里改更新时间是常见操作）。
+    // 单独再发一发 page=startPage 的请求拿最新 subject 也没必要 —— 上面那个
+    // _fetchPages 第一发就是 startPage，如果它返回 posts 空但 detail data 非空
+    // 也算成功，所以这里只在 pages 完全空（终止于第一发就 break 之前）时退出。
+    if (pages.isEmpty) {
+      return NovelEpisodeRefreshResult(
+        insertedCount: 0,
+        updatedCount: 0,
+        totalCount: (await getEpisodes(novelId: novelId)).length,
+      );
+    }
+
+    final plan = _discoveryService.buildPlan(
+      novelId: novelId,
+      pages: pages,
+      options: NovelDiscoveryOptions(
+        orderIndexOffset: context.nextOrderIndex,
+        skipCatalogExtraction: true,
+        skipFirstChapterMetadata: true,
+      ),
+    );
+
+    var inserted = 0;
+    var updated = 0;
+    // 新章节专用计数器：从 maxOrder+1 起严格递增，绕开 draft.orderIndex —— 因为
+    // 既有章节会复用旧 order_index，让 draft 计数器和实际 DB 值脱节，新章节用
+    // draft.orderIndex 会留下空洞（例如 0,1,3）。这里保证连续编号。
+    var nextNewOrderIndex = context.nextOrderIndex;
+
+    await db.transaction((txn) async {
+      for (final draft in plan.episodes) {
+        final existing = await txn.query(
+          ComicLocalDb.workEpisodesTable,
+          columns: <String>['episode_id', 'order_index', 'episode_title'],
+          where: 'episode_id = ?',
+          whereArgs: <Object>[draft.episodeId],
+          limit: 1,
+        );
+
+        // 既有章节锁定 order_index 与标题（避免 rule 链覆盖之前 catalog 抽取
+        // 出的更可信标题），仅更新位置元数据；新章节按计数器分配 order_index。
+        final isExisting = existing.isNotEmpty;
+        final int preservedOrderIndex;
+        final String preservedTitle;
+        if (isExisting) {
+          preservedOrderIndex =
+              (existing.first['order_index'] as int?) ?? draft.orderIndex;
+          preservedTitle =
+              (existing.first['episode_title'] as String?) ?? draft.episodeTitle;
+        } else {
+          preservedOrderIndex = nextNewOrderIndex++;
+          preservedTitle = draft.episodeTitle;
+        }
+
+        await txn.insert(
+          ComicLocalDb.workEpisodesTable,
+          <String, Object?>{
+            'episode_id': draft.episodeId,
+            'work_id': novelId,
+            'content_type': _contentType,
+            'source_tid': draft.sourceTid,
+            'source_pid': draft.sourcePid,
+            'source_page': draft.sourcePage,
+            'episode_title': preservedTitle,
+            'order_index': preservedOrderIndex,
+            'dateline_text': draft.datelineText,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+
+        await txn.insert(
+          ComicLocalDb.novelEpisodeContentTable,
+          <String, Object?>{
+            'episode_id': draft.episodeId,
+            'raw_html': draft.rawHtml,
+            'plain_text': draft.plainText,
+            'paragraph_json': jsonEncode(draft.paragraphs),
+            'updated_at': DateTime.now().millisecondsSinceEpoch,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+
+        if (isExisting) {
+          updated++;
+        } else {
+          inserted++;
+        }
+      }
+
+      // 标题仍重写：论坛把更新时间塞进 subject 是常态，sanitize 是纯函数
+      // 无副作用。author/cover_image_url/intro 在增量模式没有可信新数据，
+      // 不动。
+      await txn.update(
+        ComicLocalDb.worksTable,
+        <String, Object?>{
+          'title': _sanitizeTitleForStorage(plan.subject, fallback: detail.title),
+          'updated_at': DateTime.now().millisecondsSinceEpoch,
+        },
+        where: 'work_id = ? AND content_type = ?',
+        whereArgs: <Object>[novelId, _contentType],
+      );
+    });
+
+    final total = await getEpisodes(novelId: novelId);
+    return NovelEpisodeRefreshResult(
+      insertedCount: inserted,
+      updatedCount: updated,
+      totalCount: total.length,
+    );
+  }
+
+  /// 决定增量刷新的起点 / 锚点 orderIndex；返回 null 表示需要降级为 full。
+  ///
+  /// 降级条件保持最小化 —— 仅在「真的没起点」时降级：
+  ///   1) 本地零章节 —— 没有 MAX(source_page) 可用
+  ///   2) MAX(source_page) <= 1 —— 单页内增量与全量等价
+  ///
+  /// 早期版本曾用 `page=1 上 >= 2 章节` 作为 catalog 模式启发式来再次降级，但这条
+  /// 在 ppp=200 的多页小说上几乎总命中（page=1 自然就有几十章），把所有正常增量
+  /// 刷新都打回了全量。又因为 `_refreshEpisodesIncremental` 已经显式保留既有章节
+  /// 的 episode_title（避免 rule 链覆盖 catalog 抽出的更可信标题），catalog → rule
+  /// 切换不再造成标题漂移，这条启发式的防御价值就消失了。
+  Future<_IncrementalRefreshContext?> _resolveIncrementalContext({
+    required String novelId,
+  }) async {
+    final db = await _dbFuture;
+    final rows = await db.rawQuery(
+      '''
+      SELECT
+        MAX(source_page) AS max_page,
+        MAX(order_index) AS max_order,
+        COUNT(*) AS total_count
+      FROM ${ComicLocalDb.workEpisodesTable}
+      WHERE work_id = ? AND content_type = ?
+      ''',
+      <Object>[novelId, _contentType],
+    );
+    if (rows.isEmpty) {
+      return null;
+    }
+    final row = rows.first;
+    final totalCount = (row['total_count'] as int?) ?? 0;
+    if (totalCount == 0) {
+      return null;
+    }
+    final maxPage = (row['max_page'] as int?) ?? 0;
+    if (maxPage <= 1) {
+      return null;
+    }
+    final maxOrder = (row['max_order'] as int?) ?? -1;
+    return _IncrementalRefreshContext(
+      startPage: maxPage,
+      nextOrderIndex: maxOrder + 1,
     );
   }
 
@@ -1043,10 +1246,12 @@ class LocalNovelRepository
 
   Future<List<ThreadDetailData>> _fetchPages({
     required String tid,
+    int startPage = 1,
     FavoriteSyncExecutionContext? executionContext,
   }) async {
     final pages = <ThreadDetailData>[];
-    for (var page = 1; page <= _maxRefreshPages; page++) {
+    final endPage = startPage + _maxRefreshPages - 1;
+    for (var page = startPage; page <= endPage; page++) {
       final detail = await _runThreadRequest(
         executionContext: executionContext,
         kind: FavoriteFirstSyncRequestKind.novelEpisodePage,
@@ -1173,4 +1378,18 @@ class LocalNovelRepository
     }
     return DateTime.fromMillisecondsSinceEpoch(value);
   }
+}
+
+/// 增量刷新决策结果。
+///
+/// `startPage` 是从哪一页开始重新拉（含），等于本地最大 `source_page`。
+/// `nextOrderIndex` 是新章节起始 `order_index`，等于本地最大 `order_index + 1`。
+class _IncrementalRefreshContext {
+  const _IncrementalRefreshContext({
+    required this.startPage,
+    required this.nextOrderIndex,
+  });
+
+  final int startPage;
+  final int nextOrderIndex;
 }

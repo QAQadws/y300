@@ -9,6 +9,7 @@ import 'package:y300/features/library_shared/domain/services/reading_state_batch
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/presentation/adapters/novel_detail_adapter.dart';
 
 void main() {
@@ -137,12 +138,28 @@ void main() {
 
     expect(readChapters.first.progressInfo, isNull);
   });
+
+  test('refreshWork forwards incremental mode to repository', () async {
+    // 详情页下拉刷新 / 「更新」菜单要走增量；adapter 不能再退回 full。
+    final repository = _FakeNovelRepository();
+    final adapter = NovelDetailAdapter(
+      repository,
+      stateRepository: _RecordingLibraryStateRepository(),
+    );
+
+    await adapter.refreshWork(workId: 'novel:1');
+
+    expect(repository.lastRefreshMode, NovelEpisodeRefreshMode.incremental);
+  });
 }
 
 class _FakeNovelRepository implements NovelRepository {
   _FakeNovelRepository({this.progress});
 
   final NovelReadingProgress? progress;
+
+  /// 最近一次 refreshEpisodes 收到的 mode —— 用来断言 adapter 是否传了增量模式。
+  NovelEpisodeRefreshMode? lastRefreshMode;
 
   @override
   Future<String> createCategory({required String name}) async => 'created';
@@ -224,8 +241,10 @@ class _FakeNovelRepository implements NovelRepository {
   @override
   Future<NovelEpisodeRefreshResult> refreshEpisodes({
     required String novelId,
+    NovelEpisodeRefreshMode mode = NovelEpisodeRefreshMode.full,
     FavoriteSyncExecutionContext? executionContext,
   }) async {
+    lastRefreshMode = mode;
     return const NovelEpisodeRefreshResult(
       insertedCount: 0,
       updatedCount: 0,

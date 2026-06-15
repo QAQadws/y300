@@ -39,6 +39,7 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/startup/presentation/main_shell_page.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
@@ -782,6 +783,7 @@ class _FakeNovelRepository implements NovelRepository {
   @override
   Future<NovelEpisodeRefreshResult> refreshEpisodes({
     required String novelId,
+    NovelEpisodeRefreshMode mode = NovelEpisodeRefreshMode.full,
     FavoriteSyncExecutionContext? executionContext,
   }) async {
     return const NovelEpisodeRefreshResult(insertedCount: 0, updatedCount: 0, totalCount: 0);

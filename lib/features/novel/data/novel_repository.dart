@@ -5,6 +5,7 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 
 /// 小说仓储：封装小说书架、章节、正文、阅读偏好与阅读进度。
 abstract class NovelRepository {
@@ -47,6 +48,7 @@ abstract class NovelRepository {
 
   Future<NovelEpisodeRefreshResult> refreshEpisodes({
     required String novelId,
+    NovelEpisodeRefreshMode mode = NovelEpisodeRefreshMode.full,
     FavoriteSyncExecutionContext? executionContext,
   });
 

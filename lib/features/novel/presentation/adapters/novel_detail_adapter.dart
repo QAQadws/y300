@@ -7,6 +7,7 @@ import 'package:y300/features/library_shared/domain/services/reading_state_batch
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
+import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 
 /// 小说详情适配器（Phase 6）。
 class NovelDetailAdapter implements DetailModuleAdapter {
@@ -287,7 +288,15 @@ class NovelDetailAdapter implements DetailModuleAdapter {
 
   @override
   Future<DetailRefreshResult> refreshWork({required String workId}) async {
-    await _repository.refreshEpisodes(novelId: workId);
+    // 详情页下拉刷新与「更新」菜单走增量模式：
+    //   - 仅从 MAX(source_page) 开始往后再拉，省去前 N 页 IO；
+    //   - 标题仍走 NovelTitleSanitizer 重写，覆盖论坛在标题里塞的更新时间；
+    //   - 封面/简介/作者/旧章节均不动。
+    // 仓库内部对零章节/单页/catalog 模式自动降级为 full，所以 adapter 无需预判。
+    await _repository.refreshEpisodes(
+      novelId: workId,
+      mode: NovelEpisodeRefreshMode.incremental,
+    );
     return DetailRefreshResult.immediate;
   }
 
