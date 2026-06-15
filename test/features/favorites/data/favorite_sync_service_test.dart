@@ -1,5 +1,7 @@
 ﻿import 'dart:io' as io;
 
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/comic/data/comic_favorite_auto_refresh_coordinator.dart';
@@ -155,6 +157,59 @@ void main() {
     await service.syncRecentlyAddedThread(tid: '100');
 
     expect(governor.kinds, isEmpty);
+  });
+
+  test('concurrent first sync joins single inflight run and governor', () async {
+    final remote = _DelayedFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(page: 1, totalCount: 1, items: <FavoriteThread>[
+        _favoriteThread(tid: '100', title: '漫画'),
+      ]),
+    });
+    var governorCreated = 0;
+    final governor = _RecordingGovernor();
+    final service = _service(
+      remoteRepository: remote,
+      localRepository: _MemoryLocalFavoriteRepository(),
+      governorFactory: () {
+        governorCreated++;
+        return governor;
+      },
+      detailBatchLimit: 10,
+    );
+
+    final first = service.sync();
+    await remote.firstRequestStarted;
+    final second = service.sync();
+    remote.release();
+
+    await Future.wait(<Future<FavoriteSyncResult>>[first, second]);
+
+    expect(remote.requestedPages, <int>[1]);
+    expect(governorCreated, 1);
+    expect(
+      governor.kinds.where(
+        (kind) => kind == FavoriteFirstSyncRequestKind.favoriteListPage,
+      ).length,
+      1,
+    );
+  });
+
+  test('sync starts a new run after previous inflight settles', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(page: 1, totalCount: 1, items: <FavoriteThread>[
+        _favoriteThread(tid: '100', title: '漫画'),
+      ]),
+    });
+    final service = _service(
+      remoteRepository: remote,
+      localRepository: _MemoryLocalFavoriteRepository(),
+      detailBatchLimit: 10,
+    );
+
+    await service.sync();
+    await service.sync();
+
+    expect(remote.requestedPages, <int>[1, 1]);
   });
 
   test('remote list failure fails sync before detail ingestion', () async {
@@ -1082,6 +1137,40 @@ class _FakeFavoriteRepository implements FavoriteRepository {
   @override
   Future<ApiResult<List<FavoriteForum>>> getFavoriteForums() async {
     return const ApiSuccess<List<FavoriteForum>>(<FavoriteForum>[]);
+  }
+}
+
+class _DelayedFavoriteRepository extends _FakeFavoriteRepository {
+  _DelayedFavoriteRepository(super.pages);
+
+  final Completer<void> _firstRequestStarted = Completer<void>();
+  final Completer<void> _releaseGate = Completer<void>();
+
+  Future<void> get firstRequestStarted => _firstRequestStarted.future;
+
+  void release() {
+    if (!_releaseGate.isCompleted) {
+      _releaseGate.complete();
+    }
+  }
+
+  @override
+  Future<ApiResult<FavoriteThreadsPage>> getFavoriteThreads({
+    required int page,
+  }) async {
+    requestedPages.add(page);
+    if (!_firstRequestStarted.isCompleted) {
+      _firstRequestStarted.complete();
+    }
+    await _releaseGate.future;
+    return ApiSuccess(
+      pages[page] ??
+          _page(
+            page: page,
+            totalCount: 0,
+            items: const <FavoriteThread>[],
+          ),
+    );
   }
 }
 

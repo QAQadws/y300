@@ -2,6 +2,7 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
 import 'package:y300/features/favorites/domain/favorite_detail_context.dart';
+import 'package:y300/features/library_shared/domain/services/sync_diagnostic_recorder.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
@@ -29,19 +30,31 @@ class DefaultFavoriteDetailContextLoader
     required FavoriteThreadDetailLoader loadThreadDetail,
     required FavoriteTagLookupLoader loadTagLookup,
     required ThreadContentClassifier classifier,
+    SyncDiagnosticRecorder? diagnosticRecorder,
   })  : _loadThreadDetail = loadThreadDetail,
         _loadTagLookup = loadTagLookup,
-        _classifier = classifier;
+        _classifier = classifier,
+        _diagnosticRecorder =
+            diagnosticRecorder ?? const NoopSyncDiagnosticRecorder();
 
   final FavoriteThreadDetailLoader _loadThreadDetail;
   final FavoriteTagLookupLoader _loadTagLookup;
   final ThreadContentClassifier _classifier;
+  final SyncDiagnosticRecorder _diagnosticRecorder;
 
   @override
   Future<ApiResult<ThreadDetailData>> loadDetail(
     String tid, {
     FavoriteSyncExecutionContext? executionContext,
   }) {
+    _diagnosticRecorder.record(
+      scope: 'favorite_detail',
+      event: 'load_thread_detail',
+      fields: <String, Object?>{
+        'tid': tid,
+        'governed': executionContext?.governor != null,
+      },
+    );
     final governor = executionContext?.governor;
     if (governor == null) {
       return _loadThreadDetail(tid);

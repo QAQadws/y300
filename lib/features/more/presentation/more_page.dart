@@ -3,19 +3,32 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
+import 'package:y300/features/library_shared/presentation/controllers/sync_diagnostic_mode_controller.dart';
 import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/more/presentation/data_storage_page.dart';
 
-class MorePage extends ConsumerWidget {
+class MorePage extends ConsumerStatefulWidget {
   const MorePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MorePage> createState() => _MorePageState();
+}
+
+class _MorePageState extends ConsumerState<MorePage> {
+  static const int _diagnosticTapThreshold = 5;
+  static const Duration _diagnosticTapWindow = Duration(seconds: 2);
+
+  final List<DateTime> _aboutTapTimes = <DateTime>[];
+
+  @override
+  Widget build(BuildContext context) {
     final authSession = ref.watch(authSessionControllerProvider).asData?.value ??
         const AuthSessionViewState.signedOut();
     final forumMode = ref.watch(forumShellModeControllerProvider).asData?.value ??
         ForumShellMode.webview;
+    final diagnosticMode = ref.watch(syncDiagnosticModeControllerProvider);
+    final diagnosticEnabled = diagnosticMode.asData?.value ?? false;
 
     return Scaffold(
       appBar: AppBar(title: const Text('更多')),
@@ -50,15 +63,49 @@ class MorePage extends ConsumerWidget {
             title: Text('阅读设置（预留）'),
             subtitle: Text('后续阶段接入阅读器细项配置'),
           ),
-          const ListTile(
-            key: Key('more-about-placeholder'),
-            leading: Icon(Icons.info_outline),
-            title: Text('关于（预留）'),
-            subtitle: Text('后续阶段补充版本与帮助信息'),
+          ListTile(
+            key: const Key('more-about-placeholder'),
+            leading: const Icon(Icons.info_outline),
+            title: const Text('关于'),
+            subtitle: Text(
+              diagnosticEnabled
+                  ? '已开启诊断日志模式，连续快速点击 5 次可关闭'
+                  : '连续快速点击 5 次可开启诊断日志模式',
+            ),
+            onTap: _handleAboutTap,
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _handleAboutTap() async {
+    final now = DateTime.now();
+    _aboutTapTimes.add(now);
+    _aboutTapTimes.removeWhere(
+      (time) => now.difference(time) > _diagnosticTapWindow,
+    );
+    if (_aboutTapTimes.length < _diagnosticTapThreshold) {
+      return;
+    }
+    _aboutTapTimes.clear();
+    final enabled = await ref
+        .read(syncDiagnosticModeControllerProvider.notifier)
+        .toggle();
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            enabled
+                ? '诊断日志模式已开启，后续会写入本地 diagnostics 日志'
+                : '诊断日志模式已关闭',
+          ),
+        ),
+      );
   }
 
   Future<void> _showForumModeSheet(

@@ -9,6 +9,7 @@ import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applie
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/library_shared/data/sync_diagnostic_providers.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
 final comicRefreshOutcomeApplierProvider =
@@ -31,6 +32,7 @@ final comicSearchRefreshQueueServiceProvider =
     queueRepository: ref.watch(comicSearchRefreshQueueRepositoryProvider),
     refreshService: ref.watch(comicEpisodeRefreshServiceProvider),
     refreshOutcomeApplier: ref.watch(comicRefreshOutcomeApplierProvider),
+    diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),
   );
   ref.onDispose(service.dispose);
   return service;
@@ -50,6 +52,7 @@ final comicFavoriteAutoRefreshCoordinatorProvider =
     shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
     catalogMissPolicy: ref.watch(comicCatalogMissPolicyProvider),
     titleAnalyzer: ref.watch(comicTitleAnalyzerProvider),
+    diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),
     catalogUrlUpdater: ref.watch(comicRepositoryProvider),
   );
 });

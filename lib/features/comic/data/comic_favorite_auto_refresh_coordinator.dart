@@ -8,6 +8,7 @@ import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.d
 import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
+import 'package:y300/features/library_shared/domain/services/sync_diagnostic_recorder.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
 /// 抽象 catalogUrl 持久化接口。
@@ -55,6 +56,7 @@ class ComicFavoriteAutoRefreshCoordinator {
     required LibraryShelfRefreshBus shelfRefreshBus,
     required ComicCatalogMissPolicy catalogMissPolicy,
     required ComicTitleAnalyzer titleAnalyzer,
+    SyncDiagnosticRecorder? diagnosticRecorder,
     CatalogUrlUpdater? catalogUrlUpdater,
   })  : _refreshService = refreshService,
         _searchQueue = searchQueue,
@@ -62,6 +64,8 @@ class ComicFavoriteAutoRefreshCoordinator {
         _shelfRefreshBus = shelfRefreshBus,
         _catalogMissPolicy = catalogMissPolicy,
         _titleAnalyzer = titleAnalyzer,
+        _diagnosticRecorder =
+            diagnosticRecorder ?? const NoopSyncDiagnosticRecorder(),
         _catalogUrlUpdater = catalogUrlUpdater;
 
   final ComicEpisodeRefreshService _refreshService;
@@ -70,6 +74,7 @@ class ComicFavoriteAutoRefreshCoordinator {
   final LibraryShelfRefreshBus _shelfRefreshBus;
   final ComicCatalogMissPolicy _catalogMissPolicy;
   final ComicTitleAnalyzer _titleAnalyzer;
+  final SyncDiagnosticRecorder _diagnosticRecorder;
   final CatalogUrlUpdater? _catalogUrlUpdater;
 
   Future<ComicFavoriteAutoRefreshResult> refreshAfterFavoriteIngest({
@@ -115,6 +120,17 @@ class ComicFavoriteAutoRefreshCoordinator {
       sourceTitle: titles.sourceTitle,
       catalogUrl: catalogUrl,
     );
+    _diagnosticRecorder.record(
+      scope: 'favorite_comic_refresh',
+      event: 'start',
+      fields: <String, Object?>{
+        'comicId': comicId,
+        'sourceTid': sourceTid,
+        'hasCatalogUrl': catalogUrl != null && catalogUrl.isNotEmpty,
+        'forceSearchOnCatalogMiss': forceSearchOnCatalogMiss,
+        'bootstrapInitial': executionContext?.isBootstrapInitial == true,
+      },
+    );
 
     // 优先 catalog 快速路径
     if (catalogUrl != null && catalogUrl.isNotEmpty) {
@@ -123,6 +139,15 @@ class ComicFavoriteAutoRefreshCoordinator {
         executionContext: executionContext,
       );
       if (catalogDirect.catalogMatched && catalogDirect.hasLinks) {
+        _diagnosticRecorder.record(
+          scope: 'favorite_comic_refresh',
+          event: 'catalog_direct_hit',
+          fields: <String, Object?>{
+            'comicId': comicId,
+            'sourceTid': sourceTid,
+            'links': catalogDirect.links.length,
+          },
+        );
         await _refreshOutcomeApplier.apply(
           ComicRefreshApplyRequest(
             comicId: comicId,
@@ -147,6 +172,17 @@ class ComicFavoriteAutoRefreshCoordinator {
       executionContext: executionContext,
     );
     if (catalog.catalogMatched && catalog.hasLinks) {
+      _diagnosticRecorder.record(
+        scope: 'favorite_comic_refresh',
+        event: 'catalog_hit',
+        fields: <String, Object?>{
+          'comicId': comicId,
+          'sourceTid': sourceTid,
+          'links': catalog.links.length,
+          'catalogUrlChanged':
+              catalog.catalogUrl != null && catalog.catalogUrl != catalogUrl,
+        },
+      );
       // 如果本次发现了新的 catalogUrl（之前为 null 或不同），持久化
       if (catalog.catalogUrl != null &&
           catalog.catalogUrl != catalogUrl &&
@@ -180,6 +216,14 @@ class ComicFavoriteAutoRefreshCoordinator {
       sourceTagName: sourceTagName,
       forceSearchOnCatalogMiss: forceSearchOnCatalogMiss,
     )) {
+      _diagnosticRecorder.record(
+        scope: 'favorite_comic_refresh',
+        event: 'catalog_miss_skipped',
+        fields: <String, Object?>{
+          'comicId': comicId,
+          'sourceTid': sourceTid,
+        },
+      );
       _shelfRefreshBus.notify(
         modules: const <LibraryModuleKey>{
           LibraryModuleKey.comic,
@@ -196,11 +240,29 @@ class ComicFavoriteAutoRefreshCoordinator {
     }
 
     if (executionContext?.isBootstrapInitial == true) {
+      _diagnosticRecorder.record(
+        scope: 'favorite_comic_refresh',
+        event: 'catalog_miss_inline_search',
+        fields: <String, Object?>{
+          'comicId': comicId,
+          'sourceTid': sourceTid,
+        },
+      );
       final search = await _refreshService.fetchSearchAndCurrentOnly(
         request,
         executionContext: executionContext,
       );
       if (search.hasLinks) {
+        _diagnosticRecorder.record(
+          scope: 'favorite_comic_refresh',
+          event: 'inline_search_hit',
+          fields: <String, Object?>{
+            'comicId': comicId,
+            'sourceTid': sourceTid,
+            'links': search.links.length,
+            'source': search.source.name,
+          },
+        );
         await _refreshOutcomeApplier.apply(
           ComicRefreshApplyRequest(
             comicId: comicId,
@@ -227,6 +289,14 @@ class ComicFavoriteAutoRefreshCoordinator {
         workId: comicId,
         tid: sourceTid,
       );
+      _diagnosticRecorder.record(
+        scope: 'favorite_comic_refresh',
+        event: 'inline_search_empty',
+        fields: <String, Object?>{
+          'comicId': comicId,
+          'sourceTid': sourceTid,
+        },
+      );
       return const ComicFavoriteAutoRefreshResult(
         status: ComicFavoriteAutoRefreshStatus.skipped,
       );
@@ -236,6 +306,16 @@ class ComicFavoriteAutoRefreshCoordinator {
       request: request,
       title: titles.queueTitle,
       origin: ComicSearchRefreshOrigin.favoriteSync,
+    );
+    _diagnosticRecorder.record(
+      scope: 'favorite_comic_refresh',
+      event: 'queued_search',
+      fields: <String, Object?>{
+        'comicId': comicId,
+        'sourceTid': sourceTid,
+        'queuePosition': queued.position,
+        'estimatedDurationMs': queued.estimatedDuration.inMilliseconds,
+      },
     );
     _shelfRefreshBus.notify(
       modules: const <LibraryModuleKey>{

@@ -4,6 +4,7 @@ import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/favorites/data/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/favorite_ingest_providers.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/favorites/data/favorite_shelf_category_assign_use_case_impl.dart';
 import 'package:y300/features/favorites/data/favorite_link_service_impl.dart';
 import 'package:y300/features/favorites/data/favorite_repository.dart';
@@ -14,6 +15,7 @@ import 'package:y300/features/favorites/data/unfavorite_use_case_providers.dart'
 import 'package:y300/features/favorites/domain/favorite_link_service.dart';
 import 'package:y300/features/favorites/domain/favorite_shelf_bootstrapper.dart';
 import 'package:y300/features/favorites/presentation/adapters/favorite_shelf_adapter.dart';
+import 'package:y300/features/library_shared/data/sync_diagnostic_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_task_workflow_providers.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
@@ -39,10 +41,12 @@ final favoriteDetailContextLoaderProvider =
         ),
     loadTagLookup: () => ref.read(forumTagLookupProvider.future),
     classifier: ref.watch(threadContentClassifierProvider),
+    diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),
   );
 });
 
 final favoriteSyncServiceProvider = Provider<FavoriteSyncService>((ref) {
+  final diagnosticRecorder = ref.watch(syncDiagnosticRecorderProvider);
   return NetworkFavoriteSyncService(
     remoteRepository: ref.watch(favoriteRepositoryProvider),
     localRepository: ref.watch(localFavoriteRepositoryProvider),
@@ -51,6 +55,10 @@ final favoriteSyncServiceProvider = Provider<FavoriteSyncService>((ref) {
     postIngestTaskRunner: ref.watch(libraryPostIngestTaskRunnerProvider),
     shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
     downloadStorageService: ref.watch(downloadStorageServiceProvider),
+    diagnosticRecorder: diagnosticRecorder,
+    governorFactory: () => DefaultFavoriteFirstSyncRequestGovernor(
+      diagnosticRecorder: diagnosticRecorder,
+    ),
   );
 });
 

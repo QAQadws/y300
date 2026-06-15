@@ -6,6 +6,7 @@ import 'package:y300/features/auth/data/auth_repository.dart';
 import 'package:y300/features/forum/data/forum_mode_settings_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
+import 'package:y300/features/library_shared/presentation/controllers/sync_diagnostic_mode_controller.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
 
 void main() {
@@ -37,6 +38,7 @@ void main() {
     expect(find.text('管理图片缓存与下载位置'), findsOneWidget);
     expect(find.byKey(const Key('more-reader-settings-placeholder')), findsOneWidget);
     expect(find.byKey(const Key('more-about-placeholder')), findsOneWidget);
+    expect(find.textContaining('连续快速点击 5 次可开启诊断日志模式'), findsOneWidget);
   });
 
   testWidgets('MorePage renders logout entry when signed in', (tester) async {
@@ -157,6 +159,40 @@ void main() {
     expect(find.text('当前：WebView 模式'), findsOneWidget);
     expect(find.byKey(const Key('more-forum-mode-option-native')), findsOneWidget);
   });
+
+  testWidgets('MorePage toggles diagnostic mode after five quick about taps', (
+    tester,
+  ) async {
+    final controller = _FakeSyncDiagnosticModeController();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(
+            _FakeAuthRepository(isLoggedIn: false),
+          ),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
+          syncDiagnosticModeControllerProvider.overrideWith(
+            () => controller,
+          ),
+        ],
+        child: const MaterialApp(home: MorePage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final aboutTile = find.byKey(const Key('more-about-placeholder'));
+    for (var i = 0; i < 5; i++) {
+      await tester.tap(aboutTile);
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.pumpAndSettle();
+
+    expect(controller.toggleCount, 1);
+    expect(find.textContaining('诊断日志模式已开启'), findsOneWidget);
+    expect(find.textContaining('连续快速点击 5 次可关闭'), findsOneWidget);
+  });
 }
 
 class _FakeAuthRepository implements AuthRepository {
@@ -230,5 +266,23 @@ class _FakeForumModeSettingsRepository implements ForumModeSettingsRepository {
       throw StateError('save failed');
     }
     mode = nextMode;
+  }
+}
+
+class _FakeSyncDiagnosticModeController extends SyncDiagnosticModeController {
+  var toggleCount = 0;
+  var _enabled = false;
+
+  @override
+  Future<bool> build() async {
+    return _enabled;
+  }
+
+  @override
+  Future<bool> toggle() async {
+    toggleCount++;
+    _enabled = !_enabled;
+    state = AsyncData(_enabled);
+    return _enabled;
   }
 }

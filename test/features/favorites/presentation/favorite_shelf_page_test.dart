@@ -4,6 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/auth/data/auth_repository.dart';
+import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/comic/data/comic_search_refresh_queue_providers.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/favorites/data/favorite_providers.dart';
@@ -28,6 +31,7 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 void main() {
   testWidgets('FavoriteShelfPage builds unified shelf in list mode', (tester) async {
     final bootstrapper = _RecordingFavoriteShelfBootstrapper();
+    final authRepository = _FakeAuthRepository(isLoggedIn: true);
     final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
       ComicSearchRefreshQueueSnapshot.empty,
     );
@@ -44,6 +48,7 @@ void main() {
           favoriteShelfBootstrapperProvider.overrideWith(
             (ref) => bootstrapper,
           ),
+          authRepositoryProvider.overrideWithValue(authRepository),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
           ),
@@ -67,6 +72,7 @@ void main() {
     tester,
   ) async {
     final sync = _FakeFavoriteSyncService(autoComplete: false);
+    final authRepository = _FakeAuthRepository(isLoggedIn: true);
     final bootstrapper = _RecordingFavoriteShelfBootstrapper(
       onStart: () async {
         await sync.sync();
@@ -86,6 +92,7 @@ void main() {
           favoriteShelfBootstrapperProvider.overrideWith(
             (ref) => bootstrapper,
           ),
+          authRepositoryProvider.overrideWithValue(authRepository),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
           ),
@@ -109,6 +116,7 @@ void main() {
     tester,
   ) async {
     final sync = _FakeFavoriteSyncService(autoComplete: false);
+    final authRepository = _FakeAuthRepository(isLoggedIn: true);
     final bootstrapper = _RecordingFavoriteShelfBootstrapper(
       onStart: () async {
         await sync.sync();
@@ -131,6 +139,7 @@ void main() {
           favoriteShelfBootstrapperProvider.overrideWith(
             (ref) => bootstrapper,
           ),
+          authRepositoryProvider.overrideWithValue(authRepository),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
           ),
@@ -156,6 +165,7 @@ void main() {
     tester,
   ) async {
     final bootstrapper = _RecordingFavoriteShelfBootstrapper();
+    final authRepository = _FakeAuthRepository(isLoggedIn: true);
     final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
       ComicSearchRefreshQueueSnapshot.empty,
     );
@@ -174,6 +184,7 @@ void main() {
           favoriteShelfBootstrapperProvider.overrideWith(
             (ref) => bootstrapper,
           ),
+          authRepositoryProvider.overrideWithValue(authRepository),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
           ),
@@ -202,6 +213,7 @@ void main() {
     tester,
   ) async {
     final bootstrapper = _RecordingFavoriteShelfBootstrapper();
+    final authRepository = _FakeAuthRepository(isLoggedIn: true);
     final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
       ComicSearchRefreshQueueSnapshot.empty,
     );
@@ -223,6 +235,7 @@ void main() {
           favoriteShelfBootstrapperProvider.overrideWith(
             (ref) => bootstrapper,
           ),
+          authRepositoryProvider.overrideWithValue(authRepository),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
           ),
@@ -269,6 +282,7 @@ void main() {
     tester,
   ) async {
     final bootstrapper = _RecordingFavoriteShelfBootstrapper();
+    final authRepository = _FakeAuthRepository(isLoggedIn: true);
     final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
       ComicSearchRefreshQueueSnapshot.empty,
     );
@@ -290,6 +304,7 @@ void main() {
           favoriteShelfBootstrapperProvider.overrideWith(
             (ref) => bootstrapper,
           ),
+          authRepositoryProvider.overrideWithValue(authRepository),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
           ),
@@ -344,6 +359,113 @@ void main() {
       isNot(Colors.transparent),
     );
   });
+
+  testWidgets('FavoriteShelfPage retries bootstrap after login when page already exists', (
+    tester,
+  ) async {
+    final bootstrapper = _RecordingFavoriteShelfBootstrapper();
+    final authRepository = _FakeAuthRepository(isLoggedIn: false);
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    addTearDown(queueSnapshot.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          localFavoriteRepositoryProvider.overrideWith(
+            (ref) => _FakeLocalFavoriteRepository(hasSnapshot: false),
+          ),
+          favoriteSyncServiceProvider.overrideWith(
+            (ref) => _FakeFavoriteSyncService(),
+          ),
+          favoriteShelfBootstrapperProvider.overrideWith(
+            (ref) => bootstrapper,
+          ),
+          authRepositoryProvider.overrideWithValue(authRepository),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+            queueSnapshot,
+          ),
+        ],
+        child: const MaterialApp(home: FavoriteShelfPage()),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(bootstrapper.startCallCount, 0);
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(FavoriteShelfPage)),
+    );
+    authRepository.setLoggedIn();
+    await container.read(authSessionControllerProvider.notifier).refresh();
+    await tester.pumpAndSettle();
+
+    expect(bootstrapper.startCallCount, 1);
+  });
+
+  testWidgets('FavoriteShelfPage waits until active before retrying bootstrap after login', (
+    tester,
+  ) async {
+    final bootstrapper = _RecordingFavoriteShelfBootstrapper();
+    final authRepository = _FakeAuthRepository(isLoggedIn: false);
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    var isActive = false;
+    late StateSetter hostSetState;
+    addTearDown(queueSnapshot.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          localFavoriteRepositoryProvider.overrideWith(
+            (ref) => _FakeLocalFavoriteRepository(hasSnapshot: false),
+          ),
+          favoriteSyncServiceProvider.overrideWith(
+            (ref) => _FakeFavoriteSyncService(),
+          ),
+          favoriteShelfBootstrapperProvider.overrideWith(
+            (ref) => bootstrapper,
+          ),
+          authRepositoryProvider.overrideWithValue(authRepository),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+            queueSnapshot,
+          ),
+        ],
+        child: MaterialApp(
+          home: StatefulBuilder(
+            builder: (context, setState) {
+              hostSetState = setState;
+              return FavoriteShelfPage(isActive: isActive);
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(bootstrapper.startCallCount, 0);
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(FavoriteShelfPage)),
+    );
+    authRepository.setLoggedIn();
+    await container.read(authSessionControllerProvider.notifier).refresh();
+    await tester.pumpAndSettle();
+    expect(bootstrapper.startCallCount, 0);
+
+    hostSetState(() {
+      isActive = true;
+    });
+    await tester.pumpAndSettle();
+
+    expect(bootstrapper.startCallCount, 1);
+  });
 }
 
 class _RecordingFavoriteShelfBootstrapper implements FavoriteShelfBootstrapper {
@@ -358,6 +480,60 @@ class _RecordingFavoriteShelfBootstrapper implements FavoriteShelfBootstrapper {
   Future<void> startIfNeeded() async {
     startCallCount++;
     await _onStart?.call();
+  }
+}
+
+class _FakeAuthRepository implements AuthRepository {
+  _FakeAuthRepository({required bool isLoggedIn}) : _isLoggedIn = isLoggedIn;
+
+  bool _isLoggedIn;
+
+  void setLoggedIn() {
+    _isLoggedIn = true;
+  }
+
+  @override
+  Future<ApiResult<SessionInfo>> login({
+    required String username,
+    required String password,
+    String questionId = '0',
+    String answer = '',
+  }) async {
+    _isLoggedIn = true;
+    return ApiSuccess(_session);
+  }
+
+  @override
+  Future<void> logout() async {
+    _isLoggedIn = false;
+  }
+
+  @override
+  Future<ApiResult<SessionInfo>> refreshSession() async {
+    return ApiSuccess(
+      _isLoggedIn
+          ? _session
+          : SessionInfo(
+              uid: '0',
+              username: '',
+              formhash: '',
+              isLoggedIn: false,
+            ),
+    );
+  }
+
+  @override
+  Future<ApiResult<bool>> verifyAuthByForumIndex() async {
+    return ApiSuccess(_isLoggedIn);
+  }
+
+  SessionInfo get _session {
+    return SessionInfo(
+      uid: '100',
+      username: 'tester',
+      formhash: 'fh',
+      isLoggedIn: true,
+    );
   }
 }
 

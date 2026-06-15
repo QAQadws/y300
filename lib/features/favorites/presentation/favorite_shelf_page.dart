@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/comic/presentation/comic_detail_page.dart';
 import 'package:y300/features/favorites/data/favorite_providers.dart';
 import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
@@ -26,17 +27,66 @@ class FavoriteShelfPage extends ConsumerStatefulWidget {
 }
 
 class _FavoriteShelfPageState extends ConsumerState<FavoriteShelfPage> {
+  ProviderSubscription<AsyncValue<AuthSessionViewState>>?
+      _authSessionSubscription;
+  var _bootstrapScheduled = false;
+
   @override
   void initState() {
     super.initState();
+    _authSessionSubscription =
+        ref.listenManual<AsyncValue<AuthSessionViewState>>(
+      authSessionControllerProvider,
+      (previous, next) {
+        final wasLoggedIn = previous?.asData?.value.isLoggedIn ?? false;
+        final isLoggedIn = next.asData?.value.isLoggedIn ?? false;
+        if (!wasLoggedIn && isLoggedIn) {
+          _scheduleBootstrapIfEligible();
+        }
+      },
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scheduleBootstrapIfEligible();
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant FavoriteShelfPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isActive && widget.isActive) {
+      _scheduleBootstrapIfEligible();
+    }
+  }
+
+  @override
+  void dispose() {
+    _authSessionSubscription?.close();
+    _authSessionSubscription = null;
+    super.dispose();
+  }
+
+  void _scheduleBootstrapIfEligible() {
+    if (_bootstrapScheduled || !mounted || !widget.isActive) {
+      return;
+    }
+    final authState = ref.read(authSessionControllerProvider);
+    final isLoggedIn = authState.asData?.value.isLoggedIn ?? false;
+    if (!isLoggedIn) {
+      return;
+    }
+    _bootstrapScheduled = true;
+    unawaited(_runBootstrap());
+  }
+
+  Future<void> _runBootstrap() async {
+    try {
       if (!mounted) {
         return;
       }
-      unawaited(
-        ref.read(favoriteShelfBootstrapperProvider).startIfNeeded(),
-      );
-    });
+      await ref.read(favoriteShelfBootstrapperProvider).startIfNeeded();
+    } finally {
+      _bootstrapScheduled = false;
+    }
   }
 
   @override

@@ -10,6 +10,7 @@ import 'package:y300/features/favorites/domain/favorite_content_ingest.dart';
 import 'package:y300/features/favorites/domain/library_post_ingest_task_runner.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
+import 'package:y300/features/library_shared/domain/services/sync_diagnostic_recorder.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
@@ -85,6 +86,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     required LibraryPostIngestTaskRunner postIngestTaskRunner,
     LibraryShelfRefreshBus? shelfRefreshBus,
     DownloadStorageService? downloadStorageService,
+    SyncDiagnosticRecorder? diagnosticRecorder,
     int detailBatchLimit = 20,
     FavoriteFirstSyncRequestGovernor Function()? governorFactory,
   })  : _remoteRepository = remoteRepository,
@@ -94,6 +96,8 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         _postIngestTaskRunner = postIngestTaskRunner,
         _shelfRefreshBus = shelfRefreshBus,
         _downloadStorageService = downloadStorageService,
+        _diagnosticRecorder =
+            diagnosticRecorder ?? const NoopSyncDiagnosticRecorder(),
         _detailBatchLimit = detailBatchLimit,
         _governorFactory =
             governorFactory ?? (() => DefaultFavoriteFirstSyncRequestGovernor());
@@ -105,11 +109,13 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   final LibraryPostIngestTaskRunner _postIngestTaskRunner;
   final LibraryShelfRefreshBus? _shelfRefreshBus;
   final DownloadStorageService? _downloadStorageService;
+  final SyncDiagnosticRecorder _diagnosticRecorder;
   final int _detailBatchLimit;
   final FavoriteFirstSyncRequestGovernor Function() _governorFactory;
   final ValueNotifier<FavoriteSyncProgress> _progress = ValueNotifier<FavoriteSyncProgress>(
     FavoriteSyncProgress.idle,
   );
+  Future<FavoriteSyncResult>? _inflightSync;
 
   @override
   ValueListenable<FavoriteSyncProgress> get progress => _progress;
@@ -123,15 +129,41 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
 
   @override
   Future<FavoriteSyncResult> sync() async {
-    return _runSync(() async {
+    final existing = _inflightSync;
+    if (existing != null) {
+      _diagnosticRecorder.record(
+        scope: 'favorites',
+        event: 'sync_joined_inflight',
+      );
+      return existing;
+    }
+    late final Future<FavoriteSyncResult> future;
+    future = _runSync(() async {
       final snapshot = await _localRepository.getSyncSnapshot();
+      if (snapshot == null) {
+        _diagnosticRecorder.activateFavoriteFirstSync();
+      }
       final context = snapshot == null
           ? FavoriteSyncExecutionContext.bootstrapInitial(
               governor: _governorFactory(),
             )
           : const FavoriteSyncExecutionContext.automaticResume();
+      _diagnosticRecorder.record(
+        scope: 'favorites',
+        event: 'sync_requested',
+        fields: <String, Object?>{
+          'mode': context.mode.name,
+          'snapshotExists': snapshot != null,
+        },
+      );
       return _syncInternal(context: context);
+    }).whenComplete(() {
+      if (identical(_inflightSync, future)) {
+        _inflightSync = null;
+      }
     });
+    _inflightSync = future;
+    return future;
   }
 
   @override
@@ -162,6 +194,10 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   ) async {
     try {
       final result = await body();
+      _diagnosticRecorder.record(
+        scope: 'favorites',
+        event: 'sync_completed',
+      );
       _emitProgress(
         const FavoriteSyncProgress(
           phase: FavoriteSyncProgressPhase.completed,
@@ -170,6 +206,13 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       );
       return result;
     } on _FavoriteSyncFailure catch (error) {
+      _diagnosticRecorder.record(
+        scope: 'favorites',
+        event: 'sync_failed',
+        fields: <String, Object?>{
+          'error': error.message,
+        },
+      );
       _emitProgress(
         FavoriteSyncProgress(
           phase: FavoriteSyncProgressPhase.failed,
@@ -179,6 +222,13 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       await _localRepository.markSyncFailure(error.message);
       throw StateError(error.message);
     } catch (error) {
+      _diagnosticRecorder.record(
+        scope: 'favorites',
+        event: 'sync_failed',
+        fields: <String, Object?>{
+          'error': '$error',
+        },
+      );
       _emitProgress(
         FavoriteSyncProgress(
           phase: FavoriteSyncProgressPhase.failed,
@@ -210,6 +260,16 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     }
 
     final firstPage = firstPageResult.dataOrNull!;
+    _diagnosticRecorder.record(
+      scope: 'favorites',
+      event: 'first_page_loaded',
+      fields: <String, Object?>{
+        'remoteCount': firstPage.totalCount,
+        'perPage': firstPage.perPage,
+        'estimatedPageCount': _estimatedPageCount(firstPage),
+        'mode': context.mode.name,
+      },
+    );
     _emitProgress(
       FavoriteSyncProgress(
         phase: FavoriteSyncProgressPhase.fetchingList,
@@ -828,6 +888,15 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   }
 
   void _emitProgress(FavoriteSyncProgress progress) {
+    _diagnosticRecorder.record(
+      scope: 'favorites_progress',
+      event: progress.phase.name,
+      fields: <String, Object?>{
+        'message': progress.message,
+        'current': progress.current,
+        'total': progress.total,
+      },
+    );
     _progress.value = progress;
   }
 

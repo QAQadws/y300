@@ -6,16 +6,20 @@ import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/discuz_response.dart';
+import 'package:y300/core/network/network_diagnostic_recorder.dart';
 
 /// 统一网络入口：负责请求基础能力，不承担具体业务字段解析
 class ApiClient {
   ApiClient({
     required CookieStore cookieStore,
     required Logger logger,
+    NetworkDiagnosticRecorder? diagnosticRecorder,
     Dio? dio,
     bool enableLog = true,
   }) : _cookieStore = cookieStore,
        _logger = logger,
+       _diagnosticRecorder =
+           diagnosticRecorder ?? const NoopNetworkDiagnosticRecorder(),
        _enableLog = enableLog,
        _dio =
            dio ??
@@ -29,6 +33,8 @@ class ApiClient {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
+          options.extra['diagnosticStartedAt'] = DateTime.now();
+
           // 统一注入公共参数，调用层可覆盖 version
           options.queryParameters = {
             ...options.queryParameters,
@@ -52,6 +58,7 @@ class ApiClient {
             response.requestOptions.uri,
             setCookie,
           );
+          _recordRequestSuccess(response);
 
           if (_enableLog) {
             _logger.i(
@@ -69,6 +76,7 @@ class ApiClient {
   final Dio _dio;
   final CookieStore _cookieStore;
   final Logger _logger;
+  final NetworkDiagnosticRecorder _diagnosticRecorder;
   final bool _enableLog;
 
   static const int _maxLoggedStringLength = 1200;
@@ -134,6 +142,7 @@ class ApiClient {
 
       return ApiSuccess(discuzResponse);
     } on DioException catch (error) {
+      _recordRequestFailure(error);
       return ApiFailure(_mapDioError(error));
     } on FormatException catch (error) {
       return ApiFailure(
@@ -180,6 +189,7 @@ class ApiClient {
       final json = _toJsonMap(response.data);
       return ApiSuccess(DiscuzResponse.fromJson(json));
     } on DioException catch (error) {
+      _recordRequestFailure(error);
       return ApiFailure(_mapDioError(error));
     } on FormatException catch (error) {
       return ApiFailure(
@@ -299,4 +309,37 @@ class ApiClient {
     );
   }
 
+  void _recordRequestSuccess(Response<dynamic> response) {
+    final startedAt = _resolveStartedAt(response.requestOptions);
+    _diagnosticRecorder.recordHttpRequest(
+      method: response.requestOptions.method,
+      uri: response.requestOptions.uri,
+      startedAt: startedAt,
+      elapsedMs: DateTime.now().difference(startedAt).inMilliseconds,
+      statusCode: response.statusCode,
+      succeeded: true,
+    );
+  }
+
+  void _recordRequestFailure(DioException error) {
+    final request = error.requestOptions;
+    final startedAt = _resolveStartedAt(request);
+    _diagnosticRecorder.recordHttpRequest(
+      method: request.method,
+      uri: request.uri,
+      startedAt: startedAt,
+      elapsedMs: DateTime.now().difference(startedAt).inMilliseconds,
+      statusCode: error.response?.statusCode,
+      succeeded: false,
+      error: error.message,
+    );
+  }
+
+  DateTime _resolveStartedAt(RequestOptions options) {
+    final value = options.extra['diagnosticStartedAt'];
+    if (value is DateTime) {
+      return value;
+    }
+    return DateTime.now();
+  }
 }

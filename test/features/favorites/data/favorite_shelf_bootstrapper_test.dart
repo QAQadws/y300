@@ -101,6 +101,38 @@ void main() {
 
     expect(failingSync.syncCount, 1);
   });
+
+  test('FavoriteShelfBootstrapper retries after failed run', () async {
+    final repository = _FakeLocalFavoriteRepository(snapshot: null);
+    final syncService = _FakeFavoriteSyncService(throwOnSync: true);
+    final bootstrapper = DefaultFavoriteShelfBootstrapper(
+      repository: repository,
+      syncService: syncService,
+    );
+
+    await bootstrapper.startIfNeeded();
+    await bootstrapper.startIfNeeded();
+
+    expect(syncService.syncCount, 2);
+  });
+
+  test('FavoriteShelfBootstrapper does not rerun after stable baseline exists', () async {
+    final repository = _FakeLocalFavoriteRepository(
+      snapshot: _snapshot(),
+      missingDetailCount: 0,
+    );
+    final syncService = _FakeFavoriteSyncService();
+    final bootstrapper = DefaultFavoriteShelfBootstrapper(
+      repository: repository,
+      syncService: syncService,
+    );
+
+    await bootstrapper.startIfNeeded();
+    await bootstrapper.startIfNeeded();
+
+    expect(syncService.syncCount, 0);
+    expect(syncService.maintenanceCount, 1);
+  });
 }
 
 FavoriteSyncSnapshot _snapshot() {
