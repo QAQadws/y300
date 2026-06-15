@@ -11,6 +11,7 @@ import 'package:y300/features/comic/data/local/comic_snapshot_store.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_single_thread_episode_namer.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -29,7 +30,10 @@ class LocalComicRepository
   LocalComicRepository(
     this._dbFuture, {
     ComicSubjectParser? subjectParser,
-  }) : _subjectParser = subjectParser ?? const RuleBasedComicSubjectParser() {
+    ComicSingleThreadEpisodeNamer? singleThreadEpisodeNamer,
+  })  : _subjectParser = subjectParser ?? const RuleBasedComicSubjectParser(),
+        _singleThreadEpisodeNamer = singleThreadEpisodeNamer ??
+            const DefaultComicSingleThreadEpisodeNamer() {
     _shelfStore = ComicShelfStore(_dbFuture, defaultCategoryId: _defaultCategoryId);
     _detailStore = ComicDetailStore(_dbFuture, subjectParser: _subjectParser);
     _coverStore = ComicCoverStore(_dbFuture);
@@ -50,6 +54,7 @@ class LocalComicRepository
 
   final Future<Database> _dbFuture;
   final ComicSubjectParser _subjectParser;
+  final ComicSingleThreadEpisodeNamer _singleThreadEpisodeNamer;
 
   late final ComicShelfStore _shelfStore;
   late final ComicDetailStore _detailStore;
@@ -234,12 +239,21 @@ class LocalComicRepository
         fallbackSourceTid: tid,
         episodeLinks: parsedPost.episodeLinks,
       );
-      await _episodeStore.seedFirstFloorImagesInTxn(
-        txn,
-        comicId: comicId,
-        sourceTid: tid,
-        imageUrls: parsedPost.imageUrls,
-      );
+      // 仅在「单帖漫画」语义下种入唯一一话——即 catalog 解析未抓到任何章节
+      // 链接。否则让 upsertParsedEpisodeLinksInTxn 主导章节列表，避免给纯
+      // 目录贴留下永远拉不到内容的孤儿记录（sourceUrl 空、orderIndex<0）。
+      if (parsedPost.episodeLinks.isEmpty) {
+        await _episodeStore.seedSingleThreadEpisodeInTxn(
+          txn,
+          comicId: comicId,
+          sourceTid: tid,
+          episodeTitle: _singleThreadEpisodeNamer.resolve(
+            metadata: parsedPost.subjectMetadata,
+            fallbackComicTitle: title,
+          ),
+          imageUrls: parsedPost.imageUrls,
+        );
+      }
       await _shelfStore.ensureShelfItemExistsInTxn(
         txn,
         categoryId: _defaultCategoryId,

@@ -79,6 +79,112 @@ void main() {
       expect(items.length, 1);
     });
 
+    test(
+      'addToShelf 单帖漫画用 subject metadata 的 episodeLabel 作为话名',
+      () async {
+        await repository.addToShelf(
+          comicId: 'yamibo:single-thread',
+          tid: '300',
+          fid: '30',
+          title: '【某汉化组】一帖完结漫画 第3话',
+          parsedPost: const ParsedComicPost(
+            imageUrls: <String>[
+              'https://img.test/single-thread-page-1.jpg',
+              'https://img.test/single-thread-page-2.jpg',
+            ],
+            episodeLinks: <ComicEpisodeLink>[],
+            plainTextSummary: '摘要',
+            subjectMetadata: ComicSubjectMetadata(
+              normalizedTitle: '一帖完结漫画',
+              translationGroup: '某汉化组',
+              episodeLabel: '第3话',
+            ),
+          ),
+        );
+
+        final episodes = await repository.getComicEpisodes(
+          comicId: 'yamibo:single-thread',
+          descending: false,
+        );
+
+        // 单帖漫画：唯一一话 + 命名取自标题分析器的 episodeLabel。
+        expect(episodes, hasLength(1));
+        expect(episodes.first.episodeTitle, '第3话');
+        expect(episodes.first.sourceTid, '300');
+      },
+    );
+
+    test(
+      'addToShelf 单帖漫画无 episodeLabel 时回落到规范化书名',
+      () async {
+        await repository.addToShelf(
+          comicId: 'yamibo:single-no-label',
+          tid: '301',
+          fid: '30',
+          title: '【组A】整本就一话漫画',
+          parsedPost: const ParsedComicPost(
+            imageUrls: <String>['https://img.test/no-label.jpg'],
+            episodeLinks: <ComicEpisodeLink>[],
+            plainTextSummary: '摘要',
+            subjectMetadata: ComicSubjectMetadata(
+              normalizedTitle: '整本就一话漫画',
+              translationGroup: '组A',
+            ),
+          ),
+        );
+
+        final episodes = await repository.getComicEpisodes(
+          comicId: 'yamibo:single-no-label',
+          descending: false,
+        );
+
+        expect(episodes, hasLength(1));
+        expect(episodes.first.episodeTitle, '整本就一话漫画');
+      },
+    );
+
+    test(
+      'addToShelf 解析到 catalog 章节链接时不再种入"首楼"影子记录',
+      () async {
+        await repository.addToShelf(
+          comicId: 'yamibo:catalog-only',
+          tid: '400',
+          fid: '30',
+          title: '【某汉化组】目录贴漫画',
+          parsedPost: const ParsedComicPost(
+            // 即使 OP 里有横幅图，只要 catalog 链接非空就不该种入 source tid
+            // 上的孤儿话——避免后续显示 sourceUrl 空、永远拉不到内容的章节。
+            imageUrls: <String>['https://img.test/catalog-banner.jpg'],
+            episodeLinks: <ComicEpisodeLink>[
+              ComicEpisodeLink(
+                url: 'thread-401-1-1.html',
+                rawText: '第1话',
+                episodeTitle: '第1话',
+              ),
+              ComicEpisodeLink(
+                url: 'thread-402-1-1.html',
+                rawText: '第2话',
+                episodeTitle: '第2话',
+              ),
+            ],
+            plainTextSummary: '摘要',
+          ),
+        );
+
+        final episodes = await repository.getComicEpisodes(
+          comicId: 'yamibo:catalog-only',
+          descending: false,
+        );
+
+        expect(episodes, hasLength(2));
+        expect(
+          episodes.map((episode) => episode.episodeTitle).toList(),
+          <String?>['第1话', '第2话'],
+        );
+        expect(episodes.any((episode) => episode.sourceTid == '400'), isFalse);
+      },
+    );
+
     test('removeFromShelf only removes shelf entry and keeps comic data', () async {
       await repository.addToShelf(
         comicId: 'yamibo:remove-only',
@@ -126,10 +232,12 @@ void main() {
       expect(inShelf, isFalse);
       expect(shelfItems, isEmpty);
       expect(detail, isNotNull);
-      expect(episodes, hasLength(2));
+      // catalog 章节链接已抓到时不再种入 "首楼" 影子记录，
+      // 详见 ComicSingleThreadEpisodeNamer 的语义说明。
+      expect(episodes, hasLength(1));
       expect(
         episodes.map((episode) => episode.episodeTitle).toList(),
-        <String?>['首楼', '第1话'],
+        <String?>['第1话'],
       );
       expect(images, hasLength(1));
       expect(progress, isNotNull);
@@ -237,10 +345,10 @@ void main() {
       );
       expect(purgedProgress, isNull);
       expect(remainingDetail, isNotNull);
-      expect(remainingEpisodes, hasLength(2));
+      expect(remainingEpisodes, hasLength(1));
       expect(
         remainingEpisodes.map((episode) => episode.episodeTitle).toList(),
-        <String?>['首楼', '第1话'],
+        <String?>['第1话'],
       );
       expect(
         await db.query(

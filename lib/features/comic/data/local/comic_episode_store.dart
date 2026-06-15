@@ -305,10 +305,17 @@ class ComicEpisodeStore {
     }
   }
 
-  Future<void> seedFirstFloorImagesInTxn(
+  /// 把单帖漫画的内容图片落地到唯一一话上。
+  ///
+  /// 使用约束：仅在调用方已确认该帖**不存在 catalog 章节链接**时才能进入；
+  /// 否则会与 [upsertParsedEpisodeLinksInTxn] 产生 orderIndex=-1 的孤儿记录。
+  /// 命名策略不属于存储层职责，由调用方通过 [episodeTitle] 注入
+  /// （参见 `ComicSingleThreadEpisodeNamer`）。
+  Future<void> seedSingleThreadEpisodeInTxn(
     DatabaseExecutor executor, {
     required String comicId,
     required String sourceTid,
+    required String episodeTitle,
     required List<String> imageUrls,
   }) async {
     if (imageUrls.isEmpty) {
@@ -321,10 +328,10 @@ class ComicEpisodeStore {
       EpisodeRecord(
         episodeId: defaultEpisodeId,
         comicId: comicId,
-        episodeTitle: '首楼',
+        episodeTitle: episodeTitle,
         sourceTid: sourceTid,
         sourceUrl: '',
-        orderIndex: -1,
+        orderIndex: 0,
         publishTimeText: null,
       ).toMap(),
       conflictAlgorithm: ConflictAlgorithm.ignore,
