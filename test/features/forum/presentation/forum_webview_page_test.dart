@@ -35,340 +35,367 @@ Matcher containsCssSelector(String selector) {
 }
 
 void main() {
-  testWidgets('ForumWebViewPage waits for bootstrap config before building the real webview', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()
-      ..capabilityProfile = const ForumWebViewCapabilityProfile(
-        engine: ForumWebViewEngine.legacy,
-        documentStartMode: ForumWebViewDocumentStartMode.unavailable,
-        supportsContentBlockers: false,
-        supportsTransparentBackground: false,
-        supportsPlatformScrollTuning: false,
-        supportsCookieHooks: false,
+  testWidgets(
+    'ForumWebViewPage waits for bootstrap config before building the real webview',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()
+        ..capabilityProfile = const ForumWebViewCapabilityProfile(
+          engine: ForumWebViewEngine.legacy,
+          documentStartMode: ForumWebViewDocumentStartMode.unavailable,
+          supportsContentBlockers: false,
+          supportsTransparentBackground: false,
+          supportsPlatformScrollTuning: false,
+          supportsCookieHooks: false,
+        );
+
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+
+      expect(
+        find.byKey(const Key('forum-webview-bootstrap-placeholder')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('forum-webview-bootstrap-placeholder-list')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('forum-webview-surface')), findsNothing);
+      expect(driver.buildWidgetCallCount, 0);
+
+      await tester.pump();
+
+      expect(find.byKey(const Key('forum-webview-surface')), findsOneWidget);
+      expect(driver.buildWidgetCallCount, greaterThanOrEqualTo(1));
+    },
+  );
+
+  testWidgets(
+    'ForumWebViewPage shows home app bar and seeds raw cookies before load',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver();
+      final cookieStore = _FakeCookieStore(
+        cookies: <String, String>{
+          'auth': 'token%2B123',
+          'saltkey': 'abc%7Cxyz',
+          'removed': 'deleted',
+          'empty': '',
+        },
       );
 
-    await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pumpWidget(
+        _buildTestApp(driver: driver, cookieStore: cookieStore),
+      );
+      await tester.pump();
 
-    expect(find.byKey(const Key('forum-webview-bootstrap-placeholder')), findsOneWidget);
-    expect(find.byKey(const Key('forum-webview-bootstrap-placeholder-list')), findsOneWidget);
-    expect(find.byKey(const Key('forum-webview-surface')), findsNothing);
-    expect(driver.buildWidgetCallCount, 0);
-
-    await tester.pump();
-
-    expect(find.byKey(const Key('forum-webview-surface')), findsOneWidget);
-    expect(driver.buildWidgetCallCount, greaterThanOrEqualTo(1));
-  });
-
-  testWidgets('ForumWebViewPage shows home app bar and seeds raw cookies before load', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver();
-    final cookieStore = _FakeCookieStore(
-      cookies: <String, String>{
-        'auth': 'token%2B123',
-        'saltkey': 'abc%7Cxyz',
-        'removed': 'deleted',
-        'empty': '',
-      },
-    );
-
-    await tester.pumpWidget(
-      _buildTestApp(
-        driver: driver,
-        cookieStore: cookieStore,
-      ),
-    );
-    await tester.pump();
-
-    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
-    expect(find.text('百合会论坛'), findsOneWidget);
-    expect(find.byKey(const Key('forum-webview-back-button')), findsNothing);
-    expect(find.byKey(const Key('forum-webview-search-button')), findsOneWidget);
-    expect(find.byKey(const Key('forum-webview-more-button')), findsOneWidget);
-    final appBar = tester.widget<AppBar>(find.byType(AppBar));
-    expect(appBar.systemOverlayStyle?.statusBarColor, Colors.transparent);
-    expect(
-      driver.events,
-      <String>[
+      expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+      expect(find.text('百合会论坛'), findsOneWidget);
+      expect(find.byKey(const Key('forum-webview-back-button')), findsNothing);
+      expect(
+        find.byKey(const Key('forum-webview-search-button')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('forum-webview-more-button')),
+        findsOneWidget,
+      );
+      final appBar = tester.widget<AppBar>(find.byType(AppBar));
+      expect(appBar.systemOverlayStyle?.statusBarColor, Colors.transparent);
+      expect(driver.events, <String>[
         'probeCapabilities',
         'initialize',
         'clearCookies',
         'seedCookies',
         'load',
-      ],
-    );
-    expect(driver.probeCapabilitiesCallCount, 1);
-    expect(
-      driver.bootstrapConfig?.initialUri.toString(),
-      'https://bbs.yamibo.com/index.php?mobile=2',
-    );
-    expect(driver.bootstrapConfig?.capabilityProfile.engine, ForumWebViewEngine.advanced);
-    final bootstrapConfig = driver.bootstrapConfig!;
-    expect(
-      bootstrapConfig.visualPolicy.earlyHiddenSelectors,
-      const <String>{
+      ]);
+      expect(driver.probeCapabilitiesCallCount, 1);
+      expect(
+        driver.bootstrapConfig?.initialUri.toString(),
+        'https://bbs.yamibo.com/index.php?mobile=2',
+      );
+      expect(
+        driver.bootstrapConfig?.capabilityProfile.engine,
+        ForumWebViewEngine.advanced,
+      );
+      final bootstrapConfig = driver.bootstrapConfig!;
+      expect(bootstrapConfig.visualPolicy.earlyHiddenSelectors, const <String>{
         '#header-padding',
         '.header.cl',
         '.footer.mt10.cl',
         '.foot.flex-box',
-      },
-    );
-    expect(
-      bootstrapConfig.visualPolicy.lateRemovedSelectors,
-      const <String>{
+      });
+      expect(bootstrapConfig.visualPolicy.lateRemovedSelectors, const <String>{
         '#header-padding',
         '.header.cl',
         '.footer.mt10.cl',
         '.foot.flex-box',
-      },
-    );
-    expect(bootstrapConfig.initialUserScripts, hasLength(1));
-    expect(
-      bootstrapConfig.initialUserScripts.single.source,
-      isNot(containsCssSelector('.foot_height')),
-    );
-    expect(
-      bootstrapConfig.initialUserScripts.single.source,
-      isNot(containsCssSelector('.foot-pwa')),
-    );
-    expect(bootstrapConfig.networkPolicy.customUserAgent, isNull);
-    expect(bootstrapConfig.networkPolicy.preferAppLocale, isTrue);
-    expect(driver.seededCookies.single.domain, 'bbs.yamibo.com');
-    expect(
-      driver.seededCookies.single.cookies,
-      <String, String>{'auth': 'token%2B123', 'saltkey': 'abc%7Cxyz'},
-    );
-    final initialLoadRequest = driver.loadRequests.single;
-    final initialHeaderKeys = initialLoadRequest.headers.keys
-        .map((key) => key.toLowerCase())
-        .toSet();
-    expect(initialLoadRequest.headers['Referer'], 'https://bbs.yamibo.com/');
-    expect(initialHeaderKeys, contains('accept-language'));
-    expect(initialHeaderKeys, isNot(contains('cookie')));
-    expect(initialHeaderKeys, isNot(contains('user-agent')));
-    expect(
-      initialLoadRequest.uri.toString(),
-      'https://bbs.yamibo.com/index.php?mobile=2',
-    );
-  });
+      });
+      expect(bootstrapConfig.initialUserScripts, hasLength(1));
+      expect(
+        bootstrapConfig.initialUserScripts.single.source,
+        isNot(containsCssSelector('.foot_height')),
+      );
+      expect(
+        bootstrapConfig.initialUserScripts.single.source,
+        isNot(containsCssSelector('.foot-pwa')),
+      );
+      expect(bootstrapConfig.networkPolicy.customUserAgent, isNull);
+      expect(bootstrapConfig.networkPolicy.preferAppLocale, isTrue);
+      expect(driver.seededCookies.single.domain, 'bbs.yamibo.com');
+      expect(driver.seededCookies.single.cookies, <String, String>{
+        'auth': 'token%2B123',
+        'saltkey': 'abc%7Cxyz',
+      });
+      final initialLoadRequest = driver.loadRequests.single;
+      final initialHeaderKeys = initialLoadRequest.headers.keys
+          .map((key) => key.toLowerCase())
+          .toSet();
+      expect(initialLoadRequest.headers['Referer'], 'https://bbs.yamibo.com/');
+      expect(initialHeaderKeys, contains('accept-language'));
+      expect(initialHeaderKeys, isNot(contains('cookie')));
+      expect(initialHeaderKeys, isNot(contains('user-agent')));
+      expect(
+        initialLoadRequest.uri.toString(),
+        'https://bbs.yamibo.com/index.php?mobile=2',
+      );
+    },
+  );
 
-  testWidgets('ForumWebViewPage passes early user scripts into bootstrap config when document-start is available', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()
-      ..capabilityProfile = const ForumWebViewCapabilityProfile(
-        engine: ForumWebViewEngine.advanced,
-        documentStartMode: ForumWebViewDocumentStartMode.bestEffort,
-        supportsContentBlockers: false,
-        supportsTransparentBackground: true,
-        supportsPlatformScrollTuning: true,
-        supportsCookieHooks: true,
+  testWidgets(
+    'ForumWebViewPage passes early user scripts into bootstrap config when document-start is available',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()
+        ..capabilityProfile = const ForumWebViewCapabilityProfile(
+          engine: ForumWebViewEngine.advanced,
+          documentStartMode: ForumWebViewDocumentStartMode.bestEffort,
+          supportsContentBlockers: false,
+          supportsTransparentBackground: true,
+          supportsPlatformScrollTuning: true,
+          supportsCookieHooks: true,
+        );
+
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
+
+      final bootstrapConfig = driver.bootstrapConfig!;
+      expect(
+        bootstrapConfig.capabilityProfile.engine,
+        ForumWebViewEngine.advanced,
+      );
+      expect(bootstrapConfig.initialUserScripts, hasLength(1));
+      expect(
+        bootstrapConfig.initialUserScripts.single.injectionTime,
+        ForumWebViewInitialUserScriptInjectionTime.documentStart,
+      );
+      expect(
+        bootstrapConfig.initialUserScripts.single.source,
+        contains("window.location.host !== 'bbs.yamibo.com'"),
+      );
+      expect(
+        bootstrapConfig.initialUserScripts.single.source,
+        isNot(containsCssSelector('.foot_height')),
+      );
+      expect(
+        bootstrapConfig.initialUserScripts.single.source,
+        isNot(containsCssSelector('.foot-pwa')),
+      );
+      expect(
+        bootstrapConfig.initialUserScripts.single.source,
+        containsCssSelector('.foot.foot_reply.flex-box.cl'),
+      );
+      expect(
+        bootstrapConfig.initialUserScripts.single.source,
+        containsCssSelector('.foot_height_view'),
+      );
+    },
+  );
+
+  testWidgets(
+    'ForumWebViewPage cleans baseline chrome when home finishes loading',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver();
+
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
+
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/index.php?mobile=2',
+      );
+      await tester.pump();
+
+      expect(driver.scripts.length, 1);
+      expect(driver.scripts.single, containsCssSelector('#header-padding'));
+      expect(driver.scripts.single, containsCssSelector('.header.cl'));
+      expect(driver.scripts.single, isNot(containsCssSelector('.foot_height')));
+      expect(driver.scripts.single, isNot(containsCssSelector('.foot-pwa')));
+
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+
+      expect(driver.scripts.length, 2);
+    },
+  );
+
+  testWidgets(
+    'ForumWebViewPage uses thread-detail cleanup selectors after thread detail navigation',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '主题标题';
+
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
+
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+      );
+      await tester.pump();
+
+      expect(driver.scripts.length, 1);
+      expect(
+        driver.scripts.single,
+        containsCssSelector('.foot.foot_reply.flex-box.cl'),
+      );
+      expect(driver.scripts.single, containsCssSelector('.foot_height_view'));
+    },
+  );
+
+  testWidgets(
+    'ForumWebViewPage uses pwa cleanup selectors after search navigation',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '帖子搜索';
+
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
+
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
+      );
+      await tester.pump();
+
+      expect(driver.scripts.length, 1);
+      expect(driver.scripts.single, containsCssSelector('.foot_height'));
+      expect(driver.scripts.single, containsCssSelector('.foot-pwa'));
+    },
+  );
+
+  testWidgets(
+    'ForumWebViewPage hides loading mask after page-finished stabilization without requiring commit-visible',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()
+        ..capabilityProfile = const ForumWebViewCapabilityProfile(
+          engine: ForumWebViewEngine.advanced,
+          documentStartMode: ForumWebViewDocumentStartMode.bestEffort,
+          supportsContentBlockers: false,
+          supportsTransparentBackground: true,
+          supportsPlatformScrollTuning: true,
+          supportsCookieHooks: true,
+          supportsPageCommitVisible: true,
+        );
+
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
+
+      expect(
+        find.byKey(const Key('forum-webview-loading-mask')),
+        findsOneWidget,
+      );
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(
+        find.byKey(const Key('forum-webview-bootstrap-placeholder-list')),
+        findsWidgets,
       );
 
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/index.php?mobile=2',
+      );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/index.php?mobile=2',
+      );
+      await tester.pump();
 
-    final bootstrapConfig = driver.bootstrapConfig!;
-    expect(bootstrapConfig.capabilityProfile.engine, ForumWebViewEngine.advanced);
-    expect(bootstrapConfig.initialUserScripts, hasLength(1));
-    expect(
-      bootstrapConfig.initialUserScripts.single.injectionTime,
-      ForumWebViewInitialUserScriptInjectionTime.documentStart,
-    );
-    expect(
-      bootstrapConfig.initialUserScripts.single.source,
-      contains("window.location.host !== 'bbs.yamibo.com'"),
-    );
-    expect(
-      bootstrapConfig.initialUserScripts.single.source,
-      isNot(containsCssSelector('.foot_height')),
-    );
-    expect(
-      bootstrapConfig.initialUserScripts.single.source,
-      isNot(containsCssSelector('.foot-pwa')),
-    );
-    expect(
-      bootstrapConfig.initialUserScripts.single.source,
-      containsCssSelector('.foot.foot_reply.flex-box.cl'),
-    );
-    expect(
-      bootstrapConfig.initialUserScripts.single.source,
-      containsCssSelector('.foot_height_view'),
-    );
-  });
-
-  testWidgets('ForumWebViewPage cleans baseline chrome when home finishes loading', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver();
-
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
-
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/index.php?mobile=2',
-    );
-    await tester.pump();
-
-    expect(driver.scripts.length, 1);
-    expect(driver.scripts.single, containsCssSelector('#header-padding'));
-    expect(driver.scripts.single, containsCssSelector('.header.cl'));
-    expect(driver.scripts.single, isNot(containsCssSelector('.foot_height')));
-    expect(driver.scripts.single, isNot(containsCssSelector('.foot-pwa')));
-
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.pump();
-
-    expect(driver.scripts.length, 2);
-  });
-
-  testWidgets('ForumWebViewPage uses thread-detail cleanup selectors after thread detail navigation', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()..title = '主题标题';
-
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
-
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
-    );
-    await tester.pump();
-
-    expect(driver.scripts.length, 1);
-    expect(
-      driver.scripts.single,
-      containsCssSelector('.foot.foot_reply.flex-box.cl'),
-    );
-    expect(driver.scripts.single, containsCssSelector('.foot_height_view'));
-  });
-
-  testWidgets('ForumWebViewPage uses pwa cleanup selectors after search navigation', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()..title = '帖子搜索';
-
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
-
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
-    );
-    await tester.pump();
-
-    expect(driver.scripts.length, 1);
-    expect(driver.scripts.single, containsCssSelector('.foot_height'));
-    expect(driver.scripts.single, containsCssSelector('.foot-pwa'));
-  });
-
-  testWidgets('ForumWebViewPage keeps loading mask until the first managed page commits visible and stabilizes', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()
-      ..capabilityProfile = const ForumWebViewCapabilityProfile(
-        engine: ForumWebViewEngine.advanced,
-        documentStartMode: ForumWebViewDocumentStartMode.bestEffort,
-        supportsContentBlockers: false,
-        supportsTransparentBackground: true,
-        supportsPlatformScrollTuning: true,
-        supportsCookieHooks: true,
-        supportsPageCommitVisible: true,
+      // Mask still visible immediately after pageFinished.
+      expect(
+        find.byKey(const Key('forum-webview-loading-mask')),
+        findsOneWidget,
       );
 
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
 
-    expect(find.byKey(const Key('forum-webview-loading-mask')), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.byKey(const Key('forum-webview-bootstrap-placeholder-list')), findsWidgets);
+      expect(driver.scripts.length, 2);
+      // Mask hidden after 300ms late-repair delay, no commit-visible needed.
+      expect(find.byKey(const Key('forum-webview-loading-mask')), findsNothing);
+    },
+  );
 
-    await driver.dispatchPageStarted(
-      'https://bbs.yamibo.com/index.php?mobile=2',
-    );
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/index.php?mobile=2',
-    );
-    await tester.pump();
+  testWidgets(
+    'ForumWebViewPage hides loading mask after page-finished stabilization with legacy engine',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()
+        ..capabilityProfile = const ForumWebViewCapabilityProfile(
+          engine: ForumWebViewEngine.legacy,
+          documentStartMode: ForumWebViewDocumentStartMode.unavailable,
+          supportsContentBlockers: false,
+          supportsTransparentBackground: false,
+          supportsPlatformScrollTuning: false,
+          supportsCookieHooks: false,
+          supportsPageCommitVisible: false,
+        );
 
-    expect(find.byKey(const Key('forum-webview-loading-mask')), findsOneWidget);
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
 
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.pump();
-
-    expect(driver.scripts.length, 2);
-    expect(find.byKey(const Key('forum-webview-loading-mask')), findsOneWidget);
-
-    await driver.dispatchPageCommitVisible(
-      'https://bbs.yamibo.com/index.php?mobile=2',
-    );
-    await tester.pump();
-
-    expect(find.byKey(const Key('forum-webview-loading-mask')), findsNothing);
-  });
-
-  testWidgets('ForumWebViewPage falls back to page-finished stabilization when commit-visible is unavailable', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()
-      ..capabilityProfile = const ForumWebViewCapabilityProfile(
-        engine: ForumWebViewEngine.legacy,
-        documentStartMode: ForumWebViewDocumentStartMode.unavailable,
-        supportsContentBlockers: false,
-        supportsTransparentBackground: false,
-        supportsPlatformScrollTuning: false,
-        supportsCookieHooks: false,
-        supportsPageCommitVisible: false,
+      expect(
+        find.byKey(const Key('forum-webview-loading-mask')),
+        findsOneWidget,
       );
 
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/index.php?mobile=2',
+      );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/index.php?mobile=2',
+      );
+      await tester.pump();
 
-    expect(find.byKey(const Key('forum-webview-loading-mask')), findsOneWidget);
+      expect(
+        find.byKey(const Key('forum-webview-loading-mask')),
+        findsOneWidget,
+      );
 
-    await driver.dispatchPageStarted(
-      'https://bbs.yamibo.com/index.php?mobile=2',
-    );
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/index.php?mobile=2',
-    );
-    await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
 
-    expect(find.byKey(const Key('forum-webview-loading-mask')), findsOneWidget);
+      expect(driver.scripts.length, 2);
+      expect(find.byKey(const Key('forum-webview-loading-mask')), findsNothing);
+    },
+  );
 
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.pump();
+  testWidgets(
+    'ForumWebViewPage home search button loads managed forum search url',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver();
 
-    expect(driver.scripts.length, 2);
-    expect(find.byKey(const Key('forum-webview-loading-mask')), findsNothing);
-  });
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
 
-  testWidgets('ForumWebViewPage home search button loads managed forum search url', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver();
+      await tester.tap(find.byKey(const Key('forum-webview-search-button')));
+      await tester.pumpAndSettle();
 
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
-
-    await tester.tap(find.byKey(const Key('forum-webview-search-button')));
-    await tester.pumpAndSettle();
-
-    expect(driver.loadedUris.length, 2);
-    expect(
-      driver.loadedUris.last.toString(),
-      'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
-    );
-    expect(
-      driver.loadRequests.last.headers['Referer'],
-      'https://bbs.yamibo.com/index.php?mobile=2',
-    );
-    expect(
-      driver.loadRequests.last.headers.keys.map((key) => key.toLowerCase()).toSet(),
-      isNot(contains('cookie')),
-    );
-  });
+      expect(driver.loadedUris.length, 2);
+      expect(
+        driver.loadedUris.last.toString(),
+        'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
+      );
+      expect(
+        driver.loadRequests.last.headers['Referer'],
+        'https://bbs.yamibo.com/index.php?mobile=2',
+      );
+      expect(
+        driver.loadRequests.last.headers.keys
+            .map((key) => key.toLowerCase())
+            .toSet(),
+        isNot(contains('cookie')),
+      );
+    },
+  );
 
   testWidgets('ForumWebViewPage no longer wraps webview in refresh indicator', (
     tester,
@@ -378,28 +405,32 @@ void main() {
     await tester.pumpWidget(_buildTestApp(driver: driver));
     await tester.pump();
 
-    expect(find.byKey(const Key('forum-webview-refresh-indicator')), findsNothing);
+    expect(
+      find.byKey(const Key('forum-webview-refresh-indicator')),
+      findsNothing,
+    );
     expect(find.byKey(const Key('forum-webview-refresh-scroll')), findsNothing);
     expect(find.byType(RefreshIndicator), findsNothing);
     expect(find.byType(SingleChildScrollView), findsNothing);
     expect(find.byType(ListView), findsNothing);
   });
 
-  testWidgets('ForumWebViewPage refresh action reloads current page from more menu', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver();
+  testWidgets(
+    'ForumWebViewPage refresh action reloads current page from more menu',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver();
 
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
 
-    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('forum-webview-refresh-action')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('forum-webview-more-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('forum-webview-refresh-action')));
+      await tester.pumpAndSettle();
 
-    expect(driver.reloadCallCount, 1);
-  });
+      expect(driver.reloadCallCount, 1);
+    },
+  );
 
   testWidgets('ForumWebViewPage keeps managed site links inside webview', (
     tester,
@@ -407,12 +438,7 @@ void main() {
     final driver = _FakeForumWebViewDriver();
     final launcher = _FakeForumWebViewExternalLauncher();
 
-    await tester.pumpWidget(
-      _buildTestApp(
-        driver: driver,
-        launcher: launcher,
-      ),
-    );
+    await tester.pumpWidget(_buildTestApp(driver: driver, launcher: launcher));
     await tester.pump();
 
     final decision = await driver.dispatchNavigationRequest(
@@ -429,12 +455,7 @@ void main() {
     final driver = _FakeForumWebViewDriver();
     final launcher = _FakeForumWebViewExternalLauncher();
 
-    await tester.pumpWidget(
-      _buildTestApp(
-        driver: driver,
-        launcher: launcher,
-      ),
-    );
+    await tester.pumpWidget(_buildTestApp(driver: driver, launcher: launcher));
     await tester.pump();
 
     final decision = await driver.dispatchNavigationRequest(
@@ -455,12 +476,7 @@ void main() {
     final driver = _FakeForumWebViewDriver();
     final launcher = _FakeForumWebViewExternalLauncher(shouldSucceed: false);
 
-    await tester.pumpWidget(
-      _buildTestApp(
-        driver: driver,
-        launcher: launcher,
-      ),
-    );
+    await tester.pumpWidget(_buildTestApp(driver: driver, launcher: launcher));
     await tester.pump();
 
     final decision = await driver.dispatchNavigationRequest(
@@ -484,7 +500,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('刷新页面'), findsOneWidget);
-    expect(find.byKey(const Key('forum-webview-refresh-action')), findsOneWidget);
+    expect(
+      find.byKey(const Key('forum-webview-refresh-action')),
+      findsOneWidget,
+    );
     expect(find.text('取消收藏'), findsOneWidget);
     expect(
       find.byKey(const Key('forum-webview-home-unfavorite-action')),
@@ -504,10 +523,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      _buildTestApp(
-        driver: driver,
-        favoriteRepository: favoriteRepository,
-      ),
+      _buildTestApp(driver: driver, favoriteRepository: favoriteRepository),
     );
     await tester.pump();
 
@@ -516,7 +532,10 @@ void main() {
     await tester.tap(find.text('取消收藏'));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('forum-favorite-forum-picker')), findsOneWidget);
+    expect(
+      find.byKey(const Key('forum-favorite-forum-picker')),
+      findsOneWidget,
+    );
     expect(find.text('综合区'), findsOneWidget);
     expect(find.text('讨论区'), findsOneWidget);
     expect(favoriteRepository.loadCallCount, 1);
@@ -531,19 +550,14 @@ void main() {
         const ApiFailure<List<FavoriteForum>>(
           ApiError(type: ApiErrorType.network, message: '加载失败'),
         ),
-        ApiSuccess<List<FavoriteForum>>(
-          <FavoriteForum>[
-            _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
-          ],
-        ),
+        ApiSuccess<List<FavoriteForum>>(<FavoriteForum>[
+          _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
+        ]),
       ],
     );
 
     await tester.pumpWidget(
-      _buildTestApp(
-        driver: driver,
-        favoriteRepository: favoriteRepository,
-      ),
+      _buildTestApp(driver: driver, favoriteRepository: favoriteRepository),
     );
     await tester.pump();
 
@@ -554,296 +568,297 @@ void main() {
 
     expect(find.text('加载失败'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('forum-favorite-forum-picker-retry')));
+    await tester.tap(
+      find.byKey(const Key('forum-favorite-forum-picker-retry')),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('综合区'), findsOneWidget);
     expect(favoriteRepository.loadCallCount, 2);
   });
 
-  testWidgets('ForumWebViewPage home unfavorite closes picker and reloads home', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver();
-    final favoriteRepository = _FakeForumFavoriteRepository(
-      favoriteForums: <FavoriteForum>[
-        _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
-      ],
-    );
+  testWidgets(
+    'ForumWebViewPage home unfavorite closes picker and reloads home',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver();
+      final favoriteRepository = _FakeForumFavoriteRepository(
+        favoriteForums: <FavoriteForum>[
+          _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
+        ],
+      );
 
-    await tester.pumpWidget(
-      _buildTestApp(
-        driver: driver,
-        favoriteRepository: favoriteRepository,
-      ),
-    );
-    await tester.pump();
+      await tester.pumpWidget(
+        _buildTestApp(driver: driver, favoriteRepository: favoriteRepository),
+      );
+      await tester.pump();
 
-    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('取消收藏'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('综合区'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('forum-webview-more-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('取消收藏'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('综合区'));
+      await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('forum-favorite-forum-picker')), findsNothing);
-    expect(find.text('取消收藏成功'), findsOneWidget);
-    expect(favoriteRepository.unfavoriteCalls, <String>['fav-55']);
-    expect(driver.loadedUris.length, 2);
-    expect(
-      driver.loadedUris.last.toString(),
-      'https://bbs.yamibo.com/index.php?mobile=2',
-    );
-    expect(
-      driver.loadRequests.last.headers['Referer'],
-      'https://bbs.yamibo.com/index.php?mobile=2',
-    );
-  });
+      expect(
+        find.byKey(const Key('forum-favorite-forum-picker')),
+        findsNothing,
+      );
+      expect(find.text('取消收藏成功'), findsOneWidget);
+      expect(favoriteRepository.unfavoriteCalls, <String>['fav-55']);
+      expect(driver.loadedUris.length, 2);
+      expect(
+        driver.loadedUris.last.toString(),
+        'https://bbs.yamibo.com/index.php?mobile=2',
+      );
+      expect(
+        driver.loadRequests.last.headers['Referer'],
+        'https://bbs.yamibo.com/index.php?mobile=2',
+      );
+    },
+  );
 
-  testWidgets('ForumWebViewPage shows forum display app bar and loads curForum search', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()..title = '页面标题';
-    final favoriteRepository = _FakeForumFavoriteRepository();
+  testWidgets(
+    'ForumWebViewPage shows forum display app bar and loads curForum search',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '页面标题';
+      final favoriteRepository = _FakeForumFavoriteRepository();
 
-    await tester.pumpWidget(
-      _buildTestApp(
-        driver: driver,
-        favoriteRepository: favoriteRepository,
-      ),
-    );
-    await tester.pump();
+      await tester.pumpWidget(
+        _buildTestApp(driver: driver, favoriteRepository: favoriteRepository),
+      );
+      await tester.pump();
 
-    driver.canGoBackValue = true;
-    await driver.dispatchPageStarted(
-      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
-    );
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
-    );
-    await tester.pump();
-    await tester.pump();
+      driver.canGoBackValue = true;
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+      );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+      );
+      await tester.pump();
+      await tester.pump();
 
-    expect(find.byKey(const Key('forum-webview-back-button')), findsOneWidget);
-    expect(find.text('综合区'), findsOneWidget);
+      expect(
+        find.byKey(const Key('forum-webview-back-button')),
+        findsOneWidget,
+      );
+      expect(find.text('综合区'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('forum-webview-search-button')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('forum-webview-search-button')));
+      await tester.pumpAndSettle();
 
-    expect(driver.loadedUris.length, 2);
-    expect(
-      driver.loadedUris.last.toString(),
-      'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
-    );
-    expect(
-      driver.loadRequests.last.headers['Referer'],
-      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
-    );
-  });
+      expect(driver.loadedUris.length, 2);
+      expect(
+        driver.loadedUris.last.toString(),
+        'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
+      );
+      expect(
+        driver.loadRequests.last.headers['Referer'],
+        'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+      );
+    },
+  );
 
-  testWidgets('ForumWebViewPage forum display shows favorite action when forum is not favorited', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()..title = '页面标题';
-    final favoriteRepository = _FakeForumFavoriteRepository();
+  testWidgets(
+    'ForumWebViewPage forum display shows favorite action when forum is not favorited',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '页面标题';
+      final favoriteRepository = _FakeForumFavoriteRepository();
 
-    await tester.pumpWidget(
-      _buildTestApp(
-        driver: driver,
-        favoriteRepository: favoriteRepository,
-      ),
-    );
-    await tester.pump();
+      await tester.pumpWidget(
+        _buildTestApp(driver: driver, favoriteRepository: favoriteRepository),
+      );
+      await tester.pump();
 
-    await driver.dispatchPageStarted(
-      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
-    );
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
-    );
-    await tester.pump();
-    await tester.pump();
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+      );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+      );
+      await tester.pump();
+      await tester.pump();
 
-    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('forum-webview-more-button')));
+      await tester.pumpAndSettle();
 
-    expect(find.text('收藏本版'), findsOneWidget);
-  });
+      expect(find.text('收藏本版'), findsOneWidget);
+    },
+  );
 
-  testWidgets('ForumWebViewPage forum display shows unfavorite action when forum is favorited', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()..title = '页面标题';
-    final favoriteRepository = _FakeForumFavoriteRepository(
-      favoriteForums: <FavoriteForum>[
-        _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
-      ],
-    );
+  testWidgets(
+    'ForumWebViewPage forum display shows unfavorite action when forum is favorited',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '页面标题';
+      final favoriteRepository = _FakeForumFavoriteRepository(
+        favoriteForums: <FavoriteForum>[
+          _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
+        ],
+      );
 
-    await tester.pumpWidget(
-      _buildTestApp(
-        driver: driver,
-        favoriteRepository: favoriteRepository,
-      ),
-    );
-    await tester.pump();
+      await tester.pumpWidget(
+        _buildTestApp(driver: driver, favoriteRepository: favoriteRepository),
+      );
+      await tester.pump();
 
-    await driver.dispatchPageStarted(
-      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
-    );
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
-    );
-    await tester.pump();
-    await tester.pump();
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+      );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+      );
+      await tester.pump();
+      await tester.pump();
 
-    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('forum-webview-more-button')));
+      await tester.pumpAndSettle();
 
-    expect(find.text('取消收藏'), findsOneWidget);
-  });
+      expect(find.text('取消收藏'), findsOneWidget);
+    },
+  );
 
-  testWidgets('ForumWebViewPage forum display favorite action reloads current page', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()..title = '页面标题';
-    final favoriteRepository = _FakeForumFavoriteRepository();
-    const forumDisplayUrl =
-        'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2';
+  testWidgets(
+    'ForumWebViewPage forum display favorite action reloads current page',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '页面标题';
+      final favoriteRepository = _FakeForumFavoriteRepository();
+      const forumDisplayUrl =
+          'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2';
 
-    await tester.pumpWidget(
-      _buildTestApp(
-        driver: driver,
-        favoriteRepository: favoriteRepository,
-      ),
-    );
-    await tester.pump();
+      await tester.pumpWidget(
+        _buildTestApp(driver: driver, favoriteRepository: favoriteRepository),
+      );
+      await tester.pump();
 
-    await driver.dispatchPageStarted(forumDisplayUrl);
-    await driver.dispatchPageFinished(forumDisplayUrl);
-    await tester.pump();
-    await tester.pump();
+      await driver.dispatchPageStarted(forumDisplayUrl);
+      await driver.dispatchPageFinished(forumDisplayUrl);
+      await tester.pump();
+      await tester.pump();
 
-    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('收藏本版'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('forum-webview-more-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('收藏本版'));
+      await tester.pumpAndSettle();
 
-    expect(favoriteRepository.favoriteCalls, <String>['55']);
-    expect(find.text('收藏成功'), findsOneWidget);
-    expect(driver.loadedUris.last.toString(), forumDisplayUrl);
-    expect(driver.loadRequests.last.headers['Referer'], forumDisplayUrl);
-  });
+      expect(favoriteRepository.favoriteCalls, <String>['55']);
+      expect(find.text('收藏成功'), findsOneWidget);
+      expect(driver.loadedUris.last.toString(), forumDisplayUrl);
+      expect(driver.loadRequests.last.headers['Referer'], forumDisplayUrl);
+    },
+  );
 
-  testWidgets('ForumWebViewPage forum display unfavorite action reloads current page', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()..title = '页面标题';
-    final favoriteRepository = _FakeForumFavoriteRepository(
-      favoriteForums: <FavoriteForum>[
-        _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
-      ],
-    );
-    const forumDisplayUrl =
-        'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2';
+  testWidgets(
+    'ForumWebViewPage forum display unfavorite action reloads current page',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '页面标题';
+      final favoriteRepository = _FakeForumFavoriteRepository(
+        favoriteForums: <FavoriteForum>[
+          _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
+        ],
+      );
+      const forumDisplayUrl =
+          'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2';
 
-    await tester.pumpWidget(
-      _buildTestApp(
-        driver: driver,
-        favoriteRepository: favoriteRepository,
-      ),
-    );
-    await tester.pump();
+      await tester.pumpWidget(
+        _buildTestApp(driver: driver, favoriteRepository: favoriteRepository),
+      );
+      await tester.pump();
 
-    await driver.dispatchPageStarted(forumDisplayUrl);
-    await driver.dispatchPageFinished(forumDisplayUrl);
-    await tester.pump();
-    await tester.pump();
+      await driver.dispatchPageStarted(forumDisplayUrl);
+      await driver.dispatchPageFinished(forumDisplayUrl);
+      await tester.pump();
+      await tester.pump();
 
-    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('取消收藏'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('forum-webview-more-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('取消收藏'));
+      await tester.pumpAndSettle();
 
-    expect(favoriteRepository.unfavoriteCalls, <String>['fav-55']);
-    expect(find.text('取消收藏成功'), findsOneWidget);
-    expect(driver.loadedUris.last.toString(), forumDisplayUrl);
-    expect(driver.loadRequests.last.headers['Referer'], forumDisplayUrl);
-  });
+      expect(favoriteRepository.unfavoriteCalls, <String>['fav-55']);
+      expect(find.text('取消收藏成功'), findsOneWidget);
+      expect(driver.loadedUris.last.toString(), forumDisplayUrl);
+      expect(driver.loadRequests.last.headers['Referer'], forumDisplayUrl);
+    },
+  );
 
-  testWidgets('ForumWebViewPage thread detail falls back to forum search when fid is unknown', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()..title = '主题标题';
+  testWidgets(
+    'ForumWebViewPage thread detail falls back to forum search when fid is unknown',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '主题标题';
 
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
 
-    driver.canGoBackValue = true;
-    await driver.dispatchPageStarted(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
-    );
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
-    );
-    await tester.pump();
+      driver.canGoBackValue = true;
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+      );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+      );
+      await tester.pump();
 
-    expect(find.byKey(const Key('forum-webview-back-button')), findsOneWidget);
-    expect(find.text('主题标题'), findsOneWidget);
-    expect(
-      find.byKey(const Key('forum-webview-thread-reply-button')),
-      findsNothing,
-    );
+      expect(
+        find.byKey(const Key('forum-webview-back-button')),
+        findsOneWidget,
+      );
+      expect(find.text('主题标题'), findsOneWidget);
+      expect(
+        find.byKey(const Key('forum-webview-thread-reply-button')),
+        findsNothing,
+      );
 
-    await tester.tap(find.byKey(const Key('forum-webview-search-button')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('forum-webview-search-button')));
+      await tester.pumpAndSettle();
 
-    expect(driver.loadedUris.length, 2);
-    expect(
-      driver.loadedUris.last.toString(),
-      'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
-    );
-  });
+      expect(driver.loadedUris.length, 2);
+      expect(
+        driver.loadedUris.last.toString(),
+        'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
+      );
+    },
+  );
 
-  testWidgets('ForumWebViewPage hides thread reply button outside thread detail', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver();
+  testWidgets(
+    'ForumWebViewPage hides thread reply button outside thread detail',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver();
 
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
 
-    expect(
-      find.byKey(const Key('forum-webview-thread-reply-button')),
-      findsNothing,
-    );
+      expect(
+        find.byKey(const Key('forum-webview-thread-reply-button')),
+        findsNothing,
+      );
 
-    await driver.dispatchPageStarted(
-      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
-    );
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
-    );
-    await tester.pump();
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+      );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+      );
+      await tester.pump();
 
-    expect(
-      find.byKey(const Key('forum-webview-thread-reply-button')),
-      findsNothing,
-    );
+      expect(
+        find.byKey(const Key('forum-webview-thread-reply-button')),
+        findsNothing,
+      );
 
-    await driver.dispatchPageStarted(
-      'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
-    );
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
-    );
-    await tester.pump();
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
+      );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
+      );
+      await tester.pump();
 
-    expect(
-      find.byKey(const Key('forum-webview-thread-reply-button')),
-      findsNothing,
-    );
-  });
+      expect(
+        find.byKey(const Key('forum-webview-thread-reply-button')),
+        findsNothing,
+      );
+    },
+  );
 
   testWidgets('ForumWebViewPage opens thread reply composer with fid and tid', (
     tester,
@@ -852,10 +867,7 @@ void main() {
     final replyRepository = _FakeReplyRepository();
 
     await tester.pumpWidget(
-      _buildTestApp(
-        driver: driver,
-        replyRepository: replyRepository,
-      ),
+      _buildTestApp(driver: driver, replyRepository: replyRepository),
     );
     await tester.pump();
 
@@ -878,16 +890,16 @@ void main() {
         .toList(growable: false);
     expect(
       actionKeys,
-      containsAllInOrder(
-        const <Key>[
-          Key('forum-webview-search-button'),
-          Key('forum-webview-thread-reply-button'),
-          Key('forum-webview-more-button'),
-        ],
-      ),
+      containsAllInOrder(const <Key>[
+        Key('forum-webview-search-button'),
+        Key('forum-webview-thread-reply-button'),
+        Key('forum-webview-more-button'),
+      ]),
     );
 
-    await tester.tap(find.byKey(const Key('forum-webview-thread-reply-button')));
+    await tester.tap(
+      find.byKey(const Key('forum-webview-thread-reply-button')),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('回复帖子'), findsOneWidget);
@@ -907,50 +919,51 @@ void main() {
     expect(find.text('回复发布成功'), findsOneWidget);
   });
 
-  testWidgets('ForumWebViewPage intercepts post reply navigation and reloads after sent', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()..title = '主题标题';
-    final replyRepository = _FakeReplyRepository();
+  testWidgets(
+    'ForumWebViewPage intercepts post reply navigation and reloads after sent',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '主题标题';
+      final replyRepository = _FakeReplyRepository();
 
-    await tester.pumpWidget(
-      _buildTestApp(
-        driver: driver,
-        replyRepository: replyRepository,
-      ),
-    );
-    await tester.pump();
+      await tester.pumpWidget(
+        _buildTestApp(driver: driver, replyRepository: replyRepository),
+      );
+      await tester.pump();
 
-    final decision = await driver.dispatchNavigationRequest(
-      'https://bbs.yamibo.com/forum.php?mod=post&action=reply'
-      '&fid=55&tid=123&repquote=41554317'
-      '&extra=page%3D1&page=1&mobile=2',
-    );
-    await tester.pumpAndSettle();
+      final decision = await driver.dispatchNavigationRequest(
+        'https://bbs.yamibo.com/forum.php?mod=post&action=reply'
+        '&fid=55&tid=123&repquote=41554317'
+        '&extra=page%3D1&page=1&mobile=2',
+      );
+      await tester.pumpAndSettle();
 
-    expect(decision, ForumWebViewNavigationDecision.prevent);
-    expect(find.text('回复楼层'), findsOneWidget);
-    expect(replyRepository.prepareCallCount, 1);
-    expect(
-      find.byKey(const Key('reply-composer-reference-banner')),
-      findsOneWidget,
-    );
-    await tester.enterText(
-      find.byKey(const Key('reply-composer-message-input')),
-      '来自 WebView 的楼层回复',
-    );
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('reply-composer-send-button')));
-    await tester.pumpAndSettle();
+      expect(decision, ForumWebViewNavigationDecision.prevent);
+      expect(find.text('回复楼层'), findsOneWidget);
+      expect(replyRepository.prepareCallCount, 1);
+      expect(
+        find.byKey(const Key('reply-composer-reference-banner')),
+        findsOneWidget,
+      );
+      await tester.enterText(
+        find.byKey(const Key('reply-composer-message-input')),
+        '来自 WebView 的楼层回复',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('reply-composer-send-button')));
+      await tester.pumpAndSettle();
 
-    expect(replyRepository.sentDrafts, hasLength(1));
-    expect(replyRepository.sentDrafts.single.fid, '55');
-    expect(replyRepository.sentDrafts.single.tid, '123');
-    expect(replyRepository.sentDrafts.single.formHash, 'prepared-formhash');
-    expect(replyRepository.sentDrafts.single.noticeTrimStr, '[quote]引用[/quote]');
-    expect(replyRepository.sentDrafts.single.repPost, '41554317');
-    expect(driver.reloadCallCount, 1);
-  });
+      expect(replyRepository.sentDrafts, hasLength(1));
+      expect(replyRepository.sentDrafts.single.fid, '55');
+      expect(replyRepository.sentDrafts.single.tid, '123');
+      expect(replyRepository.sentDrafts.single.formHash, 'prepared-formhash');
+      expect(
+        replyRepository.sentDrafts.single.noticeTrimStr,
+        '[quote]引用[/quote]',
+      );
+      expect(replyRepository.sentDrafts.single.repPost, '41554317');
+      expect(driver.reloadCallCount, 1);
+    },
+  );
 
   testWidgets(
     'ForumWebViewPage intercepts newthread navigation and reloads after sent',
@@ -1003,10 +1016,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(newThreadRepository.submittedPayloads, hasLength(1));
-      expect(
-        newThreadRepository.submittedPayloads.single.fid,
-        '33',
-      );
+      expect(newThreadRepository.submittedPayloads.single.fid, '33');
       expect(
         newThreadRepository.submittedPayloads.single.subject,
         '来自 WebView 的标题',
@@ -1015,10 +1025,7 @@ void main() {
         newThreadRepository.submittedPayloads.single.message,
         '来自 WebView 的正文',
       );
-      expect(
-        newThreadRepository.submittedPayloads.single.formHash,
-        'fh',
-      );
+      expect(newThreadRepository.submittedPayloads.single.formHash, 'fh');
       // 提交成功 → SnackBar + WebView reload。
       expect(driver.reloadCallCount, 1);
       expect(find.text('发布成功'), findsOneWidget);
@@ -1043,154 +1050,161 @@ void main() {
     },
   );
 
-  testWidgets('ForumWebViewPage thread detail more menu shows author order and home actions', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()
-      ..title = '主题标题'
-      ..javaScriptResult = jsonEncode(
-        jsonEncode(<String, String?>{
-          'authorOnlyHref':
-              'forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
-          'normalThreadHref': null,
-          'reverseOrderHref':
-              'forum.php?mod=viewthread&tid=123&ordertype=1&mobile=2',
-          'normalOrderHref': null,
-        }),
+  testWidgets(
+    'ForumWebViewPage thread detail more menu shows author order and home actions',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()
+        ..title = '主题标题'
+        ..javaScriptResult = jsonEncode(
+          jsonEncode(<String, String?>{
+            'authorOnlyHref':
+                'forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
+            'normalThreadHref': null,
+            'reverseOrderHref':
+                'forum.php?mod=viewthread&tid=123&ordertype=1&mobile=2',
+            'normalOrderHref': null,
+          }),
+        );
+
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
+
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+      );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+      );
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('forum-webview-more-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('刷新页面'), findsOneWidget);
+      expect(find.text('只看楼主'), findsOneWidget);
+      expect(find.text('倒序浏览'), findsOneWidget);
+      expect(find.text('返回首页'), findsOneWidget);
+      expect(
+        driver.returningScripts.single,
+        contains('#nav-more-menu .nav-more-item'),
+      );
+    },
+  );
+
+  testWidgets(
+    'ForumWebViewPage thread detail author filter action loads author-only url',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()
+        ..title = '主题标题'
+        ..javaScriptResult = jsonEncode(
+          jsonEncode(<String, String?>{
+            'authorOnlyHref':
+                'forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
+          }),
+        );
+
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
+
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+      );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+      );
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('forum-webview-more-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('只看楼主'));
+      await tester.pumpAndSettle();
+
+      expect(
+        driver.loadedUris.last.toString(),
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
+      );
+    },
+  );
+
+  testWidgets(
+    'ForumWebViewPage thread detail already author-only shows normal thread action',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '主题标题';
+
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
+
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
+      );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
+      );
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('forum-webview-more-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('看全部'), findsOneWidget);
+
+      await tester.tap(find.text('看全部'));
+      await tester.pumpAndSettle();
+
+      expect(
+        driver.loadedUris.last.toString(),
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+      );
+    },
+  );
+
+  testWidgets(
+    'ForumWebViewPage thread detail order action toggles between reverse and normal order',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '主题标题';
+
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
+
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+      );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+      );
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('forum-webview-more-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('倒序浏览'));
+      await tester.pumpAndSettle();
+
+      expect(
+        driver.loadedUris.last.toString(),
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2&ordertype=1',
       );
 
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
-
-    await driver.dispatchPageStarted(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
-    );
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
-    );
-    await tester.pump();
-
-    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('刷新页面'), findsOneWidget);
-    expect(find.text('只看楼主'), findsOneWidget);
-    expect(find.text('倒序浏览'), findsOneWidget);
-    expect(find.text('返回首页'), findsOneWidget);
-    expect(driver.returningScripts.single, contains('#nav-more-menu .nav-more-item'));
-  });
-
-  testWidgets('ForumWebViewPage thread detail author filter action loads author-only url', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()
-      ..title = '主题标题'
-      ..javaScriptResult = jsonEncode(
-        jsonEncode(<String, String?>{
-          'authorOnlyHref':
-              'forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
-        }),
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&ordertype=1&mobile=2',
       );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&ordertype=1&mobile=2',
+      );
+      await tester.pump();
 
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
+      await tester.tap(find.byKey(const Key('forum-webview-more-button')));
+      await tester.pumpAndSettle();
 
-    await driver.dispatchPageStarted(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
-    );
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
-    );
-    await tester.pump();
+      expect(find.text('正序浏览'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('只看楼主'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('正序浏览'));
+      await tester.pumpAndSettle();
 
-    expect(
-      driver.loadedUris.last.toString(),
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
-    );
-  });
-
-  testWidgets('ForumWebViewPage thread detail already author-only shows normal thread action', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()..title = '主题标题';
-
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
-
-    await driver.dispatchPageStarted(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
-    );
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
-    );
-    await tester.pump();
-
-    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('看全部'), findsOneWidget);
-
-    await tester.tap(find.text('看全部'));
-    await tester.pumpAndSettle();
-
-    expect(
-      driver.loadedUris.last.toString(),
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
-    );
-  });
-
-  testWidgets('ForumWebViewPage thread detail order action toggles between reverse and normal order', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()..title = '主题标题';
-
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
-
-    await driver.dispatchPageStarted(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
-    );
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
-    );
-    await tester.pump();
-
-    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('倒序浏览'));
-    await tester.pumpAndSettle();
-
-    expect(
-      driver.loadedUris.last.toString(),
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2&ordertype=1',
-    );
-
-    await driver.dispatchPageStarted(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&ordertype=1&mobile=2',
-    );
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&ordertype=1&mobile=2',
-    );
-    await tester.pump();
-
-    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('正序浏览'), findsOneWidget);
-
-    await tester.tap(find.text('正序浏览'));
-    await tester.pumpAndSettle();
-
-    expect(
-      driver.loadedUris.last.toString(),
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
-    );
-  });
+      expect(
+        driver.loadedUris.last.toString(),
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+      );
+    },
+  );
 
   testWidgets('ForumWebViewPage thread detail more menu can load home', (
     tester,
@@ -1223,94 +1237,107 @@ void main() {
     );
   });
 
-  testWidgets('ForumWebViewPage thread detail uses curForum search when fid is known', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()..title = '主题标题';
+  testWidgets(
+    'ForumWebViewPage thread detail uses curForum search when fid is known',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '主题标题';
 
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
 
-    driver.canGoBackValue = true;
-    await driver.dispatchPageStarted(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&fid=55&mobile=2',
-    );
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&fid=55&mobile=2',
-    );
-    await tester.pump();
+      driver.canGoBackValue = true;
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&fid=55&mobile=2',
+      );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&fid=55&mobile=2',
+      );
+      await tester.pump();
 
-    expect(find.byKey(const Key('forum-webview-back-button')), findsOneWidget);
-    expect(find.text('综合区'), findsOneWidget);
+      expect(
+        find.byKey(const Key('forum-webview-back-button')),
+        findsOneWidget,
+      );
+      expect(find.text('综合区'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('forum-webview-search-button')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('forum-webview-search-button')));
+      await tester.pumpAndSettle();
 
-    expect(driver.loadedUris.length, 2);
-    expect(
-      driver.loadedUris.last.toString(),
-      'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
-    );
-    expect(
-      driver.loadRequests.last.headers['Referer'],
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&fid=55&mobile=2',
-    );
-  });
+      expect(driver.loadedUris.length, 2);
+      expect(
+        driver.loadedUris.last.toString(),
+        'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
+      );
+      expect(
+        driver.loadRequests.last.headers['Referer'],
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&fid=55&mobile=2',
+      );
+    },
+  );
 
-  testWidgets('ForumWebViewPage search app bar uses forum search title and hides search button', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()..title = '帖子搜索';
+  testWidgets(
+    'ForumWebViewPage search app bar uses forum search title and hides search button',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '帖子搜索';
 
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
 
-    driver.canGoBackValue = true;
-    await driver.dispatchPageStarted(
-      'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
-    );
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
-    );
-    await tester.pump();
-    await tester.pump();
+      driver.canGoBackValue = true;
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
+      );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
+      );
+      await tester.pump();
+      await tester.pump();
 
-    expect(find.byKey(const Key('forum-webview-back-button')), findsOneWidget);
-    expect(find.text('论坛搜索'), findsOneWidget);
-    expect(find.byKey(const Key('forum-webview-search-button')), findsNothing);
+      expect(
+        find.byKey(const Key('forum-webview-back-button')),
+        findsOneWidget,
+      );
+      expect(find.text('论坛搜索'), findsOneWidget);
+      expect(
+        find.byKey(const Key('forum-webview-search-button')),
+        findsNothing,
+      );
 
-    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('forum-webview-more-button')));
+      await tester.pumpAndSettle();
 
-    expect(find.text('刷新页面'), findsOneWidget);
-    expect(find.text('返回首页'), findsOneWidget);
-  });
+      expect(find.text('刷新页面'), findsOneWidget);
+      expect(find.text('返回首页'), findsOneWidget);
+    },
+  );
 
-  testWidgets('ForumWebViewPage search app bar uses board name search title for curforum scope', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()..title = '帖子搜索';
+  testWidgets(
+    'ForumWebViewPage search app bar uses board name search title for curforum scope',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '帖子搜索';
 
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
 
-    driver.canGoBackValue = true;
-    await driver.dispatchPageStarted(
-      'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
-    );
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
-    );
-    await tester.pump();
-    await tester.pump();
+      driver.canGoBackValue = true;
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
+      );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
+      );
+      await tester.pump();
+      await tester.pump();
 
-    expect(find.text('综合区搜索'), findsOneWidget);
-    expect(find.byKey(const Key('forum-webview-search-button')), findsNothing);
-  });
+      expect(find.text('综合区搜索'), findsOneWidget);
+      expect(
+        find.byKey(const Key('forum-webview-search-button')),
+        findsNothing,
+      );
+    },
+  );
 
-  testWidgets('ForumWebViewPage search more action loads home', (
-    tester,
-  ) async {
+  testWidgets('ForumWebViewPage search more action loads home', (tester) async {
     final driver = _FakeForumWebViewDriver()..title = '帖子搜索';
 
     await tester.pumpWidget(_buildTestApp(driver: driver));
@@ -1340,145 +1367,151 @@ void main() {
     );
   });
 
-  testWidgets('ForumWebViewPage search page still cleans chrome when loading finishes', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()..title = '帖子搜索';
+  testWidgets(
+    'ForumWebViewPage search page still cleans chrome when loading finishes',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '帖子搜索';
 
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
 
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
-    );
-    await tester.pump();
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
+      );
+      await tester.pump();
 
-    expect(driver.scripts.length, 1);
-  });
+      expect(driver.scripts.length, 1);
+    },
+  );
 
-  testWidgets('ForumWebViewPage back button uses driver.goBack when history exists', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()..title = '页面标题';
+  testWidgets(
+    'ForumWebViewPage back button uses driver.goBack when history exists',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '页面标题';
 
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
 
-    driver.canGoBackValue = true;
-    await driver.dispatchPageStarted(
-      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
-    );
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
-    );
-    await tester.pump();
+      driver.canGoBackValue = true;
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+      );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+      );
+      await tester.pump();
 
-    await tester.tap(find.byType(BackButton));
-    await tester.pump();
+      await tester.tap(find.byType(BackButton));
+      await tester.pump();
 
-    expect(driver.goBackCallCount, 1);
-    expect(
-      driver.loadedUris.single.toString(),
-      'https://bbs.yamibo.com/index.php?mobile=2',
-    );
-  });
+      expect(driver.goBackCallCount, 1);
+      expect(
+        driver.loadedUris.single.toString(),
+        'https://bbs.yamibo.com/index.php?mobile=2',
+      );
+    },
+  );
 
-  testWidgets('ForumWebViewPage back button loads home when history is unavailable', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()..title = '页面标题';
+  testWidgets(
+    'ForumWebViewPage back button loads home when history is unavailable',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '页面标题';
 
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
 
-    driver.canGoBackValue = false;
-    await driver.dispatchPageStarted(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
-    );
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
-    );
-    await tester.pump();
+      driver.canGoBackValue = false;
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+      );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+      );
+      await tester.pump();
 
-    await tester.tap(find.byType(BackButton));
-    await tester.pump();
+      await tester.tap(find.byType(BackButton));
+      await tester.pump();
 
-    expect(driver.goBackCallCount, 0);
-    expect(driver.loadedUris.length, 2);
-    expect(
-      driver.loadedUris.last.toString(),
-      'https://bbs.yamibo.com/index.php?mobile=2',
-    );
-  });
+      expect(driver.goBackCallCount, 0);
+      expect(driver.loadedUris.length, 2);
+      expect(
+        driver.loadedUris.last.toString(),
+        'https://bbs.yamibo.com/index.php?mobile=2',
+      );
+    },
+  );
 
-  testWidgets('ForumWebViewPage system back uses driver.goBack when history exists', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()..title = '页面标题';
+  testWidgets(
+    'ForumWebViewPage system back uses driver.goBack when history exists',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '页面标题';
 
-    await tester.pumpWidget(_buildRoutedTestApp(driver: driver));
-    await tester.tap(find.byKey(const Key('open-forum-webview-page')));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(_buildRoutedTestApp(driver: driver));
+      await tester.tap(find.byKey(const Key('open-forum-webview-page')));
+      await tester.pumpAndSettle();
 
-    driver.canGoBackValue = true;
-    await driver.dispatchPageStarted(
-      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
-    );
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
-    );
-    await tester.pump();
+      driver.canGoBackValue = true;
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+      );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+      );
+      await tester.pump();
 
-    await tester.binding.handlePopRoute();
-    await tester.pump();
+      await tester.binding.handlePopRoute();
+      await tester.pump();
 
-    expect(driver.goBackCallCount, 1);
-    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
-  });
+      expect(driver.goBackCallCount, 1);
+      expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+    },
+  );
 
-  testWidgets('ForumWebViewPage system back loads home when history is unavailable away from home', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver()..title = '页面标题';
+  testWidgets(
+    'ForumWebViewPage system back loads home when history is unavailable away from home',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '页面标题';
 
-    await tester.pumpWidget(_buildRoutedTestApp(driver: driver));
-    await tester.tap(find.byKey(const Key('open-forum-webview-page')));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(_buildRoutedTestApp(driver: driver));
+      await tester.tap(find.byKey(const Key('open-forum-webview-page')));
+      await tester.pumpAndSettle();
 
-    await driver.dispatchPageStarted(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
-    );
-    await driver.dispatchPageFinished(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
-    );
-    await tester.pump();
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+      );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+      );
+      await tester.pump();
 
-    await tester.binding.handlePopRoute();
-    await tester.pump();
+      await tester.binding.handlePopRoute();
+      await tester.pump();
 
-    expect(driver.goBackCallCount, 0);
-    expect(
-      driver.loadedUris.last.toString(),
-      'https://bbs.yamibo.com/index.php?mobile=2',
-    );
-    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
-  });
+      expect(driver.goBackCallCount, 0);
+      expect(
+        driver.loadedUris.last.toString(),
+        'https://bbs.yamibo.com/index.php?mobile=2',
+      );
+      expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+    },
+  );
 
-  testWidgets('ForumWebViewPage system back allows route pop on home without history', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver();
+  testWidgets(
+    'ForumWebViewPage system back allows route pop on home without history',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver();
 
-    await tester.pumpWidget(_buildRoutedTestApp(driver: driver));
-    await tester.tap(find.byKey(const Key('open-forum-webview-page')));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(_buildRoutedTestApp(driver: driver));
+      await tester.tap(find.byKey(const Key('open-forum-webview-page')));
+      await tester.pumpAndSettle();
 
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('forum-webview-page')), findsNothing);
-    expect(find.byKey(const Key('open-forum-webview-page')), findsOneWidget);
-  });
+      expect(find.byKey(const Key('forum-webview-page')), findsNothing);
+      expect(find.byKey(const Key('open-forum-webview-page')), findsOneWidget);
+    },
+  );
 }
 
 Widget _buildTestApp({
@@ -1672,10 +1705,7 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
     events.add('load');
     loadedUris.add(uri);
     loadRequests.add(
-      _LoadRequestRecord(
-        uri: uri,
-        headers: Map<String, String>.from(headers),
-      ),
+      _LoadRequestRecord(uri: uri, headers: Map<String, String>.from(headers)),
     );
   }
 
@@ -1748,7 +1778,8 @@ class _FakeForumWebViewExternalLauncher
 }
 
 class _MemoryComposerDraftRepository implements ComposerDraftRepository {
-  final Map<String, ComposerDraftSnapshot> _drafts = <String, ComposerDraftSnapshot>{};
+  final Map<String, ComposerDraftSnapshot> _drafts =
+      <String, ComposerDraftSnapshot>{};
 
   @override
   Future<void> deleteDraft(ComposerDraftIdentity identity) async {
@@ -1761,12 +1792,16 @@ class _MemoryComposerDraftRepository implements ComposerDraftRepository {
     required String tid,
   }) async {
     return _drafts.values
-        .where((draft) => draft.identity.fid == fid && draft.identity.tid == tid)
+        .where(
+          (draft) => draft.identity.fid == fid && draft.identity.tid == tid,
+        )
         .toList(growable: false);
   }
 
   @override
-  Future<ComposerDraftSnapshot?> loadDraft(ComposerDraftIdentity identity) async {
+  Future<ComposerDraftSnapshot?> loadDraft(
+    ComposerDraftIdentity identity,
+  ) async {
     return _drafts[identity.storageKey];
   }
 
@@ -1775,10 +1810,7 @@ class _MemoryComposerDraftRepository implements ComposerDraftRepository {
     Duration maxAge = const Duration(days: 30),
     int maxCount = 100,
   }) async {
-    return ComposerDraftPruneResult(
-      removedCount: 0,
-      keptCount: _drafts.length,
-    );
+    return ComposerDraftPruneResult(removedCount: 0, keptCount: _drafts.length);
   }
 
   @override
@@ -1804,11 +1836,7 @@ class _FakeReplyRepository implements ReplyRepository {
            preparationResult ??
            const ApiSuccess<ReplyPreparation>(
              ReplyPreparation(
-               target: ReplyTarget.post(
-                 fid: '55',
-                 tid: '123',
-                 pid: '41554317',
-               ),
+               target: ReplyTarget.post(fid: '55', tid: '123', pid: '41554317'),
                reference: ReplyReference(
                  formHash: 'prepared-formhash',
                  noticeAuthor: 'notice-token',
@@ -1855,19 +1883,14 @@ class _SeededCookieRecord {
 }
 
 class _LoadRequestRecord {
-  const _LoadRequestRecord({
-    required this.uri,
-    required this.headers,
-  });
+  const _LoadRequestRecord({required this.uri, required this.headers});
 
   final Uri uri;
   final Map<String, String> headers;
 }
 
 class _FakeCookieStore extends CookieStore {
-  _FakeCookieStore({
-    this.cookies = const <String, String>{},
-  });
+  _FakeCookieStore({this.cookies = const <String, String>{}});
 
   final Map<String, String> cookies;
 
@@ -1885,15 +1908,9 @@ class _FakeCookieStore extends CookieStore {
 class _FakeForumTagRepository implements ForumTagRepository {
   @override
   Future<ForumTagLookup> loadLookup() async {
-    return ForumTagLookup(
-      const <ForumBoardTagSet>[
-        ForumBoardTagSet(
-          fid: '55',
-          name: '综合区',
-          tags: <ForumTagDefinition>[],
-        ),
-      ],
-    );
+    return ForumTagLookup(const <ForumBoardTagSet>[
+      ForumBoardTagSet(fid: '55', name: '综合区', tags: <ForumTagDefinition>[]),
+    ]);
   }
 }
 
@@ -1919,12 +1936,12 @@ class _FakeForumFavoriteRepository implements ForumFavoriteRepository {
     List<ApiResult<List<FavoriteForum>>>? loadResults,
     ApiResult<ForumFavoriteMutationResult>? favoriteResult,
     ApiResult<ForumFavoriteMutationResult>? unfavoriteResult,
-  }) : favoriteForums =
-           List<FavoriteForum>.from(favoriteForums ?? const <FavoriteForum>[]),
-       _loadResults =
-           List<ApiResult<List<FavoriteForum>>>.from(
-             loadResults ?? const <ApiResult<List<FavoriteForum>>>[],
-           ),
+  }) : favoriteForums = List<FavoriteForum>.from(
+         favoriteForums ?? const <FavoriteForum>[],
+       ),
+       _loadResults = List<ApiResult<List<FavoriteForum>>>.from(
+         loadResults ?? const <ApiResult<List<FavoriteForum>>>[],
+       ),
        _favoriteResult = favoriteResult,
        _unfavoriteResult = unfavoriteResult;
 
@@ -2002,7 +2019,8 @@ class _FakePostingFormMetadataRepository
     required String fid,
   }) async {
     callCount += 1;
-    final value = metadata ??
+    final value =
+        metadata ??
         NewThreadFormMetadata(
           fid: fid,
           forumName: '集成测试版块',
@@ -2017,16 +2035,16 @@ class _FakePostingFormMetadataRepository
 }
 
 class _FakeNewThreadRepository implements NewThreadRepository {
-  _FakeNewThreadRepository({
-    ApiResult<NewThreadSubmissionResult>? result,
-  }) : _result = result ??
-            const ApiSuccess<NewThreadSubmissionResult>(
-              NewThreadSubmissionResult(
-                tid: '900001',
-                pid: '910001',
-                message: '发布成功',
-              ),
-            );
+  _FakeNewThreadRepository({ApiResult<NewThreadSubmissionResult>? result})
+    : _result =
+          result ??
+          const ApiSuccess<NewThreadSubmissionResult>(
+            NewThreadSubmissionResult(
+              tid: '900001',
+              pid: '910001',
+              message: '发布成功',
+            ),
+          );
 
   final ApiResult<NewThreadSubmissionResult> _result;
   final List<NewThreadDraftPayload> submittedPayloads =

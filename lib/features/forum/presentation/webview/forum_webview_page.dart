@@ -64,7 +64,6 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   ForumWebViewBootstrapConfig? _bootstrapConfig;
   bool _showLoadingMask = false;
   bool _isAwaitingInitialManagedPageStable = false;
-  bool _didReceiveInitialManagedPageCommitVisible = false;
   bool _didCompleteInitialManagedPageLateRepair = false;
 
   @override
@@ -130,15 +129,11 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           body: Stack(
             fit: StackFit.expand,
             children: [
-              _buildWebViewSurface(
-                context: context,
-                driver: driver,
-              ),
+              _buildWebViewSurface(context: context, driver: driver),
               if (_showLoadingMask) const ForumWebViewLoadingMask(),
               if (state.isLoading && state.loadingProgress < 100)
                 _ForumWebViewProgressOverlay(
-                  progress:
-                      state.loadingProgress.clamp(0, 99).toDouble() / 100,
+                  progress: state.loadingProgress.clamp(0, 99).toDouble() / 100,
                 ),
             ],
           ),
@@ -153,9 +148,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     final visualPolicyResolver = ref.read(
       forumWebViewVisualPolicyResolverProvider,
     );
-    final earlyScriptBuilder = ref.read(
-      forumWebViewEarlyScriptBuilderProvider,
-    );
+    final earlyScriptBuilder = ref.read(forumWebViewEarlyScriptBuilderProvider);
     final networkPolicyResolver = ref.read(
       forumWebViewNetworkPolicyResolverProvider,
     );
@@ -164,7 +157,9 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       return;
     }
 
-    final visualPolicy = visualPolicyResolver.resolve(ForumWebViewPageKind.home);
+    final visualPolicy = visualPolicyResolver.resolve(
+      ForumWebViewPageKind.home,
+    );
     // Initial user scripts are registered once per WebView runtime, but they
     // run on every later managed-page navigation. Only merge early-safe
     // selectors here so late-only cleanup targets such as forum/search PWA
@@ -191,7 +186,6 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         onPageFinished: _handlePageFinished,
         onProgress: _handleProgress,
         onNavigationRequest: _handleNavigationRequest,
-        onPageCommitVisible: _handlePageCommitVisible,
         onResourceDiagnostic: _handleResourceDiagnostic,
       ),
       bootstrapConfig: bootstrapConfig,
@@ -208,7 +202,6 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       _bootstrapConfig = bootstrapConfig;
       _showLoadingMask = shouldUseMask;
       _isAwaitingInitialManagedPageStable = shouldUseMask;
-      _didReceiveInitialManagedPageCommitVisible = false;
       _didCompleteInitialManagedPageLateRepair = false;
     });
 
@@ -228,10 +221,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       return;
     }
 
-    await driver.seedCookies(
-      domain: navigator.homeUri.host,
-      cookies: cookies,
-    );
+    await driver.seedCookies(domain: navigator.homeUri.host, cookies: cookies);
     if (!mounted) {
       return;
     }
@@ -246,24 +236,10 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     _delayedCleanupTimer?.cancel();
     _delayedCleanupTimer = null;
     if (_isAwaitingInitialManagedPageStable) {
-      _didReceiveInitialManagedPageCommitVisible = false;
       _didCompleteInitialManagedPageLateRepair = false;
     }
     _navigationGeneration += 1;
     ref.read(forumWebViewControllerProvider.notifier).onPageStarted(url);
-  }
-
-  void _handlePageCommitVisible(String url) {
-    if (!mounted || !_isAwaitingInitialManagedPageStable) {
-      return;
-    }
-    final navigator = ref.read(forumWebViewNavigatorProvider);
-    final uri = navigator.resolve(url);
-    if (!navigator.isManagedSite(uri)) {
-      return;
-    }
-    _didReceiveInitialManagedPageCommitVisible = true;
-    _tryHideInitialLoadingMask();
   }
 
   Future<void> _handlePageFinished(String url) async {
@@ -297,7 +273,9 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     if (!mounted || generation != _navigationGeneration) {
       return;
     }
-    await ref.read(forumWebViewControllerProvider.notifier).onPageFinished(
+    await ref
+        .read(forumWebViewControllerProvider.notifier)
+        .onPageFinished(
           rawUrl: url,
           pageTitle: pageTitle,
           canGoBack: canGoBack,
@@ -310,39 +288,30 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       return;
     }
 
-    await injector.cleanChrome(
-      driver,
-      visualPolicy: visualPolicy,
-    );
+    await injector.cleanChrome(driver, visualPolicy: visualPolicy);
 
     _delayedCleanupTimer?.cancel();
-    _delayedCleanupTimer = Timer(
-      const Duration(milliseconds: 300),
-      () async {
-        if (!mounted || generation != _navigationGeneration) {
-          return;
-        }
-        final currentUri = ref
-            .read(forumWebViewControllerProvider)
-            .asData
-            ?.value
-            .currentUri;
-        if (currentUri != uri) {
-          return;
-        }
-        await injector.cleanChrome(
-          driver,
-          visualPolicy: visualPolicy,
-        );
-        if (!mounted || generation != _navigationGeneration) {
-          return;
-        }
-        if (_isAwaitingInitialManagedPageStable) {
-          _didCompleteInitialManagedPageLateRepair = true;
-          _tryHideInitialLoadingMask();
-        }
-      },
-    );
+    _delayedCleanupTimer = Timer(const Duration(milliseconds: 300), () async {
+      if (!mounted || generation != _navigationGeneration) {
+        return;
+      }
+      final currentUri = ref
+          .read(forumWebViewControllerProvider)
+          .asData
+          ?.value
+          .currentUri;
+      if (currentUri != uri) {
+        return;
+      }
+      await injector.cleanChrome(driver, visualPolicy: visualPolicy);
+      if (!mounted || generation != _navigationGeneration) {
+        return;
+      }
+      if (_isAwaitingInitialManagedPageStable) {
+        _didCompleteInitialManagedPageLateRepair = true;
+        _tryHideInitialLoadingMask();
+      }
+    });
   }
 
   void _handleProgress(int progress) {
@@ -364,14 +333,16 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     if (uri.scheme.toLowerCase() == 'javascript') {
       return ForumWebViewNavigationDecision.prevent;
     }
-    final postReplyRequest =
-        ref.read(forumWebViewReplyNavigatorProvider).resolvePostReply(url);
+    final postReplyRequest = ref
+        .read(forumWebViewReplyNavigatorProvider)
+        .resolvePostReply(url);
     if (postReplyRequest != null) {
       unawaited(_openPostReplyComposer(context, postReplyRequest));
       return ForumWebViewNavigationDecision.prevent;
     }
-    final newThreadRequest =
-        ref.read(forumWebViewPostNavigatorProvider).resolveNewThread(url);
+    final newThreadRequest = ref
+        .read(forumWebViewPostNavigatorProvider)
+        .resolveNewThread(url);
     if (newThreadRequest != null) {
       unawaited(_openPostingComposer(context, newThreadRequest));
       return ForumWebViewNavigationDecision.prevent;
@@ -387,11 +358,9 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   PreferredSizeWidget _buildAppBar(
     BuildContext context,
     ForumWebViewState state,
-    ForumWebViewDriver driver,
-    {
-      required SystemUiOverlayStyle overlayStyle,
-    }
-  ) {
+    ForumWebViewDriver driver, {
+    required SystemUiOverlayStyle overlayStyle,
+  }) {
     final title = _resolveTitle(state);
 
     return AppBar(
@@ -511,7 +480,8 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   List<PopupMenuEntry<String>> _buildThreadDetailMoreMenuItems(
     ForumWebViewState state,
   ) {
-    final menu = state.threadDetailMenu ?? _buildFallbackThreadDetailMenu(state);
+    final menu =
+        state.threadDetailMenu ?? _buildFallbackThreadDetailMenu(state);
 
     final items = <PopupMenuEntry<String>>[];
     if (!menu.isAuthorOnly && menu.authorOnlyUri != null) {
@@ -722,15 +692,11 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     final navigator = ref.read(forumWebViewNavigatorProvider);
     final targetUri =
         ((state.pageKind == ForumWebViewPageKind.forumDisplay ||
-                    state.pageKind == ForumWebViewPageKind.threadDetail) &&
-                state.fid != null)
-            ? navigator.curForumSearchUri(fid: state.fid!)
-            : navigator.forumSearchUri();
-    await _loadManagedUri(
-      driver,
-      targetUri,
-      referrerUri: state.currentUri,
-    );
+                state.pageKind == ForumWebViewPageKind.threadDetail) &&
+            state.fid != null)
+        ? navigator.curForumSearchUri(fid: state.fid!)
+        : navigator.forumSearchUri();
+    await _loadManagedUri(driver, targetUri, referrerUri: state.currentUri);
   }
 
   Future<void> _handleBackNavigation(
@@ -769,9 +735,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     // Platform views must own vertical drag gestures directly. Re-wrapping the
     // WebView in a Flutter Scrollable brings back the mixed-shell scrolling
     // regressions UX-2 is trying to remove.
-    return driver.buildWidget(
-      key: const Key('forum-webview-surface'),
-    );
+    return driver.buildWidget(key: const Key('forum-webview-surface'));
   }
 
   void _tryHideInitialLoadingMask() {
@@ -779,12 +743,6 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       return;
     }
     if (!_didCompleteInitialManagedPageLateRepair) {
-      return;
-    }
-    final supportsPageCommitVisible =
-        _bootstrapConfig?.capabilityProfile.supportsPageCommitVisible ?? false;
-    if (supportsPageCommitVisible &&
-        !_didReceiveInitialManagedPageCommitVisible) {
       return;
     }
     setState(() {
@@ -799,8 +757,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         .copyWith(
           statusBarColor: Colors.transparent,
           statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
-          statusBarIconBrightness:
-              isDark ? Brightness.light : Brightness.dark,
+          statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
         );
   }
 
@@ -841,10 +798,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     required ForumWebViewThreadMenuBridge threadMenuBridge,
   }) async {
     try {
-      return await threadMenuBridge.read(
-        target: driver,
-        navigator: navigator,
-      );
+      return await threadMenuBridge.read(target: driver, navigator: navigator);
     } catch (_) {
       return null;
     }
@@ -955,7 +909,9 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
             if (!mounted || !messenger.mounted) {
               return;
             }
-            if (result case ApiSuccess<ForumFavoriteMutationResult>(:final data)) {
+            if (result case ApiSuccess<ForumFavoriteMutationResult>(
+              :final data,
+            )) {
               if (sheetNavigator.mounted) {
                 sheetNavigator.pop();
               }
@@ -974,8 +930,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
               );
               return;
             }
-            final message =
-                result.errorOrNull?.message ?? '取消收藏失败，请稍后重试';
+            final message = result.errorOrNull?.message ?? '取消收藏失败，请稍后重试';
             _showSnackBar(messenger, message);
           },
         );
@@ -996,11 +951,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     }
     if (result case ApiSuccess<ForumFavoriteMutationResult>(:final data)) {
       _showSnackBar(messenger, data.message);
-      await _loadManagedUri(
-        driver,
-        reloadUri,
-        referrerUri: reloadUri,
-      );
+      await _loadManagedUri(driver, reloadUri, referrerUri: reloadUri);
       return;
     }
     final message = result.errorOrNull?.message ?? '操作失败，请稍后重试';
@@ -1013,9 +964,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     }
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _loadManagedUri(
@@ -1038,9 +987,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     required Uri targetUri,
     Uri? referrerUri,
   }) {
-    final headerBuilder = ref.read(
-      forumWebViewNavigationHeaderBuilderProvider,
-    );
+    final headerBuilder = ref.read(forumWebViewNavigationHeaderBuilderProvider);
     final policy = _resolveNetworkPolicy(targetUri);
     return headerBuilder.build(
       targetUri: targetUri,
@@ -1051,11 +998,12 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
 
   ForumWebViewNetworkPolicy _resolveNetworkPolicy(Uri targetUri) {
     final bootstrapConfig = _bootstrapConfig;
-    if (bootstrapConfig != null &&
-        bootstrapConfig.initialUri == targetUri) {
+    if (bootstrapConfig != null && bootstrapConfig.initialUri == targetUri) {
       return bootstrapConfig.networkPolicy;
     }
-    return ref.read(forumWebViewNetworkPolicyResolverProvider).resolve(targetUri);
+    return ref
+        .read(forumWebViewNetworkPolicyResolverProvider)
+        .resolve(targetUri);
   }
 
   ForumWebViewVisualPolicy _mergeEarlyHiddenPolicies(
@@ -1102,7 +1050,8 @@ class _FavoriteForumPickerSheet extends StatefulWidget {
   final Future<void> Function(FavoriteForum forum) onUnfavorite;
 
   @override
-  State<_FavoriteForumPickerSheet> createState() => _FavoriteForumPickerSheetState();
+  State<_FavoriteForumPickerSheet> createState() =>
+      _FavoriteForumPickerSheetState();
 }
 
 class _FavoriteForumPickerSheetState extends State<_FavoriteForumPickerSheet> {
@@ -1139,9 +1088,7 @@ class _FavoriteForumPickerSheetState extends State<_FavoriteForumPickerSheet> {
             return result.when(
               success: (forums) {
                 if (forums.isEmpty) {
-                  return const Center(
-                    child: Text('暂无收藏版块'),
-                  );
+                  return const Center(child: Text('暂无收藏版块'));
                 }
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1158,7 +1105,9 @@ class _FavoriteForumPickerSheetState extends State<_FavoriteForumPickerSheet> {
                           final forum = forums[index];
                           final isSubmitting = _submittingFavid == forum.favid;
                           return ListTile(
-                            key: Key('forum-favorite-forum-item-${forum.favid}'),
+                            key: Key(
+                              'forum-favorite-forum-item-${forum.favid}',
+                            ),
                             enabled: _submittingFavid == null,
                             title: Text(forum.title),
                             subtitle: Text('fid=${forum.fid}'),
@@ -1166,7 +1115,9 @@ class _FavoriteForumPickerSheetState extends State<_FavoriteForumPickerSheet> {
                                 ? const SizedBox(
                                     width: 18,
                                     height: 18,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
                                   )
                                 : null,
                             onTap: _submittingFavid == null
@@ -1242,9 +1193,7 @@ class _FavoriteForumPickerErrorView extends StatelessWidget {
 }
 
 class _ForumWebViewProgressOverlay extends StatelessWidget {
-  const _ForumWebViewProgressOverlay({
-    required this.progress,
-  });
+  const _ForumWebViewProgressOverlay({required this.progress});
 
   final double progress;
 
@@ -1257,10 +1206,7 @@ class _ForumWebViewProgressOverlay extends StatelessWidget {
       child: IgnorePointer(
         child: ClipRRect(
           borderRadius: BorderRadius.circular(999),
-          child: LinearProgressIndicator(
-            minHeight: 2,
-            value: progress,
-          ),
+          child: LinearProgressIndicator(minHeight: 2, value: progress),
         ),
       ),
     );

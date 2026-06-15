@@ -96,6 +96,7 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
       pageKind: pageKind,
       uri: uri,
     );
+    final syncBoardName = _resolveSyncBoardName(pageKind: pageKind, fid: fid);
     _setState(
       current.copyWith(
         currentUri: uri,
@@ -106,12 +107,11 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
         clearFid: fid == null,
         tid: tid,
         clearTid: tid == null,
+        boardName: syncBoardName,
         currentFavoriteForum: currentFavoriteForum,
         clearCurrentFavoriteForum: currentFavoriteForum == null,
         threadDetailMenu: threadDetailMenu,
         clearThreadDetailMenu: threadDetailMenu == null,
-        clearBoardName: true,
-        clearPageTitle: true,
         isLoading: true,
         loadingProgress: 0,
       ),
@@ -381,6 +381,22 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
       ForumWebViewPageKind.other => '百合会论坛',
       ForumWebViewPageKind.home => null,
     };
+  }
+
+  /// Synchronously resolves board name from cached [forumTagLookupProvider] data.
+  ///
+  /// Returns null for home pages, or when the lookup has not been cached yet.
+  /// This ensures the AppBar title and back button appear in the same frame,
+  /// avoiding a two-step visual flicker when navigating from home to a forum.
+  String? _resolveSyncBoardName({
+    required ForumWebViewPageKind pageKind,
+    required String? fid,
+  }) {
+    if (pageKind == ForumWebViewPageKind.home) return null;
+    if (fid == null) return null;
+    final lookup = ref.read(forumTagLookupProvider).value;
+    if (lookup == null) return null;
+    return _normalizeText(lookup.findBoard(fid: fid)?.name);
   }
 
   String? _normalizeText(String? value) {
