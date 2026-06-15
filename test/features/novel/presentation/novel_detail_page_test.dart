@@ -39,6 +39,28 @@ void main() {
     expect(find.textContaining('Pid:5001'), findsOneWidget);
     expect(find.byIcon(Icons.file_download), findsAtLeastNWidgets(1));
   });
+
+  testWidgets('NovelDetailPage hides group row but keeps author row', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+          novelDownloadServiceProvider.overrideWithValue(_NoopNovelDownloadService()),
+          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+        ],
+        child: const MaterialApp(home: NovelDetailPage(novelId: 'novel:1')),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    // 小说 detail 不展示「原作者作品」组（group_outlined）行。
+    expect(find.byKey(const Key('unified-detail-group-row')), findsNothing);
+    expect(find.byIcon(Icons.group_outlined), findsNothing);
+    // 作者行（person_outlined）仍要保留。
+    expect(find.byKey(const Key('unified-detail-author-row')), findsOneWidget);
+    expect(find.byIcon(Icons.person_outlined), findsOneWidget);
+  });
 }
 
 class _NoopNovelDownloadService implements NovelDownloadService {

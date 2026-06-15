@@ -11,9 +11,10 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_state.dar
 import 'package:y300/features/tags/data/tag_providers.dart';
 
 final forumWebViewControllerProvider =
-    AsyncNotifierProvider.autoDispose<ForumWebViewController, ForumWebViewState>(
-      ForumWebViewController.new,
-    );
+    AsyncNotifierProvider.autoDispose<
+      ForumWebViewController,
+      ForumWebViewState
+    >(ForumWebViewController.new);
 
 class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
   late ForumWebViewNavigator _navigator;
@@ -63,8 +64,9 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
       return _lastKnownState ?? _initialState();
     }
     final currentState = state;
-    final currentValue =
-        currentState is AsyncData<ForumWebViewState> ? currentState.value : null;
+    final currentValue = currentState is AsyncData<ForumWebViewState>
+        ? currentState.value
+        : null;
     return currentValue ?? _lastKnownState ?? _initialState();
   }
 
@@ -176,7 +178,9 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
           clearTid: tid == null,
           boardName: boardName,
           clearBoardName: boardName == null,
-          pageTitle: pageKind == ForumWebViewPageKind.home ? null : normalizedTitle,
+          pageTitle: pageKind == ForumWebViewPageKind.home
+              ? null
+              : normalizedTitle,
           clearPageTitle:
               pageKind == ForumWebViewPageKind.home || normalizedTitle == null,
           canGoBack: canGoBack,
@@ -256,7 +260,8 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
     });
   }
 
-  Future<ApiResult<ForumFavoriteMutationResult>> unfavoriteCurrentForum() async {
+  Future<ApiResult<ForumFavoriteMutationResult>>
+  unfavoriteCurrentForum() async {
     final currentFavoriteForum = _currentState.currentFavoriteForum;
     if (currentFavoriteForum == null) {
       return const ApiFailure<ForumFavoriteMutationResult>(
@@ -470,9 +475,7 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
       return;
     }
     final current = _currentState;
-    _setState(
-      current.copyWith(isFavoriteMutationLoading: isLoading),
-    );
+    _setState(current.copyWith(isFavoriteMutationLoading: isLoading));
   }
 
   void _setState(ForumWebViewState nextState) {

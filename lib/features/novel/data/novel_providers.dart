@@ -10,8 +10,10 @@ import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/data/novel_shelf_category_assign_use_case_impl.dart';
 import 'package:y300/features/novel/data/novel_thread_gateway.dart';
 import 'package:y300/features/novel/domain/services/novel_episode_discovery_service.dart';
+import 'package:y300/features/novel/domain/services/novel_intro_section_extractor.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_search_service.dart';
+import 'package:y300/features/novel/domain/services/novel_title_sanitizer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_layout_service.dart';
@@ -25,6 +27,15 @@ final novelEpisodeDiscoveryServiceProvider =
       return NovelEpisodeDiscoveryService(
         imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
       );
+    });
+
+final novelTitleSanitizerProvider = Provider<NovelTitleSanitizer>((ref) {
+  return const DefaultNovelTitleSanitizer();
+});
+
+final novelIntroSectionExtractorProvider =
+    Provider<NovelIntroSectionExtractor>((ref) {
+      return const DefaultNovelIntroSectionExtractor();
     });
 
 final novelReaderDocumentParserProvider = Provider<NovelReaderDocumentParser>((ref) {
@@ -93,6 +104,9 @@ final novelRepositoryProvider = Provider<NovelRepository>((ref) {
     threadGateway: ref.watch(novelThreadGatewayProvider),
     discoveryService: ref.watch(novelEpisodeDiscoveryServiceProvider),
     imageCacheService: ref.watch(imageCacheServiceProvider),
+    titleSanitizer: ref.watch(novelTitleSanitizerProvider),
+    introExtractor: ref.watch(novelIntroSectionExtractorProvider),
+    stateRepository: ref.watch(libraryStateRepositoryProvider),
   );
 });
 

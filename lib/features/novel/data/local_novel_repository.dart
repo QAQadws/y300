@@ -7,6 +7,7 @@ import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/data/local_library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -17,6 +18,8 @@ import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/domain/services/novel_episode_discovery_service.dart';
+import 'package:y300/features/novel/domain/services/novel_intro_section_extractor.dart';
+import 'package:y300/features/novel/domain/services/novel_title_sanitizer.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
 class LocalNovelRepository
@@ -26,16 +29,24 @@ class LocalNovelRepository
     required NovelThreadGateway threadGateway,
     required NovelEpisodeDiscoveryService discoveryService,
     ImageCacheService? imageCacheService,
+    NovelTitleSanitizer titleSanitizer = const DefaultNovelTitleSanitizer(),
+    NovelIntroSectionExtractor introExtractor =
+        const DefaultNovelIntroSectionExtractor(),
+    LibraryStateRepository? stateRepository,
   })  : _threadGateway = threadGateway,
         _discoveryService = discoveryService,
         _imageCacheService = imageCacheService,
-        _stateRepository = LocalLibraryStateRepository(_dbFuture);
+        _titleSanitizer = titleSanitizer,
+        _introExtractor = introExtractor,
+        _stateRepository = stateRepository ?? LocalLibraryStateRepository(_dbFuture);
 
   final Future<Database> _dbFuture;
   final NovelThreadGateway _threadGateway;
   final NovelEpisodeDiscoveryService _discoveryService;
   final ImageCacheService? _imageCacheService;
-  final LocalLibraryStateRepository _stateRepository;
+  final NovelTitleSanitizer _titleSanitizer;
+  final NovelIntroSectionExtractor _introExtractor;
+  final LibraryStateRepository _stateRepository;
 
   static const String _contentType = 'novel';
   static const int _maxRefreshPages = 10;
@@ -556,7 +567,7 @@ class LocalNovelRepository
           'source_fid': seed.fid,
           'source_typeid': _normalizeNullable(seed.typeid ?? detail.typeid),
           'source_tag_name': _normalizeNullable(seed.tagName),
-          'title': detail.subject.trim().isEmpty ? '未命名小说' : detail.subject.trim(),
+          'title': _sanitizeTitleForStorage(detail.subject),
           'author': detail.author.trim().isEmpty ? null : detail.author.trim(),
           'cover_image_url': null,
           'cover_local_path': null,
@@ -684,7 +695,7 @@ class LocalNovelRepository
       await txn.update(
         ComicLocalDb.worksTable,
         <String, Object?>{
-          'title': plan.subject.trim().isEmpty ? detail.title : plan.subject.trim(),
+          'title': _sanitizeTitleForStorage(plan.subject, fallback: detail.title),
           'author': plan.author.trim().isEmpty ? detail.author : plan.author.trim(),
           // Parser-produced cover is a candidate only; keep an existing cover
           // when the current refresh does not discover a reliable image.
@@ -695,6 +706,11 @@ class LocalNovelRepository
         whereArgs: <Object>[novelId, _contentType],
       );
     });
+
+    // 简介自动解析：仅当用户没有手动编辑过 intro_text 时才写入。
+    // 这样可以保留用户的「编辑简介」结果，同时让首次入库 / 用户未编辑
+    // 的小说自动获得简介展示。
+    await _maybeWriteParsedIntro(novelId: novelId, pages: pages);
 
     final coverUrl = _normalizeNullable(plan.coverImageUrl);
     if (coverUrl != null) {
@@ -1071,6 +1087,72 @@ class LocalNovelRepository
   String? _normalizeNullable(String? value) {
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
+
+  /// 应用标题清洗，并在为空时回退到固定文案或上一次的标题。
+  ///
+  /// `fallback` 用于 `refreshEpisodes` 路径 —— 解析后的 plan.subject
+  /// 偶尔为空，此时不能把已存的 title 抹成"未命名小说"。
+  String _sanitizeTitleForStorage(String rawTitle, {String? fallback}) {
+    final sanitized = _titleSanitizer.sanitize(rawTitle);
+    if (sanitized.isNotEmpty) {
+      return sanitized;
+    }
+    final fallbackTrimmed = fallback?.trim();
+    if (fallbackTrimmed != null && fallbackTrimmed.isNotEmpty) {
+      return fallbackTrimmed;
+    }
+    return '未命名小说';
+  }
+
+  /// 取首页第一个 OP 帖（楼层 1）的 message —— 简介解析的输入源。
+  String? _findFirstOpPostHtml(List<ThreadDetailData> pages) {
+    if (pages.isEmpty) {
+      return null;
+    }
+    final firstPage = pages.first;
+    if (firstPage.posts.isEmpty) {
+      return null;
+    }
+    final opAuthorId = firstPage.posts.first.authorId;
+    for (final post in firstPage.posts) {
+      final isOpPost = opAuthorId.isEmpty || post.authorId == opAuthorId;
+      if (isOpPost && post.message.trim().isNotEmpty) {
+        return post.message;
+      }
+    }
+    return null;
+  }
+
+  /// 解析首楼简介并写入 library_work_state.intro_text，仅当当前为空。
+  ///
+  /// 用户通过「编辑简介」写入的值会被保留：一旦 intro_text 非空，刷新流程
+  /// 不再覆盖。首次入库或用户从未编辑过的情况下，这里的解析结果会展示。
+  Future<void> _maybeWriteParsedIntro({
+    required String novelId,
+    required List<ThreadDetailData> pages,
+  }) async {
+    final firstPostHtml = _findFirstOpPostHtml(pages);
+    if (firstPostHtml == null) {
+      return;
+    }
+    final parsed = _introExtractor.extract(firstPostHtml: firstPostHtml);
+    if (parsed == null || parsed.isEmpty) {
+      return;
+    }
+    final existing = await _stateRepository.getWorkState(
+      moduleKey: LibraryModuleKey.novel,
+      workId: novelId,
+    );
+    final hasUserIntro = (existing?.introText?.trim().isNotEmpty ?? false);
+    if (hasUserIntro) {
+      return;
+    }
+    await _stateRepository.upsertWorkState(
+      moduleKey: LibraryModuleKey.novel,
+      workId: novelId,
+      introText: parsed,
+    );
   }
 
   Future<T> _runThreadRequest<T>({

@@ -207,7 +207,10 @@ class _HeroMetaColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final groupLabel = moduleKey == LibraryModuleKey.comic ? translationGroup : '原作者作品';
+    // 小说标题格式混乱，几乎无法稳定从中解析作者/汉化组等元信息，
+    // 只保留发布者本身（person 行）即可；group 行专属漫画。
+    final showGroupRow = moduleKey == LibraryModuleKey.comic;
+    final groupLabel = translationGroup;
 
     return DefaultTextStyle(
       style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: foregroundColor),
@@ -241,21 +244,23 @@ class _HeroMetaColumn extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          Row(
-            key: const Key('unified-detail-group-row'),
-            children: [
-              Icon(Icons.group_outlined, size: 18, color: foregroundColor),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  groupLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+          if (showGroupRow) ...[
+            const SizedBox(height: 6),
+            Row(
+              key: const Key('unified-detail-group-row'),
+              children: [
+                Icon(Icons.group_outlined, size: 18, color: foregroundColor),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    groupLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ],
       ),
     );

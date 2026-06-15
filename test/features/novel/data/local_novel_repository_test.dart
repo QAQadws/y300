@@ -381,7 +381,168 @@ void main() {
       expect(episodes.map((episode) => episode.episodeId), isNot(contains('novel:49:200:stale-tid')));
       expect(staleContent, isNull);
     });
+
+    test('upsertNovelBySeed strips leading brackets and decodes &amp; in title', () async {
+      final dirtyRepo = LocalNovelRepository(
+        dbFuture,
+        threadGateway: _DirtyTitleGateway(),
+        discoveryService: const NovelEpisodeDiscoveryService(),
+      );
+
+      await dirtyRepo.upsertNovelBySeed(
+        seed: const NovelRefreshSeed(fid: '49', tid: '700'),
+      );
+
+      final detail = await dirtyRepo.getDetail(novelId: 'novel:49:700');
+      expect(detail, isNotNull);
+      expect(detail!.title, '一周一次买下同班同学的那些事 A & B');
+    });
+
+    test(
+      'refreshEpisodes auto-fills parsed intro when work state is empty',
+      () async {
+        final introRepo = LocalNovelRepository(
+          dbFuture,
+          threadGateway: _IntroGateway(),
+          discoveryService: const NovelEpisodeDiscoveryService(),
+        );
+        await introRepo.upsertNovelBySeed(
+          seed: const NovelRefreshSeed(fid: '49', tid: '800'),
+        );
+        await introRepo.refreshEpisodes(novelId: 'novel:49:800');
+
+        final stateRepository = LocalLibraryStateRepository(dbFuture);
+        final state = await stateRepository.getWorkState(
+          moduleKey: LibraryModuleKey.novel,
+          workId: 'novel:49:800',
+        );
+        expect(state, isNotNull);
+        expect(state!.introText, isNotNull);
+        expect(state.introText, contains('简介：本文讲述'));
+        expect(state.introText, contains('感人的故事'));
+        expect(state.introText, isNot(contains('目录')));
+      },
+    );
+
+    test('refreshEpisodes does not overwrite user-edited intro', () async {
+      final introRepo = LocalNovelRepository(
+        dbFuture,
+        threadGateway: _IntroGateway(),
+        discoveryService: const NovelEpisodeDiscoveryService(),
+      );
+      await introRepo.upsertNovelBySeed(
+        seed: const NovelRefreshSeed(fid: '49', tid: '800'),
+      );
+
+      final stateRepository = LocalLibraryStateRepository(dbFuture);
+      await stateRepository.upsertWorkState(
+        moduleKey: LibraryModuleKey.novel,
+        workId: 'novel:49:800',
+        introText: '我手动写的简介',
+      );
+
+      await introRepo.refreshEpisodes(novelId: 'novel:49:800');
+
+      final state = await stateRepository.getWorkState(
+        moduleKey: LibraryModuleKey.novel,
+        workId: 'novel:49:800',
+      );
+      expect(state!.introText, '我手动写的简介');
+    });
   });
+}
+
+class _DirtyTitleGateway implements NovelThreadGateway {
+  @override
+  Future<ThreadDetailData> getThreadDetail({required String tid, required int page}) async {
+    if (page > 1) {
+      return ThreadDetailData(
+        tid: tid,
+        fid: '49',
+        subject: '[个人翻译][长篇][羽田宇佐]一周一次买下同班同学的那些事 A &amp; B',
+        author: '楼主A',
+        replies: 0,
+        views: 0,
+        currentPage: page,
+        perPage: 20,
+        posts: const <ThreadPost>[],
+      );
+    }
+    return ThreadDetailData(
+      tid: tid,
+      fid: '49',
+      // 既验证前导括号剥离，也验证 &amp; 实体解码。
+      subject: '[个人翻译][长篇][羽田宇佐]一周一次买下同班同学的那些事 A &amp; B',
+      author: '楼主A',
+      replies: 0,
+      views: 0,
+      currentPage: 1,
+      perPage: 20,
+      posts: <ThreadPost>[
+        ThreadPost(
+          pid: '7001',
+          author: '楼主A',
+          authorId: '1',
+          message: '<p>第1章 开始</p><p>正文</p>',
+          number: 1,
+          isFirst: true,
+          dateline: '2026-06-15',
+        ),
+      ],
+    );
+  }
+}
+
+class _IntroGateway implements NovelThreadGateway {
+  @override
+  Future<ThreadDetailData> getThreadDetail({required String tid, required int page}) async {
+    if (page > 1) {
+      return ThreadDetailData(
+        tid: tid,
+        fid: '49',
+        subject: '带简介的小说',
+        author: '楼主A',
+        replies: 0,
+        views: 0,
+        currentPage: page,
+        perPage: 20,
+        posts: const <ThreadPost>[],
+      );
+    }
+    return ThreadDetailData(
+      tid: tid,
+      fid: '49',
+      subject: '带简介的小说',
+      author: '楼主A',
+      replies: 0,
+      views: 0,
+      currentPage: 1,
+      perPage: 20,
+      posts: <ThreadPost>[
+        ThreadPost(
+          pid: '8001',
+          author: '楼主A',
+          authorId: '1',
+          message: '<p>简介：本文讲述</p>'
+              '<p>一段感人的故事。</p>'
+              '<p>目录</p>'
+              '<p>第1章 开始</p>',
+          number: 1,
+          isFirst: true,
+          dateline: '2026-06-15',
+        ),
+        ThreadPost(
+          pid: '8002',
+          author: '楼主A',
+          authorId: '1',
+          message: '<p>第2章 继续</p><p>正文 B</p>',
+          number: 2,
+          isFirst: false,
+          dateline: '2026-06-15',
+        ),
+      ],
+    );
+  }
 }
 
 class _FakeGateway implements NovelThreadGateway {

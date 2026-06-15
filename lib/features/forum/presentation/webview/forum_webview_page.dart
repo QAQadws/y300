@@ -235,9 +235,10 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     }
     _delayedCleanupTimer?.cancel();
     _delayedCleanupTimer = null;
-    if (_isAwaitingInitialManagedPageStable) {
-      _didCompleteInitialManagedPageLateRepair = false;
-    }
+    // 注意：这里**不**复位 _didCompleteInitialManagedPageLateRepair。
+    // 蒙版是 bootstrap 一次性使命；一旦初次 cleanChrome 跑完就关掉。
+    // 旧实现每次 pageStarted 都把它复位 → 用户在 300ms 内连续盲点
+    // (IgnorePointer 让点击穿透蒙版) 会让蒙版永远卡住。
     _navigationGeneration += 1;
     ref.read(forumWebViewControllerProvider.notifier).onPageStarted(url);
   }
@@ -290,6 +291,15 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
 
     await injector.cleanChrome(driver, visualPolicy: visualPolicy);
 
+    // 首次 cleanChrome 立即跑完即视为 bootstrap 已完成；蒙版立刻关闭，
+    // 不再等 300ms 二次清理 —— 那个定时器在用户连续盲点时会被反复 cancel，
+    // 是上一版蒙版卡住的根因。300ms 二次清理保留作为 chrome 残留兜底，
+    // 但不再阻塞蒙版生命周期。
+    if (_isAwaitingInitialManagedPageStable) {
+      _didCompleteInitialManagedPageLateRepair = true;
+      _tryHideInitialLoadingMask();
+    }
+
     _delayedCleanupTimer?.cancel();
     _delayedCleanupTimer = Timer(const Duration(milliseconds: 300), () async {
       if (!mounted || generation != _navigationGeneration) {
@@ -304,13 +314,6 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         return;
       }
       await injector.cleanChrome(driver, visualPolicy: visualPolicy);
-      if (!mounted || generation != _navigationGeneration) {
-        return;
-      }
-      if (_isAwaitingInitialManagedPageStable) {
-        _didCompleteInitialManagedPageLateRepair = true;
-        _tryHideInitialLoadingMask();
-      }
     });
   }
 
