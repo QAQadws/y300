@@ -119,6 +119,7 @@ class DefaultLibraryPostIngestTaskRunner implements LibraryPostIngestTaskRunner 
       sourceTagName: task.sourceTagName,
       forceSearchOnCatalogMiss: task.forceSearchOnCatalogMiss,
       executionContext: executionContext,
+      preloadedRootDetail: task.detail,
     );
   }
 

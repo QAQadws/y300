@@ -9,6 +9,7 @@ import 'package:y300/features/comic/domain/services/comic_refresh_keyword_resolv
 import 'package:y300/features/comic/domain/services/comic_search_candidate_ranker.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
 import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -715,6 +716,102 @@ void main() {
       expect(discovery.catalogFallbackAllowedByTid['100'], isFalse);
     });
 
+    test('catalog-only reuses preloaded root detail without root discovery request', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{
+          '301': const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: '第1话'),
+          ],
+        },
+        directLinksByTid: <String, List<ComicEpisodeLink>>{
+          '100': const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-301-1-1.html', rawText: '上一话'),
+          ],
+        },
+        strategyByTid: const <String, EpisodeDiscoveryStrategy>{
+          '100': EpisodeDiscoveryStrategy.direct,
+        },
+      );
+      final service = _buildService(
+        discoveryService: discovery,
+        searchService: _FakeDiscuzSearchService(
+          response: const DiscuzSearchResponse(
+            items: <DiscuzSearchResultItem>[],
+            rateLimited: false,
+          ),
+        ),
+      );
+
+      final outcome = await service.fetchCatalogOnly(
+        const ComicEpisodeRefreshRequest(sourceTid: '100'),
+        preloadedRootDetail: _threadDetail(
+          tid: '100',
+          subject: '测试漫画 第1话',
+          message:
+              '<a href="https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301">上一话</a>',
+        ),
+      );
+
+      expect(outcome.source, ComicEpisodeRefreshSource.empty);
+      expect(discovery.requestedTids, isEmpty);
+      expect(discovery.preloadedTids, <String>['100']);
+    });
+
+    test('search-and-current-only reuses preloaded root detail and skips threadSeedFetcher', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: <String, List<ComicEpisodeLink>>{
+          '301': const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: '第1话'),
+          ],
+        },
+        directLinksByTid: <String, List<ComicEpisodeLink>>{
+          '100': const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-90-1-1.html', rawText: '上一话'),
+          ],
+        },
+      );
+      final searchService = _FakeDiscuzSearchService(
+        response: const DiscuzSearchResponse(
+          items: <DiscuzSearchResultItem>[
+            DiscuzSearchResultItem(
+              tid: '301',
+              title: '测试漫画 第1话',
+              url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301',
+              fid: '30',
+            ),
+          ],
+          rateLimited: false,
+        ),
+      );
+      var threadSeedFetchCount = 0;
+      final service = _buildService(
+        discoveryService: discovery,
+        searchService: searchService,
+        subjectParser: const RuleBasedComicSubjectParser(),
+        threadSeedFetcher: (_) async {
+          threadSeedFetchCount++;
+          return const ThreadSeed(subject: '不会被使用');
+        },
+      );
+
+      final outcome = await service.fetchSearchAndCurrentOnly(
+        const ComicEpisodeRefreshRequest(sourceTid: '100'),
+        preloadedRootDetail: _threadDetail(
+          tid: '100',
+          subject: '测试漫画 第2话',
+          message:
+              '<a href="https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301">上一话</a>',
+        ),
+      );
+
+      expect(outcome.source, ComicEpisodeRefreshSource.search);
+      expect(outcome.links, isNotEmpty);
+      expect(threadSeedFetchCount, 0);
+      expect(searchService.calledKeywords, <String>['测试漫画']);
+      expect(discovery.requestedTids, <String>['301']);
+      expect(discovery.preloadedTids, <String>['100']);
+    });
+
     test('catalog-then-fallback returns catalog outcome when catalog matches', () async {
       final discovery = _FakeDiscoveryService(
         byTid: <String, List<ComicEpisodeLink>>{
@@ -1057,6 +1154,7 @@ class _FakeDiscoveryService extends ComicEpisodeDiscoveryService {
     required this.byTid,
     this.strategyByTid = const <String, EpisodeDiscoveryStrategy>{},
     this.byCatalogUrl = const <String, List<ComicEpisodeLink>>{},
+    this.directLinksByTid = const <String, List<ComicEpisodeLink>>{},
   }) : super(
          fetchThreadDetail: (_) async => const ApiFailure<ThreadDetailData>(
            ApiError(type: ApiErrorType.business, message: 'unused'),
@@ -1070,8 +1168,10 @@ class _FakeDiscoveryService extends ComicEpisodeDiscoveryService {
   final Map<String, List<ComicEpisodeLink>> byTid;
   final Map<String, EpisodeDiscoveryStrategy> strategyByTid;
   final Map<String, List<ComicEpisodeLink>> byCatalogUrl;
+  final Map<String, List<ComicEpisodeLink>> directLinksByTid;
   final List<String> requestedTids = <String>[];
   final List<String> requestedCatalogUrls = <String>[];
+  final List<String> preloadedTids = <String>[];
   final Map<String, bool> catalogFallbackAllowedByTid = <String, bool>{};
 
   @override
@@ -1089,12 +1189,21 @@ class _FakeDiscoveryService extends ComicEpisodeDiscoveryService {
     required bool preferCatalogFirst,
     bool allowCatalogFallback = true,
     FavoriteFirstSyncRequestGovernor? governor,
+    ThreadDetailData? preloadedRootDetail,
+    ComicThreadDetailCache? threadCache,
   }) async {
-    requestedTids.add(tid);
+    if (preloadedRootDetail != null && preloadedRootDetail.tid == tid) {
+      preloadedTids.add(tid);
+    } else {
+      requestedTids.add(tid);
+    }
     catalogFallbackAllowedByTid[tid] = allowCatalogFallback;
     return EpisodeDiscoveryResult(
       strategy: strategyByTid[tid] ?? EpisodeDiscoveryStrategy.direct,
-      episodeLinks: byTid[tid] ?? const <ComicEpisodeLink>[],
+      episodeLinks:
+          preloadedRootDetail != null && preloadedRootDetail.tid == tid
+          ? directLinksByTid[tid] ?? const <ComicEpisodeLink>[]
+          : byTid[tid] ?? const <ComicEpisodeLink>[],
     );
   }
 
@@ -1144,6 +1253,35 @@ class _FakeDiscuzSearchService implements ForumSearchService {
       rateLimited: false,
     );
   }
+}
+
+ThreadDetailData _threadDetail({
+  required String tid,
+  required String subject,
+  required String message,
+}) {
+  return ThreadDetailData(
+    tid: tid,
+    fid: '30',
+    typeid: '398',
+    subject: subject,
+    author: 'Author',
+    replies: 0,
+    views: 1,
+    currentPage: 1,
+    perPage: 20,
+    posts: <ThreadPost>[
+      ThreadPost(
+        pid: 'p1',
+        author: 'Author',
+        authorId: '1',
+        message: message,
+        number: 1,
+        isFirst: true,
+        dateline: '2026-01-01',
+      ),
+    ],
+  );
 }
 
 class _SequencedDiscuzSearchService implements ForumSearchService {

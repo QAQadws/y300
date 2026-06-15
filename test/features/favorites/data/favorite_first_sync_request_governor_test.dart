@@ -20,7 +20,7 @@ void main() {
       },
     );
     final second = governor.run<void>(
-      kind: FavoriteFirstSyncRequestKind.comicForumSearch,
+      kind: FavoriteFirstSyncRequestKind.comicCatalogHtml,
       action: () async {
         events.add('second-start');
         events.add('second-end');

@@ -6,6 +6,7 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/catalog_thread_html_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
 import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/library_shared/domain/services/sync_diagnostic_recorder.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
@@ -133,8 +134,15 @@ class ComicEpisodeDiscoveryService {
     // same catalog fallback run twice. The default keeps legacy discovery.
     bool allowCatalogFallback = true,
     FavoriteFirstSyncRequestGovernor? governor,
+    ThreadDetailData? preloadedRootDetail,
+    ComicThreadDetailCache? threadCache,
   }) async {
-    final root = await _fetchAndParse(tid, governor: governor);
+    final root = await _fetchAndParse(
+      tid,
+      governor: governor,
+      preloadedDetail: preloadedRootDetail,
+      threadCache: threadCache,
+    );
     if (root == null) {
       return const EpisodeDiscoveryResult(
         strategy: EpisodeDiscoveryStrategy.direct,
@@ -164,7 +172,11 @@ class ComicEpisodeDiscoveryService {
       );
     }
 
-    final recursiveLinks = await _discoverRecursive(root, governor: governor);
+    final recursiveLinks = await _discoverRecursive(
+      root,
+      governor: governor,
+      threadCache: threadCache,
+    );
     if (recursiveLinks.length > root.parsed.episodeLinks.length) {
       return EpisodeDiscoveryResult(
         strategy: EpisodeDiscoveryStrategy.recursive,
@@ -221,6 +233,7 @@ class ComicEpisodeDiscoveryService {
   Future<List<ComicEpisodeLink>> _discoverRecursive(
     _ParsedThreadRoot root, {
     FavoriteFirstSyncRequestGovernor? governor,
+    ComicThreadDetailCache? threadCache,
   }) async {
     if (!_shouldTryRecursive(root)) {
       return root.parsed.episodeLinks;
@@ -267,7 +280,11 @@ class ComicEpisodeDiscoveryService {
         depth < _config.maxRecursiveDepth &&
         consecutiveFailures < _config.maxConsecutiveFailures) {
       final currentTid = queue.removeFirst();
-      final parsed = await _fetchAndParse(currentTid, governor: governor);
+      final parsed = await _fetchAndParse(
+        currentTid,
+        governor: governor,
+        threadCache: threadCache,
+      );
       depth += 1;
       if (parsed == null) {
         consecutiveFailures += 1;
@@ -388,7 +405,52 @@ class ComicEpisodeDiscoveryService {
   Future<_ParsedThreadRoot?> _fetchAndParse(
     String tid, {
     FavoriteFirstSyncRequestGovernor? governor,
+    ThreadDetailData? preloadedDetail,
+    ComicThreadDetailCache? threadCache,
   }) async {
+    if (preloadedDetail != null && preloadedDetail.tid == tid) {
+      threadCache?.store(preloadedDetail);
+      final parsed = _opPostParser.parse(
+        tid: preloadedDetail.tid,
+        fid: preloadedDetail.fid,
+        subject: preloadedDetail.subject,
+        posts: preloadedDetail.posts,
+      );
+      return _ParsedThreadRoot(
+        detail: preloadedDetail,
+        parsed: parsed,
+        recursiveTidCandidates: _collectRecursiveTidCandidates(
+          tid: preloadedDetail.tid,
+          episodeLinks: parsed.episodeLinks,
+          posts: preloadedDetail.posts,
+        ),
+      );
+    }
+    final cached = threadCache?.get(tid);
+    if (cached != null) {
+      _diagnosticRecorder.record(
+        scope: 'comic_discovery',
+        event: 'fetch_thread_cache_hit',
+        fields: <String, Object?>{
+          'tid': tid,
+        },
+      );
+      final parsed = _opPostParser.parse(
+        tid: cached.tid,
+        fid: cached.fid,
+        subject: cached.subject,
+        posts: cached.posts,
+      );
+      return _ParsedThreadRoot(
+        detail: cached,
+        parsed: parsed,
+        recursiveTidCandidates: _collectRecursiveTidCandidates(
+          tid: cached.tid,
+          episodeLinks: parsed.episodeLinks,
+          posts: cached.posts,
+        ),
+      );
+    }
     _diagnosticRecorder.record(
       scope: 'comic_discovery',
       event: 'fetch_thread',
@@ -403,6 +465,7 @@ class ComicEpisodeDiscoveryService {
     );
     return result.when(
       success: (data) {
+        threadCache?.store(data);
         final parsed = _opPostParser.parse(
           tid: data.tid,
           fid: data.fid,

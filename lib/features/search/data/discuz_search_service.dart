@@ -56,6 +56,10 @@ class DiscuzSearchService implements ForumSearchService {
   final CookieStore _cookieStore;
   final Dio _dio;
   final DiscuzSearchHtmlParser _htmlParser;
+  // bbs.yamibo.com 的 formhash 与登录会话绑定，重复 GET profile 拉到的
+  // 永远是同一个值——首次同步阶段一连发 70 次 search，每次都先去拉 profile
+  // 是纯净的浪费。这里只缓存 hash 字符串，避免把整段 ProfileData 留在内存。
+  String? _cachedFormhash;
 
   @override
   Future<DiscuzSearchResponse> searchForum({
@@ -173,6 +177,10 @@ class DiscuzSearchService implements ForumSearchService {
   }
 
   Future<String> _loadFormhash() async {
+    final cached = _cachedFormhash;
+    if (cached != null && cached.isNotEmpty) {
+      return cached;
+    }
     final profile = await _profileRepository.getProfile();
     return profile.when(
       success: (data) {
@@ -180,6 +188,7 @@ class DiscuzSearchService implements ForumSearchService {
         if (formhash.isEmpty) {
           throw const DiscuzSearchServiceException('formhash 为空，无法执行搜索');
         }
+        _cachedFormhash = formhash;
         return formhash;
       },
       failure: (error) => throw DiscuzSearchServiceException('获取 formhash 失败：${error.message}'),

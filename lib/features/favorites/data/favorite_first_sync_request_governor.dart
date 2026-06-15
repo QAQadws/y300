@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:y300/features/library_shared/domain/services/sync_diagnostic_recorder.dart';
 
+// Adjust this single constant when tuning favorite first-sync request pacing.
+const Duration favoriteFirstSyncGovernorCooldown = Duration(milliseconds: 500);
+
 enum FavoriteSyncExecutionMode {
   bootstrapInitial,
   automaticResume,
@@ -13,7 +16,9 @@ enum FavoriteFirstSyncRequestKind {
   favoriteThreadDetail,
   comicThreadDetail,
   comicCatalogHtml,
-  comicForumSearch,
+  // 注意：漫画论坛搜索由 ForumSearchScheduler（~10.5s 节奏）独立管控，
+  // 不再走 favorite first-sync governor 的槽。这里删掉旧的 comicForumSearch
+  // 枚举项以避免误用。
   novelSeedDetail,
   novelEpisodePage,
 }
@@ -54,7 +59,7 @@ abstract interface class FavoriteFirstSyncRequestGovernor {
 class DefaultFavoriteFirstSyncRequestGovernor
     implements FavoriteFirstSyncRequestGovernor {
   DefaultFavoriteFirstSyncRequestGovernor({
-    this.cooldown = const Duration(seconds: 1),
+    this.cooldown = favoriteFirstSyncGovernorCooldown,
     DateTime Function()? nowProvider,
     Future<void> Function(Duration duration)? delay,
     SyncDiagnosticRecorder? diagnosticRecorder,

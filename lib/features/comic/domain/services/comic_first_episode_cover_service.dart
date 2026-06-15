@@ -1,11 +1,17 @@
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 
 typedef ComicEpisodeImageFetcher = Future<List<String>> Function(String tid);
 
 abstract class ComicFirstEpisodeCoverPromoter {
   Future<bool> promoteIfPossible({
     required String comicId,
+    ComicThreadDetailCache? threadCache,
+    FavoriteFirstSyncRequestGovernor? governor,
   });
 }
 
@@ -13,18 +19,24 @@ abstract class ComicFirstEpisodeCoverPromoter {
 /// cover. The service stays storage-agnostic: SQLite-specific write details
 /// remain behind [ComicFirstEpisodeCoverWriter] or [ComicRepository].
 class ComicFirstEpisodeCoverService implements ComicFirstEpisodeCoverPromoter {
-  const ComicFirstEpisodeCoverService({
+  ComicFirstEpisodeCoverService({
     required ComicRepository repository,
     ComicEpisodeImageFetcher? fetchEpisodeImagesByTid,
+    ForumImageSourcePipeline? imageSourcePipeline,
   })  : _repository = repository,
-        _fetchEpisodeImagesByTid = fetchEpisodeImagesByTid;
+        _fetchEpisodeImagesByTid = fetchEpisodeImagesByTid,
+        _imageSourcePipeline =
+            imageSourcePipeline ?? const DefaultForumImageSourcePipeline();
 
   final ComicRepository _repository;
   final ComicEpisodeImageFetcher? _fetchEpisodeImagesByTid;
+  final ForumImageSourcePipeline _imageSourcePipeline;
 
   @override
   Future<bool> promoteIfPossible({
     required String comicId,
+    ComicThreadDetailCache? threadCache,
+    FavoriteFirstSyncRequestGovernor? governor,
   }) async {
     final detail = await _repository.getComicDetail(comicId: comicId);
     if (detail == null || _hasCustomCover(detail)) {
@@ -48,11 +60,27 @@ class ComicFirstEpisodeCoverService implements ComicFirstEpisodeCoverPromoter {
       );
     }
 
+    // 1) 优先复用 discovery 阶段已抓取的 thread 详情，避免再发一次 viewthread。
+    final cached = threadCache?.get(episode.sourceTid);
+    if (cached != null) {
+      final cachedImages = _dedupeNonEmpty(_extractFirstPostImages(cached));
+      if (cachedImages.isNotEmpty) {
+        await _repository.saveEpisodeImages(
+          episodeId: episode.episodeId,
+          imageUrls: cachedImages,
+        );
+        return true;
+      }
+    }
+
+    // 2) discovery 没碰过这一话；走 governor 拉取（首同步内不会越过 cooldown）。
     final fetcher = _fetchEpisodeImagesByTid;
     if (fetcher == null) {
       return false;
     }
-    final fetched = _dedupeNonEmpty(await fetcher(episode.sourceTid));
+    final fetched = _dedupeNonEmpty(
+      await _runFetch(governor, () => fetcher(episode.sourceTid)),
+    );
     if (fetched.isEmpty) {
       return false;
     }
@@ -64,6 +92,32 @@ class ComicFirstEpisodeCoverService implements ComicFirstEpisodeCoverPromoter {
       imageUrls: fetched,
     );
     return true;
+  }
+
+  Future<List<String>> _runFetch(
+    FavoriteFirstSyncRequestGovernor? governor,
+    Future<List<String>> Function() action,
+  ) {
+    if (governor == null) {
+      return action();
+    }
+    return governor.run(
+      kind: FavoriteFirstSyncRequestKind.comicThreadDetail,
+      action: action,
+    );
+  }
+
+  List<String> _extractFirstPostImages(ThreadDetailData detail) {
+    final firstPost = detail.posts
+        .where((post) => post.isFirst || post.number == 1)
+        .firstOrNull;
+    if (firstPost == null) {
+      return const <String>[];
+    }
+    return _imageSourcePipeline
+        .collectFromPost(firstPost)
+        .map((source) => source.normalizedUrl)
+        .toList(growable: false);
   }
 
   Future<bool> _promoteKnownImage({
@@ -146,4 +200,8 @@ class ComicFirstEpisodeCoverService implements ComicFirstEpisodeCoverPromoter {
     }
     return output;
   }
+}
+
+extension _FirstOrNullThreadPostExt<E> on Iterable<E> {
+  E? get firstOrNull => isEmpty ? null : first;
 }

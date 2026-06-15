@@ -6,6 +6,7 @@ import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applie
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
 import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
 import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -51,6 +52,10 @@ void main() {
       expect(result.status, ComicFavoriteAutoRefreshStatus.catalogMerged);
       expect(result.linkCount, 1);
       expect(refreshService.catalogRequests.single.displayTitle, 'Catalog Comic');
+      expect(
+        refreshService.catalogPreloadedRootDetails.single?.tid,
+        '100',
+      );
       expect(applier.requests, hasLength(1));
       expect(applier.requests.single.comicId, 'comic:1');
       expect(applier.requests.single.sourceTid, '100');
@@ -302,19 +307,15 @@ void main() {
       expect(bus.signal.value?.tid, '100');
     });
 
-    test('bootstrap initial catalog miss runs inline governed search instead of queueing', () async {
+    test('bootstrap initial catalog miss enqueues to search queue (no inline governed search)', () async {
+      // 之前 bootstrapInitial 会内联跑 search，这条路径已被废弃：
+      // 现在所有 catalog 未命中都进入 ComicSearchRefreshQueueService，
+      // 由 ForumSearchScheduler 控制节奏并向通知栏汇报"《xxx》正在等待漫画搜索"。
       final governor = _RecordingGovernor();
       final refreshService = _FakeRefreshService(
         catalogOutcome: const ComicEpisodeRefreshOutcome(
           source: ComicEpisodeRefreshSource.empty,
           links: <ComicEpisodeLink>[],
-        ),
-        searchOutcome: const ComicEpisodeRefreshOutcome(
-          source: ComicEpisodeRefreshSource.search,
-          links: <ComicEpisodeLink>[
-            ComicEpisodeLink(url: 'thread-888-1-1.html', rawText: 'Episode 8'),
-          ],
-          usedSearch: true,
         ),
       );
       final searchQueue = _RecordingSearchQueue();
@@ -342,19 +343,12 @@ void main() {
         ),
       );
 
-      expect(result.status, ComicFavoriteAutoRefreshStatus.searchMerged);
-      expect(result.linkCount, 1);
-      expect(searchQueue.enqueuedRequests, isEmpty);
-      expect(refreshService.searchRequests, hasLength(1));
-      expect(
-        governor.kinds,
-        contains(FavoriteFirstSyncRequestKind.comicForumSearch),
-      );
-      expect(
-        applier.requests.single.reason,
-        'favorite_comic_search_refresh_completed',
-      );
-      expect(bus.signal.value, isNull);
+      expect(result.status, ComicFavoriteAutoRefreshStatus.queuedForSearch);
+      expect(searchQueue.enqueuedRequests, hasLength(1));
+      expect(refreshService.searchRequests, isEmpty);
+      // catalog 未命中下不应触发任何 governor 槽位（catalogOutcome.empty 直接入队）。
+      expect(governor.kinds, isEmpty);
+      expect(applier.requests, isEmpty);
     });
   });
 }
@@ -403,15 +397,22 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
       <ComicEpisodeRefreshRequest>[];
   final List<ComicEpisodeRefreshRequest> searchRequests =
       <ComicEpisodeRefreshRequest>[];
+  final List<ThreadDetailData?> catalogPreloadedRootDetails =
+      <ThreadDetailData?>[];
+  final List<ThreadDetailData?> searchPreloadedRootDetails =
+      <ThreadDetailData?>[];
   int directCalls = 0;
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
+    ThreadDetailData? preloadedRootDetail,
+    ComicThreadDetailCache? threadCache,
   }
   ) async {
     catalogRequests.add(request);
+    catalogPreloadedRootDetails.add(preloadedRootDetail);
     return _catalogOutcome;
   }
 
@@ -452,22 +453,12 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
+    ThreadDetailData? preloadedRootDetail,
+    ComicThreadDetailCache? threadCache,
   }
   ) async {
     searchRequests.add(request);
-    final governor = executionContext?.governor;
-    if (governor != null) {
-      return governor.run(
-        kind: FavoriteFirstSyncRequestKind.comicForumSearch,
-        action: () async {
-          return _searchOutcome ??
-              const ComicEpisodeRefreshOutcome(
-                source: ComicEpisodeRefreshSource.empty,
-                links: <ComicEpisodeLink>[],
-              );
-        },
-      );
-    }
+    searchPreloadedRootDetails.add(preloadedRootDetail);
     return _searchOutcome ??
         const ComicEpisodeRefreshOutcome(
           source: ComicEpisodeRefreshSource.empty,
@@ -500,16 +491,20 @@ class _RecordingSearchQueue implements ComicSearchRefreshQueueEnqueuer {
   final List<String> enqueuedTitles = <String>[];
   final List<ComicSearchRefreshOrigin> enqueuedOrigins =
       <ComicSearchRefreshOrigin>[];
+  final List<ThreadDetailData?> enqueuedPreloadedDetails =
+      <ThreadDetailData?>[];
 
   @override
   Future<ComicSearchRefreshEnqueueResult> enqueue({
     required ComicEpisodeRefreshRequest request,
     required String title,
     required ComicSearchRefreshOrigin origin,
+    ThreadDetailData? preloadedRootDetail,
   }) async {
     enqueuedRequests.add(request);
     enqueuedTitles.add(title);
     enqueuedOrigins.add(origin);
+    enqueuedPreloadedDetails.add(preloadedRootDetail);
     return ComicSearchRefreshEnqueueResult(
       entry: ComicSearchRefreshQueueEntry(
         id: enqueuedRequests.length,

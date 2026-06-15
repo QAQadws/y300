@@ -8,6 +8,7 @@ import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/library_shared/domain/services/sync_diagnostic_recorder.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/search/data/forum_search_scheduler.dart';
+import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
 class ComicSearchRefreshRetryPolicy {
   const ComicSearchRefreshRetryPolicy({
@@ -29,6 +30,11 @@ abstract class ComicSearchRefreshQueueEnqueuer {
     required ComicEpisodeRefreshRequest request,
     required String title,
     required ComicSearchRefreshOrigin origin,
+    // 内存侧通道：让队列任务复用收藏 ingest 已抓的 ThreadDetailData，
+    // 跨入队边界保留，省掉 _discoverCurrentOnly + _searchFallback 在
+    // 队列任务内对源 tid 的两次重复 viewthread。
+    // 不持久化——冷启动只是回退到原行为，不影响正确性。
+    ThreadDetailData? preloadedRootDetail,
   });
 }
 
@@ -86,6 +92,12 @@ class ComicSearchRefreshQueueService
   Timer? _wakeTimer;
   Future<void>? _pumpFuture;
 
+  // 跨入队边界透传 ThreadDetailData。键是 queue entry id；任务跑完
+  // （成功或彻底失败）就清掉。app 重启时丢失没关系——任务会照常跑，
+  // 只是少一次缓存命中。
+  final Map<int, ThreadDetailData> _preloadedRootDetails =
+      <int, ThreadDetailData>{};
+
   @override
   ValueListenable<ComicSearchRefreshQueueSnapshot> get snapshot => _snapshot;
 
@@ -94,6 +106,7 @@ class ComicSearchRefreshQueueService
     required ComicEpisodeRefreshRequest request,
     required String title,
     required ComicSearchRefreshOrigin origin,
+    ThreadDetailData? preloadedRootDetail,
   }) async {
     final comicId = request.comicId?.trim();
     if (comicId == null || comicId.isEmpty) {
@@ -108,6 +121,10 @@ class ComicSearchRefreshQueueService
       ),
       now: _nowProvider(),
     );
+    if (preloadedRootDetail != null &&
+        preloadedRootDetail.tid == request.sourceTid) {
+      _preloadedRootDetails[result.entry.id] = preloadedRootDetail;
+    }
     final entries = await _refreshSnapshot();
     final position = _positionOf(result.entry, entries);
     _logQueue(
@@ -182,6 +199,7 @@ class ComicSearchRefreshQueueService
     _disposed = true;
     _pumpRequested = false;
     _wakeTimer?.cancel();
+    _preloadedRootDetails.clear();
     _snapshot.dispose();
   }
 
@@ -262,7 +280,11 @@ class ComicSearchRefreshQueueService
       },
     );
     try {
-      final outcome = await _refreshService.fetchSearchAndCurrentOnly(task.request);
+      final preloaded = _preloadedRootDetails[task.id];
+      final outcome = await _refreshService.fetchSearchAndCurrentOnly(
+        task.request,
+        preloadedRootDetail: preloaded,
+      );
       if (outcome.hasLinks) {
         final applied = await _refreshOutcomeApplier.apply(
           ComicRefreshApplyRequest(
@@ -272,6 +294,9 @@ class ComicSearchRefreshQueueService
             source: outcome.source,
             mutationSource: LibraryMutationSource.comicSearchQueue,
             reason: 'comic_search_refresh_completed',
+            // 队列任务在 bootstrap 之外执行，没有 governor；threadCache 仍然
+            // 透传过去——可能省掉一次封面 viewthread。
+            threadCache: outcome.threadCache,
           ),
         );
         _logQueue(
@@ -312,6 +337,7 @@ class ComicSearchRefreshQueueService
         id: task.id,
         now: _nowProvider(),
       );
+      _preloadedRootDetails.remove(task.id);
     } catch (error) {
       await _handleFailure(task, error);
     }
@@ -346,6 +372,7 @@ class ComicSearchRefreshQueueService
         lastError: message,
         now: now,
       );
+      _preloadedRootDetails.remove(task.id);
       return;
     }
     _logQueue(

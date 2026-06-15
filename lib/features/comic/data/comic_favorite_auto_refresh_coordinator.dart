@@ -3,6 +3,7 @@ import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applie
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
 import 'package:y300/features/comic/domain/services/title/comic_title_analysis.dart';
 import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
 import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
@@ -85,6 +86,7 @@ class ComicFavoriteAutoRefreshCoordinator {
     bool forceSearchOnCatalogMiss = false,
     String? catalogUrl,
     FavoriteSyncExecutionContext? executionContext,
+    ThreadDetailData? preloadedRootDetail,
   }) async {
     return refreshFavoriteComic(
       comicId: comicId,
@@ -95,6 +97,7 @@ class ComicFavoriteAutoRefreshCoordinator {
       forceSearchOnCatalogMiss: forceSearchOnCatalogMiss,
       catalogUrl: catalogUrl,
       executionContext: executionContext,
+      preloadedRootDetail: preloadedRootDetail ?? detail,
     );
   }
 
@@ -107,6 +110,7 @@ class ComicFavoriteAutoRefreshCoordinator {
     bool forceSearchOnCatalogMiss = false,
     String? catalogUrl,
     FavoriteSyncExecutionContext? executionContext,
+    ThreadDetailData? preloadedRootDetail,
   }) async {
     final titles = _resolveTitles(
       favoriteTitle: favoriteTitle,
@@ -157,6 +161,10 @@ class ComicFavoriteAutoRefreshCoordinator {
             mutationSource: LibraryMutationSource.favoriteSync,
             reason: 'favorite_comic_catalog_direct_refresh',
             catalogUrl: catalogDirect.catalogUrl,
+            // catalog-direct 没有发起任何 viewthread，threadCache 必为空，
+            // 这条路径下封面提升仍然会经 governor 拉一次，是预期行为。
+            threadCache: catalogDirect.threadCache,
+            governor: executionContext?.governor,
           ),
         );
         return ComicFavoriteAutoRefreshResult(
@@ -167,9 +175,14 @@ class ComicFavoriteAutoRefreshCoordinator {
     }
 
     // catalog 快速路径失败 -> 回退到 fetchCatalogOnly
+    // 共享一个 ComicThreadDetailCache，让封面提升能复用 discovery 已抓取
+    // 的第一话 thread 详情，省掉一次 viewthread。
+    final sharedCache = ComicThreadDetailCache();
     final catalog = await _refreshService.fetchCatalogOnly(
       request,
       executionContext: executionContext,
+      preloadedRootDetail: preloadedRootDetail,
+      threadCache: sharedCache,
     );
     if (catalog.catalogMatched && catalog.hasLinks) {
       _diagnosticRecorder.record(
@@ -204,6 +217,8 @@ class ComicFavoriteAutoRefreshCoordinator {
           mutationSource: LibraryMutationSource.favoriteSync,
           reason: 'favorite_comic_catalog_refresh_completed',
           catalogUrl: catalog.catalogUrl,
+          threadCache: catalog.threadCache ?? sharedCache,
+          governor: executionContext?.governor,
         ),
       );
       return ComicFavoriteAutoRefreshResult(
@@ -239,73 +254,17 @@ class ComicFavoriteAutoRefreshCoordinator {
       );
     }
 
-    if (executionContext?.isBootstrapInitial == true) {
-      _diagnosticRecorder.record(
-        scope: 'favorite_comic_refresh',
-        event: 'catalog_miss_inline_search',
-        fields: <String, Object?>{
-          'comicId': comicId,
-          'sourceTid': sourceTid,
-        },
-      );
-      final search = await _refreshService.fetchSearchAndCurrentOnly(
-        request,
-        executionContext: executionContext,
-      );
-      if (search.hasLinks) {
-        _diagnosticRecorder.record(
-          scope: 'favorite_comic_refresh',
-          event: 'inline_search_hit',
-          fields: <String, Object?>{
-            'comicId': comicId,
-            'sourceTid': sourceTid,
-            'links': search.links.length,
-            'source': search.source.name,
-          },
-        );
-        await _refreshOutcomeApplier.apply(
-          ComicRefreshApplyRequest(
-            comicId: comicId,
-            sourceTid: sourceTid,
-            links: search.links,
-            source: search.source,
-            mutationSource: LibraryMutationSource.favoriteSync,
-            reason: 'favorite_comic_search_refresh_completed',
-            catalogUrl: search.catalogUrl,
-          ),
-        );
-        return ComicFavoriteAutoRefreshResult(
-          status: ComicFavoriteAutoRefreshStatus.searchMerged,
-          linkCount: search.links.length,
-        );
-      }
-      _shelfRefreshBus.notify(
-        modules: const <LibraryModuleKey>{
-          LibraryModuleKey.comic,
-          LibraryModuleKey.favorite,
-        },
-        reason: 'favorite_comic_catalog_miss_search_skipped',
-        source: LibraryMutationSource.favoriteSync,
-        workId: comicId,
-        tid: sourceTid,
-      );
-      _diagnosticRecorder.record(
-        scope: 'favorite_comic_refresh',
-        event: 'inline_search_empty',
-        fields: <String, Object?>{
-          'comicId': comicId,
-          'sourceTid': sourceTid,
-        },
-      );
-      return const ComicFavoriteAutoRefreshResult(
-        status: ComicFavoriteAutoRefreshStatus.skipped,
-      );
-    }
-
+    // catalog 未命中：始终走持久化的搜索等待队列。
+    // 队列内部由 ForumSearchScheduler 控制 ~10.5s 节奏，并通过队列快照向
+    // 通知栏汇报"《xxx》正在等待漫画搜索"——这是一直存在的能力，曾被
+    // bootstrapInitial 内联搜索路径绕过，这里恢复成始终入队。
     final queued = await _searchQueue.enqueue(
       request: request,
       title: titles.queueTitle,
       origin: ComicSearchRefreshOrigin.favoriteSync,
+      // 把已抓到的 root detail 透传给队列任务，跨入队边界保留缓存——
+      // 避免队列任务再为同一 sourceTid 发起 viewthread。
+      preloadedRootDetail: preloadedRootDetail,
     );
     _diagnosticRecorder.record(
       scope: 'favorite_comic_refresh',

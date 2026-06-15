@@ -5,6 +5,8 @@ import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
+import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
 void main() {
@@ -256,17 +258,31 @@ class _RecordingCoverPromoter implements ComicFirstEpisodeCoverPromoter {
 
   final bool promoteResult;
   final List<String> promotedComicIds = <String>[];
+  final List<ComicThreadDetailCache?> capturedThreadCaches =
+      <ComicThreadDetailCache?>[];
+  final List<FavoriteFirstSyncRequestGovernor?> capturedGovernors =
+      <FavoriteFirstSyncRequestGovernor?>[];
 
   @override
-  Future<bool> promoteIfPossible({required String comicId}) async {
+  Future<bool> promoteIfPossible({
+    required String comicId,
+    ComicThreadDetailCache? threadCache,
+    FavoriteFirstSyncRequestGovernor? governor,
+  }) async {
     promotedComicIds.add(comicId);
+    capturedThreadCaches.add(threadCache);
+    capturedGovernors.add(governor);
     return promoteResult;
   }
 }
 
 class _ThrowingCoverPromoter implements ComicFirstEpisodeCoverPromoter {
   @override
-  Future<bool> promoteIfPossible({required String comicId}) {
+  Future<bool> promoteIfPossible({
+    required String comicId,
+    ComicThreadDetailCache? threadCache,
+    FavoriteFirstSyncRequestGovernor? governor,
+  }) {
     throw StateError('promote failed');
   }
 }

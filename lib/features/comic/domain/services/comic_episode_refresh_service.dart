@@ -1,5 +1,7 @@
 import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
 import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
 abstract class ComicEpisodeRefreshService {
   Future<List<ComicEpisodeLink>> fetchEpisodeLinks(
@@ -17,6 +19,8 @@ abstract class ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
+    ThreadDetailData? preloadedRootDetail,
+    ComicThreadDetailCache? threadCache,
   }
   );
 
@@ -25,6 +29,8 @@ abstract class ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
+    ThreadDetailData? preloadedRootDetail,
+    ComicThreadDetailCache? threadCache,
   }
   );
 
@@ -55,6 +61,7 @@ class ComicEpisodeRefreshOutcome {
     this.usedSearch = false,
     this.catalogMatched = false,
     this.catalogUrl,
+    this.threadCache,
   });
 
   final ComicEpisodeRefreshSource source;
@@ -64,6 +71,9 @@ class ComicEpisodeRefreshOutcome {
   /// 本次刷新过程中发现或使用的 catalogUrl。
   /// 调用方可据此持久化，以便下次走 catalog 快速路径。
   final String? catalogUrl;
+  /// 本次刷新内 discovery 过程已抓取并解析过的 thread detail 缓存。
+  /// 调用方（如封面提升）可优先复用，避免对已访问 tid 再发起 viewthread。
+  final ComicThreadDetailCache? threadCache;
 
   bool get hasLinks => links.isNotEmpty;
 }

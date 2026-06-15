@@ -8,6 +8,7 @@ import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applie
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
 import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
 import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/favorites/data/library_post_ingest_task_runner.dart';
@@ -55,6 +56,7 @@ void main() {
       expect(call.sourceTagName, '長篇連載');
       expect(call.forceSearchOnCatalogMiss, isTrue);
       expect(call.detail.tid, '100');
+      expect(call.preloadedRootDetail?.tid, '100');
       expect(report.completed, contains(task));
       expect(report.failures, isEmpty);
       expect(report.resolvedWorkId, isNull);
@@ -366,6 +368,7 @@ class _AutoRefreshCallRecord {
     required this.favoriteTitle,
     required this.sourceTagName,
     required this.forceSearchOnCatalogMiss,
+    required this.preloadedRootDetail,
   });
 
   final String comicId;
@@ -373,6 +376,7 @@ class _AutoRefreshCallRecord {
   final String favoriteTitle;
   final String? sourceTagName;
   final bool forceSearchOnCatalogMiss;
+  final ThreadDetailData? preloadedRootDetail;
 }
 
 class _BackfillCallRecord {
@@ -416,6 +420,7 @@ class _RecordingAutoRefreshCoordinator
     String? sourceTagName,
     bool forceSearchOnCatalogMiss = false,
     FavoriteSyncExecutionContext? executionContext,
+    ThreadDetailData? preloadedRootDetail,
   }) async {
     afterIngestCalls.add(
       _AutoRefreshCallRecord(
@@ -424,6 +429,7 @@ class _RecordingAutoRefreshCoordinator
         favoriteTitle: favoriteTitle,
         sourceTagName: sourceTagName,
         forceSearchOnCatalogMiss: forceSearchOnCatalogMiss,
+        preloadedRootDetail: preloadedRootDetail,
       ),
     );
     return const ComicFavoriteAutoRefreshResult(
@@ -441,6 +447,7 @@ class _RecordingAutoRefreshCoordinator
     String? sourceTagName,
     bool forceSearchOnCatalogMiss = false,
     FavoriteSyncExecutionContext? executionContext,
+    ThreadDetailData? preloadedRootDetail,
   }) async {
     backfillCalls.add(
       _BackfillCallRecord(
@@ -478,6 +485,7 @@ class _ThrowingAutoRefreshCoordinator
     String? sourceTagName,
     bool forceSearchOnCatalogMiss = false,
     FavoriteSyncExecutionContext? executionContext,
+    ThreadDetailData? preloadedRootDetail,
   }) {
     throw StateError('refresh failed');
   }
@@ -492,6 +500,7 @@ class _ThrowingAutoRefreshCoordinator
     String? sourceTagName,
     bool forceSearchOnCatalogMiss = false,
     FavoriteSyncExecutionContext? executionContext,
+    ThreadDetailData? preloadedRootDetail,
   }) {
     throw StateError('refresh failed');
   }
@@ -513,6 +522,8 @@ class _NoopRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
+    ThreadDetailData? preloadedRootDetail,
+    ComicThreadDetailCache? threadCache,
   }
   ) async {
     return const ComicEpisodeRefreshOutcome(
@@ -559,6 +570,8 @@ class _NoopRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
+    ThreadDetailData? preloadedRootDetail,
+    ComicThreadDetailCache? threadCache,
   }
   ) async {
     return const ComicEpisodeRefreshOutcome(
@@ -574,6 +587,7 @@ class _NoopSearchQueue implements ComicSearchRefreshQueueEnqueuer {
     required ComicEpisodeRefreshRequest request,
     required String title,
     required ComicSearchRefreshOrigin origin,
+    ThreadDetailData? preloadedRootDetail,
   }) async {
     return ComicSearchRefreshEnqueueResult(
       entry: ComicSearchRefreshQueueEntry(

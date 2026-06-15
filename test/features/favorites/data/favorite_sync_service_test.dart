@@ -16,6 +16,7 @@ import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applie
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
 import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
 import 'package:y300/features/favorites/data/favorite_content_ingest_registry.dart';
 import 'package:y300/features/favorites/data/favorite_detail_context_loader.dart';
@@ -503,7 +504,7 @@ void main() {
     expect(bus.signal.value?.payload['detailLoadedCount'], 1);
   });
 
-  test('first sync inlines catalog miss search only when comic tag is long-running', () async {
+  test('first sync queues catalog miss search when comic tag is long-running', () async {
     final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
       1: _page(page: 1, totalCount: 1, items: <FavoriteThread>[
         _favoriteThread(tid: '100', title: '[Fav] Long Comic EP 02'),
@@ -555,18 +556,21 @@ void main() {
 
     await service.sync();
 
-    expect(queue.enqueuedRequests, isEmpty);
+    // 旧路径在 bootstrapInitial 下走内联搜索；新路径下所有 catalog 未命中
+    // 都走持久化等待队列，由 ForumSearchScheduler 控制节奏，并通过队列快照
+    // 驱动通知栏。
+    expect(queue.enqueuedRequests, hasLength(1));
+    expect(
+      signals.any(
+        (signal) => signal.reason == 'favorite_comic_search_refresh_queued',
+      ),
+      isTrue,
+    );
     expect(
       signals.any(
         (signal) => signal.reason == 'favorite_comic_catalog_miss_search_skipped',
       ),
       isFalse,
-    );
-    expect(
-      signals.any(
-        (signal) => signal.reason == 'favorite_comic_search_refresh_completed',
-      ),
-      isTrue,
     );
   });
 
@@ -1303,6 +1307,8 @@ class _BackfillRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
+    ThreadDetailData? preloadedRootDetail,
+    ComicThreadDetailCache? threadCache,
   }
   ) async {
     return _catalogOutcome;
@@ -1343,6 +1349,8 @@ class _BackfillRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
+    ThreadDetailData? preloadedRootDetail,
+    ComicThreadDetailCache? threadCache,
   }
   ) async {
     return _searchOutcome ??
@@ -1360,6 +1368,8 @@ class _ThrowingRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
+    ThreadDetailData? preloadedRootDetail,
+    ComicThreadDetailCache? threadCache,
   }
   ) async {
     throw StateError('refresh failed');
@@ -1397,6 +1407,8 @@ class _ThrowingRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
+    ThreadDetailData? preloadedRootDetail,
+    ComicThreadDetailCache? threadCache,
   }
   ) async {
     throw StateError('refresh failed');
@@ -1427,6 +1439,7 @@ class _RecordingSearchQueue implements ComicSearchRefreshQueueEnqueuer {
     required ComicEpisodeRefreshRequest request,
     required String title,
     required ComicSearchRefreshOrigin origin,
+    ThreadDetailData? preloadedRootDetail,
   }) async {
     enqueuedRequests.add(request);
     enqueuedTitles.add(title);
@@ -1452,7 +1465,11 @@ class _RecordingSearchQueue implements ComicSearchRefreshQueueEnqueuer {
 
 class _RecordingCoverPromoter implements ComicFirstEpisodeCoverPromoter {
   @override
-  Future<bool> promoteIfPossible({required String comicId}) async {
+  Future<bool> promoteIfPossible({
+    required String comicId,
+    ComicThreadDetailCache? threadCache,
+    FavoriteFirstSyncRequestGovernor? governor,
+  }) async {
     return true;
   }
 }

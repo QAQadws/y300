@@ -14,6 +14,7 @@ import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
 import 'package:y300/features/comic/presentation/comic_detail_page.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
@@ -21,6 +22,7 @@ import 'package:y300/features/library_shared/data/library_state_repository.dart'
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
+import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
 void main() {
   testWidgets('ComicDetailPage renders unified detail header and chapter list', (tester) async {
@@ -297,6 +299,8 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
+    ThreadDetailData? preloadedRootDetail,
+    ComicThreadDetailCache? threadCache,
   }
   ) async {
     return const ComicEpisodeRefreshOutcome(
@@ -309,6 +313,8 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
+    ThreadDetailData? preloadedRootDetail,
+    ComicThreadDetailCache? threadCache,
   }
   ) async {
     return const ComicEpisodeRefreshOutcome(

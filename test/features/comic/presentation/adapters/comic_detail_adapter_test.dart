@@ -15,11 +15,13 @@ import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_m
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
 import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/comic/presentation/adapters/comic_detail_adapter.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
+import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
@@ -533,6 +535,8 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
+    ThreadDetailData? preloadedRootDetail,
+    ComicThreadDetailCache? threadCache,
   }
   ) async {
     catalogOnlyCalls++;
@@ -556,6 +560,8 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
+    ThreadDetailData? preloadedRootDetail,
+    ComicThreadDetailCache? threadCache,
   }
   ) async {
     searchAndCurrentOnlyCalls++;
@@ -626,6 +632,7 @@ class _RecordingSearchQueue implements ComicSearchRefreshQueueEnqueuer {
     required ComicEpisodeRefreshRequest request,
     required String title,
     required ComicSearchRefreshOrigin origin,
+    ThreadDetailData? preloadedRootDetail,
   }) async {
     enqueuedRequests.add(request);
     enqueuedTitles.add(title);
