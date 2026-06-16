@@ -259,6 +259,21 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     final visualPolicy = visualPolicyResolver.resolve(pageKind);
     final generation = _navigationGeneration;
 
+    // 蒙版关闭必须放在所有 await 之前。后面的 _readPageTitle / _readCanGoBack /
+    // _readThreadMenuSnapshot / controller.onPageFinished 任何一处一旦 await，
+    // 用户在此期间盲点（IgnorePointer 让 tap 穿透到 WebView）就会触发新的
+    // pageStarted → _navigationGeneration += 1 → 后续早退 (`generation !=
+    // _navigationGeneration` 命中)，于是这一轮 pageFinished 永远走不到关蒙版的
+    // 那一行。一旦连续盲点的节奏足够快，蒙版会被彻底卡死。
+    //
+    // pageFinished 触发本身就证明 WebView 已经过了 bootstrap 闪烁阶段，
+    // 这里同步关蒙版安全且必要。后续 chrome 清理 / title 抓取等异步工作
+    // 仍按原有 generation 检查节流，与蒙版生命周期解耦。
+    if (navigator.isManagedSite(uri) && _isAwaitingInitialManagedPageStable) {
+      _didCompleteInitialManagedPageLateRepair = true;
+      _tryHideInitialLoadingMask();
+    }
+
     final pageTitle = await _readPageTitle(driver);
     final canGoBack = await _readCanGoBack(driver);
     if (!mounted || generation != _navigationGeneration) {
@@ -291,14 +306,8 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
 
     await injector.cleanChrome(driver, visualPolicy: visualPolicy);
 
-    // 首次 cleanChrome 立即跑完即视为 bootstrap 已完成；蒙版立刻关闭，
-    // 不再等 300ms 二次清理 —— 那个定时器在用户连续盲点时会被反复 cancel，
-    // 是上一版蒙版卡住的根因。300ms 二次清理保留作为 chrome 残留兜底，
-    // 但不再阻塞蒙版生命周期。
-    if (_isAwaitingInitialManagedPageStable) {
-      _didCompleteInitialManagedPageLateRepair = true;
-      _tryHideInitialLoadingMask();
-    }
+    // 蒙版关闭已经在方法顶部同步完成；这里保留 300ms 二次清理作为 chrome
+    // 残留的兜底，但与蒙版生命周期完全解耦。
 
     _delayedCleanupTimer?.cancel();
     _delayedCleanupTimer = Timer(const Duration(milliseconds: 300), () async {
