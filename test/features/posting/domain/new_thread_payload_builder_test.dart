@@ -157,6 +157,96 @@ void main() {
       );
       expect(payload.uploadedAttachmentAids, isEmpty);
     });
+
+    // ── tags 扩展轴 ─────────────────────────────────
+    test('passes tags through normalizer (trim, dedupe, cap)', () {
+      final payload = builder.build(
+        input: const NewThreadDraftInput(
+          subject: '标题',
+          message: '正文',
+          selectedTypeId: null,
+          useSignature: true,
+          allowNoticeAuthor: false,
+          bbCodeOff: false,
+          smileyOff: false,
+          parseUrlOff: false,
+          tags: ['  百合 ', '百合', '动画', ''],
+        ),
+        metadata: _metadata(),
+      );
+      expect(payload.tags, ['百合', '动画']);
+    });
+
+    test('default special is normal with no poll', () {
+      final payload = builder.build(
+        input: const NewThreadDraftInput(
+          subject: '标题',
+          message: '正文',
+          selectedTypeId: null,
+          useSignature: true,
+          allowNoticeAuthor: false,
+          bbCodeOff: false,
+          smileyOff: false,
+          parseUrlOff: false,
+        ),
+        metadata: _metadata(),
+      );
+      expect(payload.special, NewThreadSpecial.normal);
+      expect(payload.poll, isNull);
+    });
+
+    // ── special=poll 扩展轴 ─────────────────────────
+    test('builds poll payload with normalized fields', () {
+      final payload = builder.build(
+        input: const NewThreadDraftInput(
+          subject: '投票标题',
+          message: '说明',
+          selectedTypeId: null,
+          useSignature: true,
+          allowNoticeAuthor: false,
+          bbCodeOff: false,
+          smileyOff: false,
+          parseUrlOff: false,
+          special: NewThreadSpecial.poll,
+          poll: NewThreadPollDraft(
+            options: ['  A ', '', 'B', 'C'],
+            multiple: true,
+            maxChoices: 99, // 高于 options 数量，会被夹到 3
+            expirationDays: -1, // 负数会被夹到 0
+            overt: true,
+            visibilityPoll: false,
+          ),
+        ),
+        metadata: _metadata(),
+      );
+      expect(payload.special, NewThreadSpecial.poll);
+      expect(payload.poll, isNotNull);
+      expect(payload.poll!.options, ['A', 'B', 'C']);
+      expect(payload.poll!.maxChoices, 3);
+      expect(payload.poll!.expirationDays, 0);
+      expect(payload.poll!.overt, isTrue);
+    });
+
+    test('poll thread can still carry uploaded attachments', () {
+      final payload = builder.build(
+        input: NewThreadDraftInput(
+          subject: '投票',
+          message: '正文 [attach]111[/attach]',
+          selectedTypeId: null,
+          useSignature: true,
+          allowNoticeAuthor: false,
+          bbCodeOff: false,
+          smileyOff: false,
+          parseUrlOff: false,
+          special: NewThreadSpecial.poll,
+          poll: const NewThreadPollDraft(options: ['A', 'B']),
+          imageAttachments: [_uploaded(localId: 'x', aid: '111')],
+        ),
+        metadata: _metadata(),
+      );
+      expect(payload.uploadedAttachmentAids, ['111']);
+      expect(payload.special, NewThreadSpecial.poll);
+    });
   });
 }
 

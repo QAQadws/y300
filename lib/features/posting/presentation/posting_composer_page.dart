@@ -13,10 +13,14 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_mode
 import 'package:y300/features/composer_shared/presentation/widgets/composer_restored_draft_banner.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_status_banner.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/sticker_picker_sheet.dart';
+import 'package:y300/features/posting/domain/models/posting_models.dart';
 import 'package:y300/features/posting/presentation/posting_composer_controller.dart';
 import 'package:y300/features/posting/presentation/posting_composer_state.dart';
 import 'package:y300/features/posting/presentation/widgets/posting_options_panel.dart';
+import 'package:y300/features/posting/presentation/widgets/thread_poll_editor.dart';
+import 'package:y300/features/posting/presentation/widgets/thread_special_switch.dart';
 import 'package:y300/features/posting/presentation/widgets/thread_subject_field.dart';
+import 'package:y300/features/posting/presentation/widgets/thread_tags_field.dart';
 import 'package:y300/features/posting/presentation/widgets/thread_type_selector.dart';
 import 'package:y300/features/reply/presentation/widgets/reply_editor_toolbar.dart';
 
@@ -146,6 +150,14 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
             onParseUrlOffChanged: controller.updateParseUrlOff,
             onSelectedTypeIdChanged: controller.updateSelectedTypeId,
             onRetryLoadMetadata: controller.retryLoadMetadata,
+            onTagsChanged: controller.updateTags,
+            onSpecialChanged: controller.updateSpecial,
+            onPollOptionsChanged: controller.updatePollOptions,
+            onPollMultipleChanged: controller.updatePollMultiple,
+            onPollMaxChoicesChanged: controller.updatePollMaxChoices,
+            onPollExpirationDaysChanged: controller.updatePollExpirationDays,
+            onPollOvertChanged: controller.updatePollOvert,
+            onPollVisibilityPollChanged: controller.updatePollVisibilityPoll,
             onStickerPressed: () {
               unawaited(_pickAndInsertSticker(context, controller));
             },
@@ -221,10 +233,14 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
     if (_allowPopWithoutConfirm) {
       return false;
     }
-    return state != null &&
-        (state.subject.trim().isNotEmpty ||
-            state.message.trim().isNotEmpty ||
-            state.imageAttachments.isNotEmpty);
+    if (state == null) return false;
+    if (state.subject.trim().isNotEmpty) return true;
+    if (state.message.trim().isNotEmpty) return true;
+    if (state.imageAttachments.isNotEmpty) return true;
+    if (state.tags.isNotEmpty) return true;
+    final pollOptions = state.poll?.options ?? const <String>[];
+    if (pollOptions.any((option) => option.trim().isNotEmpty)) return true;
+    return false;
   }
 
   Future<void> _confirmAndPop(
@@ -326,6 +342,14 @@ class _PostingComposerBody extends StatelessWidget {
     required this.onParseUrlOffChanged,
     required this.onSelectedTypeIdChanged,
     required this.onRetryLoadMetadata,
+    required this.onTagsChanged,
+    required this.onSpecialChanged,
+    required this.onPollOptionsChanged,
+    required this.onPollMultipleChanged,
+    required this.onPollMaxChoicesChanged,
+    required this.onPollExpirationDaysChanged,
+    required this.onPollOvertChanged,
+    required this.onPollVisibilityPollChanged,
     required this.onStickerPressed,
   });
 
@@ -344,6 +368,14 @@ class _PostingComposerBody extends StatelessWidget {
   final ValueChanged<bool> onParseUrlOffChanged;
   final ValueChanged<String?> onSelectedTypeIdChanged;
   final VoidCallback onRetryLoadMetadata;
+  final ValueChanged<List<String>> onTagsChanged;
+  final ValueChanged<NewThreadSpecial> onSpecialChanged;
+  final ValueChanged<List<String>> onPollOptionsChanged;
+  final ValueChanged<bool> onPollMultipleChanged;
+  final ValueChanged<int> onPollMaxChoicesChanged;
+  final ValueChanged<int> onPollExpirationDaysChanged;
+  final ValueChanged<bool> onPollOvertChanged;
+  final ValueChanged<bool> onPollVisibilityPollChanged;
   final VoidCallback onStickerPressed;
 
   // PLACEHOLDER_PHASE_5_BODY_BUILD
@@ -380,6 +412,16 @@ class _PostingComposerBody extends StatelessWidget {
             maxLength: state.metadata?.maxSubjectLength ?? 0,
           ),
           const SizedBox(height: 12),
+          ThreadTagsField(
+            containerKey: const Key('posting-composer-tags-field'),
+            inputFieldKey: const Key('posting-composer-tags-input'),
+            chipKeyBuilder: (tag, index) =>
+                Key('posting-composer-tag-chip-$index'),
+            tags: state.tags,
+            onChanged: onTagsChanged,
+            enabled: !disabled,
+          ),
+          const SizedBox(height: 12),
           if (state.metadata != null && state.metadata!.threadTypes.isNotEmpty)
             ThreadTypeSelector(
               containerKey: const Key('posting-composer-type-selector'),
@@ -394,6 +436,42 @@ class _PostingComposerBody extends StatelessWidget {
             ),
           if (state.metadata != null && state.metadata!.threadTypes.isNotEmpty)
             const SizedBox(height: 12),
+          ThreadSpecialSwitch(
+            widgetKey: const Key('posting-composer-special-switch'),
+            special: state.special,
+            onChanged: onSpecialChanged,
+            enabled: !disabled,
+          ),
+          if (state.special == NewThreadSpecial.poll) ...[
+            const SizedBox(height: 12),
+            ThreadPollEditor(
+              containerKey: const Key('posting-composer-poll-editor'),
+              optionFieldKeyBuilder: (index) =>
+                  Key('posting-composer-poll-option-$index'),
+              optionRemoveKeyBuilder: (index) =>
+                  Key('posting-composer-poll-option-remove-$index'),
+              addOptionButtonKey:
+                  const Key('posting-composer-poll-add-option'),
+              multipleSwitchKey:
+                  const Key('posting-composer-poll-multiple-switch'),
+              maxChoicesFieldKey:
+                  const Key('posting-composer-poll-max-choices'),
+              expirationFieldKey:
+                  const Key('posting-composer-poll-expiration'),
+              overtSwitchKey: const Key('posting-composer-poll-overt-switch'),
+              visibilityPollSwitchKey:
+                  const Key('posting-composer-poll-visibility-switch'),
+              poll: state.poll ?? NewThreadPollDraft.empty,
+              enabled: !disabled,
+              onOptionsChanged: onPollOptionsChanged,
+              onMultipleChanged: onPollMultipleChanged,
+              onMaxChoicesChanged: onPollMaxChoicesChanged,
+              onExpirationDaysChanged: onPollExpirationDaysChanged,
+              onOvertChanged: onPollOvertChanged,
+              onVisibilityPollChanged: onPollVisibilityPollChanged,
+            ),
+          ],
+          const SizedBox(height: 12),
           ComposerModeSwitch(
             widgetKey: const Key('posting-composer-mode-switch'),
             mode: state.mode,

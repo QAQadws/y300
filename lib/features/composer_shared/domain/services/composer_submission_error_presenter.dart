@@ -79,6 +79,15 @@ class ComposerSubmissionErrorPresenter {
         return _floodMessage(kind);
       case 'seccode_invalid':
         return '需要验证码，请暂时改用网页发布';
+      // ── 投票相关 ────────────────────────────────────
+      case 'post_pollinvalid':
+      case 'pollinvalid':
+        return '投票配置无效，请检查选项与截止时间';
+      case 'polloption_count_invalid':
+      case 'post_polloption_invalid':
+        return '投票选项数量不合法（至少 2 个，最多见站点设置）';
+      case 'post_polltype_isnull':
+        return '请正确填写投票相关字段';
     }
     if (code.startsWith('seccode_')) {
       return '需要验证码，请暂时改用网页发布';

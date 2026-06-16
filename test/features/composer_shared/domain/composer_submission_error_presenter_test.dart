@@ -150,6 +150,31 @@ void main() {
           contains('验证码'),
         );
       });
+
+      test('maps poll-specific business codes to friendly text', () {
+        expect(
+          presenter.present(
+            const ApiError(
+              type: ApiErrorType.business,
+              code: 'post_pollinvalid',
+              message: 'invalid poll',
+            ),
+            kind: ComposerKind.newThread,
+          ),
+          contains('投票配置无效'),
+        );
+        expect(
+          presenter.present(
+            const ApiError(
+              type: ApiErrorType.business,
+              code: 'polloption_count_invalid',
+              message: 'wrong count',
+            ),
+            kind: ComposerKind.newThread,
+          ),
+          contains('选项数量不合法'),
+        );
+      });
     });
   });
 }

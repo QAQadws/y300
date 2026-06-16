@@ -505,5 +505,184 @@ void main() {
       },
     );
 
+    // ── tags / special / poll ────────────────────────────────
+    test('updateTags writes normalized tags into state and draft', () async {
+      final draftRepository = _MemoryDraftRepository();
+      final args = _args();
+      final container = _buildContainer(
+        draftRepository: draftRepository,
+        metadataRepository: _FakeMetadataRepository.success(_metadataNoTypes()),
+      );
+      addTearDown(container.dispose);
+      final subscription = _keepAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(postingComposerControllerProvider(args).future);
+      await _drain();
+
+      final controller = container.read(
+        postingComposerControllerProvider(args).notifier,
+      );
+      // 草稿落盘时 ComposerDraftSnapshot.isEmpty 同时看 subject/message/附件，
+      // 全空时 memory repo 会把草稿删了。这里给一条最低限的标题 + 正文，让
+      // 测试焦点回到"tags 能否被持久化"。
+      controller.updateSubject('标题');
+      controller.updateMessage('正文');
+      controller.updateTags(['  百合 ', '百合', '动画', '']);
+      await controller.flushDraft();
+
+      final state =
+          container.read(postingComposerControllerProvider(args)).value!;
+      expect(state.tags, ['百合', '动画']);
+
+      final stored = await draftRepository.loadDraft(args.identity);
+      expect(stored?.extras['tags'], '百合,动画');
+    });
+
+    test('updateSpecial to poll seeds an empty draft and persists', () async {
+      final draftRepository = _MemoryDraftRepository();
+      final args = _args();
+      final container = _buildContainer(
+        draftRepository: draftRepository,
+        metadataRepository: _FakeMetadataRepository.success(_metadataNoTypes()),
+      );
+      addTearDown(container.dispose);
+      final subscription = _keepAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(postingComposerControllerProvider(args).future);
+      await _drain();
+
+      final controller = container.read(
+        postingComposerControllerProvider(args).notifier,
+      );
+      // 必须先有 subject / message，否则 isEmpty 草稿不会落盘。
+      controller.updateSubject('投票');
+      controller.updateMessage('说明');
+      controller.updateSpecial(NewThreadSpecial.poll);
+      await controller.flushDraft();
+
+      final state =
+          container.read(postingComposerControllerProvider(args)).value!;
+      expect(state.special, NewThreadSpecial.poll);
+      expect(state.poll, isNotNull);
+
+      final stored = await draftRepository.loadDraft(args.identity);
+      expect(stored?.extras['special'], 'poll');
+    });
+
+    test('poll preflight blocks submit when fewer than 2 valid options',
+        () async {
+      final newThreadRepository = _FakeNewThreadRepository();
+      final args = _args();
+      final container = _buildContainer(
+        metadataRepository: _FakeMetadataRepository.success(_metadataNoTypes()),
+        newThreadRepository: newThreadRepository,
+      );
+      addTearDown(container.dispose);
+      final subscription = _keepAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(postingComposerControllerProvider(args).future);
+      await _drain();
+
+      final controller = container.read(
+        postingComposerControllerProvider(args).notifier,
+      );
+      controller.updateSubject('投票');
+      controller.updateMessage('说明');
+      controller.updateSpecial(NewThreadSpecial.poll);
+      controller.updatePollOptions(['只有一个']);
+
+      final result = await controller.submit();
+      expect(result.sent, isFalse);
+      expect(newThreadRepository.submittedPayloads, isEmpty);
+      expect(result.message, contains('投票至少需要'));
+    });
+
+    test('poll submit forwards normalized payload', () async {
+      final newThreadRepository = _FakeNewThreadRepository();
+      final args = _args();
+      final container = _buildContainer(
+        metadataRepository: _FakeMetadataRepository.success(_metadataNoTypes()),
+        newThreadRepository: newThreadRepository,
+      );
+      addTearDown(container.dispose);
+      final subscription = _keepAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(postingComposerControllerProvider(args).future);
+      await _drain();
+
+      final controller = container.read(
+        postingComposerControllerProvider(args).notifier,
+      );
+      controller.updateSubject('投票标题');
+      controller.updateMessage('正文');
+      controller.updateSpecial(NewThreadSpecial.poll);
+      controller.updatePollOptions(['  A ', '', 'B', 'C']);
+      controller.updatePollMultiple(true);
+      controller.updatePollMaxChoices(2);
+      controller.updatePollExpirationDays(7);
+      controller.updatePollOvert(true);
+
+      final result = await controller.submit();
+      expect(result.sent, isTrue);
+
+      final payload = newThreadRepository.submittedPayloads.single;
+      expect(payload.special, NewThreadSpecial.poll);
+      expect(payload.poll, isNotNull);
+      expect(payload.poll!.options, ['A', 'B', 'C']);
+      expect(payload.poll!.multiple, isTrue);
+      expect(payload.poll!.maxChoices, 2);
+      expect(payload.poll!.expirationDays, 7);
+      expect(payload.poll!.overt, isTrue);
+
+      // 成功后业务字段被 reset。
+      final state =
+          container.read(postingComposerControllerProvider(args)).value!;
+      expect(state.special, NewThreadSpecial.normal);
+      expect(state.poll, isNull);
+      expect(state.tags, isEmpty);
+    });
+
+    test('restored poll draft re-enters poll mode after relaunch', () async {
+      final draftRepository = _MemoryDraftRepository();
+      // 模拟"杀进程后重启"：先在仓库里塞一份草稿。
+      await draftRepository.saveDraft(
+        ComposerDraftSnapshot(
+          identity: ComposerDraftIdentity.newThread(fid: '33'),
+          message: '说明',
+          subject: '投票',
+          useSignature: true,
+          updatedAt: DateTime.now(),
+          extras: const <String, String>{
+            'special': 'poll',
+            'pollOptions': 'A\nB',
+            'pollMultiple': '1',
+            'pollMaxChoices': '2',
+            'tags': '百合,动画',
+          },
+        ),
+      );
+
+      final args = _args();
+      final container = _buildContainer(
+        draftRepository: draftRepository,
+        metadataRepository: _FakeMetadataRepository.success(_metadataNoTypes()),
+      );
+      addTearDown(container.dispose);
+      final subscription = _keepAlive(container, args);
+      addTearDown(subscription.close);
+
+      final state = await container.read(
+        postingComposerControllerProvider(args).future,
+      );
+      expect(state.subject, '投票');
+      expect(state.message, '说明');
+      expect(state.tags, ['百合', '动画']);
+      expect(state.special, NewThreadSpecial.poll);
+      expect(state.poll, isNotNull);
+      expect(state.poll!.options, ['A', 'B']);
+      expect(state.poll!.multiple, isTrue);
+      expect(state.poll!.maxChoices, 2);
+    });
+
   });
 }

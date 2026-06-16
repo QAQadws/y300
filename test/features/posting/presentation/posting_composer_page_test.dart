@@ -130,6 +130,12 @@ void main() {
       );
       expect(sendButton.onPressed, isNull);
 
+      // 加了 tags / special switch 后，type 选择器在窄视口里需要先滚到屏内
+      // 才能 tap 到。
+      await tester.ensureVisible(
+        find.byKey(const Key('posting-composer-type-111')),
+      );
+      await tester.pump();
       // 选了分类之后按钮启用。
       await tester.tap(find.byKey(const Key('posting-composer-type-111')));
       await tester.pump();
@@ -223,20 +229,48 @@ void main() {
       await tester.pumpAndSettle();
 
       // 没输入时计数显示 0/limit。
+      // 加了 tags / special switch / poll editor 之后，message-counter 在窄
+      // 视口下被推到 fold 之外。ListView 对屏外子项不建 element，
+      // ensureVisible 拿不到 element 会抛 No element。所以分两阶段断言：
+      //   1) 滚之前 subject-counter 在 viewport 顶部，能直接断言 "0 / 5"。
+      //   2) scrollUntilVisible 把 message-counter 滚进来，再断言 "0 / 10"。
+      // 不要在滚动后回头断言 subject 的文本——滚远了 ListView 可能已经把
+      // 旧 element 释放，find.text 会丢。
+      // page 里 TextField 内部也有 Scrollable，所以显式锁定到外层 ListView，
+      // 否则默认 find.byType(Scrollable) 命中多个会抛 single 异常。
       expect(
         find.byKey(const Key('posting-composer-subject-counter')),
         findsOneWidget,
+      );
+      expect(find.text('0 / 5'), findsOneWidget);
+
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('posting-composer-message-counter')),
+        100,
+        scrollable: find.byType(Scrollable).first,
       );
       expect(
         find.byKey(const Key('posting-composer-message-counter')),
         findsOneWidget,
       );
-      expect(find.text('0 / 5'), findsOneWidget);
       expect(find.text('0 / 10'), findsOneWidget);
 
+      // 把 ListView 滚回顶部再输入 subject——否则输入框可能已经在屏外，
+      // enterText 会失败。
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('posting-composer-subject-input')),
+        -200,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.enterText(
         find.byKey(const Key('posting-composer-subject-input')),
         '六个字符的标题',
+      );
+      // 滚回正文输入框再敲正文。
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('posting-composer-message-input')),
+        200,
+        scrollable: find.byType(Scrollable).first,
       );
       await tester.enterText(
         find.byKey(const Key('posting-composer-message-input')),
@@ -244,7 +278,12 @@ void main() {
       );
       await tester.pump();
 
-      // 标题超限后发送按钮禁用，计数行能看到当前长度 / 上限。
+      // 标题超限后发送按钮禁用；先把 subject-counter 滚回视口再断言文本。
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('posting-composer-subject-counter')),
+        -200,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(find.text('7 / 5'), findsOneWidget);
       final sendButton = tester.widget<IconButton>(
         find.byKey(const Key('posting-composer-send-button')),
@@ -302,6 +341,14 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(imagePicker.pickCallCount, 1);
+      // 加了 tags / special switch 后，image-queue 在窄视口里被推到 fold
+      // 之外。ListView 对屏外子项不建 element，要用 scrollUntilVisible
+      // 让 sliver 边滚边建。锁定到外层 ListView，避开 TextField 内部 Scrollable。
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('posting-composer-image-queue')),
+        100,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(
         find.byKey(const Key('posting-composer-image-queue')),
         findsOneWidget,

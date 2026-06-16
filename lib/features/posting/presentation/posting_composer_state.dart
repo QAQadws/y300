@@ -41,6 +41,8 @@ class PostingComposerArgs {
 /// - metadata 是 `null` 表示"还在加载或加载失败"，由 [isLoadingMetadata] /
 ///   [metadataError] 区分。这两个状态分开存而非合并 enum，是为了让"加载失败
 ///   后用户继续打字"的情况，metadata 可以保留旧错误标记同时正常编辑草稿。
+/// - tags / special / poll 三个字段是后续扩展轴：tags 普通/投票通用；
+///   special 决定 payload strategy；poll 仅当 special == poll 时非空。
 class PostingComposerState extends ComposerStateBase {
   const PostingComposerState({
     required this.target,
@@ -62,6 +64,9 @@ class PostingComposerState extends ComposerStateBase {
     this.bbCodeOff = false,
     this.smileyOff = false,
     this.parseUrlOff = false,
+    this.tags = const <String>[],
+    this.special = NewThreadSpecial.normal,
+    this.poll,
     super.errorMessage,
     super.imageUploadError,
   });
@@ -82,6 +87,9 @@ class PostingComposerState extends ComposerStateBase {
     bool bbCodeOff = false,
     bool smileyOff = false,
     bool parseUrlOff = false,
+    List<String> tags = const <String>[],
+    NewThreadSpecial special = NewThreadSpecial.normal,
+    NewThreadPollDraft? poll,
   }) {
     return PostingComposerState(
       target: target,
@@ -103,6 +111,9 @@ class PostingComposerState extends ComposerStateBase {
       bbCodeOff: bbCodeOff,
       smileyOff: smileyOff,
       parseUrlOff: parseUrlOff,
+      tags: tags,
+      special: special,
+      poll: poll,
     );
   }
 
@@ -119,6 +130,16 @@ class PostingComposerState extends ComposerStateBase {
   final bool bbCodeOff;
   final bool smileyOff;
   final bool parseUrlOff;
+
+  /// 主题标签（chip 输入）。空表示用户未填。
+  final List<String> tags;
+
+  /// 主题特殊类型；目前只 normal / poll。
+  final NewThreadSpecial special;
+
+  /// 投票草稿；仅当 [special] == [NewThreadSpecial.poll] 时非空。
+  /// segmented 切到普通帖时由 controller 负责清空。
+  final NewThreadPollDraft? poll;
 
   bool get canPickImages => !isSubmitting && !isUploadingImages;
 
@@ -147,6 +168,21 @@ class PostingComposerState extends ComposerStateBase {
         message.trim().length > metadata!.maxMessageLength) {
       return false;
     }
+    if (special == NewThreadSpecial.poll) {
+      final p = poll;
+      if (p == null) return false;
+      final validOptions =
+          p.options.where((s) => s.trim().isNotEmpty).toList(growable: false);
+      if (validOptions.length < NewThreadPollValidation.minOptions) {
+        return false;
+      }
+      if (p.options.any(
+        (option) => option.trim().length > NewThreadPollValidation.maxOptionLength,
+      )) {
+        return false;
+      }
+      if (p.multiple && p.maxChoices < 2) return false;
+    }
     return true;
   }
 
@@ -169,11 +205,15 @@ class PostingComposerState extends ComposerStateBase {
     bool? bbCodeOff,
     bool? smileyOff,
     bool? parseUrlOff,
+    List<String>? tags,
+    NewThreadSpecial? special,
+    NewThreadPollDraft? poll,
     String? errorMessage,
     String? imageUploadError,
     bool clearMetadata = false,
     bool clearMetadataError = false,
     bool clearSelectedTypeId = false,
+    bool clearPoll = false,
     bool clearErrorMessage = false,
     bool clearImageUploadError = false,
   }) {
@@ -199,6 +239,9 @@ class PostingComposerState extends ComposerStateBase {
       bbCodeOff: bbCodeOff ?? this.bbCodeOff,
       smileyOff: smileyOff ?? this.smileyOff,
       parseUrlOff: parseUrlOff ?? this.parseUrlOff,
+      tags: tags ?? this.tags,
+      special: special ?? this.special,
+      poll: clearPoll ? null : poll ?? this.poll,
       errorMessage:
           clearErrorMessage ? null : errorMessage ?? this.errorMessage,
       imageUploadError: clearImageUploadError

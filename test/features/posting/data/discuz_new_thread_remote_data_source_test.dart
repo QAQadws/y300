@@ -64,6 +64,124 @@ void main() {
       expect(adapter.lastBody, contains('special=0'));
       expect(adapter.lastBody, contains('usesig=1'));
       expect(adapter.lastBody, contains('allownoticeauthor=0'));
+      // tags / poll 都没设置 → form 里不应出现这些键。
+      expect(adapter.lastBody, isNot(contains('tags=')));
+      expect(adapter.lastBody, isNot(contains('tpolloption=')));
+      expect(adapter.lastBody, isNot(contains('polloptions=')));
+    });
+
+    test('serializes tags as joined comma string when non-empty', () async {
+      final adapter = _Adapter(
+        responseJson: <String, dynamic>{
+          'Variables': <String, dynamic>{'tid': '1', 'pid': '2'},
+          'Message': <String, dynamic>{'messageval': 'post_newthread_succeed'},
+        },
+      );
+      final dataSource = _build(adapter);
+
+      await dataSource.submit(
+        const NewThreadSubmitForm(
+          payload: NewThreadDraftPayload(
+            fid: '33',
+            formHash: 'fh',
+            subject: 't',
+            message: 'm',
+            typeid: '0',
+            useSignature: false,
+            allowNoticeAuthor: false,
+            bbCodeOff: false,
+            smileyOff: false,
+            parseUrlOff: false,
+            tags: ['a', 'b'],
+          ),
+        ),
+      );
+
+      expect(adapter.lastBody, contains('tags=a%2Cb'));
+    });
+
+    test('serializes poll fields when special=poll', () async {
+      final adapter = _Adapter(
+        responseJson: <String, dynamic>{
+          'Variables': <String, dynamic>{'tid': '1', 'pid': '2'},
+          'Message': <String, dynamic>{'messageval': 'post_newthread_succeed'},
+        },
+      );
+      final dataSource = _build(adapter);
+
+      await dataSource.submit(
+        const NewThreadSubmitForm(
+          payload: NewThreadDraftPayload(
+            fid: '33',
+            formHash: 'fh',
+            subject: '投票',
+            message: '说明',
+            typeid: '0',
+            useSignature: true,
+            allowNoticeAuthor: false,
+            bbCodeOff: false,
+            smileyOff: false,
+            parseUrlOff: false,
+            special: NewThreadSpecial.poll,
+            poll: NewThreadPollDraft(
+              options: ['A', 'B', 'C'],
+              multiple: true,
+              maxChoices: 2,
+              expirationDays: 7,
+              overt: true,
+              visibilityPoll: true,
+            ),
+          ),
+        ),
+      );
+
+      expect(adapter.lastBody, contains('special=1'));
+      expect(adapter.lastBody, contains('tpolloption=2'));
+      // polloptions 用 \n 分隔；form 编码后是 %0A。
+      expect(adapter.lastBody, contains('polloptions=A%0AB%0AC'));
+      expect(adapter.lastBody, contains('maxchoices=2'));
+      expect(adapter.lastBody, contains('expiration=7'));
+      expect(adapter.lastBody, contains('overt=1'));
+      expect(adapter.lastBody, contains('visibilitypoll=1'));
+    });
+
+    test('single-choice poll caps maxchoices at 1 regardless of stored value',
+        () async {
+      final adapter = _Adapter(
+        responseJson: <String, dynamic>{
+          'Variables': <String, dynamic>{'tid': '1', 'pid': '2'},
+          'Message': <String, dynamic>{'messageval': 'post_newthread_succeed'},
+        },
+      );
+      final dataSource = _build(adapter);
+
+      await dataSource.submit(
+        const NewThreadSubmitForm(
+          payload: NewThreadDraftPayload(
+            fid: '33',
+            formHash: 'fh',
+            subject: '投票',
+            message: '说明',
+            typeid: '0',
+            useSignature: false,
+            allowNoticeAuthor: false,
+            bbCodeOff: false,
+            smileyOff: false,
+            parseUrlOff: false,
+            special: NewThreadSpecial.poll,
+            poll: NewThreadPollDraft(
+              options: ['A', 'B'],
+              multiple: false,
+              maxChoices: 5,
+              expirationDays: 0,
+            ),
+          ),
+        ),
+      );
+
+      expect(adapter.lastBody, contains('maxchoices=1'));
+      expect(adapter.lastBody, contains('expiration=0'));
+      expect(adapter.lastBody, isNot(contains('visibilitypoll=')));
     });
   });
 }

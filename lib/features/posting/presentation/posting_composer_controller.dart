@@ -15,17 +15,9 @@ import 'package:y300/features/posting/data/posting_form_metadata_repository.dart
 import 'package:y300/features/posting/data/posting_providers.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
 import 'package:y300/features/posting/domain/services/new_thread_payload_builder.dart';
+import 'package:y300/features/posting/domain/services/new_thread_tags_normalizer.dart';
+import 'package:y300/features/posting/domain/services/posting_draft_extras_codec.dart';
 import 'package:y300/features/posting/presentation/posting_composer_state.dart';
-
-/// 草稿 extras 中预定义的 key。集中放在这里避免 controller / 草稿 codec / 测试
-/// 各自硬编码字符串后字段意外飘逸。
-class _PostingDraftExtras {
-  static const String typeid = 'typeid';
-  static const String allowNoticeAuthor = 'allowNoticeAuthor';
-  static const String bbCodeOff = 'bbCodeOff';
-  static const String smileyOff = 'smileyOff';
-  static const String parseUrlOff = 'parseurlOff';
-}
 
 final postingComposerControllerProvider = AsyncNotifierProvider.autoDispose
     .family<PostingComposerController, PostingComposerState,
@@ -39,7 +31,8 @@ final postingComposerControllerProvider = AsyncNotifierProvider.autoDispose
 /// [ComposerControllerBase]；这里只补：
 /// 1) `_loadMetadata`：拉取 forumdisplay 元数据，并在 metadata 到位后校正
 ///    草稿恢复出来的 typeid。
-/// 2) 业务字段更新（subject / typeid / 选项）+ 草稿落盘。
+/// 2) 业务字段更新（subject / typeid / 选项 / tags / special / poll）+
+///    草稿落盘。tags / poll 走单独的小型 setter，避免基类感知发帖独有字段。
 /// 3) `performSubmit`：把 state 翻译成 [NewThreadDraftInput]，喂给
 ///    [NewThreadPayloadBuilder]，再交给 [NewThreadRepository] 提交，
 ///    成功 / 失败统一翻译为 [ComposerSubmissionOutcome]。
@@ -52,6 +45,8 @@ class PostingComposerController
   NewThreadRepository? _newThreadRepository;
   NewThreadPayloadBuilder? _payloadBuilder;
   ComposerSubmissionErrorPresenter? _errorPresenter;
+  PostingDraftExtrasCodec? _draftExtrasCodec;
+  NewThreadTagsNormalizer? _tagsNormalizer;
 
   @override
   ComposerDraftIdentity get draftIdentity => _args.identity;
@@ -65,6 +60,8 @@ class PostingComposerController
     _newThreadRepository = ref.read(newThreadRepositoryProvider);
     _payloadBuilder = ref.read(newThreadPayloadBuilderProvider);
     _errorPresenter = ref.read(composerSubmissionErrorPresenterProvider);
+    _draftExtrasCodec = ref.read(postingDraftExtrasCodecProvider);
+    _tagsNormalizer = ref.read(newThreadTagsNormalizerProvider);
     return super.build();
   }
 
@@ -72,8 +69,9 @@ class PostingComposerController
   Future<PostingComposerState> buildInitialState({
     required ComposerDraftSnapshot? restoredDraft,
   }) async {
-    final extras = restoredDraft?.extras ?? const <String, String>{};
-    final restoredTypeId = _readNonEmpty(extras[_PostingDraftExtras.typeid]);
+    final extras = _draftExtrasCodec!.decode(
+      restoredDraft?.extras ?? const <String, String>{},
+    );
     return PostingComposerState.initial(
       target: _args.target,
       subject: restoredDraft?.subject ?? '',
@@ -83,12 +81,14 @@ class PostingComposerController
       imageAttachments:
           restoredDraft?.imageAttachments ?? const <ComposerImageAttachment>[],
       isLoadingMetadata: true,
-      selectedTypeId: restoredTypeId,
-      allowNoticeAuthor:
-          _readBool(extras[_PostingDraftExtras.allowNoticeAuthor]),
-      bbCodeOff: _readBool(extras[_PostingDraftExtras.bbCodeOff]),
-      smileyOff: _readBool(extras[_PostingDraftExtras.smileyOff]),
-      parseUrlOff: _readBool(extras[_PostingDraftExtras.parseUrlOff]),
+      selectedTypeId: extras.selectedTypeId,
+      allowNoticeAuthor: extras.allowNoticeAuthor,
+      bbCodeOff: extras.bbCodeOff,
+      smileyOff: extras.smileyOff,
+      parseUrlOff: extras.parseUrlOff,
+      tags: extras.tags,
+      special: extras.special,
+      poll: extras.poll,
     );
   }
 
@@ -131,14 +131,16 @@ class PostingComposerController
 
   @override
   Map<String, String> draftExtrasFor(PostingComposerState value) {
-    return <String, String>{
-      if ((value.selectedTypeId ?? '').isNotEmpty)
-        _PostingDraftExtras.typeid: value.selectedTypeId!,
-      if (value.allowNoticeAuthor) _PostingDraftExtras.allowNoticeAuthor: '1',
-      if (value.bbCodeOff) _PostingDraftExtras.bbCodeOff: '1',
-      if (value.smileyOff) _PostingDraftExtras.smileyOff: '1',
-      if (value.parseUrlOff) _PostingDraftExtras.parseUrlOff: '1',
-    };
+    return _draftExtrasCodec!.encode(
+      selectedTypeId: value.selectedTypeId,
+      allowNoticeAuthor: value.allowNoticeAuthor,
+      bbCodeOff: value.bbCodeOff,
+      smileyOff: value.smileyOff,
+      parseUrlOff: value.parseUrlOff,
+      tags: value.tags,
+      special: value.special,
+      poll: value.poll,
+    );
   }
 
   @override
@@ -150,6 +152,9 @@ class PostingComposerController
       bbCodeOff: false,
       smileyOff: false,
       parseUrlOff: false,
+      tags: const <String>[],
+      special: NewThreadSpecial.normal,
+      clearPoll: true,
     );
   }
 
@@ -201,6 +206,87 @@ class PostingComposerController
 
   void updateParseUrlOff(bool value) {
     _updateOption((s) => s.copyWith(parseUrlOff: value));
+  }
+
+  /// tags 整组替换。UI 端的 chip widget 负责加 / 删 / dedupe，由 controller
+  /// 在落盘前用 [NewThreadTagsNormalizer] 收一遍 trim / 上限。
+  void updateTags(List<String> next) {
+    _updateOption((s) => s.copyWith(
+          tags: List<String>.unmodifiable(_tagsNormalizer!.normalize(next)),
+        ));
+  }
+
+  /// 切换主题特殊类型。
+  ///
+  /// - normal → poll：若当前 poll 为空就给一个 [NewThreadPollDraft.empty]，
+  ///   让 UI 立即展开"投票编辑器"；
+  /// - poll → normal：保留 poll 草稿不删（用户切回投票时还能看到原选项），
+  ///   但 special 字段改为 normal，序列化时 poll 不会被 form 捎带。
+  ///
+  /// 这里**不**清空 poll，是为了保护用户已经填了一半的投票草稿；
+  /// `resetAfterSuccess` 在提交成功后才显式清空。
+  void updateSpecial(NewThreadSpecial next) {
+    final current = state.value;
+    if (current == null) return;
+    if (current.special == next) return;
+    final NewThreadPollDraft? poll;
+    if (next == NewThreadSpecial.poll) {
+      poll = current.poll ?? NewThreadPollDraft.empty;
+    } else {
+      poll = current.poll;
+    }
+    setStateValue(current.copyWith(
+      special: next,
+      poll: poll,
+      clearErrorMessage: true,
+    ));
+    unawaited(scheduleDraftSave());
+  }
+
+  // ── poll 字段编辑 ─────────────────────────────────
+  void updatePollOptions(List<String> options) {
+    _updatePoll((p) => p.copyWith(options: List<String>.from(options)));
+  }
+
+  void updatePollMultiple(bool multiple) {
+    _updatePoll((p) {
+      // 关闭多选时把 maxChoices 强制压回 1，避免草稿恢复后 UI 出现
+      // 单选 + maxChoices=5 这种自相矛盾的状态。
+      if (!multiple) {
+        return p.copyWith(multiple: false, maxChoices: 1);
+      }
+      // 打开多选时，若历史 maxChoices < 2，给个 2 当起步——选项数还没填够时
+      // [canSubmit] 仍会拦住提交，UI 上的输入框允许用户继续上调。
+      return p.copyWith(
+        multiple: true,
+        maxChoices: p.maxChoices < 2 ? 2 : p.maxChoices,
+      );
+    });
+  }
+
+  void updatePollMaxChoices(int n) {
+    _updatePoll((p) => p.copyWith(maxChoices: n < 1 ? 1 : n));
+  }
+
+  void updatePollExpirationDays(int days) {
+    _updatePoll((p) => p.copyWith(expirationDays: days < 0 ? 0 : days));
+  }
+
+  void updatePollOvert(bool value) {
+    _updatePoll((p) => p.copyWith(overt: value));
+  }
+
+  void updatePollVisibilityPoll(bool value) {
+    _updatePoll((p) => p.copyWith(visibilityPoll: value));
+  }
+
+  void _updatePoll(NewThreadPollDraft Function(NewThreadPollDraft) reducer) {
+    final current = state.value;
+    if (current == null) return;
+    if (current.special != NewThreadSpecial.poll) return;
+    final next = reducer(current.poll ?? NewThreadPollDraft.empty);
+    setStateValue(current.copyWith(poll: next, clearErrorMessage: true));
+    unawaited(scheduleDraftSave());
   }
 
   void _updateOption(
@@ -319,6 +405,30 @@ class PostingComposerController
         message.length > metadata.maxMessageLength) {
       return '正文超出版块上限（最多 ${metadata.maxMessageLength} 字符）';
     }
+    if (state.special == NewThreadSpecial.poll) {
+      final pollError = _validatePoll(state.poll);
+      if (pollError != null) return pollError;
+    }
+    return null;
+  }
+
+  String? _validatePoll(NewThreadPollDraft? poll) {
+    if (poll == null) {
+      return '投票配置缺失，请添加选项';
+    }
+    final validOptions =
+        poll.options.where((s) => s.trim().isNotEmpty).toList(growable: false);
+    if (validOptions.length < NewThreadPollValidation.minOptions) {
+      return '投票至少需要 ${NewThreadPollValidation.minOptions} 个非空选项';
+    }
+    if (poll.options.any(
+      (option) => option.trim().length > NewThreadPollValidation.maxOptionLength,
+    )) {
+      return '单个投票选项不能超过 ${NewThreadPollValidation.maxOptionLength} 字符';
+    }
+    if (poll.multiple && poll.maxChoices < 2) {
+      return '多选投票的最大选择数需 ≥ 2';
+    }
     return null;
   }
 
@@ -344,6 +454,9 @@ class PostingComposerController
       smileyOff: state.smileyOff,
       parseUrlOff: state.parseUrlOff,
       imageAttachments: state.imageAttachments,
+      tags: state.tags,
+      special: state.special,
+      poll: state.poll,
     );
     final payload = _payloadBuilder!.build(
       input: input,
@@ -383,23 +496,4 @@ class PostingComposerController
   /// `performSubmit` 写入、`submit` 读取，最后封进 [PostingComposerResult]。
   /// 单线程运行，submit 之间不会重叠，所以一个普通字段足够。
   NewThreadSubmissionResult? _lastSuccess;
-
-  String? _readNonEmpty(String? value) {
-    if (value == null) {
-      return null;
-    }
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) {
-      return null;
-    }
-    return trimmed;
-  }
-
-  bool _readBool(String? value) {
-    if (value == null) {
-      return false;
-    }
-    final normalized = value.trim().toLowerCase();
-    return normalized == '1' || normalized == 'true';
-  }
 }
