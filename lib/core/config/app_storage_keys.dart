@@ -8,6 +8,7 @@ abstract final class AppStorageKeys {
   static const String imageCacheMaxBytes = 'image_cache_max_bytes';
   static const String imageCacheCustomDirectory = 'image_cache_custom_dir';
   static const String downloadStorageDirectory = 'download_storage_dir';
+  static const String appThemePreference = 'app_theme_preference';
   static const String forumShellMode = 'forum_shell_mode';
   static const String syncDiagnosticManualMode = 'sync_diagnostic_manual_mode';
   static const String replyStickerLastGroupId = 'reply_sticker_last_group_id';

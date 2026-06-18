@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/app/settings/app_appearance_controller.dart';
+import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/library_shared/presentation/controllers/sync_diagnostic_mode_controller.dart';
 import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
+import 'package:y300/features/more/presentation/appearance_settings_page.dart';
 import 'package:y300/features/more/presentation/data_storage_page.dart';
 
 class MorePage extends ConsumerStatefulWidget {
@@ -27,6 +30,9 @@ class _MorePageState extends ConsumerState<MorePage> {
         const AuthSessionViewState.signedOut();
     final forumMode = ref.watch(forumShellModeControllerProvider).asData?.value ??
         ForumShellMode.webview;
+    final appearanceSettings =
+        ref.watch(appAppearanceControllerProvider).asData?.value ??
+            AppAppearanceSettings.defaults();
     final diagnosticMode = ref.watch(syncDiagnosticModeControllerProvider);
     final diagnosticEnabled = diagnosticMode.asData?.value ?? false;
 
@@ -45,6 +51,19 @@ class _MorePageState extends ConsumerState<MorePage> {
             title: const Text('论坛显示模式'),
             subtitle: Text('当前：${forumMode.displayLabel}'),
             onTap: () => _showForumModeSheet(context, ref, forumMode),
+          ),
+          ListTile(
+            key: const Key('more-appearance-entry'),
+            leading: const Icon(Icons.palette_outlined),
+            title: const Text('外观与文字'),
+            subtitle: Text('当前：${appearanceSettings.themePreference.displayLabel}'),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const AppearanceSettingsPage(),
+                ),
+              );
+            },
           ),
           ListTile(
             key: const Key('more-data-storage-entry'),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/app/settings/app_appearance_controller.dart';
+import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/auth/data/auth_repository.dart';
 import 'package:y300/features/forum/data/forum_mode_settings_repository.dart';
@@ -20,6 +22,9 @@ void main() {
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
+          appAppearanceControllerProvider.overrideWith(
+            () => _FakeAppAppearanceController(),
+          ),
         ],
         child: const MaterialApp(home: MorePage()),
       ),
@@ -32,6 +37,9 @@ void main() {
     expect(find.byKey(const Key('more-forum-mode-entry')), findsOneWidget);
     expect(find.text('论坛显示模式'), findsOneWidget);
     expect(find.text('当前：WebView 模式'), findsOneWidget);
+    expect(find.byKey(const Key('more-appearance-entry')), findsOneWidget);
+    expect(find.text('外观与文字'), findsOneWidget);
+    expect(find.text('当前：浅色'), findsOneWidget);
     expect(find.byKey(const Key('more-cache-settings-entry')), findsNothing);
     expect(find.byKey(const Key('more-data-storage-entry')), findsOneWidget);
     expect(find.text('数据与存储'), findsOneWidget);
@@ -49,6 +57,9 @@ void main() {
           authRepositoryProvider.overrideWithValue(repository),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
+          ),
+          appAppearanceControllerProvider.overrideWith(
+            () => _FakeAppAppearanceController(),
           ),
         ],
         child: const MaterialApp(home: MorePage()),
@@ -82,6 +93,9 @@ void main() {
             _FakeAuthRepository(isLoggedIn: false),
           ),
           forumModeSettingsRepositoryProvider.overrideWithValue(modeRepository),
+          appAppearanceControllerProvider.overrideWith(
+            () => _FakeAppAppearanceController(),
+          ),
         ],
         child: const MaterialApp(home: MorePage()),
       ),
@@ -114,6 +128,9 @@ void main() {
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
+          appAppearanceControllerProvider.overrideWith(
+            () => _FakeAppAppearanceController(),
+          ),
         ],
         child: const MaterialApp(home: MorePage()),
       ),
@@ -143,6 +160,9 @@ void main() {
           ),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(failOnSave: true),
+          ),
+          appAppearanceControllerProvider.overrideWith(
+            () => _FakeAppAppearanceController(),
           ),
         ],
         child: const MaterialApp(home: MorePage()),
@@ -176,6 +196,9 @@ void main() {
           syncDiagnosticModeControllerProvider.overrideWith(
             () => controller,
           ),
+          appAppearanceControllerProvider.overrideWith(
+            () => _FakeAppAppearanceController(),
+          ),
         ],
         child: const MaterialApp(home: MorePage()),
       ),
@@ -192,6 +215,78 @@ void main() {
     expect(controller.toggleCount, 1);
     expect(find.textContaining('诊断日志模式已开启'), findsOneWidget);
     expect(find.textContaining('连续快速点击 5 次可关闭'), findsOneWidget);
+  });
+
+  testWidgets('MorePage opens appearance settings and changes theme mode', (
+    tester,
+  ) async {
+    final appearanceController = _FakeAppAppearanceController();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(
+            _FakeAuthRepository(isLoggedIn: false),
+          ),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
+          appAppearanceControllerProvider.overrideWith(
+            () => appearanceController,
+          ),
+        ],
+        child: const MaterialApp(home: MorePage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('more-appearance-entry')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('外观与文字'), findsWidgets);
+    expect(find.byKey(const Key('appearance-theme-option-light')), findsOneWidget);
+    expect(find.byKey(const Key('appearance-theme-option-dark')), findsOneWidget);
+    expect(find.byKey(const Key('appearance-theme-option-system')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('appearance-theme-option-dark')));
+    await tester.pumpAndSettle();
+
+    expect(appearanceController.themePreference, AppThemePreference.dark);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(find.text('当前：深色'), findsOneWidget);
+  });
+
+  testWidgets('AppearanceSettingsPage shows snackbar when save fails', (
+    tester,
+  ) async {
+    final appearanceController = _FakeAppAppearanceController(failOnSave: true);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(
+            _FakeAuthRepository(isLoggedIn: false),
+          ),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
+          appAppearanceControllerProvider.overrideWith(
+            () => appearanceController,
+          ),
+        ],
+        child: const MaterialApp(home: MorePage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('more-appearance-entry')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('appearance-theme-option-system')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('主题设置保存失败'), findsOneWidget);
+    expect(appearanceController.themePreference, AppThemePreference.light);
   });
 }
 
@@ -284,5 +379,37 @@ class _FakeSyncDiagnosticModeController extends SyncDiagnosticModeController {
     _enabled = !_enabled;
     state = AsyncData(_enabled);
     return _enabled;
+  }
+}
+
+class _FakeAppAppearanceController extends AppAppearanceController {
+  _FakeAppAppearanceController({
+    this.failOnSave = false,
+  });
+
+  final bool failOnSave;
+  var _settings = AppAppearanceSettings.defaults();
+
+  AppThemePreference get themePreference => _settings.themePreference;
+
+  @override
+  Future<AppAppearanceSettings> build() async {
+    return _settings;
+  }
+
+  @override
+  Future<void> setThemePreference(AppThemePreference preference) async {
+    final previous = _settings;
+    if (previous.themePreference == preference) {
+      return;
+    }
+    _settings = previous.copyWith(themePreference: preference);
+    state = AsyncData(_settings);
+    if (!failOnSave) {
+      return;
+    }
+    _settings = previous;
+    state = AsyncData(previous);
+    throw StateError('save failed');
   }
 }
