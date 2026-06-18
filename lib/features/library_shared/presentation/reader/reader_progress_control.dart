@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader_chrome_palette.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
 
 class ReaderProgressControl extends StatelessWidget {
@@ -11,6 +12,8 @@ class ReaderProgressControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette =
+        const ReaderChromePaletteResolver().resolve(Theme.of(context));
     final safeTotal = config.total < 1 ? 1 : config.total;
     final current = config.current.clamp(1, safeTotal).toInt();
     final sliderValue = (current - 1).toDouble();
@@ -28,7 +31,7 @@ class ReaderProgressControl extends StatelessWidget {
         Expanded(
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              color: palette.progressTrackBackground,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Padding(

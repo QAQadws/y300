@@ -666,16 +666,20 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     required ImageRequestHeaderBuilder imageHeaderBuilder,
   }) {
     final background = _readerBackgroundColor(preferences);
+    final chromePalette =
+        const ReaderChromePaletteResolver().resolve(Theme.of(context));
     return Column(
       children: [
         if (viewState.hint != null)
           Container(
             width: double.infinity,
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            color: chromePalette.chromeBackground,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Text(
               viewState.hint!,
-              style: Theme.of(context).textTheme.bodySmall,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: chromePalette.onChromeVariant,
+                  ),
             ),
           ),
         Expanded(
@@ -1216,13 +1220,15 @@ class _ReaderNextChapterTransition extends StatelessWidget {
         key: Key('comic-reader-next-chapter-transition-empty'),
       );
     }
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final chromePalette = const ReaderChromePaletteResolver().resolve(theme);
     final canOpen = preload.canOpen && !isSwitchingEpisode;
     return Padding(
       key: const Key('comic-reader-next-chapter-transition'),
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 56),
       child: Material(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.88),
+        color: chromePalette.transitionCardBackground,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           key: const Key('comic-reader-next-chapter-transition-button'),
@@ -1613,8 +1619,10 @@ class _ReaderImageLoadingPlaceholder extends StatelessWidget {
     if (paged) {
       return Center(child: content);
     }
+    final chromePalette =
+        const ReaderChromePaletteResolver().resolve(Theme.of(context));
     return ColoredBox(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(96),
+      color: chromePalette.imageLoadingPlaceholderBackground,
       child: Center(child: content),
     );
   }

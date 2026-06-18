@@ -190,6 +190,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                       );
                     },
                   );
+                  final chromePalette =
+                      const ReaderChromePaletteResolver().resolve(
+                    Theme.of(context),
+                  );
                   return Stack(
                     children: [
                       Positioned.fill(child: reader),
@@ -198,17 +202,20 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                           child: AbsorbPointer(
                             child: ColoredBox(
                               key: const Key('novel-reader-transition-mask'),
-                              color: palette.background.withValues(alpha: 0.18),
-                              child: const Center(
+                              color: chromePalette.overlayScrim.withValues(
+                                alpha: 0.18,
+                              ),
+                              child: Center(
                                 child: DecoratedBox(
-                                  key: Key('novel-reader-transition-indicator'),
+                                  key: const Key('novel-reader-transition-indicator'),
                                   decoration: BoxDecoration(
-                                    color: Colors.black12,
-                                    borderRadius: BorderRadius.all(
+                                    color:
+                                        chromePalette.transitionCardBackground,
+                                    borderRadius: const BorderRadius.all(
                                       Radius.circular(12),
                                     ),
                                   ),
-                                  child: Padding(
+                                  child: const Padding(
                                     padding: EdgeInsets.symmetric(
                                       horizontal: 20,
                                       vertical: 16,

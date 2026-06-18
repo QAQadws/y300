@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 
 void main() {
@@ -121,6 +122,30 @@ void main() {
     expect(top.ignoring, isTrue);
     expect(controller.isMenuVisible, isFalse);
   });
+
+  testWidgets('ReaderOverlayScaffold uses reader chrome background in dark theme', (
+    tester,
+  ) async {
+    final theme = AppTheme.dark();
+    final palette = const ReaderChromePaletteResolver().resolve(theme);
+
+    await tester.pumpWidget(
+      _buildScaffold(
+        theme: theme,
+        menuInitiallyVisible: true,
+      ),
+    );
+
+    final top = tester.widget<Material>(
+      find.byKey(const Key('shared-reader-top-overlay-bar')),
+    );
+    final bottom = tester.widget<Material>(
+      find.byKey(const Key('shared-reader-bottom-overlay-panel')),
+    );
+
+    expect(top.color, palette.chromeBackground);
+    expect(bottom.color, palette.chromeBackground);
+  });
 }
 
 Future<void> _pumpTapAndOverlayAnimation(WidgetTester tester) async {
@@ -134,8 +159,10 @@ Widget _buildScaffold({
   List<ReaderToolbarAction> topActions = const <ReaderToolbarAction>[],
   VoidCallback? onCenterTap,
   ReaderOverlayController? controller,
+  ThemeData? theme,
 }) {
   return MaterialApp(
+    theme: theme,
     home: Scaffold(
       body: ReaderOverlayScaffold(
         controller: controller,

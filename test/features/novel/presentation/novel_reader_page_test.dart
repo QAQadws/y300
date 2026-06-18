@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -282,6 +284,66 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('第五段。'), findsOneWidget);
+  });
+
+  testWidgets('NovelReaderPage transition chrome follows reader palette', (
+    tester,
+  ) async {
+    final theme = AppTheme.dark();
+    final chromePalette = const ReaderChromePaletteResolver().resolve(theme);
+    final repository = _FakeNovelRepository.threeEpisodes(
+      chapterLoadDelay: const Duration(milliseconds: 120),
+    );
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        theme: theme,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-next-button')));
+    await tester.pump();
+
+    final mask = tester.widget<ColoredBox>(
+      find.byKey(const Key('novel-reader-transition-mask')),
+    );
+    final indicator = tester.widget<DecoratedBox>(
+      find.byKey(const Key('novel-reader-transition-indicator')),
+    );
+    final decoration = indicator.decoration as BoxDecoration;
+
+    expect(mask.color, chromePalette.overlayScrim.withValues(alpha: 0.18));
+    expect(decoration.color, chromePalette.transitionCardBackground);
+
+    await tester.pump(const Duration(milliseconds: 140));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('NovelReaderPage reader chrome uses shared palette in dark theme', (
+    tester,
+  ) async {
+    final theme = AppTheme.dark();
+    final palette = const ReaderChromePaletteResolver().resolve(theme);
+    final repository = _FakeNovelRepository();
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        theme: theme,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final topBar = tester.widget<Material>(
+      find.byKey(const Key('shared-reader-top-overlay-bar')),
+    );
+    final bottomPanel = tester.widget<Material>(
+      find.byKey(const Key('shared-reader-bottom-overlay-panel')),
+    );
+
+    expect(topBar.color, palette.chromeBackground);
+    expect(bottomPanel.color, palette.chromeBackground);
   });
 
   testWidgets('NovelReaderPage chapter switch failure keeps old content and shows snackbar', (
@@ -1420,6 +1482,7 @@ Widget _buildReaderApp({
   NovelReaderLayoutService? layoutService,
   NovelReaderDocumentBuildService? documentBuildService,
   NovelReaderSupplementalHydrationService? supplementalHydrationService,
+  ThemeData? theme,
   String initialEpisodeId = 'novel:49:100:5001',
 }) {
   return ProviderScope(
@@ -1451,6 +1514,7 @@ Widget _buildReaderApp({
         threadRepositoryProvider.overrideWithValue(threadRepository),
     ],
     child: MaterialApp(
+      theme: theme,
       home: NovelReaderPage(
         novelId: 'novel:49:100',
         initialEpisodeId: initialEpisodeId,

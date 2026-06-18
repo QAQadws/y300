@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 
 void main() {
@@ -119,10 +120,43 @@ void main() {
     expect(current.data, '1');
     expect(total.data, '1');
   });
+
+  testWidgets('ReaderProgressControl uses reader chrome progress track color', (
+    tester,
+  ) async {
+    final theme = AppTheme.dark();
+    final palette = const ReaderChromePaletteResolver().resolve(theme);
+
+    await tester.pumpWidget(
+      _buildProgress(
+        theme: theme,
+        config: ReaderProgressConfig(
+          current: 1,
+          total: 5,
+          onChanged: (_) {},
+          onChangeEnd: (_) {},
+        ),
+      ),
+    );
+
+    final track = tester.widget<DecoratedBox>(
+      find.ancestor(
+        of: find.byKey(const Key('shared-reader-progress-slider')),
+        matching: find.byType(DecoratedBox),
+      ).first,
+    );
+    final decoration = track.decoration as BoxDecoration;
+
+    expect(decoration.color, palette.progressTrackBackground);
+  });
 }
 
-Widget _buildProgress({required ReaderProgressConfig config}) {
+Widget _buildProgress({
+  required ReaderProgressConfig config,
+  ThemeData? theme,
+}) {
   return MaterialApp(
+    theme: theme,
     home: Scaffold(
       body: Center(
         child: ReaderProgressControl(config: config),

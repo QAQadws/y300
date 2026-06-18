@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader_chrome_palette.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_progress_control.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_tool_button.dart';
@@ -13,9 +14,11 @@ class ReaderBottomOverlayPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette =
+        const ReaderChromePaletteResolver().resolve(Theme.of(context));
     return Material(
       key: const Key('shared-reader-bottom-overlay-panel'),
-      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.94),
+      color: palette.chromeBackground,
       child: SafeArea(
         top: false,
         child: Padding(

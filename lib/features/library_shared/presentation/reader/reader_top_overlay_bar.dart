@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader_chrome_palette.dart';
 
 class ReaderTopOverlayBar extends StatelessWidget {
   const ReaderTopOverlayBar({
@@ -11,9 +12,11 @@ class ReaderTopOverlayBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette =
+        const ReaderChromePaletteResolver().resolve(Theme.of(context));
     return Material(
       key: const Key('shared-reader-top-overlay-bar'),
-      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.94),
+      color: palette.chromeBackground,
       child: SafeArea(
         bottom: false,
         child: SizedBox(

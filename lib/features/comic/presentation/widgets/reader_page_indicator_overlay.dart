@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader_chrome_palette.dart';
 
 class ReaderPageIndicatorOverlay extends StatelessWidget {
   const ReaderPageIndicatorOverlay({
@@ -16,6 +17,8 @@ class ReaderPageIndicatorOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette =
+        const ReaderChromePaletteResolver().resolve(Theme.of(context));
     final safeTotal = totalPages < 1 ? 1 : totalPages;
     final current = currentPage.clamp(1, safeTotal).toInt();
     return IgnorePointer(
@@ -31,7 +34,7 @@ class ReaderPageIndicatorOverlay extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 18),
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.56),
+                  color: palette.overlayScrim,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Padding(

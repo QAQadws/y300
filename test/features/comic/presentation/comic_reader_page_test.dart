@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/app/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
@@ -18,6 +19,7 @@ import 'package:y300/features/comic/domain/services/comic_reading_state_writer.d
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/comic_reader_page.dart';
 import 'package:y300/features/comic/presentation/widgets/reader_zoomable_image.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 
 void main() {
@@ -463,6 +465,42 @@ void main() {
     expect(find.byKey(const Key('shared-reader-progress-slider')), findsOneWidget);
     expect(find.byKey(const Key('shared-reader-current-label')), findsOneWidget);
     expect(find.byKey(const Key('shared-reader-total-label')), findsOneWidget);
+  });
+
+  testWidgets('ComicReaderPage reader chrome uses shared palette in dark theme', (
+    tester,
+  ) async {
+    await prepareLargeViewport(tester);
+    final theme = AppTheme.dark();
+    final palette = const ReaderChromePaletteResolver().resolve(theme);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
+          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
+          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+        ],
+        child: MaterialApp(
+          theme: theme,
+          home: const ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await openReaderMenu(tester);
+
+    final topBar = tester.widget<Material>(
+      find.byKey(const Key('shared-reader-top-overlay-bar')),
+    );
+    final bottomPanel = tester.widget<Material>(
+      find.byKey(const Key('shared-reader-bottom-overlay-panel')),
+    );
+
+    expect(topBar.color, palette.chromeBackground);
+    expect(bottomPanel.color, palette.chromeBackground);
   });
 }
 
