@@ -3,6 +3,7 @@ import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
@@ -14,6 +15,35 @@ import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 
 void main() {
+  testWidgets('DataStoragePage builds dark theme chrome', (tester) async {
+    final repo = _FakeDataStorageSettingsRepository(
+      defaultPath: '/tmp/default-downloads',
+      customPath: null,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+          downloadStorageServiceProvider.overrideWithValue(
+            _FakeDownloadStorageService(repo: repo),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.dark(),
+          home: const DataStoragePage(),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Scaffold), findsOneWidget);
+    expect(find.byKey(const Key('data-storage-image-cache-max-slider')), findsOneWidget);
+    expect(find.byKey(const Key('data-storage-choose-directory-button')), findsOneWidget);
+  });
+
   testWidgets('DataStoragePage renders default and effective storage directory', (tester) async {
     final repo = _FakeDataStorageSettingsRepository(
       defaultPath: '/tmp/default-downloads',

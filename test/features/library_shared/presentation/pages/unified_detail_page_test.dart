@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -227,6 +228,46 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('UnifiedDetailPage builds dark theme chrome and sheets', (tester) async {
+    final adapter = _EditableDetailAdapter();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark(),
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Scaffold), findsOneWidget);
+    expect(find.byKey(const Key('unified-detail-header-section')), findsOneWidget);
+    expect(find.byType(PopupMenuButton<String>), findsAtLeastNWidgets(2));
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byIcon(Icons.filter_list),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('unified-detail-chapter-filter-sheet')), findsOneWidget);
+    expect(find.byKey(const Key('unified-detail-sort-field')), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(PopupMenuButton<String>).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('unified-detail-edit-metadata')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('unified-detail-metadata-sheet')), findsOneWidget);
   });
 
   testWidgets('UnifiedDetailPage header seam bridge does not block actions', (tester) async {

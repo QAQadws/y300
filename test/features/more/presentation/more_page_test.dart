@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
+import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/auth/data/auth_repository.dart';
 import 'package:y300/features/forum/data/forum_mode_settings_repository.dart';
@@ -12,6 +13,33 @@ import 'package:y300/features/library_shared/presentation/controllers/sync_diagn
 import 'package:y300/features/more/presentation/more_page.dart';
 
 void main() {
+  testWidgets('MorePage builds dark theme chrome', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(
+            _FakeAuthRepository(isLoggedIn: false),
+          ),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
+          appAppearanceControllerProvider.overrideWith(
+            () => _FakeAppAppearanceController(),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.dark(),
+          home: const MorePage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Scaffold), findsOneWidget);
+    expect(find.byKey(const Key('more-appearance-entry')), findsOneWidget);
+    expect(find.byKey(const Key('more-data-storage-entry')), findsOneWidget);
+  });
+
   testWidgets('MorePage renders stage-1 entries', (tester) async {
     await tester.pumpWidget(
       ProviderScope(

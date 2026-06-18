@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/comic/data/comic_search_refresh_queue_providers.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
@@ -15,6 +16,30 @@ import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
 
 void main() {
+  testWidgets('ForumSearchPage builds dark theme chrome', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark(),
+        home: ProviderScope(
+          overrides: [
+            discuzSearchServiceProvider.overrideWithValue(_FakeDiscuzSearchService()),
+            comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+              ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+                ComicSearchRefreshQueueSnapshot.empty,
+              ),
+            ),
+          ],
+          child: const ForumSearchPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Scaffold), findsOneWidget);
+    expect(find.byKey(const Key('forum-search-input')), findsOneWidget);
+    expect(find.byKey(const Key('forum-search-submit-button')), findsOneWidget);
+  });
+
   testWidgets('ForumHomePage opens ForumSearchPage from app bar action', (tester) async {
     await tester.pumpWidget(
       ProviderScope(

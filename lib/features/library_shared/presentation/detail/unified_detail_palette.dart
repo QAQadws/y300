@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/app/theme/app_theme_semantics.dart';
 
 /// Theme-derived color contract for the shared comic/novel detail page.
 ///
@@ -34,11 +35,14 @@ class UnifiedDetailPaletteResolver {
 
   UnifiedDetailPalette resolve(ThemeData theme) {
     final scheme = theme.colorScheme;
+    final y300Theme = theme.extension<Y300ThemeExtension>();
     final isDark = theme.brightness == Brightness.dark;
     final pageBackground = theme.scaffoldBackgroundColor;
+    final detailSurface =
+        y300Theme?.coverPlaceholderBackground ?? scheme.surfaceContainer;
     final fallbackBackground = Color.alphaBlend(
       scheme.primary.withAlpha(isDark ? 34 : 18),
-      scheme.surfaceContainerHighest,
+      detailSurface,
     );
 
     return UnifiedDetailPalette(

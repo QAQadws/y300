@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/composer_shared/data/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/composer_image_picker.dart';
@@ -24,6 +25,21 @@ import 'package:y300/features/posting/presentation/posting_composer_state.dart';
 part 'posting_composer_page_test_fakes.dart';
 
 void main() {
+  testWidgets('PostingComposerPage builds dark theme chrome', (tester) async {
+    await tester.pumpWidget(
+      _buildPage(
+        theme: AppTheme.dark(),
+        metadataRepository: _FakeMetadataRepository.success(_metadata()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Scaffold), findsOneWidget);
+    expect(find.byKey(const Key('posting-composer-subject-input')), findsOneWidget);
+    expect(find.byKey(const Key('posting-composer-message-input')), findsOneWidget);
+    expect(find.byKey(const Key('posting-composer-send-button')), findsOneWidget);
+  });
+
   // PLACEHOLDER_PHASE_5_PAGE_TESTS
   testWidgets('PostingComposerPage shows metadata loading banner first frame',
       (tester) async {

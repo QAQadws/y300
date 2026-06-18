@@ -31,6 +31,7 @@ Widget _buildPage({
   NewThreadRepository? newThreadRepository,
   ComposerImagePicker? imagePicker,
   ComposerImageUploadCoordinator? imageUploadCoordinator,
+  ThemeData? theme,
 }) {
   return ProviderScope(
     overrides: [
@@ -66,6 +67,7 @@ Widget _buildPage({
       }),
     ],
     child: MaterialApp(
+      theme: theme,
       home: PostingComposerPage(args: args ?? _args()),
     ),
   );
@@ -80,6 +82,7 @@ Widget _buildLauncher({
   NewThreadRepository? newThreadRepository,
   ComposerImagePicker? imagePicker,
   ComposerImageUploadCoordinator? imageUploadCoordinator,
+  ThemeData? theme,
   ValueChanged<PostingComposerResult>? onResult,
 }) {
   return ProviderScope(
@@ -116,6 +119,7 @@ Widget _buildLauncher({
       }),
     ],
     child: MaterialApp(
+      theme: theme,
       home: _PostingComposerLauncher(
         args: args ?? _args(),
         onResult: onResult ?? ((_) {}),

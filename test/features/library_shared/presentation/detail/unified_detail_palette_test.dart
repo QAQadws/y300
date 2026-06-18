@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/app/theme/app_theme.dart';
+import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_palette.dart';
 
 void main() {
@@ -45,5 +47,21 @@ void main() {
     expect(palette.headerFallbackBackground, isNot(equals(Colors.white)));
     expect(palette.headerPlaceholderBackground, isNot(equals(Colors.white)));
     expect(palette.onHeader, Colors.white);
+  });
+
+  test('UnifiedDetailPaletteResolver uses app cover placeholder semantic when available', () {
+    final theme = AppTheme.dark();
+    final extension = theme.extension<Y300ThemeExtension>()!;
+    final scheme = theme.colorScheme;
+
+    final palette = const UnifiedDetailPaletteResolver().resolve(theme);
+
+    expect(
+      palette.headerFallbackBackground,
+      Color.alphaBlend(
+        scheme.primary.withAlpha(34),
+        extension.coverPlaceholderBackground,
+      ),
+    );
   });
 }

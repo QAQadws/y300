@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/forum_home_repository.dart';
@@ -52,6 +53,30 @@ void main() {
       expect(find.byKey(const Key('forum-favorite-card-2')), findsOneWidget);
       expect(find.byKey(const Key('forum-favorite-card-55')), findsOneWidget);
       expect(find.text('综合区'), findsOneWidget);
+    });
+
+    testWidgets('renders favorite forum cards with dark theme surface semantics', (tester) async {
+      final repository = _FakeForumHomeRepository(() async => ApiSuccess(_loggedInPayloadWithFavorites()));
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [forumHomeRepositoryProvider.overrideWithValue(repository)],
+          child: MaterialApp(
+            theme: AppTheme.dark(),
+            home: const ForumHomePage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final favoriteCard = tester.widget<Container>(
+        find.descendant(
+          of: find.byKey(const Key('forum-favorite-card-2')),
+          matching: find.byType(Container),
+        ).first,
+      );
+      final decoration = favoriteCard.decoration as BoxDecoration;
+      expect(decoration.color, AppTheme.dark().colorScheme.surfaceContainer);
     });
   });
 }

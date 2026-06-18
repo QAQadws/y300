@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/composer_shared/data/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/composer_image_picker.dart';
@@ -22,6 +23,17 @@ import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 
 void main() {
+  testWidgets('ReplyComposerPage builds dark theme chrome', (tester) async {
+    await tester.pumpWidget(
+      _buildPage(theme: AppTheme.dark()),
+    );
+    await tester.pump();
+
+    expect(find.byType(Scaffold), findsOneWidget);
+    expect(find.byKey(const Key('reply-composer-message-input')), findsOneWidget);
+    expect(find.byKey(const Key('reply-composer-send-button')), findsOneWidget);
+  });
+
   testWidgets('ReplyComposerPage shows minimal composer UI', (tester) async {
     await tester.pumpWidget(_buildPage());
     await tester.pump();
@@ -756,6 +768,7 @@ Widget _buildPage({
   ComposerImagePicker? imagePicker,
   ComposerImageUploadCoordinator? imageUploadCoordinator,
   List<StickerGroup> stickerGroups = const [],
+  ThemeData? theme,
 }) {
   return ProviderScope(
     overrides: [
@@ -786,6 +799,7 @@ Widget _buildPage({
       }),
     ],
     child: MaterialApp(
+      theme: theme,
       home: ReplyComposerPage(args: args ?? _threadArgs()),
     ),
   );
@@ -809,6 +823,7 @@ Widget _buildLauncher({
   ComposerDraftRepository? draftRepository,
   ReplyRepository? replyRepository,
   List<StickerGroup> stickerGroups = const [],
+  ThemeData? theme,
   ValueChanged<ReplyComposerResult>? onResult,
 }) {
   return ProviderScope(
@@ -838,6 +853,7 @@ Widget _buildLauncher({
       }),
     ],
     child: MaterialApp(
+      theme: theme,
       home: _ReplyComposerLauncher(onResult: onResult ?? ((_) {})),
     ),
   );

@@ -117,6 +117,7 @@ class _FavoriteForumCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final description = item.description.trim();
     return InkWell(
       key: Key('forum-favorite-card-${item.fid}'),
@@ -125,10 +126,10 @@ class _FavoriteForumCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(96),
+          color: colorScheme.surfaceContainer,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: Theme.of(context).colorScheme.primary.withAlpha(90),
+            color: colorScheme.primary.withAlpha(90),
           ),
         ),
         child: Column(
