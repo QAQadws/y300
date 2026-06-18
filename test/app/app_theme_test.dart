@@ -7,16 +7,15 @@ import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/app/settings/app_appearance_settings_repository.dart';
 import 'package:y300/app/theme/app_theme.dart';
+import 'package:y300/app/theme/app_theme_palette.dart';
+import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/app/theme/app_theme_tokens.dart';
 import 'package:y300/app/y300_app.dart';
 
 void main() {
   test('AppTheme.light exposes the expected scaffold, app bar, and navigation bar colors', () {
     final theme = AppTheme.light();
-    final expectedColorScheme = ColorScheme.fromSeed(
-      seedColor: AppThemeTokens.seedColor,
-      brightness: Brightness.light,
-    );
+    final palette = AppThemePalette.light();
 
     expect(theme.useMaterial3, isTrue);
     expect(theme.scaffoldBackgroundColor, AppThemeTokens.scaffoldBackground);
@@ -26,11 +25,13 @@ void main() {
       theme.navigationBarTheme.backgroundColor,
       AppThemeTokens.navigationBarBackground,
     );
-    expect(theme.colorScheme.primary, expectedColorScheme.primary);
+    _expectColorSchemeMatchesPalette(theme.colorScheme, palette);
+    expect(theme.extension<Y300ThemeExtension>(), isNotNull);
   });
 
   test('AppTheme.dark exposes a valid dark Material theme', () {
     final theme = AppTheme.dark();
+    final palette = AppThemePalette.dark();
 
     expect(theme.useMaterial3, isTrue);
     expect(theme.colorScheme.brightness, Brightness.dark);
@@ -41,6 +42,49 @@ void main() {
       theme.navigationBarTheme.backgroundColor,
       isNot(AppThemeTokens.navigationBarBackground),
     );
+    _expectColorSchemeMatchesPalette(theme.colorScheme, palette);
+    expect(theme.extension<Y300ThemeExtension>(), isNotNull);
+  });
+
+  test('AppThemePalette.light preserves the shell baseline tokens', () {
+    final palette = AppThemePalette.light();
+
+    expect(palette.brightness, Brightness.light);
+    expect(palette.seedColor, AppThemeTokens.seedColor);
+    expect(palette.scaffoldBackground, AppThemeTokens.scaffoldBackground);
+    expect(palette.appBarBackground, AppThemeTokens.appBarBackground);
+    expect(palette.appBarForeground, AppThemeTokens.appBarForeground);
+    expect(
+      palette.navigationBarBackground,
+      AppThemeTokens.navigationBarBackground,
+    );
+  });
+
+  test('AppThemePalette.dark exposes dark shell colors', () {
+    final palette = AppThemePalette.dark();
+
+    expect(palette.brightness, Brightness.dark);
+    expect(palette.scaffoldBackground, isNot(AppThemeTokens.scaffoldBackground));
+    expect(palette.appBarBackground, isNot(AppThemeTokens.appBarBackground));
+    expect(
+      palette.navigationBarBackground,
+      isNot(AppThemeTokens.navigationBarBackground),
+    );
+  });
+
+  test('Y300ThemeExtension copyWith and lerp preserve semantic colors', () {
+    final light = Y300ThemeExtension.light(AppThemePalette.light());
+    final dark = Y300ThemeExtension.dark(AppThemePalette.dark());
+    const replacement = Color(0xFF123456);
+
+    final copied = light.copyWith(
+      readerProgressTrackBackground: replacement,
+    );
+
+    expect(copied.readerProgressTrackBackground, replacement);
+    expect(copied.readerChromeBackground, light.readerChromeBackground);
+    expect(light.lerp(dark, 0).readerChromeBackground, light.readerChromeBackground);
+    expect(light.lerp(dark, 1).readerChromeBackground, dark.readerChromeBackground);
   });
 
   testWidgets('Y300App wires AppTheme into MaterialApp with saved theme mode', (
@@ -73,6 +117,10 @@ void main() {
       AppThemeTokens.navigationBarBackground,
     );
     expect(materialApp.darkTheme!.colorScheme.brightness, Brightness.dark);
+    expect(
+      materialApp.darkTheme!.extension<Y300ThemeExtension>(),
+      isNotNull,
+    );
   });
 
   testWidgets('Y300App falls back to light while settings load', (tester) async {
@@ -142,4 +190,22 @@ class _FailingAppAppearanceController extends AppAppearanceController {
   Future<AppAppearanceSettings> build() {
     throw StateError('load failed');
   }
+}
+
+void _expectColorSchemeMatchesPalette(
+  ColorScheme scheme,
+  AppThemePalette palette,
+) {
+  expect(scheme.brightness, palette.brightness);
+  expect(scheme.primary, palette.primary);
+  expect(scheme.onPrimary, palette.onPrimary);
+  expect(scheme.surface, palette.surface);
+  expect(scheme.onSurface, palette.onSurface);
+  expect(scheme.surfaceContainerLowest, palette.surfaceContainerLowest);
+  expect(scheme.surfaceContainer, palette.surfaceContainer);
+  expect(scheme.surfaceContainerHighest, palette.surfaceContainerHighest);
+  expect(scheme.onSurfaceVariant, palette.onSurfaceVariant);
+  expect(scheme.outlineVariant, palette.outlineVariant);
+  expect(scheme.secondaryContainer, palette.secondaryContainer);
+  expect(scheme.onSecondaryContainer, palette.onSecondaryContainer);
 }

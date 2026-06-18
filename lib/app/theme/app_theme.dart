@@ -1,88 +1,53 @@
 import 'package:flutter/material.dart';
-import 'package:y300/app/theme/app_theme_tokens.dart';
+import 'package:y300/app/theme/app_component_theme_builder.dart';
+import 'package:y300/app/theme/app_theme_palette.dart';
+import 'package:y300/app/theme/app_theme_semantics.dart';
 
 /// Y300 全局主题入口。
 final class AppTheme {
   const AppTheme._();
 
   static ThemeData light() {
-    return _buildTheme(
-      brightness: Brightness.light,
-      scaffoldBackgroundColor: AppThemeTokens.scaffoldBackground,
-      appBarBackgroundColor: AppThemeTokens.appBarBackground,
-      appBarForegroundColor: AppThemeTokens.appBarForeground,
-      navigationBarBackgroundColor: AppThemeTokens.navigationBarBackground,
-    );
+    return _buildTheme(AppThemePalette.light());
   }
 
   static ThemeData dark() {
-    return _buildTheme(
-      brightness: Brightness.dark,
-      scaffoldBackgroundColor: const Color(0xFF17110F),
-      appBarBackgroundColor: const Color(0xFF2A0903),
-      appBarForegroundColor: const Color(0xFFFFEDE0),
-      navigationBarBackgroundColor: const Color(0xFF241412),
-    );
+    return _buildTheme(AppThemePalette.dark());
   }
 
-  static ThemeData _buildTheme({
-    required Brightness brightness,
-    required Color scaffoldBackgroundColor,
-    required Color appBarBackgroundColor,
-    required Color appBarForegroundColor,
-    required Color navigationBarBackgroundColor,
-  }) {
-    final colorScheme = _buildColorScheme(brightness: brightness).copyWith(
-      surface: scaffoldBackgroundColor,
-      onSurface: brightness == Brightness.dark
-          ? const Color(0xFFF6E8DD)
-          : null,
-      surfaceContainerHighest: brightness == Brightness.dark
-          ? const Color(0xFF3A2A25)
-          : null,
+  static ThemeData _buildTheme(AppThemePalette palette) {
+    final colorScheme = _buildColorScheme(palette).copyWith(
+      primary: palette.primary,
+      onPrimary: palette.onPrimary,
+      surface: palette.surface,
+      onSurface: palette.onSurface,
+      surfaceContainerLowest: palette.surfaceContainerLowest,
+      surfaceContainer: palette.surfaceContainer,
+      surfaceContainerHighest: palette.surfaceContainerHighest,
+      onSurfaceVariant: palette.onSurfaceVariant,
+      outlineVariant: palette.outlineVariant,
+      secondaryContainer: palette.secondaryContainer,
+      onSecondaryContainer: palette.onSecondaryContainer,
     );
     return ThemeData(
       useMaterial3: true,
-      brightness: brightness,
+      brightness: palette.brightness,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: scaffoldBackgroundColor,
-      appBarTheme: _buildAppBarTheme(
-        backgroundColor: appBarBackgroundColor,
-        foregroundColor: appBarForegroundColor,
-      ),
-      navigationBarTheme: _buildNavigationBarTheme(
-        backgroundColor: navigationBarBackgroundColor,
-      ),
+      scaffoldBackgroundColor: palette.scaffoldBackground,
+      appBarTheme: AppComponentThemeBuilder.appBarTheme(palette),
+      navigationBarTheme: AppComponentThemeBuilder.navigationBarTheme(palette),
+      extensions: <ThemeExtension<dynamic>>[
+        palette.brightness == Brightness.dark
+            ? Y300ThemeExtension.dark(palette)
+            : Y300ThemeExtension.light(palette),
+      ],
     );
   }
 
-  static ColorScheme _buildColorScheme({
-    required Brightness brightness,
-  }) {
+  static ColorScheme _buildColorScheme(AppThemePalette palette) {
     return ColorScheme.fromSeed(
-      seedColor: AppThemeTokens.seedColor,
-      brightness: brightness,
-    );
-  }
-
-  static AppBarTheme _buildAppBarTheme({
-    required Color backgroundColor,
-    required Color foregroundColor,
-  }) {
-    return AppBarTheme(
-      backgroundColor: backgroundColor,
-      foregroundColor: foregroundColor,
-      surfaceTintColor: Colors.transparent,
-      elevation: 0,
-      scrolledUnderElevation: 0,
-    );
-  }
-
-  static NavigationBarThemeData _buildNavigationBarTheme({
-    required Color backgroundColor,
-  }) {
-    return NavigationBarThemeData(
-      backgroundColor: backgroundColor,
+      seedColor: palette.seedColor,
+      brightness: palette.brightness,
     );
   }
 }

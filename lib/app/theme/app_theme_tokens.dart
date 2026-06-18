@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 final class AppThemeTokens {
   const AppThemeTokens._();
 
-  static const Color seedColor = Color(0xFF1F7A8C);
+  static const Color seedColor = Color(0xFF8A5A2B);
   static const Color appBarBackground = Color(0xFF531104);
   static const Color appBarForeground = Color(0xFFF8F8E1);
   static const Color scaffoldBackground = Color(0xFFF8F8E1);
