@@ -1,6 +1,8 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
+import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
 
 void main() {
   testWidgets('ShelfCoverCard renders title and badge with fallback background', (tester) async {
@@ -50,5 +52,36 @@ void main() {
     );
 
     expect(find.textContaining('···'), findsOneWidget);
+  });
+
+  testWidgets('ShelfCoverCard uses shelf placeholder color from app theme', (tester) async {
+    final theme = AppTheme.dark();
+    final palette = const ShelfThemePaletteResolver().resolve(theme);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: theme,
+        home: Scaffold(
+          body: SizedBox(
+            width: 120,
+            height: 180,
+            child: ShelfCoverCard(
+              title: 'No Cover',
+              coverImageUrl: null,
+              onTap: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final fallback = tester.widget<Container>(
+      find.ancestor(
+        of: find.byIcon(Icons.image_not_supported_outlined),
+        matching: find.byType(Container),
+      ).first,
+    );
+
+    expect(fallback.color, palette.coverPlaceholderBackground);
   });
 }

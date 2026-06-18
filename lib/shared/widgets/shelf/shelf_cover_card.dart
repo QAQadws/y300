@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
+import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
 
 typedef ShelfCoverLayerBuilder = Widget Function(
   BuildContext context,
@@ -64,8 +65,10 @@ class ShelfCoverCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette =
+        const ShelfThemePaletteResolver().resolve(Theme.of(context));
     final borderColor = selected
-        ? Theme.of(context).colorScheme.primary
+        ? palette.selectedBorder
         : Colors.transparent;
     return GestureDetector(
       onTap: onTap,
@@ -136,10 +139,12 @@ class ShelfCoverCard extends StatelessWidget {
   }
 
   Widget _buildFallback(BuildContext context) {
+    final palette =
+        const ShelfThemePaletteResolver().resolve(Theme.of(context));
     return Container(
       decoration: fallbackBackground,
       color: fallbackBackground == null
-          ? Theme.of(context).colorScheme.surfaceContainerHighest
+          ? palette.coverPlaceholderBackground
           : null,
       child: Icon(placeholderIcon),
     );

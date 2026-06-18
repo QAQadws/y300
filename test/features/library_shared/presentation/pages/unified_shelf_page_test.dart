@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
@@ -13,6 +14,7 @@ import 'package:y300/features/library_shared/presentation/pages/unified_shelf_pa
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
+import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
 
 void main() {
   testWidgets('search mode switches app bar layout', (tester) async {
@@ -333,6 +335,86 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('unified-shelf-task-progress-bar')), findsNothing);
+  });
+
+  testWidgets('dark theme shelf surfaces use shelf palette', (tester) async {
+    final theme = AppTheme.dark();
+    final palette = const ShelfThemePaletteResolver().resolve(theme);
+    final progress = ValueNotifier<LibraryShelfTaskProgress?>(
+      const LibraryShelfTaskProgress(
+        message: '正在解析: 收藏帖',
+        current: 1,
+        total: 2,
+      ),
+    );
+    addTearDown(progress.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: theme,
+        home: UnifiedShelfPage(
+          adapter: _FakeShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.list,
+            taskProgress: progress,
+            onQuery: ({
+              required List<LibraryCategory> categories,
+              required LibraryFilterSet filters,
+              required LibraryShelfSortOption sortOption,
+              required String keyword,
+            }) async {
+              return {
+                'default': [
+                  _item(
+                    workId: 'covered',
+                    title: 'Covered Comic',
+                    coverImageUrl: 'https://example.com/covered.jpg',
+                  ),
+                ],
+              };
+            },
+          ),
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final headerMaterial = tester.widget<Material>(
+      find.ancestor(
+        of: find.byKey(
+          const ValueKey<String>('unified-shelf-category-tab-default'),
+        ),
+        matching: find.byType(Material),
+      ).first,
+    );
+    final bannerMaterial = tester.widget<Material>(
+      find.ancestor(
+        of: find.byKey(const Key('unified-shelf-task-progress-bar')),
+        matching: find.byType(Material),
+      ).first,
+    );
+    final listItemMaterial = tester.widget<Material>(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey<String>('unified-shelf-list-item-covered'),
+        ),
+        matching: find.byType(Material),
+      ).first,
+    );
+
+    expect(headerMaterial.color, palette.categoryBarBackground);
+    expect(bannerMaterial.color, palette.taskProgressBackground);
+    expect(listItemMaterial.color, palette.listItemBackground);
+
+    await tester.tap(find.byIcon(Icons.filter_list).first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('筛选'), findsWidgets);
+    await tester.tap(find.byType(TextButton).at(2));
+    await tester.pumpAndSettle();
+
+    expect(find.text('网格'), findsOneWidget);
+    expect(find.text('列表'), findsOneWidget);
   });
 
   testWidgets('task progress without total keeps banner indeterminate', (tester) async {

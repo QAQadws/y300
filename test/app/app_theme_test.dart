@@ -89,6 +89,17 @@ void main() {
     expect(light.lerp(dark, 1).readerChromeBackground, dark.readerChromeBackground);
   });
 
+  test('Y300ThemeExtension exposes shelf semantic colors for light and dark themes', () {
+    final light = Y300ThemeExtension.light(AppThemePalette.light());
+    final dark = Y300ThemeExtension.dark(AppThemePalette.dark());
+
+    expect(light.shelfCategoryBarBackground, isNot(Colors.transparent));
+    expect(light.shelfCategorySelectedBackground, isNot(Colors.transparent));
+    expect(light.coverPlaceholderBackground, isNot(Colors.transparent));
+    expect(dark.shelfCategoryBarBackground, isNot(Colors.white));
+    expect(dark.coverPlaceholderBackground, isNot(Colors.white));
+  });
+
   test('AppTheme.dark component themes avoid light default surfaces', () {
     final theme = AppTheme.dark();
     final scheme = theme.colorScheme;

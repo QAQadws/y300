@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
 
 /// 通用固定槽位分页头。
 ///
@@ -53,9 +54,11 @@ class _FixedSlotPagerHeaderState extends State<FixedSlotPagerHeader> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final palette = const ShelfThemePaletteResolver().resolve(theme);
     if (widget.tabs.isEmpty) {
       return Material(
-        color: Theme.of(context).colorScheme.surface,
+        color: palette.categoryBarBackground,
         child: const SizedBox(height: 56),
       );
     }
@@ -63,7 +66,7 @@ class _FixedSlotPagerHeaderState extends State<FixedSlotPagerHeader> {
     return Material(
       // Header 会覆盖在可滚动书架内容上方，组件自身提供不透明背景，
       // 避免列表模式滚动时下方 item 透出。
-      color: Theme.of(context).colorScheme.surface,
+      color: palette.categoryBarBackground,
       child: SizedBox(
         height: 56,
         child: LayoutBuilder(
@@ -80,6 +83,7 @@ class _FixedSlotPagerHeaderState extends State<FixedSlotPagerHeader> {
                     child: Row(
                       children: List.generate(widget.tabs.length, (index) {
                         final tab = widget.tabs[index];
+                        final selected = index == widget.selectedIndex;
                         return SizedBox(
                           width: slotWidth,
                           child: InkWell(
@@ -90,7 +94,10 @@ class _FixedSlotPagerHeaderState extends State<FixedSlotPagerHeader> {
                                 tab.label,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: selected
+                                          ? palette.categorySelectedBackground
+                                          : theme.colorScheme.onSurface,
                                       fontWeight: FontWeight.w600,
                                     ),
                               ),
@@ -108,6 +115,7 @@ class _FixedSlotPagerHeaderState extends State<FixedSlotPagerHeader> {
                         return SizedBox(width: slotWidth);
                       }
                       final tab = widget.tabs[slotIndex];
+                      final selected = slotIndex == widget.selectedIndex;
                       return SizedBox(
                         width: slotWidth,
                         child: InkWell(
@@ -118,7 +126,10 @@ class _FixedSlotPagerHeaderState extends State<FixedSlotPagerHeader> {
                               tab.label,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: selected
+                                        ? palette.categorySelectedBackground
+                                        : theme.colorScheme.onSurface,
                                     fontWeight: FontWeight.w600,
                                   ),
                             ),
@@ -143,7 +154,7 @@ class _FixedSlotPagerHeaderState extends State<FixedSlotPagerHeader> {
                         width: slotWidth * 0.6,
                         height: 4,
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary,
+                          color: palette.categorySelectedBackground,
                           borderRadius: BorderRadius.circular(999),
                         ),
                       ),

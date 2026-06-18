@@ -15,6 +15,7 @@ import 'package:y300/features/library_shared/presentation/selection/shelf_select
 import 'package:y300/shared/widgets/shelf/fixed_slot_pager_header.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
+import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
 
 /// 统一书架页面（Phase 3）。
 class UnifiedShelfPage extends StatefulWidget {
@@ -140,6 +141,8 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
         .toList(growable: false);
     final selectedIndex = _resolveSelectedIndex(categories, state.selectedCategoryId);
     final selecting = _selectionController.isSelecting;
+    final shelfPalette =
+        const ShelfThemePaletteResolver().resolve(Theme.of(context));
 
     return PopScope<void>(
       canPop: !selecting,
@@ -205,7 +208,11 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                           tabKeyBuilder: (id) => ValueKey<String>('unified-shelf-category-tab-$id'),
                         ),
                       ),
-                    if (categories.isNotEmpty) const Divider(height: 1),
+                    if (categories.isNotEmpty)
+                      Divider(
+                        height: 1,
+                        color: shelfPalette.categoryDivider,
+                      ),
                     Expanded(
                       child: categories.isEmpty
                           ? const _AlwaysScrollableEmptyState(message: '书架为空')
@@ -1069,8 +1076,10 @@ class _ShelfTaskProgressBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final countText = _countText();
+    final shelfPalette =
+        const ShelfThemePaletteResolver().resolve(Theme.of(context));
     return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      color: shelfPalette.taskProgressBackground,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
         child: Column(
@@ -1155,7 +1164,8 @@ class _WorkList extends StatelessWidget {
         itemBuilder: (context, index) {
           final item = items[index];
           final selected = selectedWorkIds.contains(item.workId);
-          final scheme = Theme.of(context).colorScheme;
+          final shelfPalette =
+              const ShelfThemePaletteResolver().resolve(Theme.of(context));
           final leading = _hasCoverSource(item)
               ? ClipRRect(
                   borderRadius: BorderRadius.circular(8),
@@ -1173,14 +1183,15 @@ class _WorkList extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: selected ? scheme.primary : Colors.transparent,
+                color:
+                    selected ? shelfPalette.selectedBorder : Colors.transparent,
                 width: 2,
               ),
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: Material(
-                color: scheme.surfaceContainerHighest.withAlpha(64),
+                color: shelfPalette.listItemBackground,
                 child: ListTile(
                   key: ValueKey<String>('unified-shelf-list-tile-${item.workId}'),
                   minTileHeight: 72,
@@ -1206,8 +1217,10 @@ class _WorkList extends StatelessWidget {
   }
 
   Widget _buildLeadingCover(BuildContext context, LibraryWorkItem item) {
+    final shelfPalette =
+        const ShelfThemePaletteResolver().resolve(Theme.of(context));
     final placeholder = Container(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      color: shelfPalette.coverPlaceholderBackground,
       child: const Icon(Icons.image_not_supported_outlined),
     );
     if (!useShelfCoverImage) {
