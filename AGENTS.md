@@ -93,3 +93,7 @@
 
 ## 重要决策
 小说的解析要version=1，而不是version=4，要不然可能会发生格式错误，目前已经实现了，但是我希望你记住而不要乱改
+
+## 笔记
+当要增加comic测试标题时需要加到`test\features\comic\domain\services\comic_title_parser_cases.dart`
+当要增加novel测试标题时需要加到`test\features\novel\test_support\novel_title_fixtures.dart`

@@ -9,10 +9,7 @@ final class ComicTitleRules {
 
   // 标题正文截断符。仅 `|｜` 在真实样本中作为强分隔（论坛尾巴/版块标签前缀），
   // 其余如 `~`、`-` 在真实漫画标题里大量作装饰用，因此不放进截断列表，避免误伤。
-  static const List<String> separatorTokens = <String>[
-    '|',
-    '｜',
-  ];
+  static const List<String> separatorTokens = <String>['|', '｜'];
 
   // 翻译/汉化组识别提示。仅保留真实可读字符；阶段 1 早期版本曾把
   // GBK 解码为 UTF-8 产生的 mojibake 也写进列表，但那是源 Kotlin 文件被错误
@@ -37,6 +34,8 @@ final class ComicTitleRules {
   static const List<String> specialEpisodeMarkers = <String>[
     '卷后附录',
     '卷後附錄',
+    '卷附录',
+    '卷附錄',
     '卷彩页',
     '卷彩頁',
     '小剧场',
@@ -63,13 +62,7 @@ final class ComicTitleRules {
   ];
 
   static const Map<String, String> asciiPunctuationNormalization =
-      <String, String>{
-        '．': '.',
-        '：': ':',
-        '＃': '#',
-        '～': '~',
-        '　': ' ',
-      };
+      <String, String>{'．': '.', '：': ':', '＃': '#', '～': '~', '　': ' '};
 
   static const String numberTokenCharacters =
       r'0-9０-９零〇一二两兩三四五六七八九十百千ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩⅪⅫIVXLCDMivxlcdm①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳';
@@ -134,8 +127,10 @@ final class ComicTitleRules {
 
   static bool isComiketToken(String token) {
     final normalized = normalizeForMatching(token);
-    return RegExp(r'^(?:C|COMIKET)\s*\d{2,4}$', caseSensitive: false)
-        .hasMatch(normalized);
+    return RegExp(
+      r'^(?:C|COMIKET)\s*\d{2,4}$',
+      caseSensitive: false,
+    ).hasMatch(normalized);
   }
 
   static String? extractAuthorHint(String raw) {

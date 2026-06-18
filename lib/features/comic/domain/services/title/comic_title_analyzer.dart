@@ -25,25 +25,45 @@ class PetitComicTitleAnalyzer implements ComicTitleAnalyzer {
   // 顺带兼容繁体 `話`，让 `第N织` / `19话` / `5幕` 都能识别。
   static const String _chapterUnitCharacters = '话話织回章节幕折更';
 
+  // 特殊/位置标记关键词匹配。
+  // 不限制前缀边界——后处理逻辑通过回溯吸收尾部数字/卷号前缀，
+  // 从而正确拆分 `致彼时繁花05 后篇`、`LOVE·BULLET 二卷番外`、
+  // `ハムスター大作戦）下篇`、`口腔…前篇` 等场景。
   static final RegExp _specialMarkerPattern = RegExp(
-    r'(卷后附录|卷後附錄|卷彩页|卷彩頁|小剧场|小劇場|小漫画|小漫畫|单行本|單行本|番外|特典|附录|附錄|短篇|\bSP\b)',
+    r'(?:卷后附录|卷後附錄|卷附录|卷附錄|卷彩页|卷彩頁|小剧场|小劇場|小漫画|小漫畫|单行本|單行本|'
+    r'番外|特典|附录|附錄|短篇|\bSP\b|'
+    r'前篇|后篇|上篇|下篇|中篇)'
+    r'[\s\S]*',
     caseSensitive: false,
   );
+  static const List<String> _positionEpisodeMarkers = <String>[
+    '前篇',
+    '后篇',
+    '上篇',
+    '下篇',
+    '中篇',
+  ];
   static final RegExp _finalMarkerPattern = RegExp(
     r'(最终话|最終話|最终回|最終回|大结局|大結局)',
     caseSensitive: false,
   );
   // `第` 引导的章节，章节单位可选；同样接受 `第6-1话` 这种小节号形式（取主章节）。
+  // 当 unit 字符不存在时，允许捕获后续非空白文本作为标签延伸（如 `第一拳`）。
   static final RegExp _chapterLabelPattern = RegExp(
     '((第)\\s*([${ComicTitleRules.numberTokenCharacters}]+(?:\\.[0-9]+)?)'
-    '\\s*(?:[$_chapterUnitCharacters])?\\s*'
-    '(上篇|中篇|下篇|前篇|后篇|上|中|下|前|后)?\\s*[①②③④⑤⑥⑦⑧⑨]?)',
+    '(?:-[0-9]+)?'
+    '\\s*(?:'
+    '[$_chapterUnitCharacters]\\s*'
+    '(上篇|中篇|下篇|前篇|后篇|上|中|下|前|后)?\\s*[①②③④⑤⑥⑦⑧⑨]?'
+    '|([^\\s上中下前后篇①②③④⑤⑥⑦⑧⑨\\-]))'
+    ')',
     caseSensitive: false,
   );
   // 没有 `第` 但带章节单位的形式，例如 `19话`、`16话`、`03话`、`28话`、`第十五织`。
   // 通过 lookbehind 排除前面紧贴 ASCII 数字/字母的情况，避免把版本号或尺寸误识别。
   static final RegExp _bareChapterLabelPattern = RegExp(
     '((?<![A-Za-z0-9])([${ComicTitleRules.numberTokenCharacters}]+(?:\\.[0-9]+)?)'
+    '(?:\\s*[~～-]\\s*([${ComicTitleRules.numberTokenCharacters}]+(?:\\.[0-9]+)?))?'
     '\\s*[$_chapterUnitCharacters]\\s*'
     '(上篇|中篇|下篇|前篇|后篇|上|中|下|前|后)?\\s*[①②③④⑤⑥⑦⑧⑨]?)',
     caseSensitive: false,
@@ -198,22 +218,57 @@ class PetitComicTitleAnalyzer implements ComicTitleAnalyzer {
 
     final specialMatch = _specialMarkerPattern.firstMatch(input);
     if (specialMatch != null) {
-      // 特殊标记后紧跟破折号连接符时（如 `番外－后记`），
-      // 标记是书名描述的一部分而非章节边界，跳过此次匹配。
-      final charAfterSpecial = specialMatch.end < input.length
-          ? input[specialMatch.end]
-          : '';
-      final isDashContinuation =
-          charAfterSpecial == '－' ||
-          charAfterSpecial == '–' ||
-          charAfterSpecial == '—';
-      if (!isDashContinuation) {
-        _addPossibleNumber(possibleNumbers, 0);
-        final rawLabel = specialMatch.group(0)?.trim() ?? '';
+      final matchStart = _specialEpisodeStart(input, specialMatch);
+
+      if (matchStart != null) {
+        // episodeLabel 保留原始文本，不规范化。
+        final fullLabel = input.substring(matchStart).trim();
+
+        // 仅当 episodeLabel 内含最终话标记时覆盖为 '最终话'。
+        if (_finalMarkerPattern.hasMatch(fullLabel)) {
+          _addPossibleNumber(possibleNumbers, 999);
+          return _ChapterExtraction(
+            bookSegment: input.substring(0, matchStart),
+            episodeLabel: '最终话',
+            chapterNumber: 999,
+            possibleChapterNumbers: possibleNumbers,
+          );
+        }
+
+        // chapterNumber 推导：
+        // 1. 尝试解析 episodeLabel 前导 ASCII 数字（如 `05 后篇` → 5）。
+        // 2. 从标记关键词前的前缀文本中提取中文数字（如 `二卷番外` → 2）。
+        double chapterNumber = 0;
+        final leadingDigits = RegExp(r'^(\d+)').firstMatch(fullLabel);
+        if (leadingDigits != null) {
+          chapterNumber = double.tryParse(leadingDigits.group(1)!) ?? 0;
+        } else {
+          // 找到最长匹配的特殊标记关键词，提取其前面的文本作为中文数字源。
+          String? longestKeyword;
+          for (final marker in ComicTitleRules.specialEpisodeMarkers) {
+            if (fullLabel.contains(marker) &&
+                (longestKeyword == null ||
+                    marker.length > longestKeyword.length)) {
+              longestKeyword = marker;
+            }
+          }
+          if (longestKeyword != null) {
+            final keywordIndex = fullLabel.indexOf(longestKeyword);
+            if (keywordIndex > 0) {
+              final prefixText = fullLabel.substring(0, keywordIndex);
+              final chineseNumber = _extractLeadingChineseNumber(prefixText);
+              if (chineseNumber != null) {
+                chapterNumber = chineseNumber.toDouble();
+              }
+            }
+          }
+        }
+        _addPossibleNumber(possibleNumbers, chapterNumber);
+
         return _ChapterExtraction(
-          bookSegment: input.substring(0, specialMatch.start),
-          episodeLabel: _canonicalizeSpecialLabel(rawLabel),
-          chapterNumber: 0,
+          bookSegment: input.substring(0, matchStart),
+          episodeLabel: fullLabel,
+          chapterNumber: chapterNumber,
           possibleChapterNumbers: possibleNumbers,
         );
       }
@@ -224,25 +279,44 @@ class PetitComicTitleAnalyzer implements ComicTitleAnalyzer {
       // 检查匹配文本自身的末尾字符是否为章节 unit 字符或修饰符。
       // 使用 group(1) 而非 group(0)，因为 group(0) 末尾的 \s* 会贪吃空格。
       final matchedLabel = chapterMatch.group(1)?.trim() ?? '';
-      final lastChar = matchedLabel.isNotEmpty ? matchedLabel[matchedLabel.length - 1] : '';
-      final hasUnitOrModifier = _chapterUnitCharacters.contains(lastChar) ||
+      final lastChar = matchedLabel.isNotEmpty
+          ? matchedLabel[matchedLabel.length - 1]
+          : '';
+      final extension = chapterMatch.group(5);
+      final hasUnitOrModifier =
+          _chapterUnitCharacters.contains(lastChar) ||
           '上中下前后篇①②③④⑤⑥⑦⑧⑨'.contains(lastChar) ||
-          RegExp(r'[0-9０-９]').hasMatch(lastChar);
+          RegExp(r'[0-9０-９]').hasMatch(lastChar) ||
+          (extension != null && extension.isNotEmpty);
       if (hasUnitOrModifier) {
         final label = chapterMatch.group(1)?.trim() ?? '';
         final base = _numberParser.parseNumber(chapterMatch.group(3) ?? '');
         final part = chapterMatch.group(4);
-        final adjusted = _applyChapterModifier(base, label, part);
-        if (adjusted != null) {
-          _addPossibleNumber(possibleNumbers, adjusted);
+
+        double? chapterNumber;
+        String episodeLabel;
+
+        if (extension != null && extension.isNotEmpty) {
+          // 延伸分支：episodeLabel 保留原文（如 `第一拳`）。
+          episodeLabel = matchedLabel;
+          chapterNumber = base;
+        } else {
+          // 标准分支：保持现有规范化行为（如 `第2话上`）。
+          final adjusted = _applyChapterModifier(base, label, part);
+          chapterNumber = adjusted;
+          episodeLabel = _canonicalizeChapterLabel(base, part, label);
         }
-        if (base != null && adjusted != base) {
+
+        if (chapterNumber != null) {
+          _addPossibleNumber(possibleNumbers, chapterNumber);
+        }
+        if (base != null && chapterNumber != base) {
           _addPossibleNumber(possibleNumbers, base);
         }
         return _ChapterExtraction(
           bookSegment: input.substring(0, chapterMatch.start),
-          episodeLabel: _canonicalizeChapterLabel(base, part, label),
-          chapterNumber: adjusted,
+          episodeLabel: episodeLabel,
+          chapterNumber: chapterNumber,
           possibleChapterNumbers: possibleNumbers,
         );
       }
@@ -276,17 +350,24 @@ class PetitComicTitleAnalyzer implements ComicTitleAnalyzer {
     if (bareChapterMatch != null) {
       final label = bareChapterMatch.group(1)?.trim() ?? '';
       final base = _numberParser.parseNumber(bareChapterMatch.group(2) ?? '');
-      final part = bareChapterMatch.group(3);
+      final rangeEnd = bareChapterMatch.group(3);
+      final part = bareChapterMatch.group(4);
       final adjusted = _applyChapterModifier(base, label, part);
       if (adjusted != null) {
         _addPossibleNumber(possibleNumbers, adjusted);
+      }
+      final endNumber = _numberParser.parseNumber(rangeEnd ?? '');
+      if (endNumber != null) {
+        _addPossibleNumber(possibleNumbers, endNumber);
       }
       if (base != null && adjusted != base) {
         _addPossibleNumber(possibleNumbers, base);
       }
       return _ChapterExtraction(
         bookSegment: input.substring(0, bareChapterMatch.start),
-        episodeLabel: _canonicalizeChapterLabel(base, part, label),
+        episodeLabel: rangeEnd == null
+            ? _canonicalizeChapterLabel(base, part, label)
+            : label,
         chapterNumber: adjusted,
         possibleChapterNumbers: possibleNumbers,
       );
@@ -294,7 +375,9 @@ class PetitComicTitleAnalyzer implements ComicTitleAnalyzer {
 
     final seasonMatch = _seasonEpisodePattern.firstMatch(input);
     if (seasonMatch != null) {
-      final episodeNumber = _numberParser.parseNumber(seasonMatch.group(4) ?? '');
+      final episodeNumber = _numberParser.parseNumber(
+        seasonMatch.group(4) ?? '',
+      );
       if (episodeNumber != null) {
         _addPossibleNumber(possibleNumbers, episodeNumber);
       }
@@ -337,6 +420,101 @@ class PetitComicTitleAnalyzer implements ComicTitleAnalyzer {
     }
     return null;
   }
+
+  int? _specialEpisodeStart(String input, RegExpMatch specialMatch) {
+    final markerStart = specialMatch.start;
+    final isPositionMarker = _positionEpisodeMarkers.any(
+      (marker) => input.startsWith(marker, markerStart),
+    );
+    if (isPositionMarker) {
+      return _positionEpisodeStart(input, markerStart);
+    }
+
+    if (markerStart == 0) {
+      return markerStart;
+    }
+
+    final previous = input[markerStart - 1];
+    if (_isWhitespace(previous)) {
+      return markerStart;
+    }
+
+    final tokenStart = _startOfCurrentToken(input, markerStart);
+    final prefix = input.substring(tokenStart, markerStart).trim();
+    if (_looksLikeSpecialEpisodePrefix(prefix)) {
+      return tokenStart;
+    }
+
+    return null;
+  }
+
+  int _positionEpisodeStart(String input, int markerStart) {
+    if (markerStart == 0) {
+      return markerStart;
+    }
+
+    var cursor = markerStart - 1;
+    if (!_isWhitespace(input[cursor])) {
+      return markerStart;
+    }
+
+    while (cursor >= 0 && _isWhitespace(input[cursor])) {
+      cursor--;
+    }
+    if (cursor < 0) {
+      return markerStart;
+    }
+
+    final tokenEnd = cursor + 1;
+    final beforeMarker = input.substring(0, tokenEnd);
+    final numberMatch = _lastEpisodeNumberMatch(beforeMarker);
+    return numberMatch == null ? markerStart : numberMatch.start;
+  }
+
+  int _startOfCurrentToken(String input, int endExclusive) {
+    var cursor = endExclusive - 1;
+    while (cursor >= 0 && !_isWhitespace(input[cursor])) {
+      cursor--;
+    }
+    return cursor + 1;
+  }
+
+  bool _looksLikeSpecialEpisodePrefix(String prefix) {
+    if (prefix.isEmpty) {
+      return false;
+    }
+    if (prefix.startsWith('完结') || prefix.startsWith('完結')) {
+      return true;
+    }
+    return _extractLeadingEpisodeNumber(prefix) != null;
+  }
+
+  double? _extractLeadingEpisodeNumber(String text) {
+    final match = RegExp(
+      '^第?([${ComicTitleRules.numberTokenCharacters}]+(?:\\.[0-9]+)?)',
+      caseSensitive: false,
+    ).firstMatch(text.trimLeft());
+    if (match == null) {
+      return null;
+    }
+    return _numberParser.parseNumber(match.group(1) ?? '');
+  }
+
+  RegExpMatch? _lastEpisodeNumberMatch(String text) {
+    final matches = RegExp(
+      '[${ComicTitleRules.numberTokenCharacters}]+(?:\\.[0-9]+)?',
+      caseSensitive: false,
+    ).allMatches(text);
+    RegExpMatch? result;
+    for (final match in matches) {
+      if (_numberParser.parseNumber(match.group(0) ?? '') != null) {
+        result = match;
+      }
+    }
+    return result;
+  }
+
+  bool _isWhitespace(String char) => RegExp(r'\s').hasMatch(char);
 
   bool _isStandaloneEnglishLabelMatch(String input, RegExpMatch match) {
     if (match.start > 0) {
@@ -408,35 +586,22 @@ class PetitComicTitleAnalyzer implements ComicTitleAnalyzer {
     if (match == null) {
       return null;
     }
-    return const ComicTitleNumberParser().parseNumber(match.group(0) ?? '')?.toInt();
+    return const ComicTitleNumberParser()
+        .parseNumber(match.group(0) ?? '')
+        ?.toInt();
   }
 
-  String _canonicalizeSpecialLabel(String rawLabel) {
-    final normalized = ComicTitleRules.normalizeForMatching(rawLabel);
-    if (_finalMarkerPattern.hasMatch(normalized)) {
-      return '最终话';
+  /// 从文本开头提取中文数字（如 `二卷` → 2，`三` → 3）。
+  /// 用于从特殊标记文本中推导 chapterNumber。
+  int? _extractLeadingChineseNumber(String text) {
+    const chineseNumberChars = '零〇一二两兩三四五六七八九十百千';
+    final normalized = text.startsWith('第') ? text.substring(1) : text;
+    var i = 0;
+    while (i < normalized.length && chineseNumberChars.contains(normalized[i])) {
+      i++;
     }
-    if (normalized.toUpperCase() == 'SP') {
-      return 'SP';
-    }
-    for (final marker in ComicTitleRules.specialEpisodeMarkers) {
-      if (normalized.toLowerCase().contains(marker.toLowerCase())) {
-        return marker == '卷後附錄'
-            ? '卷后附录'
-            : marker == '卷彩頁'
-                ? '卷彩页'
-                : marker == '小劇場'
-                    ? '小剧场'
-                    : marker == '小漫畫'
-                        ? '小漫画'
-                        : marker == '單行本'
-                            ? '单行本'
-                            : marker == '附錄'
-                                ? '附录'
-                                : marker;
-      }
-    }
-    return normalized;
+    if (i == 0) return null;
+    return _numberParser.parseNumber(normalized.substring(0, i))?.toInt();
   }
 
   String _canonicalizeChapterLabel(
