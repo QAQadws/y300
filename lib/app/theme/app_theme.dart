@@ -36,6 +36,23 @@ final class AppTheme {
       scaffoldBackgroundColor: palette.scaffoldBackground,
       appBarTheme: AppComponentThemeBuilder.appBarTheme(palette),
       navigationBarTheme: AppComponentThemeBuilder.navigationBarTheme(palette),
+      popupMenuTheme: AppComponentThemeBuilder.popupMenuTheme(colorScheme),
+      menuTheme: AppComponentThemeBuilder.menuTheme(colorScheme),
+      dropdownMenuTheme:
+          AppComponentThemeBuilder.dropdownMenuTheme(colorScheme),
+      bottomSheetTheme: AppComponentThemeBuilder.bottomSheetTheme(colorScheme),
+      dialogTheme: AppComponentThemeBuilder.dialogTheme(colorScheme),
+      snackBarTheme: AppComponentThemeBuilder.snackBarTheme(colorScheme),
+      segmentedButtonTheme:
+          AppComponentThemeBuilder.segmentedButtonTheme(colorScheme),
+      sliderTheme: AppComponentThemeBuilder.sliderTheme(colorScheme),
+      listTileTheme: AppComponentThemeBuilder.listTileTheme(colorScheme),
+      dividerTheme: AppComponentThemeBuilder.dividerTheme(colorScheme),
+      iconButtonTheme: AppComponentThemeBuilder.iconButtonTheme(colorScheme),
+      inputDecorationTheme:
+          AppComponentThemeBuilder.inputDecorationTheme(colorScheme),
+      chipTheme: AppComponentThemeBuilder.chipTheme(colorScheme),
+      cardTheme: AppComponentThemeBuilder.cardTheme(colorScheme),
       extensions: <ThemeExtension<dynamic>>[
         palette.brightness == Brightness.dark
             ? Y300ThemeExtension.dark(palette)

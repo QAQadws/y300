@@ -26,6 +26,7 @@ void main() {
       AppThemeTokens.navigationBarBackground,
     );
     _expectColorSchemeMatchesPalette(theme.colorScheme, palette);
+    _expectComponentThemesMatchScheme(theme);
     expect(theme.extension<Y300ThemeExtension>(), isNotNull);
   });
 
@@ -43,6 +44,7 @@ void main() {
       isNot(AppThemeTokens.navigationBarBackground),
     );
     _expectColorSchemeMatchesPalette(theme.colorScheme, palette);
+    _expectComponentThemesMatchScheme(theme);
     expect(theme.extension<Y300ThemeExtension>(), isNotNull);
   });
 
@@ -87,6 +89,21 @@ void main() {
     expect(light.lerp(dark, 1).readerChromeBackground, dark.readerChromeBackground);
   });
 
+  test('AppTheme.dark component themes avoid light default surfaces', () {
+    final theme = AppTheme.dark();
+    final scheme = theme.colorScheme;
+
+    expect(theme.popupMenuTheme.color, scheme.surfaceContainer);
+    expect(theme.bottomSheetTheme.modalBackgroundColor, scheme.surfaceContainer);
+    expect(
+      theme.sliderTheme.inactiveTrackColor,
+      scheme.surfaceContainerHighest,
+    );
+    expect(theme.inputDecorationTheme.fillColor, scheme.surfaceContainer);
+    expect(theme.popupMenuTheme.color, isNot(Colors.white));
+    expect(theme.bottomSheetTheme.modalBackgroundColor, isNot(Colors.white));
+  });
+
   testWidgets('Y300App wires AppTheme into MaterialApp with saved theme mode', (
     tester,
   ) async {
@@ -121,6 +138,48 @@ void main() {
       materialApp.darkTheme!.extension<Y300ThemeExtension>(),
       isNotNull,
     );
+  });
+
+  testWidgets('AppTheme.dark builds common Material controls', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark(),
+        home: Scaffold(
+          body: Column(
+            children: [
+              PopupMenuButton<String>(
+                itemBuilder: (context) => const [
+                  PopupMenuItem<String>(
+                    value: 'refresh',
+                    child: Text('刷新'),
+                  ),
+                ],
+              ),
+              SegmentedButton<int>(
+                segments: const [
+                  ButtonSegment<int>(value: 0, label: Text('A')),
+                  ButtonSegment<int>(value: 1, label: Text('B')),
+                ],
+                selected: const {0},
+                onSelectionChanged: (_) {},
+              ),
+              Slider(
+                value: 0.5,
+                onChanged: (_) {},
+              ),
+              const TextField(
+                decoration: InputDecoration(labelText: '搜索'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(PopupMenuButton<String>), findsOneWidget);
+    expect(find.byType(SegmentedButton<int>), findsOneWidget);
+    expect(find.byType(Slider), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
   });
 
   testWidgets('Y300App falls back to light while settings load', (tester) async {
@@ -208,4 +267,39 @@ void _expectColorSchemeMatchesPalette(
   expect(scheme.outlineVariant, palette.outlineVariant);
   expect(scheme.secondaryContainer, palette.secondaryContainer);
   expect(scheme.onSecondaryContainer, palette.onSecondaryContainer);
+}
+
+void _expectComponentThemesMatchScheme(ThemeData theme) {
+  final scheme = theme.colorScheme;
+
+  expect(
+    theme.menuTheme.style?.backgroundColor?.resolve(const <WidgetState>{}),
+    scheme.surfaceContainer,
+  );
+  expect(
+    theme.dropdownMenuTheme.menuStyle?.backgroundColor?.resolve(
+      const <WidgetState>{},
+    ),
+    scheme.surfaceContainer,
+  );
+  expect(theme.popupMenuTheme.color, scheme.surfaceContainer);
+  expect(theme.popupMenuTheme.textStyle?.color, scheme.onSurface);
+  expect(theme.bottomSheetTheme.backgroundColor, scheme.surfaceContainer);
+  expect(theme.bottomSheetTheme.modalBackgroundColor, scheme.surfaceContainer);
+  expect(theme.dialogTheme.backgroundColor, scheme.surfaceContainer);
+  expect(theme.snackBarTheme.backgroundColor, scheme.inverseSurface);
+  expect(
+    theme.segmentedButtonTheme.style?.backgroundColor?.resolve(
+      const <WidgetState>{WidgetState.selected},
+    ),
+    scheme.secondaryContainer,
+  );
+  expect(theme.sliderTheme.activeTrackColor, scheme.primary);
+  expect(theme.sliderTheme.thumbColor, scheme.primary);
+  expect(theme.sliderTheme.inactiveTrackColor, scheme.surfaceContainerHighest);
+  expect(theme.listTileTheme.textColor, scheme.onSurface);
+  expect(theme.dividerTheme.color, scheme.outlineVariant);
+  expect(theme.inputDecorationTheme.fillColor, scheme.surfaceContainer);
+  expect(theme.chipTheme.backgroundColor, scheme.surfaceContainer);
+  expect(theme.cardTheme.color, scheme.surfaceContainer);
 }

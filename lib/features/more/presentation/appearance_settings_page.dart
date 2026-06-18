@@ -41,9 +41,6 @@ class AppearanceSettingsPage extends ConsumerWidget {
                 }
                 _setThemePreference(context, ref, selected.first);
               },
-              style: SegmentedButton.styleFrom(
-                minimumSize: const Size.fromHeight(44),
-              ),
               expandedInsets: const EdgeInsets.symmetric(horizontal: 16),
             ),
           ),
