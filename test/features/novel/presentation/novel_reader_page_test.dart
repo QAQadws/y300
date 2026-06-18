@@ -89,6 +89,39 @@ void main() {
     expect(topGate.ignoring, isTrue);
   });
 
+  testWidgets('NovelReaderPage first drag does not get reset by restore logic', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: _FakeNovelRepository(
+          firstParagraphs: List<String>.generate(30, (index) => '第一章段落 $index'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final list = find.byKey(const Key('novel-reader-paragraph-list'));
+    final scrollable = find.descendant(
+      of: list,
+      matching: find.byType(Scrollable),
+    );
+    expect(scrollable, findsOneWidget);
+
+    await tester.drag(list, const Offset(0, -80));
+    await tester.pumpAndSettle();
+
+    final scrollableState = tester.state<ScrollableState>(scrollable);
+    final firstOffset = scrollableState.position.pixels;
+    expect(firstOffset, greaterThan(0));
+
+    await tester.drag(list, const Offset(0, -80));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-paragraph-list')), findsOneWidget);
+    expect(scrollableState.position.pixels, greaterThan(firstOffset));
+  });
+
   testWidgets('NovelReaderPage opens catalog and switches chapter', (
     tester,
   ) async {
@@ -280,7 +313,7 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
-  testWidgets('NovelReaderPage display sheet previews theme and saves on confirm', (
+  testWidgets('NovelReaderPage display sheet is half height and applies theme live', (
     tester,
   ) async {
     final repository = _FakeNovelRepository();
@@ -295,24 +328,21 @@ void main() {
     expect(find.byKey(const Key('novel-reader-display-settings-sheet')), findsOneWidget);
     expect(find.byKey(const Key('novel-reader-flow-mode-control')), findsOneWidget);
     expect(find.byKey(const Key('novel-reader-content-width-slider')), findsOneWidget);
+    expect(find.byKey(const Key('novel-reader-display-settings-save')), findsNothing);
+    expect(find.byKey(const Key('novel-reader-display-settings-cancel')), findsNothing);
+
+    final sheetHeight = tester
+        .getSize(find.byKey(const Key('novel-reader-display-settings-sheet')))
+        .height;
+    final viewportHeight =
+        tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    expect(sheetHeight, lessThanOrEqualTo(viewportHeight * 0.5 + 1));
 
     await tester.ensureVisible(find.byKey(const Key('novel-theme-sepia')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('novel-theme-sepia')));
     await tester.pumpAndSettle();
-
-    expect(repository.latestPreferences, isNull);
-    expect(repository.upsertPreferencesCallCount, 0);
-    expect(
-      find.byKey(const Key('novel-reader-display-settings-save')),
-      findsOneWidget,
-    );
-
-    await tester.ensureVisible(
-      find.byKey(const Key('novel-reader-display-settings-save')),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('novel-reader-display-settings-save')));
+    await tester.pump(const Duration(milliseconds: 600));
     await tester.pumpAndSettle();
 
     expect(repository.latestPreferences?.themeMode, 'sepia');
@@ -320,7 +350,7 @@ void main() {
     expect(repository.upsertPreferencesCallCount, 1);
   });
 
-  testWidgets('NovelReaderPage display sheet previews reading mode and cancels rollback', (
+  testWidgets('NovelReaderPage display sheet applies reading mode live', (
     tester,
   ) async {
     final repository = _FakeNovelRepository();
@@ -339,50 +369,14 @@ void main() {
     expect(find.byKey(const Key('novel-reader-paged-view')), findsOneWidget);
     expect(find.byKey(const Key('novel-reader-paragraph-list')), findsNothing);
 
-    expect(repository.latestPreferences, isNull);
-    expect(repository.upsertPreferencesCallCount, 0);
-
-    await tester.ensureVisible(
-      find.byKey(const Key('novel-reader-display-settings-cancel')),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('novel-reader-display-settings-cancel')));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('novel-reader-paragraph-list')), findsOneWidget);
-    expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
-    expect(repository.latestPreferences, isNull);
-  });
-
-  testWidgets('NovelReaderPage display sheet saves reading mode only on confirm', (
-    tester,
-  ) async {
-    final repository = _FakeNovelRepository();
-    await tester.pumpWidget(_buildReaderApp(repository: repository));
-    await tester.pumpAndSettle();
-
-    await _showReaderMenu(tester);
-    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-display')));
-    await tester.pumpAndSettle();
-
-    await tester.ensureVisible(find.text('分页'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('分页'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(
-      find.byKey(const Key('novel-reader-display-settings-save')),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('novel-reader-display-settings-save')));
+    await tester.pump(const Duration(milliseconds: 600));
     await tester.pumpAndSettle();
 
     expect(repository.latestPreferences?.flowMode, NovelReaderFlowMode.pagedLtr);
     expect(repository.upsertPreferencesCallCount, 1);
-    expect(find.byKey(const Key('novel-reader-paged-view')), findsOneWidget);
-    expect(find.byKey(const Key('novel-reader-paragraph-list')), findsNothing);
   });
 
-  testWidgets('NovelReaderPage display sheet slider preview does not persist until save', (
+  testWidgets('NovelReaderPage display sheet slider applies without save button', (
     tester,
   ) async {
     final repository = _FakeNovelRepository();
@@ -393,12 +387,7 @@ void main() {
     await tester.tap(find.byKey(const Key('shared-reader-bottom-action-display')));
     await tester.pumpAndSettle();
 
-    final saveButtonFinder = find.byKey(
-      const Key('novel-reader-display-settings-save'),
-    );
-    FilledButton saveButton() =>
-        tester.widget<FilledButton>(saveButtonFinder);
-    expect(saveButton().onPressed, isNull);
+    expect(find.byKey(const Key('novel-reader-display-settings-save')), findsNothing);
 
     await tester.drag(
       find.descendant(
@@ -408,14 +397,7 @@ void main() {
       const Offset(120, 0),
     );
     await tester.pumpAndSettle();
-
-    expect(repository.latestPreferences, isNull);
-    expect(repository.upsertPreferencesCallCount, 0);
-    expect(saveButton().onPressed, isNotNull);
-
-    await tester.ensureVisible(saveButtonFinder);
-    await tester.pumpAndSettle();
-    await tester.tap(saveButtonFinder);
+    await tester.pump(const Duration(milliseconds: 600));
     await tester.pumpAndSettle();
 
     expect(repository.latestPreferences, isNotNull);
@@ -423,7 +405,7 @@ void main() {
     expect(repository.upsertPreferencesCallCount, 1);
   });
 
-  testWidgets('NovelReaderPage display sheet barrier dismiss rolls back preview', (
+  testWidgets('NovelReaderPage display sheet barrier dismiss keeps applied settings', (
     tester,
   ) async {
     final repository = _FakeNovelRepository();
@@ -440,16 +422,18 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('novel-reader-paged-view')), findsOneWidget);
-    expect(repository.latestPreferences, isNull);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpAndSettle();
+    expect(repository.latestPreferences?.flowMode, NovelReaderFlowMode.pagedLtr);
 
     await tester.tapAt(const Offset(24, 24));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('novel-reader-display-settings-sheet')), findsNothing);
-    expect(find.byKey(const Key('novel-reader-paragraph-list')), findsOneWidget);
-    expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
-    expect(repository.latestPreferences, isNull);
-    expect(repository.upsertPreferencesCallCount, 0);
+    expect(find.byKey(const Key('novel-reader-paged-view')), findsOneWidget);
+    expect(find.byKey(const Key('novel-reader-paragraph-list')), findsNothing);
+    expect(repository.latestPreferences?.flowMode, NovelReaderFlowMode.pagedLtr);
+    expect(repository.upsertPreferencesCallCount, 1);
   });
 
   testWidgets('NovelReaderPage paged mode shows layout loading before first layout resolves', (
@@ -532,6 +516,8 @@ void main() {
       greaterThan(1),
     );
 
+    layoutService.completeEpisode('novel:49:100:5001');
+    await tester.pump(const Duration(milliseconds: 100));
     layoutService.completeEpisode('novel:49:100:5001');
     await tester.pumpAndSettle();
 

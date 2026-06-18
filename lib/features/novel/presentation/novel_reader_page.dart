@@ -42,6 +42,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       const NovelReaderTypographyResolver();
   final NovelReaderProgressPolicy _progressPolicy = const NovelReaderProgressPolicy();
   final Map<String, GlobalKey> _nodeKeys = <String, GlobalKey>{};
+  Timer? _displayPreviewThrottle;
+  Timer? _displayPersistDebounce;
+  NovelReaderPreferences? _pendingDisplayPreferences;
+  NovelReaderPreferences? _lastPreviewedDisplayPreferences;
+  NovelReaderPreferences? _lastPersistedDisplayPreferences;
+  NovelReaderPreferences? _inFlightDisplayPreferences;
+  int _displayPersistSerial = 0;
   bool _hasRestoredOffset = false;
   bool _isProgrammaticScrollChange = false;
   bool _allowPopAfterProgressFlush = false;
@@ -64,6 +71,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     WidgetsBinding.instance.removeObserver(this);
     _overlayController.dispose();
     _pagedSurfaceController.dispose();
+    _displayPreviewThrottle?.cancel();
+    _displayPersistDebounce?.cancel();
     _scrollController
       ..removeListener(_onScroll)
       ..dispose();
@@ -419,6 +428,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     if (_isProgrammaticScrollChange) {
       return;
     }
+    if (!_hasRestoredOffset) {
+      // Once the user has started a real drag, stop any pending restore from
+      // fighting the gesture mid-flight.
+      _hasRestoredOffset = true;
+    }
     _overlayController.hideMenu();
     ref
         .read(novelReaderControllerProvider(_args).notifier)
@@ -432,7 +446,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     required String episodeId,
     required double offset,
   }) {
-    if (_hasRestoredOffset || offset <= 0) {
+    if (_hasRestoredOffset) {
+      return;
+    }
+    if (offset <= 0) {
+      _hasRestoredOffset = true;
       return;
     }
     final current = ref.read(novelReaderControllerProvider(_args)).value;
@@ -788,32 +806,102 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     NovelReaderController controller,
   ) async {
     _overlayController.hideMenu();
-    final draft = await showModalBottomSheet<NovelReaderPreferences>(
+    final maxSheetHeight = MediaQuery.sizeOf(context).height * 0.5;
+    _pendingDisplayPreferences = viewState.preferences;
+    _lastPreviewedDisplayPreferences = viewState.preferences;
+    _lastPersistedDisplayPreferences = viewState.persistedPreferences;
+    _inFlightDisplayPreferences = null;
+    await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: NovelReaderDisplaySettingsSheet(
-          initialPreferences: viewState.persistedPreferences,
-          onPreviewRequested: controller.previewPreferences,
-        ),
+      constraints: BoxConstraints(maxHeight: maxSheetHeight),
+      builder: (context) => NovelReaderDisplaySettingsSheet(
+        initialPreferences: viewState.preferences,
+        onPreferencesChanged: (preferences) =>
+            _onDisplayPreferencesChanged(preferences, controller),
       ),
     );
     if (!mounted) {
       return;
     }
-    if (draft == null) {
-      controller.revertPreferencePreview();
+    await _flushDisplayPreferenceChanges(controller);
+  }
+
+  void _onDisplayPreferencesChanged(
+    NovelReaderPreferences preferences,
+    NovelReaderController controller,
+  ) {
+    _pendingDisplayPreferences = preferences;
+    _scheduleDisplayPreferencePreview(controller);
+    _scheduleDisplayPreferencePersist(controller);
+  }
+
+  void _scheduleDisplayPreferencePreview(NovelReaderController controller) {
+    if (_displayPreviewThrottle?.isActive == true) {
       return;
     }
+    _applyPendingDisplayPreview(controller);
+    _displayPreviewThrottle = Timer(const Duration(milliseconds: 90), () {
+      _displayPreviewThrottle = null;
+      _applyPendingDisplayPreview(controller);
+    });
+  }
+
+  void _applyPendingDisplayPreview(NovelReaderController controller) {
+    final preferences = _pendingDisplayPreferences;
+    if (preferences == null ||
+        preferences == _lastPreviewedDisplayPreferences) {
+      return;
+    }
+    _lastPreviewedDisplayPreferences = preferences;
+    controller.previewPreferences(preferences);
+  }
+
+  void _scheduleDisplayPreferencePersist(NovelReaderController controller) {
+    _displayPersistDebounce?.cancel();
+    _displayPersistDebounce = Timer(const Duration(milliseconds: 520), () {
+      _displayPersistDebounce = null;
+      unawaited(_persistPendingDisplayPreferences(controller));
+    });
+  }
+
+  Future<void> _flushDisplayPreferenceChanges(
+    NovelReaderController controller,
+  ) async {
+    _displayPreviewThrottle?.cancel();
+    _displayPreviewThrottle = null;
+    _displayPersistDebounce?.cancel();
+    _displayPersistDebounce = null;
+    _applyPendingDisplayPreview(controller);
+    await _persistPendingDisplayPreferences(controller);
+  }
+
+  Future<void> _persistPendingDisplayPreferences(
+    NovelReaderController controller,
+  ) async {
+    final preferences = _pendingDisplayPreferences;
+    if (preferences == null ||
+        preferences == _lastPersistedDisplayPreferences ||
+        preferences == _inFlightDisplayPreferences) {
+      return;
+    }
+    _inFlightDisplayPreferences = preferences;
+    final serial = ++_displayPersistSerial;
     try {
-      await controller.commitPreferences(draft);
+      await controller.commitPreferences(preferences);
+      if (serial == _displayPersistSerial) {
+        _lastPersistedDisplayPreferences = preferences;
+      }
     } catch (_) {
-      controller.revertPreferencePreview();
-      if (!mounted) {
+      if (!mounted || serial != _displayPersistSerial) {
         return;
       }
+      controller.revertPreferencePreview();
       _showReaderSnackBar('显示设置保存失败');
+    } finally {
+      if (_inFlightDisplayPreferences == preferences) {
+        _inFlightDisplayPreferences = null;
+      }
     }
   }
 

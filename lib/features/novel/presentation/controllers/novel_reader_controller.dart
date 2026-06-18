@@ -210,6 +210,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       <String, NovelReadingProgress>{};
   int _activeSessionToken = 0;
   int _transitionRequestSerial = 0;
+  int _preferenceCommitSerial = 0;
 
   @override
   FutureOr<NovelReaderViewState> build() async {
@@ -262,14 +263,22 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       );
       return;
     }
+    final commitSerial = ++_preferenceCommitSerial;
     await ref.read(novelRepositoryProvider).upsertReaderPreferences(next);
+    if (commitSerial != _preferenceCommitSerial) {
+      return;
+    }
     final latest = state.value ?? current;
+    final effectivePreferences =
+        latest.effectivePreferences == current.effectivePreferences
+            ? next
+            : latest.effectivePreferences;
     state = AsyncData(
       latest.copyWith(
         persistedPreferences: next,
-        effectivePreferences: next,
+        effectivePreferences: effectivePreferences,
         progressSnapshot: latest.progressSnapshot.copyWith(
-          flowMode: next.flowMode,
+          flowMode: effectivePreferences.flowMode,
         ),
       ),
     );
