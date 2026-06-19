@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:logger/logger.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/utils/parse_utils.dart';
 import 'package:y300/features/profile/data/profile_repository.dart';
 import 'package:y300/features/reply/data/discuz_reply_remote_data_source.dart';
@@ -15,21 +17,37 @@ class DiscuzReplyApiRepository implements ReplyRepository {
   DiscuzReplyApiRepository({
     required ProfileRepository profileRepository,
     required CookieStore cookieStore,
+    YamiboHttpGateway? gateway,
     Dio? dio,
     DiscuzReplyRemoteDataSource? remoteDataSource,
     ReplyFormPreparationDataSource? preparationDataSource,
     ReplyDraftValidator validator = const ReplyDraftValidator(),
-  })  : _profileRepository = profileRepository,
-        _remoteDataSource = remoteDataSource ??
-            DiscuzReplyDioRemoteDataSource(
-              cookieStore: cookieStore,
-              dio: dio,
-            ),
-        _preparationDataSource = preparationDataSource ??
-            DiscuzReplyFormPreparationDataSource(
-              cookieStore: cookieStore,
-            ),
-        _validator = validator;
+  }) : _profileRepository = profileRepository,
+       _remoteDataSource =
+           remoteDataSource ??
+           DiscuzReplyDioRemoteDataSource(
+             gateway:
+                 gateway ??
+                 YamiboHttpGateway(
+                   cookieStore: cookieStore,
+                   logger: Logger(level: Level.off),
+                   dio: dio,
+                   enableLog: false,
+                 ),
+           ),
+       _preparationDataSource =
+           preparationDataSource ??
+           DiscuzReplyFormPreparationDataSource(
+             gateway:
+                 gateway ??
+                 YamiboHttpGateway(
+                   cookieStore: cookieStore,
+                   logger: Logger(level: Level.off),
+                   dio: dio,
+                   enableLog: false,
+                 ),
+           ),
+       _validator = validator;
 
   final ProfileRepository _profileRepository;
   final DiscuzReplyRemoteDataSource _remoteDataSource;
@@ -103,8 +121,9 @@ class DiscuzReplyApiRepository implements ReplyRepository {
     required Uri replyFormUri,
   }) async {
     try {
-      final preparation =
-          await _preparationDataSource.fetchReplyPreparation(replyFormUri);
+      final preparation = await _preparationDataSource.fetchReplyPreparation(
+        replyFormUri,
+      );
       return ApiSuccess<ReplyPreparation>(preparation);
     } on DioException catch (error) {
       return ApiFailure<ReplyPreparation>(
@@ -145,7 +164,10 @@ class DiscuzReplyApiRepository implements ReplyRepository {
         final formhash = data.formhash.trim();
         if (formhash.isEmpty) {
           return const ApiFailure<String>(
-            ApiError(type: ApiErrorType.business, message: 'formhash 为空，无法发送回复'),
+            ApiError(
+              type: ApiErrorType.business,
+              message: 'formhash 为空，无法发送回复',
+            ),
           );
         }
         return ApiSuccess<String>(formhash);
@@ -167,13 +189,17 @@ class DiscuzReplyApiRepository implements ReplyRepository {
     final messageNode = ParseUtils.asMap(root['Message']);
     final message = ParseUtils.asString(
       messageNode['messagestr'],
-      fallback: ParseUtils.asString(messageNode['messageval'], fallback: '回复结果未知'),
+      fallback: ParseUtils.asString(
+        messageNode['messageval'],
+        fallback: '回复结果未知',
+      ),
     );
     final code = ParseUtils.asString(messageNode['messageval'], fallback: '');
     final loweredCode = code.toLowerCase();
     final loweredMessage = message.toLowerCase();
 
-    final success = loweredCode.contains('succeed') ||
+    final success =
+        loweredCode.contains('succeed') ||
         loweredCode.contains('success') ||
         loweredMessage.contains('成功');
     return _ReplyResponseParseResult(

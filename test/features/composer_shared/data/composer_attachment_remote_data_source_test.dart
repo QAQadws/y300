@@ -4,8 +4,11 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/yamibo/yamibo_api_client.dart';
+import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/features/composer_shared/data/composer_attachment_remote_data_source.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 
@@ -87,15 +90,14 @@ void main() {
       );
       final cookieStore = CookieStore();
       final uri = Uri.parse('https://bbs.yamibo.com/api/mobile/index.php');
-      await cookieStore.saveFromSetCookie(
-        uri,
-        const <String>['upload_cookie=123; Path=/'],
-      );
+      await cookieStore.saveFromSetCookie(uri, const <String>[
+        'upload_cookie=123; Path=/',
+      ]);
       final dataSource = _buildDataSource(adapter, cookieStore: cookieStore);
 
       await dataSource.checkUploadPermission(fid: '33');
 
-      expect(adapter.lastHeaders['cookie'], contains('upload_cookie=123'));
+      expect(adapter.lastHeaders['Cookie'], contains('upload_cookie=123'));
       final cookieHeader = await cookieStore.readCookieHeader(uri);
       expect(cookieHeader, contains('upload_next=456'));
     });
@@ -107,9 +109,17 @@ DiscuzComposerAttachmentDioDataSource _buildDataSource(
   CookieStore? cookieStore,
 }) {
   final dio = Dio()..httpClientAdapter = adapter;
-  return DiscuzComposerAttachmentDioDataSource(
-    cookieStore: cookieStore ?? CookieStore(),
+  final store = cookieStore ?? CookieStore();
+  final gateway = YamiboHttpGateway(
+    cookieStore: store,
+    logger: Logger(level: Level.off),
     dio: dio,
+    enableLog: false,
+  );
+  return DiscuzComposerAttachmentDioDataSource(
+    cookieStore: store,
+    apiClient: YamiboApiClient(gateway: gateway),
+    gateway: gateway,
   );
 }
 
@@ -138,10 +148,7 @@ Map<String, dynamic> _checkPostResponse() {
           'png': '-1',
           'mp3': '0',
         },
-        'attachremain': <String, String>{
-          'size': '-1',
-          'count': '-1',
-        },
+        'attachremain': <String, String>{'size': '-1', 'count': '-1'},
         'uploadhash': 'd3bd2566e6639c93880a3703505a1286',
       },
     },
@@ -180,10 +187,6 @@ class _UploadRemoteTestAdapter implements HttpClientAdapter {
       lastBody = utf8.decode(bytes, allowMalformed: true);
     }
 
-    return ResponseBody.fromString(
-      responseBody,
-      200,
-      headers: responseHeaders,
-    );
+    return ResponseBody.fromString(responseBody, 200, headers: responseHeaders);
   }
 }

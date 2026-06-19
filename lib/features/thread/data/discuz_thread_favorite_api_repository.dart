@@ -1,9 +1,12 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:logger/logger.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
+import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/core/utils/parse_utils.dart';
 import 'package:y300/features/profile/data/profile_repository.dart';
 import 'package:y300/features/thread/data/thread_favorite_repository.dart';
@@ -13,38 +16,27 @@ class DiscuzThreadFavoriteApiRepository implements ThreadFavoriteRepository {
   DiscuzThreadFavoriteApiRepository({
     required ProfileRepository profileRepository,
     required CookieStore cookieStore,
+    YamiboHttpGateway? gateway,
     Dio? dio,
-  })  : _profileRepository = profileRepository,
-        _cookieStore = cookieStore,
-        _dio =
-            dio ??
-            Dio(
-              BaseOptions(
-                connectTimeout: AppConfig.connectTimeout,
-                receiveTimeout: AppConfig.receiveTimeout,
-              ),
-            ) {
-    _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) async {
-          final cookieHeader = await _cookieStore.readCookieHeader(options.uri);
-          if (cookieHeader != null && cookieHeader.isNotEmpty) {
-            options.headers['cookie'] = cookieHeader;
-          }
-          handler.next(options);
-        },
-        onResponse: (response, handler) async {
-          final setCookie = response.headers.map['set-cookie'] ?? <String>[];
-          await _cookieStore.saveFromSetCookie(response.requestOptions.uri, setCookie);
-          handler.next(response);
-        },
-      ),
-    );
-  }
+  }) : _profileRepository = profileRepository,
+       _gateway =
+           gateway ??
+           YamiboHttpGateway(
+             cookieStore: cookieStore,
+             logger: Logger(level: Level.off),
+             dio:
+                 dio ??
+                 Dio(
+                   BaseOptions(
+                     connectTimeout: AppConfig.connectTimeout,
+                     receiveTimeout: AppConfig.receiveTimeout,
+                   ),
+                 ),
+             enableLog: false,
+           );
 
   final ProfileRepository _profileRepository;
-  final CookieStore _cookieStore;
-  final Dio _dio;
+  final YamiboHttpGateway _gateway;
 
   @override
   Future<ApiResult<ThreadFavoriteResult>> favoriteThread({
@@ -62,38 +54,46 @@ class DiscuzThreadFavoriteApiRepository implements ThreadFavoriteRepository {
       return ApiFailure<ThreadFavoriteResult>(error);
     }
     final formhash = (formhashResult as ApiSuccess<String>).data;
-    final endpoint = '${AppConfig.siteBaseUrl}/api/mobile/index.php';
+    final endpoint = Uri.parse(AppConfig.apiBaseUrl).replace(
+      queryParameters: const <String, String>{
+        'module': 'favthread',
+        'version': '4',
+      },
+    );
 
     try {
-      final response = await _dio.post<dynamic>(
+      final response = await _gateway.postForm(
         endpoint,
-        queryParameters: const <String, String>{
-          'module': 'favthread',
-          'version': '4',
-        },
+        context: const YamiboRequestContext(
+          kind: YamiboRequestKind.api,
+          operation: 'thread.favorite.add',
+          module: 'favthread',
+        ),
         data: <String, String>{
           'formhash': formhash,
           'id': tid,
           'favoritesubmit': '1',
         },
-        options: Options(
-          contentType: Headers.formUrlEncodedContentType,
-          headers: <String, String>{
-            'referer': '${AppConfig.siteBaseUrl}/forum.php?mod=viewthread&tid=$tid&mobile=2',
-            'accept': 'application/json, text/plain, */*',
-          },
-        ),
+        headers: <String, String>{
+          'referer':
+              '${AppConfig.siteBaseUrl}/forum.php?mod=viewthread&tid=$tid&mobile=2',
+          'accept': 'application/json, text/plain, */*',
+        },
       );
+      if (response case ApiFailure(:final error)) {
+        throw _toDioException(error, endpoint);
+      }
+      final data = response.dataOrNull;
 
-      final parsed = _parseFavoriteResponse(response.data);
+      final parsed = _parseFavoriteResponse(data?.body);
       if (!parsed.success) {
         return ApiFailure<ThreadFavoriteResult>(
           ApiError(
             type: ApiErrorType.business,
             message: parsed.message,
             code: parsed.code,
-            raw: response.data,
-            statusCode: response.statusCode,
+            raw: data?.body,
+            statusCode: data?.statusCode,
           ),
         );
       }
@@ -139,42 +139,47 @@ class DiscuzThreadFavoriteApiRepository implements ThreadFavoriteRepository {
       return ApiFailure<ThreadUnfavoriteResult>(error);
     }
     final formhash = (formhashResult as ApiSuccess<String>).data;
-    final endpoint = '${AppConfig.siteBaseUrl}/api/mobile/index.php';
+    final endpoint = Uri.parse(AppConfig.apiBaseUrl).replace(
+      queryParameters: <String, String>{
+        'module': 'favthread',
+        'version': '4',
+        'op': 'delete',
+        'type': 'thread',
+        'id': tid,
+      },
+    );
 
     try {
       // 删除以 tid 为键：`op=delete&type=thread&id=<tid>`，与添加收藏的
       // `favoritesubmit` 路径同构，只是把提交字段换成 `deletesubmit`。
-      final response = await _dio.post<dynamic>(
+      final response = await _gateway.postForm(
         endpoint,
-        queryParameters: <String, String>{
-          'module': 'favthread',
-          'version': '4',
-          'op': 'delete',
-          'type': 'thread',
-          'id': tid,
-        },
-        data: <String, String>{
-          'formhash': formhash,
-          'deletesubmit': 'true',
-        },
-        options: Options(
-          contentType: Headers.formUrlEncodedContentType,
-          headers: <String, String>{
-            'referer': '${AppConfig.siteBaseUrl}/home.php?mod=spacecp&ac=favorite&mobile=2',
-            'accept': 'application/json, text/plain, */*',
-          },
+        context: const YamiboRequestContext(
+          kind: YamiboRequestKind.api,
+          operation: 'thread.favorite.delete',
+          module: 'favthread',
         ),
+        data: <String, String>{'formhash': formhash, 'deletesubmit': 'true'},
+        headers: <String, String>{
+          'referer':
+              '${AppConfig.siteBaseUrl}/home.php?mod=spacecp&ac=favorite&mobile=2',
+          'accept': 'application/json, text/plain, */*',
+        },
       );
+      if (response case ApiFailure(:final error)) {
+        throw _toDioException(error, endpoint);
+      }
+      final data = response.dataOrNull;
 
-      final parsed = _parseUnfavoriteResponse(response.data);
+      final parsed = _parseUnfavoriteResponse(data?.body);
       if (!parsed.success) {
         return ApiFailure<ThreadUnfavoriteResult>(
           ApiError(
             type: ApiErrorType.business,
             message: parsed.message,
             code: parsed.code,
-            raw: response.data,
-            statusCode: response.statusCode,
+            raw: data?.body,
+            statusCode: data?.statusCode,
           ),
         );
       }
@@ -211,7 +216,10 @@ class DiscuzThreadFavoriteApiRepository implements ThreadFavoriteRepository {
         final formhash = data.formhash.trim();
         if (formhash.isEmpty) {
           return const ApiFailure<String>(
-            ApiError(type: ApiErrorType.business, message: 'formhash 为空，无法收藏帖子'),
+            ApiError(
+              type: ApiErrorType.business,
+              message: 'formhash 为空，无法收藏帖子',
+            ),
           );
         }
         return ApiSuccess<String>(formhash);
@@ -233,13 +241,17 @@ class DiscuzThreadFavoriteApiRepository implements ThreadFavoriteRepository {
     final messageNode = ParseUtils.asMap(root['Message']);
     final message = ParseUtils.asString(
       messageNode['messagestr'],
-      fallback: ParseUtils.asString(messageNode['messageval'], fallback: '收藏结果未知'),
+      fallback: ParseUtils.asString(
+        messageNode['messageval'],
+        fallback: '收藏结果未知',
+      ),
     );
     final code = ParseUtils.asString(messageNode['messageval'], fallback: '');
     final loweredCode = code.toLowerCase();
     final loweredMessage = message.toLowerCase();
     final alreadyFavorited = _isAlreadyFavorited(loweredCode, loweredMessage);
-    final success = alreadyFavorited ||
+    final success =
+        alreadyFavorited ||
         loweredCode.contains('succeed') ||
         loweredCode.contains('success') ||
         loweredCode == 'favorite_do_success' ||
@@ -268,7 +280,10 @@ class DiscuzThreadFavoriteApiRepository implements ThreadFavoriteRepository {
     final messageNode = ParseUtils.asMap(root['Message']);
     final message = ParseUtils.asString(
       messageNode['messagestr'],
-      fallback: ParseUtils.asString(messageNode['messageval'], fallback: '取消收藏结果未知'),
+      fallback: ParseUtils.asString(
+        messageNode['messageval'],
+        fallback: '取消收藏结果未知',
+      ),
     );
     final code = ParseUtils.asString(messageNode['messageval'], fallback: '');
     final loweredCode = code.toLowerCase();
@@ -276,7 +291,8 @@ class DiscuzThreadFavoriteApiRepository implements ThreadFavoriteRepository {
     // 删除一个本就不存在的收藏视为幂等成功：上层逐个 tid 取消整部作品时，
     // 历史残留 / 重复点击都不该当成失败。
     final alreadyRemoved = _isAlreadyUnfavorited(loweredCode, loweredMessage);
-    final success = alreadyRemoved ||
+    final success =
+        alreadyRemoved ||
         loweredCode.contains('succeed') ||
         loweredCode.contains('success') ||
         loweredCode == 'do_success' ||
@@ -311,6 +327,19 @@ class DiscuzThreadFavoriteApiRepository implements ThreadFavoriteRepository {
       return ParseUtils.asMap(decoded);
     }
     return <String, dynamic>{};
+  }
+
+  DioException _toDioException(ApiError error, Uri endpoint) {
+    final requestOptions = RequestOptions(path: endpoint.toString());
+    return DioException(
+      requestOptions: requestOptions,
+      response: Response<dynamic>(
+        requestOptions: requestOptions,
+        statusCode: error.statusCode,
+        data: error.raw,
+      ),
+      message: error.message,
+    );
   }
 
   ApiErrorType _mapDioErrorType(DioException error) {

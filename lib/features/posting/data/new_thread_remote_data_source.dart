@@ -1,6 +1,10 @@
 import 'package:dio/dio.dart';
+import 'package:logger/logger.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
+import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
 
 /// 发帖提交的 form-urlencoded 载荷。
@@ -8,9 +12,7 @@ import 'package:y300/features/posting/domain/models/posting_models.dart';
 /// 把"业务字段 → form key/value"集中在这里，让上层的 Repository / 测试
 /// 不关心 Discuz 字段拼写细节。
 class NewThreadSubmitForm {
-  const NewThreadSubmitForm({
-    required this.payload,
-  });
+  const NewThreadSubmitForm({required this.payload});
 
   final NewThreadDraftPayload payload;
 
@@ -106,10 +108,7 @@ class NewThreadSubmitForm {
 }
 
 class NewThreadRemoteResponse {
-  const NewThreadRemoteResponse({
-    required this.data,
-    required this.statusCode,
-  });
+  const NewThreadRemoteResponse({required this.data, required this.statusCode});
 
   final dynamic data;
   final int? statusCode;
@@ -122,62 +121,64 @@ abstract class NewThreadRemoteDataSource {
 class DiscuzNewThreadDioRemoteDataSource implements NewThreadRemoteDataSource {
   DiscuzNewThreadDioRemoteDataSource({
     required CookieStore cookieStore,
+    YamiboHttpGateway? gateway,
     Dio? dio,
-  })  : _cookieStore = cookieStore,
-        _dio = dio ??
-            Dio(
-              BaseOptions(
-                connectTimeout: AppConfig.connectTimeout,
-                receiveTimeout: AppConfig.receiveTimeout,
-              ),
-            ) {
-    _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) async {
-          final cookieHeader = await _cookieStore.readCookieHeader(options.uri);
-          if (cookieHeader != null && cookieHeader.isNotEmpty) {
-            options.headers['cookie'] = cookieHeader;
-          }
-          handler.next(options);
-        },
-        onResponse: (response, handler) async {
-          final setCookie = response.headers.map['set-cookie'] ?? <String>[];
-          await _cookieStore.saveFromSetCookie(
-            response.requestOptions.uri,
-            setCookie,
-          );
-          handler.next(response);
-        },
-      ),
-    );
-  }
+  }) : _gateway =
+           gateway ??
+           YamiboHttpGateway(
+             cookieStore: cookieStore,
+             logger: Logger(level: Level.off),
+             dio:
+                 dio ??
+                 Dio(
+                   BaseOptions(
+                     connectTimeout: AppConfig.connectTimeout,
+                     receiveTimeout: AppConfig.receiveTimeout,
+                   ),
+                 ),
+             enableLog: false,
+           );
 
-  final CookieStore _cookieStore;
-  final Dio _dio;
+  final YamiboHttpGateway _gateway;
 
   @override
   Future<NewThreadRemoteResponse> submit(NewThreadSubmitForm form) async {
-    final endpoint = '${AppConfig.siteBaseUrl}/api/mobile/index.php';
-    final response = await _dio.post<dynamic>(
-      endpoint,
+    final endpoint = Uri.parse(AppConfig.apiBaseUrl).replace(
       queryParameters: <String, String>{
         'module': 'newthread',
         'version': '4',
         'fid': form.payload.fid,
       },
-      data: form.toFormData(),
-      options: Options(
-        contentType: Headers.formUrlEncodedContentType,
-        headers: <String, String>{
-          'referer':
-              '${AppConfig.siteBaseUrl}/forum.php?mod=post&action=newthread&fid=${form.payload.fid}',
-          'accept': 'application/json, text/plain, */*',
-        },
-      ),
     );
+    final response = await _gateway.postForm(
+      endpoint,
+      context: const YamiboRequestContext(
+        kind: YamiboRequestKind.api,
+        operation: 'posting.newThread.submit',
+        module: 'newthread',
+      ),
+      data: form.toFormData(),
+      headers: <String, String>{
+        'referer':
+            '${AppConfig.siteBaseUrl}/forum.php?mod=post&action=newthread&fid=${form.payload.fid}',
+        'accept': 'application/json, text/plain, */*',
+      },
+    );
+    if (response case ApiFailure(:final error)) {
+      throw DioException(
+        requestOptions: RequestOptions(path: endpoint.toString()),
+        response: Response<dynamic>(
+          requestOptions: RequestOptions(path: endpoint.toString()),
+          statusCode: error.statusCode,
+          data: error.raw,
+        ),
+        message: error.message,
+      );
+    }
+    final data = response.dataOrNull;
     return NewThreadRemoteResponse(
-      data: response.data,
-      statusCode: response.statusCode,
+      data: data?.body,
+      statusCode: data?.statusCode,
     );
   }
 }

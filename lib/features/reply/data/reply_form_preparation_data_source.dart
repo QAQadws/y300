@@ -1,7 +1,6 @@
-import 'package:dio/dio.dart';
-import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
+import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/domain/services/reply_form_parser.dart';
 
@@ -12,59 +11,33 @@ abstract class ReplyFormPreparationDataSource {
 class DiscuzReplyFormPreparationDataSource
     implements ReplyFormPreparationDataSource {
   DiscuzReplyFormPreparationDataSource({
-    required CookieStore cookieStore,
+    required YamiboHttpGateway gateway,
     ReplyFormParser parser = const ReplyFormParser(),
-    Dio? dio,
-  })  : _cookieStore = cookieStore,
-        _parser = parser,
-        _dio = dio ??
-            Dio(
-              BaseOptions(
-                connectTimeout: AppConfig.connectTimeout,
-                receiveTimeout: AppConfig.receiveTimeout,
-              ),
-            ) {
-    _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) async {
-          final cookieHeader = await _cookieStore.readCookieHeader(options.uri);
-          if (cookieHeader != null && cookieHeader.isNotEmpty) {
-            options.headers['cookie'] = cookieHeader;
-          }
-          handler.next(options);
-        },
-        onResponse: (response, handler) async {
-          final setCookie = response.headers.map['set-cookie'] ?? <String>[];
-          await _cookieStore.saveFromSetCookie(
-            response.requestOptions.uri,
-            setCookie,
-          );
-          handler.next(response);
-        },
-      ),
-    );
-  }
+  }) : _gateway = gateway,
+       _parser = parser;
 
-  final CookieStore _cookieStore;
+  final YamiboHttpGateway _gateway;
   final ReplyFormParser _parser;
-  final Dio _dio;
 
   @override
   Future<ReplyPreparation> fetchReplyPreparation(Uri replyFormUri) async {
-    final response = await _dio.get<String>(
-      replyFormUri.toString(),
-      options: Options(
-        responseType: ResponseType.plain,
-        headers: const <String, String>{
-          'accept':
-              'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        },
+    final response = await _gateway.getText(
+      replyFormUri,
+      context: const YamiboRequestContext(
+        kind: YamiboRequestKind.html,
+        operation: 'reply.prepareForm',
+        pageKind: 'reply.form',
       ),
+      headers: const <String, String>{
+        'Accept':
+            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
     );
-    final parsed = _parser.parse(
-      sourceUri: replyFormUri,
-      html: response.data ?? '',
-    );
+    if (response case ApiFailure(:final error)) {
+      throw ReplyFormParseException(error.message);
+    }
+    final html = response.dataOrNull?.body ?? '';
+    final parsed = _parser.parse(sourceUri: replyFormUri, html: html);
     if (parsed case ApiSuccess<ReplyPreparation>(:final data)) {
       return data;
     }

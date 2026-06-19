@@ -25,16 +25,17 @@ final replyDraftValidatorProvider = Provider<ReplyDraftValidator>((_) {
 
 final replyFormPreparationDataSourceProvider =
     Provider<ReplyFormPreparationDataSource>((ref) {
-  return DiscuzReplyFormPreparationDataSource(
-    cookieStore: ref.read(cookieStoreProvider),
-    parser: ref.read(replyFormParserProvider),
-  );
-});
+      return DiscuzReplyFormPreparationDataSource(
+        gateway: ref.read(yamiboHttpGatewayProvider),
+        parser: ref.read(replyFormParserProvider),
+      );
+    });
 
 final replyRepositoryProvider = Provider<ReplyRepository>((ref) {
   return DiscuzReplyApiRepository(
     profileRepository: ref.read(profileRepositoryProvider),
     cookieStore: ref.read(cookieStoreProvider),
+    gateway: ref.read(yamiboHttpGatewayProvider),
     preparationDataSource: ref.read(replyFormPreparationDataSourceProvider),
     validator: ref.read(replyDraftValidatorProvider),
   );

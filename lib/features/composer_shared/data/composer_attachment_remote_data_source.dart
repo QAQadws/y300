@@ -3,6 +3,10 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/network/yamibo/yamibo_api_client.dart';
+import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
+import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/core/utils/parse_utils.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 
@@ -25,35 +29,11 @@ class DiscuzComposerAttachmentDioDataSource
     implements ComposerAttachmentRemoteDataSource {
   DiscuzComposerAttachmentDioDataSource({
     required CookieStore cookieStore,
+    required YamiboApiClient apiClient,
+    required YamiboHttpGateway gateway,
     Dio? dio,
-  })  : _cookieStore = cookieStore,
-        _dio = dio ??
-            Dio(
-              BaseOptions(
-                connectTimeout: AppConfig.connectTimeout,
-                receiveTimeout: AppConfig.receiveTimeout,
-              ),
-            ) {
-    _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) async {
-          final cookieHeader = await _cookieStore.readCookieHeader(options.uri);
-          if (cookieHeader != null && cookieHeader.isNotEmpty) {
-            options.headers['cookie'] = cookieHeader;
-          }
-          handler.next(options);
-        },
-        onResponse: (response, handler) async {
-          final setCookie = response.headers.map['set-cookie'] ?? <String>[];
-          await _cookieStore.saveFromSetCookie(
-            response.requestOptions.uri,
-            setCookie,
-          );
-          handler.next(response);
-        },
-      ),
-    );
-  }
+  }) : _apiClient = apiClient,
+       _gateway = gateway;
 
   static const Set<String> _imageExtensions = <String>{
     'jpg',
@@ -62,27 +42,32 @@ class DiscuzComposerAttachmentDioDataSource
     'gif',
   };
 
-  final CookieStore _cookieStore;
-  final Dio _dio;
+  final YamiboApiClient _apiClient;
+  final YamiboHttpGateway _gateway;
 
   @override
   Future<ComposerImageUploadPermission> checkUploadPermission({
     required String fid,
   }) async {
-    final response = await _dio.get<dynamic>(
-      AppConfig.apiBaseUrl,
-      queryParameters: <String, String>{
-        'module': 'checkpost',
-        'version': '1',
-        'fid': fid,
-      },
-      options: Options(
-        headers: const <String, String>{
-          'accept': 'application/json, text/plain, */*',
-        },
-      ),
+    final response = await _apiClient.getDiscuz(
+      module: 'checkpost',
+      queryParameters: <String, String>{'version': '1', 'fid': fid},
+      treatMessageAsBusinessError: false,
     );
-    return _parsePermission(response.data);
+    if (response case ApiFailure(:final error)) {
+      throw DioException(
+        requestOptions: RequestOptions(path: AppConfig.apiBaseUrl),
+        response: Response<dynamic>(
+          requestOptions: RequestOptions(path: AppConfig.apiBaseUrl),
+          statusCode: error.statusCode,
+          data: error.raw,
+        ),
+        message: error.message,
+      );
+    }
+    return _parsePermission(
+      response.dataOrNull?.variables ?? const <String, dynamic>{},
+    );
   }
 
   @override
@@ -96,8 +81,7 @@ class DiscuzComposerAttachmentDioDataSource
       file.path,
       filename: file.fileName,
     );
-    final response = await _dio.post<dynamic>(
-      AppConfig.apiBaseUrl,
+    final endpoint = Uri.parse(AppConfig.apiBaseUrl).replace(
       queryParameters: <String, String>{
         'module': 'forumupload',
         'version': '4',
@@ -105,32 +89,47 @@ class DiscuzComposerAttachmentDioDataSource
         'type': 'image',
         'filetype': file.mimeType,
       },
-      data: FormData.fromMap(
-        <String, dynamic>{
-          'uid': permission.uid,
-          'hash': permission.uploadHash,
-          'Filedata': multipartFile,
-        },
+    );
+    final response = await _gateway.postMultipart(
+      endpoint,
+      context: const YamiboRequestContext(
+        kind: YamiboRequestKind.resource,
+        operation: 'composer.attachment.upload',
+        module: 'forumupload',
       ),
+      data: FormData.fromMap(<String, dynamic>{
+        'uid': permission.uid,
+        'hash': permission.uploadHash,
+        'Filedata': multipartFile,
+      }),
       options: Options(
         responseType: ResponseType.plain,
-        headers: const <String, String>{
-          'accept': 'text/plain, */*',
-        },
+        headers: const <String, String>{'accept': 'text/plain, */*'},
       ),
       onSendProgress: onSendProgress,
     );
-    final rawBody = response.data;
+    if (response case ApiFailure(:final error)) {
+      throw DioException(
+        requestOptions: RequestOptions(path: endpoint.toString()),
+        response: Response<dynamic>(
+          requestOptions: RequestOptions(path: endpoint.toString()),
+          statusCode: error.statusCode,
+          data: error.raw,
+        ),
+        message: error.message,
+      );
+    }
+    final data = response.dataOrNull;
+    final rawBody = data?.body;
     return ComposerImageUploadResponse(
       aid: rawBody?.toString().trim() ?? '',
       rawBody: rawBody,
-      statusCode: response.statusCode,
+      statusCode: data?.statusCode,
     );
   }
 
   ComposerImageUploadPermission _parsePermission(dynamic data) {
-    final root = _asJsonMap(data);
-    final variables = ParseUtils.asMap(root['Variables']);
+    final variables = _asJsonMap(data);
     final allowPerm = ParseUtils.asMap(variables['allowperm']);
     final allowUpload = ParseUtils.asMap(allowPerm['allowupload']);
     final attachRemain = ParseUtils.asMap(allowPerm['attachremain']);

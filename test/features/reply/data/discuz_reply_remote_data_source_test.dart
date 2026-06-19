@@ -3,8 +3,10 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/features/reply/data/discuz_reply_remote_data_source.dart';
 
 void main() {
@@ -15,49 +17,57 @@ void main() {
       SharedPreferences.setMockInitialValues(<String, Object>{});
     });
 
-    test('posts sendreply payload with expected query headers and body', () async {
-      final adapter = _ReplyRemoteTestAdapter(
-        responseJson: <String, dynamic>{
-          'Message': <String, dynamic>{
-            'messageval': 'post_reply_succeed',
-            'messagestr': '回复发布成功',
+    test(
+      'posts sendreply payload with expected query headers and body',
+      () async {
+        final adapter = _ReplyRemoteTestAdapter(
+          responseJson: <String, dynamic>{
+            'Message': <String, dynamic>{
+              'messageval': 'post_reply_succeed',
+              'messagestr': '回复发布成功',
+            },
           },
-        },
-      );
-      final dataSource = _buildDataSource(adapter);
+        );
+        final dataSource = _buildDataSource(adapter);
 
-      final response = await dataSource.sendReply(
-        const ReplySubmitPayload(
-          formHash: 'fe182126',
-          fid: '33',
-          tid: '570617',
-          message: '测试回复',
-          useSignature: true,
-        ),
-      );
+        final response = await dataSource.sendReply(
+          const ReplySubmitPayload(
+            formHash: 'fe182126',
+            fid: '33',
+            tid: '570617',
+            message: '测试回复',
+            useSignature: true,
+          ),
+        );
 
-      expect(response.statusCode, 200);
-      expect(response.data, contains('post_reply_succeed'));
-      expect(adapter.lastUri.queryParameters['module'], 'sendreply');
-      expect(adapter.lastUri.queryParameters['version'], '4');
-      expect(adapter.lastBody, contains('formhash=fe182126'));
-      expect(adapter.lastBody, contains('fid=33'));
-      expect(adapter.lastBody, contains('tid=570617'));
-      expect(
-        adapter.lastBody,
-        contains('message=%E6%B5%8B%E8%AF%95%E5%9B%9E%E5%A4%8D'),
-      );
-      expect(adapter.lastBody, contains('replysubmit=yes'));
-      expect(adapter.lastBody, contains('usesig=1'));
-      expect(adapter.lastHeaders['accept'], 'application/json, text/plain, */*');
-      expect(
-        adapter.lastHeaders['referer'],
-        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=570617&mobile=2',
-      );
-    });
+        expect(response.statusCode, 200);
+        expect(response.data, contains('post_reply_succeed'));
+        expect(adapter.lastUri.queryParameters['module'], 'sendreply');
+        expect(adapter.lastUri.queryParameters['version'], '4');
+        expect(adapter.lastBody, contains('formhash=fe182126'));
+        expect(adapter.lastBody, contains('fid=33'));
+        expect(adapter.lastBody, contains('tid=570617'));
+        expect(
+          adapter.lastBody,
+          contains('message=%E6%B5%8B%E8%AF%95%E5%9B%9E%E5%A4%8D'),
+        );
+        expect(adapter.lastBody, contains('replysubmit=yes'));
+        expect(adapter.lastBody, contains('usesig=1'));
+        expect(
+          adapter.lastHeaders['accept'],
+          'application/json, text/plain, */*',
+        );
+        expect(
+          adapter.lastHeaders['referer'],
+          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=570617&mobile=2',
+        );
+      },
+    );
 
     test('maps disabled signature to usesig zero', () async {
-      final adapter = _ReplyRemoteTestAdapter(responseJson: <String, dynamic>{});
+      final adapter = _ReplyRemoteTestAdapter(
+        responseJson: <String, dynamic>{},
+      );
       final dataSource = _buildDataSource(adapter);
 
       await dataSource.sendReply(
@@ -74,7 +84,9 @@ void main() {
     });
 
     test('passes optional post reply fields through form body', () async {
-      final adapter = _ReplyRemoteTestAdapter(responseJson: <String, dynamic>{});
+      final adapter = _ReplyRemoteTestAdapter(
+        responseJson: <String, dynamic>{},
+      );
       final dataSource = _buildDataSource(adapter);
 
       await dataSource.sendReply(
@@ -100,7 +112,9 @@ void main() {
     });
 
     test('passes uploaded attachment aids through form body', () async {
-      final adapter = _ReplyRemoteTestAdapter(responseJson: <String, dynamic>{});
+      final adapter = _ReplyRemoteTestAdapter(
+        responseJson: <String, dynamic>{},
+      );
       final dataSource = _buildDataSource(adapter);
 
       await dataSource.sendReply(
@@ -126,7 +140,9 @@ void main() {
     });
 
     test('omits attachment fields when uploaded aids are empty', () async {
-      final adapter = _ReplyRemoteTestAdapter(responseJson: <String, dynamic>{});
+      final adapter = _ReplyRemoteTestAdapter(
+        responseJson: <String, dynamic>{},
+      );
       final dataSource = _buildDataSource(adapter);
 
       await dataSource.sendReply(
@@ -152,10 +168,9 @@ void main() {
       );
       final cookieStore = CookieStore();
       final uri = Uri.parse('https://bbs.yamibo.com/api/mobile/index.php');
-      await cookieStore.saveFromSetCookie(
-        uri,
-        const <String>['reply_cookie=123; Path=/'],
-      );
+      await cookieStore.saveFromSetCookie(uri, const <String>[
+        'reply_cookie=123; Path=/',
+      ]);
       final dataSource = _buildDataSource(adapter, cookieStore: cookieStore);
 
       await dataSource.sendReply(
@@ -168,7 +183,7 @@ void main() {
         ),
       );
 
-      expect(adapter.lastHeaders['cookie'], contains('reply_cookie=123'));
+      expect(adapter.lastHeaders['Cookie'], contains('reply_cookie=123'));
       final cookieHeader = await cookieStore.readCookieHeader(uri);
       expect(cookieHeader, contains('next_cookie=456'));
     });
@@ -181,8 +196,12 @@ DiscuzReplyDioRemoteDataSource _buildDataSource(
 }) {
   final dio = Dio()..httpClientAdapter = adapter;
   return DiscuzReplyDioRemoteDataSource(
-    cookieStore: cookieStore ?? CookieStore(),
-    dio: dio,
+    gateway: YamiboHttpGateway(
+      cookieStore: cookieStore ?? CookieStore(),
+      logger: Logger(level: Level.off),
+      dio: dio,
+      enableLog: false,
+    ),
   );
 }
 

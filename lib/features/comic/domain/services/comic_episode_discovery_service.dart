@@ -1,8 +1,12 @@
-﻿import 'dart:collection';
+import 'dart:collection';
 
 import 'package:dio/dio.dart';
+import 'package:logger/logger.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
+import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/catalog_thread_html_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
@@ -13,11 +17,7 @@ import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
 
-enum EpisodeDiscoveryStrategy {
-  direct,
-  recursive,
-  catalog,
-}
+enum EpisodeDiscoveryStrategy { direct, recursive, catalog }
 
 class EpisodeDiscoveryResult {
   const EpisodeDiscoveryResult({
@@ -28,6 +28,7 @@ class EpisodeDiscoveryResult {
 
   final EpisodeDiscoveryStrategy strategy;
   final List<ComicEpisodeLink> episodeLinks;
+
   /// 本次发现过程中解析出的 catalogUrl（可能为 null）。
   final String? catalogUrl;
 }
@@ -51,31 +52,44 @@ abstract class CatalogHtmlFetcher {
 }
 
 class DioCatalogHtmlFetcher implements CatalogHtmlFetcher {
-  DioCatalogHtmlFetcher({
-    Dio? dio,
-  }) : _dio =
-           dio ??
-           Dio(
-             BaseOptions(
-               connectTimeout: AppConfig.connectTimeout,
-               receiveTimeout: AppConfig.receiveTimeout,
-             ),
-           );
+  DioCatalogHtmlFetcher({YamiboHttpGateway? gateway, Dio? dio})
+    : _gateway =
+          gateway ??
+          YamiboHttpGateway(
+            cookieStore: CookieStore(),
+            logger: Logger(level: Level.off),
+            dio:
+                dio ??
+                Dio(
+                  BaseOptions(
+                    connectTimeout: AppConfig.connectTimeout,
+                    receiveTimeout: AppConfig.receiveTimeout,
+                  ),
+                ),
+            enableLog: false,
+          );
 
-  final Dio _dio;
+  final YamiboHttpGateway _gateway;
 
   @override
   Future<String?> fetchHtml(String url) async {
     try {
-      final response = await _dio.get<String>(
-        url,
-        options: Options(
-          responseType: ResponseType.plain,
-          followRedirects: true,
-          validateStatus: (status) => status != null && status >= 200 && status < 400,
+      final uri = Uri.tryParse(url);
+      if (uri == null || !uri.hasScheme) {
+        return null;
+      }
+      final response = await _gateway.getText(
+        uri,
+        context: const YamiboRequestContext(
+          kind: YamiboRequestKind.html,
+          operation: 'comic.catalog.fetch',
+          pageKind: 'comic.catalog',
         ),
+        followRedirects: true,
+        validateStatus: (status) =>
+            status != null && status >= 200 && status < 400,
       );
-      return response.data;
+      return response.dataOrNull?.body;
     } catch (_) {
       return null;
     }
@@ -95,14 +109,22 @@ class ComicEpisodeDiscoveryService {
   }) : _fetchThreadDetail = fetchThreadDetail,
        _opPostParser = opPostParser,
        _catalogHtmlFetcher = catalogHtmlFetcher,
-       _catalogThreadHtmlParser = catalogThreadHtmlParser ?? CatalogThreadHtmlParser(),
-       _domExtractor = domExtractor ?? ForumPostDomExtractor(urlParser: urlParser ?? const ForumThreadUrlParser()),
+       _catalogThreadHtmlParser =
+           catalogThreadHtmlParser ?? CatalogThreadHtmlParser(),
+       _domExtractor =
+           domExtractor ??
+           ForumPostDomExtractor(
+             urlParser: urlParser ?? const ForumThreadUrlParser(),
+           ),
        _urlParser = urlParser ?? const ForumThreadUrlParser(),
        _diagnosticRecorder =
            diagnosticRecorder ?? const NoopSyncDiagnosticRecorder(),
        _config = config;
 
-  static final RegExp _subjectEpisodeNoPattern = RegExp(r'第\s*(\d+)\s*话', caseSensitive: false);
+  static final RegExp _subjectEpisodeNoPattern = RegExp(
+    r'第\s*(\d+)\s*话',
+    caseSensitive: false,
+  );
 
   final ThreadDetailFetcher _fetchThreadDetail;
   final ComicConsecutiveOpPostParser _opPostParser;
@@ -150,7 +172,9 @@ class ComicEpisodeDiscoveryService {
       );
     }
 
-    if (allowCatalogFallback && preferCatalogFirst && root.parsed.catalogUrl != null) {
+    if (allowCatalogFallback &&
+        preferCatalogFirst &&
+        root.parsed.catalogUrl != null) {
       final catalogLinks = await _discoverFromCatalog(
         root.parsed.catalogUrl,
         governor: governor,
@@ -260,7 +284,8 @@ class ComicEpisodeDiscoveryService {
         merged.putIfAbsent(
           candidateTid,
           () => ComicEpisodeLink(
-            url: '${AppConfig.siteBaseUrl}/forum.php?mod=viewthread&tid=$candidateTid',
+            url:
+                '${AppConfig.siteBaseUrl}/forum.php?mod=viewthread&tid=$candidateTid',
             rawText: '上一话',
             episodeTitle: null,
           ),
@@ -326,10 +351,7 @@ class ComicEpisodeDiscoveryService {
       _diagnosticRecorder.record(
         scope: 'comic_discovery',
         event: 'fetch_catalog_page',
-        fields: <String, Object?>{
-          'url': pageUrl,
-          'governed': governor != null,
-        },
+        fields: <String, Object?>{'url': pageUrl, 'governed': governor != null},
       );
 
       final html = await _runCatalogRequest(
@@ -363,9 +385,14 @@ class ComicEpisodeDiscoveryService {
 
       // When parser can infer total pages, eagerly enqueue remaining pages to avoid missing tails.
       final basePageUri = Uri.tryParse(pageUrl);
-      final currentPage = parsedCatalog.currentPage ?? int.tryParse(basePageUri?.queryParameters['page'] ?? '') ?? 1;
+      final currentPage =
+          parsedCatalog.currentPage ??
+          int.tryParse(basePageUri?.queryParameters['page'] ?? '') ??
+          1;
       final totalPages = parsedCatalog.totalPages;
-      if (basePageUri != null && totalPages != null && totalPages > currentPage) {
+      if (basePageUri != null &&
+          totalPages != null &&
+          totalPages > currentPage) {
         for (var page = currentPage + 1; page <= totalPages; page++) {
           final candidate = _withPage(basePageUri, page).toString();
           if (!visitedPages.contains(candidate)) {
@@ -383,11 +410,15 @@ class ComicEpisodeDiscoveryService {
     if (parsed == null) {
       return rawUrl;
     }
-    final resolved = parsed.hasScheme ? parsed : Uri.parse('${AppConfig.siteBaseUrl}/').resolveUri(parsed);
+    final resolved = parsed.hasScheme
+        ? parsed
+        : Uri.parse('${AppConfig.siteBaseUrl}/').resolveUri(parsed);
     final params = Map<String, String>.from(resolved.queryParameters);
     if ((params['mod'] ?? '').toLowerCase() == 'tag') {
       params['type'] = 'thread';
-      params['page'] = params['page']?.trim().isNotEmpty == true ? params['page']! : '1';
+      params['page'] = params['page']?.trim().isNotEmpty == true
+          ? params['page']!
+          : '1';
       return resolved.replace(queryParameters: params).toString();
     }
     return resolved.toString();
@@ -431,9 +462,7 @@ class ComicEpisodeDiscoveryService {
       _diagnosticRecorder.record(
         scope: 'comic_discovery',
         event: 'fetch_thread_cache_hit',
-        fields: <String, Object?>{
-          'tid': tid,
-        },
+        fields: <String, Object?>{'tid': tid},
       );
       final parsed = _opPostParser.parse(
         tid: cached.tid,
@@ -454,10 +483,7 @@ class ComicEpisodeDiscoveryService {
     _diagnosticRecorder.record(
       scope: 'comic_discovery',
       event: 'fetch_thread',
-      fields: <String, Object?>{
-        'tid': tid,
-        'governed': governor != null,
-      },
+      fields: <String, Object?>{'tid': tid, 'governed': governor != null},
     );
     final result = await _runThreadRequest(
       governor: governor,
@@ -503,7 +529,9 @@ class ComicEpisodeDiscoveryService {
     // which may not match strict episode semantic rules. Keep this DOM-based
     // so plain text, scripts, and quoted raw URLs are not promoted accidentally.
     for (final post in posts) {
-      for (final candidateTid in _domExtractor.extractThreadTids(post.message)) {
+      for (final candidateTid in _domExtractor.extractThreadTids(
+        post.message,
+      )) {
         if (candidateTid != tid) {
           candidates.add(candidateTid);
         }
@@ -557,7 +585,8 @@ class ComicEpisodeDiscoveryService {
   }
 }
 
-typedef ThreadDetailFetcher = Future<ApiResult<ThreadDetailData>> Function(String tid);
+typedef ThreadDetailFetcher =
+    Future<ApiResult<ThreadDetailData>> Function(String tid);
 
 /// 帖子解析结果（public），用于增量发现。
 ///

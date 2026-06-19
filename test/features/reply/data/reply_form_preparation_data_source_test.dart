@@ -3,8 +3,10 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/features/reply/data/reply_form_preparation_data_source.dart';
 
 void main() {
@@ -15,35 +17,41 @@ void main() {
       SharedPreferences.setMockInitialValues(<String, Object>{});
     });
 
-    test('gets reply form html with cookies and stores response cookies', () async {
-      final adapter = _ReplyFormTestAdapter(
-        html: _formHtml(),
-        headers: const <String, List<String>>{
-          'set-cookie': <String>['next_cookie=456; Path=/'],
-        },
-      );
-      final cookieStore = CookieStore();
-      final uri = Uri.parse(
-        'https://bbs.yamibo.com/forum.php?mod=post&action=reply&fid=33&tid=572063&repquote=41554317&mobile=2',
-      );
-      await cookieStore.saveFromSetCookie(
-        uri,
-        const <String>['reply_cookie=123; Path=/'],
-      );
-      final dataSource = DiscuzReplyFormPreparationDataSource(
-        cookieStore: cookieStore,
-        dio: Dio()..httpClientAdapter = adapter,
-      );
+    test(
+      'gets reply form html with cookies and stores response cookies',
+      () async {
+        final adapter = _ReplyFormTestAdapter(
+          html: _formHtml(),
+          headers: const <String, List<String>>{
+            'set-cookie': <String>['next_cookie=456; Path=/'],
+          },
+        );
+        final cookieStore = CookieStore();
+        final uri = Uri.parse(
+          'https://bbs.yamibo.com/forum.php?mod=post&action=reply&fid=33&tid=572063&repquote=41554317&mobile=2',
+        );
+        await cookieStore.saveFromSetCookie(uri, const <String>[
+          'reply_cookie=123; Path=/',
+        ]);
+        final dataSource = DiscuzReplyFormPreparationDataSource(
+          gateway: YamiboHttpGateway(
+            cookieStore: cookieStore,
+            logger: Logger(level: Level.off),
+            dio: Dio()..httpClientAdapter = adapter,
+            enableLog: false,
+          ),
+        );
 
-      final preparation = await dataSource.fetchReplyPreparation(uri);
+        final preparation = await dataSource.fetchReplyPreparation(uri);
 
-      expect(adapter.lastUri, uri);
-      expect(adapter.lastMethod, 'GET');
-      expect(adapter.lastHeaders['cookie'], contains('reply_cookie=123'));
-      expect(preparation.reference.noticeTrimStr, '[quote]引用[/quote]');
-      final cookieHeader = await cookieStore.readCookieHeader(uri);
-      expect(cookieHeader, contains('next_cookie=456'));
-    });
+        expect(adapter.lastUri, uri);
+        expect(adapter.lastMethod, 'GET');
+        expect(adapter.lastHeaders['Cookie'], contains('reply_cookie=123'));
+        expect(preparation.reference.noticeTrimStr, '[quote]引用[/quote]');
+        final cookieHeader = await cookieStore.readCookieHeader(uri);
+        expect(cookieHeader, contains('next_cookie=456'));
+      },
+    );
   });
 }
 
@@ -71,11 +79,7 @@ class _ReplyFormTestAdapter implements HttpClientAdapter {
     lastUri = options.uri;
     lastMethod = options.method;
     lastHeaders = Map<String, dynamic>.from(options.headers);
-    return ResponseBody.fromBytes(
-      utf8.encode(html),
-      200,
-      headers: headers,
-    );
+    return ResponseBody.fromBytes(utf8.encode(html), 200, headers: headers);
   }
 }
 

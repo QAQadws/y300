@@ -53,6 +53,8 @@ class YamiboHttpGateway {
     required YamiboRequestContext context,
     Map<String, String>? headers,
     CancelToken? cancelToken,
+    bool? followRedirects,
+    ValidateStatus? validateStatus,
   }) async {
     return _request<String>(
       method: 'GET',
@@ -61,6 +63,8 @@ class YamiboHttpGateway {
       headers: headers,
       responseType: ResponseType.plain,
       cancelToken: cancelToken,
+      followRedirects: followRedirects,
+      validateStatus: validateStatus,
       normalizeBody: (data) => data?.toString() ?? '',
     );
   }
@@ -94,6 +98,8 @@ class YamiboHttpGateway {
     Map<String, String>? headers,
     CancelToken? cancelToken,
     Options? options,
+    bool? followRedirects,
+    ValidateStatus? validateStatus,
   }) async {
     return _request<String>(
       uri,
@@ -104,7 +110,34 @@ class YamiboHttpGateway {
       cancelToken: cancelToken,
       data: data,
       contentType: options?.contentType ?? Headers.formUrlEncodedContentType,
+      followRedirects: followRedirects ?? options?.followRedirects,
+      validateStatus: validateStatus ?? options?.validateStatus,
       normalizeBody: (responseData) => responseData?.toString() ?? '',
+    );
+  }
+
+  Future<ApiResult<YamiboHttpResponse<Object?>>> postMultipart(
+    Uri uri, {
+    required YamiboRequestContext context,
+    required FormData data,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+    Options? options,
+    ProgressCallback? onSendProgress,
+  }) async {
+    return _request<Object?>(
+      uri,
+      method: 'POST',
+      context: context,
+      headers: headers,
+      responseType: options?.responseType ?? ResponseType.json,
+      cancelToken: cancelToken,
+      data: data,
+      contentType: options?.contentType,
+      followRedirects: options?.followRedirects,
+      validateStatus: options?.validateStatus,
+      onSendProgress: onSendProgress,
+      normalizeBody: (responseData) => responseData,
     );
   }
 
@@ -118,6 +151,9 @@ class YamiboHttpGateway {
     CancelToken? cancelToken,
     Object? data,
     String? contentType,
+    bool? followRedirects,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
   }) async {
     final startedAt = DateTime.now();
     final requestHeaders = <String, String>{...?headers};
@@ -135,8 +171,11 @@ class YamiboHttpGateway {
           headers: requestHeaders,
           responseType: responseType,
           contentType: contentType,
+          followRedirects: followRedirects,
+          validateStatus: validateStatus,
         ),
         cancelToken: cancelToken,
+        onSendProgress: onSendProgress,
       );
       await _saveCookies(response);
       final body = normalizeBody(response.data);

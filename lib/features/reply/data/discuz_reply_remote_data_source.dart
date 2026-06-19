@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:y300/core/config/app_config.dart';
-import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
+import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 
 class ReplySubmitPayload {
@@ -85,10 +87,7 @@ class ReplySubmitPayload {
 }
 
 class ReplyRemoteResponse {
-  const ReplyRemoteResponse({
-    required this.data,
-    required this.statusCode,
-  });
+  const ReplyRemoteResponse({required this.data, required this.statusCode});
 
   final dynamic data;
   final int? statusCode;
@@ -99,63 +98,45 @@ abstract class DiscuzReplyRemoteDataSource {
 }
 
 class DiscuzReplyDioRemoteDataSource implements DiscuzReplyRemoteDataSource {
-  DiscuzReplyDioRemoteDataSource({
-    required CookieStore cookieStore,
-    Dio? dio,
-  })  : _cookieStore = cookieStore,
-        _dio = dio ??
-            Dio(
-              BaseOptions(
-                connectTimeout: AppConfig.connectTimeout,
-                receiveTimeout: AppConfig.receiveTimeout,
-              ),
-            ) {
-    _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) async {
-          final cookieHeader = await _cookieStore.readCookieHeader(options.uri);
-          if (cookieHeader != null && cookieHeader.isNotEmpty) {
-            options.headers['cookie'] = cookieHeader;
-          }
-          handler.next(options);
-        },
-        onResponse: (response, handler) async {
-          final setCookie = response.headers.map['set-cookie'] ?? <String>[];
-          await _cookieStore.saveFromSetCookie(
-            response.requestOptions.uri,
-            setCookie,
-          );
-          handler.next(response);
-        },
-      ),
-    );
-  }
+  DiscuzReplyDioRemoteDataSource({required YamiboHttpGateway gateway})
+    : _gateway = gateway;
 
-  final CookieStore _cookieStore;
-  final Dio _dio;
+  final YamiboHttpGateway _gateway;
 
   @override
   Future<ReplyRemoteResponse> sendReply(ReplySubmitPayload payload) async {
-    final endpoint = '${AppConfig.siteBaseUrl}/api/mobile/index.php';
-    final response = await _dio.post<dynamic>(
-      endpoint,
+    final endpoint = Uri.parse(AppConfig.apiBaseUrl).replace(
       queryParameters: const <String, String>{
         'module': 'sendreply',
         'version': '4',
       },
-      data: payload.toFormData(),
-      options: Options(
-        contentType: Headers.formUrlEncodedContentType,
-        headers: <String, String>{
-          'referer':
-              '${AppConfig.siteBaseUrl}/forum.php?mod=viewthread&tid=${payload.tid}&mobile=2',
-          'accept': 'application/json, text/plain, */*',
-        },
+    );
+    final response = await _gateway.postForm(
+      endpoint,
+      context: const YamiboRequestContext(
+        kind: YamiboRequestKind.api,
+        operation: 'reply.submit',
+        module: 'sendreply',
       ),
+      data: payload.toFormData(),
+      headers: <String, String>{
+        'referer':
+            '${AppConfig.siteBaseUrl}/forum.php?mod=viewthread&tid=${payload.tid}&mobile=2',
+        'accept': 'application/json, text/plain, */*',
+      },
     );
-    return ReplyRemoteResponse(
-      data: response.data,
-      statusCode: response.statusCode,
-    );
+    if (response case ApiFailure(:final error)) {
+      throw DioException(
+        requestOptions: RequestOptions(path: endpoint.toString()),
+        response: Response<dynamic>(
+          requestOptions: RequestOptions(path: endpoint.toString()),
+          statusCode: error.statusCode,
+          data: error.raw,
+        ),
+        message: error.message,
+      );
+    }
+    final data = response.dataOrNull;
+    return ReplyRemoteResponse(data: data?.body, statusCode: data?.statusCode);
   }
 }

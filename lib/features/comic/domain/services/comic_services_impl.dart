@@ -1,4 +1,4 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -134,8 +134,7 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
     FavoriteSyncExecutionContext? executionContext,
     ThreadDetailData? preloadedRootDetail,
     ComicThreadDetailCache? threadCache,
-  }
-  ) async {
+  }) async {
     final cache = threadCache ?? ComicThreadDetailCache();
     final current = await _discoverCatalogFirst(
       request,
@@ -177,8 +176,7 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
     FavoriteSyncExecutionContext? executionContext,
     ThreadDetailData? preloadedRootDetail,
     ComicThreadDetailCache? threadCache,
-  }
-  ) async {
+  }) async {
     final cache = threadCache ?? ComicThreadDetailCache();
     final current = await _discoverCurrentOnly(
       request,
@@ -199,8 +197,7 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(
     String catalogUrl, {
     FavoriteSyncExecutionContext? executionContext,
-  }
-  ) async {
+  }) async {
     final links = await _discoveryService.discoverFromCatalogUrl(
       catalogUrl,
       governor: executionContext?.governor,
@@ -487,57 +484,61 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
 }
 
 class _SearchFallbackResult {
-  const _SearchFallbackResult({
-    required this.links,
-    required this.usedSearch,
-  });
+  const _SearchFallbackResult({required this.links, required this.usedSearch});
 
   const _SearchFallbackResult.empty()
-      : links = const <ComicEpisodeLink>[],
-        usedSearch = false;
+    : links = const <ComicEpisodeLink>[],
+      usedSearch = false;
 
   final List<ComicEpisodeLink> links;
   final bool usedSearch;
 }
 
-final comicEpisodeDiscoveryServiceProvider = Provider<ComicEpisodeDiscoveryService>((ref) {
-  final engine = ComicPostParsingEngine();
-  final opPostParser = ComicConsecutiveOpPostParser(
-    engine: engine,
-    imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
-  );
-  return ComicEpisodeDiscoveryService(
-    fetchThreadDetail: (tid) => ref.read(threadRepositoryProvider).getThreadDetail(tid: tid, page: 1),
-    opPostParser: opPostParser,
-    catalogHtmlFetcher: DioCatalogHtmlFetcher(),
-    diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),
-  );
-});
+final comicEpisodeDiscoveryServiceProvider =
+    Provider<ComicEpisodeDiscoveryService>((ref) {
+      final engine = ComicPostParsingEngine();
+      final opPostParser = ComicConsecutiveOpPostParser(
+        engine: engine,
+        imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
+      );
+      return ComicEpisodeDiscoveryService(
+        fetchThreadDetail: (tid) => ref
+            .read(threadRepositoryProvider)
+            .getThreadDetail(tid: tid, page: 1),
+        opPostParser: opPostParser,
+        catalogHtmlFetcher: DioCatalogHtmlFetcher(
+          gateway: ref.watch(yamiboHttpGatewayProvider),
+        ),
+        diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),
+      );
+    });
 
 final comicIncrementalEpisodeDiscoveryProvider =
     Provider<ComicIncrementalEpisodeDiscovery>((ref) {
-  return ComicIncrementalEpisodeDiscovery(
-    fetchThreadDetail: (tid) =>
-        ref.read(threadRepositoryProvider).getThreadDetail(tid: tid, page: 1),
-    opPostParser: ComicConsecutiveOpPostParser(
-      engine: ComicPostParsingEngine(),
-      imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
-    ),
-  );
-});
+      return ComicIncrementalEpisodeDiscovery(
+        fetchThreadDetail: (tid) => ref
+            .read(threadRepositoryProvider)
+            .getThreadDetail(tid: tid, page: 1),
+        opPostParser: ComicConsecutiveOpPostParser(
+          engine: ComicPostParsingEngine(),
+          imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
+        ),
+      );
+    });
 
 final comicRefreshKeywordResolverProvider =
     Provider<ComicRefreshKeywordResolver>((ref) {
-  return DefaultComicRefreshKeywordResolver(
-    subjectParser: ref.read(comicSubjectParserProvider),
-    featureFlags: ref.watch(comicReaderFeatureFlagsProvider),
-  );
-});
+      return DefaultComicRefreshKeywordResolver(
+        subjectParser: ref.read(comicSubjectParserProvider),
+        featureFlags: ref.watch(comicReaderFeatureFlagsProvider),
+      );
+    });
 
-final comicSearchCandidateRankerProvider =
-    Provider<ComicSearchCandidateRanker>((ref) {
-  return const DefaultComicSearchCandidateRanker();
-});
+final comicSearchCandidateRankerProvider = Provider<ComicSearchCandidateRanker>(
+  (ref) {
+    return const DefaultComicSearchCandidateRanker();
+  },
+);
 
 final comicEpisodeLinkMergerProvider = Provider<ComicEpisodeLinkMerger>((ref) {
   return DefaultComicEpisodeLinkMerger(
@@ -549,23 +550,27 @@ final comicCatalogMissPolicyProvider = Provider<ComicCatalogMissPolicy>((ref) {
   return const DefaultComicCatalogMissPolicy();
 });
 
-final comicEpisodeRefreshServiceProvider = Provider<ComicEpisodeRefreshService>((ref) {
-  return NetworkComicEpisodeRefreshService(
-    discoveryService: ref.read(comicEpisodeDiscoveryServiceProvider),
-    searchService: ref.read(discuzSearchServiceProvider),
-    keywordResolver: ref.watch(comicRefreshKeywordResolverProvider),
-    candidateRanker: ref.watch(comicSearchCandidateRankerProvider),
-    episodeLinkMerger: ref.watch(comicEpisodeLinkMergerProvider),
-    diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),
-    threadSeedFetcher: (tid) async {
-      final result = await ref.read(threadRepositoryProvider).getThreadDetail(tid: tid, page: 1);
-      return result.when(
-        success: (data) => ThreadSeed(subject: data.subject),
-        failure: (_) => null,
-      );
-    },
-  );
-});
+final comicEpisodeRefreshServiceProvider = Provider<ComicEpisodeRefreshService>(
+  (ref) {
+    return NetworkComicEpisodeRefreshService(
+      discoveryService: ref.read(comicEpisodeDiscoveryServiceProvider),
+      searchService: ref.read(discuzSearchServiceProvider),
+      keywordResolver: ref.watch(comicRefreshKeywordResolverProvider),
+      candidateRanker: ref.watch(comicSearchCandidateRankerProvider),
+      episodeLinkMerger: ref.watch(comicEpisodeLinkMergerProvider),
+      diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),
+      threadSeedFetcher: (tid) async {
+        final result = await ref
+            .read(threadRepositoryProvider)
+            .getThreadDetail(tid: tid, page: 1);
+        return result.when(
+          success: (data) => ThreadSeed(subject: data.subject),
+          failure: (_) => null,
+        );
+      },
+    );
+  },
+);
 
 abstract class ComicReaderService {
   /// 拉取单话首楼图片，区分"成功（含真无图）"和各类失败原因。
@@ -627,12 +632,12 @@ class NetworkComicReaderService implements ComicReaderService {
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
     ForumImageSourcePipeline imageSourcePipeline =
         const DefaultForumImageSourcePipeline(),
-  })  : _threadRepository = threadRepository,
-        _imageCacheService = imageCacheService,
-        _cacheManager = cacheManager ?? DefaultCacheManager(),
-        _headerBuilder = headerBuilder,
-        _urlResolver = urlResolver,
-        _imageSourcePipeline = imageSourcePipeline;
+  }) : _threadRepository = threadRepository,
+       _imageCacheService = imageCacheService,
+       _cacheManager = cacheManager ?? DefaultCacheManager(),
+       _headerBuilder = headerBuilder,
+       _urlResolver = urlResolver,
+       _imageSourcePipeline = imageSourcePipeline;
 
   final ThreadRepository _threadRepository;
   final ImageCacheService? _imageCacheService;
@@ -685,14 +690,12 @@ class NetworkComicReaderService implements ComicReaderService {
   ) {
     return switch (type) {
       ApiErrorType.network ||
-      ApiErrorType.timeout =>
-        ComicEpisodeImagesFetchFailureReason.network,
+      ApiErrorType.timeout => ComicEpisodeImagesFetchFailureReason.network,
       ApiErrorType.unauthorized => ComicEpisodeImagesFetchFailureReason.auth,
       ApiErrorType.server => ComicEpisodeImagesFetchFailureReason.server,
       ApiErrorType.parse => ComicEpisodeImagesFetchFailureReason.parse,
       ApiErrorType.business ||
-      ApiErrorType.unknown =>
-        ComicEpisodeImagesFetchFailureReason.unknown,
+      ApiErrorType.unknown => ComicEpisodeImagesFetchFailureReason.unknown,
     };
   }
 
@@ -741,13 +744,17 @@ class NetworkComicReaderService implements ComicReaderService {
       final headers = await _buildHeaders(sourceUrl);
       final fileInfo = await _cacheManager.downloadFile(
         sourceUrl,
-        key: normalizedKey == null || normalizedKey.isEmpty ? sourceUrl : normalizedKey,
+        key: normalizedKey == null || normalizedKey.isEmpty
+            ? sourceUrl
+            : normalizedKey,
         authHeaders: headers.isEmpty ? null : headers,
       );
       return ComicImageCacheResult(
         success: true,
         localPath: fileInfo.file.path,
-        cacheKey: normalizedKey == null || normalizedKey.isEmpty ? sourceUrl : normalizedKey,
+        cacheKey: normalizedKey == null || normalizedKey.isEmpty
+            ? sourceUrl
+            : normalizedKey,
         bytes: await fileInfo.file.length(),
       );
     } catch (_) {
@@ -771,7 +778,9 @@ class NetworkComicReaderService implements ComicReaderService {
   }
 }
 
-final comicReaderServiceProvider = FutureProvider<ComicReaderService>((ref) async {
+final comicReaderServiceProvider = FutureProvider<ComicReaderService>((
+  ref,
+) async {
   return NetworkComicReaderService(
     threadRepository: ref.read(threadRepositoryProvider),
     imageCacheService: ref.read(imageCacheServiceProvider),
@@ -781,16 +790,19 @@ final comicReaderServiceProvider = FutureProvider<ComicReaderService>((ref) asyn
   );
 });
 
-final comicFirstEpisodeCoverServiceProvider = Provider<ComicFirstEpisodeCoverService>((ref) {
-  return ComicFirstEpisodeCoverService(
-    repository: ref.watch(comicRepositoryProvider),
-    imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
-    fetchEpisodeImagesByTid: (tid) async {
-      final readerService = await ref.read(comicReaderServiceProvider.future);
-      return readerService.fetchEpisodeImagesByTid(tid);
-    },
-  );
-});
+final comicFirstEpisodeCoverServiceProvider =
+    Provider<ComicFirstEpisodeCoverService>((ref) {
+      return ComicFirstEpisodeCoverService(
+        repository: ref.watch(comicRepositoryProvider),
+        imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
+        fetchEpisodeImagesByTid: (tid) async {
+          final readerService = await ref.read(
+            comicReaderServiceProvider.future,
+          );
+          return readerService.fetchEpisodeImagesByTid(tid);
+        },
+      );
+    });
 
 class RuleBasedComicDetector implements ComicDetector {
   RuleBasedComicDetector({this.threshold = 60});
@@ -826,7 +838,10 @@ class RuleBasedComicDetector implements ComicDetector {
       reasons.add('fid=30');
     }
 
-    final imageCount = RegExp(r'<img\b', caseSensitive: false).allMatches(message).length;
+    final imageCount = RegExp(
+      r'<img\b',
+      caseSensitive: false,
+    ).allMatches(message).length;
     if (imageCount >= 2) {
       score += 35;
       reasons.add('\u56fe\u7247\u6570\u91cf>=2');
@@ -867,7 +882,8 @@ class HtmlComicParserService implements ComicParserService {
   HtmlComicParserService({
     ComicPostParsingEngine? engine,
     ForumPostDomExtractor? domExtractor,
-    ForumPostImageSourceCollector imageSourceCollector = const ForumPostImageSourceCollector(),
+    ForumPostImageSourceCollector imageSourceCollector =
+        const ForumPostImageSourceCollector(),
   }) : this._(
          engine: engine,
          domExtractor: domExtractor ?? const ForumPostDomExtractor(),
@@ -896,9 +912,24 @@ class HtmlComicParserService implements ComicParserService {
       attachmentImageUrls: input.attachmentImageUrls,
     );
     signals
-      ..add(ComicParsingSignal(stage: 'image', message: 'dom images=${domImageUrls.length}'))
-      ..add(ComicParsingSignal(stage: 'image', message: 'attachment images=${input.attachmentImageUrls.length}'))
-      ..add(ComicParsingSignal(stage: 'image', message: 'accepted images=${imageUrls.length}'));
+      ..add(
+        ComicParsingSignal(
+          stage: 'image',
+          message: 'dom images=${domImageUrls.length}',
+        ),
+      )
+      ..add(
+        ComicParsingSignal(
+          stage: 'image',
+          message: 'attachment images=${input.attachmentImageUrls.length}',
+        ),
+      )
+      ..add(
+        ComicParsingSignal(
+          stage: 'image',
+          message: 'accepted images=${imageUrls.length}',
+        ),
+      );
 
     final parsedByEngine = _engine.parse(messageHtml: input.messageHtml);
     final episodeLinks = parsedByEngine.episodes
@@ -910,10 +941,15 @@ class HtmlComicParserService implements ComicParserService {
           ),
         )
         .toList(growable: false);
-    final catalogUrl = parsedByEngine.catalogLinks.isEmpty ? null : parsedByEngine.catalogLinks.first;
+    final catalogUrl = parsedByEngine.catalogLinks.isEmpty
+        ? null
+        : parsedByEngine.catalogLinks.first;
     signals.addAll(parsedByEngine.debugSignals);
 
-    final plainText = _domExtractor.extractPlainText(input.messageHtml).replaceAll(RegExp(r'\s+'), ' ').trim();
+    final plainText = _domExtractor
+        .extractPlainText(input.messageHtml)
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
 
     final debugInfo = ComicParsingDebugInfo(
       signals: signals,
@@ -943,7 +979,9 @@ class HtmlComicParserService implements ComicParserService {
   }
 
   String? _inferAuthor(String plainText) {
-    final authorMatch = RegExp(r'(\u4f5c\u8005|\u6c49\u5316|\u7ffb\u8bd1)[\uff1a:]\s*([^\s\uff0c\u3002\uff1b;]+)').firstMatch(plainText);
+    final authorMatch = RegExp(
+      r'(\u4f5c\u8005|\u6c49\u5316|\u7ffb\u8bd1)[\uff1a:]\s*([^\s\uff0c\u3002\uff1b;]+)',
+    ).firstMatch(plainText);
     return authorMatch?.group(2);
   }
 }

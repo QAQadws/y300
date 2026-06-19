@@ -18,27 +18,30 @@ import 'package:y300/features/posting/domain/services/posting_form_metadata_pars
 ///
 /// Phase 5+ 增量：tags / poll normalizer + draft extras codec。
 
-final postingFormMetadataParserProvider =
-    Provider<PostingFormMetadataParser>((_) {
+final postingFormMetadataParserProvider = Provider<PostingFormMetadataParser>((
+  _,
+) {
   return const PostingFormMetadataParser();
 });
 
 final postingFormMetadataRepositoryProvider =
     Provider<PostingFormMetadataRepository>((ref) {
-  return DiscuzPostingFormMetadataRepository(
-    ref.watch(apiClientProvider),
-    parser: ref.read(postingFormMetadataParserProvider),
-  );
-});
+      return DiscuzPostingFormMetadataRepository(
+        ref.watch(apiClientProvider),
+        parser: ref.read(postingFormMetadataParserProvider),
+      );
+    });
 
 final newThreadResponseParserProvider = Provider<NewThreadResponseParser>((_) {
   return const NewThreadResponseParser();
 });
 
-final newThreadRemoteDataSourceProvider =
-    Provider<NewThreadRemoteDataSource>((ref) {
+final newThreadRemoteDataSourceProvider = Provider<NewThreadRemoteDataSource>((
+  ref,
+) {
   return DiscuzNewThreadDioRemoteDataSource(
     cookieStore: ref.read(cookieStoreProvider),
+    gateway: ref.read(yamiboHttpGatewayProvider),
   );
 });
 
@@ -62,7 +65,9 @@ final postingDraftExtrasCodecProvider = Provider<PostingDraftExtrasCodec>((_) {
   return const PostingDraftExtrasCodec();
 });
 
-final newThreadPayloadBuilderProvider = Provider<NewThreadPayloadBuilder>((ref) {
+final newThreadPayloadBuilderProvider = Provider<NewThreadPayloadBuilder>((
+  ref,
+) {
   return DefaultNewThreadPayloadBuilder(
     tagsNormalizer: ref.watch(newThreadTagsNormalizerProvider),
     pollNormalizer: ref.watch(newThreadPollNormalizerProvider),

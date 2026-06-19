@@ -44,15 +44,13 @@ final stickerGroupsProvider = FutureProvider<List<StickerGroup>>((ref) {
 
 final stickerPickerPreferencesRepositoryProvider =
     Provider<StickerPickerPreferencesRepository>((_) {
-  return SharedPreferencesStickerPickerPreferencesRepository();
-});
+      return SharedPreferencesStickerPickerPreferencesRepository();
+    });
 
 final stickerPickerLastGroupIdProvider = FutureProvider.autoDispose<String?>((
   ref,
 ) {
-  return ref
-      .read(stickerPickerPreferencesRepositoryProvider)
-      .loadLastGroupId();
+  return ref.read(stickerPickerPreferencesRepositoryProvider).loadLastGroupId();
 });
 
 final stickerBbCodeTokenizerProvider = Provider<StickerBbCodeTokenizer>((_) {
@@ -61,21 +59,23 @@ final stickerBbCodeTokenizerProvider = Provider<StickerBbCodeTokenizer>((_) {
 
 final composerAttachBbCodeTokenizerProvider =
     Provider<ComposerAttachBbCodeTokenizer>((_) {
-  return const ComposerAttachBbCodeTokenizer();
-});
+      return const ComposerAttachBbCodeTokenizer();
+    });
 
 final composerSubmissionErrorPresenterProvider =
     Provider<ComposerSubmissionErrorPresenter>((_) {
-  return const ComposerSubmissionErrorPresenter();
-});
+      return const ComposerSubmissionErrorPresenter();
+    });
 
-final composerUploadCacheStorageProvider = Provider<ComposerUploadCacheStorage>((
-  _,
+final composerUploadCacheStorageProvider = Provider<ComposerUploadCacheStorage>(
+  (_) {
+    return LocalComposerUploadCacheStorage();
+  },
+);
+
+final composerDraftRepositoryProvider = Provider<ComposerDraftRepository>((
+  ref,
 ) {
-  return LocalComposerUploadCacheStorage();
-});
-
-final composerDraftRepositoryProvider = Provider<ComposerDraftRepository>((ref) {
   return SharedPreferencesComposerDraftRepository(
     cacheStorage: ref.read(composerUploadCacheStorageProvider),
   );
@@ -83,10 +83,10 @@ final composerDraftRepositoryProvider = Provider<ComposerDraftRepository>((ref) 
 
 final composerDraftAttachmentMaintenanceServiceProvider =
     Provider<ComposerDraftAttachmentMaintenanceService>((ref) {
-  return SharedPreferencesComposerDraftAttachmentMaintenanceService(
-    cacheStorage: ref.read(composerUploadCacheStorageProvider),
-  );
-});
+      return SharedPreferencesComposerDraftAttachmentMaintenanceService(
+        cacheStorage: ref.read(composerUploadCacheStorageProvider),
+      );
+    });
 
 final composerImagePickerProvider = Provider<ComposerImagePicker>((_) {
   return ImagePickerComposerImagePicker();
@@ -94,34 +94,36 @@ final composerImagePickerProvider = Provider<ComposerImagePicker>((_) {
 
 final composerAttachmentRemoteDataSourceProvider =
     Provider<ComposerAttachmentRemoteDataSource>((ref) {
-  return DiscuzComposerAttachmentDioDataSource(
-    cookieStore: ref.read(cookieStoreProvider),
-  );
-});
+      return DiscuzComposerAttachmentDioDataSource(
+        cookieStore: ref.read(cookieStoreProvider),
+        apiClient: ref.read(yamiboApiClientProvider),
+        gateway: ref.read(yamiboHttpGatewayProvider),
+      );
+    });
 
 final composerAttachmentRepositoryProvider =
     Provider<ComposerAttachmentRepository>((ref) {
-  return DiscuzComposerAttachmentRepository(
-    remoteDataSource: ref.read(composerAttachmentRemoteDataSourceProvider),
-  );
-});
+      return DiscuzComposerAttachmentRepository(
+        remoteDataSource: ref.read(composerAttachmentRemoteDataSourceProvider),
+      );
+    });
 
 final composerAttachBbCodeServiceProvider =
     Provider<ComposerAttachBbCodeService>((_) {
-  return const ComposerAttachBbCodeService();
-});
+      return const ComposerAttachBbCodeService();
+    });
 
 final composerImageUploadCoordinatorProvider =
     Provider<ComposerImageUploadCoordinator>((ref) {
-  return SerialComposerImageUploadCoordinator(
-    repository: ref.read(composerAttachmentRepositoryProvider),
-  );
-});
+      return SerialComposerImageUploadCoordinator(
+        repository: ref.read(composerAttachmentRepositoryProvider),
+      );
+    });
 
 final composerUploadNotificationServiceProvider =
     Provider<ComposerUploadNotificationService>((_) {
-  return FlutterLocalComposerUploadNotificationService();
-});
+      return FlutterLocalComposerUploadNotificationService();
+    });
 
 final forumBbCodeRendererProvider = Provider<ForumBbCodeRenderer>((ref) {
   return FlutterBbCodeForumRenderer(

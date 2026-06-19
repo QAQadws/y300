@@ -8,27 +8,33 @@ import 'package:y300/features/thread/data/discuz_thread_favorite_api_repository.
 import 'package:y300/features/thread/data/thread_favorite_repository.dart';
 import 'package:y300/features/thread/domain/services/thread_favorite_action_service.dart';
 
-final threadFavoriteRepositoryProvider = Provider<ThreadFavoriteRepository>((ref) {
+final threadFavoriteRepositoryProvider = Provider<ThreadFavoriteRepository>((
+  ref,
+) {
   return DiscuzThreadFavoriteApiRepository(
     profileRepository: ref.read(profileRepositoryProvider),
     cookieStore: ref.read(cookieStoreProvider),
+    gateway: ref.read(yamiboHttpGatewayProvider),
   );
 });
 
-final threadFavoriteActionServiceProvider = Provider<ThreadFavoriteActionService>((ref) {
-  final shelfRefreshBus = ref.watch(libraryShelfRefreshBusProvider);
-  return DefaultThreadFavoriteActionService(
-    repository: ref.watch(threadFavoriteRepositoryProvider),
-    refreshFavoriteModule: ({required String tid}) async {
-      await ref.read(favoriteSyncServiceProvider).syncRecentlyAddedThread(tid: tid);
-    },
-    notifyFavoriteModule: ({required String reason, required String tid}) {
-      shelfRefreshBus.notify(
-        modules: const <LibraryModuleKey>{LibraryModuleKey.favorite},
-        reason: reason,
-        source: LibraryMutationSource.threadFavoriteAction,
-        tid: tid,
+final threadFavoriteActionServiceProvider =
+    Provider<ThreadFavoriteActionService>((ref) {
+      final shelfRefreshBus = ref.watch(libraryShelfRefreshBusProvider);
+      return DefaultThreadFavoriteActionService(
+        repository: ref.watch(threadFavoriteRepositoryProvider),
+        refreshFavoriteModule: ({required String tid}) async {
+          await ref
+              .read(favoriteSyncServiceProvider)
+              .syncRecentlyAddedThread(tid: tid);
+        },
+        notifyFavoriteModule: ({required String reason, required String tid}) {
+          shelfRefreshBus.notify(
+            modules: const <LibraryModuleKey>{LibraryModuleKey.favorite},
+            reason: reason,
+            source: LibraryMutationSource.threadFavoriteAction,
+            tid: tid,
+          );
+        },
       );
-    },
-  );
-});
+    });

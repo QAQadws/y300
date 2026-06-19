@@ -3,9 +3,11 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/features/profile/data/models/profile_models.dart';
 import 'package:y300/features/profile/data/profile_repository.dart';
 import 'package:y300/features/search/data/discuz_search_service.dart';
@@ -46,7 +48,8 @@ void main() {
       );
 
       final result = await service.fetchNextPage(
-        nextPageUrl: 'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&page=2&mobile=2',
+        nextPageUrl:
+            'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&page=2&mobile=2',
         context: const DiscuzSearchContext.curForum(srhfid: '30'),
       );
       expect(result.items.length, 1);
@@ -57,20 +60,27 @@ void main() {
 
 DiscuzSearchService _buildService({required _DiscuzSearchTestAdapter adapter}) {
   final profileRepository = _FakeProfileRepository.success(formhash: 'fh_123');
-  final limiter = _FakeSearchRateLimiter(checkResult: const _LimiterState.allowed());
+  final limiter = _FakeSearchRateLimiter(
+    checkResult: const _LimiterState.allowed(),
+  );
   final dio = Dio(
     BaseOptions(
       connectTimeout: const Duration(seconds: 3),
       receiveTimeout: const Duration(seconds: 3),
       followRedirects: false,
-      validateStatus: (status) => status != null && status >= 200 && status < 400,
+      validateStatus: (status) =>
+          status != null && status >= 200 && status < 400,
     ),
   )..httpClientAdapter = adapter;
   return DiscuzSearchService(
     profileRepository: profileRepository,
     rateLimiter: limiter,
-    cookieStore: CookieStore(),
-    dio: dio,
+    gateway: YamiboHttpGateway(
+      cookieStore: CookieStore(),
+      logger: Logger(level: Level.off),
+      dio: dio,
+      enableLog: false,
+    ),
   );
 }
 

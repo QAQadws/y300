@@ -1,8 +1,10 @@
-import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
-import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo/yamibo_http_response.dart';
+import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
+import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/profile/data/profile_repository.dart';
 import 'package:y300/features/search/data/discuz_search_html_parser.dart';
 import 'package:y300/features/search/data/forum_search_service.dart';
@@ -16,45 +18,16 @@ class DiscuzSearchService implements ForumSearchService {
   DiscuzSearchService({
     required ProfileRepository profileRepository,
     required SearchRateLimiter rateLimiter,
-    required CookieStore cookieStore,
-    Dio? dio,
+    required YamiboHttpGateway gateway,
     DiscuzSearchHtmlParser? htmlParser,
   }) : _profileRepository = profileRepository,
        _rateLimiter = rateLimiter,
-       _cookieStore = cookieStore,
-       _dio =
-           dio ??
-           Dio(
-             BaseOptions(
-               connectTimeout: AppConfig.connectTimeout,
-               receiveTimeout: AppConfig.receiveTimeout,
-               followRedirects: false,
-               validateStatus: (status) => status != null && status >= 200 && status < 400,
-             ),
-           ),
-       _htmlParser = htmlParser ?? DiscuzSearchHtmlParser() {
-    _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) async {
-          final cookieHeader = await _cookieStore.readCookieHeader(options.uri);
-          if (cookieHeader != null && cookieHeader.isNotEmpty) {
-            options.headers['cookie'] = cookieHeader;
-          }
-          handler.next(options);
-        },
-        onResponse: (response, handler) async {
-          final setCookie = response.headers.map['set-cookie'] ?? <String>[];
-          await _cookieStore.saveFromSetCookie(response.requestOptions.uri, setCookie);
-          handler.next(response);
-        },
-      ),
-    );
-  }
+       _gateway = gateway,
+       _htmlParser = htmlParser ?? DiscuzSearchHtmlParser();
 
   final ProfileRepository _profileRepository;
   final SearchRateLimiter _rateLimiter;
-  final CookieStore _cookieStore;
-  final Dio _dio;
+  final YamiboHttpGateway _gateway;
   final DiscuzSearchHtmlParser _htmlParser;
   // bbs.yamibo.com 的 formhash 与登录会话绑定，重复 GET profile 拉到的
   // 永远是同一个值——首次同步阶段一连发 70 次 search，每次都先去拉 profile
@@ -69,7 +42,10 @@ class DiscuzSearchService implements ForumSearchService {
   }) async {
     final trimmed = keyword.trim();
     if (trimmed.isEmpty) {
-      return const DiscuzSearchResponse(items: <DiscuzSearchResultItem>[], rateLimited: false);
+      return const DiscuzSearchResponse(
+        items: <DiscuzSearchResultItem>[],
+        rateLimited: false,
+      );
     }
 
     if (enforceRateLimit) {
@@ -84,46 +60,57 @@ class DiscuzSearchService implements ForumSearchService {
     }
 
     final formhash = await _loadFormhash();
-    final submitUrl = '${AppConfig.siteBaseUrl}/${_buildSubmitPath(context)}';
+    final submitUrl = Uri.parse(
+      '${AppConfig.siteBaseUrl}/${_buildSubmitPath(context)}',
+    );
     final referer = _buildEntryUrl(context);
     final postResponse = await _guardedRequest(
-      () => _dio.post<String>(
+      () => _gateway.postForm(
         submitUrl,
         data: <String, String>{
           'srchtxt': trimmed,
           'formhash': formhash,
           if ((context.srhfid ?? '').isNotEmpty) 'srhfid': context.srhfid!,
         },
-        options: Options(
-          contentType: Headers.formUrlEncodedContentType,
-          responseType: ResponseType.plain,
-          headers: <String, String>{'referer': referer},
+        context: const YamiboRequestContext(
+          kind: YamiboRequestKind.html,
+          operation: 'search.forum.submit',
+          pageKind: 'search',
         ),
+        headers: <String, String>{'referer': referer},
+        followRedirects: false,
+        validateStatus: (status) =>
+            status != null && status >= 200 && status < 400,
       ),
       action: '提交搜索请求',
     );
 
-    final location = postResponse.headers.value('location');
+    final locationValues = postResponse.headers['location'];
+    final location = locationValues == null || locationValues.isEmpty
+        ? null
+        : locationValues.first;
     final searchResultUrl = _resolveSearchResultUrl(
       location: location,
-      fallbackRequestUri: postResponse.requestOptions.uri,
+      fallbackRequestUri: postResponse.uri,
     );
     if (searchResultUrl == null) {
       throw const DiscuzSearchServiceException('搜索结果重定向地址缺失');
     }
 
     final resultResponse = await _guardedRequest(
-      () => _dio.get<String>(
-        searchResultUrl,
-        options: Options(
-          responseType: ResponseType.plain,
-          headers: <String, String>{'referer': referer},
+      () => _gateway.getText(
+        Uri.parse(searchResultUrl),
+        context: const YamiboRequestContext(
+          kind: YamiboRequestKind.html,
+          operation: 'search.forum.result',
+          pageKind: 'search',
         ),
+        headers: <String, String>{'referer': referer},
       ),
       action: '获取搜索结果',
     );
 
-    final parsed = _htmlParser.parse(resultResponse.data ?? '');
+    final parsed = _htmlParser.parse(resultResponse.body);
     if (enforceRateLimit) {
       await _rateLimiter.markTriggered();
     }
@@ -141,19 +128,24 @@ class DiscuzSearchService implements ForumSearchService {
   }) async {
     final trimmed = nextPageUrl.trim();
     if (trimmed.isEmpty) {
-      return const DiscuzSearchResponse(items: <DiscuzSearchResultItem>[], rateLimited: false);
+      return const DiscuzSearchResponse(
+        items: <DiscuzSearchResultItem>[],
+        rateLimited: false,
+      );
     }
     final response = await _guardedRequest(
-      () => _dio.get<String>(
-        trimmed,
-        options: Options(
-          responseType: ResponseType.plain,
-          headers: <String, String>{'referer': _buildEntryUrl(context)},
+      () => _gateway.getText(
+        Uri.parse(trimmed),
+        context: const YamiboRequestContext(
+          kind: YamiboRequestKind.html,
+          operation: 'search.forum.nextPage',
+          pageKind: 'search',
         ),
+        headers: <String, String>{'referer': _buildEntryUrl(context)},
       ),
       action: '获取搜索下一页',
     );
-    final parsed = _htmlParser.parse(response.data ?? '');
+    final parsed = _htmlParser.parse(response.body);
     return DiscuzSearchResponse(
       items: _filterItemsByContext(parsed.items, context),
       rateLimited: false,
@@ -161,19 +153,19 @@ class DiscuzSearchService implements ForumSearchService {
     );
   }
 
-  Future<Response<String>> _guardedRequest(
-    Future<Response<String>> Function() request, {
+  Future<YamiboHttpResponse<String>> _guardedRequest(
+    Future<ApiResult<YamiboHttpResponse<String>>> Function() request, {
     required String action,
   }) async {
-    try {
-      return await request();
-    } on DioException catch (error) {
-      final statusCode = error.response?.statusCode;
-      if (statusCode == 503) {
-        throw const DiscuzSearchServiceException('搜索服务暂时不可用（HTTP 503），请稍后重试');
-      }
-      throw DiscuzSearchServiceException('$action失败：${error.message}');
+    final result = await request();
+    if (result case ApiSuccess(:final data)) {
+      return data;
     }
+    final error = (result as ApiFailure<YamiboHttpResponse<String>>).error;
+    if (error.statusCode == 503) {
+      throw const DiscuzSearchServiceException('搜索服务暂时不可用（HTTP 503），请稍后重试');
+    }
+    throw DiscuzSearchServiceException('$action失败：${error.message}');
   }
 
   Future<String> _loadFormhash() async {
@@ -191,7 +183,8 @@ class DiscuzSearchService implements ForumSearchService {
         _cachedFormhash = formhash;
         return formhash;
       },
-      failure: (error) => throw DiscuzSearchServiceException('获取 formhash 失败：${error.message}'),
+      failure: (error) =>
+          throw DiscuzSearchServiceException('获取 formhash 失败：${error.message}'),
     );
   }
 
@@ -205,7 +198,9 @@ class DiscuzSearchService implements ForumSearchService {
         if (uri.hasScheme) {
           return uri.toString();
         }
-        return Uri.parse('${AppConfig.siteBaseUrl}/').resolveUri(uri).toString();
+        return Uri.parse(
+          '${AppConfig.siteBaseUrl}/',
+        ).resolveUri(uri).toString();
       }
     }
     return fallbackRequestUri.toString();
@@ -251,7 +246,7 @@ final rawDiscuzSearchServiceProvider = Provider<ForumSearchService>((ref) {
   return DiscuzSearchService(
     profileRepository: ref.read(profileRepositoryProvider),
     rateLimiter: ref.read(searchRateLimiterProvider),
-    cookieStore: ref.read(cookieStoreProvider),
+    gateway: ref.read(yamiboHttpGatewayProvider),
   );
 });
 
