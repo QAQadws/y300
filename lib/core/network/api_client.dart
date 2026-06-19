@@ -5,10 +5,7 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/discuz_response.dart';
 import 'package:y300/core/network/network_diagnostic_recorder.dart';
-import 'package:y300/core/network/yamibo/yamibo_api_client.dart';
-import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
-import 'package:y300/core/network/yamibo/yamibo_session_extractor.dart';
-import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
+import 'package:y300/core/network/yamibo/yamibo.dart';
 
 /// Backward-compatible API facade for existing repositories.
 ///

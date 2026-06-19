@@ -3,12 +3,7 @@ import 'package:logger/logger.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/image_request_headers.dart';
-import 'package:y300/core/network/yamibo/yamibo_api_client.dart';
-import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
-import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
-import 'package:y300/core/network/yamibo/yamibo_resource_client.dart';
-import 'package:y300/core/network/yamibo/yamibo_session_extractor.dart';
-import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
+import 'package:y300/core/network/yamibo/yamibo.dart';
 import 'package:y300/features/library_shared/data/sync_diagnostic_providers.dart';
 
 final loggerProvider = Provider<Logger>((ref) {
