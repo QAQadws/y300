@@ -3,6 +3,7 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/auth/data/auth_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/forum_home_repository.dart';
+import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
 
 void main() {
@@ -60,6 +61,47 @@ void main() {
       final payload = result.dataOrNull!;
       expect(payload.isLoggedIn, isTrue);
       expect(payload.favoriteForums.single.fid, '30');
+    });
+
+    test('includes home chrome payload when chrome loader succeeds', () async {
+      final repository = DiscuzForumHomeRepository(
+        loadForumIndex: () async => ApiSuccess(_sampleForumIndexData()),
+        refreshSession: () async => ApiSuccess(_loggedOutSession()),
+        loadChrome: () async => const ApiSuccess(
+          ForumHomeChromeData(
+            carouselItems: [
+              ForumHomeCarouselItem(
+                imageUrl: 'https://bbs.yamibo.com/banner.jpg',
+                targetUrl: 'https://bbs.yamibo.com/thread-1-1-1.html',
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final result = await repository.getForumHomePayload();
+
+      expect(result.isSuccess, isTrue);
+      expect(result.dataOrNull!.chromeData.carouselItems, hasLength(1));
+      expect(
+        result.dataOrNull!.chromeData.carouselItems.single.targetUrl,
+        'https://bbs.yamibo.com/thread-1-1-1.html',
+      );
+    });
+
+    test('degrades to empty chrome when chrome loader fails', () async {
+      final repository = DiscuzForumHomeRepository(
+        loadForumIndex: () async => ApiSuccess(_sampleForumIndexData()),
+        refreshSession: () async => ApiSuccess(_loggedOutSession()),
+        loadChrome: () async => const ApiFailure(
+          ApiError(type: ApiErrorType.network, message: 'offline'),
+        ),
+      );
+
+      final result = await repository.getForumHomePayload();
+
+      expect(result.isSuccess, isTrue);
+      expect(result.dataOrNull!.chromeData.carouselItems, isEmpty);
     });
   });
 }

@@ -1,11 +1,17 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
-import 'package:y300/features/forum/data/models/forum_index_models.dart';
-import 'package:y300/features/forum/presentation/forum_home_controller.dart';
+import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
+import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
+import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
+import 'package:y300/features/forum/presentation/widgets/forum_home_widgets.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
+import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
+import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
 class ForumHomePage extends ConsumerWidget {
   const ForumHomePage({super.key});
@@ -13,6 +19,7 @@ class ForumHomePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(forumHomeControllerProvider);
+    final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -36,163 +43,175 @@ class ForumHomePage extends ConsumerWidget {
         loading: () => const SizedBox.shrink(),
         error: (error, _) => _ForumHomeErrorView(
           message: error.toString(),
-          onRetry: () => ref.read(forumHomeControllerProvider.notifier).refresh(),
+          onRetry: () =>
+              ref.read(forumHomeControllerProvider.notifier).refresh(),
         ),
-        data: (data) => _ForumHomeContent(data: data),
+        data: (data) => _ForumHomeContent(
+          data: data,
+          imageHeaderBuilder: imageHeaderBuilder,
+        ),
       ),
     );
   }
 }
 
-class _ForumHomeContent extends ConsumerWidget {
-  const _ForumHomeContent({required this.data});
+class _ForumHomeContent extends ConsumerStatefulWidget {
+  const _ForumHomeContent({
+    required this.data,
+    required this.imageHeaderBuilder,
+  });
 
   final ForumHomeViewData data;
+  final ImageRequestHeaderBuilder imageHeaderBuilder;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ForumHomeContent> createState() => _ForumHomeContentState();
+}
+
+class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
+  final Set<String> _collapsedSectionKeys = <String>{};
+
+  @override
+  void didUpdateWidget(covariant _ForumHomeContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final activeKeys = {
+      for (final section in widget.data.sections) _sectionKey(section),
+    };
+    _collapsedSectionKeys.removeWhere((key) => !activeKeys.contains(key));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ForumHomeNativePalette.resolve(Theme.of(context));
     return RefreshIndicator(
       onRefresh: () => ref.read(forumHomeControllerProvider.notifier).refresh(),
-      child: ListView(
-        key: const Key('forum-home-list'),
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(
-            '共${data.sectionCount} 个分组，${data.regularForumCount} 个版块',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 12),
-          for (final section in data.sections) ...[
-            Text(
-              section.title,
-              key: Key('forum-section-title-${section.title}'),
-              style: Theme.of(context).textTheme.titleMedium,
+      child: ColoredBox(
+        color: palette.background,
+        child: ListView(
+          key: const Key('forum-home-list'),
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.only(bottom: 10),
+          children: [
+            ForumHomeCarousel(
+              items: widget.data.carouselItems,
+              headerBuilder: widget.imageHeaderBuilder,
+              onOpen: (item) => _openCarouselTarget(context, ref, item),
             ),
-            const SizedBox(height: 8),
-            for (final forum in section.favoriteItems) ...[
-              _FavoriteForumCard(
-                item: forum,
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => ForumDisplayPage(
-                        fid: forum.fid,
-                        title: forum.title,
-                      ),
-                    ),
-                  );
-                },
+            for (final section in widget.data.sections)
+              ForumHomeSectionCard(
+                title: section.title,
+                isCollapsed: _collapsedSectionKeys.contains(
+                  _sectionKey(section),
+                ),
+                onToggle: () => _toggleSection(section),
+                children: _buildRows(context, section),
               ),
-              const SizedBox(height: 10),
-            ],
-            for (final forum in section.items) ...[
-              _ForumCard(
-                item: forum,
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => ForumDisplayPage(
-                        fid: forum.fid,
-                        title: forum.name,
-                      ),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 10),
-            ],
-            const SizedBox(height: 8),
           ],
-        ],
+        ),
       ),
     );
+  }
+
+  void _toggleSection(ForumSection section) {
+    final key = _sectionKey(section);
+    setState(() {
+      if (!_collapsedSectionKeys.add(key)) {
+        _collapsedSectionKeys.remove(key);
+      }
+    });
+  }
+
+  String _sectionKey(ForumSection section) {
+    return '${section.type.name}:${section.title}';
+  }
+
+  List<Widget> _buildRows(BuildContext context, ForumSection section) {
+    final rows = <_ForumHomeRowData>[
+      for (final forum in section.favoriteItems)
+        _ForumHomeRowData(
+          key: Key('forum-favorite-card-${forum.fid}'),
+          title: forum.title,
+          description: forum.description,
+          todayPosts: forum.todayPosts,
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => ForumDisplayPage(
+                  fid: forum.fid,
+                  title: forum.title,
+                ),
+              ),
+            );
+          },
+        ),
+      for (final forum in section.items)
+        _ForumHomeRowData(
+          key: Key('forum-card-${forum.fid}'),
+          title: forum.name,
+          description: forum.description,
+          todayPosts: forum.todayPosts,
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => ForumDisplayPage(
+                  fid: forum.fid,
+                  title: forum.name,
+                ),
+              ),
+            );
+          },
+        ),
+    ];
+
+    return [
+      for (var index = 0; index < rows.length; index++)
+        ForumHomeForumRow(
+          key: rows[index].key,
+          title: rows[index].title,
+          description: rows[index].description,
+          todayPosts: rows[index].todayPosts,
+          isLast: index == rows.length - 1,
+          onTap: rows[index].onTap,
+        ),
+    ];
+  }
+
+  Future<void> _openCarouselTarget(
+    BuildContext context,
+    WidgetRef ref,
+    ForumHomeCarouselItem item,
+  ) async {
+    final parser = const ForumThreadUrlParser();
+    final normalized = parser.normalizeHref(item.targetUrl);
+    final tid = normalized == null ? null : parser.extractTid(normalized);
+    if (tid != null && tid.isNotEmpty) {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ThreadDetailPage(tid: tid),
+        ),
+      );
+      return;
+    }
+
+    final uri = ref.read(forumWebViewNavigatorProvider).resolve(item.targetUrl);
+    await ref.read(forumWebViewExternalLauncherProvider).launch(uri);
   }
 }
 
-class _FavoriteForumCard extends StatelessWidget {
-  const _FavoriteForumCard({required this.item, required this.onTap});
+class _ForumHomeRowData {
+  const _ForumHomeRowData({
+    required this.key,
+    required this.title,
+    required this.description,
+    required this.todayPosts,
+    required this.onTap,
+  });
 
-  final FavoriteForum item;
+  final Key key;
+  final String title;
+  final String description;
+  final int todayPosts;
   final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final description = item.description.trim();
-    return InkWell(
-      key: Key('forum-favorite-card-${item.fid}'),
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: colorScheme.surfaceContainer,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: colorScheme.primary.withAlpha(90),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(item.title, style: Theme.of(context).textTheme.titleSmall),
-            if (description.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(description, style: Theme.of(context).textTheme.bodySmall),
-            ],
-            const SizedBox(height: 8),
-            Text(
-              '主题 ${item.threads}  帖子 ${item.posts}  今日 ${item.todayPosts}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ForumCard extends StatelessWidget {
-  const _ForumCard({required this.item, required this.onTap});
-
-  final ForumItem item;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final description = item.description.trim();
-
-    return InkWell(
-      key: Key('forum-card-${item.fid}'),
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outlineVariant,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(item.name, style: Theme.of(context).textTheme.titleSmall),
-            if (description.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(description, style: Theme.of(context).textTheme.bodySmall),
-            ],
-            const SizedBox(height: 8),
-            Text(
-              '主题 ${item.threads}  帖子 ${item.posts}  今日 ${item.todayPosts}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _ForumHomeErrorView extends StatelessWidget {

@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
 
@@ -39,13 +38,10 @@ void main() {
         ForumSection(
           title: '我收藏的版块',
           favoriteItems: [
-            FavoriteForum(
-              favid: '1',
+            FavoriteForumDisplayItem(
               fid: '2',
               title: '公告区',
               description: '',
-              threads: 1,
-              posts: 2,
               todayPosts: 0,
             ),
           ],

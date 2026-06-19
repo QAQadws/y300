@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
@@ -29,6 +28,7 @@ class ForumHomeController extends AsyncNotifier<ForumHomeViewData> {
       success: (payload) => ForumHomeViewData(
         sections: _mapSections(payload),
         isLoggedIn: payload.isLoggedIn,
+        carouselItems: payload.chromeData.carouselItems,
       ),
       failure: (error) => throw ForumHomeException(error.message),
     );
@@ -36,7 +36,7 @@ class ForumHomeController extends AsyncNotifier<ForumHomeViewData> {
 
   List<ForumSection> _mapSections(ForumHomePayload payload) {
     final sections = <ForumSection>[];
-    final favoriteForums = _dedupeFavoriteForums(payload.favoriteForums);
+    final favoriteForums = _mapFavoriteForums(payload);
     if (favoriteForums.isNotEmpty) {
       sections.add(
         ForumSection(
@@ -50,14 +50,41 @@ class ForumHomeController extends AsyncNotifier<ForumHomeViewData> {
     return sections;
   }
 
-  List<FavoriteForum> _dedupeFavoriteForums(List<FavoriteForum> source) {
+  List<FavoriteForumDisplayItem> _mapFavoriteForums(ForumHomePayload payload) {
+    final forumByFid = <String, ForumItem>{
+      for (final forum in payload.forumIndex.forums) forum.fid: forum,
+    };
+    final chromeForumByFid = {
+      for (final forum in payload.chromeData.favoriteForums) forum.fid: forum,
+    };
     final seen = <String>{};
-    final output = <FavoriteForum>[];
-    for (final forum in source) {
+    final output = <FavoriteForumDisplayItem>[];
+    for (final forum in payload.favoriteForums) {
       if (forum.fid.trim().isEmpty || !seen.add(forum.fid)) {
         continue;
       }
-      output.add(forum);
+      final chromeForum = chromeForumByFid[forum.fid];
+      final homeForum = forumByFid[forum.fid];
+      output.add(
+        FavoriteForumDisplayItem(
+          fid: forum.fid,
+          title: forum.title.trim().isNotEmpty
+              ? forum.title
+              : chromeForum?.title.trim().isNotEmpty == true
+              ? chromeForum!.title
+              : homeForum?.name ?? forum.title,
+          description: forum.description.trim().isNotEmpty
+              ? forum.description
+              : chromeForum?.description.trim().isNotEmpty == true
+              ? chromeForum!.description
+              : homeForum?.description ?? '',
+          todayPosts: forum.todayPosts > 0
+              ? forum.todayPosts
+              : chromeForum?.todayPosts != null && chromeForum!.todayPosts > 0
+              ? chromeForum.todayPosts
+              : homeForum?.todayPosts ?? 0,
+        ),
+      );
     }
     return output;
   }

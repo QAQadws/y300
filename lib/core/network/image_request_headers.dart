@@ -18,6 +18,9 @@ class DiscuzImageRequestHeaderBuilder implements ImageRequestHeaderBuilder {
   static const String browserUserAgent =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+  static const String mobileBrowserUserAgent =
+      'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 '
+      '(KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36';
   static const String imageAcceptHeader =
       'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8';
 
