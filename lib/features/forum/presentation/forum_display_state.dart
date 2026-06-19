@@ -9,6 +9,19 @@ class ForumDisplayPageState {
     required this.isLoadingInitial,
     required this.isLoadingMore,
     required this.threads,
+    required this.query,
+    this.headImageUrl,
+    this.forumIconUrl,
+    this.todayPosts = 0,
+    this.totalThreads = 0,
+    this.rank = 0,
+    this.primaryFilters = const <ForumDisplayFilterItem>[],
+    this.typeFilters = const <ForumDisplayFilterItem>[],
+    this.subForums = const <ForumDisplaySubForum>[],
+    this.topEntries = const <ForumDisplayTopEntry>[],
+    this.previousPageUrl,
+    this.nextPageUrl,
+    this.lastPage,
     this.errorMessage,
   });
 
@@ -19,6 +32,19 @@ class ForumDisplayPageState {
   final bool isLoadingInitial;
   final bool isLoadingMore;
   final List<ForumThreadSummary> threads;
+  final ForumDisplayQuery query;
+  final String? headImageUrl;
+  final String? forumIconUrl;
+  final int todayPosts;
+  final int totalThreads;
+  final int rank;
+  final List<ForumDisplayFilterItem> primaryFilters;
+  final List<ForumDisplayFilterItem> typeFilters;
+  final List<ForumDisplaySubForum> subForums;
+  final List<ForumDisplayTopEntry> topEntries;
+  final String? previousPageUrl;
+  final String? nextPageUrl;
+  final int? lastPage;
   final String? errorMessage;
 
   factory ForumDisplayPageState.initial({
@@ -33,6 +59,19 @@ class ForumDisplayPageState {
       isLoadingInitial: true,
       isLoadingMore: false,
       threads: const <ForumThreadSummary>[],
+      query: ForumDisplayQuery.initial(fid: fid),
+      headImageUrl: null,
+      forumIconUrl: null,
+      todayPosts: 0,
+      totalThreads: 0,
+      rank: 0,
+      primaryFilters: const <ForumDisplayFilterItem>[],
+      typeFilters: const <ForumDisplayFilterItem>[],
+      subForums: const <ForumDisplaySubForum>[],
+      topEntries: const <ForumDisplayTopEntry>[],
+      previousPageUrl: null,
+      nextPageUrl: null,
+      lastPage: null,
       errorMessage: null,
     );
   }
@@ -45,6 +84,19 @@ class ForumDisplayPageState {
     bool? isLoadingInitial,
     bool? isLoadingMore,
     List<ForumThreadSummary>? threads,
+    ForumDisplayQuery? query,
+    String? headImageUrl,
+    String? forumIconUrl,
+    int? todayPosts,
+    int? totalThreads,
+    int? rank,
+    List<ForumDisplayFilterItem>? primaryFilters,
+    List<ForumDisplayFilterItem>? typeFilters,
+    List<ForumDisplaySubForum>? subForums,
+    List<ForumDisplayTopEntry>? topEntries,
+    String? previousPageUrl,
+    String? nextPageUrl,
+    int? lastPage,
     String? errorMessage,
     bool clearError = false,
   }) {
@@ -56,6 +108,19 @@ class ForumDisplayPageState {
       isLoadingInitial: isLoadingInitial ?? this.isLoadingInitial,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       threads: threads ?? this.threads,
+      query: query ?? this.query,
+      headImageUrl: headImageUrl ?? this.headImageUrl,
+      forumIconUrl: forumIconUrl ?? this.forumIconUrl,
+      todayPosts: todayPosts ?? this.todayPosts,
+      totalThreads: totalThreads ?? this.totalThreads,
+      rank: rank ?? this.rank,
+      primaryFilters: primaryFilters ?? this.primaryFilters,
+      typeFilters: typeFilters ?? this.typeFilters,
+      subForums: subForums ?? this.subForums,
+      topEntries: topEntries ?? this.topEntries,
+      previousPageUrl: previousPageUrl ?? this.previousPageUrl,
+      nextPageUrl: nextPageUrl ?? this.nextPageUrl,
+      lastPage: lastPage ?? this.lastPage,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );
   }

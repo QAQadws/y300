@@ -2,6 +2,39 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
 
 void main() {
+  group('ForumDisplayQuery', () {
+    test('parses forumdisplay URL and preserves filter parameters', () {
+      final query = ForumDisplayQuery.fromUrl(
+        'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=30&filter=typeid&typeid=69&page=2&mobile=2',
+        fallbackFid: '1',
+      );
+
+      expect(query.fid, '30');
+      expect(query.page, 2);
+      expect(query.parameters['filter'], 'typeid');
+      expect(query.parameters['typeid'], '69');
+      expect(query.parameters.containsKey('mod'), isFalse);
+      expect(query.parameters.containsKey('mobile'), isFalse);
+      expect(query.toRequestParameters(), containsPair('mod', 'forumdisplay'));
+      expect(query.toRequestParameters(), containsPair('mobile', '2'));
+    });
+
+    test('copyWithPage keeps current filter query', () {
+      const query = ForumDisplayQuery(
+        fid: '30',
+        page: 1,
+        parameters: <String, String>{'filter': 'digest', 'digest': '1'},
+      );
+
+      final next = query.copyWithPage(4);
+
+      expect(next.page, 4);
+      expect(next.parameters['filter'], 'digest');
+      expect(next.parameters['digest'], '1');
+      expect(next.toRequestParameters()['page'], '4');
+    });
+  });
+
   group('ForumDisplayData.fromVariables', () {
     test('parses forum_threadlist and tpp from forumdisplay response', () {
       final variables = <String, dynamic>{

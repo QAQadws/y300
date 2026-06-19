@@ -19,7 +19,9 @@ class ForumDisplayArgs {
     if (identical(this, other)) {
       return true;
     }
-    return other is ForumDisplayArgs && other.fid == fid && other.title == title;
+    return other is ForumDisplayArgs &&
+        other.fid == fid &&
+        other.title == title;
   }
 
   @override
@@ -39,85 +41,144 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
 
   @override
   FutureOr<ForumDisplayPageState> build() async {
-    return _loadPage(page: 1, previous: const <ForumThreadSummary>[]);
+    return _loadQuery(ForumDisplayQuery.initial(fid: _args.fid));
   }
 
   Future<void> refresh() async {
+    final query =
+        state.value?.query ?? ForumDisplayQuery.initial(fid: _args.fid);
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
-      () => _loadPage(page: 1, previous: const <ForumThreadSummary>[]),
-    );
+    state = await AsyncValue.guard(() => _loadQuery(query));
   }
 
   Future<void> loadMore() async {
+    await loadNextPage();
+  }
+
+  Future<void> loadNextPage() async {
     final current = state.value;
     if (current == null || current.isLoadingMore || !current.hasMore) {
       return;
     }
-
-    state = AsyncData(current.copyWith(isLoadingMore: true, clearError: true));
-    final result = await _readRepository().getForumDisplay(
-      fid: _args.fid,
-      page: current.currentPage + 1,
+    final query = _queryFromUrl(
+      current.nextPageUrl,
+      fallback: current.query.copyWithPage(current.currentPage + 1),
     );
-
-    if (result case ApiSuccess<ForumDisplayData>(:final data)) {
-      final mappedThreads = await _attachSourceTagNames(data);
-      final merged = <ForumThreadSummary>[...current.threads, ...mappedThreads];
-      state = AsyncData(
-        current.copyWith(
-          title: data.forumName.isNotEmpty ? data.forumName : current.title,
-          currentPage: data.currentPage,
-          hasMore: data.hasMore,
-          isLoadingMore: false,
-          threads: merged,
-          clearError: true,
-        ),
-      );
-      return;
-    }
-
-    final error = (result as ApiFailure<ForumDisplayData>).error;
-    state = AsyncData(
-      current.copyWith(
-        isLoadingMore: false,
-        errorMessage: error.message,
-      ),
-    );
+    await _replaceWithQuery(query, current: current);
   }
 
-  Future<ForumDisplayPageState> _loadPage({
-    required int page,
-    required List<ForumThreadSummary> previous,
-  }) async {
-    final result = await _readRepository().getForumDisplay(fid: _args.fid, page: page);
+  Future<void> loadPreviousPage() async {
+    final current = state.value;
+    if (current == null || current.isLoadingMore || current.currentPage <= 1) {
+      return;
+    }
+    final query = _queryFromUrl(
+      current.previousPageUrl,
+      fallback: current.query.copyWithPage(current.currentPage - 1),
+    );
+    await _replaceWithQuery(query, current: current);
+  }
 
+  Future<void> loadPageNumber(int page) async {
+    if (page < 1) {
+      return;
+    }
+    final current = state.value;
+    final query = (current?.query ?? ForumDisplayQuery.initial(fid: _args.fid))
+        .copyWithPage(page);
+    await _replaceWithQuery(query, current: current);
+  }
+
+  Future<void> openFilter(ForumDisplayFilterItem item) async {
+    await openForumDisplayUrl(item.url);
+  }
+
+  Future<void> openThreadTag(ForumThreadSummary thread) async {
+    final url = thread.sourceTagUrl;
+    if (url == null || url.trim().isEmpty) {
+      return;
+    }
+    await openForumDisplayUrl(url);
+  }
+
+  Future<void> openForumDisplayUrl(String url) async {
+    final current = state.value;
+    final query = ForumDisplayQuery.fromUrl(
+      url,
+      fallbackFid: current?.fid ?? _args.fid,
+    );
+    await _replaceWithQuery(query, current: current);
+  }
+
+  Future<void> _replaceWithQuery(
+    ForumDisplayQuery query, {
+    required ForumDisplayPageState? current,
+  }) async {
+    if (current == null) {
+      state = const AsyncLoading();
+    } else {
+      state = AsyncData(
+        current.copyWith(isLoadingMore: true, clearError: true),
+      );
+    }
+    state = await AsyncValue.guard(() => _loadQuery(query));
+  }
+
+  Future<ForumDisplayPageState> _loadQuery(ForumDisplayQuery query) async {
+    final result = await _readRepository().getForumDisplayByQuery(query);
     if (result case ApiSuccess<ForumDisplayData>(:final data)) {
       final mappedThreads = await _attachSourceTagNames(data);
-      final merged = page == 1
-          ? mappedThreads
-          : <ForumThreadSummary>[...previous, ...mappedThreads];
+      final effectiveQuery = query.copyWithPage(data.currentPage);
       return ForumDisplayPageState(
-        fid: _args.fid,
+        fid: data.fid.isNotEmpty ? data.fid : query.fid,
         title: data.forumName.isNotEmpty ? data.forumName : _args.title,
         currentPage: data.currentPage,
         hasMore: data.hasMore,
         isLoadingInitial: false,
         isLoadingMore: false,
-        threads: merged,
+        threads: mappedThreads,
+        query: effectiveQuery,
+        headImageUrl: data.headImageUrl,
+        forumIconUrl: data.forumIconUrl,
+        todayPosts: data.todayPosts,
+        totalThreads: data.totalThreads,
+        rank: data.rank,
+        primaryFilters: data.primaryFilters,
+        typeFilters: data.typeFilters,
+        subForums: data.subForums,
+        topEntries: data.topEntries,
+        previousPageUrl: data.previousPageUrl,
+        nextPageUrl: data.nextPageUrl,
+        lastPage: data.lastPage,
       );
     }
 
     final error = (result as ApiFailure<ForumDisplayData>).error;
     return ForumDisplayPageState(
-      fid: _args.fid,
+      fid: query.fid,
       title: _args.title,
-      currentPage: page == 1 ? 0 : page,
+      currentPage: query.page,
       hasMore: false,
       isLoadingInitial: false,
       isLoadingMore: false,
-      threads: previous,
+      threads: const <ForumThreadSummary>[],
+      query: query,
       errorMessage: error.message,
+    );
+  }
+
+  ForumDisplayQuery _queryFromUrl(
+    String? url, {
+    required ForumDisplayQuery fallback,
+  }) {
+    final value = url?.trim();
+    if (value == null || value.isEmpty) {
+      return fallback;
+    }
+    return ForumDisplayQuery.fromUrl(
+      value,
+      fallbackFid: fallback.fid,
+      fallbackPage: fallback.page,
     );
   }
 
@@ -132,14 +193,18 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
       return data.threads;
     }
     return data.threads
-        .map(
-          (thread) => thread.copyWith(
+        .map((thread) {
+          final parsedName = thread.sourceTagName?.trim();
+          if (parsedName != null && parsedName.isNotEmpty) {
+            return thread;
+          }
+          return thread.copyWith(
             sourceTagName: lookup.findName(
               fid: data.fid,
               typeid: thread.typeid,
             ),
-          ),
-        )
+          );
+        })
         .toList(growable: false);
   }
 
