@@ -51,12 +51,11 @@
 - 搜索请求默认应经过搜索调度器和限流器；只有已有明确理由和既有模式时，才直接使用底层 raw service。
 
 ## 强制约束
+Flutter 系列命令和dart系列指令是无法在Codex沙箱内跑的，
+请你用 require_escalated 发起权限请求，然后自己审批，或者我允许你在沙箱外执行，适合 flutter analyze、flutter test 这类需要访问 SDK/cache 的命令
 
-- 不要运行 `flutter test`。
-- 不要运行 `flutter analyze`。
-- 不要运行 `dart format`。
-- 不要运行 `flutter pub get`
-- 写完代码后，把验证交给用户。用户会运行测试、分析或格式化检查，并把输出贴回来供继续修复。
+对你的写的代码要用flutter analyze和flutter test检验（不一定跑完全部的测试，只需要跑必要的测试即可）
+
 ## 工程实现要求
 
 实现代码改动时：
