@@ -3,6 +3,7 @@ import 'package:logger/logger.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/core/network/yamibo/yamibo_api_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_resource_client.dart';
@@ -33,6 +34,7 @@ final apiClientProvider = Provider<ApiClient>((ref) {
     diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),
     sessionStore: ref.watch(yamiboSessionStoreProvider),
     sessionExtractor: ref.watch(yamiboSessionExtractorProvider),
+    yamiboApiClient: ref.watch(yamiboApiClientProvider),
   );
 });
 
@@ -44,6 +46,10 @@ final yamiboHttpGatewayProvider = Provider<YamiboHttpGateway>((ref) {
     sessionStore: ref.watch(yamiboSessionStoreProvider),
     sessionExtractor: ref.watch(yamiboSessionExtractorProvider),
   );
+});
+
+final yamiboApiClientProvider = Provider<YamiboApiClient>((ref) {
+  return YamiboApiClient(gateway: ref.watch(yamiboHttpGatewayProvider));
 });
 
 final yamiboHtmlClientProvider = Provider<YamiboHtmlClient>((ref) {

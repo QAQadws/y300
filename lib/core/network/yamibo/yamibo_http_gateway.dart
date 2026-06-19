@@ -54,7 +54,8 @@ class YamiboHttpGateway {
     Map<String, String>? headers,
     CancelToken? cancelToken,
   }) async {
-    return _get<String>(
+    return _request<String>(
+      method: 'GET',
       uri,
       context: context,
       headers: headers,
@@ -70,7 +71,8 @@ class YamiboHttpGateway {
     Map<String, String>? headers,
     CancelToken? cancelToken,
   }) async {
-    return _get<List<int>>(
+    return _request<List<int>>(
+      method: 'GET',
       uri,
       context: context,
       headers: headers,
@@ -85,13 +87,37 @@ class YamiboHttpGateway {
     );
   }
 
-  Future<ApiResult<YamiboHttpResponse<T>>> _get<T>(
+  Future<ApiResult<YamiboHttpResponse<String>>> postForm(
     Uri uri, {
+    required YamiboRequestContext context,
+    required Map<String, String> data,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+    Options? options,
+  }) async {
+    return _request<String>(
+      uri,
+      method: 'POST',
+      context: context,
+      headers: headers,
+      responseType: ResponseType.plain,
+      cancelToken: cancelToken,
+      data: data,
+      contentType: options?.contentType ?? Headers.formUrlEncodedContentType,
+      normalizeBody: (responseData) => responseData?.toString() ?? '',
+    );
+  }
+
+  Future<ApiResult<YamiboHttpResponse<T>>> _request<T>(
+    Uri uri, {
+    required String method,
     required YamiboRequestContext context,
     required ResponseType responseType,
     required T Function(Object? data) normalizeBody,
     Map<String, String>? headers,
     CancelToken? cancelToken,
+    Object? data,
+    String? contentType,
   }) async {
     final startedAt = DateTime.now();
     final requestHeaders = <String, String>{...?headers};
@@ -101,9 +127,15 @@ class YamiboHttpGateway {
     }
 
     try {
-      final response = await _dio.getUri<Object?>(
+      final response = await _dio.requestUri<Object?>(
         uri,
-        options: Options(headers: requestHeaders, responseType: responseType),
+        data: data,
+        options: Options(
+          method: method,
+          headers: requestHeaders,
+          responseType: responseType,
+          contentType: contentType,
+        ),
         cancelToken: cancelToken,
       );
       await _saveCookies(response);

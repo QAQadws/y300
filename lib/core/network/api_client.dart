@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:dio/dio.dart';
 import 'package:logger/logger.dart';
 import 'package:y300/core/config/app_config.dart';
@@ -7,10 +5,15 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/discuz_response.dart';
 import 'package:y300/core/network/network_diagnostic_recorder.dart';
+import 'package:y300/core/network/yamibo/yamibo_api_client.dart';
+import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_extractor.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 
-/// 统一网络入口：负责请求基础能力，不承担具体业务字段解析
+/// Backward-compatible API facade for existing repositories.
+///
+/// N-4 moves Discuz mobile API transport into [YamiboApiClient] while keeping
+/// this class as the stable adapter used by feature repositories.
 class ApiClient {
   ApiClient({
     required CookieStore cookieStore,
@@ -20,104 +23,37 @@ class ApiClient {
     YamiboSessionExtractor? sessionExtractor,
     Dio? dio,
     bool enableLog = true,
+    YamiboApiClient? yamiboApiClient,
   }) : _cookieStore = cookieStore,
-       _logger = logger,
        _sessionStore = sessionStore,
-       _sessionExtractor = sessionExtractor,
-       _diagnosticRecorder =
-           diagnosticRecorder ?? const NoopNetworkDiagnosticRecorder(),
-       _enableLog = enableLog,
-       _dio =
-           dio ??
-           Dio(
-             BaseOptions(
-               baseUrl: AppConfig.apiBaseUrl,
-               connectTimeout: AppConfig.connectTimeout,
-               receiveTimeout: AppConfig.receiveTimeout,
+       _yamiboApiClient =
+           yamiboApiClient ??
+           YamiboApiClient(
+             gateway: YamiboHttpGateway(
+               cookieStore: cookieStore,
+               logger: logger,
+               diagnosticRecorder: diagnosticRecorder,
+               sessionStore: sessionStore,
+               sessionExtractor: sessionExtractor,
+               dio:
+                   dio ??
+                   Dio(
+                     BaseOptions(
+                       baseUrl: AppConfig.apiBaseUrl,
+                       connectTimeout: AppConfig.connectTimeout,
+                       receiveTimeout: AppConfig.receiveTimeout,
+                       followRedirects: true,
+                       validateStatus: (status) =>
+                           status != null && status >= 200 && status < 400,
+                     ),
+                   ),
+               enableLog: enableLog,
              ),
-           ) {
-    _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) async {
-          options.extra['diagnosticStartedAt'] = DateTime.now();
+           );
 
-          // 统一注入公共参数，调用层可覆盖 version
-          options.queryParameters = {
-            ...options.queryParameters,
-            'version':
-                options.queryParameters['version'] ??
-                AppConfig.defaultApiVersion,
-          };
-
-          // 自动补齐本地会话 Cookie
-          final cookieHeader = await _cookieStore.readCookieHeader(options.uri);
-          if (cookieHeader != null && cookieHeader.isNotEmpty) {
-            options.headers['cookie'] = cookieHeader;
-          }
-
-          handler.next(options);
-        },
-        onResponse: (response, handler) async {
-          // 自动接收并持久化服务端下发的 Cookie
-          final setCookie = response.headers.map['set-cookie'] ?? <String>[];
-          await _cookieStore.saveFromSetCookie(
-            response.requestOptions.uri,
-            setCookie,
-          );
-          _recordRequestSuccess(response);
-
-          if (_enableLog) {
-            _logger.i(
-              '[HTTP ${response.statusCode}] ${response.requestOptions.uri}\\n'
-              'body=${_describeLogBody(response.data)}',
-            );
-          }
-
-          handler.next(response);
-        },
-      ),
-    );
-  }
-
-  final Dio _dio;
   final CookieStore _cookieStore;
-  final Logger _logger;
   final YamiboSessionStore? _sessionStore;
-  final YamiboSessionExtractor? _sessionExtractor;
-  final NetworkDiagnosticRecorder _diagnosticRecorder;
-  final bool _enableLog;
-
-  static const int _maxLoggedStringLength = 1200;
-  static const int _maxLoggedMapKeys = 12;
-
-  String _describeLogBody(Object? body) {
-    if (body == null) {
-      return 'null';
-    }
-    if (body is String) {
-      return _truncateLogString(body);
-    }
-    if (body is Map) {
-      final keys = body.keys
-          .take(_maxLoggedMapKeys)
-          .map((key) => '$key')
-          .join(', ');
-      final suffix = body.length > _maxLoggedMapKeys ? ', ...' : '';
-      return 'Map(length=${body.length}, keys=[$keys$suffix])';
-    }
-    if (body is Iterable) {
-      return '${body.runtimeType}(length=${body.length})';
-    }
-    return body.runtimeType.toString();
-  }
-
-  String _truncateLogString(String value) {
-    if (value.length <= _maxLoggedStringLength) {
-      return value;
-    }
-    return '${value.substring(0, _maxLoggedStringLength)}... '
-        '(truncated, length=${value.length})';
-  }
+  final YamiboApiClient _yamiboApiClient;
 
   Future<void> clearSession() async {
     await _cookieStore.clear();
@@ -130,99 +66,30 @@ class ApiClient {
     Map<String, dynamic>? queryParameters,
     CancelToken? cancelToken,
     bool treatMessageAsBusinessError = true,
-  }) async {
-    try {
-      final response = await _dio.get<dynamic>(
-        '',
-        queryParameters: {'module': module, ...?queryParameters},
-        cancelToken: cancelToken,
-      );
-
-      final json = _toJsonMap(response.data);
-      final discuzResponse = DiscuzResponse.fromJson(json);
-      _saveExtractedApiSession(discuzResponse, source: 'api:$module');
-      if (treatMessageAsBusinessError && discuzResponse.hasBusinessError) {
-        return ApiFailure(
-          ApiError(
-            type: ApiErrorType.business,
-            code: discuzResponse.businessCode,
-            message: discuzResponse.businessMessage,
-            raw: json,
-            statusCode: response.statusCode,
-          ),
-        );
-      }
-
-      return ApiSuccess(discuzResponse);
-    } on DioException catch (error) {
-      _recordRequestFailure(error);
-      return ApiFailure(_mapDioError(error));
-    } on FormatException catch (error) {
-      return ApiFailure(
-        ApiError(
-          type: ApiErrorType.parse,
-          message: '响应格式错误: ${error.message}',
-          raw: error.source,
-        ),
-      );
-    } catch (error) {
-      return ApiFailure(
-        ApiError(
-          type: ApiErrorType.unknown,
-          message: '未知错误: $error',
-          raw: error,
-        ),
-      );
-    }
+  }) {
+    return _yamiboApiClient.getDiscuz(
+      module: module,
+      queryParameters: queryParameters,
+      cancelToken: cancelToken,
+      treatMessageAsBusinessError: treatMessageAsBusinessError,
+    );
   }
 
   /// 以 `application/x-www-form-urlencoded` 提交 Discuz 移动端表单。
-  ///
-  /// 该方法只提供通用 POST 能力：version 注入、Cookie 持久化和通用
-  /// JSON 解析仍由 ApiClient 负责，具体业务成功/失败由调用方判断。
   Future<ApiResult<DiscuzResponse>> postDiscuzForm({
     required String module,
     required Map<String, String> data,
     Map<String, dynamic>? queryParameters,
     CancelToken? cancelToken,
     Options? options,
-  }) async {
-    try {
-      final response = await _dio.post<dynamic>(
-        '',
-        queryParameters: {'module': module, ...?queryParameters},
-        data: data,
-        cancelToken: cancelToken,
-        options: (options ?? Options()).copyWith(
-          contentType:
-              options?.contentType ?? Headers.formUrlEncodedContentType,
-        ),
-      );
-
-      final json = _toJsonMap(response.data);
-      final discuzResponse = DiscuzResponse.fromJson(json);
-      _saveExtractedApiSession(discuzResponse, source: 'api:$module');
-      return ApiSuccess(discuzResponse);
-    } on DioException catch (error) {
-      _recordRequestFailure(error);
-      return ApiFailure(_mapDioError(error));
-    } on FormatException catch (error) {
-      return ApiFailure(
-        ApiError(
-          type: ApiErrorType.parse,
-          message: '响应格式错误: ${error.message}',
-          raw: error.source,
-        ),
-      );
-    } catch (error) {
-      return ApiFailure(
-        ApiError(
-          type: ApiErrorType.unknown,
-          message: '未知错误: $error',
-          raw: error,
-        ),
-      );
-    }
+  }) {
+    return _yamiboApiClient.postDiscuzForm(
+      module: module,
+      data: data,
+      queryParameters: queryParameters,
+      cancelToken: cancelToken,
+      options: options,
+    );
   }
 
   /// 模板化解析：网络成功后把 variables 转成具体业务模型
@@ -254,125 +121,5 @@ class ApiClient {
       },
       failure: ApiFailure.new,
     );
-  }
-
-  Map<String, dynamic> _toJsonMap(dynamic data) {
-    if (data is Map<String, dynamic>) {
-      return data;
-    }
-    if (data is Map) {
-      return data.map((key, dynamic value) => MapEntry(key.toString(), value));
-    }
-    if (data is String) {
-      final decoded = jsonDecode(data);
-      if (decoded is Map<String, dynamic>) {
-        return decoded;
-      }
-      throw const FormatException('响应不是JSON对象', null);
-    }
-    throw FormatException('无法解析响应类型: ${data.runtimeType}', data);
-  }
-
-  void _saveExtractedApiSession(
-    DiscuzResponse response, {
-    required String source,
-  }) {
-    final store = _sessionStore;
-    final extractor = _sessionExtractor;
-    if (store == null || extractor == null) {
-      return;
-    }
-    final snapshot = extractor.extractFromApiVariables(
-      response.variables,
-      source: source,
-    );
-    if (snapshot != null) {
-      store.saveExtracted(snapshot);
-    }
-  }
-
-  ApiError _mapDioError(DioException error) {
-    // 统一映射为可消费的错误类型，避免上层耦合 Dio 细节。
-    final statusCode = error.response?.statusCode;
-    final responseData = error.response?.data;
-
-    if (error.type == DioExceptionType.connectionTimeout ||
-        error.type == DioExceptionType.receiveTimeout ||
-        error.type == DioExceptionType.sendTimeout) {
-      return ApiError(
-        type: ApiErrorType.timeout,
-        message: '请求超时，请稍后重试',
-        statusCode: statusCode,
-        raw: responseData,
-      );
-    }
-
-    if (statusCode == 401 || statusCode == 403) {
-      return ApiError(
-        type: ApiErrorType.unauthorized,
-        message: '登录态失效，请重新登录',
-        statusCode: statusCode,
-        raw: responseData,
-      );
-    }
-
-    if (statusCode != null && statusCode >= 500) {
-      return ApiError(
-        type: ApiErrorType.server,
-        message: '服务端异常($statusCode)',
-        statusCode: statusCode,
-        raw: responseData,
-      );
-    }
-
-    if (error.type == DioExceptionType.badResponse) {
-      return ApiError(
-        type: ApiErrorType.server,
-        message: '接口请求失败($statusCode)',
-        statusCode: statusCode,
-        raw: responseData,
-      );
-    }
-
-    return ApiError(
-      type: ApiErrorType.network,
-      message: '网络异常: ${error.message ?? 'unknown'}',
-      statusCode: statusCode,
-      raw: responseData,
-    );
-  }
-
-  void _recordRequestSuccess(Response<dynamic> response) {
-    final startedAt = _resolveStartedAt(response.requestOptions);
-    _diagnosticRecorder.recordHttpRequest(
-      method: response.requestOptions.method,
-      uri: response.requestOptions.uri,
-      startedAt: startedAt,
-      elapsedMs: DateTime.now().difference(startedAt).inMilliseconds,
-      statusCode: response.statusCode,
-      succeeded: true,
-    );
-  }
-
-  void _recordRequestFailure(DioException error) {
-    final request = error.requestOptions;
-    final startedAt = _resolveStartedAt(request);
-    _diagnosticRecorder.recordHttpRequest(
-      method: request.method,
-      uri: request.uri,
-      startedAt: startedAt,
-      elapsedMs: DateTime.now().difference(startedAt).inMilliseconds,
-      statusCode: error.response?.statusCode,
-      succeeded: false,
-      error: error.message,
-    );
-  }
-
-  DateTime _resolveStartedAt(RequestOptions options) {
-    final value = options.extra['diagnosticStartedAt'];
-    if (value is DateTime) {
-      return value;
-    }
-    return DateTime.now();
   }
 }
