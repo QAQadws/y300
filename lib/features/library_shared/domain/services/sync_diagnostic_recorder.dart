@@ -48,5 +48,10 @@ class NoopSyncDiagnosticRecorder implements SyncDiagnosticRecorder {
     int? statusCode,
     bool succeeded = true,
     String? error,
+    String? kind,
+    String? operation,
+    String? module,
+    String? pageKind,
+    String? requestId,
   }) {}
 }

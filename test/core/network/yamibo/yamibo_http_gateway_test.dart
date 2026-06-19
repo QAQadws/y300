@@ -55,6 +55,9 @@ void main() {
         expect(await cookieStore.readCookieHeader(uri), 'auth=after');
         expect(diagnostics.records.single.succeeded, isTrue);
         expect(diagnostics.records.single.statusCode, 200);
+        expect(diagnostics.records.single.kind, 'html');
+        expect(diagnostics.records.single.operation, 'forum.home.chrome');
+        expect(diagnostics.records.single.requestId, 'yhttp-1');
         expect(
           logOutput.lines.join('\n'),
           contains(
@@ -62,6 +65,7 @@ void main() {
             'https://bbs.yamibo.com/index.php?mobile=2 -> 200',
           ),
         );
+        expect(logOutput.lines.join('\n'), contains('requestId=yhttp-1'));
         expect(logOutput.lines.join('\n'), contains('body=String(length=15)'));
       },
     );
@@ -81,16 +85,27 @@ void main() {
         context: const YamiboRequestContext(
           kind: YamiboRequestKind.imageProbe,
           operation: 'forum.home.carouselProbe',
+          module: 'forum',
+          pageKind: 'home',
         ),
       );
 
       expect(result.isSuccess, isTrue);
       expect(result.dataOrNull?.body, const <int>[1, 2, 3, 4]);
       expect(diagnostics.records.single.succeeded, isTrue);
+      expect(diagnostics.records.single.kind, 'imageProbe');
+      expect(
+        diagnostics.records.single.operation,
+        'forum.home.carouselProbe',
+      );
+      expect(diagnostics.records.single.module, 'forum');
+      expect(diagnostics.records.single.pageKind, 'home');
+      expect(diagnostics.records.single.requestId, 'yhttp-1');
       expect(
         logOutput.lines.join('\n'),
         contains('[YamiboHTTP][imageProbe][forum.home.carouselProbe] GET'),
       );
+      expect(logOutput.lines.join('\n'), contains('requestId=yhttp-1'));
       expect(logOutput.lines.join('\n'), contains('body=Bytes(length=4)'));
     });
 
@@ -118,7 +133,11 @@ void main() {
         expect(result.errorOrNull?.statusCode, 503);
         expect(diagnostics.records.single.succeeded, isFalse);
         expect(diagnostics.records.single.statusCode, 503);
+        expect(diagnostics.records.single.kind, 'html');
+        expect(diagnostics.records.single.operation, 'forum.home.chrome');
+        expect(diagnostics.records.single.requestId, 'yhttp-1');
         expect(logOutput.lines.join('\n'), contains('-> failed 503'));
+        expect(logOutput.lines.join('\n'), contains('requestId=yhttp-1'));
       },
     );
 
@@ -231,6 +250,11 @@ class _RecordingNetworkDiagnosticRecorder implements NetworkDiagnosticRecorder {
     int? statusCode,
     bool succeeded = true,
     String? error,
+    String? kind,
+    String? operation,
+    String? module,
+    String? pageKind,
+    String? requestId,
   }) {
     records.add(
       _DiagnosticRecord(
@@ -241,6 +265,11 @@ class _RecordingNetworkDiagnosticRecorder implements NetworkDiagnosticRecorder {
         statusCode: statusCode,
         succeeded: succeeded,
         error: error,
+        kind: kind,
+        operation: operation,
+        module: module,
+        pageKind: pageKind,
+        requestId: requestId,
       ),
     );
   }
@@ -255,6 +284,11 @@ class _DiagnosticRecord {
     required this.succeeded,
     this.statusCode,
     this.error,
+    this.kind,
+    this.operation,
+    this.module,
+    this.pageKind,
+    this.requestId,
   });
 
   final String method;
@@ -264,6 +298,11 @@ class _DiagnosticRecord {
   final int? statusCode;
   final bool succeeded;
   final String? error;
+  final String? kind;
+  final String? operation;
+  final String? module;
+  final String? pageKind;
+  final String? requestId;
 }
 
 class _MemoryLogOutput extends LogOutput {

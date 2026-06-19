@@ -7,6 +7,11 @@ abstract class NetworkDiagnosticRecorder {
     int? statusCode,
     bool succeeded = true,
     String? error,
+    String? kind,
+    String? operation,
+    String? module,
+    String? pageKind,
+    String? requestId,
   });
 }
 
@@ -22,5 +27,10 @@ class NoopNetworkDiagnosticRecorder implements NetworkDiagnosticRecorder {
     int? statusCode,
     bool succeeded = true,
     String? error,
+    String? kind,
+    String? operation,
+    String? module,
+    String? pageKind,
+    String? requestId,
   }) {}
 }

@@ -47,6 +47,7 @@ class YamiboHttpGateway {
   final NetworkDiagnosticRecorder _diagnosticRecorder;
   final YamiboRequestLogger _requestLogger;
   final Dio _dio;
+  int _nextRequestSequence = 0;
 
   Future<ApiResult<YamiboHttpResponse<String>>> getText(
     Uri uri, {
@@ -156,6 +157,7 @@ class YamiboHttpGateway {
     ProgressCallback? onSendProgress,
   }) async {
     final startedAt = DateTime.now();
+    final requestId = _generateRequestId();
     final requestHeaders = <String, String>{...?headers};
     final cookieHeader = await _cookieStore.readCookieHeader(uri);
     if (cookieHeader != null && cookieHeader.isNotEmpty) {
@@ -182,12 +184,15 @@ class YamiboHttpGateway {
       _saveExtractedHtmlSession(body: body, context: context);
       final elapsedMs = _elapsedMs(startedAt);
       _recordSuccess(
+        context: context,
+        requestId: requestId,
         response: response,
         startedAt: startedAt,
         elapsedMs: elapsedMs,
       );
       _requestLogger.logSuccess(
         context: context,
+        requestId: requestId,
         method: response.requestOptions.method,
         uri: response.requestOptions.uri,
         statusCode: response.statusCode,
@@ -208,9 +213,16 @@ class YamiboHttpGateway {
       if (response != null) {
         await _saveCookies(response);
       }
-      _recordFailure(error: error, startedAt: startedAt, elapsedMs: elapsedMs);
+      _recordFailure(
+        context: context,
+        requestId: requestId,
+        error: error,
+        startedAt: startedAt,
+        elapsedMs: elapsedMs,
+      );
       _requestLogger.logFailure(
         context: context,
+        requestId: requestId,
         method: error.requestOptions.method,
         uri: error.requestOptions.uri,
         statusCode: error.response?.statusCode,
@@ -256,6 +268,8 @@ class YamiboHttpGateway {
   }
 
   void _recordSuccess({
+    required YamiboRequestContext context,
+    required String requestId,
     required Response<Object?> response,
     required DateTime startedAt,
     required int elapsedMs,
@@ -267,10 +281,17 @@ class YamiboHttpGateway {
       elapsedMs: elapsedMs,
       statusCode: response.statusCode,
       succeeded: true,
+      kind: context.kind.name,
+      operation: context.operation,
+      module: context.module,
+      pageKind: context.pageKind,
+      requestId: requestId,
     );
   }
 
   void _recordFailure({
+    required YamiboRequestContext context,
+    required String requestId,
     required DioException error,
     required DateTime startedAt,
     required int elapsedMs,
@@ -284,6 +305,11 @@ class YamiboHttpGateway {
       statusCode: error.response?.statusCode,
       succeeded: false,
       error: error.message,
+      kind: context.kind.name,
+      operation: context.operation,
+      module: context.module,
+      pageKind: context.pageKind,
+      requestId: requestId,
     );
   }
 
@@ -339,5 +365,10 @@ class YamiboHttpGateway {
 
   int _elapsedMs(DateTime startedAt) {
     return DateTime.now().difference(startedAt).inMilliseconds;
+  }
+
+  String _generateRequestId() {
+    _nextRequestSequence += 1;
+    return 'yhttp-$_nextRequestSequence';
   }
 }

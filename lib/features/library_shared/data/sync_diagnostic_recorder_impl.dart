@@ -113,6 +113,11 @@ class DefaultSyncDiagnosticRecorder implements SyncDiagnosticRecorder {
     int? statusCode,
     bool succeeded = true,
     String? error,
+    String? kind,
+    String? operation,
+    String? module,
+    String? pageKind,
+    String? requestId,
   }) {
     if (!_shouldRecord) {
       return;
@@ -128,6 +133,11 @@ class DefaultSyncDiagnosticRecorder implements SyncDiagnosticRecorder {
         'startedAt': startedAt.toUtc().toIso8601String(),
         'elapsedMs': elapsedMs,
         'statusCode': statusCode,
+        if (kind != null && kind.isNotEmpty) 'kind': kind,
+        if (operation != null && operation.isNotEmpty) 'operation': operation,
+        if (module != null && module.isNotEmpty) 'module': module,
+        if (pageKind != null && pageKind.isNotEmpty) 'pageKind': pageKind,
+        if (requestId != null && requestId.isNotEmpty) 'requestId': requestId,
         if (error != null && error.isNotEmpty) 'error': error,
       },
     );

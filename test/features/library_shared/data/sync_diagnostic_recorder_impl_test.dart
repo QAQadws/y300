@@ -36,6 +36,11 @@ void main() {
       elapsedMs: 234,
       statusCode: 200,
       succeeded: true,
+      kind: 'api',
+      operation: 'viewthread',
+      module: 'viewthread',
+      pageKind: 'thread.detail',
+      requestId: 'yhttp-42',
     );
 
     await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -52,12 +57,15 @@ void main() {
         .where((line) => line.trim().isNotEmpty)
         .map((line) => jsonDecode(line) as Map<String, dynamic>)
         .toList(growable: false);
-    expect(
-      payloads.any(
-        (item) => item['scope'] == 'http' && item['event'] == 'request_succeeded',
-      ),
-      isTrue,
+    final httpEvent = payloads.firstWhere(
+      (item) => item['scope'] == 'http' && item['event'] == 'request_succeeded',
     );
+    final fields = httpEvent['fields'] as Map<String, dynamic>;
+    expect(fields['kind'], 'api');
+    expect(fields['operation'], 'viewthread');
+    expect(fields['module'], 'viewthread');
+    expect(fields['pageKind'], 'thread.detail');
+    expect(fields['requestId'], 'yhttp-42');
   });
 }
 

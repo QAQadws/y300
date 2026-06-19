@@ -14,6 +14,7 @@ class YamiboRequestLogger {
 
   void logSuccess({
     required YamiboRequestContext context,
+    required String requestId,
     required String method,
     required Uri uri,
     required int? statusCode,
@@ -26,12 +27,14 @@ class YamiboRequestLogger {
     _logger.i(
       '[YamiboHTTP][${_kindName(context.kind)}][${context.operation}] '
       '$method $uri -> ${statusCode ?? 'unknown'} ${elapsedMs}ms '
+      'requestId=$requestId '
       'body=${describeBody(body)}',
     );
   }
 
   void logFailure({
     required YamiboRequestContext context,
+    required String requestId,
     required String method,
     required Uri uri,
     required int? statusCode,
@@ -44,6 +47,7 @@ class YamiboRequestLogger {
     _logger.w(
       '[YamiboHTTP][${_kindName(context.kind)}][${context.operation}] '
       '$method $uri -> failed ${statusCode ?? 'unknown'} ${elapsedMs}ms '
+      'requestId=$requestId '
       'error=${error.type.name}',
     );
   }
