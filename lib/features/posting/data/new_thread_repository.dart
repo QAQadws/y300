@@ -1,6 +1,5 @@
 import 'package:dio/dio.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/features/posting/data/new_thread_remote_data_source.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
 import 'package:y300/features/posting/domain/services/new_thread_response_parser.dart';
@@ -17,15 +16,9 @@ abstract class NewThreadRepository {
 /// 校验（标题/正文非空、必选分类）由 controller 在 preflight 完成。
 class DiscuzNewThreadRepository implements NewThreadRepository {
   DiscuzNewThreadRepository({
-    required CookieStore cookieStore,
-    Dio? dio,
-    NewThreadRemoteDataSource? remoteDataSource,
+    required NewThreadRemoteDataSource remoteDataSource,
     NewThreadResponseParser parser = const NewThreadResponseParser(),
-  })  : _remoteDataSource = remoteDataSource ??
-            DiscuzNewThreadDioRemoteDataSource(
-              cookieStore: cookieStore,
-              dio: dio,
-            ),
+  })  : _remoteDataSource = remoteDataSource,
         _parser = parser;
 
   final NewThreadRemoteDataSource _remoteDataSource;

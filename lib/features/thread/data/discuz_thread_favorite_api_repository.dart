@@ -1,10 +1,8 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
-import 'package:logger/logger.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/core/utils/parse_utils.dart';
@@ -15,25 +13,9 @@ import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 class DiscuzThreadFavoriteApiRepository implements ThreadFavoriteRepository {
   DiscuzThreadFavoriteApiRepository({
     required ProfileRepository profileRepository,
-    required CookieStore cookieStore,
-    YamiboHttpGateway? gateway,
-    Dio? dio,
+    required YamiboHttpGateway gateway,
   }) : _profileRepository = profileRepository,
-       _gateway =
-           gateway ??
-           YamiboHttpGateway(
-             cookieStore: cookieStore,
-             logger: Logger(level: Level.off),
-             dio:
-                 dio ??
-                 Dio(
-                   BaseOptions(
-                     connectTimeout: AppConfig.connectTimeout,
-                     receiveTimeout: AppConfig.receiveTimeout,
-                   ),
-                 ),
-             enableLog: false,
-           );
+       _gateway = gateway;
 
   final ProfileRepository _profileRepository;
   final YamiboHttpGateway _gateway;

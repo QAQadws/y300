@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/features/posting/data/new_thread_remote_data_source.dart';
 import 'package:y300/features/posting/data/new_thread_repository.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
@@ -221,7 +220,6 @@ NewThreadDraftPayload _payload({
 
 DiscuzNewThreadRepository _build({required NewThreadRemoteDataSource remote}) {
   return DiscuzNewThreadRepository(
-    cookieStore: CookieStore(),
     remoteDataSource: remote,
   );
 }

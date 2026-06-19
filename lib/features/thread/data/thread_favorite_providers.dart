@@ -13,7 +13,6 @@ final threadFavoriteRepositoryProvider = Provider<ThreadFavoriteRepository>((
 ) {
   return DiscuzThreadFavoriteApiRepository(
     profileRepository: ref.read(profileRepositoryProvider),
-    cookieStore: ref.read(cookieStoreProvider),
     gateway: ref.read(yamiboHttpGatewayProvider),
   );
 });

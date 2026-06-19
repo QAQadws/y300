@@ -49,6 +49,7 @@ N-7 收束 N-1 到 N-6 已落地的内部 Yamibo 网络库边界，让后续维�
 
 - 新增 `lib/core/network/yamibo/yamibo.dart` barrel export。
 - 适度更新 app 层 import，优先让 provider 和兼容 facade 使用统一入口，避免后续新增代码继续散落导入。
+- 收紧已迁移 feature 的构造边界：发帖提交、帖子收藏、漫画目录 HTML fetcher 只接收注入的 `YamiboHttpGateway`，不再在 feature 内自建 fallback `Dio`。
 - 新增 public export smoke test，确认核心类型可从统一入口导入。
 - 更新 `docs/开发文档.md` 顶部，说明 N-7 边界稳定和抽包预留。
 
@@ -61,6 +62,7 @@ N-7 收束 N-1 到 N-6 已落地的内部 Yamibo 网络库边界，让后续维�
 ## 验收点
 
 - `core/network/yamibo` 有统一 public export。
+- 已迁移 feature 不再自建 Yamibo 站点传输 `Dio`，仅通过 provider 注入的网关发起请求。
 - provider 仍在 app 装配层，不进入纯核心类型。
 - 文档明确 package 候选和非候选边界。
 - API 资产保留原则再次写清楚。

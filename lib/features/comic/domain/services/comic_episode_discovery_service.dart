@@ -1,10 +1,7 @@
 import 'dart:collection';
 
-import 'package:dio/dio.dart';
-import 'package:logger/logger.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
@@ -51,23 +48,9 @@ abstract class CatalogHtmlFetcher {
   Future<String?> fetchHtml(String url);
 }
 
-class DioCatalogHtmlFetcher implements CatalogHtmlFetcher {
-  DioCatalogHtmlFetcher({YamiboHttpGateway? gateway, Dio? dio})
-    : _gateway =
-          gateway ??
-          YamiboHttpGateway(
-            cookieStore: CookieStore(),
-            logger: Logger(level: Level.off),
-            dio:
-                dio ??
-                Dio(
-                  BaseOptions(
-                    connectTimeout: AppConfig.connectTimeout,
-                    receiveTimeout: AppConfig.receiveTimeout,
-                  ),
-                ),
-            enableLog: false,
-          );
+class YamiboCatalogHtmlFetcher implements CatalogHtmlFetcher {
+  YamiboCatalogHtmlFetcher({required YamiboHttpGateway gateway})
+    : _gateway = gateway;
 
   final YamiboHttpGateway _gateway;
 
@@ -95,6 +78,9 @@ class DioCatalogHtmlFetcher implements CatalogHtmlFetcher {
     }
   }
 }
+
+@Deprecated('Use YamiboCatalogHtmlFetcher.')
+typedef DioCatalogHtmlFetcher = YamiboCatalogHtmlFetcher;
 
 class ComicEpisodeDiscoveryService {
   ComicEpisodeDiscoveryService({

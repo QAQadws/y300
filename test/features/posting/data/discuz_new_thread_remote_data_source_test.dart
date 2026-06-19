@@ -3,8 +3,10 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/features/posting/data/new_thread_remote_data_source.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
 
@@ -189,8 +191,12 @@ void main() {
 DiscuzNewThreadDioRemoteDataSource _build(_Adapter adapter) {
   final dio = Dio()..httpClientAdapter = adapter;
   return DiscuzNewThreadDioRemoteDataSource(
-    cookieStore: CookieStore(),
-    dio: dio,
+    gateway: YamiboHttpGateway(
+      cookieStore: CookieStore(),
+      logger: Logger(level: Level.off),
+      dio: dio,
+      enableLog: false,
+    ),
   );
 }
 

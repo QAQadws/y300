@@ -506,7 +506,7 @@ final comicEpisodeDiscoveryServiceProvider =
             .read(threadRepositoryProvider)
             .getThreadDetail(tid: tid, page: 1),
         opPostParser: opPostParser,
-        catalogHtmlFetcher: DioCatalogHtmlFetcher(
+        catalogHtmlFetcher: YamiboCatalogHtmlFetcher(
           gateway: ref.watch(yamiboHttpGatewayProvider),
         ),
         diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),

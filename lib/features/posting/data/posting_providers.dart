@@ -40,14 +40,12 @@ final newThreadRemoteDataSourceProvider = Provider<NewThreadRemoteDataSource>((
   ref,
 ) {
   return DiscuzNewThreadDioRemoteDataSource(
-    cookieStore: ref.read(cookieStoreProvider),
     gateway: ref.read(yamiboHttpGatewayProvider),
   );
 });
 
 final newThreadRepositoryProvider = Provider<NewThreadRepository>((ref) {
   return DiscuzNewThreadRepository(
-    cookieStore: ref.read(cookieStoreProvider),
     remoteDataSource: ref.read(newThreadRemoteDataSourceProvider),
     parser: ref.read(newThreadResponseParserProvider),
   );
