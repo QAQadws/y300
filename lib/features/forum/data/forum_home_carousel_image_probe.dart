@@ -1,51 +1,60 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:y300/core/config/app_config.dart';
+import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
+import 'package:y300/core/network/yamibo/yamibo_resource_client.dart';
 
 class ForumHomeCarouselImageProbe {
   ForumHomeCarouselImageProbe({
-    Dio? dio,
-  }) : _dio =
-           dio ??
-           Dio(
-             BaseOptions(
-               baseUrl: AppConfig.siteBaseUrl,
-               connectTimeout: probeTimeout,
-               receiveTimeout: probeTimeout,
-               followRedirects: true,
-               validateStatus: (status) =>
-                   status != null && status >= 200 && status < 400,
-               responseType: ResponseType.bytes,
-             ),
-           );
+    required YamiboResourceClient resourceClient,
+    required ImageRequestHeaderBuilder headerBuilder,
+  })  : _resourceClient = resourceClient,
+        _headerBuilder = headerBuilder;
 
   static const double fallbackAspectRatio = 3.45;
   static const Duration probeTimeout = Duration(seconds: 2);
   static const double _minReasonableAspectRatio = 2.4;
   static const double _maxReasonableAspectRatio = 5.2;
 
-  final Dio _dio;
+  final YamiboResourceClient _resourceClient;
+  final ImageRequestHeaderBuilder _headerBuilder;
 
   Future<double?> resolveAspectRatio(
-    String imageUrl, {
-    Map<String, String> headers = const <String, String>{},
-  }) async {
+    String imageUrl,
+  ) async {
+    final cancelToken = CancelToken();
+    final timeoutTimer = Timer(probeTimeout, () {
+      if (!cancelToken.isCancelled) {
+        cancelToken.cancel('carousel image probe timeout');
+      }
+    });
     try {
-      final response = await _dio.get<List<int>>(
-        imageUrl,
-        options: Options(
-          headers: headers,
-          responseType: ResponseType.bytes,
+      final headers = await _headerBuilder.buildHeaders(imageUrl);
+      final response = await _resourceClient.getBytes(
+        url: imageUrl,
+        context: const YamiboRequestContext(
+          kind: YamiboRequestKind.imageProbe,
+          operation: 'forum.home.carouselProbe',
+          pageKind: 'forum.home',
         ),
+        headers: headers,
+        cancelToken: cancelToken,
       );
-      final bytes = response.data;
-      if (bytes == null || bytes.isEmpty) {
+      if (response case ApiFailure<List<int>>()) {
+        return null;
+      }
+      final bytes = response.dataOrNull ?? const <int>[];
+      if (bytes.isEmpty) {
         return null;
       }
       return _aspectRatioFromBytes(Uint8List.fromList(bytes));
     } catch (_) {
       return null;
+    } finally {
+      timeoutTimer.cancel();
     }
   }
 

@@ -1,10 +1,8 @@
-import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/cookie_store.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
+import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/forum/data/forum_home_carousel_image_probe.dart';
 import 'package:y300/features/forum/data/forum_home_chrome_parser.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
@@ -15,31 +13,16 @@ abstract class ForumHomeChromeRepository {
 
 class DiscuzForumHomeChromeRepository implements ForumHomeChromeRepository {
   DiscuzForumHomeChromeRepository({
-    required CookieStore cookieStore,
-    ForumHomeCarouselImageProbe? imageProbe,
+    required YamiboHtmlClient htmlClient,
+    required ForumHomeCarouselImageProbe imageProbe,
     ForumHomeChromeParser parser = const ForumHomeChromeParser(),
-    Dio? dio,
-  }) : _cookieStore = cookieStore,
-       _imageProbe = imageProbe ?? ForumHomeCarouselImageProbe(dio: dio),
-       _parser = parser,
-       _dio =
-           dio ??
-           Dio(
-             BaseOptions(
-               baseUrl: AppConfig.siteBaseUrl,
-               connectTimeout: AppConfig.connectTimeout,
-               receiveTimeout: AppConfig.receiveTimeout,
-               followRedirects: true,
-               validateStatus: (status) =>
-                   status != null && status >= 200 && status < 400,
-               responseType: ResponseType.plain,
-             ),
-           );
+  })  : _htmlClient = htmlClient,
+        _imageProbe = imageProbe,
+        _parser = parser;
 
-  final CookieStore _cookieStore;
+  final YamiboHtmlClient _htmlClient;
   final ForumHomeCarouselImageProbe _imageProbe;
   final ForumHomeChromeParser _parser;
-  final Dio _dio;
 
   @override
   Future<ApiResult<ForumHomeChromeData>> loadChrome() async {
@@ -74,30 +57,30 @@ class DiscuzForumHomeChromeRepository implements ForumHomeChromeRepository {
   Future<ApiResult<ForumHomeChromeData>> _loadChromeFrom(
     _ForumHomeChromeRequest request,
   ) async {
-    final uri = request.uri;
     try {
-      final headers = await _buildHeaders(uri);
-      final response = await _dio.get<String>(
-        request.path,
-        queryParameters: request.queryParameters.isEmpty
-            ? null
-            : request.queryParameters,
-        options: Options(headers: headers),
-      );
-      final setCookie = response.headers.map['set-cookie'] ?? const <String>[];
-      await _cookieStore.saveFromSetCookie(response.requestOptions.uri, setCookie);
-      final html = response.data ?? '';
-      final chrome = _parser.parse(html);
-      return ApiSuccess(await _withResolvedCarouselAspectRatio(chrome));
-    } on DioException catch (error) {
-      return ApiFailure(
-        ApiError(
-          type: _mapDioErrorType(error),
-          message: '论坛首页外观数据加载失败: ${error.message ?? 'unknown'}',
-          statusCode: error.response?.statusCode,
-          raw: error.response?.data,
+      final response = await _htmlClient.getMobilePage(
+        path: request.path,
+        queryParameters: request.queryParameters,
+        context: const YamiboRequestContext(
+          kind: YamiboRequestKind.html,
+          operation: 'forum.home.chrome',
+          pageKind: 'forum.home',
         ),
       );
+      if (response case ApiFailure<String>(:final error)) {
+        return ApiFailure(
+          ApiError(
+            type: error.type,
+            message: '论坛首页外观数据加载失败: ${error.message}',
+            code: error.code,
+            statusCode: error.statusCode,
+            raw: error.raw,
+          ),
+        );
+      }
+      final html = response.dataOrNull ?? '';
+      final chrome = _parser.parse(html);
+      return ApiSuccess(await _withResolvedCarouselAspectRatio(chrome));
     } catch (error) {
       return ApiFailure(
         ApiError(
@@ -116,10 +99,8 @@ class DiscuzForumHomeChromeRepository implements ForumHomeChromeRepository {
       return chrome;
     }
     final firstItem = chrome.carouselItems.first;
-    final headers = await _buildImageHeaders(firstItem.imageUrl);
     final aspectRatio = await _imageProbe.resolveAspectRatio(
       firstItem.imageUrl,
-      headers: headers,
     );
     if (aspectRatio == null) {
       return chrome;
@@ -130,53 +111,6 @@ class DiscuzForumHomeChromeRepository implements ForumHomeChromeRepository {
         ...chrome.carouselItems.skip(1),
       ],
     );
-  }
-
-  Future<Map<String, String>> _buildHeaders(Uri uri) async {
-    final headers = <String, String>{
-      'User-Agent': DiscuzImageRequestHeaderBuilder.mobileBrowserUserAgent,
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-      'Cache-Control': 'no-cache',
-      'Pragma': 'no-cache',
-      'Referer': '${AppConfig.siteBaseUrl}/',
-    };
-    final cookieHeader = await _cookieStore.readCookieHeader(uri);
-    if (cookieHeader != null && cookieHeader.isNotEmpty) {
-      headers['Cookie'] = cookieHeader;
-    }
-    return headers;
-  }
-
-  Future<Map<String, String>> _buildImageHeaders(String imageUrl) async {
-    final uri = Uri.tryParse(imageUrl);
-    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
-      return const <String, String>{};
-    }
-    final headers = <String, String>{
-      'User-Agent': DiscuzImageRequestHeaderBuilder.browserUserAgent,
-      'Accept': DiscuzImageRequestHeaderBuilder.imageAcceptHeader,
-      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-      'Referer': '${AppConfig.siteBaseUrl}/',
-    };
-    final cookieHeader = await _cookieStore.readCookieHeader(uri);
-    if (cookieHeader != null && cookieHeader.isNotEmpty) {
-      headers['Cookie'] = cookieHeader;
-    }
-    return headers;
-  }
-
-  ApiErrorType _mapDioErrorType(DioException error) {
-    final statusCode = error.response?.statusCode;
-    if (error.type == DioExceptionType.connectionTimeout ||
-        error.type == DioExceptionType.receiveTimeout ||
-        error.type == DioExceptionType.sendTimeout) {
-      return ApiErrorType.timeout;
-    }
-    if (statusCode == 401 || statusCode == 403) {
-      return ApiErrorType.unauthorized;
-    }
-    return ApiErrorType.network;
   }
 
   static final List<_ForumHomeChromeRequest> _homeRequests =
@@ -196,20 +130,16 @@ class _ForumHomeChromeRequest {
 
   final String path;
   final Map<String, String> queryParameters;
-
-  Uri get uri {
-    final siteRoot = Uri.parse(AppConfig.siteBaseUrl);
-    if (queryParameters.isEmpty) {
-      return siteRoot.replace(path: path);
-    }
-    return siteRoot.replace(path: path, queryParameters: queryParameters);
-  }
 }
 
 final forumHomeChromeRepositoryProvider = Provider<ForumHomeChromeRepository>((
   ref,
 ) {
   return DiscuzForumHomeChromeRepository(
-    cookieStore: ref.watch(cookieStoreProvider),
+    htmlClient: ref.watch(yamiboHtmlClientProvider),
+    imageProbe: ForumHomeCarouselImageProbe(
+      resourceClient: ref.watch(yamiboResourceClientProvider),
+      headerBuilder: ref.watch(imageRequestHeaderBuilderProvider),
+    ),
   );
 });

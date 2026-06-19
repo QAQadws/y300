@@ -3,8 +3,14 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
+import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
+import 'package:y300/core/network/yamibo/yamibo_resource_client.dart';
+import 'package:y300/features/forum/data/forum_home_carousel_image_probe.dart';
 import 'package:y300/features/forum/data/forum_home_chrome_repository.dart';
 
 void main() {
@@ -16,15 +22,7 @@ void main() {
 
   test('loadChrome requests mobile index once with mobile user agent', () async {
     final adapter = _ForumHomeChromeTestAdapter();
-    final repository = DiscuzForumHomeChromeRepository(
-      cookieStore: CookieStore(),
-      dio: Dio(
-        BaseOptions(
-          baseUrl: 'https://bbs.yamibo.com',
-          responseType: ResponseType.plain,
-        ),
-      )..httpClientAdapter = adapter,
-    );
+    final repository = _buildRepository(adapter);
 
     final result = await repository.loadChrome();
 
@@ -50,15 +48,7 @@ void main() {
     final adapter = _ForumHomeChromeTestAdapter(
       emptyMobileIndex: true,
     );
-    final repository = DiscuzForumHomeChromeRepository(
-      cookieStore: CookieStore(),
-      dio: Dio(
-        BaseOptions(
-          baseUrl: 'https://bbs.yamibo.com',
-          responseType: ResponseType.plain,
-        ),
-      )..httpClientAdapter = adapter,
-    );
+    final repository = _buildRepository(adapter);
 
     final result = await repository.loadChrome();
 
@@ -70,6 +60,29 @@ void main() {
     );
     expect(adapter.imageRequestedUris, isEmpty);
   });
+}
+
+DiscuzForumHomeChromeRepository _buildRepository(
+  _ForumHomeChromeTestAdapter adapter,
+) {
+  final gateway = YamiboHttpGateway(
+    cookieStore: CookieStore(),
+    logger: Logger(level: Level.off),
+    dio: Dio(
+      BaseOptions(
+        baseUrl: 'https://bbs.yamibo.com',
+        validateStatus: (status) => status != null && status >= 200 && status < 400,
+      ),
+    )..httpClientAdapter = adapter,
+    enableLog: false,
+  );
+  return DiscuzForumHomeChromeRepository(
+    htmlClient: YamiboHtmlClient(gateway: gateway),
+    imageProbe: ForumHomeCarouselImageProbe(
+      resourceClient: YamiboResourceClient(gateway: gateway),
+      headerBuilder: const _StaticImageRequestHeaderBuilder(),
+    ),
+  );
 }
 
 class _ForumHomeChromeTestAdapter implements HttpClientAdapter {
@@ -136,5 +149,18 @@ class _ForumHomeChromeTestAdapter implements HttpClientAdapter {
     data.setUint32(16, width, Endian.big);
     data.setUint32(20, height, Endian.big);
     return bytes;
+  }
+}
+
+class _StaticImageRequestHeaderBuilder implements ImageRequestHeaderBuilder {
+  const _StaticImageRequestHeaderBuilder();
+
+  @override
+  Future<Map<String, String>> buildHeaders(String imageUrl) async {
+    return const <String, String>{
+      'User-Agent': DiscuzImageRequestHeaderBuilder.browserUserAgent,
+      'Accept': DiscuzImageRequestHeaderBuilder.imageAcceptHeader,
+      'Referer': 'https://bbs.yamibo.com/',
+    };
   }
 }

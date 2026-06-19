@@ -99,7 +99,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('forum-favorite-card-2')), findsOneWidget);
-      expect(find.text('站点公告与维护信息'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('forum-favorite-card-2')),
+          matching: find.text('站点公告与维护信息'),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('favorite forums use home html descriptions before forum index fallback', (

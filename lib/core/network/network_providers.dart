@@ -3,6 +3,9 @@ import 'package:logger/logger.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
+import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
+import 'package:y300/core/network/yamibo/yamibo_resource_client.dart';
 import 'package:y300/features/library_shared/data/sync_diagnostic_providers.dart';
 
 final loggerProvider = Provider<Logger>((ref) {
@@ -21,7 +24,28 @@ final apiClientProvider = Provider<ApiClient>((ref) {
   );
 });
 
-final imageRequestHeaderBuilderProvider = Provider<ImageRequestHeaderBuilder>((ref) {
+final yamiboHttpGatewayProvider = Provider<YamiboHttpGateway>((ref) {
+  return YamiboHttpGateway(
+    cookieStore: ref.watch(cookieStoreProvider),
+    logger: ref.watch(loggerProvider),
+    diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),
+  );
+});
+
+final yamiboHtmlClientProvider = Provider<YamiboHtmlClient>((ref) {
+  return YamiboHtmlClient(
+    gateway: ref.watch(yamiboHttpGatewayProvider),
+  );
+});
+
+final yamiboResourceClientProvider = Provider<YamiboResourceClient>((ref) {
+  return YamiboResourceClient(
+    gateway: ref.watch(yamiboHttpGatewayProvider),
+  );
+});
+
+final imageRequestHeaderBuilderProvider =
+    Provider<ImageRequestHeaderBuilder>((ref) {
   return DiscuzImageRequestHeaderBuilder(
     cookieStore: ref.watch(cookieStoreProvider),
   );
