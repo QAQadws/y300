@@ -19,7 +19,7 @@ class YamiboApiClient {
     CancelToken? cancelToken,
     bool treatMessageAsBusinessError = true,
   }) async {
-    final result = await _gateway.getText(
+    final result = await _gateway.getJson(
       _buildApiUri(module: module, queryParameters: queryParameters),
       context: YamiboRequestContext(
         kind: YamiboRequestKind.api,
@@ -46,7 +46,7 @@ class YamiboApiClient {
     CancelToken? cancelToken,
     Options? options,
   }) async {
-    final result = await _gateway.postForm(
+    final result = await _gateway.postFormJson(
       _buildApiUri(module: module, queryParameters: queryParameters),
       context: YamiboRequestContext(
         kind: YamiboRequestKind.api,
@@ -82,7 +82,7 @@ class YamiboApiClient {
   }
 
   ApiResult<DiscuzResponse> _parseDiscuzResponse(
-    String body, {
+    Object? body, {
     required int? statusCode,
     required bool treatMessageAsBusinessError,
   }) {
@@ -120,8 +120,29 @@ class YamiboApiClient {
     }
   }
 
-  Map<String, dynamic> _toJsonMap(String data) {
-    final decoded = jsonDecode(data);
+  Map<String, dynamic> _toJsonMap(Object? data) {
+    if (data is Map<String, dynamic>) {
+      return data;
+    }
+    if (data is Map) {
+      return data.map(
+        (key, dynamic value) => MapEntry(key.toString(), value),
+      );
+    }
+    if (data is! String) {
+      throw FormatException('无法解析响应类型: ${data.runtimeType}', data);
+    }
+
+    final normalized = _normalizeJsonText(data);
+    final firstJsonChar = normalized.isEmpty ? '' : normalized[0];
+    if (firstJsonChar != '{' && firstJsonChar != '[') {
+      throw FormatException(
+        '响应不是JSON文本，开头为: ${_previewResponseStart(normalized)}',
+        data,
+      );
+    }
+
+    final decoded = jsonDecode(normalized);
     if (decoded is Map<String, dynamic>) {
       return decoded;
     }
@@ -131,6 +152,40 @@ class YamiboApiClient {
       );
     }
     throw FormatException('响应不是JSON对象', data);
+  }
+
+  String _normalizeJsonText(String data) {
+    var text = data;
+    while (text.isNotEmpty) {
+      final trimmed = text.trimLeft();
+      if (trimmed.length != text.length) {
+        text = trimmed;
+        continue;
+      }
+      if (text.startsWith('\uFEFF')) {
+        text = text.substring(1);
+        continue;
+      }
+      // Some servers/proxies expose UTF-8 BOM bytes after a lossy decode.
+      if (text.startsWith('ï»¿')) {
+        text = text.substring(3);
+        continue;
+      }
+      break;
+    }
+    return text;
+  }
+
+  String _previewResponseStart(String data) {
+    final compact = data.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (compact.isEmpty) {
+      return '<empty>';
+    }
+    const maxLength = 80;
+    if (compact.length <= maxLength) {
+      return compact;
+    }
+    return '${compact.substring(0, maxLength)}...';
   }
 
   Map<String, String> _mergeHeaders(

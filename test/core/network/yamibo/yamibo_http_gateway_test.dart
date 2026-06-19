@@ -171,6 +171,44 @@ void main() {
       expect(sessionStore.readFreshFormhash(), 'fh_html');
       expect(sessionStore.readCurrent()?.source, 'html:forum.home.html');
     });
+
+    test('getJson stores session snapshot extracted from API variables', () async {
+      final sessionStore = YamiboSessionStore();
+      final gateway = _buildGateway(
+        adapter: _GatewayTestAdapter(
+          textBody: '''
+{
+  "Version": "4",
+  "Charset": "utf-8",
+  "Variables": {
+    "formhash": "fh_api",
+    "member_uid": "597454",
+    "member_username": "tester"
+  }
+}
+''',
+        ),
+        sessionStore: sessionStore,
+        sessionExtractor: const YamiboSessionExtractor(),
+      );
+
+      final result = await gateway.getJson(
+        Uri.parse(
+          'https://bbs.yamibo.com/api/mobile/index.php?module=profile&version=4',
+        ),
+        context: const YamiboRequestContext(
+          kind: YamiboRequestKind.api,
+          operation: 'profile',
+          module: 'profile',
+        ),
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(sessionStore.readCurrent()?.uid, '597454');
+      expect(sessionStore.readCurrent()?.username, 'tester');
+      expect(sessionStore.readFreshFormhash(), 'fh_api');
+      expect(sessionStore.readCurrent()?.source, 'api:profile');
+    });
   });
 }
 
@@ -234,7 +272,17 @@ class _GatewayTestAdapter implements HttpClientAdapter {
     if (options.responseType == ResponseType.bytes) {
       return ResponseBody.fromBytes(bytesBody, statusCode, headers: headers);
     }
-    return ResponseBody.fromString(textBody, statusCode, headers: headers);
+    final responseHeaders = options.responseType == ResponseType.json
+        ? <String, List<String>>{
+            ...headers,
+            Headers.contentTypeHeader: const <String>['application/json'],
+          }
+        : headers;
+    return ResponseBody.fromString(
+      textBody,
+      statusCode,
+      headers: responseHeaders,
+    );
   }
 }
 

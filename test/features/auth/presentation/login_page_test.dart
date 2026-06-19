@@ -31,7 +31,7 @@ void main() {
       expect(find.byKey(const Key('login-result-text')), findsOneWidget);
       expect(find.text('result=true'), findsOneWidget);
       expect(find.text('session=tester'), findsOneWidget);
-      expect(repository.refreshSessionCallCount, 2);
+      expect(repository.refreshSessionCallCount, 1);
     });
 
     testWidgets('shows error message after failed login', (tester) async {

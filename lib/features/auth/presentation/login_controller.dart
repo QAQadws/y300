@@ -34,9 +34,9 @@ class LoginController extends AsyncNotifier<LoginPageState> {
     );
   }
 
-  Future<bool> submit() async {
+  Future<SessionInfo?> submit() async {
     if (_current.isSubmitting) {
-      return false;
+      return null;
     }
 
     final username = _current.username.trim();
@@ -49,7 +49,7 @@ class LoginController extends AsyncNotifier<LoginPageState> {
           clearSuccess: true,
         ),
       );
-      return false;
+      return null;
     }
 
     state = AsyncData(
@@ -82,7 +82,7 @@ class LoginController extends AsyncNotifier<LoginPageState> {
             clearError: true,
           ),
         );
-        return true;
+        return session;
       },
       failure: (error) {
         state = AsyncData(
@@ -92,7 +92,7 @@ class LoginController extends AsyncNotifier<LoginPageState> {
             clearSuccess: true,
           ),
         );
-        return false;
+        return null;
       },
     );
   }

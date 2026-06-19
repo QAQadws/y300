@@ -44,9 +44,11 @@ class LoginPage extends ConsumerWidget {
             onPressed: state.isSubmitting
                 ? null
                 : () async {
-                    final success = await controller.submit();
-                    if (success && context.mounted) {
-                      ref.invalidate(authSessionControllerProvider);
+                    final session = await controller.submit();
+                    if (session != null && context.mounted) {
+                      ref
+                          .read(authSessionControllerProvider.notifier)
+                          .acceptSession(session);
                       // 登录成功后主动刷新论坛首页，确保首页登录态立即生效。
                       ref.invalidate(forumHomeControllerProvider);
                       ScaffoldMessenger.of(context).showSnackBar(

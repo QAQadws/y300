@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo/yamibo_api_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
@@ -24,6 +25,7 @@ void main() {
       final result = await client.getDiscuz(module: 'forumindex');
 
       expect(result.isSuccess, isTrue);
+      expect(adapter.lastResponseType, ResponseType.json);
       expect(adapter.lastUri?.queryParameters['module'], 'forumindex');
       expect(adapter.lastUri?.queryParameters['version'], '4');
     });
@@ -64,6 +66,38 @@ void main() {
       expect(result.errorOrNull?.message, '业务失败');
     });
 
+    test('getDiscuz parses BOM-prefixed JSON response', () async {
+      final adapter = _ApiClientTestAdapter(
+        responseText:
+            '\uFEFF{"Version":"4","Charset":"utf-8","Variables":{"fid":"33"}}',
+        contentType: 'text/plain',
+      );
+      final client = _buildClient(adapter);
+
+      final result = await client.getDiscuz(
+        module: 'forumdisplay',
+        queryParameters: const <String, dynamic>{'fid': '33', 'page': 1},
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(result.dataOrNull?.variables['fid'], '33');
+    });
+
+    test('getDiscuz reports clear parse error for HTML response', () async {
+      final adapter = _ApiClientTestAdapter(
+        responseText: '<!doctype html><html><body>login required</body></html>',
+        contentType: 'text/html; charset=utf-8',
+      );
+      final client = _buildClient(adapter);
+
+      final result = await client.getDiscuz(module: 'profile');
+
+      expect(result.isFailure, isTrue);
+      expect(result.errorOrNull?.type, ApiErrorType.parse);
+      expect(result.errorOrNull?.message, contains('响应不是JSON文本'));
+      expect(result.errorOrNull?.message, contains('<!doctype html>'));
+    });
+
     test('postDiscuzForm sends urlencoded form body', () async {
       final adapter = _ApiClientTestAdapter();
       final client = _buildClient(adapter);
@@ -76,6 +110,7 @@ void main() {
 
       expect(result.isSuccess, isTrue);
       expect(adapter.lastMethod, 'POST');
+      expect(adapter.lastResponseType, ResponseType.json);
       expect(adapter.lastUri?.queryParameters['module'], 'login');
       expect(adapter.lastUri?.queryParameters['version'], '4');
       expect(adapter.lastUri?.queryParameters['action'], 'login');
@@ -108,19 +143,28 @@ YamiboApiClient _buildClient(_ApiClientTestAdapter adapter) {
 }
 
 class _ApiClientTestAdapter implements HttpClientAdapter {
-  _ApiClientTestAdapter({Map<String, dynamic>? responseBody})
-    : responseBody =
-          responseBody ??
-          <String, dynamic>{
-            'Version': '4',
-            'Charset': 'utf-8',
-            'Variables': <String, dynamic>{'formhash': 'fh_after'},
-          };
+  _ApiClientTestAdapter({
+    Map<String, dynamic>? responseBody,
+    String? responseText,
+    this.contentType = 'application/json',
+  })
+    : responseText =
+          responseText ??
+          jsonEncode(
+            responseBody ??
+                <String, dynamic>{
+                  'Version': '4',
+                  'Charset': 'utf-8',
+                  'Variables': <String, dynamic>{'formhash': 'fh_after'},
+                },
+          );
 
-  final Map<String, dynamic> responseBody;
+  final String responseText;
+  final String contentType;
   Uri? lastUri;
   String? lastMethod;
   String lastBody = '';
+  ResponseType? lastResponseType;
   Map<String, dynamic> lastHeaders = const <String, dynamic>{};
 
   @override
@@ -134,12 +178,19 @@ class _ApiClientTestAdapter implements HttpClientAdapter {
   ) async {
     lastUri = options.uri;
     lastMethod = options.method;
+    lastResponseType = options.responseType;
     lastHeaders = options.headers;
     final chunks = await requestStream?.toList() ?? const <Uint8List>[];
     lastBody = utf8.decode(
       chunks.expand((chunk) => chunk).toList(growable: false),
       allowMalformed: true,
     );
-    return ResponseBody.fromString(jsonEncode(responseBody), 200);
+    return ResponseBody.fromString(
+      responseText,
+      200,
+      headers: <String, List<String>>{
+        Headers.contentTypeHeader: <String>[contentType],
+      },
+    );
   }
 }

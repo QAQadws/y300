@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:logger/logger.dart';
 import 'package:y300/core/config/app_config.dart';
@@ -8,7 +10,9 @@ import 'package:y300/core/network/yamibo/yamibo_http_response.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_logger.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_extractor.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
+import 'package:y300/core/utils/parse_utils.dart';
 
 class YamiboHttpGateway {
   YamiboHttpGateway({
@@ -70,6 +74,23 @@ class YamiboHttpGateway {
     );
   }
 
+  Future<ApiResult<YamiboHttpResponse<Object?>>> getJson(
+    Uri uri, {
+    required YamiboRequestContext context,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+  }) async {
+    return _request<Object?>(
+      method: 'GET',
+      uri,
+      context: context,
+      headers: headers,
+      responseType: ResponseType.json,
+      cancelToken: cancelToken,
+      normalizeBody: (data) => data,
+    );
+  }
+
   Future<ApiResult<YamiboHttpResponse<List<int>>>> getBytes(
     Uri uri, {
     required YamiboRequestContext context,
@@ -114,6 +135,31 @@ class YamiboHttpGateway {
       followRedirects: followRedirects ?? options?.followRedirects,
       validateStatus: validateStatus ?? options?.validateStatus,
       normalizeBody: (responseData) => responseData?.toString() ?? '',
+    );
+  }
+
+  Future<ApiResult<YamiboHttpResponse<Object?>>> postFormJson(
+    Uri uri, {
+    required YamiboRequestContext context,
+    required Map<String, String> data,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+    Options? options,
+    bool? followRedirects,
+    ValidateStatus? validateStatus,
+  }) async {
+    return _request<Object?>(
+      uri,
+      method: 'POST',
+      context: context,
+      headers: headers,
+      responseType: ResponseType.json,
+      cancelToken: cancelToken,
+      data: data,
+      contentType: options?.contentType ?? Headers.formUrlEncodedContentType,
+      followRedirects: followRedirects ?? options?.followRedirects,
+      validateStatus: validateStatus ?? options?.validateStatus,
+      normalizeBody: (responseData) => responseData,
     );
   }
 
@@ -181,7 +227,7 @@ class YamiboHttpGateway {
       );
       await _saveCookies(response);
       final body = normalizeBody(response.data);
-      _saveExtractedHtmlSession(body: body, context: context);
+      _saveExtractedSession(body: body, context: context);
       final elapsedMs = _elapsedMs(startedAt);
       _recordSuccess(
         context: context,
@@ -249,22 +295,77 @@ class YamiboHttpGateway {
     );
   }
 
-  void _saveExtractedHtmlSession({
+  void _saveExtractedSession({
     required Object? body,
     required YamiboRequestContext context,
   }) {
     final store = _sessionStore;
     final extractor = _sessionExtractor;
-    if (store == null || extractor == null || body is! String) {
+    if (store == null || extractor == null) {
       return;
     }
-    final snapshot = extractor.extractFromHtml(
-      body,
-      source: 'html:${context.operation}',
-    );
+    final snapshot = switch (context.kind) {
+      YamiboRequestKind.api => _extractApiSession(
+        body: body,
+        context: context,
+        extractor: extractor,
+      ),
+      YamiboRequestKind.html => body is String
+          ? extractor.extractFromHtml(
+              body,
+              source: 'html:${context.operation}',
+            )
+          : null,
+      YamiboRequestKind.resource || YamiboRequestKind.imageProbe => null,
+    };
     if (snapshot != null) {
       store.saveExtracted(snapshot);
     }
+  }
+
+  YamiboSessionSnapshot? _extractApiSession({
+    required Object? body,
+    required YamiboRequestContext context,
+    required YamiboSessionExtractor extractor,
+  }) {
+    try {
+      final decoded = body is String
+          ? jsonDecode(_normalizeJsonText(body))
+          : body;
+      final variables = ParseUtils.asMap(ParseUtils.asMap(decoded)['Variables']);
+      if (variables.isEmpty) {
+        return null;
+      }
+      return extractor.extractFromApiVariables(
+        variables,
+        source: 'api:${context.module ?? context.operation}',
+      );
+    } catch (_) {
+      // Session extraction is best-effort; API parsing still belongs to YamiboApiClient.
+      return null;
+    }
+  }
+
+  String _normalizeJsonText(String data) {
+    var text = data;
+    while (text.isNotEmpty) {
+      final trimmed = text.trimLeft();
+      if (trimmed.length != text.length) {
+        text = trimmed;
+        continue;
+      }
+      if (text.startsWith('\uFEFF')) {
+        text = text.substring(1);
+        continue;
+      }
+      // Some servers/proxies expose UTF-8 BOM bytes after a lossy decode.
+      if (text.startsWith('ï»¿')) {
+        text = text.substring(3);
+        continue;
+      }
+      break;
+    }
+    return text;
   }
 
   void _recordSuccess({

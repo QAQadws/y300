@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/comic/data/comic_refresh_workflow_providers.dart';
 import 'package:y300/features/comic/presentation/comic_tab_page.dart';
 import 'package:y300/features/library_shared/data/library_task_workflow_providers.dart';
@@ -45,6 +46,19 @@ final mainShellReplyDraftAttachmentMaintenanceStarterProvider =
   };
 });
 
+final mainShellYamiboSessionWarmupProvider = Provider<Future<void> Function()>((
+  ref,
+) {
+  return () async {
+    try {
+      await ref.read(yamiboApiClientProvider).getDiscuz(module: 'profile');
+    } catch (_) {
+      // Profile warmup only refreshes shared formhash/session metadata.
+      // Startup and the forum shell must remain usable if it fails.
+    }
+  };
+});
+
 /// 应用主壳：承载论坛、收藏、漫画、小说、更多五栏 Tab，避免业务页面相互耦合。
 class MainShellPage extends ConsumerStatefulWidget {
   const MainShellPage({super.key});
@@ -69,6 +83,11 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
       ref
           .read(mainShellReplyDraftAttachmentMaintenanceStarterProvider)
           .call(),
+    );
+    // 首页 HTML 通常拿不到 formhash；启动后预热 profile API，让后续
+    // 搜索/回复/收藏/发帖可以复用 YamiboSessionStore 中的新鲜 formhash。
+    unawaited(
+      ref.read(mainShellYamiboSessionWarmupProvider).call().catchError((_) {}),
     );
   }
 

@@ -62,6 +62,7 @@ void main() {
           mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
           mainShellNotificationInitializerProvider
               .overrideWithValue(() async {}),
+          mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
           authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
@@ -116,6 +117,7 @@ void main() {
           mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
           mainShellNotificationInitializerProvider
               .overrideWithValue(() async {}),
+          mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
           authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
@@ -168,6 +170,7 @@ void main() {
           mainShellNotificationInitializerProvider.overrideWithValue(
             () async {},
           ),
+          mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
           authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
@@ -216,11 +219,118 @@ void main() {
           libraryTaskNotificationServiceProvider.overrideWithValue(
             notificationService,
           ),
+          mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
           authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
           forumWebViewDriverFactoryProvider.overrideWithValue(() => webViewDriver),
+          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
+        ],
+        child: const MaterialApp(home: MainShellPage()),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('MainShellPage warms up Yamibo profile session on startup', (
+    tester,
+  ) async {
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    final webViewDriver = _FakeForumWebViewDriver();
+    var warmupCalls = 0;
+    addTearDown(queueSnapshot.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+          novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
+          localFavoriteRepositoryProvider.overrideWith(
+            (ref) => _FakeLocalFavoriteRepository(),
+          ),
+          favoriteSyncServiceProvider.overrideWith(
+            (ref) => _FakeFavoriteSyncService(),
+          ),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+            queueSnapshot,
+          ),
+          mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
+          mainShellNotificationInitializerProvider.overrideWithValue(
+            () async {},
+          ),
+          mainShellReplyDraftAttachmentMaintenanceStarterProvider
+              .overrideWithValue(() async {}),
+          mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {
+            warmupCalls += 1;
+          }),
+          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
+          forumWebViewDriverFactoryProvider.overrideWithValue(
+            () => webViewDriver,
+          ),
+          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
+        ],
+        child: const MaterialApp(home: MainShellPage()),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(warmupCalls, 1);
+  });
+
+  testWidgets('MainShellPage ignores Yamibo profile warmup failure', (
+    tester,
+  ) async {
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    final webViewDriver = _FakeForumWebViewDriver();
+    addTearDown(queueSnapshot.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+          novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
+          localFavoriteRepositoryProvider.overrideWith(
+            (ref) => _FakeLocalFavoriteRepository(),
+          ),
+          favoriteSyncServiceProvider.overrideWith(
+            (ref) => _FakeFavoriteSyncService(),
+          ),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+            queueSnapshot,
+          ),
+          mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
+          mainShellNotificationInitializerProvider.overrideWithValue(
+            () async {},
+          ),
+          mainShellReplyDraftAttachmentMaintenanceStarterProvider
+              .overrideWithValue(() async {}),
+          mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {
+            throw StateError('warmup failed');
+          }),
+          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
+          forumWebViewDriverFactoryProvider.overrideWithValue(
+            () => webViewDriver,
+          ),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
         child: const MaterialApp(home: MainShellPage()),
@@ -254,6 +364,7 @@ void main() {
           comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
           mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
           mainShellNotificationInitializerProvider.overrideWithValue(() async {}),
+          mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
           authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
           shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
           forumModeSettingsRepositoryProvider.overrideWithValue(
@@ -318,6 +429,7 @@ void main() {
           comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
           mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
           mainShellNotificationInitializerProvider.overrideWithValue(() async {}),
+          mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
           authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
           shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
           forumModeSettingsRepositoryProvider.overrideWithValue(
@@ -381,6 +493,7 @@ void main() {
           comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
           mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
           mainShellNotificationInitializerProvider.overrideWithValue(() async {}),
+          mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
           authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
           shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
           forumModeSettingsRepositoryProvider.overrideWithValue(

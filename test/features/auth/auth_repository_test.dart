@@ -49,6 +49,8 @@ void main() {
         expect(adapter.lastLoginBody, contains('loginsubmit=1'));
         expect(adapter.lastLoginBody, contains('username=tester'));
         expect(adapter.lastProfileCookieHeader, contains('auth=token123'));
+        expect(adapter.forumIndexGetCount, 1);
+        expect(adapter.profileGetCount, 1);
       },
     );
 
@@ -95,13 +97,13 @@ void main() {
     });
 
     test(
-      'mobile login success but forumindex auth is null returns unauthorized',
+      'mobile login success but profile is not logged in returns unauthorized',
       () async {
         final adapter = _DiscuzAuthTestAdapter(
           guestFormhash: 'fh_guest',
           loginSucceeds: true,
-          forumIndexAuthAfterLogin: null,
-          profileUid: '123',
+          forumIndexAuthAfterLogin: 'token123',
+          profileUid: '0',
           profileUsername: 'tester',
         );
         final authRepository = _buildAuthRepository(adapter);
@@ -115,7 +117,7 @@ void main() {
         final error = result.errorOrNull;
         expect(error, isNotNull);
         expect(error!.type, ApiErrorType.unauthorized);
-        expect(error.message, contains('forumindex.auth'));
+        expect(error.message, contains('会话未生效'));
       },
     );
 
@@ -236,6 +238,32 @@ void main() {
         expect(adapter.profileGetCount, 0);
       },
     );
+
+    test(
+      'formhash provider uses gateway-extracted formhash after API business failure',
+      () async {
+        final adapter = _DiscuzAuthTestAdapter(
+          guestFormhash: 'fh_guest',
+          loginSucceeds: true,
+          forumIndexAuthAfterLogin: 'token123',
+          profileUid: '123',
+          profileUsername: 'tester',
+          forumIndexFormhashMessageFails: true,
+        );
+        final sessionStore = YamiboSessionStore();
+        final provider = ApiFormhashProvider(
+          _buildApiClient(adapter, sessionStore: sessionStore),
+          sessionStore: sessionStore,
+        );
+
+        final result = await provider.loadFormhash();
+
+        expect(result.isSuccess, isTrue);
+        expect(result.dataOrNull, 'fh_guest');
+        expect(adapter.forumIndexGetCount, 1);
+        expect(adapter.profileGetCount, 0);
+      },
+    );
   });
 }
 
@@ -286,6 +314,7 @@ class _DiscuzAuthTestAdapter implements HttpClientAdapter {
     required this.profileUid,
     required this.profileUsername,
     this.logoutSucceeds = true,
+    this.forumIndexFormhashMessageFails = false,
   });
 
   final String guestFormhash;
@@ -294,6 +323,7 @@ class _DiscuzAuthTestAdapter implements HttpClientAdapter {
   final String profileUid;
   final String profileUsername;
   final bool logoutSucceeds;
+  final bool forumIndexFormhashMessageFails;
 
   String lastLoginBody = '';
   String? lastProfileCookieHeader;
@@ -329,6 +359,11 @@ class _DiscuzAuthTestAdapter implements HttpClientAdapter {
             'member_uid': auth == null ? '0' : '123',
             'formhash': _loggedIn ? 'fh_after_login' : guestFormhash,
           },
+          if (forumIndexFormhashMessageFails && !_loggedIn)
+            'Message': <String, dynamic>{
+              'messageval': 'guest_prompt',
+              'messagestr': '需要登录',
+            },
         },
         headers: const <String, List<String>>{
           'set-cookie': <String>['guest=1; Path=/; HttpOnly'],

@@ -38,20 +38,6 @@ class ApiSessionVerifier implements SessionVerifier {
 
   @override
   Future<ApiResult<SessionInfo>> verifyLoggedIn() async {
-    final authResult = await verifyAuthByForumIndex();
-    final authValid = authResult.when(
-      success: (ok) => ok,
-      failure: (_) => false,
-    );
-    if (!authValid) {
-      return const ApiFailure<SessionInfo>(
-        ApiError(
-          type: ApiErrorType.unauthorized,
-          message: '登录请求已发送，但 forumindex.auth 仍为空',
-        ),
-      );
-    }
-
     final sessionResult = await refreshSession();
     return sessionResult.when(
       success: (session) {

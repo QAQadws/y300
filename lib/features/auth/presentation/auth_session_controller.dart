@@ -62,6 +62,10 @@ class AuthSessionController extends AsyncNotifier<AuthSessionViewState> {
     state = await AsyncValue.guard(_loadSession);
   }
 
+  void acceptSession(SessionInfo session) {
+    state = AsyncData(AuthSessionViewState.fromSession(session));
+  }
+
   Future<bool> logout() async {
     final current = state.asData?.value ?? const AuthSessionViewState.signedOut();
     if (current.isLoggingOut) {

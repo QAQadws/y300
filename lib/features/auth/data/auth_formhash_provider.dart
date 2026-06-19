@@ -30,6 +30,10 @@ class ApiFormhashProvider implements FormhashProvider {
     for (final module in modules) {
       final result = await _apiClient.getDiscuz(module: module);
       if (result case ApiFailure<DiscuzResponse>(:final error)) {
+        final extracted = _sessionStore?.readFreshFormhash();
+        if (extracted != null && extracted.trim().isNotEmpty) {
+          return ApiSuccess<String>(extracted);
+        }
         lastError = error;
         continue;
       }
