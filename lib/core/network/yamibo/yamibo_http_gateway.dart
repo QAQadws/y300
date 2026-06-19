@@ -7,35 +7,43 @@ import 'package:y300/core/network/network_diagnostic_recorder.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_response.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_logger.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_extractor.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 
 class YamiboHttpGateway {
   YamiboHttpGateway({
     required CookieStore cookieStore,
     required Logger logger,
     NetworkDiagnosticRecorder? diagnosticRecorder,
+    YamiboSessionStore? sessionStore,
+    YamiboSessionExtractor? sessionExtractor,
     Dio? dio,
     bool enableLog = true,
-  })  : _cookieStore = cookieStore,
-        _diagnosticRecorder =
-            diagnosticRecorder ?? const NoopNetworkDiagnosticRecorder(),
-        _requestLogger = YamiboRequestLogger(
-          logger: logger,
-          enableLog: enableLog,
-        ),
-        _dio =
-            dio ??
-            Dio(
-              BaseOptions(
-                baseUrl: AppConfig.siteBaseUrl,
-                connectTimeout: AppConfig.connectTimeout,
-                receiveTimeout: AppConfig.receiveTimeout,
-                followRedirects: true,
-                validateStatus: (status) =>
-                    status != null && status >= 200 && status < 400,
-              ),
-            );
+  }) : _cookieStore = cookieStore,
+       _sessionStore = sessionStore,
+       _sessionExtractor = sessionExtractor,
+       _diagnosticRecorder =
+           diagnosticRecorder ?? const NoopNetworkDiagnosticRecorder(),
+       _requestLogger = YamiboRequestLogger(
+         logger: logger,
+         enableLog: enableLog,
+       ),
+       _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               baseUrl: AppConfig.siteBaseUrl,
+               connectTimeout: AppConfig.connectTimeout,
+               receiveTimeout: AppConfig.receiveTimeout,
+               followRedirects: true,
+               validateStatus: (status) =>
+                   status != null && status >= 200 && status < 400,
+             ),
+           );
 
   final CookieStore _cookieStore;
+  final YamiboSessionStore? _sessionStore;
+  final YamiboSessionExtractor? _sessionExtractor;
   final NetworkDiagnosticRecorder _diagnosticRecorder;
   final YamiboRequestLogger _requestLogger;
   final Dio _dio;
@@ -95,14 +103,12 @@ class YamiboHttpGateway {
     try {
       final response = await _dio.getUri<Object?>(
         uri,
-        options: Options(
-          headers: requestHeaders,
-          responseType: responseType,
-        ),
+        options: Options(headers: requestHeaders, responseType: responseType),
         cancelToken: cancelToken,
       );
       await _saveCookies(response);
       final body = normalizeBody(response.data);
+      _saveExtractedHtmlSession(body: body, context: context);
       final elapsedMs = _elapsedMs(startedAt);
       _recordSuccess(
         response: response,
@@ -154,7 +160,28 @@ class YamiboHttpGateway {
 
   Future<void> _saveCookies(Response<dynamic> response) async {
     final setCookie = response.headers.map['set-cookie'] ?? const <String>[];
-    await _cookieStore.saveFromSetCookie(response.requestOptions.uri, setCookie);
+    await _cookieStore.saveFromSetCookie(
+      response.requestOptions.uri,
+      setCookie,
+    );
+  }
+
+  void _saveExtractedHtmlSession({
+    required Object? body,
+    required YamiboRequestContext context,
+  }) {
+    final store = _sessionStore;
+    final extractor = _sessionExtractor;
+    if (store == null || extractor == null || body is! String) {
+      return;
+    }
+    final snapshot = extractor.extractFromHtml(
+      body,
+      source: 'html:${context.operation}',
+    );
+    if (snapshot != null) {
+      store.saveExtracted(snapshot);
+    }
   }
 
   void _recordSuccess({

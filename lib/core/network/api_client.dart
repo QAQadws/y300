@@ -7,6 +7,8 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/discuz_response.dart';
 import 'package:y300/core/network/network_diagnostic_recorder.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_extractor.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 
 /// 统一网络入口：负责请求基础能力，不承担具体业务字段解析
 class ApiClient {
@@ -14,10 +16,14 @@ class ApiClient {
     required CookieStore cookieStore,
     required Logger logger,
     NetworkDiagnosticRecorder? diagnosticRecorder,
+    YamiboSessionStore? sessionStore,
+    YamiboSessionExtractor? sessionExtractor,
     Dio? dio,
     bool enableLog = true,
   }) : _cookieStore = cookieStore,
        _logger = logger,
+       _sessionStore = sessionStore,
+       _sessionExtractor = sessionExtractor,
        _diagnosticRecorder =
            diagnosticRecorder ?? const NoopNetworkDiagnosticRecorder(),
        _enableLog = enableLog,
@@ -76,6 +82,8 @@ class ApiClient {
   final Dio _dio;
   final CookieStore _cookieStore;
   final Logger _logger;
+  final YamiboSessionStore? _sessionStore;
+  final YamiboSessionExtractor? _sessionExtractor;
   final NetworkDiagnosticRecorder _diagnosticRecorder;
   final bool _enableLog;
 
@@ -90,7 +98,10 @@ class ApiClient {
       return _truncateLogString(body);
     }
     if (body is Map) {
-      final keys = body.keys.take(_maxLoggedMapKeys).map((key) => '$key').join(', ');
+      final keys = body.keys
+          .take(_maxLoggedMapKeys)
+          .map((key) => '$key')
+          .join(', ');
       final suffix = body.length > _maxLoggedMapKeys ? ', ...' : '';
       return 'Map(length=${body.length}, keys=[$keys$suffix])';
     }
@@ -110,6 +121,7 @@ class ApiClient {
 
   Future<void> clearSession() async {
     await _cookieStore.clear();
+    _sessionStore?.clear();
   }
 
   /// 返回 Discuz 原始通用结构，供上层按需二次解析
@@ -128,6 +140,7 @@ class ApiClient {
 
       final json = _toJsonMap(response.data);
       final discuzResponse = DiscuzResponse.fromJson(json);
+      _saveExtractedApiSession(discuzResponse, source: 'api:$module');
       if (treatMessageAsBusinessError && discuzResponse.hasBusinessError) {
         return ApiFailure(
           ApiError(
@@ -187,7 +200,9 @@ class ApiClient {
       );
 
       final json = _toJsonMap(response.data);
-      return ApiSuccess(DiscuzResponse.fromJson(json));
+      final discuzResponse = DiscuzResponse.fromJson(json);
+      _saveExtractedApiSession(discuzResponse, source: 'api:$module');
+      return ApiSuccess(discuzResponse);
     } on DioException catch (error) {
       _recordRequestFailure(error);
       return ApiFailure(_mapDioError(error));
@@ -256,6 +271,24 @@ class ApiClient {
       throw const FormatException('响应不是JSON对象', null);
     }
     throw FormatException('无法解析响应类型: ${data.runtimeType}', data);
+  }
+
+  void _saveExtractedApiSession(
+    DiscuzResponse response, {
+    required String source,
+  }) {
+    final store = _sessionStore;
+    final extractor = _sessionExtractor;
+    if (store == null || extractor == null) {
+      return;
+    }
+    final snapshot = extractor.extractFromApiVariables(
+      response.variables,
+      source: source,
+    );
+    if (snapshot != null) {
+      store.saveExtracted(snapshot);
+    }
   }
 
   ApiError _mapDioError(DioException error) {

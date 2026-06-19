@@ -8,6 +8,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_extractor.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
+import 'package:y300/features/auth/data/auth_formhash_provider.dart';
 import 'package:y300/features/auth/data/auth_repository.dart';
 
 void main() {
@@ -18,32 +22,35 @@ void main() {
       SharedPreferences.setMockInitialValues(<String, Object>{});
     });
 
-    test('login loads formhash, posts mobile login, and verifies session', () async {
-      final adapter = _DiscuzAuthTestAdapter(
-        guestFormhash: 'fh_guest',
-        loginSucceeds: true,
-        forumIndexAuthAfterLogin: 'token123',
-        profileUid: '123',
-        profileUsername: 'tester',
-      );
-      final authRepository = _buildAuthRepository(adapter);
+    test(
+      'login loads formhash, posts mobile login, and verifies session',
+      () async {
+        final adapter = _DiscuzAuthTestAdapter(
+          guestFormhash: 'fh_guest',
+          loginSucceeds: true,
+          forumIndexAuthAfterLogin: 'token123',
+          profileUid: '123',
+          profileUsername: 'tester',
+        );
+        final authRepository = _buildAuthRepository(adapter);
 
-      final result = await authRepository.login(
-        username: ' tester ',
-        password: 'pass123',
-      );
+        final result = await authRepository.login(
+          username: ' tester ',
+          password: 'pass123',
+        );
 
-      expect(result.isSuccess, isTrue);
-      final session = result.dataOrNull;
-      expect(session, isNotNull);
-      expect(session!.isLoggedIn, isTrue);
-      expect(session.uid, '123');
-      expect(session.username, 'tester');
-      expect(adapter.lastLoginBody, contains('formhash=fh_guest'));
-      expect(adapter.lastLoginBody, contains('loginsubmit=1'));
-      expect(adapter.lastLoginBody, contains('username=tester'));
-      expect(adapter.lastProfileCookieHeader, contains('auth=token123'));
-    });
+        expect(result.isSuccess, isTrue);
+        final session = result.dataOrNull;
+        expect(session, isNotNull);
+        expect(session!.isLoggedIn, isTrue);
+        expect(session.uid, '123');
+        expect(session.username, 'tester');
+        expect(adapter.lastLoginBody, contains('formhash=fh_guest'));
+        expect(adapter.lastLoginBody, contains('loginsubmit=1'));
+        expect(adapter.lastLoginBody, contains('username=tester'));
+        expect(adapter.lastProfileCookieHeader, contains('auth=token123'));
+      },
+    );
 
     test('login does not post password when formhash is empty', () async {
       final adapter = _DiscuzAuthTestAdapter(
@@ -87,29 +94,64 @@ void main() {
       expect(error.message, contains('密码错误'));
     });
 
-    test('mobile login success but forumindex auth is null returns unauthorized', () async {
-      final adapter = _DiscuzAuthTestAdapter(
-        guestFormhash: 'fh_guest',
-        loginSucceeds: true,
-        forumIndexAuthAfterLogin: null,
-        profileUid: '123',
-        profileUsername: 'tester',
-      );
-      final authRepository = _buildAuthRepository(adapter);
+    test(
+      'mobile login success but forumindex auth is null returns unauthorized',
+      () async {
+        final adapter = _DiscuzAuthTestAdapter(
+          guestFormhash: 'fh_guest',
+          loginSucceeds: true,
+          forumIndexAuthAfterLogin: null,
+          profileUid: '123',
+          profileUsername: 'tester',
+        );
+        final authRepository = _buildAuthRepository(adapter);
 
-      final result = await authRepository.login(
-        username: 'tester',
-        password: 'pass123',
-      );
+        final result = await authRepository.login(
+          username: 'tester',
+          password: 'pass123',
+        );
 
-      expect(result.isFailure, isTrue);
-      final error = result.errorOrNull;
-      expect(error, isNotNull);
-      expect(error!.type, ApiErrorType.unauthorized);
-      expect(error.message, contains('forumindex.auth'));
-    });
+        expect(result.isFailure, isTrue);
+        final error = result.errorOrNull;
+        expect(error, isNotNull);
+        expect(error!.type, ApiErrorType.unauthorized);
+        expect(error.message, contains('forumindex.auth'));
+      },
+    );
 
-    test('logout calls mobile API and clears persisted cookies after success', () async {
+    test(
+      'logout calls mobile API and clears persisted cookies after success',
+      () async {
+        final adapter = _DiscuzAuthTestAdapter(
+          guestFormhash: 'fh_guest',
+          loginSucceeds: true,
+          forumIndexAuthAfterLogin: 'token123',
+          profileUid: '123',
+          profileUsername: 'tester',
+          logoutSucceeds: true,
+        );
+        final authRepository = _buildAuthRepository(adapter);
+        final cookieStore = CookieStore();
+
+        await authRepository.login(username: 'tester', password: 'pass123');
+
+        final beforeLogout = await cookieStore.readCookieHeader(
+          Uri.parse('https://bbs.yamibo.com/api/mobile/index.php'),
+        );
+        expect(beforeLogout, contains('auth=token123'));
+
+        await authRepository.logout();
+
+        expect(adapter.logoutQuery?['action'], 'logout');
+        expect(adapter.logoutQuery?['formhash'], 'fh_after_login');
+        final afterLogout = await cookieStore.readCookieHeader(
+          Uri.parse('https://bbs.yamibo.com/api/mobile/index.php'),
+        );
+        expect(afterLogout, isNull);
+      },
+    );
+
+    test('logout clears shared session store after success', () async {
       final adapter = _DiscuzAuthTestAdapter(
         guestFormhash: 'fh_guest',
         loginSucceeds: true,
@@ -118,24 +160,25 @@ void main() {
         profileUsername: 'tester',
         logoutSucceeds: true,
       );
-      final authRepository = _buildAuthRepository(adapter);
-      final cookieStore = CookieStore();
-
-      await authRepository.login(username: 'tester', password: 'pass123');
-
-      final beforeLogout = await cookieStore.readCookieHeader(
-        Uri.parse('https://bbs.yamibo.com/api/mobile/index.php'),
+      final sessionStore = YamiboSessionStore();
+      sessionStore.saveExtracted(
+        YamiboSessionSnapshot(
+          isLoggedIn: true,
+          uid: '123',
+          username: 'tester',
+          formhash: 'fh_after_login',
+          updatedAt: DateTime.now(),
+          source: 'api:profile',
+        ),
       );
-      expect(beforeLogout, contains('auth=token123'));
+      final authRepository = _buildAuthRepository(
+        adapter,
+        sessionStore: sessionStore,
+      );
 
       await authRepository.logout();
 
-      expect(adapter.logoutQuery?['action'], 'logout');
-      expect(adapter.logoutQuery?['formhash'], 'fh_after_login');
-      final afterLogout = await cookieStore.readCookieHeader(
-        Uri.parse('https://bbs.yamibo.com/api/mobile/index.php'),
-      );
-      expect(afterLogout, isNull);
+      expect(sessionStore.readCurrent(), isNull);
     });
 
     test('logout failure does not clear persisted cookies', () async {
@@ -152,24 +195,69 @@ void main() {
 
       await authRepository.login(username: 'tester', password: 'pass123');
 
-      await expectLater(
-        authRepository.logout(),
-        throwsA(isA<StateError>()),
-      );
+      await expectLater(authRepository.logout(), throwsA(isA<StateError>()));
       final afterLogout = await cookieStore.readCookieHeader(
         Uri.parse('https://bbs.yamibo.com/api/mobile/index.php'),
       );
       expect(afterLogout, contains('auth=token123'));
     });
+
+    test(
+      'formhash provider returns cached session formhash without API call',
+      () async {
+        final adapter = _DiscuzAuthTestAdapter(
+          guestFormhash: 'fh_guest',
+          loginSucceeds: true,
+          forumIndexAuthAfterLogin: 'token123',
+          profileUid: '123',
+          profileUsername: 'tester',
+        );
+        final sessionStore = YamiboSessionStore();
+        sessionStore.saveExtracted(
+          YamiboSessionSnapshot(
+            isLoggedIn: true,
+            uid: '123',
+            username: 'tester',
+            formhash: 'fh_cached',
+            updatedAt: DateTime.now(),
+            source: 'html:forum.home.html',
+          ),
+        );
+        final provider = ApiFormhashProvider(
+          _buildApiClient(adapter, sessionStore: sessionStore),
+          sessionStore: sessionStore,
+        );
+
+        final result = await provider.loadFormhash();
+
+        expect(result.isSuccess, isTrue);
+        expect(result.dataOrNull, 'fh_cached');
+        expect(adapter.forumIndexGetCount, 0);
+        expect(adapter.profileGetCount, 0);
+      },
+    );
   });
 }
 
-AuthRepository _buildAuthRepository(HttpClientAdapter adapter) {
-  final apiClient = _buildApiClient(adapter);
-  return ApiAuthRepository(apiClient);
+AuthRepository _buildAuthRepository(
+  HttpClientAdapter adapter, {
+  YamiboSessionStore? sessionStore,
+}) {
+  final apiClient = _buildApiClient(adapter, sessionStore: sessionStore);
+  return ApiAuthRepository(
+    apiClient,
+    formhashProvider: ApiFormhashProvider(
+      apiClient,
+      sessionStore: sessionStore,
+    ),
+    sessionStore: sessionStore,
+  );
 }
 
-ApiClient _buildApiClient(HttpClientAdapter adapter) {
+ApiClient _buildApiClient(
+  HttpClientAdapter adapter, {
+  YamiboSessionStore? sessionStore,
+}) {
   final dio = Dio(
     BaseOptions(
       baseUrl: 'https://bbs.yamibo.com/api/mobile/index.php',
@@ -181,6 +269,10 @@ ApiClient _buildApiClient(HttpClientAdapter adapter) {
   return ApiClient(
     cookieStore: CookieStore(),
     logger: Logger(level: Level.off),
+    sessionStore: sessionStore,
+    sessionExtractor: sessionStore == null
+        ? null
+        : const YamiboSessionExtractor(),
     dio: dio,
     enableLog: false,
   );
@@ -207,6 +299,8 @@ class _DiscuzAuthTestAdapter implements HttpClientAdapter {
   String? lastProfileCookieHeader;
   Map<String, String>? logoutQuery;
   var loginPostCount = 0;
+  var forumIndexGetCount = 0;
+  var profileGetCount = 0;
   var _loggedIn = false;
 
   @override
@@ -224,6 +318,7 @@ class _DiscuzAuthTestAdapter implements HttpClientAdapter {
     if (options.method == 'GET' &&
         uri.path.endsWith('/api/mobile/index.php') &&
         uri.queryParameters['module'] == 'forumindex') {
+      forumIndexGetCount++;
       final auth = _loggedIn ? forumIndexAuthAfterLogin : null;
       return _jsonResponse(
         <String, dynamic>{
@@ -271,18 +366,17 @@ class _DiscuzAuthTestAdapter implements HttpClientAdapter {
     if (options.method == 'GET' &&
         uri.path.endsWith('/api/mobile/index.php') &&
         uri.queryParameters['module'] == 'profile') {
+      profileGetCount++;
       lastProfileCookieHeader = options.headers['cookie']?.toString();
-      return _jsonResponse(
-        <String, dynamic>{
-          'Version': '4',
-          'Charset': 'utf-8',
-          'Variables': <String, dynamic>{
-            'member_uid': _loggedIn ? profileUid : '0',
-            'member_username': _loggedIn ? profileUsername : '',
-            'formhash': _loggedIn ? 'fh_after_login' : guestFormhash,
-          },
+      return _jsonResponse(<String, dynamic>{
+        'Version': '4',
+        'Charset': 'utf-8',
+        'Variables': <String, dynamic>{
+          'member_uid': _loggedIn ? profileUid : '0',
+          'member_username': _loggedIn ? profileUsername : '',
+          'formhash': _loggedIn ? 'fh_after_login' : guestFormhash,
         },
-      );
+      });
     }
 
     if (options.method == 'GET' &&
@@ -294,17 +388,15 @@ class _DiscuzAuthTestAdapter implements HttpClientAdapter {
       if (logoutSucceeds) {
         _loggedIn = false;
       }
-      return _jsonResponse(
-        <String, dynamic>{
-          'Version': '4',
-          'Charset': 'utf-8',
-          'Variables': <String, dynamic>{},
-          'Message': <String, dynamic>{
-            'messageval': logoutSucceeds ? 'logout_succeed' : 'logout_failed',
-            'messagestr': logoutSucceeds ? '退出成功' : '退出失败',
-          },
+      return _jsonResponse(<String, dynamic>{
+        'Version': '4',
+        'Charset': 'utf-8',
+        'Variables': <String, dynamic>{},
+        'Message': <String, dynamic>{
+          'messageval': logoutSucceeds ? 'logout_succeed' : 'logout_failed',
+          'messagestr': logoutSucceeds ? '退出成功' : '退出失败',
         },
-      );
+      });
     }
 
     return ResponseBody.fromString(
@@ -318,11 +410,7 @@ class _DiscuzAuthTestAdapter implements HttpClientAdapter {
     Map<String, dynamic> body, {
     Map<String, List<String>> headers = const <String, List<String>>{},
   }) {
-    return ResponseBody.fromString(
-      jsonEncode(body),
-      200,
-      headers: headers,
-    );
+    return ResponseBody.fromString(jsonEncode(body), 200, headers: headers);
   }
 
   Future<String> _readRequestBody(Stream<Uint8List>? requestStream) async {

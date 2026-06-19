@@ -3,6 +3,7 @@ import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/discuz_response.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/features/auth/data/auth_formhash_provider.dart';
 import 'package:y300/features/auth/data/auth_remote_data_source.dart';
 import 'package:y300/features/auth/data/auth_session_models.dart';
@@ -31,14 +32,17 @@ class ApiAuthRepository implements AuthRepository {
     AuthRemoteDataSource? remoteDataSource,
     FormhashProvider? formhashProvider,
     SessionVerifier? sessionVerifier,
-  })  : _remoteDataSource = remoteDataSource ?? DiscuzMobileAuthApi(_apiClient),
-        _formhashProvider = formhashProvider ?? ApiFormhashProvider(_apiClient),
-        _sessionVerifier = sessionVerifier ?? ApiSessionVerifier(_apiClient);
+    YamiboSessionStore? sessionStore,
+  }) : _remoteDataSource = remoteDataSource ?? DiscuzMobileAuthApi(_apiClient),
+       _formhashProvider = formhashProvider ?? ApiFormhashProvider(_apiClient),
+       _sessionVerifier = sessionVerifier ?? ApiSessionVerifier(_apiClient),
+       _sessionStore = sessionStore;
 
   final ApiClient _apiClient;
   final AuthRemoteDataSource _remoteDataSource;
   final FormhashProvider _formhashProvider;
   final SessionVerifier _sessionVerifier;
+  final YamiboSessionStore? _sessionStore;
 
   /// 通过 profile 探活当前登录态。
   @override
@@ -112,6 +116,7 @@ class ApiAuthRepository implements AuthRepository {
     }
 
     await _apiClient.clearSession();
+    _sessionStore?.clear();
   }
 }
 
@@ -122,11 +127,15 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
     remoteDataSource: ref.watch(authRemoteDataSourceProvider),
     formhashProvider: ref.watch(formhashProvider),
     sessionVerifier: ref.watch(sessionVerifierProvider),
+    sessionStore: ref.watch(yamiboSessionStoreProvider),
   );
 });
 
 final formhashProvider = Provider<FormhashProvider>((ref) {
-  return ApiFormhashProvider(ref.watch(apiClientProvider));
+  return ApiFormhashProvider(
+    ref.watch(apiClientProvider),
+    sessionStore: ref.watch(yamiboSessionStoreProvider),
+  );
 });
 
 final sessionVerifierProvider = Provider<SessionVerifier>((ref) {

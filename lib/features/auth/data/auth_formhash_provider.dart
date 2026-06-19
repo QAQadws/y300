@@ -1,6 +1,7 @@
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/discuz_response.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/core/utils/parse_utils.dart';
 
 abstract class FormhashProvider {
@@ -8,12 +9,19 @@ abstract class FormhashProvider {
 }
 
 class ApiFormhashProvider implements FormhashProvider {
-  ApiFormhashProvider(this._apiClient);
+  ApiFormhashProvider(this._apiClient, {YamiboSessionStore? sessionStore})
+    : _sessionStore = sessionStore;
 
   final ApiClient _apiClient;
+  final YamiboSessionStore? _sessionStore;
 
   @override
   Future<ApiResult<String>> loadFormhash({bool preferProfile = false}) async {
+    final cached = _sessionStore?.readFreshFormhash();
+    if (cached != null && cached.trim().isNotEmpty) {
+      return ApiSuccess<String>(cached);
+    }
+
     final modules = preferProfile
         ? const <String>['profile', 'forumindex']
         : const <String>['forumindex', 'profile'];
@@ -27,7 +35,9 @@ class ApiFormhashProvider implements FormhashProvider {
       }
 
       final response = (result as ApiSuccess<DiscuzResponse>).data;
-      final formhash = ParseUtils.asString(response.variables['formhash']).trim();
+      final formhash = ParseUtils.asString(
+        response.variables['formhash'],
+      ).trim();
       if (formhash.isNotEmpty) {
         return ApiSuccess<String>(formhash);
       }
@@ -55,4 +65,3 @@ class ApiFormhashProvider implements FormhashProvider {
     );
   }
 }
-
