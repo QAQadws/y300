@@ -1,28 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/reply/domain/models/reply_models.dart';
+import 'package:y300/features/reply/presentation/reply_composer_page.dart';
+import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
+import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 
-class ThreadDetailPage extends ConsumerWidget {
+class ThreadDetailPage extends ConsumerStatefulWidget {
   const ThreadDetailPage({super.key, required this.tid, this.subject = ''});
 
   final String tid;
   final String subject;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final args = ThreadDetailArgs(tid: tid, subject: subject);
+  ConsumerState<ThreadDetailPage> createState() => _ThreadDetailPageState();
+}
+
+class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
+  @override
+  Widget build(BuildContext context) {
+    final args = ThreadDetailArgs(tid: widget.tid, subject: widget.subject);
     final asyncState = ref.watch(threadDetailControllerProvider(args));
     final controller = ref.read(threadDetailControllerProvider(args).notifier);
     final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
     final state =
         asyncState.value ??
-        ThreadDetailPageState.initial(tid: tid, subject: subject);
+        ThreadDetailPageState.initial(tid: widget.tid, subject: widget.subject);
     ref.listen<AsyncValue<ThreadDetailPageState>>(
       threadDetailControllerProvider(args),
       (previous, next) {
@@ -81,7 +91,12 @@ class ThreadDetailPage extends ConsumerWidget {
               },
               icon: const Icon(Icons.search),
             ),
-          _ThreadDetailMoreMenu(state: state),
+          _ThreadDetailMoreMenu(
+            state: state,
+            onOnlyAuthor: controller.openOnlyAuthor,
+            onReverseOrder: controller.openReverseOrder,
+            onCopyUrl: _copyUrl,
+          ),
         ],
       ),
       body: Column(
@@ -98,17 +113,25 @@ class ThreadDetailPage extends ConsumerWidget {
                     state: state,
                     imageHeaderBuilder: imageHeaderBuilder,
                     sourceTagLabel: _sourceTagLabel(state),
-                    onLoadMore: controller.loadMore,
+                    onLoadPreviousPage: controller.loadPreviousPage,
+                    onLoadNextPage: controller.loadNextPage,
+                    onOpenOnlyAuthor: controller.openOnlyAuthor,
+                    onOpenReverseOrder: controller.openReverseOrder,
                     onAddComicToShelf: controller.addToShelf,
                     onAddNovelToShelf: controller.addNovelToShelf,
+                    onOpenPostReply: (post) {
+                      _openPostReplyComposer(args, state, post);
+                    },
+                    onCopyActionUrl: _copyActionUrl,
                   ),
           ),
           _ReplyComposer(
-            replyText: state.replyText,
-            isSubmitting: state.isReplySubmitting,
             hint: state.replyHint,
-            onChanged: controller.updateReplyText,
-            onSubmit: controller.submitReply,
+            onReply: asyncState.value == null
+                ? null
+                : () {
+                    _openThreadReplyComposer(args, state);
+                  },
             onFavorite:
                 asyncState.value == null ||
                     state.isThreadFavoriteActionLoading ||
@@ -117,7 +140,9 @@ class ThreadDetailPage extends ConsumerWidget {
                 : controller.favoriteThread,
             favoriteSelected: state.isThreadFavorited,
             favoriteLoading: state.isThreadFavoriteActionLoading,
-            showShare: state.shareUrl?.trim().isNotEmpty == true,
+            onShare: state.shareUrl?.trim().isEmpty ?? true
+                ? null
+                : () => _copyUrl('分享链接', state.shareUrl!),
           ),
         ],
       ),
@@ -131,6 +156,100 @@ class ThreadDetailPage extends ConsumerWidget {
     }
     final typeid = state.typeid.trim();
     return typeid.isEmpty ? '未标记' : 'typeid=$typeid';
+  }
+
+  Future<void> _openThreadReplyComposer(
+    ThreadDetailArgs args,
+    ThreadDetailPageState state,
+  ) async {
+    final fid = state.fid.trim();
+    final tid = state.tid.trim();
+    if (fid.isEmpty || tid.isEmpty) {
+      return;
+    }
+    final result = await Navigator.of(context).push<ReplyComposerResult>(
+      MaterialPageRoute<ReplyComposerResult>(
+        builder: (_) => ReplyComposerPage(
+          args: ReplyComposerArgs(
+            target: ReplyTarget.thread(
+              fid: fid,
+              tid: tid,
+              sourceUri: Uri.tryParse(state.desktopUrl ?? ''),
+            ),
+            title: state.subject,
+          ),
+        ),
+      ),
+    );
+    await _handleReplyComposerResult(args, result);
+  }
+
+  Future<void> _openPostReplyComposer(
+    ThreadDetailArgs args,
+    ThreadDetailPageState state,
+    ThreadPost post,
+  ) async {
+    final replyUrl = post.replyUrl?.trim();
+    final fid = state.fid.trim();
+    final tid = state.tid.trim();
+    if (replyUrl == null || replyUrl.isEmpty || fid.isEmpty || tid.isEmpty) {
+      await _copyUrl('楼层回复链接', post.replyUrl ?? '');
+      return;
+    }
+    final replyFormUri = Uri.tryParse(replyUrl);
+    if (replyFormUri == null) {
+      await _copyUrl('楼层回复链接', replyUrl);
+      return;
+    }
+    final result = await Navigator.of(context).push<ReplyComposerResult>(
+      MaterialPageRoute<ReplyComposerResult>(
+        builder: (_) => ReplyComposerPage(
+          args: ReplyComposerArgs(
+            target: ReplyTarget.post(
+              fid: fid,
+              tid: tid,
+              pid: post.pid,
+              sourceUri: replyFormUri,
+            ),
+            replyFormUri: replyFormUri,
+          ),
+        ),
+      ),
+    );
+    await _handleReplyComposerResult(args, result);
+  }
+
+  Future<void> _handleReplyComposerResult(
+    ThreadDetailArgs args,
+    ReplyComposerResult? result,
+  ) async {
+    if (!mounted || result == null || !result.sent) {
+      return;
+    }
+    _showSnackBar(result.message.trim().isEmpty ? '回复成功' : result.message);
+    await ref.read(threadDetailControllerProvider(args).notifier).refresh();
+  }
+
+  Future<void> _copyActionUrl(String label, String url) {
+    return _copyUrl('$label链接', url);
+  }
+
+  Future<void> _copyUrl(String label, String url) async {
+    final value = url.trim();
+    if (value.isEmpty) {
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) {
+      return;
+    }
+    _showSnackBar('$label已复制');
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -166,9 +285,17 @@ class _ThreadDetailAppBarTitle extends StatelessWidget {
 }
 
 class _ThreadDetailMoreMenu extends StatelessWidget {
-  const _ThreadDetailMoreMenu({required this.state});
+  const _ThreadDetailMoreMenu({
+    required this.state,
+    required this.onOnlyAuthor,
+    required this.onReverseOrder,
+    required this.onCopyUrl,
+  });
 
   final ThreadDetailPageState state;
+  final VoidCallback onOnlyAuthor;
+  final VoidCallback onReverseOrder;
+  final void Function(String label, String url) onCopyUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -191,10 +318,21 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
         if (state.desktopUrl?.trim().isNotEmpty == true)
           const PopupMenuItem<String>(value: 'desktop', child: Text('电脑版')),
       ],
-      onSelected: (_) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(const SnackBar(content: Text('该入口后续接入')));
+      onSelected: (value) {
+        switch (value) {
+          case 'only-author':
+            onOnlyAuthor();
+            return;
+          case 'reverse-order':
+            onReverseOrder();
+            return;
+          case 'home':
+            onCopyUrl('首页链接', state.homeUrl!);
+            return;
+          case 'desktop':
+            onCopyUrl('电脑版链接', state.desktopUrl!);
+            return;
+        }
       },
     );
   }
@@ -202,26 +340,20 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
 
 class _ReplyComposer extends StatelessWidget {
   const _ReplyComposer({
-    required this.replyText,
-    required this.isSubmitting,
     required this.hint,
-    required this.onChanged,
-    required this.onSubmit,
+    required this.onReply,
     required this.onFavorite,
     required this.favoriteSelected,
     required this.favoriteLoading,
-    required this.showShare,
+    required this.onShare,
   });
 
-  final String replyText;
-  final bool isSubmitting;
   final String? hint;
-  final ValueChanged<String> onChanged;
-  final VoidCallback onSubmit;
+  final VoidCallback? onReply;
   final VoidCallback? onFavorite;
   final bool favoriteSelected;
   final bool favoriteLoading;
-  final bool showShare;
+  final VoidCallback? onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -250,17 +382,13 @@ class _ReplyComposer extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: TextFormField(
+                child: OutlinedButton.icon(
                   key: const Key('thread-reply-input'),
-                  initialValue: replyText,
-                  enabled: !isSubmitting,
-                  onChanged: onChanged,
-                  minLines: 1,
-                  maxLines: 4,
-                  decoration: const InputDecoration(
-                    hintText: '输入回复内容',
-                    border: OutlineInputBorder(),
-                    isDense: true,
+                  onPressed: onReply,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('发表回复'),
                   ),
                 ),
               ),
@@ -281,24 +409,18 @@ class _ReplyComposer extends StatelessWidget {
                             : Icons.star_border_outlined,
                       ),
               ),
-              if (showShare)
+              if (onShare != null)
                 IconButton(
                   key: const Key('thread-detail-share-button'),
                   tooltip: '分享',
-                  onPressed: null,
+                  onPressed: onShare,
                   icon: const Icon(Icons.ios_share_outlined),
                 ),
               const SizedBox(width: 4),
               FilledButton(
                 key: const Key('thread-reply-submit-button'),
-                onPressed: isSubmitting ? null : onSubmit,
-                child: isSubmitting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('发送'),
+                onPressed: onReply,
+                child: const Text('回复'),
               ),
             ],
           ),

@@ -17,6 +17,8 @@ class ThreadDetailPageState {
     required this.replies,
     required this.currentPage,
     required this.lastPage,
+    required this.previousPageUrl,
+    required this.nextPageUrl,
     required this.reverseOrderUrl,
     required this.onlyAuthorUrl,
     required this.favoriteUrl,
@@ -24,6 +26,7 @@ class ThreadDetailPageState {
     required this.homeUrl,
     required this.desktopUrl,
     required this.hasMore,
+    required this.queryParameters,
     required this.isLoadingInitial,
     required this.isLoadingMore,
     required this.posts,
@@ -56,6 +59,8 @@ class ThreadDetailPageState {
   final int replies;
   final int currentPage;
   final int? lastPage;
+  final String? previousPageUrl;
+  final String? nextPageUrl;
   final String? reverseOrderUrl;
   final String? onlyAuthorUrl;
   final String? favoriteUrl;
@@ -63,6 +68,7 @@ class ThreadDetailPageState {
   final String? homeUrl;
   final String? desktopUrl;
   final bool hasMore;
+  final Map<String, String> queryParameters;
   final bool isLoadingInitial;
   final bool isLoadingMore;
   final List<ThreadPost> posts;
@@ -99,6 +105,8 @@ class ThreadDetailPageState {
       replies: 0,
       currentPage: 0,
       lastPage: null,
+      previousPageUrl: null,
+      nextPageUrl: null,
       reverseOrderUrl: null,
       onlyAuthorUrl: null,
       favoriteUrl: null,
@@ -106,6 +114,7 @@ class ThreadDetailPageState {
       homeUrl: null,
       desktopUrl: null,
       hasMore: true,
+      queryParameters: const <String, String>{},
       isLoadingInitial: true,
       isLoadingMore: false,
       posts: const <ThreadPost>[],
@@ -140,6 +149,8 @@ class ThreadDetailPageState {
     int? replies,
     int? currentPage,
     int? lastPage,
+    String? previousPageUrl,
+    String? nextPageUrl,
     String? reverseOrderUrl,
     String? onlyAuthorUrl,
     String? favoriteUrl,
@@ -147,6 +158,7 @@ class ThreadDetailPageState {
     String? homeUrl,
     String? desktopUrl,
     bool? hasMore,
+    Map<String, String>? queryParameters,
     bool? isLoadingInitial,
     bool? isLoadingMore,
     List<ThreadPost>? posts,
@@ -170,6 +182,8 @@ class ThreadDetailPageState {
     bool clearSourceTagName = false,
     bool clearTypeName = false,
     bool clearLastPage = false,
+    bool clearPreviousPageUrl = false,
+    bool clearNextPageUrl = false,
     bool clearReverseOrderUrl = false,
     bool clearOnlyAuthorUrl = false,
     bool clearForumName = false,
@@ -195,6 +209,10 @@ class ThreadDetailPageState {
       replies: replies ?? this.replies,
       currentPage: currentPage ?? this.currentPage,
       lastPage: clearLastPage ? null : (lastPage ?? this.lastPage),
+      previousPageUrl: clearPreviousPageUrl
+          ? null
+          : (previousPageUrl ?? this.previousPageUrl),
+      nextPageUrl: clearNextPageUrl ? null : (nextPageUrl ?? this.nextPageUrl),
       reverseOrderUrl: clearReverseOrderUrl
           ? null
           : (reverseOrderUrl ?? this.reverseOrderUrl),
@@ -206,6 +224,7 @@ class ThreadDetailPageState {
       homeUrl: clearHomeUrl ? null : (homeUrl ?? this.homeUrl),
       desktopUrl: clearDesktopUrl ? null : (desktopUrl ?? this.desktopUrl),
       hasMore: hasMore ?? this.hasMore,
+      queryParameters: queryParameters ?? this.queryParameters,
       isLoadingInitial: isLoadingInitial ?? this.isLoadingInitial,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       posts: posts ?? this.posts,

@@ -52,13 +52,23 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
   @override
   FutureOr<ThreadDetailPageState> build() async {
-    return _loadPage(page: 1, previous: const <ThreadPost>[]);
+    return _loadPage(
+      page: 1,
+      previous: const <ThreadPost>[],
+      queryParameters: const <String, String>{},
+    );
   }
 
   Future<void> refresh() async {
+    final current = state.value;
+    final currentPage = current?.currentPage;
     state = const AsyncLoading();
     state = await AsyncValue.guard(
-      () => _loadPage(page: 1, previous: const <ThreadPost>[]),
+      () => _loadPage(
+        page: currentPage == null || currentPage <= 0 ? 1 : currentPage,
+        previous: const <ThreadPost>[],
+        queryParameters: current?.queryParameters ?? const <String, String>{},
+      ),
     );
   }
 
@@ -72,6 +82,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     final result = await _readRepository().getThreadDetail(
       tid: _args.tid,
       page: current.currentPage + 1,
+      queryParameters: current.queryParameters,
     );
 
     state = result.when(
@@ -87,6 +98,8 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
             replies: data.replies,
             currentPage: data.currentPage,
             lastPage: data.lastPage,
+            previousPageUrl: data.previousPageUrl,
+            nextPageUrl: data.nextPageUrl,
             reverseOrderUrl: data.reverseOrderUrl,
             onlyAuthorUrl: data.onlyAuthorUrl,
             favoriteUrl: data.favoriteUrl,
@@ -106,6 +119,61 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         );
       },
     );
+  }
+
+  Future<void> loadPage(int page) {
+    return _replaceWithPage(page: page);
+  }
+
+  Future<void> loadPreviousPage() async {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    final previousPage = _pageFromUrl(current.previousPageUrl);
+    final fallbackPage = current.currentPage > 1 ? current.currentPage - 1 : 1;
+    final targetPage = previousPage ?? fallbackPage;
+    if (targetPage >= current.currentPage || targetPage < 1) {
+      return;
+    }
+    await _replaceWithPage(page: targetPage);
+  }
+
+  Future<void> loadNextPage() async {
+    final current = state.value;
+    if (current == null || !current.hasMore) {
+      return;
+    }
+    final nextPage = _pageFromUrl(current.nextPageUrl);
+    await _replaceWithPage(page: nextPage ?? current.currentPage + 1);
+  }
+
+  Future<void> openOnlyAuthor() async {
+    final current = state.value;
+    final query = _queryFromUrl(current?.onlyAuthorUrl);
+    if (current == null || query.isEmpty) {
+      return;
+    }
+    await _replaceWithPage(
+      page: _pageFromQuery(query) ?? 1,
+      queryParameters: _threadDetailQuery(query),
+    );
+  }
+
+  Future<void> openReverseOrder() async {
+    final current = state.value;
+    final query = _queryFromUrl(current?.reverseOrderUrl);
+    if (current == null || query.isEmpty) {
+      return;
+    }
+    await _replaceWithPage(
+      page: _pageFromQuery(query) ?? current.currentPage,
+      queryParameters: _threadDetailQuery(query),
+    );
+  }
+
+  Future<void> resetThreadView() async {
+    await _replaceWithPage(page: 1, queryParameters: const <String, String>{});
   }
 
   Future<void> addToShelf() async {
@@ -296,7 +364,11 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       if (latest == null) {
         return;
       }
-      final reloaded = await _loadPage(page: 1, previous: const <ThreadPost>[]);
+      final reloaded = await _loadPage(
+        page: latest.currentPage <= 0 ? 1 : latest.currentPage,
+        previous: const <ThreadPost>[],
+        queryParameters: latest.queryParameters,
+      );
       state = AsyncData(
         reloaded.copyWith(
           replyHint: latest.replyHint,
@@ -311,10 +383,12 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
   Future<ThreadDetailPageState> _loadPage({
     required int page,
     required List<ThreadPost> previous,
+    required Map<String, String> queryParameters,
   }) async {
     final result = await _readRepository().getThreadDetail(
       tid: _args.tid,
       page: page,
+      queryParameters: queryParameters,
     );
 
     if (result case ApiSuccess<ThreadDetailData>(:final data)) {
@@ -369,6 +443,8 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         replies: data.replies,
         currentPage: data.currentPage,
         lastPage: data.lastPage,
+        previousPageUrl: data.previousPageUrl,
+        nextPageUrl: data.nextPageUrl,
         reverseOrderUrl: data.reverseOrderUrl,
         onlyAuthorUrl: data.onlyAuthorUrl,
         favoriteUrl: data.favoriteUrl,
@@ -376,6 +452,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         homeUrl: data.homeUrl,
         desktopUrl: data.desktopUrl,
         hasMore: data.hasMore,
+        queryParameters: Map<String, String>.unmodifiable(queryParameters),
         isLoadingInitial: false,
         isLoadingMore: false,
         posts: merged,
@@ -410,6 +487,8 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       replies: 0,
       currentPage: page == 1 ? 0 : page,
       lastPage: null,
+      previousPageUrl: null,
+      nextPageUrl: null,
       reverseOrderUrl: null,
       onlyAuthorUrl: null,
       favoriteUrl: null,
@@ -417,6 +496,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       homeUrl: null,
       desktopUrl: null,
       hasMore: false,
+      queryParameters: Map<String, String>.unmodifiable(queryParameters),
       isLoadingInitial: false,
       isLoadingMore: false,
       posts: previous,
@@ -435,6 +515,82 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       replyHint: null,
       errorMessage: error.message,
     );
+  }
+
+  Future<void> _replaceWithPage({
+    required int page,
+    Map<String, String>? queryParameters,
+  }) async {
+    final current = state.value;
+    if (current == null || current.isLoadingMore) {
+      return;
+    }
+    final nextQuery = queryParameters ?? current.queryParameters;
+    state = AsyncData(current.copyWith(isLoadingMore: true, clearError: true));
+    final next = await _loadPage(
+      page: page,
+      previous: const <ThreadPost>[],
+      queryParameters: nextQuery,
+    );
+    final afterLoading = state.value ?? current;
+    state = AsyncData(
+      next.copyWith(
+        isThreadFavorited: afterLoading.isThreadFavorited,
+        threadFavoriteHint: afterLoading.threadFavoriteHint,
+      ),
+    );
+  }
+
+  int? _pageFromUrl(String? url) {
+    final value = url?.trim();
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    final uri = Uri.tryParse(value);
+    final queryPage = int.tryParse(uri?.queryParameters['page'] ?? '');
+    if (queryPage != null) {
+      return queryPage;
+    }
+    final path = uri?.path ?? '';
+    return int.tryParse(
+      RegExp(r'thread-\d+-(\d+)-').firstMatch(path)?.group(1) ?? '',
+    );
+  }
+
+  Map<String, String> _queryFromUrl(String? url) {
+    final value = url?.trim();
+    if (value == null || value.isEmpty) {
+      return const <String, String>{};
+    }
+    final parsed = Uri.tryParse(value);
+    if (parsed == null) {
+      return const <String, String>{};
+    }
+    final query = Map<String, String>.from(parsed.queryParameters);
+    final page = _pageFromUrl(value);
+    if (page != null) {
+      query['page'] = page.toString();
+    }
+    return query;
+  }
+
+  int? _pageFromQuery(Map<String, String> query) {
+    return int.tryParse(query['page'] ?? '');
+  }
+
+  Map<String, String> _threadDetailQuery(Map<String, String> query) {
+    const allowedKeys = <String>{
+      'authorid',
+      'ordertype',
+      'extra',
+      'from',
+      'page',
+    };
+    return Map<String, String>.unmodifiable({
+      for (final entry in query.entries)
+        if (allowedKeys.contains(entry.key) && entry.value.trim().isNotEmpty)
+          entry.key: entry.value,
+    });
   }
 
   ThreadRepository _readRepository() {

@@ -11,6 +11,7 @@ abstract class ThreadRepository {
   Future<ApiResult<ThreadDetailData>> getThreadDetail({
     required String tid,
     int page = 1,
+    Map<String, String> queryParameters = const <String, String>{},
   });
 }
 
@@ -23,10 +24,11 @@ class ApiThreadRepository implements ThreadRepository {
   Future<ApiResult<ThreadDetailData>> getThreadDetail({
     required String tid,
     int page = 1,
+    Map<String, String> queryParameters = const <String, String>{},
   }) {
     return _apiClient.getParsed<ThreadDetailData>(
       module: 'viewthread',
-      queryParameters: {'tid': tid, 'page': page},
+      queryParameters: {...queryParameters, 'tid': tid, 'page': page},
       parser: (response) =>
           ThreadDetailData.fromVariables(response.variables, page: page),
     );
@@ -47,10 +49,12 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
   Future<ApiResult<ThreadDetailData>> getThreadDetail({
     required String tid,
     int page = 1,
+    Map<String, String> queryParameters = const <String, String>{},
   }) async {
     final htmlResult = await _htmlClient.getDesktopPage(
       path: '/forum.php',
       queryParameters: <String, String>{
+        ...queryParameters,
         'mod': 'viewthread',
         'tid': tid,
         'page': page.toString(),

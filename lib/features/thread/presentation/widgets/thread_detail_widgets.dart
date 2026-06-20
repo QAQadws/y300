@@ -13,17 +13,27 @@ class ThreadDetailContent extends StatelessWidget {
     required this.state,
     required this.imageHeaderBuilder,
     required this.sourceTagLabel,
-    required this.onLoadMore,
+    required this.onLoadPreviousPage,
+    required this.onLoadNextPage,
+    required this.onOpenOnlyAuthor,
+    required this.onOpenReverseOrder,
     required this.onAddComicToShelf,
     required this.onAddNovelToShelf,
+    required this.onOpenPostReply,
+    required this.onCopyActionUrl,
   });
 
   final ThreadDetailPageState state;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final String sourceTagLabel;
-  final VoidCallback onLoadMore;
+  final VoidCallback onLoadPreviousPage;
+  final VoidCallback onLoadNextPage;
+  final VoidCallback onOpenOnlyAuthor;
+  final VoidCallback onOpenReverseOrder;
   final VoidCallback onAddComicToShelf;
   final VoidCallback onAddNovelToShelf;
+  final ValueChanged<ThreadPost> onOpenPostReply;
+  final void Function(String label, String url) onCopyActionUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +51,9 @@ class ThreadDetailContent extends StatelessWidget {
             hasMore: state.hasMore,
             isLoadingMore: state.isLoadingMore,
             currentPage: state.currentPage <= 0 ? 1 : state.currentPage,
-            onLoadMore: onLoadMore,
+            canLoadPrevious: state.currentPage > 1,
+            onLoadPreviousPage: onLoadPreviousPage,
+            onLoadNextPage: onLoadNextPage,
             palette: palette,
           );
         }
@@ -54,6 +66,8 @@ class ThreadDetailContent extends StatelessWidget {
           imageHeaderBuilder: imageHeaderBuilder,
           onAddComicToShelf: onAddComicToShelf,
           onAddNovelToShelf: onAddNovelToShelf,
+          onOpenPostReply: onOpenPostReply,
+          onCopyActionUrl: onCopyActionUrl,
           palette: palette,
         );
         if (post.isFirst && state.posts.length > 1) {
@@ -61,7 +75,12 @@ class ThreadDetailContent extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               postCard,
-              ThreadRepliesHeader(state: state, palette: palette),
+              ThreadRepliesHeader(
+                state: state,
+                palette: palette,
+                onOpenOnlyAuthor: onOpenOnlyAuthor,
+                onOpenReverseOrder: onOpenReverseOrder,
+              ),
             ],
           );
         }
@@ -138,10 +157,14 @@ class ThreadRepliesHeader extends StatelessWidget {
     super.key,
     required this.state,
     required this.palette,
+    required this.onOpenOnlyAuthor,
+    required this.onOpenReverseOrder,
   });
 
   final ThreadDetailPageState state;
   final ThreadDetailNativePalette palette;
+  final VoidCallback onOpenOnlyAuthor;
+  final VoidCallback onOpenReverseOrder;
 
   @override
   Widget build(BuildContext context) {
@@ -176,11 +199,19 @@ class ThreadRepliesHeader extends StatelessWidget {
           ),
           const Spacer(),
           if (state.reverseOrderUrl?.trim().isNotEmpty == true) ...[
-            ThreadReplyHeaderAction(label: '倒序浏览', palette: palette),
+            ThreadReplyHeaderAction(
+              label: '倒序浏览',
+              palette: palette,
+              onPressed: onOpenReverseOrder,
+            ),
             const SizedBox(width: 6),
           ],
           if (state.onlyAuthorUrl?.trim().isNotEmpty == true) ...[
-            ThreadReplyHeaderAction(label: '只看楼主', palette: palette),
+            ThreadReplyHeaderAction(
+              label: '只看楼主',
+              palette: palette,
+              onPressed: onOpenOnlyAuthor,
+            ),
             const SizedBox(width: 6),
           ],
           Text(
@@ -201,24 +232,30 @@ class ThreadReplyHeaderAction extends StatelessWidget {
     super.key,
     required this.label,
     required this.palette,
+    required this.onPressed,
   });
 
   final String label;
   final ThreadDetailNativePalette palette;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-      decoration: BoxDecoration(
-        color: palette.card.withValues(alpha: 0.72),
+    return Material(
+      color: palette.card.withValues(alpha: 0.72),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
         borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: palette.muted,
-          fontWeight: FontWeight.w700,
+        onTap: onPressed,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: palette.muted,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ),
       ),
     );
@@ -234,6 +271,8 @@ class ThreadPostCard extends StatelessWidget {
     required this.imageHeaderBuilder,
     required this.onAddComicToShelf,
     required this.onAddNovelToShelf,
+    required this.onOpenPostReply,
+    required this.onCopyActionUrl,
     required this.palette,
   });
 
@@ -243,6 +282,8 @@ class ThreadPostCard extends StatelessWidget {
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final VoidCallback onAddComicToShelf;
   final VoidCallback onAddNovelToShelf;
+  final ValueChanged<ThreadPost> onOpenPostReply;
+  final void Function(String label, String url) onCopyActionUrl;
   final ThreadDetailNativePalette palette;
 
   @override
@@ -313,7 +354,12 @@ class ThreadPostCard extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 10),
-                ThreadPostActionRow(post: post, palette: palette),
+                ThreadPostActionRow(
+                  post: post,
+                  palette: palette,
+                  onOpenPostReply: onOpenPostReply,
+                  onCopyActionUrl: onCopyActionUrl,
+                ),
               ],
             ),
           ),
@@ -375,10 +421,14 @@ class ThreadPostActionRow extends StatelessWidget {
     super.key,
     required this.post,
     required this.palette,
+    required this.onOpenPostReply,
+    required this.onCopyActionUrl,
   });
 
   final ThreadPost post;
   final ThreadDetailNativePalette palette;
+  final ValueChanged<ThreadPost> onOpenPostReply;
+  final void Function(String label, String url) onCopyActionUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -393,17 +443,20 @@ class ThreadPostActionRow extends StatelessWidget {
             label: '评分',
             icon: Icons.favorite_border,
             palette: palette,
+            onPressed: () => onCopyActionUrl('评分', post.rateUrl!),
           ),
         if (post.commentUrl?.trim().isNotEmpty == true)
           ThreadActionChip(
             label: '点评',
             icon: Icons.chat_bubble_outline,
             palette: palette,
+            onPressed: () => onCopyActionUrl('点评', post.commentUrl!),
           ),
         ThreadActionChip(
           label: '回复',
           icon: Icons.reply_outlined,
           palette: palette,
+          onPressed: () => onOpenPostReply(post),
         ),
       ],
     );
@@ -416,34 +469,42 @@ class ThreadActionChip extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.palette,
+    required this.onPressed,
   });
 
   final String label;
   final IconData icon;
   final ThreadDetailNativePalette palette;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 27,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: BoxDecoration(
-        color: palette.metricBackground.withValues(alpha: 0.52),
+    return Material(
+      color: palette.metricBackground.withValues(alpha: 0.52),
+      borderRadius: BorderRadius.circular(9),
+      child: InkWell(
         borderRadius: BorderRadius.circular(9),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: palette.softText),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: palette.muted,
-              fontWeight: FontWeight.w700,
+        onTap: onPressed,
+        child: SizedBox(
+          height: 27,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 13, color: palette.softText),
+                const SizedBox(width: 4),
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: palette.muted,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -701,14 +762,18 @@ class ThreadLoadMoreSection extends StatelessWidget {
     required this.hasMore,
     required this.isLoadingMore,
     required this.currentPage,
-    required this.onLoadMore,
+    required this.canLoadPrevious,
+    required this.onLoadPreviousPage,
+    required this.onLoadNextPage,
     required this.palette,
   });
 
   final bool hasMore;
   final bool isLoadingMore;
   final int currentPage;
-  final VoidCallback onLoadMore;
+  final bool canLoadPrevious;
+  final VoidCallback onLoadPreviousPage;
+  final VoidCallback onLoadNextPage;
   final ThreadDetailNativePalette palette;
 
   @override
@@ -727,7 +792,7 @@ class ThreadLoadMoreSection extends StatelessWidget {
         children: [
           TextButton(
             key: const Key('thread-detail-previous-page-button'),
-            onPressed: null,
+            onPressed: canLoadPrevious ? onLoadPreviousPage : null,
             child: const Text('上一页'),
           ),
           const SizedBox(width: 6),
@@ -751,7 +816,7 @@ class ThreadLoadMoreSection extends StatelessWidget {
           const SizedBox(width: 6),
           TextButton(
             key: const Key('thread-detail-load-more-button'),
-            onPressed: hasMore ? onLoadMore : null,
+            onPressed: hasMore ? onLoadNextPage : null,
             child: Text(hasMore ? '下一页' : '没有更多'),
           ),
         ],

@@ -4,6 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/composer_shared/data/composer_draft_repository.dart';
+import 'package:y300/features/composer_shared/data/composer_image_picker.dart';
+import 'package:y300/features/composer_shared/data/composer_providers.dart';
+import 'package:y300/features/composer_shared/data/composer_upload_notification_service.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
 import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
@@ -34,7 +41,7 @@ void main() {
   });
 
   group('ThreadDetailPage', () {
-    testWidgets('shows posts and loads more replies', (tester) async {
+    testWidgets('shows posts and switches thread pages', (tester) async {
       var callCount = 0;
       final repository = _FakeThreadRepository((tid, page) async {
         callCount++;
@@ -54,6 +61,8 @@ void main() {
               views: 12,
               currentPage: 1,
               lastPage: 2,
+              nextPageUrl:
+                  'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=2',
               reverseOrderUrl:
                   'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&ordertype=1',
               onlyAuthorUrl:
@@ -105,6 +114,17 @@ void main() {
             views: 12,
             currentPage: 2,
             lastPage: 2,
+            previousPageUrl:
+                'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
+            reverseOrderUrl:
+                'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&ordertype=1&page=2',
+            onlyAuthorUrl:
+                'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&authorid=1&page=2',
+            shareUrl:
+                'https://bbs.yamibo.com/home.php?mod=spacecp&ac=share&type=thread&id=100',
+            homeUrl: 'https://bbs.yamibo.com/index.php',
+            desktopUrl:
+                'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=2',
             perPage: 1,
             posts: [
               ThreadPost(
@@ -160,12 +180,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      expect(find.text('第一条回复'), findsOneWidget);
+      expect(find.text('第一条回复'), findsNothing);
       expect(find.text('第二条回复'), findsOneWidget);
-      expect(find.byKey(const Key('thread-replies-header')), findsOneWidget);
-      expect(find.text('全部回复'), findsOneWidget);
-      expect(find.text('倒序浏览'), findsOneWidget);
-      expect(find.text('只看楼主'), findsOneWidget);
       expect(
         find.byKey(const Key('thread-detail-bottom-favorite-button')),
         findsOneWidget,
@@ -179,6 +195,24 @@ void main() {
       expect(find.text('返回首页'), findsOneWidget);
       expect(find.text('电脑版'), findsOneWidget);
       expect(callCount, 2);
+
+      await tester.tap(find.text('倒序浏览'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(repository.queryHistory.last['ordertype'], '1');
+
+      await tester.ensureVisible(
+        find.byKey(const Key('thread-detail-previous-page-button')),
+      );
+      await tester.tap(
+        find.byKey(const Key('thread-detail-previous-page-button')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(find.text('第一条回复'), findsOneWidget);
+      expect(callCount, 4);
     });
 
     testWidgets('shows comic add-to-shelf button for comic candidate post', (
@@ -414,7 +448,7 @@ void main() {
       expect(find.text('收藏成功'), findsOneWidget);
     });
 
-    testWidgets('can input and submit reply via api repository abstraction', (
+    testWidgets('opens reply composer and submits reply via shared composer', (
       tester,
     ) async {
       final repository = _FakeThreadRepository((tid, page) async {
@@ -449,17 +483,28 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      await tester.tap(find.byKey(const Key('thread-reply-submit-button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('reply-composer-message-input')),
+        findsOneWidget,
+      );
       await tester.enterText(
-        find.byKey(const Key('thread-reply-input')),
+        find.byKey(const Key('reply-composer-message-input')),
         '这是测试回复',
       );
-      await tester.tap(find.byKey(const Key('thread-reply-submit-button')));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
+      final sendButton = tester.widget<IconButton>(
+        find.byKey(const Key('reply-composer-send-button')),
+      );
+      expect(sendButton.onPressed, isNotNull);
+      await tester.tap(find.byKey(const Key('reply-composer-send-button')));
+      await tester.pumpAndSettle();
 
       expect(replyRepo.called, isTrue);
       expect(replyRepo.lastDraft?.message, '这是测试回复');
-      expect(find.byKey(const Key('thread-reply-hint')), findsOneWidget);
+      expect(find.text('回复发布成功'), findsOneWidget);
     });
   });
 }
@@ -484,6 +529,16 @@ Widget _buildTestApp(
         favoriteActionService ?? _FakeThreadFavoriteActionService(),
       ),
       forumTagRepositoryProvider.overrideWithValue(_FakeForumTagRepository()),
+      composerDraftRepositoryProvider.overrideWithValue(
+        _MemoryComposerDraftRepository(),
+      ),
+      composerImagePickerProvider.overrideWithValue(_NoopComposerImagePicker()),
+      composerImageUploadCoordinatorProvider.overrideWithValue(
+        _NoopComposerImageUploadCoordinator(),
+      ),
+      composerUploadNotificationServiceProvider.overrideWithValue(
+        _NoopComposerUploadNotificationService(),
+      ),
     ],
     child: const MaterialApp(
       home: ThreadDetailPage(tid: '100', subject: '测试主题'),
@@ -567,14 +622,95 @@ class _FakeThreadRepository implements ThreadRepository {
 
   final Future<ApiResult<ThreadDetailData>> Function(String tid, int page)
   _loader;
+  final List<Map<String, String>> queryHistory = <Map<String, String>>[];
 
   @override
   Future<ApiResult<ThreadDetailData>> getThreadDetail({
     required String tid,
     int page = 1,
+    Map<String, String> queryParameters = const <String, String>{},
   }) {
+    queryHistory.add(Map<String, String>.from(queryParameters));
     return _loader(tid, page);
   }
+}
+
+class _MemoryComposerDraftRepository implements ComposerDraftRepository {
+  final Map<ComposerDraftIdentity, ComposerDraftSnapshot> _drafts =
+      <ComposerDraftIdentity, ComposerDraftSnapshot>{};
+
+  @override
+  Future<void> deleteDraft(ComposerDraftIdentity identity) async {
+    _drafts.remove(identity);
+  }
+
+  @override
+  Future<ComposerDraftSnapshot?> loadDraft(
+    ComposerDraftIdentity identity,
+  ) async {
+    return _drafts[identity];
+  }
+
+  @override
+  Future<ComposerDraftPruneResult> pruneDrafts({
+    Duration maxAge = const Duration(days: 30),
+    int maxCount = 100,
+  }) async {
+    return ComposerDraftPruneResult(removedCount: 0, keptCount: _drafts.length);
+  }
+
+  @override
+  Future<void> saveDraft(ComposerDraftSnapshot snapshot) async {
+    _drafts[snapshot.identity] = snapshot;
+  }
+
+  @override
+  Future<List<ComposerDraftSnapshot>> listDraftsForThread({
+    required String fid,
+    required String tid,
+  }) async {
+    return _drafts.values
+        .where(
+          (draft) => draft.identity.fid == fid && draft.identity.tid == tid,
+        )
+        .toList(growable: false);
+  }
+}
+
+class _NoopComposerImagePicker implements ComposerImagePicker {
+  @override
+  Future<List<ComposerPickedImage>> pickImagesInOrder() async {
+    return const <ComposerPickedImage>[];
+  }
+}
+
+class _NoopComposerImageUploadCoordinator
+    implements ComposerImageUploadCoordinator {
+  @override
+  void cancel() {}
+
+  @override
+  Stream<ComposerImageUploadEvent> uploadInOrder({
+    required String fid,
+    required List<ComposerImageAttachment> attachments,
+  }) {
+    return const Stream<ComposerImageUploadEvent>.empty();
+  }
+}
+
+class _NoopComposerUploadNotificationService
+    implements ComposerUploadNotificationService {
+  @override
+  Future<void> clear() async {}
+
+  @override
+  Future<void> showFailure({
+    required int failedCount,
+    required int total,
+  }) async {}
+
+  @override
+  Future<void> showProgress({required int current, required int total}) async {}
 }
 
 class _FakeComicRepository implements ComicRepository {
