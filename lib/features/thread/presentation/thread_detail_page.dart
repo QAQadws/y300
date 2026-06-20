@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
@@ -15,6 +16,7 @@ import 'package:y300/features/thread/presentation/thread_detail_controller.dart'
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 
 class ThreadDetailPage extends ConsumerStatefulWidget {
   const ThreadDetailPage({super.key, required this.tid, this.subject = ''});
@@ -32,10 +34,12 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     final args = ThreadDetailArgs(tid: widget.tid, subject: widget.subject);
     final asyncState = ref.watch(threadDetailControllerProvider(args));
     final controller = ref.read(threadDetailControllerProvider(args).notifier);
-    final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
     final state =
         asyncState.value ??
         ThreadDetailPageState.initial(tid: widget.tid, subject: widget.subject);
+    final imageHeaderBuilder = ref.watch(
+      imageRequestHeaderBuilderForRefererProvider(_imageRefererFor(state)),
+    );
     ref.listen<AsyncValue<ThreadDetailPageState>>(
       threadDetailControllerProvider(args),
       (previous, next) {
@@ -97,7 +101,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
           _ThreadDetailMoreMenu(
             state: state,
             onOnlyAuthor: controller.openOnlyAuthor,
+            onAllPosts: controller.openAllPosts,
             onReverseOrder: controller.openReverseOrder,
+            onNormalOrder: controller.openNormalOrder,
             onCopyUrl: _copyUrl,
           ),
         ],
@@ -119,7 +125,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                     onLoadPreviousPage: controller.loadPreviousPage,
                     onLoadNextPage: controller.loadNextPage,
                     onOpenOnlyAuthor: controller.openOnlyAuthor,
+                    onOpenAllPosts: controller.openAllPosts,
                     onOpenReverseOrder: controller.openReverseOrder,
+                    onOpenNormalOrder: controller.openNormalOrder,
                     onAddComicToShelf: controller.addToShelf,
                     onAddNovelToShelf: controller.addNovelToShelf,
                     onOpenPostReply: (post) {
@@ -132,6 +140,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                       _openPostCommentSheet(args, controller, post);
                     },
                     onCopyActionUrl: _copyActionUrl,
+                    onOpenPostImages: _openPostImages,
                     onTogglePollOption: controller.togglePollOption,
                     onSubmitPollVote: controller.submitPollVote,
                   ),
@@ -167,6 +176,24 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     }
     final typeid = state.typeid.trim();
     return typeid.isEmpty ? '未标记' : 'typeid=$typeid';
+  }
+
+  String _imageRefererFor(ThreadDetailPageState state) {
+    final desktopUrl = state.desktopUrl?.trim();
+    if (desktopUrl != null && desktopUrl.isNotEmpty) {
+      return desktopUrl;
+    }
+    final currentPage = state.currentPage <= 0 ? 1 : state.currentPage;
+    return Uri.parse(AppConfig.siteBaseUrl)
+        .replace(
+          path: '/forum.php',
+          queryParameters: <String, String>{
+            'mod': 'viewthread',
+            'tid': widget.tid,
+            'page': currentPage.toString(),
+          },
+        )
+        .toString();
   }
 
   Future<void> _openThreadReplyComposer(
@@ -315,6 +342,10 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     return _copyUrl('$label链接', url);
   }
 
+  void _openPostImages(ThreadPost post, ThreadPostImageOpenRequest request) {
+    _copyUrl('${post.number}# 图片链接', request.image.url);
+  }
+
   Future<void> _copyUrl(String label, String url) async {
     final value = url.trim();
     if (value.isEmpty) {
@@ -369,13 +400,17 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
   const _ThreadDetailMoreMenu({
     required this.state,
     required this.onOnlyAuthor,
+    required this.onAllPosts,
     required this.onReverseOrder,
+    required this.onNormalOrder,
     required this.onCopyUrl,
   });
 
   final ThreadDetailPageState state;
   final VoidCallback onOnlyAuthor;
+  final VoidCallback onAllPosts;
   final VoidCallback onReverseOrder;
+  final VoidCallback onNormalOrder;
   final void Function(String label, String url) onCopyUrl;
 
   @override
@@ -384,16 +419,14 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
       key: const Key('thread-detail-more-menu'),
       tooltip: '更多',
       itemBuilder: (context) => [
-        if (state.onlyAuthorUrl?.trim().isNotEmpty == true)
-          const PopupMenuItem<String>(
-            value: 'only-author',
-            child: Text('只看楼主'),
-          ),
-        if (state.reverseOrderUrl?.trim().isNotEmpty == true)
-          const PopupMenuItem<String>(
-            value: 'reverse-order',
-            child: Text('倒序浏览'),
-          ),
+        PopupMenuItem<String>(
+          value: state.isOnlyAuthorView ? 'all-posts' : 'only-author',
+          child: Text(state.isOnlyAuthorView ? '显示全部楼层' : '只看该作者'),
+        ),
+        PopupMenuItem<String>(
+          value: state.isReverseOrderView ? 'normal-order' : 'reverse-order',
+          child: Text(state.isReverseOrderView ? '正序浏览' : '倒序浏览'),
+        ),
         if (state.homeUrl?.trim().isNotEmpty == true)
           const PopupMenuItem<String>(value: 'home', child: Text('返回首页')),
         if (state.desktopUrl?.trim().isNotEmpty == true)
@@ -404,8 +437,14 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
           case 'only-author':
             onOnlyAuthor();
             return;
+          case 'all-posts':
+            onAllPosts();
+            return;
           case 'reverse-order':
             onReverseOrder();
+            return;
+          case 'normal-order':
+            onNormalOrder();
             return;
           case 'home':
             onCopyUrl('首页链接', state.homeUrl!);

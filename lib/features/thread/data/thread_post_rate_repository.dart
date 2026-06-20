@@ -5,10 +5,12 @@ import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/core/utils/parse_utils.dart';
 
 class ThreadPostRateForm {
@@ -66,10 +68,102 @@ class ThreadPostRateResult {
   final String message;
 }
 
+class ThreadPostRateFormSeed {
+  const ThreadPostRateFormSeed({
+    required this.rateUrl,
+    required this.tid,
+    required this.pid,
+    required this.referer,
+  });
+
+  final String rateUrl;
+  final String tid;
+  final String pid;
+  final String referer;
+}
+
 abstract class ThreadPostRateRepository {
   Future<ApiResult<ThreadPostRateForm>> loadForm(String rateUrl);
 
+  Future<ApiResult<ThreadPostRateForm>> loadFormFromSeed(
+    ThreadPostRateFormSeed seed,
+  );
+
   Future<ApiResult<ThreadPostRateResult>> submit(ThreadPostRateDraft draft);
+}
+
+class ThreadPostRateFormFallbackBuilder {
+  const ThreadPostRateFormFallbackBuilder({
+    SiteUrlResolver urlResolver = const SiteUrlResolver(),
+  }) : _urlResolver = urlResolver;
+
+  final SiteUrlResolver _urlResolver;
+
+  static const List<String> defaultReasonOptions = <String>[
+    '你太可爱',
+    '好萌好萌好萌',
+    '我很赞同',
+    '精品文章',
+    '原创内容',
+  ];
+
+  ThreadPostRateForm? build({
+    required ThreadPostRateFormSeed seed,
+    required String? formHash,
+  }) {
+    final endpoint = _resolveUri(seed.rateUrl);
+    if (endpoint == null) {
+      return null;
+    }
+    final tid = _firstNonEmpty(seed.tid, endpoint.queryParameters['tid']);
+    final pid = _firstNonEmpty(seed.pid, endpoint.queryParameters['pid']);
+    final normalizedFormHash = formHash?.trim() ?? '';
+    if (tid.isEmpty || pid.isEmpty || normalizedFormHash.isEmpty) {
+      return null;
+    }
+    final referer = _firstNonEmpty(
+      seed.referer,
+      '${AppConfig.siteBaseUrl}/forum.php?mod=viewthread&tid=$tid#pid$pid',
+    );
+    return ThreadPostRateForm(
+      actionUrl: Uri.parse(AppConfig.siteBaseUrl)
+          .replace(
+            path: '/forum.php',
+            queryParameters: const <String, String>{
+              'mod': 'misc',
+              'action': 'rate',
+              'ratesubmit': 'yes',
+              'infloat': 'yes',
+              'inajax': '1',
+              'handlekey': 'rateform',
+            },
+          )
+          .toString(),
+      formHash: normalizedFormHash,
+      tid: tid,
+      pid: pid,
+      referer: referer,
+      scoreName: 'score1',
+      scoreMin: 0,
+      scoreMax: 5,
+      todayRemaining: 0,
+      reasonOptions: defaultReasonOptions,
+      notifyAuthorDefault: false,
+    );
+  }
+
+  Uri? _resolveUri(String value) {
+    final resolved = _urlResolver.resolve(value.trim());
+    return resolved == null ? null : Uri.tryParse(resolved);
+  }
+
+  String _firstNonEmpty(String? first, String? second) {
+    final firstValue = first?.trim();
+    if (firstValue != null && firstValue.isNotEmpty) {
+      return firstValue;
+    }
+    return second?.trim() ?? '';
+  }
 }
 
 class ThreadPostRateFormParser {
@@ -80,7 +174,7 @@ class ThreadPostRateFormParser {
   final SiteUrlResolver _urlResolver;
 
   ThreadPostRateForm parse(String html, {required String fallbackRateUrl}) {
-    final document = html_parser.parse(html);
+    final document = html_parser.parse(_extractCData(html) ?? html);
     final form = document.querySelector('form#rateform');
     if (form == null) {
       throw const ThreadPostRateFormParseException('评分表单缺失');
@@ -159,24 +253,70 @@ class ThreadPostRateFormParser {
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
   }
+
+  String? _extractCData(String html) {
+    final start = html.indexOf('<![CDATA[');
+    if (start < 0) {
+      return null;
+    }
+    final contentStart = start + '<![CDATA['.length;
+    final end = html.indexOf(']]>', contentStart);
+    if (end < 0) {
+      return null;
+    }
+    return html.substring(contentStart, end);
+  }
 }
 
 class DiscuzThreadPostRateRepository implements ThreadPostRateRepository {
   DiscuzThreadPostRateRepository({
     required YamiboHttpGateway gateway,
+    required YamiboSessionStore sessionStore,
     ThreadPostRateFormParser parser = const ThreadPostRateFormParser(),
+    ThreadPostRateFormFallbackBuilder fallbackBuilder =
+        const ThreadPostRateFormFallbackBuilder(),
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
   }) : _gateway = gateway,
+       _sessionStore = sessionStore,
        _parser = parser,
+       _fallbackBuilder = fallbackBuilder,
        _urlResolver = urlResolver;
 
   final YamiboHttpGateway _gateway;
+  final YamiboSessionStore _sessionStore;
   final ThreadPostRateFormParser _parser;
+  final ThreadPostRateFormFallbackBuilder _fallbackBuilder;
   final SiteUrlResolver _urlResolver;
 
   @override
   Future<ApiResult<ThreadPostRateForm>> loadForm(String rateUrl) async {
     final endpoint = _uriFrom(rateUrl);
+    final tid = endpoint?.queryParameters['tid'] ?? '';
+    final pid = endpoint?.queryParameters['pid'] ?? '';
+    return _loadForm(
+      ThreadPostRateFormSeed(rateUrl: rateUrl, tid: tid, pid: pid, referer: ''),
+      endpoint: _rateFormUri(endpoint: endpoint, tid: tid, pid: pid),
+    );
+  }
+
+  @override
+  Future<ApiResult<ThreadPostRateForm>> loadFormFromSeed(
+    ThreadPostRateFormSeed seed,
+  ) async {
+    return _loadForm(
+      seed,
+      endpoint: _rateFormUri(
+        endpoint: _uriFrom(seed.rateUrl),
+        tid: seed.tid,
+        pid: seed.pid,
+      ),
+    );
+  }
+
+  Future<ApiResult<ThreadPostRateForm>> _loadForm(
+    ThreadPostRateFormSeed seed, {
+    required Uri? endpoint,
+  }) async {
     if (endpoint == null) {
       return const ApiFailure<ThreadPostRateForm>(
         ApiError(type: ApiErrorType.business, message: '评分表单地址无效'),
@@ -190,29 +330,50 @@ class DiscuzThreadPostRateRepository implements ThreadPostRateRepository {
         pageKind: 'thread.detail',
       ),
       headers: const <String, String>{
+        'User-Agent': DiscuzImageRequestHeaderBuilder.browserUserAgent,
         'accept':
             'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
       },
     );
     if (response case ApiFailure(:final error)) {
+      final fallback = _buildFallback(seed);
+      if (fallback != null) {
+        return ApiSuccess<ThreadPostRateForm>(fallback);
+      }
       return ApiFailure<ThreadPostRateForm>(error);
     }
     try {
       return ApiSuccess<ThreadPostRateForm>(
         _parser.parse(
           response.dataOrNull?.body ?? '',
-          fallbackRateUrl: endpoint.toString(),
+          fallbackRateUrl: _rateSubmitUri().toString(),
         ),
       );
     } on ThreadPostRateFormParseException catch (error) {
+      final fallback = _buildFallback(seed);
+      if (fallback != null) {
+        return ApiSuccess<ThreadPostRateForm>(fallback);
+      }
       return ApiFailure<ThreadPostRateForm>(
         ApiError(type: ApiErrorType.parse, message: error.message),
       );
     } catch (error) {
+      final fallback = _buildFallback(seed);
+      if (fallback != null) {
+        return ApiSuccess<ThreadPostRateForm>(fallback);
+      }
       return ApiFailure<ThreadPostRateForm>(
         ApiError(type: ApiErrorType.parse, message: '评分表单解析失败：$error'),
       );
     }
+  }
+
+  ThreadPostRateForm? _buildFallback(ThreadPostRateFormSeed seed) {
+    return _fallbackBuilder.build(
+      seed: seed,
+      formHash: _sessionStore.readFreshFormhash(),
+    );
   }
 
   @override
@@ -234,12 +395,7 @@ class DiscuzThreadPostRateRepository implements ThreadPostRateRepository {
         ),
       );
     }
-    final endpoint = _uriFrom(form.actionUrl);
-    if (endpoint == null) {
-      return const ApiFailure<ThreadPostRateResult>(
-        ApiError(type: ApiErrorType.business, message: '评分提交地址无效'),
-      );
-    }
+    final endpoint = _rateSubmitUri();
     final response = await _gateway.postFormFields(
       endpoint,
       context: const YamiboRequestContext(
@@ -294,7 +450,53 @@ class DiscuzThreadPostRateRepository implements ThreadPostRateRepository {
     return resolved == null ? null : Uri.tryParse(resolved);
   }
 
+  Uri? _rateFormUri({
+    required Uri? endpoint,
+    required String tid,
+    required String pid,
+  }) {
+    if (endpoint == null) {
+      return null;
+    }
+    final resolvedTid = tid.trim().isNotEmpty
+        ? tid.trim()
+        : endpoint.queryParameters['tid']?.trim() ?? '';
+    final resolvedPid = pid.trim().isNotEmpty
+        ? pid.trim()
+        : endpoint.queryParameters['pid']?.trim() ?? '';
+    if (resolvedTid.isEmpty || resolvedPid.isEmpty) {
+      return endpoint;
+    }
+    return Uri.parse(AppConfig.siteBaseUrl).replace(
+      path: '/forum.php',
+      queryParameters: <String, String>{
+        'mod': 'misc',
+        'action': 'rate',
+        'tid': resolvedTid,
+        'pid': resolvedPid,
+        'infloat': 'yes',
+        'handlekey': 'rate',
+        'inajax': '1',
+      },
+    );
+  }
+
+  Uri _rateSubmitUri() {
+    return Uri.parse(AppConfig.siteBaseUrl).replace(
+      path: '/forum.php',
+      queryParameters: const <String, String>{
+        'mod': 'misc',
+        'action': 'rate',
+        'ratesubmit': 'yes',
+        'infloat': 'yes',
+        'inajax': '1',
+        'handlekey': 'rateform',
+      },
+    );
+  }
+
   _ThreadPostRateParseResult _parseSubmitResponse(String body) {
+    final html = _extractCData(body) ?? body;
     final json = _tryDecodeJson(body);
     if (json != null) {
       final messageNode = ParseUtils.asMap(json['Message']);
@@ -312,7 +514,7 @@ class DiscuzThreadPostRateRepository implements ThreadPostRateRepository {
         code: code,
       );
     }
-    final document = html_parser.parse(body);
+    final document = html_parser.parse(html);
     final message = _cleanText(
       document.querySelector('#messagetext p')?.text ??
           document.querySelector('.alert_info')?.text ??
@@ -362,6 +564,19 @@ class DiscuzThreadPostRateRepository implements ThreadPostRateRepository {
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
   }
+
+  String? _extractCData(String html) {
+    final start = html.indexOf('<![CDATA[');
+    if (start < 0) {
+      return null;
+    }
+    final contentStart = start + '<![CDATA['.length;
+    final end = html.indexOf(']]>', contentStart);
+    if (end < 0) {
+      return null;
+    }
+    return html.substring(contentStart, end);
+  }
 }
 
 class ThreadPostRateFormParseException implements Exception {
@@ -375,6 +590,7 @@ final threadPostRateRepositoryProvider = Provider<ThreadPostRateRepository>((
 ) {
   return DiscuzThreadPostRateRepository(
     gateway: ref.watch(yamiboHttpGatewayProvider),
+    sessionStore: ref.watch(yamiboSessionStoreProvider),
   );
 });
 

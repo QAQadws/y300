@@ -93,6 +93,11 @@ class ThreadDetailPageState {
   final String? replyHint;
   final String? errorMessage;
 
+  bool get isOnlyAuthorView =>
+      (queryParameters['authorid']?.trim().isNotEmpty ?? false);
+
+  bool get isReverseOrderView => queryParameters['ordertype']?.trim() == '1';
+
   factory ThreadDetailPageState.initial({
     required String tid,
     required String subject,

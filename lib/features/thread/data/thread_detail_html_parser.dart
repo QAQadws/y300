@@ -115,7 +115,7 @@ class ThreadDetailHtmlParser {
       pid: pid,
       author: _cleanText(authorAnchor?.text ?? ''),
       authorId: _extractUid(_resolve(authorAnchor?.attributes['href'])) ?? '',
-      message: _cleanPostMessageHtml(messageNode),
+      message: _cleanPostMessageHtml(messageNode, postContainer: container),
       number: number,
       isFirst: number == 1,
       dateline: _parseDateline(container, pid),
@@ -143,50 +143,61 @@ class ThreadDetailHtmlParser {
   }
 
   ThreadPoll? _parsePoll(html_dom.Element postContainer) {
-    final form = postContainer.querySelector('form#poll');
-    if (form == null) {
+    final pollRoot = postContainer.querySelector('#poll');
+    if (pollRoot == null) {
       return null;
     }
-    final summary = _cleanText(form.querySelector('.pinf')?.text ?? '');
-    final deadlineText = _cleanText(form.querySelector('.ptmr')?.text ?? '');
-    final options = _parsePollOptions(form);
+    final summary = _cleanText(pollRoot.querySelector('.pinf')?.text ?? '');
+    final deadlineText = _cleanText(
+      pollRoot.querySelector('.ptmr')?.text ?? '',
+    );
+    final options = _parsePollOptions(pollRoot);
     if (summary.isEmpty && options.isEmpty) {
       return null;
     }
+    final statusText = _parsePollStatusText(pollRoot);
+    final hasVoteInputs =
+        pollRoot.querySelector('input[name="pollanswers[]"]') != null;
+    final canVote = hasVoteInputs && !_isAlreadyVotedStatus(statusText);
     final maxMatch = RegExp(r'最多可选\s*(\d+)\s*项').firstMatch(summary);
     return ThreadPoll(
       isMultipleChoice:
-          form.querySelector('input[type="checkbox"]') != null ||
+          pollRoot.querySelector('input[type="checkbox"]') != null ||
           summary.contains('多选'),
+      canVote: canVote,
       maxChoices: int.tryParse(maxMatch?.group(1) ?? ''),
       summary: summary,
       deadlineText: deadlineText.isEmpty ? null : deadlineText,
-      actionUrl: _resolve(form.attributes['action']),
-      formHash: form
+      actionUrl: _resolve(pollRoot.attributes['action']),
+      formHash: pollRoot
           .querySelector('input[name="formhash"]')
           ?.attributes['value']
           ?.trim(),
+      statusText: statusText.isEmpty ? null : statusText,
       options: List<ThreadPollOption>.unmodifiable(options),
     );
   }
 
-  List<ThreadPollOption> _parsePollOptions(html_dom.Element form) {
+  List<ThreadPollOption> _parsePollOptions(html_dom.Element pollRoot) {
     final output = <ThreadPollOption>[];
-    final rows = form.querySelectorAll('table[summary="poll panel"] tr');
+    final rows = pollRoot.querySelectorAll('table[summary="poll panel"] tr');
     for (var index = 0; index < rows.length; index++) {
       final row = rows[index];
       final input = row.querySelector('input[name="pollanswers[]"]');
       final label = _cleanText(row.querySelector('label')?.text ?? '');
-      if (input == null || label.isEmpty) {
+      if (label.isEmpty) {
         continue;
       }
       final resultRow = index + 1 < rows.length ? rows[index + 1] : null;
+      final labelNode = row.querySelector('label');
+      final optionId = _parsePollOptionId(
+        input: input,
+        label: labelNode,
+        fallback: output.length + 1,
+      );
       output.add(
         ThreadPollOption(
-          id:
-              input.attributes['value']?.trim() ??
-              input.attributes['id']?.trim() ??
-              '',
+          id: optionId,
           label: _stripPollNumber(label),
           voteCount: _parseVoteCount(resultRow),
           percent: _parsePollPercent(resultRow),
@@ -195,6 +206,45 @@ class ThreadDetailHtmlParser {
       );
     }
     return output;
+  }
+
+  String _parsePollOptionId({
+    required html_dom.Element? input,
+    required html_dom.Element? label,
+    required int fallback,
+  }) {
+    final inputValue =
+        input?.attributes['value']?.trim() ?? input?.attributes['id']?.trim();
+    if (inputValue != null && inputValue.isNotEmpty) {
+      return inputValue;
+    }
+    final labelFor = label?.attributes['for']?.trim() ?? '';
+    final optionMatch = RegExp(r'option_(\d+)').firstMatch(labelFor);
+    final optionId = optionMatch?.group(1);
+    if (optionId != null && optionId.isNotEmpty) {
+      return optionId;
+    }
+    return fallback.toString();
+  }
+
+  String _parsePollStatusText(html_dom.Element pollRoot) {
+    final rows = pollRoot.querySelectorAll('table[summary="poll panel"] tr');
+    for (final row in rows.reversed) {
+      if (row.querySelector('.pbr') != null ||
+          row.querySelector('label') != null) {
+        continue;
+      }
+      final text = _cleanText(row.text);
+      if (_isAlreadyVotedStatus(text) || text.contains('谢谢您的参与')) {
+        return text;
+      }
+    }
+    return '';
+  }
+
+  bool _isAlreadyVotedStatus(String? text) {
+    final value = text?.trim() ?? '';
+    return value.contains('已经投过票') || value.contains('谢谢您的参与');
   }
 
   int? _parseVoteCount(html_dom.Element? row) {
@@ -231,7 +281,21 @@ class ThreadDetailHtmlParser {
     return match?.group(1);
   }
 
-  String _cleanPostMessageHtml(html_dom.Element? messageNode) {
+  String _cleanPostMessageHtml(
+    html_dom.Element? messageNode, {
+    html_dom.Element? postContainer,
+  }) {
+    final parts = <String>[
+      _cleanPostMessageBodyHtml(messageNode),
+      ..._cleanPostAttachmentImageHtml(
+        postContainer: postContainer,
+        messageNode: messageNode,
+      ),
+    ].where((part) => part.trim().isNotEmpty);
+    return parts.join('\n').trim();
+  }
+
+  String _cleanPostMessageBodyHtml(html_dom.Element? messageNode) {
     if (messageNode == null) {
       return '';
     }
@@ -252,6 +316,110 @@ class ThreadDetailHtmlParser {
       }
     }
     return clone.innerHtml.trim();
+  }
+
+  List<String> _cleanPostAttachmentImageHtml({
+    required html_dom.Element? postContainer,
+    required html_dom.Element? messageNode,
+  }) {
+    if (postContainer == null) {
+      return const <String>[];
+    }
+    final output = <String>[];
+    final seenSources = <String>{};
+    for (final image in postContainer.querySelectorAll(
+      'img[zoomfile], img[file]',
+    )) {
+      if (messageNode != null && _isDescendantOf(image, messageNode)) {
+        continue;
+      }
+      if (!_looksLikeDiscuzAttachmentImage(image)) {
+        continue;
+      }
+      final realSource = _firstPresentAttribute(image, const <String>[
+        'zoomfile',
+        'file',
+        'data-original',
+        'data-src',
+        'src',
+      ]);
+      if (realSource == null || !seenSources.add(realSource)) {
+        continue;
+      }
+      output.add(_cleanAttachmentImageTag(image, realSource));
+    }
+    return output;
+  }
+
+  bool _looksLikeDiscuzAttachmentImage(html_dom.Element image) {
+    final aid = image.attributes['aid']?.trim();
+    if (aid != null && aid.isNotEmpty) {
+      return true;
+    }
+    final id = image.id.trim();
+    if (id.startsWith('aimg_')) {
+      return true;
+    }
+    return _hasAncestorClass(image, 'tattl') ||
+        _hasAncestorClass(image, 'attm') ||
+        _hasAncestorClass(image, 'savephotop');
+  }
+
+  String _cleanAttachmentImageTag(html_dom.Element image, String realSource) {
+    final attributes = <String, String>{
+      'src': realSource,
+      'file': image.attributes['file']?.trim() ?? realSource,
+      'zoomfile': image.attributes['zoomfile']?.trim() ?? realSource,
+    };
+    for (final name in const <String>[
+      'id',
+      'aid',
+      'width',
+      'height',
+      'w',
+      'h',
+      'alt',
+      'title',
+    ]) {
+      final value = image.attributes[name]?.trim();
+      if (value != null && value.isNotEmpty) {
+        attributes[name] = value;
+      }
+    }
+    final serialized = attributes.entries
+        .map((entry) => '${entry.key}="${_escapeAttribute(entry.value)}"')
+        .join(' ');
+    return '<img $serialized />';
+  }
+
+  String _escapeAttribute(String value) {
+    return value
+        .replaceAll('&', '&amp;')
+        .replaceAll('"', '&quot;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+  }
+
+  bool _isDescendantOf(html_dom.Node node, html_dom.Element ancestor) {
+    html_dom.Node? current = node.parentNode;
+    while (current != null) {
+      if (identical(current, ancestor)) {
+        return true;
+      }
+      current = current.parentNode;
+    }
+    return false;
+  }
+
+  bool _hasAncestorClass(html_dom.Node node, String className) {
+    html_dom.Node? current = node.parentNode;
+    while (current != null) {
+      if (current is html_dom.Element && current.classes.contains(className)) {
+        return true;
+      }
+      current = current.parentNode;
+    }
+    return false;
   }
 
   String _parseDateline(html_dom.Element container, String pid) {

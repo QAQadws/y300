@@ -5,6 +5,7 @@ import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
@@ -44,8 +45,26 @@ class ThreadPostCommentResult {
   final String message;
 }
 
+class ThreadPostCommentFormSeed {
+  const ThreadPostCommentFormSeed({
+    required this.commentUrl,
+    required this.tid,
+    required this.pid,
+    required this.page,
+  });
+
+  final String commentUrl;
+  final String tid;
+  final String pid;
+  final int page;
+}
+
 abstract class ThreadPostCommentRepository {
   Future<ApiResult<ThreadPostCommentForm>> loadForm(String commentUrl);
+
+  Future<ApiResult<ThreadPostCommentForm>> loadFormFromSeed(
+    ThreadPostCommentFormSeed seed,
+  );
 
   Future<ApiResult<ThreadPostCommentResult>> submit(
     ThreadPostCommentDraft draft,
@@ -63,10 +82,13 @@ class ThreadPostCommentFormParser {
     String html, {
     required String fallbackCommentUrl,
   }) {
-    final document = html_parser.parse(html);
+    final document = html_parser.parse(_extractCData(html) ?? html);
     final form = document.querySelector('form#commentform');
     if (form == null) {
-      throw const ThreadPostCommentFormParseException('点评表单缺失');
+      final prompt = _promptMessage(document);
+      throw ThreadPostCommentFormParseException(
+        prompt.isEmpty ? '点评表单缺失' : prompt,
+      );
     }
 
     final actionUrl = _resolve(form.attributes['action']) ?? fallbackCommentUrl;
@@ -127,6 +149,33 @@ class ThreadPostCommentFormParser {
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
   }
+
+  String _promptMessage(html_dom.Document document) {
+    final prompt =
+        document.querySelector('.alert_error') ??
+        document.querySelector('.alert_info') ??
+        document.querySelector('#messagetext p') ??
+        document.querySelector('.showmessage');
+    if (prompt == null) {
+      return '';
+    }
+    final cleanPrompt = prompt.clone(true);
+    cleanPrompt.querySelectorAll('script').forEach((node) => node.remove());
+    return _cleanText(cleanPrompt.text);
+  }
+
+  String? _extractCData(String html) {
+    final start = html.indexOf('<![CDATA[');
+    if (start < 0) {
+      return null;
+    }
+    final contentStart = start + '<![CDATA['.length;
+    final end = html.indexOf(']]>', contentStart);
+    if (end < 0) {
+      return null;
+    }
+    return html.substring(contentStart, end);
+  }
 }
 
 class DiscuzThreadPostCommentRepository implements ThreadPostCommentRepository {
@@ -144,7 +193,32 @@ class DiscuzThreadPostCommentRepository implements ThreadPostCommentRepository {
 
   @override
   Future<ApiResult<ThreadPostCommentForm>> loadForm(String commentUrl) async {
-    final endpoint = _uriFrom(commentUrl);
+    return _loadForm(
+      endpoint: _commentFormUri(endpoint: _uriFrom(commentUrl)),
+      fallbackCommentUrl: commentUrl,
+    );
+  }
+
+  @override
+  Future<ApiResult<ThreadPostCommentForm>> loadFormFromSeed(
+    ThreadPostCommentFormSeed seed,
+  ) async {
+    final endpoint = _commentFormUri(
+      endpoint: _uriFrom(seed.commentUrl),
+      tid: seed.tid,
+      pid: seed.pid,
+      page: seed.page,
+    );
+    return _loadForm(
+      endpoint: endpoint,
+      fallbackCommentUrl: endpoint?.toString() ?? seed.commentUrl,
+    );
+  }
+
+  Future<ApiResult<ThreadPostCommentForm>> _loadForm({
+    required Uri? endpoint,
+    required String fallbackCommentUrl,
+  }) async {
     if (endpoint == null) {
       return const ApiFailure<ThreadPostCommentForm>(
         ApiError(type: ApiErrorType.business, message: '点评表单地址无效'),
@@ -158,8 +232,10 @@ class DiscuzThreadPostCommentRepository implements ThreadPostCommentRepository {
         pageKind: 'thread.detail',
       ),
       headers: const <String, String>{
+        'User-Agent': DiscuzImageRequestHeaderBuilder.browserUserAgent,
         'accept':
             'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
       },
     );
     if (response case ApiFailure(:final error)) {
@@ -169,7 +245,7 @@ class DiscuzThreadPostCommentRepository implements ThreadPostCommentRepository {
       return ApiSuccess<ThreadPostCommentForm>(
         _parser.parse(
           response.dataOrNull?.body ?? '',
-          fallbackCommentUrl: endpoint.toString(),
+          fallbackCommentUrl: fallbackCommentUrl,
         ),
       );
     } on ThreadPostCommentFormParseException catch (error) {
@@ -255,6 +331,51 @@ class DiscuzThreadPostCommentRepository implements ThreadPostCommentRepository {
   Uri? _uriFrom(String value) {
     final resolved = _urlResolver.resolve(value.trim());
     return resolved == null ? null : Uri.tryParse(resolved);
+  }
+
+  Uri? _commentFormUri({
+    required Uri? endpoint,
+    String? tid,
+    String? pid,
+    int? page,
+  }) {
+    final resolvedTid = _firstNonEmpty(tid, endpoint?.queryParameters['tid']);
+    final resolvedPid = _firstNonEmpty(pid, endpoint?.queryParameters['pid']);
+    if (resolvedTid.isEmpty || resolvedPid.isEmpty) {
+      return endpoint;
+    }
+    final resolvedPage = _resolvePage(page, endpoint);
+    return Uri.parse(AppConfig.siteBaseUrl).replace(
+      path: '/forum.php',
+      queryParameters: <String, String>{
+        'mod': 'misc',
+        'action': 'comment',
+        'tid': resolvedTid,
+        'pid': resolvedPid,
+        'extra': '',
+        'page': resolvedPage.toString(),
+        'infloat': 'yes',
+        'handlekey': 'comment',
+        'inajax': '1',
+        'ajaxtarget': 'fwin_content_comment',
+      },
+    );
+  }
+
+  int _resolvePage(int? page, Uri? endpoint) {
+    final seedPage = page == null || page <= 0 ? null : page;
+    if (seedPage != null) {
+      return seedPage;
+    }
+    return int.tryParse(endpoint?.queryParameters['page'] ?? '') ?? 1;
+  }
+
+  String _firstNonEmpty(String? first, String? second) {
+    final firstValue = first?.trim();
+    if (firstValue != null && firstValue.isNotEmpty) {
+      return firstValue;
+    }
+    return second?.trim() ?? '';
   }
 
   _ThreadPostCommentParseResult _parseSubmitResponse(String body) {

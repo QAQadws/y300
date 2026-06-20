@@ -18,13 +18,16 @@ class ThreadDetailContent extends StatelessWidget {
     required this.onLoadPreviousPage,
     required this.onLoadNextPage,
     required this.onOpenOnlyAuthor,
+    required this.onOpenAllPosts,
     required this.onOpenReverseOrder,
+    required this.onOpenNormalOrder,
     required this.onAddComicToShelf,
     required this.onAddNovelToShelf,
     required this.onOpenPostReply,
     required this.onOpenPostRate,
     required this.onOpenPostComment,
     required this.onCopyActionUrl,
+    this.onOpenPostImages,
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
   });
@@ -35,13 +38,17 @@ class ThreadDetailContent extends StatelessWidget {
   final VoidCallback onLoadPreviousPage;
   final VoidCallback onLoadNextPage;
   final VoidCallback onOpenOnlyAuthor;
+  final VoidCallback onOpenAllPosts;
   final VoidCallback onOpenReverseOrder;
+  final VoidCallback onOpenNormalOrder;
   final VoidCallback onAddComicToShelf;
   final VoidCallback onAddNovelToShelf;
   final ValueChanged<ThreadPost> onOpenPostReply;
   final ValueChanged<ThreadPost> onOpenPostRate;
   final ValueChanged<ThreadPost> onOpenPostComment;
   final void Function(String label, String url) onCopyActionUrl;
+  final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
+  onOpenPostImages;
   final void Function(ThreadPoll poll, ThreadPollOption option)
   onTogglePollOption;
   final ValueChanged<ThreadPoll> onSubmitPollVote;
@@ -81,6 +88,7 @@ class ThreadDetailContent extends StatelessWidget {
           onOpenPostRate: onOpenPostRate,
           onOpenPostComment: onOpenPostComment,
           onCopyActionUrl: onCopyActionUrl,
+          onOpenPostImages: onOpenPostImages,
           onTogglePollOption: onTogglePollOption,
           onSubmitPollVote: onSubmitPollVote,
           palette: palette,
@@ -94,7 +102,9 @@ class ThreadDetailContent extends StatelessWidget {
                 state: state,
                 palette: palette,
                 onOpenOnlyAuthor: onOpenOnlyAuthor,
+                onOpenAllPosts: onOpenAllPosts,
                 onOpenReverseOrder: onOpenReverseOrder,
+                onOpenNormalOrder: onOpenNormalOrder,
               ),
             ],
           );
@@ -173,13 +183,17 @@ class ThreadRepliesHeader extends StatelessWidget {
     required this.state,
     required this.palette,
     required this.onOpenOnlyAuthor,
+    required this.onOpenAllPosts,
     required this.onOpenReverseOrder,
+    required this.onOpenNormalOrder,
   });
 
   final ThreadDetailPageState state;
   final ThreadDetailNativePalette palette;
   final VoidCallback onOpenOnlyAuthor;
+  final VoidCallback onOpenAllPosts;
   final VoidCallback onOpenReverseOrder;
+  final VoidCallback onOpenNormalOrder;
 
   @override
   Widget build(BuildContext context) {
@@ -213,22 +227,22 @@ class ThreadRepliesHeader extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          if (state.reverseOrderUrl?.trim().isNotEmpty == true) ...[
-            ThreadReplyHeaderAction(
-              label: '倒序浏览',
-              palette: palette,
-              onPressed: onOpenReverseOrder,
-            ),
-            const SizedBox(width: 6),
-          ],
-          if (state.onlyAuthorUrl?.trim().isNotEmpty == true) ...[
-            ThreadReplyHeaderAction(
-              label: '只看楼主',
-              palette: palette,
-              onPressed: onOpenOnlyAuthor,
-            ),
-            const SizedBox(width: 6),
-          ],
+          ThreadReplyHeaderAction(
+            label: state.isOnlyAuthorView ? '显示全部楼层' : '只看该作者',
+            palette: palette,
+            onPressed: state.isOnlyAuthorView
+                ? onOpenAllPosts
+                : onOpenOnlyAuthor,
+          ),
+          const SizedBox(width: 6),
+          ThreadReplyHeaderAction(
+            label: state.isReverseOrderView ? '正序浏览' : '倒序浏览',
+            palette: palette,
+            onPressed: state.isReverseOrderView
+                ? onOpenNormalOrder
+                : onOpenReverseOrder,
+          ),
+          const SizedBox(width: 6),
           Text(
             pageLabel,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -290,6 +304,7 @@ class ThreadPostCard extends StatelessWidget {
     required this.onOpenPostRate,
     required this.onOpenPostComment,
     required this.onCopyActionUrl,
+    required this.onOpenPostImages,
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
     required this.palette,
@@ -305,6 +320,8 @@ class ThreadPostCard extends StatelessWidget {
   final ValueChanged<ThreadPost> onOpenPostRate;
   final ValueChanged<ThreadPost> onOpenPostComment;
   final void Function(String label, String url) onCopyActionUrl;
+  final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
+  onOpenPostImages;
   final void Function(ThreadPoll poll, ThreadPollOption option)
   onTogglePollOption;
   final ValueChanged<ThreadPoll> onSubmitPollVote;
@@ -364,6 +381,8 @@ class ThreadPostCard extends StatelessWidget {
                     data: post.message,
                     key: Key('thread-post-${post.pid}'),
                     imageHeaderBuilder: imageHeaderBuilder,
+                    onOpenImage: (request) =>
+                        onOpenPostImages?.call(post, request),
                   ),
                 ),
                 if (post.poll != null) ...[
@@ -671,13 +690,12 @@ class ThreadPostActionRow extends StatelessWidget {
             palette: palette,
             onPressed: () => onOpenPostRate(post),
           ),
-        if (post.commentUrl?.trim().isNotEmpty == true)
-          ThreadActionChip(
-            label: '点评',
-            icon: Icons.chat_bubble_outline,
-            palette: palette,
-            onPressed: () => onOpenPostComment(post),
-          ),
+        ThreadActionChip(
+          label: '点评',
+          icon: Icons.chat_bubble_outline,
+          palette: palette,
+          onPressed: () => onOpenPostComment(post),
+        ),
         ThreadActionChip(
           label: '回复',
           icon: Icons.reply_outlined,
@@ -830,10 +848,7 @@ class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
                 ),
               ],
             ),
-            Text(
-              '范围 ${widget.form.scoreMin}~${widget.form.scoreMax}，今日剩余 ${widget.form.todayRemaining}',
-              style: theme.textTheme.labelSmall,
-            ),
+            Text(_scoreHint, style: theme.textTheme.labelSmall),
             if (widget.form.reasonOptions.isNotEmpty) ...[
               const SizedBox(height: 12),
               Wrap(
@@ -896,6 +911,15 @@ class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
         ),
       ),
     );
+  }
+
+  String get _scoreHint {
+    final range = '范围 ${widget.form.scoreMin}~${widget.form.scoreMax}';
+    final remaining = widget.form.todayRemaining;
+    if (remaining <= 0) {
+      return range;
+    }
+    return '$range，今日剩余 $remaining';
   }
 }
 
@@ -1017,9 +1041,11 @@ class ThreadPollCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final canSubmit =
+        poll.canVote &&
         selectedOptionIds.isNotEmpty &&
         !isSubmitting &&
         (poll.actionUrl?.trim().isNotEmpty ?? false);
+    final statusText = poll.statusText?.trim();
     return Container(
       key: const Key('thread-poll-card'),
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
@@ -1051,9 +1077,21 @@ class ThreadPollCard extends StatelessWidget {
               option: option,
               palette: palette,
               isMultipleChoice: poll.isMultipleChoice,
+              showSelector: poll.canVote,
               selected: selectedOptionIds.contains(option.id),
-              enabled: !isSubmitting,
+              enabled: poll.canVote && !isSubmitting,
               onTap: () => onToggleOption(option),
+            ),
+            const SizedBox(height: 8),
+          ],
+          if (statusText != null && statusText.isNotEmpty) ...[
+            Text(
+              statusText,
+              key: const Key('thread-poll-status-text'),
+              style: textTheme.labelSmall?.copyWith(
+                color: palette.muted,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 8),
           ],
@@ -1068,20 +1106,21 @@ class ThreadPollCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
           ],
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              key: const Key('thread-poll-submit-button'),
-              onPressed: canSubmit ? onSubmit : null,
-              child: isSubmitting
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('提交'),
+          if (poll.canVote)
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                key: const Key('thread-poll-submit-button'),
+                onPressed: canSubmit ? onSubmit : null,
+                child: isSubmitting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('提交'),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -1094,6 +1133,7 @@ class ThreadPollOptionTile extends StatelessWidget {
     required this.option,
     required this.palette,
     required this.isMultipleChoice,
+    required this.showSelector,
     required this.selected,
     required this.enabled,
     required this.onTap,
@@ -1102,6 +1142,7 @@ class ThreadPollOptionTile extends StatelessWidget {
   final ThreadPollOption option;
   final ThreadDetailNativePalette palette;
   final bool isMultipleChoice;
+  final bool showSelector;
   final bool selected;
   final bool enabled;
   final VoidCallback onTap;
@@ -1126,18 +1167,20 @@ class ThreadPollOptionTile extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(
-                    selected
-                        ? isMultipleChoice
-                              ? Icons.check_box
-                              : Icons.radio_button_checked
-                        : isMultipleChoice
-                        ? Icons.check_box_outline_blank
-                        : Icons.radio_button_unchecked,
-                    size: 17,
-                    color: selected ? palette.accent : palette.softText,
-                  ),
-                  const SizedBox(width: 6),
+                  if (showSelector) ...[
+                    Icon(
+                      selected
+                          ? isMultipleChoice
+                                ? Icons.check_box
+                                : Icons.radio_button_checked
+                          : isMultipleChoice
+                          ? Icons.check_box_outline_blank
+                          : Icons.radio_button_unchecked,
+                      size: 17,
+                      color: selected ? palette.accent : palette.softText,
+                    ),
+                    const SizedBox(width: 6),
+                  ],
                   Expanded(
                     child: Text(
                       option.label,

@@ -1,6 +1,9 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/data/comic_parser_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/thread/data/thread_detail_html_parser.dart';
 
 void main() {
   group('HtmlComicParserService', () {
@@ -21,11 +24,17 @@ void main() {
       expect(result.imageUrls.length, 1);
       expect(result.imageUrls.first, 'https://img.test/1.jpg');
       expect(result.episodeLinks.length, 3);
-      expect(result.episodeLinks.first.url, 'https://bbs.yamibo.com/thread-100-1-1.html');
+      expect(
+        result.episodeLinks.first.url,
+        'https://bbs.yamibo.com/thread-100-1-1.html',
+      );
       expect(result.episodeLinks.first.episodeTitle, '1');
       expect(result.catalogUrl, 'https://bbs.yamibo.com/thread-200-1-1.html');
       expect(result.inferredAuthor, '\u6d4b\u8bd5\u7ec4');
-      expect(result.plainTextSummary, contains('\u4f5c\u8005: \u6d4b\u8bd5\u7ec4'));
+      expect(
+        result.plainTextSummary,
+        contains('\u4f5c\u8005: \u6d4b\u8bd5\u7ec4'),
+      );
       expect(result.parsingDebug, isNotNull);
       expect(result.parsingDebug!.totalEpisodeLinks, 3);
     });
@@ -52,10 +61,16 @@ void main() {
       );
 
       expect(result.episodeLinks.length, 14);
-      expect(result.episodeLinks.first.url, 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=530646');
+      expect(
+        result.episodeLinks.first.url,
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=530646',
+      );
       expect(result.episodeLinks.first.episodeTitle, '01');
       expect(
-        result.episodeLinks.where((e) => e.rawText == '\u7b2c\u4e09\u5377\u7279\u5178').single.url,
+        result.episodeLinks
+            .where((e) => e.rawText == '\u7b2c\u4e09\u5377\u7279\u5178')
+            .single
+            .url,
         'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=554347&fromuid=360078',
       );
     });
@@ -63,11 +78,15 @@ void main() {
     test('supports damaged href with leading semicolon tid form', () {
       final parser = HtmlComicParserService();
       final result = parser.parse(
-        message: '<a href=";tid=537155&amp;highlight=%E5%B9%B3%E8%89%AF%E6%B7%B1">04</a>',
+        message:
+            '<a href=";tid=537155&amp;highlight=%E5%B9%B3%E8%89%AF%E6%B7%B1">04</a>',
       );
 
       expect(result.episodeLinks.length, 1);
-      expect(result.episodeLinks.single.url, 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=537155');
+      expect(
+        result.episodeLinks.single.url,
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=537155',
+      );
       expect(result.episodeLinks.single.episodeTitle, '04');
     });
 
@@ -86,35 +105,60 @@ void main() {
       expect(debug!.totalAnchors, 2);
       expect(debug.totalEpisodeLinks, 2);
       expect(debug.signals.isNotEmpty, true);
-      expect(
-        debug.signals.any((s) => s.message.contains('catalog hit')),
-        true,
-      );
+      expect(debug.signals.any((s) => s.message.contains('catalog hit')), true);
     });
 
-    test('parseInput merges DOM and attachment images with stable deduplication', () {
-      final parser = HtmlComicParserService();
-      final result = parser.parseInput(
-        const ComicPostParseInput(
-          messageHtml: '''
+    test(
+      'parseInput merges DOM and attachment images with stable deduplication',
+      () {
+        final parser = HtmlComicParserService();
+        final result = parser.parseInput(
+          const ComicPostParseInput(
+            messageHtml: '''
 <img src="https://img.test/dom-1.jpg" />
 <img src="https://img.test/shared.jpg" />
 ''',
-          attachmentImageUrls: <String>[
-            'https://img.test/shared.jpg',
-            'https://bbs.yamibo.com/data/attachment/forum/201802/16/attachment.jpg',
-          ],
-        ),
+            attachmentImageUrls: <String>[
+              'https://img.test/shared.jpg',
+              'https://bbs.yamibo.com/data/attachment/forum/201802/16/attachment.jpg',
+            ],
+          ),
+        );
+
+        expect(result.imageUrls, <String>[
+          'https://img.test/dom-1.jpg',
+          'https://img.test/shared.jpg',
+          'https://bbs.yamibo.com/data/attachment/forum/201802/16/attachment.jpg',
+        ]);
+        expect(
+          result.parsingDebug!.signals.any(
+            (signal) => signal.message == 'attachment images=2',
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test('extracts desktop attachment-form comic pages after detail parsing', () {
+      const detailParser = ThreadDetailHtmlParser();
+      final html = File('docs/html/帖子详细页/附件形式的漫画帖.html').readAsStringSync();
+      final detail = detailParser.parse(
+        html,
+        fallbackTid: '572699',
+        fallbackPage: 1,
       );
 
-      expect(result.imageUrls, <String>[
-        'https://img.test/dom-1.jpg',
-        'https://img.test/shared.jpg',
-        'https://bbs.yamibo.com/data/attachment/forum/201802/16/attachment.jpg',
-      ]);
+      final parser = HtmlComicParserService();
+      final result = parser.parse(message: detail.posts.first.message);
+
+      expect(result.imageUrls, hasLength(75));
       expect(
-        result.parsingDebug!.signals.any((signal) => signal.message == 'attachment images=2'),
-        isTrue,
+        result.imageUrls.first,
+        'https://bbs.yamibo.com/data/attachment/forum/202606/20/132204m50yzddi08r50cyd.png',
+      );
+      expect(
+        result.imageUrls.last,
+        'https://bbs.yamibo.com/data/attachment/forum/202606/20/132245ea1y0rwiv1y1o00i.png',
       );
     });
   });

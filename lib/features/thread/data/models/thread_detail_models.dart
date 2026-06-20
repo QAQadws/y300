@@ -50,18 +50,22 @@ class ThreadPoll {
     required this.isMultipleChoice,
     required this.summary,
     required this.options,
+    this.canVote = true,
     this.maxChoices,
     this.deadlineText,
     this.actionUrl,
     this.formHash,
+    this.statusText,
   });
 
   final bool isMultipleChoice;
+  final bool canVote;
   final int? maxChoices;
   final String summary;
   final String? deadlineText;
   final String? actionUrl;
   final String? formHash;
+  final String? statusText;
   final List<ThreadPollOption> options;
 }
 

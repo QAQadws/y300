@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart';
+import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/image_request_headers.dart';
@@ -62,3 +63,14 @@ final imageRequestHeaderBuilderProvider = Provider<ImageRequestHeaderBuilder>((
     cookieStore: ref.watch(cookieStoreProvider),
   );
 });
+
+final imageRequestHeaderBuilderForRefererProvider =
+    Provider.family<ImageRequestHeaderBuilder, String?>((ref, referer) {
+      final normalizedReferer = referer?.trim();
+      return DiscuzImageRequestHeaderBuilder(
+        cookieStore: ref.watch(cookieStoreProvider),
+        referer: normalizedReferer == null || normalizedReferer.isEmpty
+            ? '${AppConfig.siteBaseUrl}/'
+            : normalizedReferer,
+      );
+    });

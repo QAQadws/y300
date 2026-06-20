@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/thread/data/thread_detail_html_parser.dart';
+import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 
 void main() {
   group('ThreadDetailHtmlParser', () {
@@ -91,6 +93,26 @@ void main() {
       expect(poll.options.first.colorHex, '#E92725');
     });
 
+    test('parses already-voted desktop poll result without inputs', () {
+      final result = parser.parse(
+        _alreadyVotedPollThreadHtml,
+        fallbackTid: '567764',
+        fallbackPage: 1,
+      );
+
+      final poll = result.posts.first.poll!;
+      expect(poll.isMultipleChoice, isTrue);
+      expect(poll.maxChoices, 3);
+      expect(poll.canVote, isFalse);
+      expect(poll.statusText, contains('已经投过票'));
+      expect(poll.options, hasLength(7));
+      expect(poll.options.first.id, '1');
+      expect(poll.options.first.label, '两个心灵靠近的过程');
+      expect(poll.options.first.percent, 38.82);
+      expect(poll.options.first.voteCount, 276);
+      expect(poll.options.first.colorHex, '#E92725');
+    });
+
     test('keeps desktop attachment image real urls for comic thread', () {
       final html = File('docs/html/帖子详细页/一个电脑端漫画帖子.html').readAsStringSync();
 
@@ -123,5 +145,154 @@ void main() {
       );
       expect(firstPost.poll, isNull);
     });
+
+    test('parses attachment-form comic pages from desktop post container', () {
+      final html = File('docs/html/帖子详细页/附件形式的漫画帖.html').readAsStringSync();
+
+      final result = parser.parse(html, fallbackTid: '572699', fallbackPage: 1);
+
+      expect(result.tid, '572699');
+      expect(result.fid, '30');
+      expect(result.typeid, '68');
+      expect(result.typeName, '短篇漫畫');
+      expect(result.subject, '【个人汉化】[浄土るる]由花緒renewal');
+      expect(result.views, 623);
+      expect(result.replies, 12);
+
+      final firstPost = result.posts.first;
+      expect(firstPost.pid, '41565305');
+      expect(firstPost.author, 'Inchman');
+      expect(firstPost.message, contains('宇宙生命体'));
+      expect(
+        firstPost.message,
+        contains(
+          'src="data/attachment/forum/202606/20/132204m50yzddi08r50cyd.png"',
+        ),
+      );
+      expect(
+        firstPost.message,
+        contains(
+          'src="data/attachment/forum/202606/20/132245ea1y0rwiv1y1o00i.png"',
+        ),
+      );
+      expect(
+        firstPost.message,
+        isNot(contains('src="static/image/common/none.gif"')),
+      );
+
+      final sources = DefaultForumImageSourcePipeline.collectDomImageSources(
+        firstPost.message,
+        urlResolver: const SiteUrlResolver(),
+        domAttributes: const <String>[
+          'zoomfile',
+          'file',
+          'data-original',
+          'data-src',
+          'src',
+        ],
+      );
+      expect(sources, hasLength(75));
+      expect(
+        sources.first.normalizedUrl,
+        'https://bbs.yamibo.com/data/attachment/forum/202606/20/132204m50yzddi08r50cyd.png',
+      );
+      expect(
+        sources.last.normalizedUrl,
+        'https://bbs.yamibo.com/data/attachment/forum/202606/20/132245ea1y0rwiv1y1o00i.png',
+      );
+    });
   });
 }
+
+const _alreadyVotedPollThreadHtml = '''
+<html>
+  <body>
+    <div id="postlist">
+      <div id="post_41474948">
+        <td class="plc">
+          <div class="pi">
+            <strong><a id="postnum41474948"><em>1</em><sup>#</sup></a></strong>
+            <div class="pti"><div class="authi"><em id="authorposton41474948">发表于 2026-6-20 12:00</em></div></div>
+          </div>
+          <td class="t_f" id="postmessage_41474948"><p>投票正文</p></td>
+          <form id="poll" name="poll" method="post" autocomplete="off" action="forum.php?mod=misc&amp;action=votepoll&amp;fid=33&amp;tid=567764&amp;pollsubmit=yes&amp;quickforward=yes">
+            <input type="hidden" name="formhash" value="cba80c43">
+            <div class="pinf">
+              <strong>多选投票</strong>: ( 最多可选 3 项 ), 共有 331 人参与投票
+            </div>
+            <p class="ptmr">
+              距结束还有:
+              <strong>9878 天21 小时0 分钟</strong>
+            </p>
+            <div class="pcht">
+              <table summary="poll panel" cellspacing="0" cellpadding="0" width="100%">
+                <tbody>
+                  <tr>
+                    <td class="pvt"><label for="option_1">1. &nbsp;两个心灵靠近的过程</label></td>
+                    <td class="pvts"></td>
+                  </tr>
+                  <tr>
+                    <td><div class="pbg"><div class="pbr" style="width: 39%; background-color:#E92725"></div></div></td>
+                    <td>38.82% <em style="color:#E92725">(276)</em></td>
+                  </tr>
+                  <tr>
+                    <td class="pvt"><label for="option_2">2. &nbsp;背德扭曲神人爆爆爆</label></td>
+                    <td class="pvts"></td>
+                  </tr>
+                  <tr>
+                    <td><div class="pbg"><div class="pbr" style="width: 11%; background-color:#F27B21"></div></div></td>
+                    <td>11.25% <em style="color:#F27B21">(80)</em></td>
+                  </tr>
+                  <tr>
+                    <td class="pvt"><label for="option_3">3. &nbsp;与世俗斗争的宿命感</label></td>
+                    <td class="pvts"></td>
+                  </tr>
+                  <tr>
+                    <td><div class="pbg"><div class="pbr" style="width: 6%; background-color:#F2A61F"></div></div></td>
+                    <td>5.63% <em style="color:#F2A61F">(40)</em></td>
+                  </tr>
+                  <tr>
+                    <td class="pvt"><label for="option_4">4. &nbsp;这样那样的萌萌互动</label></td>
+                    <td class="pvts"></td>
+                  </tr>
+                  <tr>
+                    <td><div class="pbg"><div class="pbr" style="width: 21%; background-color:#5AAF4A"></div></div></td>
+                    <td>21.10% <em style="color:#5AAF4A">(150)</em></td>
+                  </tr>
+                  <tr>
+                    <td class="pvt"><label for="option_5">5. &nbsp;这样那样的扣扣空间</label></td>
+                    <td class="pvts"></td>
+                  </tr>
+                  <tr>
+                    <td><div class="pbg"><div class="pbr" style="width: 14%; background-color:#42C4F5"></div></div></td>
+                    <td>13.50% <em style="color:#42C4F5">(96)</em></td>
+                  </tr>
+                  <tr>
+                    <td class="pvt"><label for="option_6">6. &nbsp;直掰弯和性向的探索</label></td>
+                    <td class="pvts"></td>
+                  </tr>
+                  <tr>
+                    <td><div class="pbg"><div class="pbr" style="width: 3%; background-color:#0099CC"></div></div></td>
+                    <td>3.23% <em style="color:#0099CC">(23)</em></td>
+                  </tr>
+                  <tr>
+                    <td class="pvt"><label for="option_7">7. &nbsp;怎样都好是百合就看</label></td>
+                    <td class="pvts"></td>
+                  </tr>
+                  <tr>
+                    <td><div class="pbg"><div class="pbr" style="width: 6%; background-color:#3365AE"></div></div></td>
+                    <td>6.47% <em style="color:#3365AE">(46)</em></td>
+                  </tr>
+                  <tr>
+                    <td colspan="2">您已经投过票，谢谢您的参与</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </form>
+        </td>
+      </div>
+    </div>
+  </body>
+</html>
+''';

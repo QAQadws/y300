@@ -46,7 +46,7 @@ void main() {
   group('ThreadDetailPage', () {
     testWidgets('shows posts and switches thread pages', (tester) async {
       var callCount = 0;
-      final repository = _FakeThreadRepository((tid, page) async {
+      final repository = _FakeThreadRepository((tid, page, query) async {
         callCount++;
         if (page == 1) {
           return ApiSuccess(
@@ -136,10 +136,8 @@ void main() {
             lastPage: 2,
             previousPageUrl:
                 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
-            reverseOrderUrl:
-                'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&ordertype=1&page=2',
-            onlyAuthorUrl:
-                'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&authorid=1&page=2',
+            reverseOrderUrl: null,
+            onlyAuthorUrl: null,
             shareUrl:
                 'https://bbs.yamibo.com/home.php?mod=spacecp&ac=share&type=thread&id=100',
             homeUrl: 'https://bbs.yamibo.com/index.php',
@@ -175,7 +173,7 @@ void main() {
       expect(find.text('12'), findsOneWidget);
       expect(find.text('第 1 / 2 页'), findsOneWidget);
       expect(find.byKey(const Key('thread-post-card-p1')), findsOneWidget);
-      expect(find.text('第一条回复'), findsOneWidget);
+      expect(_richTextContaining('第一条回复'), findsOneWidget);
       expect(find.byKey(const Key('thread-poll-card')), findsOneWidget);
       expect(find.text('选项A'), findsOneWidget);
       final pollSubmitBeforeSelection = tester.widget<FilledButton>(
@@ -215,8 +213,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      expect(find.text('第一条回复'), findsNothing);
-      expect(find.text('第二条回复'), findsOneWidget);
+      expect(_richTextContaining('第一条回复'), findsNothing);
+      expect(_richTextContaining('第二条回复'), findsOneWidget);
       expect(
         find.byKey(const Key('thread-detail-bottom-favorite-button')),
         findsOneWidget,
@@ -236,19 +234,131 @@ void main() {
       await tester.pump(const Duration(milliseconds: 120));
 
       expect(repository.queryHistory.last['ordertype'], '1');
-
-      await tester.ensureVisible(
-        find.byKey(const Key('thread-detail-previous-page-button')),
-      );
-      await tester.tap(
-        find.byKey(const Key('thread-detail-previous-page-button')),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
-
-      expect(find.text('第一条回复'), findsOneWidget);
-      expect(callCount, 4);
+      expect(_richTextContaining('第一条回复'), findsOneWidget);
+      expect(callCount, 3);
     });
+
+    testWidgets(
+      'combines author filter with order switch and pins first post in reverse view',
+      (tester) async {
+        final repository = _FakeThreadRepository((tid, page, query) async {
+          final isAuthorOnly = query['authorid'] == '1';
+          final isReverse = query['ordertype'] == '1';
+          return ApiSuccess(
+            ThreadDetailData(
+              tid: tid,
+              fid: '33',
+              subject: '测试主题',
+              author: 'alice',
+              replies: 2,
+              views: 12,
+              currentPage: page,
+              lastPage: 1,
+              reverseOrderUrl: isReverse
+                  ? null
+                  : 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&ordertype=1',
+              onlyAuthorUrl: isAuthorOnly
+                  ? null
+                  : 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&authorid=1',
+              desktopUrl:
+                  'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=$page',
+              perPage: 3,
+              posts: isReverse
+                  ? <ThreadPost>[
+                      _post(
+                        pid: 'p3',
+                        author: 'alice',
+                        authorId: '1',
+                        number: 3,
+                        message: '<p>倒序回复</p>',
+                      ),
+                      _post(
+                        pid: 'p1',
+                        author: 'alice',
+                        authorId: '1',
+                        number: 1,
+                        isFirst: true,
+                        message: '<p>主楼正文</p>',
+                      ),
+                    ]
+                  : <ThreadPost>[
+                      _post(
+                        pid: 'p1',
+                        author: 'alice',
+                        authorId: '1',
+                        number: 1,
+                        isFirst: true,
+                        message: '<p>主楼正文</p>',
+                      ),
+                      if (!isAuthorOnly)
+                        _post(
+                          pid: 'p2',
+                          author: 'bob',
+                          authorId: '2',
+                          number: 2,
+                          message: '<p>其他作者回复</p>',
+                        ),
+                    ],
+            ),
+          );
+        });
+
+        await tester.pumpWidget(_buildTestApp(repository));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+
+        await tester.tap(find.byKey(const Key('thread-detail-more-menu')));
+        await tester.pumpAndSettle();
+        expect(_popupMenuText('只看该作者'), findsOneWidget);
+        expect(_popupMenuText('倒序浏览'), findsOneWidget);
+
+        await tester.tap(_popupMenuText('只看该作者'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+
+        expect(repository.queryHistory.last['authorid'], '1');
+        expect(repository.queryHistory.last.containsKey('ordertype'), isFalse);
+        await tester.tap(find.byKey(const Key('thread-detail-more-menu')));
+        await tester.pumpAndSettle();
+        expect(_popupMenuText('显示全部楼层'), findsOneWidget);
+        expect(_popupMenuText('倒序浏览'), findsOneWidget);
+
+        await tester.tap(_popupMenuText('倒序浏览'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+
+        expect(repository.queryHistory.last['authorid'], '1');
+        expect(repository.queryHistory.last['ordertype'], '1');
+        expect(
+          tester.getTopLeft(find.byKey(const Key('thread-post-card-p1'))).dy,
+          lessThan(
+            tester.getTopLeft(find.byKey(const Key('thread-post-card-p3'))).dy,
+          ),
+        );
+        await tester.tap(find.byKey(const Key('thread-detail-more-menu')));
+        await tester.pumpAndSettle();
+        expect(_popupMenuText('显示全部楼层'), findsOneWidget);
+        expect(_popupMenuText('正序浏览'), findsOneWidget);
+
+        await tester.tap(_popupMenuText('正序浏览'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+
+        expect(repository.queryHistory.last['authorid'], '1');
+        expect(repository.queryHistory.last['ordertype'], '2');
+        await tester.tap(find.byKey(const Key('thread-detail-more-menu')));
+        await tester.pumpAndSettle();
+        expect(_popupMenuText('显示全部楼层'), findsOneWidget);
+        expect(_popupMenuText('倒序浏览'), findsOneWidget);
+
+        await tester.tap(_popupMenuText('显示全部楼层'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+
+        expect(repository.queryHistory.last.containsKey('authorid'), isFalse);
+        expect(repository.queryHistory.last['ordertype'], '2');
+      },
+    );
 
     testWidgets('selects and submits poll vote then reloads current page', (
       tester,
@@ -327,6 +437,132 @@ void main() {
       expect(find.text('1 票'), findsOneWidget);
     });
 
+    testWidgets('shows already-voted poll results without submit action', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            typeid: '410',
+            subject: '投票主题',
+            author: 'alice',
+            replies: 0,
+            views: 12,
+            currentPage: page,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+                poll: ThreadPoll(
+                  isMultipleChoice: true,
+                  canVote: false,
+                  maxChoices: 3,
+                  summary: '多选投票: ( 最多可选 3 项 ), 共有 331 人参与投票',
+                  statusText: '您已经投过票，谢谢您的参与',
+                  options: <ThreadPollOption>[
+                    ThreadPollOption(
+                      id: '1',
+                      label: '两个心灵靠近的过程',
+                      percent: 38.82,
+                      voteCount: 276,
+                      colorHex: '#E92725',
+                    ),
+                    ThreadPollOption(
+                      id: '2',
+                      label: '背德扭曲神人爆爆爆',
+                      percent: 11.25,
+                      voteCount: 80,
+                      colorHex: '#F27B21',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      });
+      final pollVoteRepository = _FakeThreadPollVoteRepository();
+
+      await tester.pumpWidget(
+        _buildTestApp(repository, pollVoteRepository: pollVoteRepository),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(find.text('两个心灵靠近的过程'), findsOneWidget);
+      expect(find.text('38.82%'), findsOneWidget);
+      expect(find.text('276 票'), findsOneWidget);
+      expect(find.text('您已经投过票，谢谢您的参与'), findsOneWidget);
+      expect(find.byKey(const Key('thread-poll-submit-button')), findsNothing);
+
+      await tester.tap(find.byKey(const Key('thread-poll-option-1')));
+      await tester.pump();
+
+      expect(pollVoteRepository.called, isFalse);
+      expect(find.byIcon(Icons.check_box), findsNothing);
+      expect(find.byIcon(Icons.check_box_outline_blank), findsNothing);
+    });
+
+    testWidgets('uses current thread page as post image referer', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '30',
+            subject: '带图主题',
+            author: 'alice',
+            replies: 0,
+            views: 12,
+            currentPage: page,
+            perPage: 20,
+            desktopUrl:
+                'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=$tid&page=$page',
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message:
+                    '<img src="static/image/common/none.gif" file="data/attachment/forum/page-1.jpg" />',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+      await tester.pump();
+
+      expect(find.byKey(const Key('thread-post-image-0')), findsOneWidget);
+      final image = tester.widget<Image>(find.byType(Image).first);
+      final provider = image.image as NetworkImage;
+      expect(
+        provider.url,
+        'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
+      );
+      expect(
+        provider.headers?['Referer'],
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
+      );
+      expect(provider.headers?['User-Agent'], contains('Chrome'));
+      expect(provider.headers?['Accept'], contains('image/'));
+    });
+
     testWidgets('opens native rate sheet and submits post rating', (
       tester,
     ) async {
@@ -379,6 +615,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(rateRepository.lastDraft?.form.pid, 'p1');
+      expect(rateRepository.lastDraft?.form.referer, contains('#pidp1'));
       expect(rateRepository.lastDraft?.score, 5);
       expect(rateRepository.lastDraft?.reason, '我很赞同');
       expect(rateRepository.lastDraft?.notifyAuthor, isFalse);
@@ -447,6 +684,56 @@ void main() {
       expect(commentRepository.lastDraft?.message, '这是测试点评');
       expect(loadCount, 2);
       expect(find.text('点评成功'), findsOneWidget);
+    });
+
+    testWidgets('opens comment sheet for every post even without comment url', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            subject: '测试主题',
+            author: 'alice',
+            replies: 1,
+            views: 1,
+            currentPage: 2,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p2',
+                author: 'bob',
+                authorId: '2',
+                message: '<p>第二楼</p>',
+                number: 2,
+                isFirst: false,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+      final commentRepository = _FakeThreadPostCommentRepository();
+
+      await tester.pumpWidget(
+        _buildTestApp(repository, postCommentRepository: commentRepository),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('thread-post-actions-p2')), findsOneWidget);
+      expect(find.text('点评'), findsOneWidget);
+
+      await tester.tap(find.text('点评'));
+      await tester.pumpAndSettle();
+
+      expect(commentRepository.loadedSeed?.tid, '100');
+      expect(commentRepository.loadedSeed?.pid, 'p2');
+      expect(commentRepository.loadedSeed?.page, 2);
+      expect(
+        find.byKey(const Key('thread-post-comment-sheet')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('shows comic add-to-shelf button for comic candidate post', (
@@ -792,6 +1079,38 @@ Widget _buildTestApp(
   );
 }
 
+ThreadPost _post({
+  required String pid,
+  required String author,
+  required String authorId,
+  required int number,
+  required String message,
+  bool isFirst = false,
+}) {
+  return ThreadPost(
+    pid: pid,
+    author: author,
+    authorId: authorId,
+    message: message,
+    number: number,
+    isFirst: isFirst,
+    dateline: 'today',
+  );
+}
+
+Finder _popupMenuText(String text) {
+  return find.descendant(
+    of: find.byType(PopupMenuItem<String>),
+    matching: find.text(text),
+  );
+}
+
+Finder _richTextContaining(String text) {
+  return find.byWidgetPredicate((widget) {
+    return widget is RichText && widget.text.toPlainText().contains(text);
+  });
+}
+
 class _FakeForumTagRepository implements ForumTagRepository {
   @override
   Future<ForumTagLookup> loadLookup() async {
@@ -863,14 +1182,28 @@ class _FakeThreadPostRateRepository implements ThreadPostRateRepository {
   @override
   Future<ApiResult<ThreadPostRateForm>> loadForm(String rateUrl) async {
     loadedUrl = rateUrl;
-    return const ApiSuccess<ThreadPostRateForm>(
+    return _formResult();
+  }
+
+  @override
+  Future<ApiResult<ThreadPostRateForm>> loadFormFromSeed(
+    ThreadPostRateFormSeed seed,
+  ) async {
+    loadedUrl = seed.rateUrl;
+    return _formResult(referer: seed.referer);
+  }
+
+  ApiResult<ThreadPostRateForm> _formResult({String? referer}) {
+    return ApiSuccess<ThreadPostRateForm>(
       ThreadPostRateForm(
         actionUrl:
             'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&ratesubmit=yes',
         formHash: 'fh_rate',
         tid: '100',
         pid: 'p1',
-        referer: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
+        referer:
+            referer ??
+            'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
         scoreName: 'score1',
         scoreMin: 0,
         scoreMax: 5,
@@ -894,20 +1227,37 @@ class _FakeThreadPostRateRepository implements ThreadPostRateRepository {
 
 class _FakeThreadPostCommentRepository implements ThreadPostCommentRepository {
   String? loadedUrl;
+  ThreadPostCommentFormSeed? loadedSeed;
   ThreadPostCommentDraft? lastDraft;
 
   @override
   Future<ApiResult<ThreadPostCommentForm>> loadForm(String commentUrl) async {
     loadedUrl = commentUrl;
-    return const ApiSuccess<ThreadPostCommentForm>(
+    return _formResult(pid: 'p1');
+  }
+
+  @override
+  Future<ApiResult<ThreadPostCommentForm>> loadFormFromSeed(
+    ThreadPostCommentFormSeed seed,
+  ) async {
+    loadedSeed = seed;
+    loadedUrl = seed.commentUrl;
+    return _formResult(pid: seed.pid, tid: seed.tid);
+  }
+
+  ApiResult<ThreadPostCommentForm> _formResult({
+    required String pid,
+    String tid = '100',
+  }) {
+    return ApiSuccess<ThreadPostCommentForm>(
       ThreadPostCommentForm(
         actionUrl:
-            'https://bbs.yamibo.com/forum.php?mod=post&action=reply&comment=yes&tid=100&pid=p1&commentsubmit=yes',
+            'https://bbs.yamibo.com/forum.php?mod=post&action=reply&comment=yes&tid=$tid&pid=$pid&commentsubmit=yes',
         formHash: 'fh_comment',
         handleKey: 'comment',
-        tid: '100',
-        pid: 'p1',
-        referer: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
+        tid: tid,
+        pid: pid,
+        referer: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=$tid',
         maxLength: 200,
       ),
     );
@@ -952,8 +1302,7 @@ class _FakeReplyRepository implements ReplyRepository {
 class _FakeThreadRepository implements ThreadRepository {
   _FakeThreadRepository(this._loader);
 
-  final Future<ApiResult<ThreadDetailData>> Function(String tid, int page)
-  _loader;
+  final Function _loader;
   final List<Map<String, String>> queryHistory = <Map<String, String>>[];
 
   @override
@@ -963,7 +1312,20 @@ class _FakeThreadRepository implements ThreadRepository {
     Map<String, String> queryParameters = const <String, String>{},
   }) {
     queryHistory.add(Map<String, String>.from(queryParameters));
-    return _loader(tid, page);
+    final loader = _loader;
+    if (loader
+        is Future<ApiResult<ThreadDetailData>> Function(
+          String,
+          int,
+          Map<String, String>,
+        )) {
+      return loader(tid, page, queryParameters);
+    }
+    return (loader
+        as Future<ApiResult<ThreadDetailData>> Function(String, int))(
+      tid,
+      page,
+    );
   }
 }
 

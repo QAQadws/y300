@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/comic/data/comic_parser_service.dart';
 import 'package:y300/features/comic/data/comic_providers.dart';
@@ -90,7 +91,10 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
     state = result.when(
       success: (data) {
-        final merged = <ThreadPost>[...current.posts, ...data.posts];
+        final merged = _preparePostsForView(<ThreadPost>[
+          ...current.posts,
+          ...data.posts,
+        ], current.queryParameters);
         return AsyncData(
           current.copyWith(
             subject: data.subject.isNotEmpty ? data.subject : current.subject,
@@ -153,25 +157,66 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
   Future<void> openOnlyAuthor() async {
     final current = state.value;
-    final query = _queryFromUrl(current?.onlyAuthorUrl);
-    if (current == null || query.isEmpty) {
+    if (current == null) {
+      return;
+    }
+    final authorId =
+        _queryFromUrl(current.onlyAuthorUrl)['authorid'] ??
+        _firstAvailableAuthorId(current.posts);
+    if (authorId == null || authorId.trim().isEmpty) {
       return;
     }
     await _replaceWithPage(
-      page: _pageFromQuery(query) ?? 1,
-      queryParameters: _threadDetailQuery(query),
+      page: 1,
+      queryParameters: _withQueryUpdates(
+        current.queryParameters,
+        set: <String, String>{'authorid': authorId.trim()},
+        remove: const <String>{'page'},
+      ),
+    );
+  }
+
+  Future<void> openAllPosts() async {
+    final current = state.value;
+    if (current == null || !current.isOnlyAuthorView) {
+      return;
+    }
+    await _replaceWithPage(
+      page: 1,
+      queryParameters: _withQueryUpdates(
+        current.queryParameters,
+        remove: const <String>{'authorid', 'page'},
+      ),
     );
   }
 
   Future<void> openReverseOrder() async {
     final current = state.value;
-    final query = _queryFromUrl(current?.reverseOrderUrl);
-    if (current == null || query.isEmpty) {
+    if (current == null) {
       return;
     }
     await _replaceWithPage(
-      page: _pageFromQuery(query) ?? current.currentPage,
-      queryParameters: _threadDetailQuery(query),
+      page: 1,
+      queryParameters: _withQueryUpdates(
+        current.queryParameters,
+        set: const <String, String>{'ordertype': '1'},
+        remove: const <String>{'page'},
+      ),
+    );
+  }
+
+  Future<void> openNormalOrder() async {
+    final current = state.value;
+    if (current == null || !current.isReverseOrderView) {
+      return;
+    }
+    await _replaceWithPage(
+      page: 1,
+      queryParameters: _withQueryUpdates(
+        current.queryParameters,
+        set: const <String, String>{'ordertype': '2'},
+        remove: const <String>{'page'},
+      ),
     );
   }
 
@@ -314,7 +359,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
   void togglePollOption(ThreadPoll poll, ThreadPollOption option) {
     final current = state.value;
-    if (current == null || current.isPollVoteSubmitting) {
+    if (current == null || current.isPollVoteSubmitting || !poll.canVote) {
       return;
     }
     final optionId = option.id.trim();
@@ -357,7 +402,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
   Future<void> submitPollVote(ThreadPoll poll) async {
     final current = state.value;
-    if (current == null || current.isPollVoteSubmitting) {
+    if (current == null || current.isPollVoteSubmitting || !poll.canVote) {
       return;
     }
     final selected = current.selectedPollOptionIds.toList(growable: false);
@@ -419,13 +464,23 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
   }
 
   Future<ApiResult<ThreadPostRateForm>> loadRateForm(ThreadPost post) async {
+    final current = state.value;
     final rateUrl = post.rateUrl?.trim();
     if (rateUrl == null || rateUrl.isEmpty) {
       return const ApiFailure<ThreadPostRateForm>(
         ApiError(type: ApiErrorType.business, message: '评分表单地址缺失'),
       );
     }
-    return ref.read(threadPostRateRepositoryProvider).loadForm(rateUrl);
+    return ref
+        .read(threadPostRateRepositoryProvider)
+        .loadFormFromSeed(
+          ThreadPostRateFormSeed(
+            rateUrl: rateUrl,
+            tid: current?.tid ?? _args.tid,
+            pid: post.pid,
+            referer: _rateReferer(current, post),
+          ),
+        );
   }
 
   Future<ApiResult<ThreadPostRateResult>> submitPostRate(
@@ -459,13 +514,30 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
   Future<ApiResult<ThreadPostCommentForm>> loadCommentForm(
     ThreadPost post,
   ) async {
-    final commentUrl = post.commentUrl?.trim();
-    if (commentUrl == null || commentUrl.isEmpty) {
+    final current = state.value;
+    final pid = post.pid.trim();
+    if (pid.isEmpty) {
       return const ApiFailure<ThreadPostCommentForm>(
-        ApiError(type: ApiErrorType.business, message: '点评表单地址缺失'),
+        ApiError(type: ApiErrorType.business, message: '点评楼层缺失'),
       );
     }
-    return ref.read(threadPostCommentRepositoryProvider).loadForm(commentUrl);
+    final tid = current?.tid.trim().isNotEmpty == true
+        ? current!.tid.trim()
+        : _args.tid;
+    final page = current?.currentPage ?? 1;
+    final commentUrl = post.commentUrl?.trim();
+    return ref
+        .read(threadPostCommentRepositoryProvider)
+        .loadFormFromSeed(
+          ThreadPostCommentFormSeed(
+            commentUrl: commentUrl == null || commentUrl.isEmpty
+                ? _commentFormUrl(tid: tid, pid: pid, page: page)
+                : commentUrl,
+            tid: tid,
+            pid: pid,
+            page: page <= 0 ? 1 : page,
+          ),
+        );
   }
 
   Future<ApiResult<ThreadPostCommentResult>> submitPostComment(
@@ -579,9 +651,10 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     );
 
     if (result case ApiSuccess<ThreadDetailData>(:final data)) {
-      final merged = page == 1
-          ? data.posts
-          : <ThreadPost>[...previous, ...data.posts];
+      final merged = _preparePostsForView(
+        page == 1 ? data.posts : <ThreadPost>[...previous, ...data.posts],
+        queryParameters,
+      );
       final aggregation = ref
           .read(comicPostAggregationServiceProvider)
           .build(merged);
@@ -769,10 +842,6 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     return query;
   }
 
-  int? _pageFromQuery(Map<String, String> query) {
-    return int.tryParse(query['page'] ?? '');
-  }
-
   Map<String, String> _threadDetailQuery(Map<String, String> query) {
     const allowedKeys = <String>{
       'authorid',
@@ -786,6 +855,93 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         if (allowedKeys.contains(entry.key) && entry.value.trim().isNotEmpty)
           entry.key: entry.value,
     });
+  }
+
+  Map<String, String> _withQueryUpdates(
+    Map<String, String> base, {
+    Map<String, String> set = const <String, String>{},
+    Set<String> remove = const <String>{},
+  }) {
+    final next = Map<String, String>.from(_threadDetailQuery(base));
+    for (final key in remove) {
+      next.remove(key);
+    }
+    for (final entry in set.entries) {
+      final value = entry.value.trim();
+      if (value.isEmpty) {
+        next.remove(entry.key);
+      } else {
+        next[entry.key] = value;
+      }
+    }
+    return Map<String, String>.unmodifiable(next);
+  }
+
+  String? _firstAvailableAuthorId(List<ThreadPost> posts) {
+    for (final post in posts) {
+      final authorId = post.authorId.trim();
+      if (authorId.isNotEmpty) {
+        return authorId;
+      }
+    }
+    return null;
+  }
+
+  List<ThreadPost> _preparePostsForView(
+    List<ThreadPost> posts,
+    Map<String, String> queryParameters,
+  ) {
+    if (queryParameters['ordertype']?.trim() != '1' || posts.length < 2) {
+      return posts;
+    }
+    final firstPosts = <ThreadPost>[];
+    final otherPosts = <ThreadPost>[];
+    for (final post in posts) {
+      if (post.isFirst || post.number == 1) {
+        firstPosts.add(post);
+      } else {
+        otherPosts.add(post);
+      }
+    }
+    if (firstPosts.isEmpty) {
+      return posts;
+    }
+    return <ThreadPost>[...firstPosts, ...otherPosts];
+  }
+
+  String _rateReferer(ThreadDetailPageState? current, ThreadPost post) {
+    final desktopUrl = current?.desktopUrl?.trim();
+    final pid = post.pid.trim();
+    if (desktopUrl != null && desktopUrl.isNotEmpty) {
+      return pid.isEmpty ? desktopUrl : '$desktopUrl#pid$pid';
+    }
+    final tid = current?.tid.trim().isNotEmpty == true
+        ? current!.tid.trim()
+        : _args.tid;
+    return pid.isEmpty
+        ? '${AppConfig.siteBaseUrl}/forum.php?mod=viewthread&tid=$tid'
+        : '${AppConfig.siteBaseUrl}/forum.php?mod=viewthread&tid=$tid#pid$pid';
+  }
+
+  String _commentFormUrl({
+    required String tid,
+    required String pid,
+    required int page,
+  }) {
+    final normalizedPage = page <= 0 ? 1 : page;
+    return Uri.parse(AppConfig.siteBaseUrl)
+        .replace(
+          path: '/forum.php',
+          queryParameters: <String, String>{
+            'mod': 'misc',
+            'action': 'comment',
+            'tid': tid,
+            'pid': pid,
+            'extra': 'page=$normalizedPage',
+            'page': normalizedPage.toString(),
+          },
+        )
+        .toString();
   }
 
   ThreadRepository _readRepository() {
