@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/data/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
@@ -22,6 +23,7 @@ class ThreadDetailContent extends StatelessWidget {
     required this.onAddNovelToShelf,
     required this.onOpenPostReply,
     required this.onOpenPostRate,
+    required this.onOpenPostComment,
     required this.onCopyActionUrl,
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
@@ -38,6 +40,7 @@ class ThreadDetailContent extends StatelessWidget {
   final VoidCallback onAddNovelToShelf;
   final ValueChanged<ThreadPost> onOpenPostReply;
   final ValueChanged<ThreadPost> onOpenPostRate;
+  final ValueChanged<ThreadPost> onOpenPostComment;
   final void Function(String label, String url) onCopyActionUrl;
   final void Function(ThreadPoll poll, ThreadPollOption option)
   onTogglePollOption;
@@ -76,6 +79,7 @@ class ThreadDetailContent extends StatelessWidget {
           onAddNovelToShelf: onAddNovelToShelf,
           onOpenPostReply: onOpenPostReply,
           onOpenPostRate: onOpenPostRate,
+          onOpenPostComment: onOpenPostComment,
           onCopyActionUrl: onCopyActionUrl,
           onTogglePollOption: onTogglePollOption,
           onSubmitPollVote: onSubmitPollVote,
@@ -284,6 +288,7 @@ class ThreadPostCard extends StatelessWidget {
     required this.onAddNovelToShelf,
     required this.onOpenPostReply,
     required this.onOpenPostRate,
+    required this.onOpenPostComment,
     required this.onCopyActionUrl,
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
@@ -298,6 +303,7 @@ class ThreadPostCard extends StatelessWidget {
   final VoidCallback onAddNovelToShelf;
   final ValueChanged<ThreadPost> onOpenPostReply;
   final ValueChanged<ThreadPost> onOpenPostRate;
+  final ValueChanged<ThreadPost> onOpenPostComment;
   final void Function(String label, String url) onCopyActionUrl;
   final void Function(ThreadPoll poll, ThreadPollOption option)
   onTogglePollOption;
@@ -387,6 +393,7 @@ class ThreadPostCard extends StatelessWidget {
                   palette: palette,
                   onOpenPostReply: onOpenPostReply,
                   onOpenPostRate: onOpenPostRate,
+                  onOpenPostComment: onOpenPostComment,
                   onCopyActionUrl: onCopyActionUrl,
                 ),
               ],
@@ -638,6 +645,7 @@ class ThreadPostActionRow extends StatelessWidget {
     required this.palette,
     required this.onOpenPostReply,
     required this.onOpenPostRate,
+    required this.onOpenPostComment,
     required this.onCopyActionUrl,
   });
 
@@ -645,6 +653,7 @@ class ThreadPostActionRow extends StatelessWidget {
   final ThreadDetailNativePalette palette;
   final ValueChanged<ThreadPost> onOpenPostReply;
   final ValueChanged<ThreadPost> onOpenPostRate;
+  final ValueChanged<ThreadPost> onOpenPostComment;
   final void Function(String label, String url) onCopyActionUrl;
 
   @override
@@ -667,7 +676,7 @@ class ThreadPostActionRow extends StatelessWidget {
             label: '点评',
             icon: Icons.chat_bubble_outline,
             palette: palette,
-            onPressed: () => onCopyActionUrl('点评', post.commentUrl!),
+            onPressed: () => onOpenPostComment(post),
           ),
         ThreadActionChip(
           label: '回复',
@@ -881,6 +890,100 @@ class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
                         );
                       },
                 child: const Text('确定'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ThreadPostCommentSheet extends StatefulWidget {
+  const ThreadPostCommentSheet({super.key, required this.form});
+
+  final ThreadPostCommentForm form;
+
+  @override
+  State<ThreadPostCommentSheet> createState() => _ThreadPostCommentSheetState();
+}
+
+class _ThreadPostCommentSheetState extends State<ThreadPostCommentSheet> {
+  late final TextEditingController _messageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _messageController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final maxLength = widget.form.maxLength <= 0 ? 200 : widget.form.maxLength;
+    final message = _messageController.text.trim();
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(16, 14, 16, 16 + bottomInset),
+        child: Column(
+          key: const Key('thread-post-comment-sheet'),
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  '点评',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  key: const Key('thread-post-comment-close-button'),
+                  tooltip: '关闭',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              key: const Key('thread-post-comment-message-input'),
+              controller: _messageController,
+              autofocus: true,
+              minLines: 2,
+              maxLines: 5,
+              maxLength: maxLength,
+              decoration: const InputDecoration(
+                labelText: '点评内容',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                key: const Key('thread-post-comment-submit-button'),
+                onPressed: message.isEmpty
+                    ? null
+                    : () {
+                        Navigator.of(context).pop(
+                          ThreadPostCommentDraft(
+                            form: widget.form,
+                            message: _messageController.text,
+                          ),
+                        );
+                      },
+                child: const Text('发布'),
               ),
             ),
           ],

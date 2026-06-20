@@ -15,6 +15,7 @@ import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/tags/data/tag_providers.dart';
 import 'package:y300/features/thread/data/thread_favorite_providers.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/data/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/data/thread_poll_vote_repository.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
@@ -434,6 +435,46 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         .read(threadPostRateRepositoryProvider)
         .submit(draft);
     if (result case ApiFailure<ThreadPostRateResult>()) {
+      return result;
+    }
+    final current = state.value;
+    if (current != null) {
+      final reloaded = await _loadPage(
+        page: current.currentPage <= 0 ? 1 : current.currentPage,
+        previous: const <ThreadPost>[],
+        queryParameters: current.queryParameters,
+      );
+      if (ref.mounted) {
+        state = AsyncData(
+          reloaded.copyWith(
+            isThreadFavorited: current.isThreadFavorited,
+            threadFavoriteHint: current.threadFavoriteHint,
+          ),
+        );
+      }
+    }
+    return result;
+  }
+
+  Future<ApiResult<ThreadPostCommentForm>> loadCommentForm(
+    ThreadPost post,
+  ) async {
+    final commentUrl = post.commentUrl?.trim();
+    if (commentUrl == null || commentUrl.isEmpty) {
+      return const ApiFailure<ThreadPostCommentForm>(
+        ApiError(type: ApiErrorType.business, message: '点评表单地址缺失'),
+      );
+    }
+    return ref.read(threadPostCommentRepositoryProvider).loadForm(commentUrl);
+  }
+
+  Future<ApiResult<ThreadPostCommentResult>> submitPostComment(
+    ThreadPostCommentDraft draft,
+  ) async {
+    final result = await ref
+        .read(threadPostCommentRepositoryProvider)
+        .submit(draft);
+    if (result case ApiFailure<ThreadPostCommentResult>()) {
       return result;
     }
     final current = state.value;

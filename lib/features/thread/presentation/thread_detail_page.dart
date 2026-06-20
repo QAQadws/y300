@@ -9,6 +9,7 @@ import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/data/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
@@ -126,6 +127,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                     },
                     onOpenPostRate: (post) {
                       _openPostRateSheet(args, controller, post);
+                    },
+                    onOpenPostComment: (post) {
+                      _openPostCommentSheet(args, controller, post);
                     },
                     onCopyActionUrl: _copyActionUrl,
                     onTogglePollOption: controller.togglePollOption,
@@ -257,6 +261,41 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     submitResult.when(
       success: (data) =>
           _showSnackBar(data.message.trim().isEmpty ? '评分成功' : data.message),
+      failure: (error) => _showSnackBar(error.message),
+    );
+  }
+
+  Future<void> _openPostCommentSheet(
+    ThreadDetailArgs args,
+    ThreadDetailController controller,
+    ThreadPost post,
+  ) async {
+    final formResult = await controller.loadCommentForm(post);
+    if (!mounted) {
+      return;
+    }
+    if (formResult case ApiFailure<ThreadPostCommentForm>(:final error)) {
+      _showSnackBar(error.message);
+      return;
+    }
+    final form = (formResult as ApiSuccess<ThreadPostCommentForm>).data;
+    final result = await showModalBottomSheet<ThreadPostCommentDraft>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => ThreadPostCommentSheet(form: form),
+    );
+    if (!mounted || result == null) {
+      return;
+    }
+    final submitResult = await ref
+        .read(threadDetailControllerProvider(args).notifier)
+        .submitPostComment(result);
+    if (!mounted) {
+      return;
+    }
+    submitResult.when(
+      success: (data) =>
+          _showSnackBar(data.message.trim().isEmpty ? '点评成功' : data.message),
       failure: (error) => _showSnackBar(error.message),
     );
   }

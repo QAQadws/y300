@@ -30,6 +30,7 @@ import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/tags/domain/forum_tag_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_favorite_providers.dart';
+import 'package:y300/features/thread/data/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/data/thread_poll_vote_repository.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
@@ -385,6 +386,69 @@ void main() {
       expect(find.text('评分成功'), findsOneWidget);
     });
 
+    testWidgets('opens native comment sheet and submits post comment', (
+      tester,
+    ) async {
+      var loadCount = 0;
+      final repository = _FakeThreadRepository((tid, page) async {
+        loadCount++;
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            subject: '测试主题',
+            author: 'alice',
+            replies: 0,
+            views: 1,
+            currentPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+                commentUrl:
+                    'https://bbs.yamibo.com/forum.php?mod=misc&action=comment&tid=100&pid=p1',
+              ),
+            ],
+          ),
+        );
+      });
+      final commentRepository = _FakeThreadPostCommentRepository();
+
+      await tester.pumpWidget(
+        _buildTestApp(repository, postCommentRepository: commentRepository),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('点评'));
+      await tester.pumpAndSettle();
+
+      expect(commentRepository.loadedUrl, contains('action=comment'));
+      expect(
+        find.byKey(const Key('thread-post-comment-sheet')),
+        findsOneWidget,
+      );
+      await tester.enterText(
+        find.byKey(const Key('thread-post-comment-message-input')),
+        '这是测试点评',
+      );
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const Key('thread-post-comment-submit-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(commentRepository.lastDraft?.form.pid, 'p1');
+      expect(commentRepository.lastDraft?.message, '这是测试点评');
+      expect(loadCount, 2);
+      expect(find.text('点评成功'), findsOneWidget);
+    });
+
     testWidgets('shows comic add-to-shelf button for comic candidate post', (
       tester,
     ) async {
@@ -685,6 +749,7 @@ Widget _buildTestApp(
   NovelRepository? novelRepository,
   ThreadFavoriteActionService? favoriteActionService,
   ThreadPostRateRepository? postRateRepository,
+  ThreadPostCommentRepository? postCommentRepository,
   ThreadPollVoteRepository? pollVoteRepository,
 }) {
   return ProviderScope(
@@ -702,6 +767,9 @@ Widget _buildTestApp(
       ),
       threadPostRateRepositoryProvider.overrideWithValue(
         postRateRepository ?? _FakeThreadPostRateRepository(),
+      ),
+      threadPostCommentRepositoryProvider.overrideWithValue(
+        postCommentRepository ?? _FakeThreadPostCommentRepository(),
       ),
       threadPollVoteRepositoryProvider.overrideWithValue(
         pollVoteRepository ?? _FakeThreadPollVoteRepository(),
@@ -820,6 +888,38 @@ class _FakeThreadPostRateRepository implements ThreadPostRateRepository {
     lastDraft = draft;
     return const ApiSuccess<ThreadPostRateResult>(
       ThreadPostRateResult(message: '评分成功'),
+    );
+  }
+}
+
+class _FakeThreadPostCommentRepository implements ThreadPostCommentRepository {
+  String? loadedUrl;
+  ThreadPostCommentDraft? lastDraft;
+
+  @override
+  Future<ApiResult<ThreadPostCommentForm>> loadForm(String commentUrl) async {
+    loadedUrl = commentUrl;
+    return const ApiSuccess<ThreadPostCommentForm>(
+      ThreadPostCommentForm(
+        actionUrl:
+            'https://bbs.yamibo.com/forum.php?mod=post&action=reply&comment=yes&tid=100&pid=p1&commentsubmit=yes',
+        formHash: 'fh_comment',
+        handleKey: 'comment',
+        tid: '100',
+        pid: 'p1',
+        referer: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
+        maxLength: 200,
+      ),
+    );
+  }
+
+  @override
+  Future<ApiResult<ThreadPostCommentResult>> submit(
+    ThreadPostCommentDraft draft,
+  ) async {
+    lastDraft = draft;
+    return const ApiSuccess<ThreadPostCommentResult>(
+      ThreadPostCommentResult(message: '点评成功'),
     );
   }
 }
