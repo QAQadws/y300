@@ -166,19 +166,17 @@ class ForumHomeSectionCard extends StatelessWidget {
                           title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: palette.sectionHeaderForeground,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                color: palette.sectionHeaderForeground,
+                                fontWeight: FontWeight.w600,
+                              ),
                         ),
                       ),
-                      Text(
-                        isCollapsed ? '+' : '-',
-                        key: Key('forum-section-indicator-$title'),
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: palette.sectionHeaderForeground,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      _ForumHomeSectionIndicator(
+                        title: title,
+                        isCollapsed: isCollapsed,
+                        palette: palette,
                       ),
                     ],
                   ),
@@ -186,23 +184,82 @@ class ForumHomeSectionCard extends StatelessWidget {
               ),
             ),
           ),
-          if (!isCollapsed)
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: palette.sectionBodyBackground,
-                borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(4),
-                ),
-              ),
-              child: SizedBox(
-                width: double.infinity,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: children,
-                ),
-              ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 160),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: SizeTransition(
+                    sizeFactor: animation,
+                    axisAlignment: -1,
+                    child: child,
+                  ),
+                );
+              },
+              child: isCollapsed
+                  ? const SizedBox.shrink(
+                      key: ValueKey('forum-home-section-collapsed'),
+                    )
+                  : DecoratedBox(
+                      key: ValueKey('forum-home-section-expanded-$title'),
+                      decoration: BoxDecoration(
+                        color: palette.sectionBodyBackground,
+                        borderRadius: const BorderRadius.vertical(
+                          bottom: Radius.circular(4),
+                        ),
+                      ),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: children,
+                        ),
+                      ),
+                    ),
             ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _ForumHomeSectionIndicator extends StatelessWidget {
+  const _ForumHomeSectionIndicator({
+    required this.title,
+    required this.isCollapsed,
+    required this.palette,
+  });
+
+  final String title;
+  final bool isCollapsed;
+  final ForumHomeNativePalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: isCollapsed ? 0.25 : 0),
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      builder: (context, turns, child) {
+        return RotationTransition(
+          turns: AlwaysStoppedAnimation<double>(turns),
+          child: child,
+        );
+      },
+      child: Text(
+        isCollapsed ? '+' : '-',
+        key: Key('forum-section-indicator-$title'),
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          color: palette.sectionHeaderForeground,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -238,9 +295,7 @@ class ForumHomeForumRow extends StatelessWidget {
             decoration: BoxDecoration(
               border: isLast
                   ? null
-                  : Border(
-                      bottom: BorderSide(color: palette.rowDivider),
-                    ),
+                  : Border(bottom: BorderSide(color: palette.rowDivider)),
             ),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(10, 13, 10, 13),

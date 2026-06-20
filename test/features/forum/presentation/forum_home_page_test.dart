@@ -37,28 +37,29 @@ void main() {
       expect(find.text('公告区'), findsOneWidget);
     });
 
-    testWidgets('renders carousel, grouped sections, forum rows, and today counts', (
-      tester,
-    ) async {
-      final repository = _FakeForumHomeRepository(
-        () async => ApiSuccess(_loggedOutPayloadWithCarousel()),
-      );
+    testWidgets(
+      'renders carousel, grouped sections, forum rows, and today counts',
+      (tester) async {
+        final repository = _FakeForumHomeRepository(
+          () async => ApiSuccess(_loggedOutPayloadWithCarousel()),
+        );
 
-      await tester.pumpWidget(_buildTestApp(repository));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(_buildTestApp(repository));
+        await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
-      expect(find.byKey(const Key('forum-home-carousel')), findsOneWidget);
-      expect(
-        tester.getSize(find.byKey(const Key('forum-home-carousel'))).height,
-        greaterThan(0),
-      );
-      expect(find.text('综合区'), findsOneWidget);
-      expect(find.text('公告区'), findsOneWidget);
-      expect(find.text('今日 2'), findsOneWidget);
-      expect(find.byKey(const Key('forum-card-2')), findsOneWidget);
-      expect(find.textContaining('共1 个分组'), findsNothing);
-    });
+        expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
+        expect(find.byKey(const Key('forum-home-carousel')), findsOneWidget);
+        expect(
+          tester.getSize(find.byKey(const Key('forum-home-carousel'))).height,
+          greaterThan(0),
+        );
+        expect(find.text('综合区'), findsOneWidget);
+        expect(find.text('公告区'), findsOneWidget);
+        expect(find.text('今日 2'), findsOneWidget);
+        expect(find.byKey(const Key('forum-card-2')), findsOneWidget);
+        expect(find.textContaining('共1 个分组'), findsNothing);
+      },
+    );
 
     testWidgets('renders forum list when carousel is empty', (tester) async {
       final repository = _FakeForumHomeRepository(
@@ -72,84 +73,116 @@ void main() {
       expect(find.byKey(const Key('forum-card-2')), findsOneWidget);
     });
 
-    testWidgets('renders favorite forum section when logged in payload has favorites', (
+    testWidgets(
+      'renders favorite forum section when logged in payload has favorites',
+      (tester) async {
+        final repository = _FakeForumHomeRepository(
+          () async => ApiSuccess(_loggedInPayloadWithFavorites()),
+        );
+
+        await tester.pumpWidget(_buildTestApp(repository));
+        await tester.pumpAndSettle();
+
+        expect(find.text('我收藏的版块'), findsOneWidget);
+        expect(find.byKey(const Key('forum-favorite-card-2')), findsOneWidget);
+        expect(find.byKey(const Key('forum-favorite-card-55')), findsOneWidget);
+        expect(find.text('综合区'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'favorite forums use forum index description when favorite description is empty',
+      (tester) async {
+        final repository = _FakeForumHomeRepository(
+          () async =>
+              ApiSuccess(_loggedInPayloadWithEmptyFavoriteDescription()),
+        );
+
+        await tester.pumpWidget(_buildTestApp(repository));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('forum-favorite-card-2')), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('forum-favorite-card-2')),
+            matching: find.text('站点公告与维护信息'),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'favorite forums use home html descriptions before forum index fallback',
+      (tester) async {
+        final repository = _FakeForumHomeRepository(
+          () async =>
+              ApiSuccess(_loggedInPayloadWithChromeFavoriteDescriptions()),
+        );
+
+        await tester.pumpWidget(_buildTestApp(repository));
+        await tester.pumpAndSettle();
+
+        expect(find.text('风声水起。'), findsOneWidget);
+        expect(find.text('爱的推广会。'), findsOneWidget);
+        expect(find.text('外文作品翻译的分享与赏析。'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'section header toggles forum rows with minus and plus indicators',
+      (tester) async {
+        final repository = _FakeForumHomeRepository(
+          () async => ApiSuccess(_loggedInPayloadWithFavorites()),
+        );
+
+        await tester.pumpWidget(_buildTestApp(repository));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('forum-favorite-card-2')), findsOneWidget);
+        var indicator = tester.widget<Text>(
+          find.byKey(const Key('forum-section-indicator-我收藏的版块')),
+        );
+        expect(indicator.data, '-');
+
+        await tester.tap(find.byKey(const Key('forum-section-toggle-我收藏的版块')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 90));
+
+        final rotatingIndicator = tester.widget<RotationTransition>(
+          find
+              .ancestor(
+                of: find.byKey(const Key('forum-section-indicator-我收藏的版块')),
+                matching: find.byType(RotationTransition),
+              )
+              .first,
+        );
+        expect(rotatingIndicator.turns.value, greaterThan(0));
+        expect(rotatingIndicator.turns.value, lessThanOrEqualTo(0.25));
+        expect(find.byKey(const Key('forum-favorite-card-2')), findsOneWidget);
+
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('forum-favorite-card-2')), findsNothing);
+        indicator = tester.widget<Text>(
+          find.byKey(const Key('forum-section-indicator-我收藏的版块')),
+        );
+        expect(indicator.data, '+');
+
+        await tester.tap(find.byKey(const Key('forum-section-toggle-我收藏的版块')));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('forum-favorite-card-2')), findsOneWidget);
+        indicator = tester.widget<Text>(
+          find.byKey(const Key('forum-section-indicator-我收藏的版块')),
+        );
+        expect(indicator.data, '-');
+      },
+    );
+
+    testWidgets('opens forum display page when forum row is tapped', (
       tester,
     ) async {
-      final repository = _FakeForumHomeRepository(
-        () async => ApiSuccess(_loggedInPayloadWithFavorites()),
-      );
-
-      await tester.pumpWidget(_buildTestApp(repository));
-      await tester.pumpAndSettle();
-
-      expect(find.text('我收藏的版块'), findsOneWidget);
-      expect(find.byKey(const Key('forum-favorite-card-2')), findsOneWidget);
-      expect(find.byKey(const Key('forum-favorite-card-55')), findsOneWidget);
-      expect(find.text('综合区'), findsOneWidget);
-    });
-
-    testWidgets('favorite forums use forum index description when favorite description is empty', (
-      tester,
-    ) async {
-      final repository = _FakeForumHomeRepository(
-        () async => ApiSuccess(_loggedInPayloadWithEmptyFavoriteDescription()),
-      );
-
-      await tester.pumpWidget(_buildTestApp(repository));
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const Key('forum-favorite-card-2')), findsOneWidget);
-      expect(
-        find.descendant(
-          of: find.byKey(const Key('forum-favorite-card-2')),
-          matching: find.text('站点公告与维护信息'),
-        ),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('favorite forums use home html descriptions before forum index fallback', (
-      tester,
-    ) async {
-      final repository = _FakeForumHomeRepository(
-        () async => ApiSuccess(_loggedInPayloadWithChromeFavoriteDescriptions()),
-      );
-
-      await tester.pumpWidget(_buildTestApp(repository));
-      await tester.pumpAndSettle();
-
-      expect(find.text('风声水起。'), findsOneWidget);
-      expect(find.text('爱的推广会。'), findsOneWidget);
-      expect(find.text('外文作品翻译的分享与赏析。'), findsOneWidget);
-    });
-
-    testWidgets('section header toggles forum rows with minus and plus indicators', (
-      tester,
-    ) async {
-      final repository = _FakeForumHomeRepository(
-        () async => ApiSuccess(_loggedInPayloadWithFavorites()),
-      );
-
-      await tester.pumpWidget(_buildTestApp(repository));
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const Key('forum-favorite-card-2')), findsOneWidget);
-      var indicator = tester.widget<Text>(
-        find.byKey(const Key('forum-section-indicator-我收藏的版块')),
-      );
-      expect(indicator.data, '-');
-
-      await tester.tap(find.byKey(const Key('forum-section-toggle-我收藏的版块')));
-      await tester.pump();
-
-      expect(find.byKey(const Key('forum-favorite-card-2')), findsNothing);
-      indicator = tester.widget<Text>(
-        find.byKey(const Key('forum-section-indicator-我收藏的版块')),
-      );
-      expect(indicator.data, '+');
-    });
-
-    testWidgets('opens forum display page when forum row is tapped', (tester) async {
       final observer = _CountingNavigatorObserver();
       final repository = _FakeForumHomeRepository(
         () async => ApiSuccess(_loggedOutPayload()),
@@ -185,33 +218,39 @@ void main() {
       expect(observer.pushCount, pushCountBeforeTap + 1);
     });
 
-    testWidgets('launches external URL when carousel target is not a thread link', (
+    testWidgets(
+      'launches external URL when carousel target is not a thread link',
+      (tester) async {
+        final launcher = _FakeForumWebViewExternalLauncher();
+        final repository = _FakeForumHomeRepository(
+          () async => ApiSuccess(
+            _loggedOutPayload(
+              carouselItems: const [
+                ForumHomeCarouselItem(
+                  imageUrl: 'https://bbs.yamibo.com/banner.jpg',
+                  targetUrl: 'https://www.yamibo.com/',
+                ),
+              ],
+            ),
+          ),
+        );
+
+        await tester.pumpWidget(_buildTestApp(repository, launcher: launcher));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('forum-home-carousel-item-0')));
+        await tester.pump();
+
+        expect(
+          launcher.launchedUris.single,
+          Uri.parse('https://www.yamibo.com/'),
+        );
+      },
+    );
+
+    testWidgets('dark theme native home surfaces are theme driven', (
       tester,
     ) async {
-      final launcher = _FakeForumWebViewExternalLauncher();
-      final repository = _FakeForumHomeRepository(
-        () async => ApiSuccess(
-          _loggedOutPayload(
-            carouselItems: const [
-              ForumHomeCarouselItem(
-                imageUrl: 'https://bbs.yamibo.com/banner.jpg',
-                targetUrl: 'https://www.yamibo.com/',
-              ),
-            ],
-          ),
-        ),
-      );
-
-      await tester.pumpWidget(_buildTestApp(repository, launcher: launcher));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const Key('forum-home-carousel-item-0')));
-      await tester.pump();
-
-      expect(launcher.launchedUris.single, Uri.parse('https://www.yamibo.com/'));
-    });
-
-    testWidgets('dark theme native home surfaces are theme driven', (tester) async {
       final repository = _FakeForumHomeRepository(
         () async => ApiSuccess(_loggedInPayloadWithFavorites()),
       );
@@ -432,7 +471,8 @@ class _FakeImageRequestHeaderBuilder implements ImageRequestHeaderBuilder {
   }
 }
 
-class _FakeForumWebViewExternalLauncher implements ForumWebViewExternalLauncher {
+class _FakeForumWebViewExternalLauncher
+    implements ForumWebViewExternalLauncher {
   final launchedUris = <Uri>[];
 
   @override

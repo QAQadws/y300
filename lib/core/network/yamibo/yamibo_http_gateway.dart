@@ -211,7 +211,7 @@ class YamiboHttpGateway {
     }
 
     try {
-      final response = await _dio.requestUri<Object?>(
+      final response = await _dio.requestUri<dynamic>(
         uri,
         data: data,
         options: Options(
@@ -310,12 +310,13 @@ class YamiboHttpGateway {
         context: context,
         extractor: extractor,
       ),
-      YamiboRequestKind.html => body is String
-          ? extractor.extractFromHtml(
-              body,
-              source: 'html:${context.operation}',
-            )
-          : null,
+      YamiboRequestKind.html =>
+        body is String
+            ? extractor.extractFromHtml(
+                body,
+                source: 'html:${context.operation}',
+              )
+            : null,
       YamiboRequestKind.resource || YamiboRequestKind.imageProbe => null,
     };
     if (snapshot != null) {
@@ -332,7 +333,9 @@ class YamiboHttpGateway {
       final decoded = body is String
           ? jsonDecode(_normalizeJsonText(body))
           : body;
-      final variables = ParseUtils.asMap(ParseUtils.asMap(decoded)['Variables']);
+      final variables = ParseUtils.asMap(
+        ParseUtils.asMap(decoded)['Variables'],
+      );
       if (variables.isEmpty) {
         return null;
       }
@@ -417,6 +420,7 @@ class YamiboHttpGateway {
   ApiError _mapDioError(DioException error) {
     final statusCode = error.response?.statusCode;
     final responseData = error.response?.data;
+    final rawError = responseData ?? error.error;
 
     if (error.type == DioExceptionType.connectionTimeout ||
         error.type == DioExceptionType.receiveTimeout ||
@@ -425,7 +429,7 @@ class YamiboHttpGateway {
         type: ApiErrorType.timeout,
         message: '请求超时，请稍后重试',
         statusCode: statusCode,
-        raw: responseData,
+        raw: rawError,
       );
     }
 
@@ -434,7 +438,7 @@ class YamiboHttpGateway {
         type: ApiErrorType.unauthorized,
         message: '登录态失效，请重新登录',
         statusCode: statusCode,
-        raw: responseData,
+        raw: rawError,
       );
     }
 
@@ -443,7 +447,7 @@ class YamiboHttpGateway {
         type: ApiErrorType.server,
         message: '服务端异常($statusCode)',
         statusCode: statusCode,
-        raw: responseData,
+        raw: rawError,
       );
     }
 
@@ -452,7 +456,7 @@ class YamiboHttpGateway {
         type: ApiErrorType.server,
         message: '请求失败($statusCode)',
         statusCode: statusCode,
-        raw: responseData,
+        raw: rawError,
       );
     }
 
@@ -460,7 +464,7 @@ class YamiboHttpGateway {
       type: ApiErrorType.network,
       message: '网络异常: ${error.message ?? 'unknown'}',
       statusCode: statusCode,
-      raw: responseData,
+      raw: rawError,
     );
   }
 

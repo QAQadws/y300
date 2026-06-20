@@ -2,14 +2,68 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/forum/data/forum_display_repository.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
+import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
+import 'package:y300/features/forum/presentation/widgets/forum_home_widgets.dart';
 
 void main() {
   group('ForumDisplayPage', () {
+    test('light palette uses forum home native colors', () {
+      final theme = AppTheme.light();
+      final displayPalette = ForumDisplayThemePalette.resolve(theme);
+      final homePalette = ForumHomeNativePalette.resolve(theme);
+
+      expect(displayPalette.background, homePalette.background);
+      expect(displayPalette.panel, homePalette.sectionBodyBackground);
+      expect(displayPalette.card, homePalette.sectionBodyBackground);
+      expect(displayPalette.accent, homePalette.sectionHeaderBackground);
+      expect(
+        displayPalette.surfaceContainer,
+        homePalette.sectionBodyBackground,
+      );
+      expect(displayPalette.selectedContainer, isNot(Colors.transparent));
+      expect(displayPalette.outlineSoft.a, lessThan(1));
+      expect(displayPalette.stateLayer.a, lessThan(1));
+      expect(
+        displayPalette.threadBadgeBackground,
+        theme.appBarTheme.backgroundColor,
+      );
+      expect(
+        displayPalette.threadBadgeForeground,
+        theme.appBarTheme.foregroundColor,
+      );
+      expect(displayPalette.threadBadgeOutline.a, lessThan(1));
+    });
+
+    test('dark palette remains derived from ColorScheme', () {
+      final theme = AppTheme.dark();
+      final palette = ForumDisplayThemePalette.resolve(theme);
+
+      expect(palette.background, theme.scaffoldBackgroundColor);
+      expect(palette.panel, theme.colorScheme.surfaceContainer);
+      expect(palette.card, theme.colorScheme.surfaceContainerLowest);
+      expect(palette.accent, theme.colorScheme.primary);
+      expect(palette.surfaceContainer, theme.colorScheme.surfaceContainer);
+      expect(
+        palette.surfaceContainerLow,
+        theme.colorScheme.surfaceContainerLowest,
+      );
+      expect(
+        palette.surfaceContainerHigh,
+        theme.colorScheme.surfaceContainerHighest,
+      );
+      expect(palette.selectedContainer, theme.colorScheme.secondaryContainer);
+      expect(palette.threadBadgeBackground, theme.appBarTheme.backgroundColor);
+      expect(palette.threadBadgeForeground, theme.appBarTheme.foregroundColor);
+      expect(palette.threadBadgeOutline.a, lessThan(1));
+    });
+
     testWidgets('stays buildable first then renders list', (tester) async {
       final completer = Completer<ApiResult<ForumDisplayData>>();
       final repository = _FakeForumDisplayRepository(
@@ -43,9 +97,64 @@ void main() {
       await tester.pump(const Duration(milliseconds: 120));
 
       expect(find.byKey(const Key('forum-display-list')), findsOneWidget);
+      expect(
+        find.byKey(const Key('forum-display-filter-header')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('forum-thread-list-group')), findsOneWidget);
+      final selectedFilterIndicatorSize = tester.getSize(
+        find
+            .descendant(
+              of: find.byKey(const Key('forum-display-filter-全部')),
+              matching: find.byType(AnimatedContainer),
+            )
+            .last,
+      );
+      expect(selectedFilterIndicatorSize.width, 18);
+      expect(selectedFilterIndicatorSize.height, 3);
+      final selectedFilterIndicatorBottom = tester
+          .getBottomLeft(
+            find
+                .descendant(
+                  of: find.byKey(const Key('forum-display-filter-全部')),
+                  matching: find.byType(AnimatedContainer),
+                )
+                .last,
+          )
+          .dy;
+      final filterHeaderBottom = tester
+          .getBottomLeft(find.byKey(const Key('forum-display-filter-header')))
+          .dy;
+      expect(
+        (filterHeaderBottom - selectedFilterIndicatorBottom).abs(),
+        lessThanOrEqualTo(1),
+      );
+      final filterHeaderCenterY = tester
+          .getCenter(find.byKey(const Key('forum-display-filter-header')))
+          .dy;
+      final selectedFilterTextCenterY = tester.getCenter(find.text('全部')).dy;
+      expect(
+        (filterHeaderCenterY - selectedFilterTextCenterY).abs(),
+        lessThanOrEqualTo(2),
+      );
       expect(find.text('帖子A'), findsOneWidget);
       expect(find.text('公告区'), findsWidgets);
       expect(find.text('第1页'), findsOneWidget);
+
+      final palette = ForumDisplayThemePalette.resolve(
+        Theme.of(tester.element(find.byType(ForumDisplayPage))),
+      );
+      final currentPageButton = tester.widget<TextButton>(
+        find.byKey(const Key('forum-display-current-page-button')),
+      );
+      expect(
+        currentPageButton.style?.backgroundColor?.resolve({}),
+        palette.surfaceContainerHigh.withValues(alpha: 0.42),
+      );
+      final currentPageShape =
+          currentPageButton.style?.shape?.resolve({}) as RoundedRectangleBorder;
+      expect(currentPageShape.side, BorderSide.none);
+      expect(currentPageShape.borderRadius, BorderRadius.circular(10));
     });
 
     testWidgets('loads next page when tapping load more', (tester) async {
@@ -98,12 +207,114 @@ void main() {
         findsOneWidget,
       );
       await tester.tap(find.byKey(const Key('forum-display-load-more-button')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
+      await tester.pumpAndSettle();
 
       expect(find.text('帖子A'), findsNothing);
       expect(find.text('帖子B'), findsOneWidget);
       expect(callCount, 2);
+    });
+
+    testWidgets('long pressing thread copies thread link', (tester) async {
+      final copiedTexts = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            final data = Map<String, dynamic>.from(call.arguments as Map);
+            copiedTexts.add(data['text'] as String);
+          }
+          return null;
+        },
+      );
+      addTearDown(() {
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        );
+      });
+
+      final repository = _FakeForumDisplayRepository((_, page, query) async {
+        return ApiSuccess(
+          _displayData(
+            page: page,
+            total: 1,
+            threads: [
+              ForumThreadSummary(
+                tid: '572604',
+                subject: '可复制链接的帖子',
+                author: 'alice',
+                replies: 0,
+                views: 1,
+                dateline: 'today',
+                threadUrl:
+                    'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=572604&mobile=2',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      await tester.longPress(find.byKey(const Key('forum-thread-572604')));
+      await tester.pump();
+
+      expect(copiedTexts, [
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=572604&mobile=2',
+      ]);
+      expect(find.text('已复制帖子链接'), findsOneWidget);
+    });
+
+    testWidgets('long pressing thread falls back to tid link', (tester) async {
+      final copiedTexts = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            final data = Map<String, dynamic>.from(call.arguments as Map);
+            copiedTexts.add(data['text'] as String);
+          }
+          return null;
+        },
+      );
+      addTearDown(() {
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        );
+      });
+
+      final repository = _FakeForumDisplayRepository((_, page, query) async {
+        return ApiSuccess(
+          _displayData(
+            page: page,
+            total: 1,
+            threads: [
+              ForumThreadSummary(
+                tid: '100',
+                subject: '只有 tid 的帖子',
+                author: 'alice',
+                replies: 0,
+                views: 1,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      await tester.longPress(find.byKey(const Key('forum-thread-100')));
+      await tester.pump();
+
+      expect(copiedTexts, [
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&mobile=2',
+      ]);
     });
 
     testWidgets('filter and thread tag taps reload using link query', (
@@ -136,9 +347,23 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      await tester.tap(find.byKey(const Key('forum-display-filter-公告')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
+      await tester.tap(find.byKey(const Key('forum-display-type-filter-menu')));
+      await tester.pumpAndSettle();
+      final openTypeArrowFinder = find.descendant(
+        of: find.byKey(const Key('forum-display-type-filter-menu')),
+        matching: find.byType(RotationTransition),
+      );
+      final openTypeArrow =
+          openTypeArrowFinder.evaluate().single.widget as RotationTransition;
+      expect(openTypeArrow.turns.value, 0.5);
+      final menuItemCenter = tester.getCenter(
+        find.byKey(const Key('forum-display-type-filter-公告')),
+      );
+      final menuTextCenter = tester.getCenter(find.text('公告').last);
+      expect((menuItemCenter.dx - menuTextCenter.dx).abs(), lessThan(1));
+
+      await tester.tap(find.byKey(const Key('forum-display-type-filter-公告')));
+      await tester.pumpAndSettle();
 
       expect(repository.lastQuery?.parameters['filter'], 'typeid');
       expect(repository.lastQuery?.parameters['typeid'], '65');
@@ -151,6 +376,97 @@ void main() {
       expect(repository.lastQuery?.parameters['typeid'], '69');
       expect(find.text('分类筛选结果'), findsOneWidget);
     });
+
+    testWidgets(
+      'filter, thread tag, and pagination return scroll to filter start',
+      (tester) async {
+        final repository = _FakeForumDisplayRepository((_, page, query) async {
+          final typeid = query?.parameters['typeid'];
+          final suffix = typeid == null ? 'page-$page' : 'type-$typeid';
+          return ApiSuccess(
+            _displayData(
+              page: page,
+              total: 24,
+              lastPage: 8,
+              headImageUrl:
+                  'https://bbs.yamibo.com/data/attachment/album/202603/02/head.png',
+              threads: _manyThreads(
+                suffix: suffix,
+                count: 12,
+                includeTagUrl: true,
+              ),
+            ),
+          );
+        });
+
+        await tester.pumpWidget(_buildTestApp(repository));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+
+        final filterStartOffset = tester
+            .getSize(find.byKey(const Key('forum-display-head-image')))
+            .height;
+        expect(_scrollOffset(tester), 0);
+        expect(filterStartOffset, greaterThan(0));
+
+        await _dragWellPastFilter(tester);
+        expect(_scrollOffset(tester), greaterThan(filterStartOffset + 120));
+
+        await tester.tap(find.byKey(const Key('forum-display-filter-最新')));
+        await tester.pumpAndSettle();
+        _expectReturnedToFilterStart(tester, filterStartOffset);
+        expect(repository.lastQuery?.parameters['filter'], 'lastpost');
+
+        await _dragWellPastFilter(tester);
+        await tester.tap(
+          find.byKey(const Key('forum-display-type-filter-menu')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('forum-display-type-filter-公告')));
+        await tester.pumpAndSettle();
+        _expectReturnedToFilterStart(tester, filterStartOffset);
+        expect(repository.lastQuery?.parameters['typeid'], '65');
+
+        await _dragWellPastFilter(tester);
+        await tester.tap(find.byKey(const Key('forum-thread-tag-type-65-5')));
+        await tester.pumpAndSettle();
+        _expectReturnedToFilterStart(tester, filterStartOffset);
+        expect(repository.lastQuery?.parameters['typeid'], '69');
+
+        await _jumpNearBottomAndTap(
+          tester,
+          find.byKey(const Key('forum-display-load-more-button')),
+        );
+        await tester.pumpAndSettle();
+        _expectReturnedToFilterStart(tester, filterStartOffset);
+        expect(repository.lastQuery?.page, 2);
+
+        await _jumpNearBottomAndTap(
+          tester,
+          find.byKey(const Key('forum-display-prev-page-button')),
+        );
+        await tester.pumpAndSettle();
+        _expectReturnedToFilterStart(tester, filterStartOffset);
+        expect(repository.lastQuery?.page, 1);
+
+        await _jumpNearBottomAndTap(
+          tester,
+          find.byKey(const Key('forum-display-current-page-button')),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const Key('forum-display-page-input')),
+          '3',
+        );
+        await tester.tap(
+          find.byKey(const Key('forum-display-page-confirm-button')),
+        );
+        await tester.pumpAndSettle();
+
+        _expectReturnedToFilterStart(tester, filterStartOffset);
+        expect(repository.lastQuery?.page, 3);
+      },
+    );
 
     testWidgets('pinned entry opens thread detail', (tester) async {
       final repository = _FakeForumDisplayRepository((_, page, query) async {
@@ -175,6 +491,42 @@ void main() {
       await tester.pumpWidget(_buildTestApp(repository));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
+      final palette = ForumDisplayThemePalette.resolve(
+        Theme.of(tester.element(find.byType(ForumDisplayPage))),
+      );
+
+      expect(find.text('置顶跳转'), findsNothing);
+      expect(
+        find.byKey(const Key('forum-display-top-entries-toggle')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(const Key('forum-display-top-entries-toggle')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('置顶跳转'), findsOneWidget);
+      final topBadgeDecoration = _decorationAroundText(tester, '置顶');
+      expect(topBadgeDecoration.border, isNull);
+      expect(
+        topBadgeDecoration.color,
+        palette.surfaceContainerHigh.withValues(alpha: 0.42),
+      );
+      expect(topBadgeDecoration.boxShadow, isNotNull);
+      expect(topBadgeDecoration.boxShadow, isNotEmpty);
+
+      await tester.tap(
+        find.byKey(const Key('forum-display-top-entries-toggle')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('置顶跳转'), findsNothing);
+
+      await tester.tap(
+        find.byKey(const Key('forum-display-top-entries-toggle')),
+      );
+      await tester.pumpAndSettle();
 
       await tester.tap(find.text('置顶跳转'));
       await tester.pump();
@@ -250,8 +602,7 @@ void main() {
                 dateline: '2026-6-18 14:42',
                 excerpt: '请勿随意转载，也请别在外网提及，谢谢',
                 sourceTagName: '長篇連載',
-                badgeLabel: '关闭的主题',
-                isLocked: true,
+                badgeLabel: '投票',
               ),
             ],
           ),
@@ -266,9 +617,29 @@ void main() {
       expect(find.text('全部'), findsOneWidget);
       expect(find.text('最新'), findsOneWidget);
       expect(
+        find.byKey(const Key('forum-display-type-filter-menu')),
+        findsOneWidget,
+      );
+      expect(
         find.byKey(const Key('forum-display-compose-button')),
         findsOneWidget,
       );
+      expect(
+        find.byKey(const Key('forum-display-appbar-stats')),
+        findsOneWidget,
+      );
+      expect(tester.widget<AppBar>(find.byType(AppBar)).bottom, isNull);
+      expect(find.text('今日 3'), findsOneWidget);
+      expect(find.text('主题 52718'), findsOneWidget);
+      expect(find.text('排名 1'), findsOneWidget);
+      expect(find.text('发帖'), findsNothing);
+      expect(
+        find.byKey(const Key('forum-display-top-entries')),
+        findsOneWidget,
+      );
+      expect(find.text('公告 / 置顶'), findsOneWidget);
+      expect(find.text('1'), findsNothing);
+      expect(find.text('欢迎光临。'), findsNothing);
 
       await tester.drag(
         find.byKey(const Key('forum-display-list')),
@@ -276,11 +647,152 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      await tester.tap(
+        find.byKey(const Key('forum-display-top-entries-toggle')),
+      );
+      await tester.pumpAndSettle();
+
       expect(find.text('公告'), findsWidgets);
       expect(find.text('欢迎光临。'), findsOneWidget);
       expect(find.text('[个人汉化]测试标题'), findsOneWidget);
+      expect(find.text('nkdndixnx'), findsOneWidget);
+      expect(find.text('2026-6-18 14:42'), findsOneWidget);
       expect(find.textContaining('请勿随意转载'), findsOneWidget);
+      expect(find.text('119'), findsOneWidget);
+      expect(find.text('0'), findsOneWidget);
       expect(find.text('#長篇連載'), findsOneWidget);
+      expect(find.text('投票'), findsOneWidget);
+
+      final threadDecoration = _firstAnimatedContainerDecoration(
+        tester,
+        find.byKey(const Key('forum-thread-572604')),
+      );
+      expect(threadDecoration.border, isNull);
+
+      final threadBadgeDecoration = _decorationAroundText(tester, '投票');
+      expect(threadBadgeDecoration.boxShadow, isNotNull);
+      expect(threadBadgeDecoration.boxShadow, isNotEmpty);
+    });
+
+    testWidgets('aligns thread tags to the same right edge', (tester) async {
+      final repository = _FakeForumDisplayRepository((_, page, query) async {
+        return ApiSuccess(
+          _displayData(
+            page: page,
+            total: 2,
+            threads: [
+              ForumThreadSummary(
+                tid: 'tag-short',
+                subject: '短 tag 帖子',
+                author: 'alice',
+                replies: 7,
+                views: 86,
+                dateline: 'today',
+                excerpt: '短 tag 摘要',
+                sourceTagName: '短',
+              ),
+              ForumThreadSummary(
+                tid: 'tag-long',
+                subject: '长 tag 帖子',
+                author: 'bob',
+                replies: 162,
+                views: 1675,
+                dateline: 'today',
+                excerpt: '长 tag 摘要',
+                sourceTagName: '八卦杂谈',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      final shortTagRight = tester.getBottomRight(
+        find.byKey(const Key('forum-thread-tag-tag-short')),
+      );
+      final longTagRight = tester.getBottomRight(
+        find.byKey(const Key('forum-thread-tag-tag-long')),
+      );
+
+      expect((shortTagRight.dx - longTagRight.dx).abs(), lessThan(0.1));
+    });
+
+    testWidgets('clickable thread tag has a light shadow cue', (tester) async {
+      final repository = _FakeForumDisplayRepository((_, page, query) async {
+        return ApiSuccess(
+          _displayData(
+            page: page,
+            total: 1,
+            threads: [
+              ForumThreadSummary(
+                tid: 'tag-clickable',
+                subject: '带 tag 的帖子',
+                author: 'alice',
+                replies: 7,
+                views: 86,
+                dateline: 'today',
+                excerpt: '摘要',
+                sourceTagName: '長篇連載',
+                sourceTagUrl:
+                    'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=2&filter=typeid&typeid=69&mobile=2',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      final tagFinder = find.byKey(const Key('forum-thread-tag-tag-clickable'));
+      final decoratedBox = tester.widget<DecoratedBox>(
+        find.descendant(of: tagFinder, matching: find.byType(DecoratedBox)),
+      );
+      final decoration = decoratedBox.decoration as BoxDecoration;
+
+      expect(decoration.boxShadow, isNotNull);
+      expect(decoration.boxShadow, isNotEmpty);
+      expect(decoration.boxShadow!.single.blurRadius, 5);
+      expect(decoration.border, isNull);
+    });
+
+    testWidgets('dark theme uses theme-driven forum display surfaces', (
+      tester,
+    ) async {
+      final repository = _FakeForumDisplayRepository((fid, page, query) async {
+        return ApiSuccess(
+          _displayData(
+            page: 1,
+            total: 1,
+            threads: const <ForumThreadSummary>[],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            forumDisplayRepositoryProvider.overrideWithValue(repository),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.dark(),
+            home: const ForumDisplayPage(fid: '2', title: '公告区'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+      expect(scaffold.backgroundColor, AppTheme.dark().scaffoldBackgroundColor);
+      expect(find.byKey(const Key('forum-display-list')), findsOneWidget);
+      expect(
+        find.byKey(const Key('forum-display-top-entries')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('renders sub forum entry and opens nested forum display', (
@@ -325,6 +837,14 @@ void main() {
 
       expect(find.byKey(const Key('forum-display-sub-forums')), findsOneWidget);
       expect(find.text('子版块'), findsOneWidget);
+      expect(find.byType(Image), findsNothing);
+      expect(find.text('百合会最萌世界杯专版！'), findsNothing);
+
+      await tester.tap(
+        find.byKey(const Key('forum-display-sub-forums-toggle')),
+      );
+      await tester.pumpAndSettle();
+
       expect(find.text('百合会最萌世界杯专版！'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('forum-display-sub-forum-52')));
@@ -363,6 +883,16 @@ void main() {
       expect(
         find.byKey(const Key('forum-display-search-button')),
         findsOneWidget,
+      );
+      expect(
+        tester
+            .getCenter(find.byKey(const Key('forum-display-compose-button')))
+            .dx,
+        greaterThan(
+          tester
+              .getCenter(find.byKey(const Key('forum-display-search-button')))
+              .dx,
+        ),
       );
     });
   });
@@ -436,6 +966,89 @@ ForumDisplayData _displayData({
         ],
     threads: threads,
   );
+}
+
+List<ForumThreadSummary> _manyThreads({
+  required String suffix,
+  required int count,
+  bool includeTagUrl = false,
+}) {
+  return [
+    for (var index = 0; index < count; index++)
+      ForumThreadSummary(
+        tid: '$suffix-$index',
+        subject: '帖子 $suffix-$index',
+        author: 'alice',
+        replies: index,
+        views: 100 + index,
+        dateline: 'today',
+        excerpt: '用于制造滚动空间的摘要 $index',
+        sourceTagName: '長篇連載',
+        sourceTagUrl: includeTagUrl
+            ? 'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=2&filter=typeid&typeid=69&mobile=2'
+            : null,
+      ),
+  ];
+}
+
+Future<void> _dragWellPastFilter(WidgetTester tester) async {
+  await tester.drag(
+    find.byKey(const Key('forum-display-list')),
+    const Offset(0, -620),
+  );
+  await tester.pumpAndSettle();
+}
+
+Future<void> _jumpNearBottomAndTap(WidgetTester tester, Finder finder) async {
+  await _dragWellPastFilter(tester);
+  final position = _scrollPosition(tester);
+  position.jumpTo(position.maxScrollExtent);
+  await tester.pumpAndSettle();
+  await tester.tap(finder);
+}
+
+double _scrollOffset(WidgetTester tester) {
+  return _scrollPosition(tester).pixels;
+}
+
+ScrollPosition _scrollPosition(WidgetTester tester) {
+  final scrollable = find.descendant(
+    of: find.byKey(const Key('forum-display-list')),
+    matching: find.byWidgetPredicate(
+      (widget) =>
+          widget is Scrollable && widget.axisDirection == AxisDirection.down,
+    ),
+  );
+  return tester.state<ScrollableState>(scrollable).position;
+}
+
+void _expectReturnedToFilterStart(WidgetTester tester, double expectedOffset) {
+  expect((_scrollOffset(tester) - expectedOffset).abs(), lessThanOrEqualTo(1));
+}
+
+BoxDecoration _decorationAroundText(WidgetTester tester, String text) {
+  final decoratedBox = tester.widget<DecoratedBox>(
+    find
+        .ancestor(of: find.text(text), matching: find.byType(DecoratedBox))
+        .first,
+  );
+  return decoratedBox.decoration as BoxDecoration;
+}
+
+BoxDecoration _firstAnimatedContainerDecoration(
+  WidgetTester tester,
+  Finder root,
+) {
+  final containers = tester.widgetList<AnimatedContainer>(
+    find.descendant(of: root, matching: find.byType(AnimatedContainer)),
+  );
+  for (final container in containers) {
+    final decoration = container.decoration;
+    if (decoration is BoxDecoration) {
+      return decoration;
+    }
+  }
+  throw StateError('No BoxDecoration AnimatedContainer found.');
 }
 
 class _FakeForumDisplayRepository implements ForumDisplayRepository {

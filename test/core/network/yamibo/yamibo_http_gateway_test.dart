@@ -49,7 +49,11 @@ void main() {
           ),
         );
 
-        expect(result.isSuccess, isTrue);
+        expect(
+          result.isSuccess,
+          isTrue,
+          reason: '${result.errorOrNull?.message} ${result.errorOrNull?.raw}',
+        );
         expect(result.dataOrNull?.body, '<html>ok</html>');
         expect(adapter.lastHeaders['Cookie'], 'auth=before');
         expect(await cookieStore.readCookieHeader(uri), 'auth=after');
@@ -90,14 +94,15 @@ void main() {
         ),
       );
 
-      expect(result.isSuccess, isTrue);
+      expect(
+        result.isSuccess,
+        isTrue,
+        reason: '${result.errorOrNull?.message} ${result.errorOrNull?.raw}',
+      );
       expect(result.dataOrNull?.body, const <int>[1, 2, 3, 4]);
       expect(diagnostics.records.single.succeeded, isTrue);
       expect(diagnostics.records.single.kind, 'imageProbe');
-      expect(
-        diagnostics.records.single.operation,
-        'forum.home.carouselProbe',
-      );
+      expect(diagnostics.records.single.operation, 'forum.home.carouselProbe');
       expect(diagnostics.records.single.module, 'forum');
       expect(diagnostics.records.single.pageKind, 'home');
       expect(diagnostics.records.single.requestId, 'yhttp-1');
@@ -172,11 +177,13 @@ void main() {
       expect(sessionStore.readCurrent()?.source, 'html:forum.home.html');
     });
 
-    test('getJson stores session snapshot extracted from API variables', () async {
-      final sessionStore = YamiboSessionStore();
-      final gateway = _buildGateway(
-        adapter: _GatewayTestAdapter(
-          textBody: '''
+    test(
+      'getJson stores session snapshot extracted from API variables',
+      () async {
+        final sessionStore = YamiboSessionStore();
+        final gateway = _buildGateway(
+          adapter: _GatewayTestAdapter(
+            textBody: '''
 {
   "Version": "4",
   "Charset": "utf-8",
@@ -187,28 +194,29 @@ void main() {
   }
 }
 ''',
-        ),
-        sessionStore: sessionStore,
-        sessionExtractor: const YamiboSessionExtractor(),
-      );
+          ),
+          sessionStore: sessionStore,
+          sessionExtractor: const YamiboSessionExtractor(),
+        );
 
-      final result = await gateway.getJson(
-        Uri.parse(
-          'https://bbs.yamibo.com/api/mobile/index.php?module=profile&version=4',
-        ),
-        context: const YamiboRequestContext(
-          kind: YamiboRequestKind.api,
-          operation: 'profile',
-          module: 'profile',
-        ),
-      );
+        final result = await gateway.getJson(
+          Uri.parse(
+            'https://bbs.yamibo.com/api/mobile/index.php?module=profile&version=4',
+          ),
+          context: const YamiboRequestContext(
+            kind: YamiboRequestKind.api,
+            operation: 'profile',
+            module: 'profile',
+          ),
+        );
 
-      expect(result.isSuccess, isTrue);
-      expect(sessionStore.readCurrent()?.uid, '597454');
-      expect(sessionStore.readCurrent()?.username, 'tester');
-      expect(sessionStore.readFreshFormhash(), 'fh_api');
-      expect(sessionStore.readCurrent()?.source, 'api:profile');
-    });
+        expect(result.isSuccess, isTrue);
+        expect(sessionStore.readCurrent()?.uid, '597454');
+        expect(sessionStore.readCurrent()?.username, 'tester');
+        expect(sessionStore.readFreshFormhash(), 'fh_api');
+        expect(sessionStore.readCurrent()?.source, 'api:profile');
+      },
+    );
   });
 }
 
@@ -272,12 +280,17 @@ class _GatewayTestAdapter implements HttpClientAdapter {
     if (options.responseType == ResponseType.bytes) {
       return ResponseBody.fromBytes(bytesBody, statusCode, headers: headers);
     }
-    final responseHeaders = options.responseType == ResponseType.json
-        ? <String, List<String>>{
-            ...headers,
-            Headers.contentTypeHeader: const <String>['application/json'],
-          }
-        : headers;
+    final responseHeaders = switch (options.responseType) {
+      ResponseType.json => <String, List<String>>{
+        ...headers,
+        Headers.contentTypeHeader: const <String>['application/json'],
+      },
+      ResponseType.plain => <String, List<String>>{
+        ...headers,
+        Headers.contentTypeHeader: const <String>['text/html; charset=utf-8'],
+      },
+      _ => headers,
+    };
     return ResponseBody.fromString(
       textBody,
       statusCode,
