@@ -30,6 +30,8 @@ import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/tags/domain/forum_tag_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_favorite_providers.dart';
+import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
+import 'package:y300/features/thread/data/thread_poll_vote_repository.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/services/thread_favorite_action_service.dart';
@@ -90,9 +92,26 @@ void main() {
                       'https://bbs.yamibo.com/forum.php?mod=misc&action=comment',
                   replyUrl:
                       'https://bbs.yamibo.com/forum.php?mod=post&action=reply',
+                  ratingSummary: const ThreadPostRatingSummary(
+                    participantText: '参与人数 1',
+                    scoreText: '积分 +2',
+                    viewAllUrl:
+                        'https://bbs.yamibo.com/forum.php?mod=misc&action=viewratings',
+                    ratings: <ThreadPostRating>[
+                      ThreadPostRating(
+                        userName: '子子子车',
+                        userId: '736594',
+                        score: '+ 2',
+                        reason: '我很赞同',
+                      ),
+                    ],
+                  ),
                   poll: const ThreadPoll(
                     isMultipleChoice: false,
                     summary: '单选投票 , 投票后结果可见, 共有 2 人参与投票',
+                    actionUrl:
+                        'https://bbs.yamibo.com/forum.php?mod=misc&action=votepoll&tid=100',
+                    formHash: 'fh_poll',
                     options: <ThreadPollOption>[
                       ThreadPollOption(id: '1', label: '选项A'),
                       ThreadPollOption(id: '2', label: '选项B'),
@@ -158,11 +177,30 @@ void main() {
       expect(find.text('第一条回复'), findsOneWidget);
       expect(find.byKey(const Key('thread-poll-card')), findsOneWidget);
       expect(find.text('选项A'), findsOneWidget);
+      final pollSubmitBeforeSelection = tester.widget<FilledButton>(
+        find.byKey(const Key('thread-poll-submit-button')),
+      );
+      expect(pollSubmitBeforeSelection.onPressed, isNull);
       expect(find.byKey(const Key('thread-post-actions-p1')), findsOneWidget);
-      expect(find.text('评分'), findsOneWidget);
+      expect(find.text('评分'), findsAtLeastNWidgets(1));
       expect(find.text('点评'), findsOneWidget);
+      expect(
+        find.byKey(const Key('thread-post-rating-section')),
+        findsOneWidget,
+      );
+      expect(find.text('参与人数 1'), findsOneWidget);
+      expect(find.text('积分 +2'), findsOneWidget);
+      expect(find.text('子子子车'), findsOneWidget);
+      expect(find.text('我很赞同'), findsOneWidget);
+      expect(find.text('查看全部评分'), findsOneWidget);
       expect(find.byKey(const Key('thread-replies-header')), findsNothing);
 
+      await tester.dragUntilVisible(
+        find.byKey(const Key('thread-detail-load-more-button')),
+        find.byKey(const Key('thread-detail-list')),
+        const Offset(0, -260),
+      );
+      await tester.pump();
       expect(
         find.byKey(const Key('thread-detail-load-more-button')),
         findsOneWidget,
@@ -172,10 +210,6 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('下一页'), findsOneWidget);
-      await tester.ensureVisible(
-        find.byKey(const Key('thread-detail-load-more-button')),
-      );
-      await tester.pump();
       await tester.tap(find.byKey(const Key('thread-detail-load-more-button')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
@@ -213,6 +247,142 @@ void main() {
 
       expect(find.text('第一条回复'), findsOneWidget);
       expect(callCount, 4);
+    });
+
+    testWidgets('selects and submits poll vote then reloads current page', (
+      tester,
+    ) async {
+      var callCount = 0;
+      final repository = _FakeThreadRepository((tid, page) async {
+        callCount++;
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            typeid: '410',
+            subject: '投票主题',
+            author: 'alice',
+            replies: 0,
+            views: 12,
+            currentPage: page,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+                poll: ThreadPoll(
+                  isMultipleChoice: false,
+                  summary: '单选投票 , 投票后结果可见',
+                  actionUrl:
+                      'https://bbs.yamibo.com/forum.php?mod=misc&action=votepoll&tid=100',
+                  formHash: 'fh_poll',
+                  options: <ThreadPollOption>[
+                    ThreadPollOption(
+                      id: '1',
+                      label: '选项A',
+                      percent: callCount > 1 ? 100 : null,
+                      voteCount: callCount > 1 ? 1 : null,
+                    ),
+                    const ThreadPollOption(id: '2', label: '选项B'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      });
+      final pollVoteRepository = _FakeThreadPollVoteRepository();
+
+      await tester.pumpWidget(
+        _buildTestApp(repository, pollVoteRepository: pollVoteRepository),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      await tester.tap(find.byKey(const Key('thread-poll-option-1')));
+      await tester.pump();
+      final submitButton = tester.widget<FilledButton>(
+        find.byKey(const Key('thread-poll-submit-button')),
+      );
+      expect(submitButton.onPressed, isNotNull);
+
+      await tester.tap(find.byKey(const Key('thread-poll-submit-button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(pollVoteRepository.called, isTrue);
+      expect(pollVoteRepository.lastRequest?.tid, '100');
+      expect(pollVoteRepository.lastRequest?.actionUrl, contains('votepoll'));
+      expect(pollVoteRepository.lastRequest?.formHash, 'fh_poll');
+      expect(pollVoteRepository.lastRequest?.optionIds, <String>['1']);
+      expect(callCount, 2);
+      expect(find.text('投票成功'), findsOneWidget);
+      expect(find.text('100%'), findsOneWidget);
+      expect(find.text('1 票'), findsOneWidget);
+    });
+
+    testWidgets('opens native rate sheet and submits post rating', (
+      tester,
+    ) async {
+      var loadCount = 0;
+      final repository = _FakeThreadRepository((tid, page) async {
+        loadCount++;
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            subject: '测试主题',
+            author: 'alice',
+            replies: 0,
+            views: 1,
+            currentPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+                rateUrl:
+                    'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&tid=100&pid=p1',
+              ),
+            ],
+          ),
+        );
+      });
+      final rateRepository = _FakeThreadPostRateRepository();
+
+      await tester.pumpWidget(
+        _buildTestApp(repository, postRateRepository: rateRepository),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('评分'));
+      await tester.pumpAndSettle();
+
+      expect(rateRepository.loadedUrl, contains('action=rate'));
+      expect(find.byKey(const Key('thread-post-rate-sheet')), findsOneWidget);
+      expect(find.text('范围 0~5，今日剩余 10'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('thread-post-rate-reason-我很赞同')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('thread-post-rate-submit-button')));
+      await tester.pumpAndSettle();
+
+      expect(rateRepository.lastDraft?.form.pid, 'p1');
+      expect(rateRepository.lastDraft?.score, 5);
+      expect(rateRepository.lastDraft?.reason, '我很赞同');
+      expect(rateRepository.lastDraft?.notifyAuthor, isFalse);
+      expect(loadCount, 2);
+      expect(find.text('评分成功'), findsOneWidget);
     });
 
     testWidgets('shows comic add-to-shelf button for comic candidate post', (
@@ -514,6 +684,8 @@ Widget _buildTestApp(
   ReplyRepository? replyRepository,
   NovelRepository? novelRepository,
   ThreadFavoriteActionService? favoriteActionService,
+  ThreadPostRateRepository? postRateRepository,
+  ThreadPollVoteRepository? pollVoteRepository,
 }) {
   return ProviderScope(
     overrides: [
@@ -527,6 +699,12 @@ Widget _buildTestApp(
       ),
       threadFavoriteActionServiceProvider.overrideWithValue(
         favoriteActionService ?? _FakeThreadFavoriteActionService(),
+      ),
+      threadPostRateRepositoryProvider.overrideWithValue(
+        postRateRepository ?? _FakeThreadPostRateRepository(),
+      ),
+      threadPollVoteRepositoryProvider.overrideWithValue(
+        pollVoteRepository ?? _FakeThreadPollVoteRepository(),
       ),
       forumTagRepositoryProvider.overrideWithValue(_FakeForumTagRepository()),
       composerDraftRepositoryProvider.overrideWithValue(
@@ -589,6 +767,60 @@ class _FakeThreadFavoriteActionService implements ThreadFavoriteActionService {
     called = true;
     lastTid = tid;
     return result;
+  }
+}
+
+class _FakeThreadPollVoteRepository implements ThreadPollVoteRepository {
+  bool called = false;
+  ThreadPollVoteRequest? lastRequest;
+  ApiResult<ThreadPollVoteResult> result =
+      const ApiSuccess<ThreadPollVoteResult>(
+        ThreadPollVoteResult(message: '投票成功'),
+      );
+
+  @override
+  Future<ApiResult<ThreadPollVoteResult>> vote(
+    ThreadPollVoteRequest request,
+  ) async {
+    called = true;
+    lastRequest = request;
+    return result;
+  }
+}
+
+class _FakeThreadPostRateRepository implements ThreadPostRateRepository {
+  String? loadedUrl;
+  ThreadPostRateDraft? lastDraft;
+
+  @override
+  Future<ApiResult<ThreadPostRateForm>> loadForm(String rateUrl) async {
+    loadedUrl = rateUrl;
+    return const ApiSuccess<ThreadPostRateForm>(
+      ThreadPostRateForm(
+        actionUrl:
+            'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&ratesubmit=yes',
+        formHash: 'fh_rate',
+        tid: '100',
+        pid: 'p1',
+        referer: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
+        scoreName: 'score1',
+        scoreMin: 0,
+        scoreMax: 5,
+        todayRemaining: 10,
+        reasonOptions: <String>['我很赞同', '精品文章'],
+        notifyAuthorDefault: false,
+      ),
+    );
+  }
+
+  @override
+  Future<ApiResult<ThreadPostRateResult>> submit(
+    ThreadPostRateDraft draft,
+  ) async {
+    lastDraft = draft;
+    return const ApiSuccess<ThreadPostRateResult>(
+      ThreadPostRateResult(message: '评分成功'),
+    );
   }
 }
 

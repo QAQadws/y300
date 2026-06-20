@@ -65,6 +65,36 @@ class ThreadPoll {
   final List<ThreadPollOption> options;
 }
 
+class ThreadPostRating {
+  const ThreadPostRating({
+    required this.userName,
+    required this.score,
+    required this.reason,
+    this.userId,
+    this.avatarUrl,
+  });
+
+  final String userName;
+  final String score;
+  final String reason;
+  final String? userId;
+  final String? avatarUrl;
+}
+
+class ThreadPostRatingSummary {
+  const ThreadPostRatingSummary({
+    required this.participantText,
+    required this.scoreText,
+    required this.ratings,
+    this.viewAllUrl,
+  });
+
+  final String participantText;
+  final String scoreText;
+  final List<ThreadPostRating> ratings;
+  final String? viewAllUrl;
+}
+
 class ThreadPost {
   ThreadPost({
     required this.pid,
@@ -79,6 +109,7 @@ class ThreadPost {
     this.rateUrl,
     this.commentUrl,
     this.rateSummary,
+    this.ratingSummary,
     this.poll,
     this.attachmentImages = const <ForumPostAttachmentImage>[],
   });
@@ -95,6 +126,7 @@ class ThreadPost {
   final String? rateUrl;
   final String? commentUrl;
   final String? rateSummary;
+  final ThreadPostRatingSummary? ratingSummary;
   final ThreadPoll? poll;
 
   /// Raw Discuz attachment metadata. Entries may be images or non-image files.

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
@@ -20,7 +21,10 @@ class ThreadDetailContent extends StatelessWidget {
     required this.onAddComicToShelf,
     required this.onAddNovelToShelf,
     required this.onOpenPostReply,
+    required this.onOpenPostRate,
     required this.onCopyActionUrl,
+    required this.onTogglePollOption,
+    required this.onSubmitPollVote,
   });
 
   final ThreadDetailPageState state;
@@ -33,7 +37,11 @@ class ThreadDetailContent extends StatelessWidget {
   final VoidCallback onAddComicToShelf;
   final VoidCallback onAddNovelToShelf;
   final ValueChanged<ThreadPost> onOpenPostReply;
+  final ValueChanged<ThreadPost> onOpenPostRate;
   final void Function(String label, String url) onCopyActionUrl;
+  final void Function(ThreadPoll poll, ThreadPollOption option)
+  onTogglePollOption;
+  final ValueChanged<ThreadPoll> onSubmitPollVote;
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +75,10 @@ class ThreadDetailContent extends StatelessWidget {
           onAddComicToShelf: onAddComicToShelf,
           onAddNovelToShelf: onAddNovelToShelf,
           onOpenPostReply: onOpenPostReply,
+          onOpenPostRate: onOpenPostRate,
           onCopyActionUrl: onCopyActionUrl,
+          onTogglePollOption: onTogglePollOption,
+          onSubmitPollVote: onSubmitPollVote,
           palette: palette,
         );
         if (post.isFirst && state.posts.length > 1) {
@@ -272,7 +283,10 @@ class ThreadPostCard extends StatelessWidget {
     required this.onAddComicToShelf,
     required this.onAddNovelToShelf,
     required this.onOpenPostReply,
+    required this.onOpenPostRate,
     required this.onCopyActionUrl,
+    required this.onTogglePollOption,
+    required this.onSubmitPollVote,
     required this.palette,
   });
 
@@ -283,7 +297,11 @@ class ThreadPostCard extends StatelessWidget {
   final VoidCallback onAddComicToShelf;
   final VoidCallback onAddNovelToShelf;
   final ValueChanged<ThreadPost> onOpenPostReply;
+  final ValueChanged<ThreadPost> onOpenPostRate;
   final void Function(String label, String url) onCopyActionUrl;
+  final void Function(ThreadPoll poll, ThreadPollOption option)
+  onTogglePollOption;
+  final ValueChanged<ThreadPoll> onSubmitPollVote;
   final ThreadDetailNativePalette palette;
 
   @override
@@ -344,13 +362,23 @@ class ThreadPostCard extends StatelessWidget {
                 ),
                 if (post.poll != null) ...[
                   const SizedBox(height: 10),
-                  ThreadPollCard(poll: post.poll!, palette: palette),
-                ],
-                if (post.rateSummary?.trim().isNotEmpty == true) ...[
-                  const SizedBox(height: 10),
-                  ThreadPill(
-                    label: '评分 ${post.rateSummary!.trim()}',
+                  ThreadPollCard(
+                    poll: post.poll!,
+                    selectedOptionIds: state.selectedPollOptionIds,
+                    isSubmitting: state.isPollVoteSubmitting,
+                    hint: state.pollVoteHint,
+                    onToggleOption: (option) =>
+                        onTogglePollOption(post.poll!, option),
+                    onSubmit: () => onSubmitPollVote(post.poll!),
                     palette: palette,
+                  ),
+                ],
+                if (post.ratingSummary != null) ...[
+                  const SizedBox(height: 10),
+                  ThreadPostRatingSection(
+                    summary: post.ratingSummary!,
+                    palette: palette,
+                    onCopyActionUrl: onCopyActionUrl,
                   ),
                 ],
                 const SizedBox(height: 10),
@@ -358,6 +386,7 @@ class ThreadPostCard extends StatelessWidget {
                   post: post,
                   palette: palette,
                   onOpenPostReply: onOpenPostReply,
+                  onOpenPostRate: onOpenPostRate,
                   onCopyActionUrl: onCopyActionUrl,
                 ),
               ],
@@ -416,18 +445,206 @@ class _PostHeader extends StatelessWidget {
   }
 }
 
+class ThreadPostRatingSection extends StatelessWidget {
+  const ThreadPostRatingSection({
+    super.key,
+    required this.summary,
+    required this.palette,
+    required this.onCopyActionUrl,
+  });
+
+  final ThreadPostRatingSummary summary;
+  final ThreadDetailNativePalette palette;
+  final void Function(String label, String url) onCopyActionUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      key: const Key('thread-post-rating-section'),
+      padding: const EdgeInsets.fromLTRB(10, 9, 10, 9),
+      decoration: BoxDecoration(
+        color: palette.metricBackground.withValues(alpha: 0.44),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.favorite_outline, size: 15, color: palette.accent),
+              const SizedBox(width: 5),
+              Text(
+                '评分',
+                style: textTheme.labelLarge?.copyWith(
+                  color: palette.title,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: Text(
+                  summary.participantText.isEmpty
+                      ? '参与人数'
+                      : summary.participantText,
+                  style: textTheme.labelSmall?.copyWith(
+                    color: palette.muted,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  summary.scoreText.isEmpty ? '积分' : summary.scoreText,
+                  style: textTheme.labelSmall?.copyWith(
+                    color: palette.muted,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 3,
+                child: Text(
+                  '理由',
+                  style: textTheme.labelSmall?.copyWith(
+                    color: palette.muted,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          for (final rating in summary.ratings) ...[
+            const SizedBox(height: 6),
+            ThreadPostRatingRow(rating: rating, palette: palette),
+          ],
+          if (summary.viewAllUrl?.trim().isNotEmpty == true) ...[
+            const SizedBox(height: 7),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ThreadRatingLinkButton(
+                label: '查看全部评分',
+                palette: palette,
+                onPressed: () => onCopyActionUrl('查看全部评分', summary.viewAllUrl!),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class ThreadPostRatingRow extends StatelessWidget {
+  const ThreadPostRatingRow({
+    super.key,
+    required this.rating,
+    required this.palette,
+  });
+
+  final ThreadPostRating rating;
+  final ThreadDetailNativePalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 2,
+          child: Text(
+            rating.userName.isEmpty ? '用户' : rating.userName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: textTheme.labelSmall?.copyWith(
+              color: palette.bodyText,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Expanded(
+          flex: 2,
+          child: Text(
+            rating.score,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: textTheme.labelSmall?.copyWith(
+              color: palette.accent,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        Expanded(
+          flex: 3,
+          child: Text(
+            rating.reason,
+            style: textTheme.labelSmall?.copyWith(
+              color: palette.softText,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class ThreadRatingLinkButton extends StatelessWidget {
+  const ThreadRatingLinkButton({
+    super.key,
+    required this.label,
+    required this.palette,
+    required this.onPressed,
+  });
+
+  final String label;
+  final ThreadDetailNativePalette palette;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onPressed,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: palette.accent,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class ThreadPostActionRow extends StatelessWidget {
   const ThreadPostActionRow({
     super.key,
     required this.post,
     required this.palette,
     required this.onOpenPostReply,
+    required this.onOpenPostRate,
     required this.onCopyActionUrl,
   });
 
   final ThreadPost post;
   final ThreadDetailNativePalette palette;
   final ValueChanged<ThreadPost> onOpenPostReply;
+  final ValueChanged<ThreadPost> onOpenPostRate;
   final void Function(String label, String url) onCopyActionUrl;
 
   @override
@@ -443,7 +660,7 @@ class ThreadPostActionRow extends StatelessWidget {
             label: '评分',
             icon: Icons.favorite_border,
             palette: palette,
-            onPressed: () => onCopyActionUrl('评分', post.rateUrl!),
+            onPressed: () => onOpenPostRate(post),
           ),
         if (post.commentUrl?.trim().isNotEmpty == true)
           ThreadActionChip(
@@ -510,15 +727,196 @@ class ThreadActionChip extends StatelessWidget {
   }
 }
 
+class ThreadPostRateSheet extends StatefulWidget {
+  const ThreadPostRateSheet({super.key, required this.form});
+
+  final ThreadPostRateForm form;
+
+  @override
+  State<ThreadPostRateSheet> createState() => _ThreadPostRateSheetState();
+}
+
+class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
+  late int _score;
+  late bool _notifyAuthor;
+  late final TextEditingController _reasonController;
+
+  @override
+  void initState() {
+    super.initState();
+    _score = widget.form.defaultScore;
+    _notifyAuthor = widget.form.notifyAuthorDefault;
+    _reasonController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(16, 14, 16, 16 + bottomInset),
+        child: Column(
+          key: const Key('thread-post-rate-sheet'),
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  '评分',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  key: const Key('thread-post-rate-close-button'),
+                  tooltip: '关闭',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Text(
+                  '积分',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  key: const Key('thread-post-rate-decrease-button'),
+                  onPressed: _score > widget.form.scoreMin
+                      ? () => setState(() => _score -= 1)
+                      : null,
+                  icon: const Icon(Icons.remove_circle_outline),
+                ),
+                SizedBox(
+                  width: 54,
+                  child: Text(
+                    '+$_score',
+                    key: const Key('thread-post-rate-score-label'),
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  key: const Key('thread-post-rate-increase-button'),
+                  onPressed: _score < widget.form.scoreMax
+                      ? () => setState(() => _score += 1)
+                      : null,
+                  icon: const Icon(Icons.add_circle_outline),
+                ),
+              ],
+            ),
+            Text(
+              '范围 ${widget.form.scoreMin}~${widget.form.scoreMax}，今日剩余 ${widget.form.todayRemaining}',
+              style: theme.textTheme.labelSmall,
+            ),
+            if (widget.form.reasonOptions.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final reason in widget.form.reasonOptions)
+                    ActionChip(
+                      key: Key('thread-post-rate-reason-$reason'),
+                      label: Text(reason),
+                      onPressed: () {
+                        _reasonController.text = reason;
+                        setState(() {});
+                      },
+                    ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('thread-post-rate-reason-input'),
+              controller: _reasonController,
+              minLines: 1,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: '评分理由',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              key: const Key('thread-post-rate-notify-switch'),
+              contentPadding: EdgeInsets.zero,
+              value: _notifyAuthor,
+              onChanged: (value) => setState(() => _notifyAuthor = value),
+              title: const Text('通知作者'),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                key: const Key('thread-post-rate-submit-button'),
+                onPressed: _reasonController.text.trim().isEmpty
+                    ? null
+                    : () {
+                        Navigator.of(context).pop(
+                          ThreadPostRateDraft(
+                            form: widget.form,
+                            score: _score,
+                            reason: _reasonController.text,
+                            notifyAuthor: _notifyAuthor,
+                          ),
+                        );
+                      },
+                child: const Text('确定'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class ThreadPollCard extends StatelessWidget {
-  const ThreadPollCard({super.key, required this.poll, required this.palette});
+  const ThreadPollCard({
+    super.key,
+    required this.poll,
+    required this.selectedOptionIds,
+    required this.isSubmitting,
+    required this.hint,
+    required this.onToggleOption,
+    required this.onSubmit,
+    required this.palette,
+  });
 
   final ThreadPoll poll;
+  final Set<String> selectedOptionIds;
+  final bool isSubmitting;
+  final String? hint;
+  final ValueChanged<ThreadPollOption> onToggleOption;
+  final VoidCallback onSubmit;
   final ThreadDetailNativePalette palette;
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final canSubmit =
+        selectedOptionIds.isNotEmpty &&
+        !isSubmitting &&
+        (poll.actionUrl?.trim().isNotEmpty ?? false);
     return Container(
       key: const Key('thread-poll-card'),
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
@@ -546,15 +944,39 @@ class ThreadPollCard extends StatelessWidget {
           ],
           const SizedBox(height: 9),
           for (final option in poll.options) ...[
-            ThreadPollOptionTile(option: option, palette: palette),
+            ThreadPollOptionTile(
+              option: option,
+              palette: palette,
+              isMultipleChoice: poll.isMultipleChoice,
+              selected: selectedOptionIds.contains(option.id),
+              enabled: !isSubmitting,
+              onTap: () => onToggleOption(option),
+            ),
+            const SizedBox(height: 8),
+          ],
+          if (hint?.trim().isNotEmpty == true) ...[
+            Text(
+              hint!.trim(),
+              key: const Key('thread-poll-vote-hint'),
+              style: textTheme.labelSmall?.copyWith(
+                color: palette.muted,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             const SizedBox(height: 8),
           ],
           SizedBox(
             width: double.infinity,
             child: FilledButton(
               key: const Key('thread-poll-submit-button'),
-              onPressed: null,
-              child: const Text('提交'),
+              onPressed: canSubmit ? onSubmit : null,
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('提交'),
             ),
           ),
         ],
@@ -568,67 +990,95 @@ class ThreadPollOptionTile extends StatelessWidget {
     super.key,
     required this.option,
     required this.palette,
+    required this.isMultipleChoice,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
   });
 
   final ThreadPollOption option;
   final ThreadDetailNativePalette palette;
+  final bool isMultipleChoice;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final percent = option.percent;
     final color = _parseColor(option.colorHex) ?? palette.accent;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(
-              Icons.radio_button_unchecked,
-              size: 15,
-              color: palette.softText,
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                option.label,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: palette.bodyText,
-                  fontWeight: FontWeight.w600,
-                ),
+    return Material(
+      color: selected
+          ? palette.accent.withValues(alpha: 0.07)
+          : Colors.transparent,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        key: Key('thread-poll-option-${option.id}'),
+        borderRadius: BorderRadius.circular(8),
+        onTap: enabled ? onTap : null,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(5, 5, 5, 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    selected
+                        ? isMultipleChoice
+                              ? Icons.check_box
+                              : Icons.radio_button_checked
+                        : isMultipleChoice
+                        ? Icons.check_box_outline_blank
+                        : Icons.radio_button_unchecked,
+                    size: 17,
+                    color: selected ? palette.accent : palette.softText,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      option.label,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: palette.bodyText,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (percent != null)
+                    Text(
+                      '${percent.toStringAsFixed(percent.truncateToDouble() == percent ? 0 : 2)}%',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: palette.muted,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                ],
               ),
-            ),
-            if (percent != null)
-              Text(
-                '${percent.toStringAsFixed(percent.truncateToDouble() == percent ? 0 : 2)}%',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: palette.muted,
-                  fontWeight: FontWeight.w700,
+              if (percent != null) ...[
+                const SizedBox(height: 5),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: (percent / 100).clamp(0.0, 1.0),
+                    minHeight: 5,
+                    backgroundColor: palette.pollTrack,
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                  ),
                 ),
-              ),
-          ],
-        ),
-        if (percent != null) ...[
-          const SizedBox(height: 5),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: (percent / 100).clamp(0.0, 1.0),
-              minHeight: 5,
-              backgroundColor: palette.pollTrack,
-              valueColor: AlwaysStoppedAnimation<Color>(color),
-            ),
+                if (option.voteCount != null) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    '${option.voteCount} 票',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelSmall?.copyWith(color: palette.softText),
+                  ),
+                ],
+              ],
+            ],
           ),
-          if (option.voteCount != null) ...[
-            const SizedBox(height: 3),
-            Text(
-              '${option.voteCount} 票',
-              style: Theme.of(
-                context,
-              ).textTheme.labelSmall?.copyWith(color: palette.softText),
-            ),
-          ],
-        ],
-      ],
+        ),
+      ),
     );
   }
 

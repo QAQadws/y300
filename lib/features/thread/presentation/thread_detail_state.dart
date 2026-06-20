@@ -40,6 +40,9 @@ class ThreadDetailPageState {
     required this.isThreadFavorited,
     required this.isThreadFavoriteActionLoading,
     required this.threadFavoriteHint,
+    required this.selectedPollOptionIds,
+    required this.isPollVoteSubmitting,
+    required this.pollVoteHint,
     required this.replyText,
     required this.isReplySubmitting,
     required this.replyHint,
@@ -82,6 +85,9 @@ class ThreadDetailPageState {
   final bool isThreadFavorited;
   final bool isThreadFavoriteActionLoading;
   final String? threadFavoriteHint;
+  final Set<String> selectedPollOptionIds;
+  final bool isPollVoteSubmitting;
+  final String? pollVoteHint;
   final String replyText;
   final bool isReplySubmitting;
   final String? replyHint;
@@ -128,6 +134,9 @@ class ThreadDetailPageState {
       isThreadFavorited: false,
       isThreadFavoriteActionLoading: false,
       threadFavoriteHint: null,
+      selectedPollOptionIds: const <String>{},
+      isPollVoteSubmitting: false,
+      pollVoteHint: null,
       replyText: '',
       isReplySubmitting: false,
       replyHint: null,
@@ -172,12 +181,16 @@ class ThreadDetailPageState {
     bool? isThreadFavorited,
     bool? isThreadFavoriteActionLoading,
     String? threadFavoriteHint,
+    Set<String>? selectedPollOptionIds,
+    bool? isPollVoteSubmitting,
+    String? pollVoteHint,
     String? replyText,
     bool? isReplySubmitting,
     String? replyHint,
     String? errorMessage,
     bool clearReplyHint = false,
     bool clearThreadFavoriteHint = false,
+    bool clearPollVoteHint = false,
     bool clearError = false,
     bool clearSourceTagName = false,
     bool clearTypeName = false,
@@ -241,6 +254,12 @@ class ThreadDetailPageState {
       threadFavoriteHint: clearThreadFavoriteHint
           ? null
           : (threadFavoriteHint ?? this.threadFavoriteHint),
+      selectedPollOptionIds:
+          selectedPollOptionIds ?? this.selectedPollOptionIds,
+      isPollVoteSubmitting: isPollVoteSubmitting ?? this.isPollVoteSubmitting,
+      pollVoteHint: clearPollVoteHint
+          ? null
+          : (pollVoteHint ?? this.pollVoteHint),
       replyText: replyText ?? this.replyText,
       isReplySubmitting: isReplySubmitting ?? this.isReplySubmitting,
       replyHint: clearReplyHint ? null : (replyHint ?? this.replyHint),

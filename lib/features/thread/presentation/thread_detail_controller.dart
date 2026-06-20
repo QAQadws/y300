@@ -15,6 +15,8 @@ import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/tags/data/tag_providers.dart';
 import 'package:y300/features/thread/data/thread_favorite_providers.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
+import 'package:y300/features/thread/data/thread_poll_vote_repository.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
@@ -309,6 +311,150 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     );
   }
 
+  void togglePollOption(ThreadPoll poll, ThreadPollOption option) {
+    final current = state.value;
+    if (current == null || current.isPollVoteSubmitting) {
+      return;
+    }
+    final optionId = option.id.trim();
+    if (optionId.isEmpty) {
+      return;
+    }
+    final selected = Set<String>.from(current.selectedPollOptionIds);
+    if (poll.isMultipleChoice) {
+      final alreadySelected = selected.contains(optionId);
+      if (alreadySelected) {
+        selected.remove(optionId);
+      } else {
+        final maxChoices = poll.maxChoices;
+        if (maxChoices != null &&
+            maxChoices > 0 &&
+            selected.length >= maxChoices) {
+          state = AsyncData(
+            current.copyWith(
+              pollVoteHint: '最多可选 $maxChoices 项',
+              clearError: true,
+            ),
+          );
+          return;
+        }
+        selected.add(optionId);
+      }
+    } else {
+      selected
+        ..clear()
+        ..add(optionId);
+    }
+    state = AsyncData(
+      current.copyWith(
+        selectedPollOptionIds: Set<String>.unmodifiable(selected),
+        clearPollVoteHint: true,
+        clearError: true,
+      ),
+    );
+  }
+
+  Future<void> submitPollVote(ThreadPoll poll) async {
+    final current = state.value;
+    if (current == null || current.isPollVoteSubmitting) {
+      return;
+    }
+    final selected = current.selectedPollOptionIds.toList(growable: false);
+    if (selected.isEmpty) {
+      state = AsyncData(current.copyWith(pollVoteHint: '请选择投票选项'));
+      return;
+    }
+
+    state = AsyncData(
+      current.copyWith(
+        isPollVoteSubmitting: true,
+        clearPollVoteHint: true,
+        clearError: true,
+      ),
+    );
+    final result = await ref
+        .read(threadPollVoteRepositoryProvider)
+        .vote(
+          ThreadPollVoteRequest(
+            tid: current.tid,
+            actionUrl: poll.actionUrl ?? '',
+            formHash: poll.formHash ?? '',
+            optionIds: selected,
+          ),
+        );
+    if (!ref.mounted) {
+      return;
+    }
+    final afterSubmit = state.value ?? current;
+    if (result case ApiFailure<ThreadPollVoteResult>(:final error)) {
+      state = AsyncData(
+        afterSubmit.copyWith(
+          isPollVoteSubmitting: false,
+          pollVoteHint: error.message,
+        ),
+      );
+      return;
+    }
+
+    final message = (result as ApiSuccess<ThreadPollVoteResult>).data.message
+        .trim();
+    final reloaded = await _loadPage(
+      page: afterSubmit.currentPage <= 0 ? 1 : afterSubmit.currentPage,
+      previous: const <ThreadPost>[],
+      queryParameters: afterSubmit.queryParameters,
+    );
+    if (!ref.mounted) {
+      return;
+    }
+    state = AsyncData(
+      reloaded.copyWith(
+        isThreadFavorited: afterSubmit.isThreadFavorited,
+        threadFavoriteHint: afterSubmit.threadFavoriteHint,
+        pollVoteHint: message.isEmpty ? '投票成功' : message,
+        selectedPollOptionIds: const <String>{},
+        isPollVoteSubmitting: false,
+      ),
+    );
+  }
+
+  Future<ApiResult<ThreadPostRateForm>> loadRateForm(ThreadPost post) async {
+    final rateUrl = post.rateUrl?.trim();
+    if (rateUrl == null || rateUrl.isEmpty) {
+      return const ApiFailure<ThreadPostRateForm>(
+        ApiError(type: ApiErrorType.business, message: '评分表单地址缺失'),
+      );
+    }
+    return ref.read(threadPostRateRepositoryProvider).loadForm(rateUrl);
+  }
+
+  Future<ApiResult<ThreadPostRateResult>> submitPostRate(
+    ThreadPostRateDraft draft,
+  ) async {
+    final result = await ref
+        .read(threadPostRateRepositoryProvider)
+        .submit(draft);
+    if (result case ApiFailure<ThreadPostRateResult>()) {
+      return result;
+    }
+    final current = state.value;
+    if (current != null) {
+      final reloaded = await _loadPage(
+        page: current.currentPage <= 0 ? 1 : current.currentPage,
+        previous: const <ThreadPost>[],
+        queryParameters: current.queryParameters,
+      );
+      if (ref.mounted) {
+        state = AsyncData(
+          reloaded.copyWith(
+            isThreadFavorited: current.isThreadFavorited,
+            threadFavoriteHint: current.threadFavoriteHint,
+          ),
+        );
+      }
+    }
+    return result;
+  }
+
   void updateReplyText(String value) {
     final current = state.value;
     if (current == null) {
@@ -466,6 +612,9 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         isThreadFavorited: false,
         isThreadFavoriteActionLoading: false,
         threadFavoriteHint: null,
+        selectedPollOptionIds: const <String>{},
+        isPollVoteSubmitting: false,
+        pollVoteHint: null,
         replyText: '',
         isReplySubmitting: false,
         replyHint: null,
@@ -510,6 +659,9 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       isThreadFavorited: false,
       isThreadFavoriteActionLoading: false,
       threadFavoriteHint: null,
+      selectedPollOptionIds: const <String>{},
+      isPollVoteSubmitting: false,
+      pollVoteHint: null,
       replyText: '',
       isReplySubmitting: false,
       replyHint: null,
@@ -537,6 +689,8 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       next.copyWith(
         isThreadFavorited: afterLoading.isThreadFavorited,
         threadFavoriteHint: afterLoading.threadFavoriteHint,
+        selectedPollOptionIds: afterLoading.selectedPollOptionIds,
+        isPollVoteSubmitting: false,
       ),
     );
   }

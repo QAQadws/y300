@@ -137,6 +137,7 @@ class ThreadDetailHtmlParser {
             ?.attributes['href'],
       ),
       rateSummary: _parseRateSummary(container, pid),
+      ratingSummary: _parseRatingSummary(container, pid),
       poll: number == 1 ? _parsePoll(container) : null,
     );
   }
@@ -268,21 +269,76 @@ class ThreadDetailHtmlParser {
   }
 
   String? _parseRateSummary(html_dom.Element container, String pid) {
+    final ratingSummary = _parseRatingSummary(container, pid);
+    if (ratingSummary == null) {
+      return null;
+    }
+    final compact = [
+      ratingSummary.participantText,
+      ratingSummary.scoreText,
+    ].where((item) => item.isNotEmpty).join(' · ');
+    return compact.isEmpty ? null : compact;
+  }
+
+  ThreadPostRatingSummary? _parseRatingSummary(
+    html_dom.Element container,
+    String pid,
+  ) {
     final rateLog = container.querySelector('#ratelog_$pid');
     if (rateLog == null) {
       return null;
     }
-    final participants = _cleanText(
-      rateLog.querySelector('a[title="查看全部评分"]')?.text ?? '',
+    final participantAnchor = rateLog.querySelector('a[title="查看全部评分"]');
+    final participantText = _cleanText(participantAnchor?.text ?? '');
+    final headerCells = rateLog.querySelectorAll('.ratl th');
+    final scoreText = headerCells.length > 1
+        ? _cleanText(headerCells[1].text)
+        : '';
+    final rows = rateLog.querySelectorAll('.ratl_l tr[id^="rate_"]');
+    final ratings = <ThreadPostRating>[];
+    for (final row in rows) {
+      final cells = row.querySelectorAll('td');
+      final userAnchor = cells.isEmpty ? null : _firstTextAnchor(cells[0]);
+      final userName = _cleanText(userAnchor?.text ?? '');
+      final score = cells.length > 1 ? _cleanText(cells[1].text) : '';
+      final reason = cells.length > 2 ? _cleanText(cells[2].text) : '';
+      if (userName.isEmpty && score.isEmpty && reason.isEmpty) {
+        continue;
+      }
+      ratings.add(
+        ThreadPostRating(
+          userName: userName,
+          userId: _extractUid(_resolve(userAnchor?.attributes['href'])),
+          avatarUrl: _resolve(
+            cells.isEmpty
+                ? null
+                : cells[0].querySelector('img')?.attributes['src'],
+          ),
+          score: score,
+          reason: reason,
+        ),
+      );
+    }
+    if (participantText.isEmpty && scoreText.isEmpty && ratings.isEmpty) {
+      return null;
+    }
+    return ThreadPostRatingSummary(
+      participantText: participantText,
+      scoreText: scoreText,
+      viewAllUrl: _resolve(participantAnchor?.attributes['href']),
+      ratings: List<ThreadPostRating>.unmodifiable(ratings),
     );
-    final score = _cleanText(
-      rateLog.querySelector('.ratl th:nth-child(2)')?.text ?? '',
-    );
-    final compact = [
-      participants,
-      score,
-    ].where((item) => item.isNotEmpty).join(' · ');
-    return compact.isEmpty ? null : compact;
+  }
+
+  html_dom.Element? _firstTextAnchor(html_dom.Element container) {
+    for (final anchor in container.querySelectorAll(
+      'a[href*="space-uid"], a[href*="home.php"][href*="uid="]',
+    )) {
+      if (_cleanText(anchor.text).isNotEmpty) {
+        return anchor;
+      }
+    }
+    return null;
   }
 
   String? _parseActionUrl(html_dom.Element container, String action) {

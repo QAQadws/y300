@@ -114,6 +114,31 @@ void main() {
       expect(logOutput.lines.join('\n'), contains('body=Bytes(length=4)'));
     });
 
+    test('postFormFields preserves duplicate form field names', () async {
+      final adapter = _GatewayTestAdapter(textBody: 'ok');
+      final gateway = _buildGateway(adapter: adapter);
+
+      final result = await gateway.postFormFields(
+        Uri.parse('https://bbs.yamibo.com/forum.php?mod=misc&action=votepoll'),
+        context: const YamiboRequestContext(
+          kind: YamiboRequestKind.html,
+          operation: 'thread.poll.vote',
+        ),
+        data: const <MapEntry<String, String>>[
+          MapEntry<String, String>('formhash', 'fh_poll'),
+          MapEntry<String, String>('pollanswers[]', '1'),
+          MapEntry<String, String>('pollanswers[]', '2'),
+        ],
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(
+        adapter.lastRequestBody,
+        'formhash=fh_poll&pollanswers%5B%5D=1&pollanswers%5B%5D=2',
+      );
+      expect(adapter.lastHeaders[Headers.contentTypeHeader], contains('form'));
+    });
+
     test(
       'getText failure keeps statusCode and records failed diagnostic',
       () async {
@@ -263,6 +288,7 @@ class _GatewayTestAdapter implements HttpClientAdapter {
   final List<int> bytesBody;
   final List<String> setCookie;
   Map<String, dynamic> lastHeaders = const <String, dynamic>{};
+  String? lastRequestBody;
 
   @override
   void close({bool force = false}) {}
@@ -274,6 +300,7 @@ class _GatewayTestAdapter implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     lastHeaders = options.headers;
+    lastRequestBody = await _readRequestBody(requestStream);
     final headers = setCookie.isEmpty
         ? const <String, List<String>>{}
         : <String, List<String>>{'set-cookie': setCookie};
@@ -296,6 +323,17 @@ class _GatewayTestAdapter implements HttpClientAdapter {
       statusCode,
       headers: responseHeaders,
     );
+  }
+
+  Future<String?> _readRequestBody(Stream<Uint8List>? requestStream) async {
+    if (requestStream == null) {
+      return null;
+    }
+    final bytes = await requestStream.expand((chunk) => chunk).toList();
+    if (bytes.isEmpty) {
+      return '';
+    }
+    return String.fromCharCodes(bytes);
   }
 }
 

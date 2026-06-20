@@ -49,6 +49,17 @@ void main() {
         expect(firstPost.commentUrl, contains('action=comment'));
         expect(firstPost.replyUrl, contains('action=reply'));
         expect(firstPost.rateSummary, contains('参与人数'));
+        expect(firstPost.ratingSummary?.participantText, '参与人数 1');
+        expect(firstPost.ratingSummary?.scoreText, '积分 +2');
+        expect(firstPost.ratingSummary?.viewAllUrl, contains('viewratings'));
+        expect(firstPost.ratingSummary?.ratings.single.userName, '子子子车');
+        expect(firstPost.ratingSummary?.ratings.single.userId, '736594');
+        expect(firstPost.ratingSummary?.ratings.single.score, '+ 2');
+        expect(firstPost.ratingSummary?.ratings.single.reason, '我很赞同');
+        expect(
+          firstPost.ratingSummary?.ratings.single.avatarUrl,
+          contains('000/73/65/94_avatar_small.jpg'),
+        );
 
         final poll = firstPost.poll!;
         expect(poll.isMultipleChoice, isFalse);

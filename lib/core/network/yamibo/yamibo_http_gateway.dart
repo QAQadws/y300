@@ -138,6 +138,31 @@ class YamiboHttpGateway {
     );
   }
 
+  Future<ApiResult<YamiboHttpResponse<String>>> postFormFields(
+    Uri uri, {
+    required YamiboRequestContext context,
+    required List<MapEntry<String, String>> data,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+    Options? options,
+    bool? followRedirects,
+    ValidateStatus? validateStatus,
+  }) async {
+    return _request<String>(
+      uri,
+      method: 'POST',
+      context: context,
+      headers: headers,
+      responseType: ResponseType.plain,
+      cancelToken: cancelToken,
+      data: _encodeFormFields(data),
+      contentType: options?.contentType ?? Headers.formUrlEncodedContentType,
+      followRedirects: followRedirects ?? options?.followRedirects,
+      validateStatus: validateStatus ?? options?.validateStatus,
+      normalizeBody: (responseData) => responseData?.toString() ?? '',
+    );
+  }
+
   Future<ApiResult<YamiboHttpResponse<Object?>>> postFormJson(
     Uri uri, {
     required YamiboRequestContext context,
@@ -475,5 +500,15 @@ class YamiboHttpGateway {
   String _generateRequestId() {
     _nextRequestSequence += 1;
     return 'yhttp-$_nextRequestSequence';
+  }
+
+  String _encodeFormFields(List<MapEntry<String, String>> fields) {
+    return fields
+        .map(
+          (entry) =>
+              '${Uri.encodeQueryComponent(entry.key)}='
+              '${Uri.encodeQueryComponent(entry.value)}',
+        )
+        .join('&');
   }
 }
