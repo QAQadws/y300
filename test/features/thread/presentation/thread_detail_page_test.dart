@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -43,11 +43,28 @@ void main() {
             ThreadDetailData(
               tid: tid,
               fid: '2',
+              typeid: '410',
+              typeName: '理性探讨',
+              forumName: '海域區',
+              forumUrl:
+                  'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=33',
               subject: '测试主题',
               author: 'alice',
               replies: 1,
               views: 12,
               currentPage: 1,
+              lastPage: 2,
+              reverseOrderUrl:
+                  'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&ordertype=1',
+              onlyAuthorUrl:
+                  'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&authorid=1',
+              favoriteUrl:
+                  'https://bbs.yamibo.com/home.php?mod=spacecp&ac=favorite&type=thread&id=100',
+              shareUrl:
+                  'https://bbs.yamibo.com/home.php?mod=spacecp&ac=share&type=thread&id=100',
+              homeUrl: 'https://bbs.yamibo.com/index.php',
+              desktopUrl:
+                  'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
               perPage: 1,
               posts: [
                 ThreadPost(
@@ -58,6 +75,20 @@ void main() {
                   number: 1,
                   isFirst: true,
                   dateline: 'today',
+                  rateUrl:
+                      'https://bbs.yamibo.com/forum.php?mod=misc&action=rate',
+                  commentUrl:
+                      'https://bbs.yamibo.com/forum.php?mod=misc&action=comment',
+                  replyUrl:
+                      'https://bbs.yamibo.com/forum.php?mod=post&action=reply',
+                  poll: const ThreadPoll(
+                    isMultipleChoice: false,
+                    summary: '单选投票 , 投票后结果可见, 共有 2 人参与投票',
+                    options: <ThreadPollOption>[
+                      ThreadPollOption(id: '1', label: '选项A'),
+                      ThreadPollOption(id: '2', label: '选项B'),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -73,6 +104,7 @@ void main() {
             replies: 1,
             views: 12,
             currentPage: 2,
+            lastPage: 2,
             perPage: 1,
             posts: [
               ThreadPost(
@@ -94,19 +126,64 @@ void main() {
       await tester.pump(const Duration(milliseconds: 120));
 
       expect(find.byKey(const Key('thread-detail-list')), findsOneWidget);
+      expect(find.text('海域區'), findsOneWidget);
+      expect(
+        find.byKey(const Key('thread-detail-header-card')),
+        findsOneWidget,
+      );
+      expect(find.text('理性探讨'), findsOneWidget);
+      expect(find.text('12'), findsOneWidget);
+      expect(find.text('第 1 / 2 页'), findsOneWidget);
+      expect(find.byKey(const Key('thread-post-card-p1')), findsOneWidget);
       expect(find.text('第一条回复'), findsOneWidget);
+      expect(find.byKey(const Key('thread-poll-card')), findsOneWidget);
+      expect(find.text('选项A'), findsOneWidget);
+      expect(find.byKey(const Key('thread-post-actions-p1')), findsOneWidget);
+      expect(find.text('评分'), findsOneWidget);
+      expect(find.text('点评'), findsOneWidget);
+      expect(find.byKey(const Key('thread-replies-header')), findsNothing);
 
-      expect(find.byKey(const Key('thread-detail-load-more-button')), findsOneWidget);
+      expect(
+        find.byKey(const Key('thread-detail-load-more-button')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('thread-detail-current-page-button')),
+        findsOneWidget,
+      );
+      expect(find.text('下一页'), findsOneWidget);
+      await tester.ensureVisible(
+        find.byKey(const Key('thread-detail-load-more-button')),
+      );
+      await tester.pump();
       await tester.tap(find.byKey(const Key('thread-detail-load-more-button')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
       expect(find.text('第一条回复'), findsOneWidget);
       expect(find.text('第二条回复'), findsOneWidget);
+      expect(find.byKey(const Key('thread-replies-header')), findsOneWidget);
+      expect(find.text('全部回复'), findsOneWidget);
+      expect(find.text('倒序浏览'), findsOneWidget);
+      expect(find.text('只看楼主'), findsOneWidget);
+      expect(
+        find.byKey(const Key('thread-detail-bottom-favorite-button')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('thread-detail-share-button')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('thread-detail-more-menu')));
+      await tester.pumpAndSettle();
+      expect(find.text('返回首页'), findsOneWidget);
+      expect(find.text('电脑版'), findsOneWidget);
       expect(callCount, 2);
     });
 
-    testWidgets('shows comic add-to-shelf button for comic candidate post', (tester) async {
+    testWidgets('shows comic add-to-shelf button for comic candidate post', (
+      tester,
+    ) async {
       final repository = _FakeThreadRepository((tid, page) async {
         return ApiSuccess(
           ThreadDetailData(
@@ -139,7 +216,10 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      expect(find.byKey(const Key('comic-add-to-shelf-button')), findsOneWidget);
+      expect(
+        find.byKey(const Key('comic-add-to-shelf-button')),
+        findsOneWidget,
+      );
       await tester.tap(find.byKey(const Key('comic-add-to-shelf-button')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
@@ -149,7 +229,9 @@ void main() {
       expect(find.textContaining('漫画候选（评分'), findsNothing);
     });
 
-    testWidgets('shows novel add-to-shelf button for fid 49 first post', (tester) async {
+    testWidgets('shows novel add-to-shelf button for fid 49 first post', (
+      tester,
+    ) async {
       final repository = _FakeThreadRepository((tid, page) async {
         return ApiSuccess(
           ThreadDetailData(
@@ -179,12 +261,17 @@ void main() {
 
       final novelRepository = _FakeNovelRepository();
 
-      await tester.pumpWidget(_buildTestApp(repository, novelRepository: novelRepository));
+      await tester.pumpWidget(
+        _buildTestApp(repository, novelRepository: novelRepository),
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
       expect(find.text('小说 · 原创'), findsOneWidget);
-      expect(find.byKey(const Key('comic-add-to-shelf-button')), findsOneWidget);
+      expect(
+        find.byKey(const Key('comic-add-to-shelf-button')),
+        findsOneWidget,
+      );
 
       await tester.tap(find.byKey(const Key('comic-add-to-shelf-button')).last);
       await tester.pump();
@@ -195,51 +282,60 @@ void main() {
       expect(novelRepository.refreshCalled, isTrue);
     });
 
-    testWidgets('includes second floor images when floor2 is same author and image-dominant', (tester) async {
-      final repository = _FakeThreadRepository((tid, page) async {
-        return ApiSuccess(
-          ThreadDetailData(
-            tid: tid,
-            fid: '30',
-            typeid: '398',
-            subject: '【测试汉化组】第1话',
-            author: 'alice',
-            replies: 1,
-            views: 12,
-            currentPage: 1,
-            perPage: 20,
-            posts: [
-              ThreadPost(
-                pid: 'p1',
-                author: 'alice',
-                authorId: '1',
-                message: '<p>前言</p><img src="https://img.test/cover.jpg"/>',
-                number: 1,
-                isFirst: true,
-                dateline: 'today',
-              ),
-              ThreadPost(
-                pid: 'p2',
-                author: 'alice',
-                authorId: '1',
-                message: '<img src="https://img.test/page-1.jpg"/><img src="https://img.test/page-2.jpg"/>',
-                number: 2,
-                isFirst: false,
-                dateline: 'today',
-              ),
-            ],
-          ),
+    testWidgets(
+      'includes second floor images when floor2 is same author and image-dominant',
+      (tester) async {
+        final repository = _FakeThreadRepository((tid, page) async {
+          return ApiSuccess(
+            ThreadDetailData(
+              tid: tid,
+              fid: '30',
+              typeid: '398',
+              subject: '【测试汉化组】第1话',
+              author: 'alice',
+              replies: 1,
+              views: 12,
+              currentPage: 1,
+              perPage: 20,
+              posts: [
+                ThreadPost(
+                  pid: 'p1',
+                  author: 'alice',
+                  authorId: '1',
+                  message: '<p>前言</p><img src="https://img.test/cover.jpg"/>',
+                  number: 1,
+                  isFirst: true,
+                  dateline: 'today',
+                ),
+                ThreadPost(
+                  pid: 'p2',
+                  author: 'alice',
+                  authorId: '1',
+                  message:
+                      '<img src="https://img.test/page-1.jpg"/><img src="https://img.test/page-2.jpg"/>',
+                  number: 2,
+                  isFirst: false,
+                  dateline: 'today',
+                ),
+              ],
+            ),
+          );
+        });
+
+        await tester.pumpWidget(_buildTestApp(repository));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+
+        expect(
+          find.byKey(const Key('comic-add-to-shelf-button')),
+          findsOneWidget,
         );
-      });
+      },
+    );
 
-      await tester.pumpWidget(_buildTestApp(repository));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
-
-      expect(find.byKey(const Key('comic-add-to-shelf-button')), findsOneWidget);
-    });
-
-    testWidgets('shows search-in-forum action when thread fid is 30', (tester) async {
+    testWidgets('shows search-in-forum action when thread fid is 30', (
+      tester,
+    ) async {
       final repository = _FakeThreadRepository((tid, page) async {
         return ApiSuccess(
           ThreadDetailData(
@@ -269,7 +365,10 @@ void main() {
       await tester.pumpWidget(_buildTestApp(repository));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('thread-detail-search-button')), findsOneWidget);
+      expect(
+        find.byKey(const Key('thread-detail-search-button')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('favorites thread from app bar action', (tester) async {
@@ -301,10 +400,7 @@ void main() {
       final favoriteActionService = _FakeThreadFavoriteActionService();
 
       await tester.pumpWidget(
-        _buildTestApp(
-          repository,
-          favoriteActionService: favoriteActionService,
-        ),
+        _buildTestApp(repository, favoriteActionService: favoriteActionService),
       );
       await tester.pumpAndSettle();
 
@@ -318,7 +414,9 @@ void main() {
       expect(find.text('收藏成功'), findsOneWidget);
     });
 
-    testWidgets('can input and submit reply via api repository abstraction', (tester) async {
+    testWidgets('can input and submit reply via api repository abstraction', (
+      tester,
+    ) async {
       final repository = _FakeThreadRepository((tid, page) async {
         return ApiSuccess(
           ThreadDetailData(
@@ -346,10 +444,15 @@ void main() {
       });
       final replyRepo = _FakeReplyRepository();
 
-      await tester.pumpWidget(_buildTestApp(repository, replyRepository: replyRepo));
+      await tester.pumpWidget(
+        _buildTestApp(repository, replyRepository: replyRepo),
+      );
       await tester.pumpAndSettle();
 
-      await tester.enterText(find.byKey(const Key('thread-reply-input')), '这是测试回复');
+      await tester.enterText(
+        find.byKey(const Key('thread-reply-input')),
+        '这是测试回复',
+      );
       await tester.tap(find.byKey(const Key('thread-reply-submit-button')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
@@ -371,8 +474,12 @@ Widget _buildTestApp(
     overrides: [
       threadRepositoryProvider.overrideWithValue(repository),
       comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
-      novelRepositoryProvider.overrideWithValue(novelRepository ?? _FakeNovelRepository()),
-      replyRepositoryProvider.overrideWithValue(replyRepository ?? _FakeReplyRepository()),
+      novelRepositoryProvider.overrideWithValue(
+        novelRepository ?? _FakeNovelRepository(),
+      ),
+      replyRepositoryProvider.overrideWithValue(
+        replyRepository ?? _FakeReplyRepository(),
+      ),
       threadFavoriteActionServiceProvider.overrideWithValue(
         favoriteActionService ?? _FakeThreadFavoriteActionService(),
       ),
@@ -387,38 +494,36 @@ Widget _buildTestApp(
 class _FakeForumTagRepository implements ForumTagRepository {
   @override
   Future<ForumTagLookup> loadLookup() async {
-    return ForumTagLookup(
-      const <ForumBoardTagSet>[
-        ForumBoardTagSet(
-          fid: '30',
-          name: '中文百合漫画区',
-          tags: <ForumTagDefinition>[
-            ForumTagDefinition(fid: '30', typeid: '398', name: '韩国漫画'),
-            ForumTagDefinition(fid: '30', typeid: '65', name: '公告'),
-          ],
-        ),
-        ForumBoardTagSet(
-          fid: '49',
-          name: '文学区',
-          tags: <ForumTagDefinition>[
-            ForumTagDefinition(fid: '49', typeid: '293', name: '原创'),
-            ForumTagDefinition(fid: '49', typeid: '121', name: '公告'),
-          ],
-        ),
-      ],
-    );
+    return ForumTagLookup(const <ForumBoardTagSet>[
+      ForumBoardTagSet(
+        fid: '30',
+        name: '中文百合漫画区',
+        tags: <ForumTagDefinition>[
+          ForumTagDefinition(fid: '30', typeid: '398', name: '韩国漫画'),
+          ForumTagDefinition(fid: '30', typeid: '65', name: '公告'),
+        ],
+      ),
+      ForumBoardTagSet(
+        fid: '49',
+        name: '文学区',
+        tags: <ForumTagDefinition>[
+          ForumTagDefinition(fid: '49', typeid: '293', name: '原创'),
+          ForumTagDefinition(fid: '49', typeid: '121', name: '公告'),
+        ],
+      ),
+    ]);
   }
 }
 
 class _FakeThreadFavoriteActionService implements ThreadFavoriteActionService {
   final ApiResult<ThreadFavoriteActionResult> result =
       const ApiSuccess<ThreadFavoriteActionResult>(
-    ThreadFavoriteActionResult(
-      message: '收藏成功',
-      refreshedFavoriteModule: true,
-      alreadyFavorited: false,
-    ),
-  );
+        ThreadFavoriteActionResult(
+          message: '收藏成功',
+          refreshedFavoriteModule: true,
+          alreadyFavorited: false,
+        ),
+      );
   bool called = false;
   String? lastTid;
 
@@ -460,10 +565,14 @@ class _FakeReplyRepository implements ReplyRepository {
 class _FakeThreadRepository implements ThreadRepository {
   _FakeThreadRepository(this._loader);
 
-  final Future<ApiResult<ThreadDetailData>> Function(String tid, int page) _loader;
+  final Future<ApiResult<ThreadDetailData>> Function(String tid, int page)
+  _loader;
 
   @override
-  Future<ApiResult<ThreadDetailData>> getThreadDetail({required String tid, int page = 1}) {
+  Future<ApiResult<ThreadDetailData>> getThreadDetail({
+    required String tid,
+    int page = 1,
+  }) {
     return _loader(tid, page);
   }
 }
@@ -495,7 +604,8 @@ class _FakeComicRepository implements ComicRepository {
   }
 
   @override
-  Future<String> createCategory({required String name}) async => 'mock-category';
+  Future<String> createCategory({required String name}) async =>
+      'mock-category';
 
   @override
   Future<void> clearEpisodeImageCache({required String episodeId}) async {}
@@ -507,12 +617,17 @@ class _FakeComicRepository implements ComicRepository {
   Future<ComicDetail?> getComicDetail({required String comicId}) async => null;
 
   @override
-  Future<List<ComicEpisodeItem>> getComicEpisodes({required String comicId, bool descending = true}) async {
+  Future<List<ComicEpisodeItem>> getComicEpisodes({
+    required String comicId,
+    bool descending = true,
+  }) async {
     return const <ComicEpisodeItem>[];
   }
 
   @override
-  Future<List<ComicEpisodeImageItem>> getEpisodeImages({required String episodeId}) async {
+  Future<List<ComicEpisodeImageItem>> getEpisodeImages({
+    required String episodeId,
+  }) async {
     return const <ComicEpisodeImageItem>[];
   }
 
@@ -534,7 +649,9 @@ class _FakeComicRepository implements ComicRepository {
   }
 
   @override
-  Future<List<ComicShelfItem>> getShelfItems({String categoryId = 'default'}) async {
+  Future<List<ComicShelfItem>> getShelfItems({
+    String categoryId = 'default',
+  }) async {
     return const <ComicShelfItem>[];
   }
 
@@ -544,7 +661,9 @@ class _FakeComicRepository implements ComicRepository {
   }
 
   @override
-  Future<ComicReadingProgress?> getLastReadProgress({required String comicId}) async => null;
+  Future<ComicReadingProgress?> getLastReadProgress({
+    required String comicId,
+  }) async => null;
 
   @override
   Future<ComicEpisodeRefreshResult> mergeEpisodesFromLinks({
@@ -552,7 +671,11 @@ class _FakeComicRepository implements ComicRepository {
     required List<ComicEpisodeLink> episodeLinks,
     required String fallbackSourceTid,
   }) async {
-    return const ComicEpisodeRefreshResult(insertedCount: 0, updatedCount: 0, totalCount: 0);
+    return const ComicEpisodeRefreshResult(
+      insertedCount: 0,
+      updatedCount: 0,
+      totalCount: 0,
+    );
   }
 
   @override
@@ -563,25 +686,52 @@ class _FakeComicRepository implements ComicRepository {
   }) async {}
 
   @override
-  Future<void> renameCategory({required String categoryId, required String newName}) async {}
+  Future<void> renameCategory({
+    required String categoryId,
+    required String newName,
+  }) async {}
 
   @override
-  Future<void> updateCustomCover({required String comicId, required String? customCoverImageUrl}) async {}
+  Future<void> updateCustomCover({
+    required String comicId,
+    required String? customCoverImageUrl,
+  }) async {}
 
   @override
-  Future<void> updateCustomCoverFromLocalFile({required String comicId, required String localCoverPath, String? sourceEpisodeId, int? sourceImageIndex, String? sourceImageUrl}) async {}
+  Future<void> updateCustomCoverFromLocalFile({
+    required String comicId,
+    required String localCoverPath,
+    String? sourceEpisodeId,
+    int? sourceImageIndex,
+    String? sourceImageUrl,
+  }) async {}
 
   @override
-  Future<void> updateCustomMetadata({required String comicId, String? customTitle, String? customAuthor, String? customTranslationGroup, String? customSearchTitle}) async {}
+  Future<void> updateCustomMetadata({
+    required String comicId,
+    String? customTitle,
+    String? customAuthor,
+    String? customTranslationGroup,
+    String? customSearchTitle,
+  }) async {}
 
   @override
-  Future<void> clearCustomMetadata({required String comicId, bool title = false, bool author = false, bool translationGroup = false, bool searchTitle = false}) async {}
+  Future<void> clearCustomMetadata({
+    required String comicId,
+    bool title = false,
+    bool author = false,
+    bool translationGroup = false,
+    bool searchTitle = false,
+  }) async {}
 
   @override
   Future<void> updateGridColumnCount({required int columnCount}) async {}
 
   @override
-  Future<void> saveEpisodeImages({required String episodeId, required List<String> imageUrls}) async {}
+  Future<void> saveEpisodeImages({
+    required String episodeId,
+    required List<String> imageUrls,
+  }) async {}
 
   @override
   Future<void> updateEpisodeImageCacheStatus({
@@ -600,10 +750,14 @@ class _FakeComicRepository implements ComicRepository {
   }) async {}
 
   @override
-  Future<void> updateCatalogUrl({required String comicId, required String catalogUrl}) async {}
+  Future<void> updateCatalogUrl({
+    required String comicId,
+    required String catalogUrl,
+  }) async {}
 
   @override
-  Future<Set<String>> getKnownEpisodeTids({required String comicId}) async => <String>{};
+  Future<Set<String>> getKnownEpisodeTids({required String comicId}) async =>
+      <String>{};
 }
 
 class _FakeNovelRepository implements NovelRepository {
@@ -649,18 +803,26 @@ class _FakeNovelRepository implements NovelRepository {
   }
 
   @override
-  Future<NovelChapterContent?> getChapterContent({required String episodeId}) async => null;
+  Future<NovelChapterContent?> getChapterContent({
+    required String episodeId,
+  }) async => null;
 
   @override
-  Future<List<NovelEpisodeItem>> getEpisodes({required String novelId, bool descending = false}) async {
+  Future<List<NovelEpisodeItem>> getEpisodes({
+    required String novelId,
+    bool descending = false,
+  }) async {
     return const <NovelEpisodeItem>[];
   }
 
   @override
-  Future<NovelReaderPreferences> getReaderPreferences() async => NovelReaderPreferences.defaults();
+  Future<NovelReaderPreferences> getReaderPreferences() async =>
+      NovelReaderPreferences.defaults();
 
   @override
-  Future<List<NovelItem>> getShelfItems({String categoryId = 'default'}) async => const <NovelItem>[];
+  Future<List<NovelItem>> getShelfItems({
+    String categoryId = 'default',
+  }) async => const <NovelItem>[];
 
   @override
   Future<void> moveNovelToCategory({
@@ -670,7 +832,9 @@ class _FakeNovelRepository implements NovelRepository {
   }) async {}
 
   @override
-  Future<NovelReadingProgress?> getReadingProgress({required String novelId}) async => null;
+  Future<NovelReadingProgress?> getReadingProgress({
+    required String novelId,
+  }) async => null;
 
   @override
   Future<NovelEpisodeRefreshResult> refreshEpisodes({
@@ -679,7 +843,11 @@ class _FakeNovelRepository implements NovelRepository {
     FavoriteSyncExecutionContext? executionContext,
   }) async {
     refreshCalled = true;
-    return const NovelEpisodeRefreshResult(insertedCount: 1, updatedCount: 0, totalCount: 1);
+    return const NovelEpisodeRefreshResult(
+      insertedCount: 1,
+      updatedCount: 0,
+      totalCount: 1,
+    );
   }
 
   @override
@@ -693,7 +861,10 @@ class _FakeNovelRepository implements NovelRepository {
   }
 
   @override
-  Future<void> renameCategory({required String categoryId, required String newName}) async {}
+  Future<void> renameCategory({
+    required String categoryId,
+    required String newName,
+  }) async {}
 
   @override
   Future<void> saveReadingProgress({
@@ -716,10 +887,14 @@ class _FakeNovelRepository implements NovelRepository {
   }
 
   @override
-  Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {}
+  Future<void> upsertReaderPreferences(
+    NovelReaderPreferences preferences,
+  ) async {}
 
   @override
-  Future<void> addReaderBookmark({required NovelReaderBookmark bookmark}) async {}
+  Future<void> addReaderBookmark({
+    required NovelReaderBookmark bookmark,
+  }) async {}
 
   @override
   Future<List<NovelReaderBookmark>> listReaderBookmarks({
@@ -738,4 +913,3 @@ class _FakeNovelRepository implements NovelRepository {
     required bool isBookmarked,
   }) async {}
 }
-

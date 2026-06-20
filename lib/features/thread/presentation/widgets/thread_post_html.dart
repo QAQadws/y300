@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
-import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 
 class ThreadPostHtml extends StatelessWidget {
@@ -59,7 +58,9 @@ class _ThreadPostImageExtension extends HtmlExtension {
     // flutter_html 的默认网络图片渲染只能接收固定 headers。这里改为逐图
     // 交给 LibraryCachedImage，让 Cookie 继续按图片 URL host 隔离。
     return WidgetSpan(
-      alignment: context.style!.verticalAlign.toPlaceholderAlignment(context.style!.display),
+      alignment: context.style!.verticalAlign.toPlaceholderAlignment(
+        context.style!.display,
+      ),
       baseline: TextBaseline.alphabetic,
       child: CssBoxWidget(
         style: imageStyle,
@@ -77,7 +78,14 @@ class _ThreadPostImageExtension extends HtmlExtension {
   }
 
   String? _normalizedSource(Map<String, String> attributes) {
-    for (final attribute in ForumImageSourceOptions.defaultDomAttributes) {
+    const priorityAttributes = <String>[
+      'zoomfile',
+      'file',
+      'data-original',
+      'data-src',
+      'src',
+    ];
+    for (final attribute in priorityAttributes) {
       final raw = attributes[attribute]?.trim();
       if (raw == null || raw.isEmpty) {
         continue;

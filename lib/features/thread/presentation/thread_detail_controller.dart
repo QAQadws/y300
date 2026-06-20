@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -30,7 +30,9 @@ class ThreadDetailArgs {
     if (identical(this, other)) {
       return true;
     }
-    return other is ThreadDetailArgs && other.tid == tid && other.subject == subject;
+    return other is ThreadDetailArgs &&
+        other.tid == tid &&
+        other.subject == subject;
   }
 
   @override
@@ -78,7 +80,19 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         return AsyncData(
           current.copyWith(
             subject: data.subject.isNotEmpty ? data.subject : current.subject,
+            typeName: data.typeName,
+            forumName: data.forumName,
+            forumUrl: data.forumUrl,
+            views: data.views,
+            replies: data.replies,
             currentPage: data.currentPage,
+            lastPage: data.lastPage,
+            reverseOrderUrl: data.reverseOrderUrl,
+            onlyAuthorUrl: data.onlyAuthorUrl,
+            favoriteUrl: data.favoriteUrl,
+            shareUrl: data.shareUrl,
+            homeUrl: data.homeUrl,
+            desktopUrl: data.desktopUrl,
             hasMore: data.hasMore,
             isLoadingMore: false,
             posts: merged,
@@ -88,10 +102,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       },
       failure: (error) {
         return AsyncData(
-          current.copyWith(
-            isLoadingMore: false,
-            errorMessage: error.message,
-          ),
+          current.copyWith(isLoadingMore: false, errorMessage: error.message),
         );
       },
     );
@@ -106,7 +117,9 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     }
     final snapshot = current;
 
-    state = AsyncData(snapshot.copyWith(isComicActionLoading: true, clearError: true));
+    state = AsyncData(
+      snapshot.copyWith(isComicActionLoading: true, clearError: true),
+    );
     final comicId = _buildComicId(tid: snapshot.tid);
 
     try {
@@ -124,10 +137,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         return;
       }
       state = AsyncData(
-        snapshot.copyWith(
-          isComicActionLoading: false,
-          isInShelf: true,
-        ),
+        snapshot.copyWith(isComicActionLoading: false, isInShelf: true),
       );
     } catch (error) {
       if (!ref.mounted) {
@@ -152,10 +162,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     final snapshot = current;
 
     state = AsyncData(
-      snapshot.copyWith(
-        isNovelActionLoading: true,
-        clearError: true,
-      ),
+      snapshot.copyWith(isNovelActionLoading: true, clearError: true),
     );
 
     try {
@@ -178,10 +185,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         return;
       }
       state = AsyncData(
-        snapshot.copyWith(
-          isNovelActionLoading: false,
-          isNovelInShelf: true,
-        ),
+        snapshot.copyWith(isNovelActionLoading: false, isNovelInShelf: true),
       );
     } catch (error) {
       if (!ref.mounted) {
@@ -213,9 +217,9 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       ),
     );
 
-    final result = await ref.read(threadFavoriteActionServiceProvider).favoriteThread(
-          tid: snapshot.tid,
-        );
+    final result = await ref
+        .read(threadFavoriteActionServiceProvider)
+        .favoriteThread(tid: snapshot.tid);
     if (!ref.mounted) {
       return;
     }
@@ -242,12 +246,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     if (current == null) {
       return;
     }
-    state = AsyncData(
-      current.copyWith(
-        replyText: value,
-        clearReplyHint: true,
-      ),
-    );
+    state = AsyncData(current.copyWith(replyText: value, clearReplyHint: true));
   }
 
   Future<void> submitReply() async {
@@ -257,20 +256,17 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     }
     final message = current.replyText.trim();
     if (message.isEmpty) {
-      state = AsyncData(
-        current.copyWith(replyHint: '请输入回复内容'),
-      );
+      state = AsyncData(current.copyWith(replyHint: '请输入回复内容'));
       return;
     }
 
     state = AsyncData(
-      current.copyWith(
-        isReplySubmitting: true,
-        clearReplyHint: true,
-      ),
+      current.copyWith(isReplySubmitting: true, clearReplyHint: true),
     );
 
-    final result = await ref.read(replyRepositoryProvider).sendReply(
+    final result = await ref
+        .read(replyRepositoryProvider)
+        .sendReply(
           draft: ReplyDraft(
             fid: current.fid,
             tid: current.tid,
@@ -316,21 +312,26 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     required int page,
     required List<ThreadPost> previous,
   }) async {
-    final result = await _readRepository().getThreadDetail(tid: _args.tid, page: page);
+    final result = await _readRepository().getThreadDetail(
+      tid: _args.tid,
+      page: page,
+    );
 
     if (result case ApiSuccess<ThreadDetailData>(:final data)) {
-      final merged = page == 1 ? data.posts : <ThreadPost>[...previous, ...data.posts];
-      final aggregation = ref.read(comicPostAggregationServiceProvider).build(merged);
+      final merged = page == 1
+          ? data.posts
+          : <ThreadPost>[...previous, ...data.posts];
+      final aggregation = ref
+          .read(comicPostAggregationServiceProvider)
+          .build(merged);
       final subject = data.subject.isNotEmpty ? data.subject : _args.subject;
       final sourceTagName = await _findSourceTagName(
         fid: data.fid,
         typeid: data.typeid,
       );
-      final contentKind = ref.read(threadContentClassifierProvider).classify(
-            fid: data.fid,
-            typeid: data.typeid,
-            tagName: sourceTagName,
-          );
+      final contentKind = ref
+          .read(threadContentClassifierProvider)
+          .classify(fid: data.fid, typeid: data.typeid, tagName: sourceTagName);
       final comicMeta = _parseComicWhenTagged(
         isComic: contentKind == ThreadContentKind.comic,
         subject: data.subject.isNotEmpty ? data.subject : _args.subject,
@@ -347,17 +348,33 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       var isNovelInShelf = false;
       if (novelCandidate) {
         final novelId = 'novel:${data.fid}:${_args.tid}';
-        isNovelInShelf = await ref.read(novelRepositoryProvider).getDetail(novelId: novelId) != null;
+        isNovelInShelf =
+            await ref
+                .read(novelRepositoryProvider)
+                .getDetail(novelId: novelId) !=
+            null;
       }
 
       return ThreadDetailPageState(
         tid: _args.tid,
         fid: data.fid,
         typeid: data.typeid,
+        typeName: data.typeName,
+        forumName: data.forumName,
+        forumUrl: data.forumUrl,
         sourceTagName: sourceTagName,
         contentKind: contentKind,
         subject: subject,
+        views: data.views,
+        replies: data.replies,
         currentPage: data.currentPage,
+        lastPage: data.lastPage,
+        reverseOrderUrl: data.reverseOrderUrl,
+        onlyAuthorUrl: data.onlyAuthorUrl,
+        favoriteUrl: data.favoriteUrl,
+        shareUrl: data.shareUrl,
+        homeUrl: data.homeUrl,
+        desktopUrl: data.desktopUrl,
         hasMore: data.hasMore,
         isLoadingInitial: false,
         isLoadingMore: false,
@@ -383,10 +400,22 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       tid: _args.tid,
       fid: '',
       typeid: '',
+      typeName: null,
+      forumName: null,
+      forumUrl: null,
       sourceTagName: null,
       contentKind: ThreadContentKind.forum,
       subject: _args.subject,
+      views: 0,
+      replies: 0,
       currentPage: page == 1 ? 0 : page,
+      lastPage: null,
+      reverseOrderUrl: null,
+      onlyAuthorUrl: null,
+      favoriteUrl: null,
+      shareUrl: null,
+      homeUrl: null,
+      desktopUrl: null,
       hasMore: false,
       isLoadingInitial: false,
       isLoadingMore: false,
@@ -428,14 +457,14 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
     final parser = ref.read(comicParserServiceProvider);
     final subjectParser = ref.read(comicSubjectParserProvider);
-    final parsed = parser.parseInput(
-      ComicPostParseInput(
-        messageHtml: parseMessage,
-        attachmentImageUrls: attachmentImageUrls,
-      ),
-    ).copyWith(
-          subjectMetadata: subjectParser.parse(subject),
-        );
+    final parsed = parser
+        .parseInput(
+          ComicPostParseInput(
+            messageHtml: parseMessage,
+            attachmentImageUrls: attachmentImageUrls,
+          ),
+        )
+        .copyWith(subjectMetadata: subjectParser.parse(subject));
     return (
       const ComicCandidateInfo(
         isCandidate: true,

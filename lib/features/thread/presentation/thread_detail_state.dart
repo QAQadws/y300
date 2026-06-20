@@ -7,10 +7,22 @@ class ThreadDetailPageState {
     required this.tid,
     required this.fid,
     required this.typeid,
+    required this.typeName,
+    required this.forumName,
+    required this.forumUrl,
     required this.sourceTagName,
     required this.contentKind,
     required this.subject,
+    required this.views,
+    required this.replies,
     required this.currentPage,
+    required this.lastPage,
+    required this.reverseOrderUrl,
+    required this.onlyAuthorUrl,
+    required this.favoriteUrl,
+    required this.shareUrl,
+    required this.homeUrl,
+    required this.desktopUrl,
     required this.hasMore,
     required this.isLoadingInitial,
     required this.isLoadingMore,
@@ -34,10 +46,22 @@ class ThreadDetailPageState {
   final String tid;
   final String fid;
   final String typeid;
+  final String? typeName;
+  final String? forumName;
+  final String? forumUrl;
   final String? sourceTagName;
   final ThreadContentKind contentKind;
   final String subject;
+  final int views;
+  final int replies;
   final int currentPage;
+  final int? lastPage;
+  final String? reverseOrderUrl;
+  final String? onlyAuthorUrl;
+  final String? favoriteUrl;
+  final String? shareUrl;
+  final String? homeUrl;
+  final String? desktopUrl;
   final bool hasMore;
   final bool isLoadingInitial;
   final bool isLoadingMore;
@@ -65,10 +89,22 @@ class ThreadDetailPageState {
       tid: tid,
       fid: '',
       typeid: '',
+      typeName: null,
+      forumName: null,
+      forumUrl: null,
       sourceTagName: null,
       contentKind: ThreadContentKind.forum,
       subject: subject,
+      views: 0,
+      replies: 0,
       currentPage: 0,
+      lastPage: null,
+      reverseOrderUrl: null,
+      onlyAuthorUrl: null,
+      favoriteUrl: null,
+      shareUrl: null,
+      homeUrl: null,
+      desktopUrl: null,
       hasMore: true,
       isLoadingInitial: true,
       isLoadingMore: false,
@@ -94,10 +130,22 @@ class ThreadDetailPageState {
     String? tid,
     String? fid,
     String? typeid,
+    String? typeName,
+    String? forumName,
+    String? forumUrl,
     String? sourceTagName,
     ThreadContentKind? contentKind,
     String? subject,
+    int? views,
+    int? replies,
     int? currentPage,
+    int? lastPage,
+    String? reverseOrderUrl,
+    String? onlyAuthorUrl,
+    String? favoriteUrl,
+    String? shareUrl,
+    String? homeUrl,
+    String? desktopUrl,
     bool? hasMore,
     bool? isLoadingInitial,
     bool? isLoadingMore,
@@ -120,17 +168,43 @@ class ThreadDetailPageState {
     bool clearThreadFavoriteHint = false,
     bool clearError = false,
     bool clearSourceTagName = false,
+    bool clearTypeName = false,
+    bool clearLastPage = false,
+    bool clearReverseOrderUrl = false,
+    bool clearOnlyAuthorUrl = false,
+    bool clearForumName = false,
+    bool clearForumUrl = false,
+    bool clearFavoriteUrl = false,
+    bool clearShareUrl = false,
+    bool clearHomeUrl = false,
+    bool clearDesktopUrl = false,
   }) {
     return ThreadDetailPageState(
       tid: tid ?? this.tid,
       fid: fid ?? this.fid,
       typeid: typeid ?? this.typeid,
+      typeName: clearTypeName ? null : (typeName ?? this.typeName),
+      forumName: clearForumName ? null : (forumName ?? this.forumName),
+      forumUrl: clearForumUrl ? null : (forumUrl ?? this.forumUrl),
       sourceTagName: clearSourceTagName
           ? null
           : (sourceTagName ?? this.sourceTagName),
       contentKind: contentKind ?? this.contentKind,
       subject: subject ?? this.subject,
+      views: views ?? this.views,
+      replies: replies ?? this.replies,
       currentPage: currentPage ?? this.currentPage,
+      lastPage: clearLastPage ? null : (lastPage ?? this.lastPage),
+      reverseOrderUrl: clearReverseOrderUrl
+          ? null
+          : (reverseOrderUrl ?? this.reverseOrderUrl),
+      onlyAuthorUrl: clearOnlyAuthorUrl
+          ? null
+          : (onlyAuthorUrl ?? this.onlyAuthorUrl),
+      favoriteUrl: clearFavoriteUrl ? null : (favoriteUrl ?? this.favoriteUrl),
+      shareUrl: clearShareUrl ? null : (shareUrl ?? this.shareUrl),
+      homeUrl: clearHomeUrl ? null : (homeUrl ?? this.homeUrl),
+      desktopUrl: clearDesktopUrl ? null : (desktopUrl ?? this.desktopUrl),
       hasMore: hasMore ?? this.hasMore,
       isLoadingInitial: isLoadingInitial ?? this.isLoadingInitial,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,

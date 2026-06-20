@@ -29,6 +29,42 @@ class ForumPostAttachmentImage {
   }
 }
 
+class ThreadPollOption {
+  const ThreadPollOption({
+    required this.id,
+    required this.label,
+    this.voteCount,
+    this.percent,
+    this.colorHex,
+  });
+
+  final String id;
+  final String label;
+  final int? voteCount;
+  final double? percent;
+  final String? colorHex;
+}
+
+class ThreadPoll {
+  const ThreadPoll({
+    required this.isMultipleChoice,
+    required this.summary,
+    required this.options,
+    this.maxChoices,
+    this.deadlineText,
+    this.actionUrl,
+    this.formHash,
+  });
+
+  final bool isMultipleChoice;
+  final int? maxChoices;
+  final String summary;
+  final String? deadlineText;
+  final String? actionUrl;
+  final String? formHash;
+  final List<ThreadPollOption> options;
+}
+
 class ThreadPost {
   ThreadPost({
     required this.pid,
@@ -38,6 +74,12 @@ class ThreadPost {
     required this.number,
     required this.isFirst,
     required this.dateline,
+    this.avatarUrl,
+    this.replyUrl,
+    this.rateUrl,
+    this.commentUrl,
+    this.rateSummary,
+    this.poll,
     this.attachmentImages = const <ForumPostAttachmentImage>[],
   });
 
@@ -48,6 +90,13 @@ class ThreadPost {
   final int number;
   final bool isFirst;
   final String dateline;
+  final String? avatarUrl;
+  final String? replyUrl;
+  final String? rateUrl;
+  final String? commentUrl;
+  final String? rateSummary;
+  final ThreadPoll? poll;
+
   /// Raw Discuz attachment metadata. Entries may be images or non-image files.
   final List<ForumPostAttachmentImage> attachmentImages;
 
@@ -83,6 +132,9 @@ class ThreadDetailData {
     required this.tid,
     required this.fid,
     this.typeid = '',
+    this.typeName,
+    this.forumName,
+    this.forumUrl,
     required this.subject,
     required this.author,
     required this.replies,
@@ -90,11 +142,23 @@ class ThreadDetailData {
     required this.currentPage,
     required this.perPage,
     required this.posts,
+    this.lastPage,
+    this.previousPageUrl,
+    this.nextPageUrl,
+    this.reverseOrderUrl,
+    this.onlyAuthorUrl,
+    this.favoriteUrl,
+    this.shareUrl,
+    this.homeUrl,
+    this.desktopUrl,
   });
 
   final String tid;
   final String fid;
   final String typeid;
+  final String? typeName;
+  final String? forumName;
+  final String? forumUrl;
   final String subject;
   final String author;
   final int replies;
@@ -102,9 +166,25 @@ class ThreadDetailData {
   final int currentPage;
   final int perPage;
   final List<ThreadPost> posts;
+  final int? lastPage;
+  final String? previousPageUrl;
+  final String? nextPageUrl;
+  final String? reverseOrderUrl;
+  final String? onlyAuthorUrl;
+  final String? favoriteUrl;
+  final String? shareUrl;
+  final String? homeUrl;
+  final String? desktopUrl;
 
   /// Discuz 返回 replies 为回帖数，不含主楼，故这里使用 <= 保守判断。
   bool get hasMore {
+    if (nextPageUrl != null) {
+      return true;
+    }
+    final knownLastPage = lastPage;
+    if (knownLastPage != null) {
+      return currentPage < knownLastPage;
+    }
     final loaded = currentPage * perPage;
     return loaded <= replies;
   }
