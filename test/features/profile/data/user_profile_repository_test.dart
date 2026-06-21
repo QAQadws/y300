@@ -32,6 +32,22 @@ void main() {
     expect(requested.queryParameters['mobile'], '2');
     expect(adapter.userAgents.single, contains('Mobile'));
   });
+
+  test('UserProfileHtmlRepository requests my profile mobile HTML', () async {
+    final adapter = _UserProfileHtmlTestAdapter();
+    final repository = _buildRepository(adapter);
+
+    final result = await repository.getMyProfile(uid: '597454');
+
+    expect(result.isSuccess, isTrue);
+    final requested = adapter.requestedUris.single;
+    expect(requested.path, '/home.php');
+    expect(requested.queryParameters['mod'], 'space');
+    expect(requested.queryParameters['uid'], '597454');
+    expect(requested.queryParameters['do'], 'profile');
+    expect(requested.queryParameters['mycenter'], '1');
+    expect(requested.queryParameters['mobile'], '2');
+  });
 }
 
 UserProfileHtmlRepository _buildRepository(

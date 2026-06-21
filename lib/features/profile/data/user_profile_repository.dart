@@ -8,6 +8,8 @@ import 'package:y300/features/profile/data/user_profile_html_parser.dart';
 
 abstract class UserProfileRepository {
   Future<ApiResult<UserProfileData>> getUserProfile({required String uid});
+
+  Future<ApiResult<UserProfileData>> getMyProfile({required String uid});
 }
 
 class UserProfileHtmlRepository implements UserProfileRepository {
@@ -21,13 +23,44 @@ class UserProfileHtmlRepository implements UserProfileRepository {
   final UserProfileHtmlParser _parser;
 
   @override
-  Future<ApiResult<UserProfileData>> getUserProfile({
+  Future<ApiResult<UserProfileData>> getUserProfile({required String uid}) {
+    return _getProfile(
+      uid: uid,
+      queryParameters: const <String, String>{},
+      operation: 'profile.user.mobile',
+      pageKind: 'user.profile',
+      missingUidMessage: '用户 UID 缺失',
+      failurePrefix: '个人页加载失败',
+      parseFailurePrefix: '个人页解析失败',
+    );
+  }
+
+  @override
+  Future<ApiResult<UserProfileData>> getMyProfile({required String uid}) {
+    return _getProfile(
+      uid: uid,
+      queryParameters: const <String, String>{'mycenter': '1'},
+      operation: 'profile.my.mobile',
+      pageKind: 'profile.my',
+      missingUidMessage: '当前用户 UID 缺失，请先登录',
+      failurePrefix: '我的资料加载失败',
+      parseFailurePrefix: '我的资料解析失败',
+    );
+  }
+
+  Future<ApiResult<UserProfileData>> _getProfile({
     required String uid,
+    required Map<String, String> queryParameters,
+    required String operation,
+    required String pageKind,
+    required String missingUidMessage,
+    required String failurePrefix,
+    required String parseFailurePrefix,
   }) async {
     final normalizedUid = uid.trim();
     if (normalizedUid.isEmpty) {
-      return const ApiFailure<UserProfileData>(
-        ApiError(type: ApiErrorType.business, message: '用户 UID 缺失'),
+      return ApiFailure<UserProfileData>(
+        ApiError(type: ApiErrorType.business, message: missingUidMessage),
       );
     }
     final htmlResult = await _htmlClient.getMobilePage(
@@ -37,12 +70,13 @@ class UserProfileHtmlRepository implements UserProfileRepository {
         'uid': normalizedUid,
         'do': 'profile',
         'mobile': '2',
+        ...queryParameters,
       },
-      context: const YamiboRequestContext(
+      context: YamiboRequestContext(
         kind: YamiboRequestKind.html,
-        operation: 'profile.user.mobile',
+        operation: operation,
         module: 'profile',
-        pageKind: 'user.profile',
+        pageKind: pageKind,
       ),
     );
     return htmlResult.when(
@@ -55,7 +89,7 @@ class UserProfileHtmlRepository implements UserProfileRepository {
           return ApiFailure<UserProfileData>(
             ApiError(
               type: ApiErrorType.parse,
-              message: '个人页解析失败: $error',
+              message: '$parseFailurePrefix: $error',
               raw: error,
             ),
           );
@@ -64,7 +98,7 @@ class UserProfileHtmlRepository implements UserProfileRepository {
       failure: (error) => ApiFailure<UserProfileData>(
         ApiError(
           type: error.type,
-          message: '个人页加载失败: ${error.message}',
+          message: '$failurePrefix: ${error.message}',
           code: error.code,
           statusCode: error.statusCode,
           raw: error.raw,

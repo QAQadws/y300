@@ -21,6 +21,7 @@ class UserProfileHtmlParser {
           '',
     ).replaceFirst(RegExp(r'的资料$'), '');
     final title = _cleanText(document.querySelector('.header h2')?.text ?? '');
+    final actions = _parseActions(document);
 
     return UserProfileData(
       uid: uid,
@@ -34,7 +35,14 @@ class UserProfileHtmlParser {
       threadUrl: _parseActionUrl(document, 'do=thread'),
       blogUrl: _parseActionUrl(document, 'do=blog'),
       messageUrl: _parseActionUrl(document, 'do=pm'),
-      friendUrl: _parseActionUrl(document, 'ac=friend'),
+      friendUrl:
+          _parseActionUrl(document, 'ac=friend') ??
+          _parseActionUrl(document, 'do=friend'),
+      favoriteUrl: _parseActionUrl(document, 'do=favorite'),
+      signUrl: _parseActionUrl(document, 'zqlj_sign'),
+      settingsUrl: _parseSettingsUrl(document),
+      logoutUrl: _parseLogoutUrl(document),
+      actions: List<UserProfileAction>.unmodifiable(actions),
       credits: List<UserProfileMetric>.unmodifiable(_parseMetrics(document)),
       details: List<UserProfileDetailItem>.unmodifiable(details),
     );
@@ -105,6 +113,31 @@ class UserProfileHtmlParser {
           .querySelector('.myinfo_list_ico a[href*="$queryNeedle"]')
           ?.attributes['href'],
     );
+  }
+
+  List<UserProfileAction> _parseActions(html_dom.Document document) {
+    final actions = <UserProfileAction>[];
+    for (final anchor in document.querySelectorAll('.myinfo_list_ico a')) {
+      final label = _cleanText(anchor.text);
+      final url = _resolve(anchor.attributes['href']);
+      if (label.isEmpty || url == null) {
+        continue;
+      }
+      actions.add(UserProfileAction(label: label, url: url));
+    }
+    return actions;
+  }
+
+  String? _parseSettingsUrl(html_dom.Document document) {
+    return _resolve(
+      document
+          .querySelector('.myinfo_list li b + span a[href*="spacecp"]')
+          ?.attributes['href'],
+    );
+  }
+
+  String? _parseLogoutUrl(html_dom.Document document) {
+    return _resolve(document.querySelector('.btn_exit a')?.attributes['href']);
   }
 
   String? _parseCoverUrl(html_dom.Document document) {

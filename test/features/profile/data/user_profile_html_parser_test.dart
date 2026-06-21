@@ -32,4 +32,34 @@ void main() {
       contains('最后访问:2026-6-21 14:40'),
     );
   });
+
+  test('UserProfileHtmlParser parses my profile mobile page sample', () {
+    final html = File('docs/html/我的资料/我的资料.html').readAsStringSync();
+    const parser = UserProfileHtmlParser();
+
+    final profile = parser.parse(html, fallbackUid: '597454');
+
+    expect(profile.uid, '597454');
+    expect(profile.username, '2834758851');
+    expect(profile.title, '我的资料');
+    expect(profile.avatarUrl, contains('noavatar.svg'));
+    expect(profile.credits.map((item) => item.value), contains('65'));
+    expect(profile.credits.map((item) => item.value), contains('7 点'));
+    expect(profile.threadUrl, contains('do=thread'));
+    expect(profile.blogUrl, contains('do=blog'));
+    expect(profile.favoriteUrl, contains('do=favorite'));
+    expect(profile.messageUrl, contains('do=pm'));
+    expect(profile.friendUrl, contains('do=friend'));
+    expect(profile.signUrl, contains('zqlj_sign'));
+    expect(profile.settingsUrl, contains('spacecp'));
+    expect(profile.logoutUrl, contains('action=logout'));
+    expect(
+      profile.actions.map((action) => action.label),
+      containsAll(['我的主题', '我的日志', '我的收藏', '消息提醒', '我的好友', '每日签到']),
+    );
+    expect(
+      profile.details.map((item) => '${item.label}:${item.value}'),
+      contains('用户组:百合幼苗'),
+    );
+  });
 }

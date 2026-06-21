@@ -1,33 +1,38 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/auth/data/auth_repository.dart';
 
-final authSessionControllerProvider = AsyncNotifierProvider.autoDispose<
-    AuthSessionController, AuthSessionViewState>(
-  AuthSessionController.new,
-);
+final authSessionControllerProvider =
+    AsyncNotifierProvider.autoDispose<
+      AuthSessionController,
+      AuthSessionViewState
+    >(AuthSessionController.new);
 
 class AuthSessionViewState {
   const AuthSessionViewState({
     required this.isLoggedIn,
+    required this.uid,
     required this.username,
     required this.isLoggingOut,
     this.errorMessage,
   });
 
   final bool isLoggedIn;
+  final String uid;
   final String username;
   final bool isLoggingOut;
   final String? errorMessage;
 
   const AuthSessionViewState.signedOut()
-      : isLoggedIn = false,
-        username = '',
-        isLoggingOut = false,
-        errorMessage = null;
+    : isLoggedIn = false,
+      uid = '',
+      username = '',
+      isLoggingOut = false,
+      errorMessage = null;
 
   factory AuthSessionViewState.fromSession(SessionInfo session) {
     return AuthSessionViewState(
       isLoggedIn: session.isLoggedIn,
+      uid: session.uid,
       username: session.username,
       isLoggingOut: false,
     );
@@ -35,6 +40,7 @@ class AuthSessionViewState {
 
   AuthSessionViewState copyWith({
     bool? isLoggedIn,
+    String? uid,
     String? username,
     bool? isLoggingOut,
     String? errorMessage,
@@ -42,6 +48,7 @@ class AuthSessionViewState {
   }) {
     return AuthSessionViewState(
       isLoggedIn: isLoggedIn ?? this.isLoggedIn,
+      uid: uid ?? this.uid,
       username: username ?? this.username,
       isLoggingOut: isLoggingOut ?? this.isLoggingOut,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
@@ -67,7 +74,8 @@ class AuthSessionController extends AsyncNotifier<AuthSessionViewState> {
   }
 
   Future<bool> logout() async {
-    final current = state.asData?.value ?? const AuthSessionViewState.signedOut();
+    final current =
+        state.asData?.value ?? const AuthSessionViewState.signedOut();
     if (current.isLoggingOut) {
       return false;
     }

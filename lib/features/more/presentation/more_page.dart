@@ -10,6 +10,7 @@ import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/more/presentation/appearance_settings_page.dart';
 import 'package:y300/features/more/presentation/data_storage_page.dart';
+import 'package:y300/features/profile/presentation/user_profile_page.dart';
 
 class MorePage extends ConsumerStatefulWidget {
   const MorePage({super.key});
@@ -26,13 +27,15 @@ class _MorePageState extends ConsumerState<MorePage> {
 
   @override
   Widget build(BuildContext context) {
-    final authSession = ref.watch(authSessionControllerProvider).asData?.value ??
+    final authSession =
+        ref.watch(authSessionControllerProvider).asData?.value ??
         const AuthSessionViewState.signedOut();
-    final forumMode = ref.watch(forumShellModeControllerProvider).asData?.value ??
+    final forumMode =
+        ref.watch(forumShellModeControllerProvider).asData?.value ??
         ForumShellMode.webview;
     final appearanceSettings =
         ref.watch(appAppearanceControllerProvider).asData?.value ??
-            AppAppearanceSettings.defaults();
+        AppAppearanceSettings.defaults();
     final diagnosticMode = ref.watch(syncDiagnosticModeControllerProvider);
     final diagnosticEnabled = diagnosticMode.asData?.value ?? false;
 
@@ -46,6 +49,19 @@ class _MorePageState extends ConsumerState<MorePage> {
             onLogout: () => _confirmAndLogout(context, ref),
           ),
           ListTile(
+            key: const Key('more-my-profile-entry'),
+            leading: const Icon(Icons.person_outline),
+            title: const Text('我的资料'),
+            subtitle: Text(
+              authSession.isLoggedIn
+                  ? _myProfileSubtitle(authSession)
+                  : '登录后查看个人资料、消息提醒',
+            ),
+            onTap: authSession.isLoggedIn
+                ? () => _openMyProfilePage(context)
+                : () => _openLoginPage(context),
+          ),
+          ListTile(
             key: const Key('more-forum-mode-entry'),
             leading: const Icon(Icons.public_outlined),
             title: const Text('论坛显示模式'),
@@ -56,7 +72,9 @@ class _MorePageState extends ConsumerState<MorePage> {
             key: const Key('more-appearance-entry'),
             leading: const Icon(Icons.palette_outlined),
             title: const Text('外观与文字'),
-            subtitle: Text('当前：${appearanceSettings.themePreference.displayLabel}'),
+            subtitle: Text(
+              '当前：${appearanceSettings.themePreference.displayLabel}',
+            ),
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
@@ -72,7 +90,9 @@ class _MorePageState extends ConsumerState<MorePage> {
             subtitle: const Text('管理图片缓存与下载位置'),
             onTap: () {
               Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const DataStoragePage()),
+                MaterialPageRoute<void>(
+                  builder: (_) => const DataStoragePage(),
+                ),
               );
             },
           ),
@@ -119,9 +139,7 @@ class _MorePageState extends ConsumerState<MorePage> {
       ..showSnackBar(
         SnackBar(
           content: Text(
-            enabled
-                ? '诊断日志模式已开启，后续会写入本地 diagnostics 日志'
-                : '诊断日志模式已关闭',
+            enabled ? '诊断日志模式已开启，后续会写入本地 diagnostics 日志' : '诊断日志模式已关闭',
           ),
         ),
       );
@@ -191,16 +209,28 @@ class _MorePageState extends ConsumerState<MorePage> {
       }
       ScaffoldMessenger.of(pageContext)
         ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text('论坛显示模式切换失败：$error')),
-        );
+        ..showSnackBar(SnackBar(content: Text('论坛显示模式切换失败：$error')));
     }
   }
 
   Future<void> _openLoginPage(BuildContext context) async {
-    await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(builder: (_) => const LoginPage()),
-    );
+    await Navigator.of(
+      context,
+    ).push<bool>(MaterialPageRoute<bool>(builder: (_) => const LoginPage()));
+  }
+
+  void _openMyProfilePage(BuildContext context) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const MyProfilePage()));
+  }
+
+  String _myProfileSubtitle(AuthSessionViewState session) {
+    final username = session.username.trim();
+    if (username.isEmpty) {
+      return '查看个人资料、消息提醒';
+    }
+    return '$username 的资料与消息提醒';
   }
 
   Future<void> _confirmAndLogout(BuildContext context, WidgetRef ref) async {
@@ -226,24 +256,27 @@ class _MorePageState extends ConsumerState<MorePage> {
       return;
     }
 
-    final success = await ref.read(authSessionControllerProvider.notifier).logout();
+    final success = await ref
+        .read(authSessionControllerProvider.notifier)
+        .logout();
     if (!context.mounted) {
       return;
     }
 
     if (success) {
       ref.invalidate(forumHomeControllerProvider);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已退出登录')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已退出登录')));
       return;
     }
 
-    final message = ref.read(authSessionControllerProvider).asData?.value.errorMessage ??
+    final message =
+        ref.read(authSessionControllerProvider).asData?.value.errorMessage ??
         '退出登录失败';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 

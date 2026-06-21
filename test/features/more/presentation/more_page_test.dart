@@ -11,6 +11,10 @@ import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/library_shared/presentation/controllers/sync_diagnostic_mode_controller.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
+import 'package:y300/features/profile/data/models/my_message_models.dart';
+import 'package:y300/features/profile/data/models/user_profile_models.dart';
+import 'package:y300/features/profile/data/my_message_repository.dart';
+import 'package:y300/features/profile/data/user_profile_repository.dart';
 
 void main() {
   testWidgets('MorePage builds dark theme chrome', (tester) async {
@@ -27,10 +31,7 @@ void main() {
             () => _FakeAppAppearanceController(),
           ),
         ],
-        child: MaterialApp(
-          theme: AppTheme.dark(),
-          home: const MorePage(),
-        ),
+        child: MaterialApp(theme: AppTheme.dark(), home: const MorePage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -62,6 +63,8 @@ void main() {
     expect(find.text('更多'), findsWidgets);
     expect(find.byKey(const Key('more-login-entry')), findsOneWidget);
     expect(find.text('登录'), findsOneWidget);
+    expect(find.byKey(const Key('more-my-profile-entry')), findsOneWidget);
+    expect(find.text('我的资料'), findsOneWidget);
     expect(find.byKey(const Key('more-forum-mode-entry')), findsOneWidget);
     expect(find.text('论坛显示模式'), findsOneWidget);
     expect(find.text('当前：WebView 模式'), findsOneWidget);
@@ -72,7 +75,10 @@ void main() {
     expect(find.byKey(const Key('more-data-storage-entry')), findsOneWidget);
     expect(find.text('数据与存储'), findsOneWidget);
     expect(find.text('管理图片缓存与下载位置'), findsOneWidget);
-    expect(find.byKey(const Key('more-reader-settings-placeholder')), findsOneWidget);
+    expect(
+      find.byKey(const Key('more-reader-settings-placeholder')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('more-about-placeholder')), findsOneWidget);
     expect(find.textContaining('连续快速点击 5 次可开启诊断日志模式'), findsOneWidget);
   });
@@ -89,6 +95,12 @@ void main() {
           appAppearanceControllerProvider.overrideWith(
             () => _FakeAppAppearanceController(),
           ),
+          userProfileRepositoryProvider.overrideWithValue(
+            const _FakeUserProfileRepository(),
+          ),
+          myMessageRepositoryProvider.overrideWithValue(
+            const _FakeMyMessageRepository(),
+          ),
         ],
         child: const MaterialApp(home: MorePage()),
       ),
@@ -97,8 +109,18 @@ void main() {
 
     expect(find.byKey(const Key('more-login-entry')), findsNothing);
     expect(find.byKey(const Key('more-logout-entry')), findsOneWidget);
+    expect(find.byKey(const Key('more-my-profile-entry')), findsOneWidget);
     expect(find.text('退出登录'), findsOneWidget);
     expect(find.text('当前账号：tester'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('more-my-profile-entry')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('user-profile-page-list')), findsOneWidget);
+    expect(find.text('我的资料'), findsWidgets);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('more-logout-entry')));
     await tester.pumpAndSettle();
@@ -135,8 +157,14 @@ void main() {
     await tester.tap(find.byKey(const Key('more-forum-mode-entry')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('more-forum-mode-option-webview')), findsOneWidget);
-    expect(find.byKey(const Key('more-forum-mode-option-native')), findsOneWidget);
+    expect(
+      find.byKey(const Key('more-forum-mode-option-webview')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('more-forum-mode-option-native')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const Key('more-forum-mode-option-native')));
     await tester.pumpAndSettle();
@@ -167,8 +195,14 @@ void main() {
 
     await tester.tap(find.byKey(const Key('more-login-entry')));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('login-username-field')), 'tester');
-    await tester.enterText(find.byKey(const Key('login-password-field')), '123456');
+    await tester.enterText(
+      find.byKey(const Key('login-username-field')),
+      'tester',
+    );
+    await tester.enterText(
+      find.byKey(const Key('login-password-field')),
+      '123456',
+    );
     await tester.tap(find.byKey(const Key('login-submit-button')));
     await tester.pumpAndSettle();
 
@@ -205,7 +239,10 @@ void main() {
 
     expect(find.textContaining('论坛显示模式切换失败'), findsOneWidget);
     expect(find.text('当前：WebView 模式'), findsOneWidget);
-    expect(find.byKey(const Key('more-forum-mode-option-native')), findsOneWidget);
+    expect(
+      find.byKey(const Key('more-forum-mode-option-native')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('MorePage toggles diagnostic mode after five quick about taps', (
@@ -221,9 +258,7 @@ void main() {
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
-          syncDiagnosticModeControllerProvider.overrideWith(
-            () => controller,
-          ),
+          syncDiagnosticModeControllerProvider.overrideWith(() => controller),
           appAppearanceControllerProvider.overrideWith(
             () => _FakeAppAppearanceController(),
           ),
@@ -271,9 +306,18 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('外观与文字'), findsWidgets);
-    expect(find.byKey(const Key('appearance-theme-option-light')), findsOneWidget);
-    expect(find.byKey(const Key('appearance-theme-option-dark')), findsOneWidget);
-    expect(find.byKey(const Key('appearance-theme-option-system')), findsOneWidget);
+    expect(
+      find.byKey(const Key('appearance-theme-option-light')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('appearance-theme-option-dark')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('appearance-theme-option-system')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const Key('appearance-theme-option-dark')));
     await tester.pumpAndSettle();
@@ -371,9 +415,7 @@ class _FakeAuthRepository implements AuthRepository {
 }
 
 class _FakeForumModeSettingsRepository implements ForumModeSettingsRepository {
-  _FakeForumModeSettingsRepository({
-    this.failOnSave = false,
-  });
+  _FakeForumModeSettingsRepository({this.failOnSave = false});
 
   ForumShellMode mode = ForumShellMode.webview;
   final bool failOnSave;
@@ -411,9 +453,7 @@ class _FakeSyncDiagnosticModeController extends SyncDiagnosticModeController {
 }
 
 class _FakeAppAppearanceController extends AppAppearanceController {
-  _FakeAppAppearanceController({
-    this.failOnSave = false,
-  });
+  _FakeAppAppearanceController({this.failOnSave = false});
 
   final bool failOnSave;
   var _settings = AppAppearanceSettings.defaults();
@@ -439,5 +479,69 @@ class _FakeAppAppearanceController extends AppAppearanceController {
     _settings = previous;
     state = AsyncData(previous);
     throw StateError('save failed');
+  }
+}
+
+class _FakeUserProfileRepository implements UserProfileRepository {
+  const _FakeUserProfileRepository();
+
+  @override
+  Future<ApiResult<UserProfileData>> getUserProfile({
+    required String uid,
+  }) async {
+    return getMyProfile(uid: uid);
+  }
+
+  @override
+  Future<ApiResult<UserProfileData>> getMyProfile({required String uid}) async {
+    return const ApiSuccess<UserProfileData>(
+      UserProfileData(
+        uid: '100',
+        username: 'tester',
+        title: '我的资料',
+        credits: [UserProfileMetric(label: '总积分', value: '65')],
+        actions: [
+          UserProfileAction(
+            label: '消息提醒',
+            url: 'https://bbs.yamibo.com/home.php?mod=space&do=pm',
+          ),
+        ],
+        details: [UserProfileDetailItem(label: 'UID', value: '100')],
+      ),
+    );
+  }
+}
+
+class _FakeMyMessageRepository implements MyMessageRepository {
+  const _FakeMyMessageRepository();
+
+  @override
+  Future<ApiResult<MyMessageCenterData>> getMessageCenter() async {
+    return const ApiSuccess<MyMessageCenterData>(
+      MyMessageCenterData(
+        notifications: MyNotificationPage(
+          items: <MyNotificationItem>[],
+          count: 0,
+          page: 1,
+          perPage: 30,
+        ),
+        privateMessages: MyPrivateMessagePage(
+          items: <MyPrivateMessageItem>[],
+          count: 0,
+          page: 1,
+          perPage: 15,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Future<ApiResult<MyNotificationPage>> getNotifications() async {
+    return ApiSuccess((await getMessageCenter()).dataOrNull!.notifications);
+  }
+
+  @override
+  Future<ApiResult<MyPrivateMessagePage>> getPrivateMessages() async {
+    return ApiSuccess((await getMessageCenter()).dataOrNull!.privateMessages);
   }
 }

@@ -1681,6 +1681,11 @@ class _FakeUserProfileRepository implements UserProfileRepository {
       ),
     );
   }
+
+  @override
+  Future<ApiResult<UserProfileData>> getMyProfile({required String uid}) async {
+    return getUserProfile(uid: uid);
+  }
 }
 
 class _FakeThreadPostRateRepository implements ThreadPostRateRepository {

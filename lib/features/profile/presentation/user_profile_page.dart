@@ -5,8 +5,11 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
+import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/profile/data/profile_repository.dart';
 import 'package:y300/features/profile/data/models/user_profile_models.dart';
 import 'package:y300/features/profile/data/user_profile_repository.dart';
+import 'package:y300/features/profile/presentation/my_message_center_page.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 
 final userProfileProvider = FutureProvider.autoDispose
@@ -19,6 +22,48 @@ final userProfileProvider = FutureProvider.autoDispose
         ApiFailure(:final error) => throw error,
       };
     });
+
+final myUserProfileProvider = FutureProvider.autoDispose<UserProfileData>((
+  ref,
+) async {
+  final uid = await _resolveCurrentUid(ref);
+  final result = await ref
+      .watch(userProfileRepositoryProvider)
+      .getMyProfile(uid: uid);
+  return switch (result) {
+    ApiSuccess(:final data) => data,
+    ApiFailure(:final error) => throw error,
+  };
+});
+
+Future<String> _resolveCurrentUid(Ref ref) async {
+  final sessionUid = ref
+      .read(yamiboSessionStoreProvider)
+      .readCurrent()
+      ?.uid
+      .trim();
+  if (sessionUid != null && sessionUid.isNotEmpty && sessionUid != '0') {
+    return sessionUid;
+  }
+
+  final authSession = await ref.read(authSessionControllerProvider.future);
+  final authUid = authSession.uid.trim();
+  if (authUid.isNotEmpty && authUid != '0') {
+    return authUid;
+  }
+
+  final profileResult = await ref.read(profileRepositoryProvider).getProfile();
+  return switch (profileResult) {
+    ApiSuccess(:final data)
+        when data.uid.trim().isNotEmpty && data.uid.trim() != '0' =>
+      data.uid.trim(),
+    ApiSuccess() => throw const ApiError(
+      type: ApiErrorType.business,
+      message: '当前用户 UID 缺失，请先登录',
+    ),
+    ApiFailure(:final error) => throw error,
+  };
+}
 
 class UserProfilePage extends ConsumerWidget {
   const UserProfilePage({super.key, required this.uid});
@@ -49,6 +94,7 @@ class UserProfilePage extends ConsumerWidget {
           profile: profile,
           palette: palette,
           imageHeaderBuilder: imageHeaderBuilder,
+          isMyProfile: false,
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => _UserProfileError(
@@ -61,16 +107,67 @@ class UserProfilePage extends ConsumerWidget {
   }
 }
 
+class MyProfilePage extends ConsumerWidget {
+  const MyProfilePage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncProfile = ref.watch(myUserProfileProvider);
+    final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
+    final palette = _UserProfilePalette.resolve(Theme.of(context));
+
+    return Scaffold(
+      backgroundColor: palette.background,
+      appBar: AppBar(
+        title: Text(asyncProfile.value?.title ?? '我的资料'),
+        actions: [
+          IconButton(
+            tooltip: '首页',
+            onPressed: () =>
+                Navigator.of(context).popUntil((route) => route.isFirst),
+            icon: const Icon(Icons.home_outlined),
+          ),
+        ],
+      ),
+      body: asyncProfile.when(
+        data: (profile) => _UserProfileContent(
+          profile: profile,
+          palette: palette,
+          imageHeaderBuilder: imageHeaderBuilder,
+          isMyProfile: true,
+          onOpenMessages: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const MyMessageCenterPage(),
+              ),
+            );
+          },
+        ),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, _) => _UserProfileError(
+          error: error,
+          palette: palette,
+          onRetry: () => ref.invalidate(myUserProfileProvider),
+        ),
+      ),
+    );
+  }
+}
+
 class _UserProfileContent extends StatelessWidget {
   const _UserProfileContent({
     required this.profile,
     required this.palette,
     required this.imageHeaderBuilder,
+    required this.isMyProfile,
+    this.onOpenMessages,
   });
 
   final UserProfileData profile;
   final _UserProfilePalette palette;
   final ImageRequestHeaderBuilder imageHeaderBuilder;
+  final bool isMyProfile;
+  final VoidCallback? onOpenMessages;
 
   @override
   Widget build(BuildContext context) {
@@ -97,7 +194,12 @@ class _UserProfileContent extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _ActionGrid(profile: profile, palette: palette),
+                    _ActionGrid(
+                      profile: profile,
+                      palette: palette,
+                      isMyProfile: isMyProfile,
+                      onOpenMessages: onOpenMessages,
+                    ),
                     if (profile.signatureHtml?.trim().isNotEmpty == true) ...[
                       const SizedBox(height: 12),
                       _SignatureSection(
@@ -236,19 +338,21 @@ class _MetricCard extends StatelessWidget {
 }
 
 class _ActionGrid extends StatelessWidget {
-  const _ActionGrid({required this.profile, required this.palette});
+  const _ActionGrid({
+    required this.profile,
+    required this.palette,
+    required this.isMyProfile,
+    this.onOpenMessages,
+  });
 
   final UserProfileData profile;
   final _UserProfilePalette palette;
+  final bool isMyProfile;
+  final VoidCallback? onOpenMessages;
 
   @override
   Widget build(BuildContext context) {
-    final actions = <_ProfileAction>[
-      _ProfileAction('Ta的主题', Icons.chat_bubble, profile.threadUrl),
-      _ProfileAction('Ta的日志', Icons.sms, profile.blogUrl),
-      _ProfileAction('发短消息', Icons.message, profile.messageUrl),
-      _ProfileAction('加为好友', Icons.person_add_alt_1, profile.friendUrl),
-    ];
+    final actions = _buildActions();
     return Container(
       key: const Key('user-profile-actions'),
       padding: const EdgeInsets.all(18),
@@ -270,6 +374,65 @@ class _ActionGrid extends StatelessWidget {
       ),
     );
   }
+
+  List<_ProfileAction> _buildActions() {
+    if (profile.actions.isNotEmpty) {
+      return [
+        for (final action in profile.actions)
+          _ProfileAction(
+            action.label,
+            _iconForActionLabel(action.label),
+            action.url,
+            onTap: isMyProfile && action.label.contains('消息')
+                ? onOpenMessages
+                : null,
+          ),
+      ];
+    }
+    if (isMyProfile) {
+      return <_ProfileAction>[
+        _ProfileAction('我的主题', Icons.chat_bubble, profile.threadUrl),
+        _ProfileAction('我的日志', Icons.sms, profile.blogUrl),
+        _ProfileAction('我的收藏', Icons.star, profile.favoriteUrl),
+        _ProfileAction(
+          '消息提醒',
+          Icons.notifications,
+          profile.messageUrl,
+          onTap: onOpenMessages,
+        ),
+        _ProfileAction('我的好友', Icons.people_alt, profile.friendUrl),
+        _ProfileAction('每日签到', Icons.edit_note, profile.signUrl),
+      ];
+    }
+    return <_ProfileAction>[
+      _ProfileAction('Ta的主题', Icons.chat_bubble, profile.threadUrl),
+      _ProfileAction('Ta的日志', Icons.sms, profile.blogUrl),
+      _ProfileAction('发短消息', Icons.message, profile.messageUrl),
+      _ProfileAction('加为好友', Icons.person_add_alt_1, profile.friendUrl),
+    ];
+  }
+
+  IconData _iconForActionLabel(String label) {
+    if (label.contains('主题')) {
+      return Icons.chat_bubble;
+    }
+    if (label.contains('日志')) {
+      return Icons.sms;
+    }
+    if (label.contains('收藏')) {
+      return Icons.star;
+    }
+    if (label.contains('消息') || label.contains('短消息')) {
+      return Icons.notifications;
+    }
+    if (label.contains('好友')) {
+      return Icons.people_alt;
+    }
+    if (label.contains('签到')) {
+      return Icons.edit_note;
+    }
+    return Icons.chevron_right;
+  }
 }
 
 class _ActionTile extends StatelessWidget {
@@ -285,11 +448,13 @@ class _ActionTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: action.url == null
-            ? null
-            : () => ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('暂未接入该操作'))),
+        onTap:
+            action.onTap ??
+            (action.url == null
+                ? null
+                : () => ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('暂未接入该操作')))),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
@@ -484,11 +649,12 @@ class _UserProfileError extends StatelessWidget {
 }
 
 class _ProfileAction {
-  const _ProfileAction(this.label, this.icon, this.url);
+  const _ProfileAction(this.label, this.icon, this.url, {this.onTap});
 
   final String label;
   final IconData icon;
   final String? url;
+  final VoidCallback? onTap;
 }
 
 @immutable
