@@ -7,9 +7,11 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/profile/data/profile_repository.dart';
+import 'package:y300/features/profile/data/models/profile_blog_models.dart';
 import 'package:y300/features/profile/data/models/user_profile_models.dart';
 import 'package:y300/features/profile/data/user_profile_repository.dart';
 import 'package:y300/features/profile/presentation/my_message_center_page.dart';
+import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 
 final userProfileProvider = FutureProvider.autoDispose
@@ -142,6 +144,14 @@ class MyProfilePage extends ConsumerWidget {
               ),
             );
           },
+          onOpenBlogs: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) =>
+                    const ProfileBlogPage(initialView: ProfileBlogView.mine),
+              ),
+            );
+          },
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => _UserProfileError(
@@ -161,6 +171,7 @@ class _UserProfileContent extends StatelessWidget {
     required this.imageHeaderBuilder,
     required this.isMyProfile,
     this.onOpenMessages,
+    this.onOpenBlogs,
   });
 
   final UserProfileData profile;
@@ -168,6 +179,7 @@ class _UserProfileContent extends StatelessWidget {
   final ImageRequestHeaderBuilder imageHeaderBuilder;
   final bool isMyProfile;
   final VoidCallback? onOpenMessages;
+  final VoidCallback? onOpenBlogs;
 
   @override
   Widget build(BuildContext context) {
@@ -199,6 +211,7 @@ class _UserProfileContent extends StatelessWidget {
                       palette: palette,
                       isMyProfile: isMyProfile,
                       onOpenMessages: onOpenMessages,
+                      onOpenBlogs: onOpenBlogs,
                     ),
                     if (profile.signatureHtml?.trim().isNotEmpty == true) ...[
                       const SizedBox(height: 12),
@@ -343,12 +356,14 @@ class _ActionGrid extends StatelessWidget {
     required this.palette,
     required this.isMyProfile,
     this.onOpenMessages,
+    this.onOpenBlogs,
   });
 
   final UserProfileData profile;
   final _UserProfilePalette palette;
   final bool isMyProfile;
   final VoidCallback? onOpenMessages;
+  final VoidCallback? onOpenBlogs;
 
   @override
   Widget build(BuildContext context) {
@@ -385,6 +400,8 @@ class _ActionGrid extends StatelessWidget {
             action.url,
             onTap: isMyProfile && action.label.contains('消息')
                 ? onOpenMessages
+                : isMyProfile && action.label.contains('日志')
+                ? onOpenBlogs
                 : null,
           ),
       ];
@@ -392,7 +409,7 @@ class _ActionGrid extends StatelessWidget {
     if (isMyProfile) {
       return <_ProfileAction>[
         _ProfileAction('我的主题', Icons.chat_bubble, profile.threadUrl),
-        _ProfileAction('我的日志', Icons.sms, profile.blogUrl),
+        _ProfileAction('我的日志', Icons.sms, profile.blogUrl, onTap: onOpenBlogs),
         _ProfileAction('我的收藏', Icons.star, profile.favoriteUrl),
         _ProfileAction(
           '消息提醒',

@@ -5,9 +5,11 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/auth/data/auth_repository.dart';
+import 'package:y300/features/profile/data/models/profile_blog_models.dart';
 import 'package:y300/features/profile/data/models/user_profile_models.dart';
 import 'package:y300/features/profile/data/models/my_message_models.dart';
 import 'package:y300/features/profile/data/my_message_repository.dart';
+import 'package:y300/features/profile/data/profile_blog_repository.dart';
 import 'package:y300/features/profile/data/user_profile_repository.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 
@@ -57,6 +59,9 @@ void main() {
           myMessageRepositoryProvider.overrideWithValue(
             const _FakeMyMessageRepository(),
           ),
+          profileBlogRepositoryProvider.overrideWithValue(
+            const _FakeProfileBlogRepository(),
+          ),
           imageRequestHeaderBuilderProvider.overrideWithValue(
             const _StaticImageHeaderBuilder(),
           ),
@@ -72,6 +77,15 @@ void main() {
     expect(find.text('我的收藏'), findsOneWidget);
     expect(find.text('消息提醒'), findsOneWidget);
     expect(find.text('每日签到'), findsOneWidget);
+
+    await tester.tap(find.text('我的日志'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('profile-blog-list')), findsOneWidget);
+    expect(find.text('还没有相关的日志'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('消息提醒'));
     await tester.pumpAndSettle();
@@ -126,6 +140,10 @@ const _myProfile = UserProfileData(
       url: 'https://bbs.yamibo.com/home.php?mod=space&do=favorite',
     ),
     UserProfileAction(
+      label: '我的日志',
+      url: 'https://bbs.yamibo.com/home.php?mod=space&do=blog&view=me',
+    ),
+    UserProfileAction(
       label: '消息提醒',
       url: 'https://bbs.yamibo.com/home.php?mod=space&do=pm',
     ),
@@ -155,6 +173,45 @@ class _FakeUserProfileRepository implements UserProfileRepository {
   @override
   Future<ApiResult<UserProfileData>> getMyProfile({required String uid}) async {
     return ApiSuccess<UserProfileData>(profile);
+  }
+}
+
+class _FakeProfileBlogRepository implements ProfileBlogRepository {
+  const _FakeProfileBlogRepository();
+
+  @override
+  Future<ApiResult<ProfileBlogListPageData>> getBlogList({
+    ProfileBlogView view = ProfileBlogView.all,
+    ProfileBlogOrder order = ProfileBlogOrder.latest,
+    int page = 1,
+  }) async {
+    return ApiSuccess<ProfileBlogListPageData>(
+      ProfileBlogListPageData(
+        title: '日志',
+        activeView: view,
+        activeOrder: order,
+        viewTabs: [
+          for (final item in ProfileBlogView.values)
+            ProfileBlogNavigationTab(
+              label: item.label,
+              url: 'https://bbs.yamibo.com/home.php?view=${item.queryValue}',
+              isActive: item == view,
+            ),
+        ],
+        orderTabs: const <ProfileBlogNavigationTab>[],
+        items: const <ProfileBlogListItem>[],
+        emptyMessage: '还没有相关的日志',
+      ),
+    );
+  }
+
+  @override
+  Future<ApiResult<ProfileBlogDetailData>> getBlogDetail({
+    required String url,
+  }) async {
+    return const ApiFailure<ProfileBlogDetailData>(
+      ApiError(type: ApiErrorType.business, message: 'not used'),
+    );
   }
 }
 
