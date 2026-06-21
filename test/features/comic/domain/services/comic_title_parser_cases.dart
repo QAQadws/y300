@@ -134,6 +134,14 @@ final List<ComicTitleParserCase> currentComicSubjectParserCases =
         expectedAuthor: '柴田康平',
         expectedEpisodeLabel: '09 魔女和变容 后篇',
       ),
+      const ComicTitleParserCase(
+        id: 'real_sample_chapter_with_trailing_punct_in_book',
+        rawTitle: '【绿茶汉化组】[秋津貴央]小舞给大姐姐的投食日记。 第31话',
+        expectedNormalizedTitle: '小舞给大姐姐的投食日记',
+        expectedTranslationGroup: '绿茶汉化组',
+        expectedAuthor: '秋津貴央',
+        expectedEpisodeLabel: '第31话',
+      ),
     ];
 
 final List<ComicTitleRuleSummaryCase> stageOneComicTitleRuleSummaryCases =
