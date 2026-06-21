@@ -11,6 +11,7 @@ import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.d
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
+import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
@@ -187,6 +188,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                     onOpenPostComment: (post) {
                       _openPostCommentSheet(args, controller, post);
                     },
+                    onOpenAuthorProfile: _openAuthorProfile,
                     onCopyActionUrl: _copyActionUrl,
                     onOpenPostLink: _openForumLink,
                     onOpenPostImages: _openPostImages,
@@ -393,6 +395,17 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
 
   void _openPostImages(ThreadPost post, ThreadPostImageOpenRequest request) {
     _copyUrl('${post.number}# 图片链接', request.image.url);
+  }
+
+  void _openAuthorProfile(ThreadPost post) {
+    final uid = post.authorId.trim();
+    if (uid.isEmpty) {
+      _showSnackBar('用户 UID 缺失');
+      return;
+    }
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => UserProfilePage(uid: uid)));
   }
 
   void _scheduleTargetPostScroll(ThreadDetailPageState? state) {

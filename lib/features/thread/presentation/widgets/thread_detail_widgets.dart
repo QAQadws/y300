@@ -29,6 +29,7 @@ class ThreadDetailContent extends StatelessWidget {
     required this.onOpenPostReply,
     required this.onOpenPostRate,
     required this.onOpenPostComment,
+    required this.onOpenAuthorProfile,
     required this.onCopyActionUrl,
     required this.onOpenPostLink,
     this.onOpenPostImages,
@@ -53,6 +54,7 @@ class ThreadDetailContent extends StatelessWidget {
   final ValueChanged<ThreadPost> onOpenPostReply;
   final ValueChanged<ThreadPost> onOpenPostRate;
   final ValueChanged<ThreadPost> onOpenPostComment;
+  final ValueChanged<ThreadPost> onOpenAuthorProfile;
   final void Function(String label, String url) onCopyActionUrl;
   final ValueChanged<String> onOpenPostLink;
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
@@ -105,6 +107,7 @@ class ThreadDetailContent extends StatelessWidget {
           onOpenPostReply: onOpenPostReply,
           onOpenPostRate: onOpenPostRate,
           onOpenPostComment: onOpenPostComment,
+          onOpenAuthorProfile: onOpenAuthorProfile,
           onCopyActionUrl: onCopyActionUrl,
           onOpenPostLink: onOpenPostLink,
           onOpenPostImages: onOpenPostImages,
@@ -323,6 +326,7 @@ class ThreadPostCard extends StatelessWidget {
     required this.onOpenPostReply,
     required this.onOpenPostRate,
     required this.onOpenPostComment,
+    required this.onOpenAuthorProfile,
     required this.onCopyActionUrl,
     required this.onOpenPostLink,
     required this.onOpenPostImages,
@@ -341,6 +345,7 @@ class ThreadPostCard extends StatelessWidget {
   final ValueChanged<ThreadPost> onOpenPostReply;
   final ValueChanged<ThreadPost> onOpenPostRate;
   final ValueChanged<ThreadPost> onOpenPostComment;
+  final ValueChanged<ThreadPost> onOpenAuthorProfile;
   final void Function(String label, String url) onCopyActionUrl;
   final ValueChanged<String> onOpenPostLink;
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
@@ -368,16 +373,26 @@ class ThreadPostCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ThreadAuthorAvatar(
+            key: Key('thread-author-avatar-${post.pid}'),
             author: post.author,
             avatarUrl: post.avatarUrl,
             palette: palette,
+            onTap: post.authorId.trim().isEmpty
+                ? null
+                : () => onOpenAuthorProfile(post),
           ),
           const SizedBox(width: 9),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _PostHeader(post: post, palette: palette),
+                _PostHeader(
+                  post: post,
+                  palette: palette,
+                  onOpenAuthorProfile: post.authorId.trim().isEmpty
+                      ? null
+                      : () => onOpenAuthorProfile(post),
+                ),
                 if (showComicEntry) ...[
                   const SizedBox(height: 8),
                   CandidateShelfActionRow(
@@ -459,10 +474,15 @@ class ThreadPostCard extends StatelessWidget {
 }
 
 class _PostHeader extends StatelessWidget {
-  const _PostHeader({required this.post, required this.palette});
+  const _PostHeader({
+    required this.post,
+    required this.palette,
+    this.onOpenAuthorProfile,
+  });
 
   final ThreadPost post;
   final ThreadDetailNativePalette palette;
+  final VoidCallback? onOpenAuthorProfile;
 
   @override
   Widget build(BuildContext context) {
@@ -474,13 +494,20 @@ class _PostHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                post.author.isNotEmpty ? post.author : '匿名',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: textTheme.labelLarge?.copyWith(
-                  color: palette.author,
-                  fontWeight: FontWeight.w800,
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(4),
+                  onTap: onOpenAuthorProfile,
+                  child: Text(
+                    post.author.isNotEmpty ? post.author : '匿名',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.labelLarge?.copyWith(
+                      color: palette.author,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
               ),
               if (post.dateline.trim().isNotEmpty) ...[
@@ -1340,16 +1367,18 @@ class ThreadAuthorAvatar extends StatelessWidget {
     required this.author,
     required this.avatarUrl,
     required this.palette,
+    this.onTap,
   });
 
   final String author;
   final String? avatarUrl;
   final ThreadDetailNativePalette palette;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final imageUrl = avatarUrl?.trim();
-    return CircleAvatar(
+    final avatar = CircleAvatar(
       radius: 17,
       backgroundColor: palette.avatarBackground,
       foregroundColor: palette.avatarForeground,
@@ -1362,6 +1391,14 @@ class ThreadAuthorAvatar extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.w800),
             )
           : null,
+    );
+    if (onTap == null) {
+      return avatar;
+    }
+    return InkWell(
+      customBorder: const CircleBorder(),
+      onTap: onTap,
+      child: avatar,
     );
   }
 }

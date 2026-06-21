@@ -24,6 +24,8 @@ import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
+import 'package:y300/features/profile/data/models/user_profile_models.dart';
+import 'package:y300/features/profile/data/user_profile_repository.dart';
 import 'package:y300/features/tags/data/forum_tag_repository.dart';
 import 'package:y300/features/tags/data/tag_providers.dart';
 import 'package:y300/features/tags/data/yamibo_tag_thread_page_repository.dart';
@@ -1266,6 +1268,81 @@ void main() {
       );
     });
 
+    testWidgets('opens user profile from post author name', (tester) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            subject: '测试主题',
+            author: 'alice',
+            replies: 0,
+            views: 1,
+            currentPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '509957',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('alice').first);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('user-profile-page-list')), findsOneWidget);
+      expect(find.text('alice的资料'), findsWidgets);
+      expect(find.text('5263'), findsOneWidget);
+    });
+
+    testWidgets('opens user profile from post author avatar', (tester) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            subject: '测试主题',
+            author: 'alice',
+            replies: 0,
+            views: 1,
+            currentPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '509957',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('thread-author-avatar-p1')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('user-profile-page-list')), findsOneWidget);
+      expect(find.text('alice的资料'), findsWidgets);
+    });
+
     testWidgets('favorites thread from app bar action', (tester) async {
       final repository = _FakeThreadRepository((tid, page) async {
         return ApiSuccess(
@@ -1405,6 +1482,9 @@ Widget _buildTestApp(
       ),
       threadPostLocatorProvider.overrideWithValue(
         threadPostLocator ?? _FakeThreadPostLocator(null),
+      ),
+      userProfileRepositoryProvider.overrideWithValue(
+        const _FakeUserProfileRepository(),
       ),
       forumTagRepositoryProvider.overrideWithValue(_FakeForumTagRepository()),
       yamiboTagThreadPageRepositoryProvider.overrideWithValue(
@@ -1576,6 +1656,30 @@ class _FakeThreadPostLocator implements ThreadPostLocator {
       );
     }
     return ApiSuccess<ThreadPostLocation>(value);
+  }
+}
+
+class _FakeUserProfileRepository implements UserProfileRepository {
+  const _FakeUserProfileRepository();
+
+  @override
+  Future<ApiResult<UserProfileData>> getUserProfile({
+    required String uid,
+  }) async {
+    return ApiSuccess<UserProfileData>(
+      UserProfileData(
+        uid: uid,
+        username: 'alice',
+        title: 'alice的资料',
+        avatarUrl: 'https://bbs.yamibo.com/avatar.jpg',
+        credits: const <UserProfileMetric>[
+          UserProfileMetric(label: '总积分', value: '5263'),
+        ],
+        details: const <UserProfileDetailItem>[
+          UserProfileDetailItem(label: 'UID', value: '509957'),
+        ],
+      ),
+    );
   }
 }
 
