@@ -10,6 +10,7 @@ import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_pa
 import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
 import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/library_shared/domain/services/sync_diagnostic_recorder.dart';
+import 'package:y300/features/tags/domain/services/yamibo_tag_page_parsing.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
@@ -88,6 +89,7 @@ class ComicEpisodeDiscoveryService {
     required ComicConsecutiveOpPostParser opPostParser,
     required CatalogHtmlFetcher catalogHtmlFetcher,
     CatalogThreadHtmlParser? catalogThreadHtmlParser,
+    YamiboTagPageParsing? tagPageParsing,
     ForumPostDomExtractor? domExtractor,
     ForumThreadUrlParser? urlParser,
     SyncDiagnosticRecorder? diagnosticRecorder,
@@ -95,8 +97,12 @@ class ComicEpisodeDiscoveryService {
   }) : _fetchThreadDetail = fetchThreadDetail,
        _opPostParser = opPostParser,
        _catalogHtmlFetcher = catalogHtmlFetcher,
+       _tagPageParsing = tagPageParsing ?? const YamiboTagPageParsing(),
        _catalogThreadHtmlParser =
-           catalogThreadHtmlParser ?? CatalogThreadHtmlParser(),
+           catalogThreadHtmlParser ??
+           CatalogThreadHtmlParser(
+             tagPageParsing: tagPageParsing ?? const YamiboTagPageParsing(),
+           ),
        _domExtractor =
            domExtractor ??
            ForumPostDomExtractor(
@@ -115,6 +121,7 @@ class ComicEpisodeDiscoveryService {
   final ThreadDetailFetcher _fetchThreadDetail;
   final ComicConsecutiveOpPostParser _opPostParser;
   final CatalogHtmlFetcher _catalogHtmlFetcher;
+  final YamiboTagPageParsing _tagPageParsing;
   final CatalogThreadHtmlParser _catalogThreadHtmlParser;
   final ForumPostDomExtractor _domExtractor;
   final ForumThreadUrlParser _urlParser;
@@ -326,7 +333,9 @@ class ComicEpisodeDiscoveryService {
     final queue = Queue<String>();
     final visitedPages = <String>{};
     final links = <String, ComicEpisodeLink>{};
-    final normalizedEntry = _normalizeCatalogEntryUrl(catalogUrl);
+    final normalizedEntry = _tagPageParsing.normalizeCatalogEntryUrl(
+      catalogUrl,
+    );
     queue.add(normalizedEntry);
 
     while (queue.isNotEmpty && visitedPages.length < _config.maxCatalogPages) {
@@ -380,7 +389,9 @@ class ComicEpisodeDiscoveryService {
           totalPages != null &&
           totalPages > currentPage) {
         for (var page = currentPage + 1; page <= totalPages; page++) {
-          final candidate = _withPage(basePageUri, page).toString();
+          final candidate = _tagPageParsing
+              .withPage(basePageUri, page)
+              .toString();
           if (!visitedPages.contains(candidate)) {
             queue.add(candidate);
           }
@@ -389,34 +400,6 @@ class ComicEpisodeDiscoveryService {
     }
 
     return links.values.toList(growable: false);
-  }
-
-  String _normalizeCatalogEntryUrl(String rawUrl) {
-    final parsed = Uri.tryParse(rawUrl.trim());
-    if (parsed == null) {
-      return rawUrl;
-    }
-    final resolved = parsed.hasScheme
-        ? parsed
-        : Uri.parse('${AppConfig.siteBaseUrl}/').resolveUri(parsed);
-    final params = Map<String, String>.from(resolved.queryParameters);
-    if ((params['mod'] ?? '').toLowerCase() == 'tag') {
-      params['type'] = 'thread';
-      params['page'] = params['page']?.trim().isNotEmpty == true
-          ? params['page']!
-          : '1';
-      return resolved.replace(queryParameters: params).toString();
-    }
-    return resolved.toString();
-  }
-
-  Uri _withPage(Uri uri, int page) {
-    final params = Map<String, String>.from(uri.queryParameters);
-    params['page'] = page.toString();
-    if ((params['mod'] ?? '').toLowerCase() == 'tag') {
-      params['type'] = 'thread';
-    }
-    return uri.replace(queryParameters: params);
   }
 
   Future<_ParsedThreadRoot?> _fetchAndParse(
