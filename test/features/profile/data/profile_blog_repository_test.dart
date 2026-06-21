@@ -42,6 +42,27 @@ void main() {
     expect(requested.queryParameters['mobile'], '2');
   });
 
+  test(
+    'YamiboProfileBlogRepository omits order for latest public blogs',
+    () async {
+      final adapter = _ProfileBlogHtmlTestAdapter(
+        responsePath: 'docs/html/我的日志/随便看看-最新发表的日志.html',
+      );
+      final repository = _buildRepository(adapter);
+
+      final result = await repository.getBlogList(
+        view: ProfileBlogView.all,
+        order: ProfileBlogOrder.latest,
+      );
+
+      expect(result.isSuccess, isTrue);
+      final requested = adapter.requestedUris.single;
+      expect(requested.queryParameters['view'], 'all');
+      expect(requested.queryParameters.containsKey('order'), isFalse);
+      expect(requested.queryParameters['mobile'], '2');
+    },
+  );
+
   test('YamiboProfileBlogRepository requests blog detail mobile HTML', () async {
     final adapter = _ProfileBlogHtmlTestAdapter(
       responsePath: 'docs/html/我的日志/一个日志.html',

@@ -37,7 +37,8 @@ class YamiboProfileBlogRepository implements ProfileBlogRepository {
       'do': 'blog',
       'view': view.queryValue,
       'mobile': '2',
-      if (view == ProfileBlogView.all) 'order': order.queryValue,
+      if (view == ProfileBlogView.all && order == ProfileBlogOrder.hot)
+        'order': order.queryValue,
       if (page > 1) 'page': page.toString(),
     };
     final htmlResult = await _htmlClient.getMobilePage(
