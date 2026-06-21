@@ -37,6 +37,33 @@ class ThreadPostBodyStyle {
   final double imageMinAspectRatio;
   final double imageMaxAspectRatio;
   final BoxFit imageFit;
+
+  ThreadPostBodyStyle copyWith({
+    double? blockSpacing,
+    TextStyle? textStyle,
+    TextStyle? linkTextStyle,
+    BorderRadius? imageBorderRadius,
+    double? imageMinHeight,
+    double? imageMaxHeight,
+    double? imageFallbackAspectRatio,
+    double? imageMinAspectRatio,
+    double? imageMaxAspectRatio,
+    BoxFit? imageFit,
+  }) {
+    return ThreadPostBodyStyle(
+      blockSpacing: blockSpacing ?? this.blockSpacing,
+      textStyle: textStyle ?? this.textStyle,
+      linkTextStyle: linkTextStyle ?? this.linkTextStyle,
+      imageBorderRadius: imageBorderRadius ?? this.imageBorderRadius,
+      imageMinHeight: imageMinHeight ?? this.imageMinHeight,
+      imageMaxHeight: imageMaxHeight ?? this.imageMaxHeight,
+      imageFallbackAspectRatio:
+          imageFallbackAspectRatio ?? this.imageFallbackAspectRatio,
+      imageMinAspectRatio: imageMinAspectRatio ?? this.imageMinAspectRatio,
+      imageMaxAspectRatio: imageMaxAspectRatio ?? this.imageMaxAspectRatio,
+      imageFit: imageFit ?? this.imageFit,
+    );
+  }
 }
 
 class ThreadPostImageOpenRequest {
@@ -175,6 +202,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
     if (block is ThreadPostTextBlock) {
       return ThreadPostTextBlockView(
         runs: block.runs,
+        imageHeaderBuilder: imageHeaderBuilder,
         style: style,
         textTransformer: textTransformer,
         onOpenLink: onOpenLink,
@@ -191,7 +219,83 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
         onOpenImages: onOpenImages,
       );
     }
+    if (block is ThreadPostQuoteBlock) {
+      return ThreadPostQuoteBlockView(
+        document: document,
+        quote: block,
+        images: images,
+        imageHeaderBuilder: imageHeaderBuilder,
+        style: style,
+        textTransformer: textTransformer,
+        onOpenLink: onOpenLink,
+        onOpenImage: onOpenImage,
+        onOpenImages: onOpenImages,
+      );
+    }
     return const SizedBox.shrink();
+  }
+}
+
+class ThreadPostQuoteBlockView extends StatelessWidget {
+  const ThreadPostQuoteBlockView({
+    super.key,
+    required this.document,
+    required this.quote,
+    required this.images,
+    required this.imageHeaderBuilder,
+    required this.style,
+    required this.textTransformer,
+    required this.onOpenLink,
+    required this.onOpenImage,
+    required this.onOpenImages,
+  });
+
+  final ThreadPostBodyDocument document;
+  final ThreadPostQuoteBlock quote;
+  final List<ThreadPostImageBlock> images;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final ThreadPostBodyStyle style;
+  final ThreadPostTextTransformer? textTransformer;
+  final ThreadPostLinkTapHandler? onOpenLink;
+  final ThreadPostImageOpenHandler? onOpenImage;
+  final void Function(List<ThreadPostImageBlock> images, int initialIndex)?
+  onOpenImages;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final quoteStyle = style.copyWith(
+      blockSpacing: (style.blockSpacing * 0.72).clamp(4, 8).toDouble(),
+      textStyle: DefaultTextStyle.of(
+        context,
+      ).style.merge(style.textStyle).copyWith(color: scheme.onSurfaceVariant),
+    );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.38),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var index = 0; index < quote.blocks.length; index++) ...[
+            if (index > 0) SizedBox(height: quoteStyle.blockSpacing),
+            _ThreadPostBodyBlockView(
+              document: document,
+              block: quote.blocks[index],
+              images: images,
+              imageHeaderBuilder: imageHeaderBuilder,
+              style: quoteStyle,
+              textTransformer: textTransformer,
+              onOpenLink: onOpenLink,
+              onOpenImage: onOpenImage,
+              onOpenImages: onOpenImages,
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
 
@@ -199,12 +303,14 @@ class ThreadPostTextBlockView extends StatelessWidget {
   const ThreadPostTextBlockView({
     super.key,
     required this.runs,
+    this.imageHeaderBuilder,
     this.style = ThreadPostBodyStyle.defaults,
     this.textTransformer,
     this.onOpenLink,
   });
 
   final List<ThreadPostTextRun> runs;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ThreadPostBodyStyle style;
   final ThreadPostTextTransformer? textTransformer;
   final ThreadPostLinkTapHandler? onOpenLink;
@@ -215,7 +321,10 @@ class ThreadPostTextBlockView extends StatelessWidget {
     return RichText(
       text: TextSpan(
         children: [
-          for (final run in runs) _spanForRun(context, run, baseStyle),
+          for (final run in runs)
+            run.inlineImage == null
+                ? _spanForRun(context, run, baseStyle)
+                : _inlineImageSpan(context, run.inlineImage!),
         ],
       ),
       selectionRegistrar: SelectionContainer.maybeOf(context),
@@ -263,6 +372,34 @@ class ThreadPostTextBlockView extends StatelessWidget {
                 )?.showSnackBar(const SnackBar(content: Text('链接已复制')));
               })
           : null,
+    );
+  }
+
+  InlineSpan _inlineImageSpan(
+    BuildContext context,
+    ThreadPostInlineImage image,
+  ) {
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.middle,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 1),
+        child: SizedBox(
+          key: Key('thread-post-inline-image-${image.url}'),
+          width: 22,
+          height: 22,
+          child: LibraryCachedImage(
+            imageUrl: image.url,
+            fit: BoxFit.contain,
+            placeholder: const SizedBox.shrink(),
+            errorPlaceholder: Icon(
+              Icons.image_not_supported_outlined,
+              size: 14,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            headerBuilder: imageHeaderBuilder,
+          ),
+        ),
+      ),
     );
   }
 }

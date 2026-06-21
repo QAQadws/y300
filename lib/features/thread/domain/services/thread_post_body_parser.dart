@@ -66,6 +66,31 @@ class ThreadPostBodyParser {
     );
   }
 
+  ThreadPostInlineImage? _parseInlineSmiley(html_dom.Element image) {
+    final rawUrl =
+        DefaultForumImageSourcePipeline.firstDomImageSourceFromElement(
+          image,
+          domAttributes: const <String>['src', 'data-src', 'data-original'],
+        );
+    if (rawUrl == null || rawUrl.isEmpty) {
+      return null;
+    }
+    final normalized = DefaultForumImageSourcePipeline.normalizeImageSource(
+      rawUrl,
+      urlResolver: _urlResolver,
+    );
+    if (normalized == null ||
+        !DefaultForumImageSourcePipeline.isHttpImageUrl(normalized) ||
+        !normalized.toLowerCase().contains('/static/image/smiley/')) {
+      return null;
+    }
+    return ThreadPostInlineImage(
+      url: normalized,
+      rawUrl: rawUrl,
+      altText: image.attributes['alt']?.trim(),
+    );
+  }
+
   String? _resolve(String? raw) {
     final value = raw?.trim();
     if (value == null || value.isEmpty || value.startsWith('javascript:')) {
@@ -122,11 +147,35 @@ class _ThreadPostBodyBuildContext {
       return;
     }
     if (tag == 'img') {
+      final smiley = parser._parseInlineSmiley(node);
+      if (smiley != null) {
+        textBuffer.addInlineImage(smiley, style);
+        return;
+      }
       final image = parser._parseImage(node, imageIndex);
       if (image != null) {
         flushText();
         blocks.add(image);
         imageIndex += 1;
+      }
+      return;
+    }
+    if (node.classes.contains('quote') || tag == 'blockquote') {
+      flushText();
+      final quoteRoot = tag == 'blockquote'
+          ? node
+          : node.querySelector('blockquote') ?? node;
+      final quoteContext = _ThreadPostBodyBuildContext(parser: parser);
+      quoteContext.imageIndex = imageIndex;
+      quoteContext.visitChildren(quoteRoot, style);
+      quoteContext.flushText();
+      imageIndex = quoteContext.imageIndex;
+      if (quoteContext.blocks.isNotEmpty) {
+        blocks.add(
+          ThreadPostQuoteBlock(
+            blocks: List<ThreadPostBodyBlock>.unmodifiable(quoteContext.blocks),
+          ),
+        );
       }
       return;
     }
@@ -151,7 +200,8 @@ class _ThreadPostBodyBuildContext {
 class _TextBlockBuffer {
   final List<ThreadPostTextRun> _runs = <ThreadPostTextRun>[];
 
-  bool get hasContent => _runs.any((run) => run.text.trim().isNotEmpty);
+  bool get hasContent =>
+      _runs.any((run) => run.inlineImage != null || run.text.trim().isNotEmpty);
 
   void addText(String raw, _InlineStyle style) {
     final text = _normalizeInlineText(raw);
@@ -169,14 +219,27 @@ class _TextBlockBuffer {
     );
   }
 
+  void addInlineImage(ThreadPostInlineImage image, _InlineStyle style) {
+    _runs.add(
+      ThreadPostTextRun(
+        text: image.altText?.isNotEmpty == true ? image.altText! : '',
+        linkUrl: style.linkUrl,
+        isBold: style.isBold,
+        isItalic: style.isItalic,
+        isUnderline: style.isUnderline,
+        inlineImage: image,
+      ),
+    );
+  }
+
   ThreadPostTextBlock? takeBlock() {
     if (!hasContent) {
       _runs.clear();
       return null;
     }
-    final normalized = _mergeAdjacentRuns(
-      _runs,
-    ).where((run) => run.text.trim().isNotEmpty).toList(growable: false);
+    final normalized = _mergeAdjacentRuns(_runs)
+        .where((run) => run.inlineImage != null || run.text.trim().isNotEmpty)
+        .toList(growable: false);
     _runs.clear();
     if (normalized.isEmpty) {
       return null;
@@ -206,7 +269,9 @@ class _TextBlockBuffer {
   }
 
   bool _sameStyle(ThreadPostTextRun a, ThreadPostTextRun b) {
-    return a.linkUrl == b.linkUrl &&
+    return a.inlineImage == null &&
+        b.inlineImage == null &&
+        a.linkUrl == b.linkUrl &&
         a.isBold == b.isBold &&
         a.isItalic == b.isItalic &&
         a.isUnderline == b.isUnderline;

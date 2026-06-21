@@ -4,6 +4,7 @@ import 'package:y300/app/theme/app_theme_tokens.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/profile/data/models/profile_blog_models.dart';
 import 'package:y300/features/profile/data/profile_blog_repository.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
@@ -104,6 +105,7 @@ class _ProfileBlogPageState extends ConsumerState<ProfileBlogPage> {
           data: data,
           request: _request,
           palette: palette,
+          imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
           onSelectView: (view) {
             setState(() {
               _request = _request.copyWith(view: view, page: 1);
@@ -184,6 +186,7 @@ class _ProfileBlogListContent extends StatelessWidget {
     required this.data,
     required this.request,
     required this.palette,
+    required this.imageHeaderBuilder,
     required this.onSelectView,
     required this.onSelectOrder,
     required this.onOpenBlog,
@@ -193,6 +196,7 @@ class _ProfileBlogListContent extends StatelessWidget {
   final ProfileBlogListPageData data;
   final ProfileBlogListRequest request;
   final _ProfileBlogPalette palette;
+  final ImageRequestHeaderBuilder imageHeaderBuilder;
   final ValueChanged<ProfileBlogView> onSelectView;
   final ValueChanged<ProfileBlogOrder> onSelectOrder;
   final ValueChanged<ProfileBlogListItem> onOpenBlog;
@@ -230,6 +234,7 @@ class _ProfileBlogListContent extends StatelessWidget {
                     key: Key('profile-blog-item-${item.id}'),
                     item: item,
                     palette: palette,
+                    imageHeaderBuilder: imageHeaderBuilder,
                     onTap: () => onOpenBlog(item),
                   ),
                   const SizedBox(height: 10),
@@ -366,11 +371,13 @@ class _ProfileBlogListCard extends StatelessWidget {
     super.key,
     required this.item,
     required this.palette,
+    required this.imageHeaderBuilder,
     required this.onTap,
   });
 
   final ProfileBlogListItem item;
   final _ProfileBlogPalette palette;
+  final ImageRequestHeaderBuilder imageHeaderBuilder;
   final VoidCallback onTap;
 
   @override
@@ -388,15 +395,11 @@ class _ProfileBlogListCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  CircleAvatar(
+                  _ProfileBlogAvatar(
+                    imageUrl: item.avatarUrl,
                     radius: 17,
-                    backgroundColor: palette.iconBackground,
-                    backgroundImage: item.avatarUrl == null
-                        ? null
-                        : NetworkImage(item.avatarUrl!),
-                    child: item.avatarUrl == null
-                        ? Icon(Icons.person, color: palette.accent, size: 18)
-                        : null,
+                    palette: palette,
+                    imageHeaderBuilder: imageHeaderBuilder,
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -599,15 +602,11 @@ class _BlogDetailCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              CircleAvatar(
+              _ProfileBlogAvatar(
+                imageUrl: data.avatarUrl,
                 radius: 17,
-                backgroundColor: palette.iconBackground,
-                backgroundImage: data.avatarUrl == null
-                    ? null
-                    : NetworkImage(data.avatarUrl!),
-                child: data.avatarUrl == null
-                    ? Icon(Icons.person, color: palette.accent, size: 18)
-                    : null,
+                palette: palette,
+                imageHeaderBuilder: imageHeaderBuilder,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -673,15 +672,11 @@ class _CommentCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              CircleAvatar(
+              _ProfileBlogAvatar(
+                imageUrl: comment.avatarUrl,
                 radius: 15,
-                backgroundColor: palette.iconBackground,
-                backgroundImage: comment.avatarUrl == null
-                    ? null
-                    : NetworkImage(comment.avatarUrl!),
-                child: comment.avatarUrl == null
-                    ? Icon(Icons.person, color: palette.accent, size: 16)
-                    : null,
+                palette: palette,
+                imageHeaderBuilder: imageHeaderBuilder,
               ),
               const SizedBox(width: 9),
               Expanded(
@@ -711,6 +706,67 @@ class _CommentCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ProfileBlogAvatar extends StatelessWidget {
+  const _ProfileBlogAvatar({
+    required this.imageUrl,
+    required this.radius,
+    required this.palette,
+    required this.imageHeaderBuilder,
+  });
+
+  final String? imageUrl;
+  final double radius;
+  final _ProfileBlogPalette palette;
+  final ImageRequestHeaderBuilder imageHeaderBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = radius * 2;
+    final placeholder = _ProfileBlogAvatarPlaceholder(
+      palette: palette,
+      iconSize: radius + 1,
+    );
+    final url = imageUrl?.trim();
+    return SizedBox(
+      width: size,
+      height: size,
+      child: ClipOval(
+        child: url == null || url.isEmpty
+            ? placeholder
+            : LibraryCachedImage(
+                imageUrl: url,
+                fit: BoxFit.cover,
+                width: size,
+                height: size,
+                placeholder: placeholder,
+                errorPlaceholder: placeholder,
+                headerBuilder: imageHeaderBuilder,
+              ),
+      ),
+    );
+  }
+}
+
+class _ProfileBlogAvatarPlaceholder extends StatelessWidget {
+  const _ProfileBlogAvatarPlaceholder({
+    required this.palette,
+    required this.iconSize,
+  });
+
+  final _ProfileBlogPalette palette;
+  final double iconSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: palette.iconBackground,
+      child: Center(
+        child: Icon(Icons.person, color: palette.accent, size: iconSize),
       ),
     );
   }

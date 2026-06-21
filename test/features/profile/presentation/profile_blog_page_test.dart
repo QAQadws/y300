@@ -4,9 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/profile/data/models/profile_blog_models.dart';
 import 'package:y300/features/profile/data/profile_blog_repository.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 
 void main() {
   testWidgets('ProfileBlogPage switches blog tabs and opens detail', (
@@ -58,6 +60,16 @@ void main() {
     expect(_richTextContaining('一直对着电脑屏幕'), findsOneWidget);
     expect(find.text('日志评论'), findsOneWidget);
     expect(_richTextContaining('探险的感觉'), findsOneWidget);
+    expect(find.byType(ThreadPostQuoteBlockView), findsOneWidget);
+    expect(_richTextContaining('thessky: 引用正文'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is LibraryCachedImage &&
+            widget.imageUrl?.contains('/uc_server/data/avatar/') == true,
+      ),
+      findsWidgets,
+    );
   });
 }
 
@@ -115,7 +127,8 @@ class _FakeProfileBlogRepository implements ProfileBlogRepository {
         title: '我们小区的公共交通极其不便利',
         author: 'hsyhlj',
         authorUrl: null,
-        avatarUrl: null,
+        avatarUrl:
+            'https://bbs.yamibo.com/uc_server/data/avatar/000/25/75/82_avatar_small.jpg',
         dateline: '2026-6-18 00:25',
         views: 39,
         commentsCount: 5,
@@ -126,9 +139,11 @@ class _FakeProfileBlogRepository implements ProfileBlogRepository {
             id: '646846',
             author: 'thessky',
             authorUrl: null,
-            avatarUrl: null,
+            avatarUrl:
+                'https://bbs.yamibo.com/uc_server/data/avatar/000/57/74/94_avatar_small.jpg',
             dateline: '2026-6-18 09:39',
-            messageHtml: '<p>探险的感觉</p>',
+            messageHtml:
+                '<div class="quote"><blockquote><b>thessky</b>: 引用正文</blockquote></div><p>探险的感觉</p>',
           ),
         ],
       ),

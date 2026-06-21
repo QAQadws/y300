@@ -63,6 +63,77 @@ void main() {
     expect(_postRichTextPlainTexts(tester), contains('链接'));
   });
 
+  testWidgets('ThreadPostHtml renders reply quote as a quote block', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ThreadPostHtml(
+          data:
+              '<div class="quote"><blockquote><b>thessky</b>: 引用正文<br />第二行</blockquote></div><p>回复正文</p>',
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.byType(ThreadPostQuoteBlockView), findsOneWidget);
+    expect(_postRichTextPlainTexts(tester), contains('thessky: 引用正文'));
+    expect(_postRichTextPlainTexts(tester), contains('第二行'));
+    expect(_postRichTextPlainTexts(tester), contains('回复正文'));
+  });
+
+  testWidgets('ThreadPostHtml renders smiley gif as inline image', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ThreadPostHtml(
+          data:
+              '那篇很好啊我很喜欢 <img src="static/image/smiley/comcom/2.gif" class="vm">',
+          imageHeaderBuilder: const _StaticImageHeaderBuilder(<String, String>{
+            'Referer': 'https://bbs.yamibo.com/',
+          }),
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.byType(ThreadPostImageBlockView), findsNothing);
+    final inlineImages = find.byWidgetPredicate(
+      (widget) =>
+          widget is LibraryCachedImage &&
+          widget.imageUrl ==
+              'https://bbs.yamibo.com/static/image/smiley/comcom/2.gif',
+    );
+    expect(inlineImages, findsOneWidget);
+    final image = tester.widget<Image>(find.byType(Image));
+    final provider = image.image as NetworkImage;
+    expect(provider.headers?['Referer'], 'https://bbs.yamibo.com/');
+    expect(
+      _postRichTextPlainTexts(tester).any((text) => text.contains('那篇很好啊我很喜欢')),
+      isTrue,
+    );
+  });
+
+  testWidgets('ThreadPostHtml treats bare blockquote as a quote block', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ThreadPostHtml(
+          data: '<blockquote><strong>作者</strong>: 独立引用</blockquote>',
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.byType(ThreadPostQuoteBlockView), findsOneWidget);
+    expect(_postRichTextPlainTexts(tester), contains('作者: 独立引用'));
+  });
+
   testWidgets('ThreadPostHtml applies style and text transformer hooks', (
     tester,
   ) async {

@@ -94,7 +94,21 @@ void main() {
     expect(detail.comments, hasLength(5));
     expect(detail.comments.first.id, '646846');
     expect(detail.comments.first.author, 'thessky');
+    expect(
+      detail.comments.first.avatarUrl,
+      contains('/uc_server/data/avatar/000/57/74/94_avatar_small.jpg'),
+    );
     expect(detail.comments.first.messageHtml, contains('探险的感觉'));
+    expect(detail.comments[1].messageHtml, contains('<div class="quote">'));
+    expect(detail.comments[1].messageHtml, contains('<blockquote>'));
+    expect(
+      detail.comments[2].avatarUrl,
+      contains('/uc_server/data/avatar/000/27/89/48_avatar_small.jpg'),
+    );
+    expect(
+      detail.comments[2].messageHtml,
+      contains('static/image/smiley/comcom/2.gif'),
+    );
     expect(detail.commentForm?.blogId, '117548');
     expect(detail.commentForm?.formhash, 'cba80c43');
   });
