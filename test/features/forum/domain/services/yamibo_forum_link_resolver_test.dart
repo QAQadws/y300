@@ -14,6 +14,28 @@ void main() {
       expect(destination?.tid, '572514');
     });
 
+    test('resolves viewthread hash pid links as native post targets', () {
+      final destination = resolver.resolve(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=572057&page=3&extra=#pid41560047',
+      );
+
+      expect(destination?.kind, YamiboForumLinkKind.threadPost);
+      expect(destination?.tid, '572057');
+      expect(destination?.pid, '41560047');
+      expect(destination?.page, 3);
+    });
+
+    test('resolves findpost redirect links as native post targets', () {
+      final destination = resolver.resolve(
+        'https://bbs.yamibo.com/forum.php?mod=redirect&amp;goto=findpost&amp;ptid=572057&amp;pid=41554030&amp;fromuid=420637',
+      );
+
+      expect(destination?.kind, YamiboForumLinkKind.threadPost);
+      expect(destination?.tid, '572057');
+      expect(destination?.pid, '41554030');
+      expect(destination?.page, isNull);
+    });
+
     test('resolves tag links as normalized native tag page destinations', () {
       final destination = resolver.resolve(
         'https://bbs.yamibo.com/misc.php?mod=tag&amp;id=21920',

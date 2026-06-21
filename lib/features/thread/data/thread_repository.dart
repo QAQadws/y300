@@ -6,6 +6,7 @@ import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_detail_html_parser.dart';
+import 'package:y300/features/thread/data/thread_post_locator.dart';
 
 abstract class ThreadRepository {
   Future<ApiResult<ThreadDetailData>> getThreadDetail({
@@ -102,4 +103,8 @@ final threadRepositoryProvider = Provider<ThreadRepository>((ref) {
   return ThreadDetailHtmlRepository(
     htmlClient: ref.watch(yamiboHtmlClientProvider),
   );
+});
+
+final threadPostLocatorProvider = Provider<ThreadPostLocator>((ref) {
+  return HtmlThreadPostLocator(gateway: ref.watch(yamiboHttpGatewayProvider));
 });

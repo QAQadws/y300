@@ -13,6 +13,9 @@ class ThreadDetailContent extends StatelessWidget {
   const ThreadDetailContent({
     super.key,
     required this.state,
+    this.scrollController,
+    this.highlightPostPid,
+    this.targetPid,
     required this.imageHeaderBuilder,
     required this.sourceTagLabel,
     required this.onLoadPreviousPage,
@@ -34,6 +37,9 @@ class ThreadDetailContent extends StatelessWidget {
   });
 
   final ThreadDetailPageState state;
+  final ScrollController? scrollController;
+  final String? highlightPostPid;
+  final String? targetPid;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final String sourceTagLabel;
   final VoidCallback onLoadPreviousPage;
@@ -58,10 +64,13 @@ class ThreadDetailContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
+    final hasTargetPost = targetPid?.trim().isNotEmpty == true;
     return ListView.builder(
       key: const Key('thread-detail-list'),
+      controller: scrollController,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
-      itemCount: state.posts.length + 2,
+      cacheExtent: 900,
+      itemCount: state.posts.length + (hasTargetPost ? 3 : 2),
       itemBuilder: (context, index) {
         if (index == 0) {
           return ThreadDetailHeaderCard(state: state, palette: palette);
@@ -77,11 +86,18 @@ class ThreadDetailContent extends StatelessWidget {
             palette: palette,
           );
         }
+        if (hasTargetPost && index == state.posts.length + 2) {
+          return SizedBox(
+            key: const Key('thread-detail-target-scroll-spacer'),
+            height: MediaQuery.sizeOf(context).height * 0.72,
+          );
+        }
 
         final post = state.posts[index - 1];
         final postCard = ThreadPostCard(
           post: post,
           state: state,
+          highlighted: post.pid == highlightPostPid,
           sourceTagLabel: sourceTagLabel,
           imageHeaderBuilder: imageHeaderBuilder,
           onAddComicToShelf: onAddComicToShelf,
@@ -299,6 +315,7 @@ class ThreadPostCard extends StatelessWidget {
     super.key,
     required this.post,
     required this.state,
+    this.highlighted = false,
     required this.sourceTagLabel,
     required this.imageHeaderBuilder,
     required this.onAddComicToShelf,
@@ -316,6 +333,7 @@ class ThreadPostCard extends StatelessWidget {
 
   final ThreadPost post;
   final ThreadDetailPageState state;
+  final bool highlighted;
   final String sourceTagLabel;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final VoidCallback onAddComicToShelf;
@@ -343,7 +361,9 @@ class ThreadPostCard extends StatelessWidget {
       key: Key('thread-post-card-${post.pid}'),
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 11),
-      decoration: _cardDecoration(palette),
+      decoration: highlighted
+          ? _highlightedCardDecoration(palette)
+          : _cardDecoration(palette),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -704,12 +724,13 @@ class ThreadPostActionRow extends StatelessWidget {
             palette: palette,
             onPressed: () => onOpenPostRate(post),
           ),
-        ThreadActionChip(
-          label: '点评',
-          icon: Icons.chat_bubble_outline,
-          palette: palette,
-          onPressed: () => onOpenPostComment(post),
-        ),
+        if (post.commentUrl?.trim().isNotEmpty == true)
+          ThreadActionChip(
+            label: '点评',
+            icon: Icons.chat_bubble_outline,
+            palette: palette,
+            onPressed: () => onOpenPostComment(post),
+          ),
         ThreadActionChip(
           label: '回复',
           icon: Icons.reply_outlined,
@@ -1495,6 +1516,20 @@ BoxDecoration _cardDecoration(ThreadDetailNativePalette palette) {
         color: palette.stateLayer.withValues(alpha: 0.42),
         blurRadius: 7,
         offset: const Offset(0, 2),
+      ),
+    ],
+  );
+}
+
+BoxDecoration _highlightedCardDecoration(ThreadDetailNativePalette palette) {
+  return BoxDecoration(
+    color: palette.accent.withValues(alpha: 0.10),
+    borderRadius: BorderRadius.circular(12),
+    boxShadow: [
+      BoxShadow(
+        color: palette.accent.withValues(alpha: 0.22),
+        blurRadius: 10,
+        offset: const Offset(0, 3),
       ),
     ],
   );

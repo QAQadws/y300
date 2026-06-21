@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
@@ -16,7 +19,9 @@ import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/tags/presentation/yamibo_tag_thread_page.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_post_comment_repository.dart';
+import 'package:y300/features/thread/data/thread_post_locator.dart';
 import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
+import 'package:y300/features/thread/data/thread_repository.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
@@ -24,19 +29,52 @@ import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 
 class ThreadDetailPage extends ConsumerStatefulWidget {
-  const ThreadDetailPage({super.key, required this.tid, this.subject = ''});
+  const ThreadDetailPage({
+    super.key,
+    required this.tid,
+    this.subject = '',
+    this.initialPage,
+    this.targetPid,
+  });
 
   final String tid;
   final String subject;
+  final int? initialPage;
+  final String? targetPid;
 
   @override
   ConsumerState<ThreadDetailPage> createState() => _ThreadDetailPageState();
 }
 
 class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
+  late final ScrollController _scrollController;
+  final Set<String> _scrolledTargetKeys = <String>{};
+  final Set<String> _pendingTargetScrollKeys = <String>{};
+  final Map<String, int> _targetScrollAttempts = <String, int>{};
+  Timer? _highlightClearTimer;
+  String? _highlightPostPid;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+  }
+
+  @override
+  void dispose() {
+    _highlightClearTimer?.cancel();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final args = ThreadDetailArgs(tid: widget.tid, subject: widget.subject);
+    final args = ThreadDetailArgs(
+      tid: widget.tid,
+      subject: widget.subject,
+      initialPage: widget.initialPage,
+      targetPid: widget.targetPid,
+    );
     final asyncState = ref.watch(threadDetailControllerProvider(args));
     final controller = ref.read(threadDetailControllerProvider(args).notifier);
     final state =
@@ -48,6 +86,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     ref.listen<AsyncValue<ThreadDetailPageState>>(
       threadDetailControllerProvider(args),
       (previous, next) {
+        _scheduleTargetPostScroll(next.value);
         final previousHint = previous?.value?.threadFavoriteHint;
         final nextHint = next.value?.threadFavoriteHint;
         if (nextHint == null ||
@@ -61,6 +100,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       },
     );
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
+    _scheduleTargetPostScroll(state);
 
     return Scaffold(
       backgroundColor: palette.background,
@@ -125,6 +165,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                   )
                 : ThreadDetailContent(
                     state: state,
+                    scrollController: _scrollController,
+                    highlightPostPid: _highlightPostPid,
+                    targetPid: widget.targetPid,
                     imageHeaderBuilder: imageHeaderBuilder,
                     sourceTagLabel: _sourceTagLabel(state),
                     onLoadPreviousPage: controller.loadPreviousPage,
@@ -352,6 +395,177 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     _copyUrl('${post.number}# 图片链接', request.image.url);
   }
 
+  void _scheduleTargetPostScroll(ThreadDetailPageState? state) {
+    final targetPid = widget.targetPid?.trim();
+    if (targetPid == null || targetPid.isEmpty || state == null) {
+      return;
+    }
+    final targetIndex = state.posts.indexWhere((post) => post.pid == targetPid);
+    if (targetIndex < 0) {
+      return;
+    }
+    final key = '${state.currentPage}:$targetPid';
+    if (_scrolledTargetKeys.contains(key) ||
+        _pendingTargetScrollKeys.contains(key)) {
+      return;
+    }
+    _queueTargetPostScroll(state, key, targetPid, targetIndex);
+  }
+
+  void _queueTargetPostScroll(
+    ThreadDetailPageState state,
+    String key,
+    String targetPid,
+    int targetIndex,
+  ) {
+    _pendingTargetScrollKeys.add(key);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _pendingTargetScrollKeys.remove(key);
+      if (!mounted) {
+        return;
+      }
+      _tryScrollToTargetPost(state, key, targetPid, targetIndex);
+    });
+  }
+
+  void _tryScrollToTargetPost(
+    ThreadDetailPageState state,
+    String key,
+    String targetPid,
+    int targetIndex,
+  ) {
+    if (_scrolledTargetKeys.contains(key)) {
+      return;
+    }
+    final targetContext = _postCardContext(targetPid);
+    if (targetContext == null) {
+      _roughScrollTowardTargetPost(state, key, targetIndex);
+      return;
+    }
+    final targetRenderObject = targetContext.findRenderObject();
+    final viewport = RenderAbstractViewport.maybeOf(targetRenderObject);
+    if (targetRenderObject == null ||
+        viewport == null ||
+        !_scrollController.hasClients) {
+      _roughScrollTowardTargetPost(state, key, targetIndex);
+      return;
+    }
+    _scrolledTargetKeys.add(key);
+    _targetScrollAttempts.remove(key);
+    final position = _scrollController.position;
+    final revealed = viewport.getOffsetToReveal(targetRenderObject, 0);
+    final targetOffset = revealed.offset
+        .clamp(position.minScrollExtent, position.maxScrollExtent)
+        .toDouble();
+    _scrollController.animateTo(
+      targetOffset,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
+    setState(() => _highlightPostPid = targetPid);
+    _highlightClearTimer?.cancel();
+    _highlightClearTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted && _highlightPostPid == targetPid) {
+        setState(() => _highlightPostPid = null);
+      }
+    });
+  }
+
+  void _roughScrollTowardTargetPost(
+    ThreadDetailPageState state,
+    String key,
+    int targetIndex,
+  ) {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+    final attempt = _targetScrollAttempts[key] ?? 0;
+    if (attempt >= 8) {
+      _scrolledTargetKeys.add(key);
+      return;
+    }
+    final position = _scrollController.position;
+    final targetOffset = _roughTargetOffset(
+      state: state,
+      targetIndex: targetIndex,
+      position: position,
+    );
+    _targetScrollAttempts[key] = attempt + 1;
+    _scrollController.jumpTo(targetOffset);
+    _queueTargetPostScroll(
+      state,
+      key,
+      state.posts[targetIndex].pid,
+      targetIndex,
+    );
+  }
+
+  double _roughTargetOffset({
+    required ThreadDetailPageState state,
+    required int targetIndex,
+    required ScrollPosition position,
+  }) {
+    final range = _builtPostIndexRange(state);
+    if (range != null) {
+      final viewport = position.viewportDimension;
+      if (targetIndex < range.min) {
+        final distance = (range.min - targetIndex).clamp(1, 4).toDouble();
+        return (position.pixels - viewport * distance)
+            .clamp(position.minScrollExtent, position.maxScrollExtent)
+            .toDouble();
+      }
+      if (targetIndex > range.max) {
+        final distance = (targetIndex - range.max).clamp(1, 4).toDouble();
+        return (position.pixels + viewport * distance)
+            .clamp(position.minScrollExtent, position.maxScrollExtent)
+            .toDouble();
+      }
+    }
+
+    final fraction = ((targetIndex + 1) / (state.posts.length + 1)).clamp(
+      0.0,
+      1.0,
+    );
+    return (position.maxScrollExtent * fraction)
+        .clamp(position.minScrollExtent, position.maxScrollExtent)
+        .toDouble();
+  }
+
+  ({int min, int max})? _builtPostIndexRange(ThreadDetailPageState state) {
+    int? min;
+    int? max;
+    for (var index = 0; index < state.posts.length; index++) {
+      if (_postCardContext(state.posts[index].pid) == null) {
+        continue;
+      }
+      min = min == null ? index : (index < min ? index : min);
+      max = max == null ? index : (index > max ? index : max);
+    }
+    if (min == null || max == null) {
+      return null;
+    }
+    return (min: min, max: max);
+  }
+
+  BuildContext? _postCardContext(String pid) {
+    final element = _findContextByKey(Key('thread-post-card-$pid'));
+    return element;
+  }
+
+  BuildContext? _findContextByKey(Key key) {
+    BuildContext? found;
+    void visitor(Element element) {
+      if (element.widget.key == key) {
+        found = element;
+        return;
+      }
+      element.visitChildren(visitor);
+    }
+
+    context.visitChildElements(visitor);
+    return found;
+  }
+
   void _openForumLink(String url) {
     final destination = const YamiboForumLinkResolver().resolve(url);
     if (destination == null) {
@@ -369,6 +583,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
           MaterialPageRoute<void>(builder: (_) => ThreadDetailPage(tid: tid)),
         );
         return;
+      case YamiboForumLinkKind.threadPost:
+        _openThreadPost(destination);
+        return;
       case YamiboForumLinkKind.tagThreadPage:
         Navigator.of(context).push(
           MaterialPageRoute<void>(
@@ -384,6 +601,45 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         _copyUrl('外部链接', destination.uri.toString());
         return;
     }
+  }
+
+  Future<void> _openThreadPost(YamiboForumLinkDestination destination) async {
+    final tid = destination.tid?.trim();
+    final pid = destination.pid?.trim();
+    if (tid == null || tid.isEmpty || pid == null || pid.isEmpty) {
+      _copyUrl('楼层链接', destination.uri.toString());
+      return;
+    }
+    final directPage = destination.page;
+    if (directPage != null && directPage > 0) {
+      _pushThreadPost(tid: tid, page: directPage, pid: pid);
+      return;
+    }
+    final result = await ref
+        .read(threadPostLocatorProvider)
+        .locate(tid: tid, pid: pid, sourceUri: destination.uri);
+    if (!mounted) {
+      return;
+    }
+    if (result case ApiSuccess<ThreadPostLocation>(:final data)) {
+      _pushThreadPost(tid: data.tid, page: data.page, pid: data.pid);
+      return;
+    }
+    _showSnackBar('楼层定位失败，已打开帖子');
+    _pushThreadPost(tid: tid, page: 1, pid: pid);
+  }
+
+  void _pushThreadPost({
+    required String tid,
+    required int page,
+    required String pid,
+  }) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            ThreadDetailPage(tid: tid, initialPage: page, targetPid: pid),
+      ),
+    );
   }
 
   void _openManagedWebView(Uri uri) {

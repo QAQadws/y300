@@ -49,6 +49,8 @@ void main() {
         expect(firstPost.message, contains('我喜欢的你恰好是女性'));
         expect(firstPost.rateUrl, contains('action=rate'));
         expect(firstPost.commentUrl, contains('action=comment'));
+        expect(firstPost.commentUrl, contains('tid=572529'));
+        expect(firstPost.commentUrl, contains('pid=41562047'));
         expect(firstPost.replyUrl, contains('action=reply'));
         expect(firstPost.rateSummary, contains('参与人数'));
         expect(firstPost.ratingSummary?.participantText, '参与人数 1');

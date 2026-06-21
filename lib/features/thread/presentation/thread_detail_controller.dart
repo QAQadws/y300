@@ -24,10 +24,17 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 
 class ThreadDetailArgs {
-  const ThreadDetailArgs({required this.tid, this.subject = ''});
+  const ThreadDetailArgs({
+    required this.tid,
+    this.subject = '',
+    this.initialPage,
+    this.targetPid,
+  });
 
   final String tid;
   final String subject;
+  final int? initialPage;
+  final String? targetPid;
 
   @override
   bool operator ==(Object other) {
@@ -36,11 +43,13 @@ class ThreadDetailArgs {
     }
     return other is ThreadDetailArgs &&
         other.tid == tid &&
-        other.subject == subject;
+        other.subject == subject &&
+        other.initialPage == initialPage &&
+        other.targetPid == targetPid;
   }
 
   @override
-  int get hashCode => Object.hash(tid, subject);
+  int get hashCode => Object.hash(tid, subject, initialPage, targetPid);
 }
 
 final threadDetailControllerProvider = AsyncNotifierProvider.autoDispose
@@ -56,8 +65,11 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
   @override
   FutureOr<ThreadDetailPageState> build() async {
+    final initialPage = _args.initialPage == null || _args.initialPage! <= 0
+        ? 1
+        : _args.initialPage!;
     return _loadPage(
-      page: 1,
+      page: initialPage,
       previous: const <ThreadPost>[],
       queryParameters: const <String, String>{},
     );
@@ -526,13 +538,16 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         : _args.tid;
     final page = current?.currentPage ?? 1;
     final commentUrl = post.commentUrl?.trim();
+    if (commentUrl == null || commentUrl.isEmpty) {
+      return const ApiFailure<ThreadPostCommentForm>(
+        ApiError(type: ApiErrorType.business, message: '点评入口缺失'),
+      );
+    }
     return ref
         .read(threadPostCommentRepositoryProvider)
         .loadFormFromSeed(
           ThreadPostCommentFormSeed(
-            commentUrl: commentUrl == null || commentUrl.isEmpty
-                ? _commentFormUrl(tid: tid, pid: pid, page: page)
-                : commentUrl,
+            commentUrl: commentUrl,
             tid: tid,
             pid: pid,
             page: page <= 0 ? 1 : page,
@@ -921,27 +936,6 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     return pid.isEmpty
         ? '${AppConfig.siteBaseUrl}/forum.php?mod=viewthread&tid=$tid'
         : '${AppConfig.siteBaseUrl}/forum.php?mod=viewthread&tid=$tid#pid$pid';
-  }
-
-  String _commentFormUrl({
-    required String tid,
-    required String pid,
-    required int page,
-  }) {
-    final normalizedPage = page <= 0 ? 1 : page;
-    return Uri.parse(AppConfig.siteBaseUrl)
-        .replace(
-          path: '/forum.php',
-          queryParameters: <String, String>{
-            'mod': 'misc',
-            'action': 'comment',
-            'tid': tid,
-            'pid': pid,
-            'extra': 'page=$normalizedPage',
-            'page': normalizedPage.toString(),
-          },
-        )
-        .toString();
   }
 
   ThreadRepository _readRepository() {

@@ -33,6 +33,7 @@ import 'package:y300/features/tags/domain/models/yamibo_tag_thread_page.dart';
 import 'package:y300/features/tags/domain/services/yamibo_tag_page_parsing.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_favorite_providers.dart';
+import 'package:y300/features/thread/data/thread_post_locator.dart';
 import 'package:y300/features/thread/data/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/data/thread_poll_vote_repository.dart';
@@ -661,6 +662,196 @@ void main() {
       expect(_richTextContaining('新帖子正文'), findsOneWidget);
     });
 
+    testWidgets('opens viewthread pid link at target page natively', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '55',
+            subject: tid == '572057' ? '目标帖子' : '来源帖子',
+            author: 'alice',
+            replies: 3,
+            views: 12,
+            currentPage: page,
+            lastPage: 3,
+            perPage: 20,
+            posts: tid == '572057' && page == 3
+                ? [
+                    for (var index = 0; index < 18; index++)
+                      ThreadPost(
+                        pid: index == 17 ? '41560047' : 'target-$index',
+                        author: 'target',
+                        authorId: '2',
+                        message: index == 17
+                            ? '<p>目标楼层正文</p>'
+                            : '<p>占位回复 $index</p>',
+                        number: index + 1,
+                        isFirst: index == 0,
+                        dateline: 'today',
+                      ),
+                  ]
+                : [
+                    ThreadPost(
+                      pid: 'source',
+                      author: 'alice',
+                      authorId: '1',
+                      message:
+                          '<a href="https://bbs.yamibo.com/forum.php?mod=viewthread&tid=572057&page=3&extra=#pid41560047">跳到楼层</a>',
+                      number: 1,
+                      isFirst: true,
+                      dateline: 'today',
+                    ),
+                  ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      await tester.tapAt(
+        tester.getTopLeft(_richTextContaining('跳到楼层')) + const Offset(4, 8),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('目标帖子'), findsWidgets);
+      expect(
+        find.byKey(const Key('thread-post-card-41560047')),
+        findsOneWidget,
+      );
+      expect(_richTextContaining('目标楼层正文'), findsOneWidget);
+      final listTop = tester.getTopLeft(
+        find.byKey(const Key('thread-detail-list')),
+      );
+      final targetTop = tester.getTopLeft(
+        find.byKey(const Key('thread-post-card-41560047')),
+      );
+      expect(
+        targetTop.dy,
+        closeTo(listTop.dy + 10, 28),
+        reason: '目标楼层应贴近 AppBar 下方的列表顶部，而不是落在屏幕中部',
+      );
+    });
+
+    testWidgets('locates findpost link before opening native thread page', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '55',
+            subject: tid == '572057' ? '目标帖子' : '来源帖子',
+            author: 'alice',
+            replies: 2,
+            views: 12,
+            currentPage: page,
+            lastPage: 2,
+            perPage: 20,
+            posts: [
+              if (tid == '572057' && page == 2)
+                ThreadPost(
+                  pid: '41554030',
+                  author: 'target',
+                  authorId: '2',
+                  message: '<p>定位后的楼层</p>',
+                  number: 2,
+                  isFirst: false,
+                  dateline: 'today',
+                )
+              else
+                ThreadPost(
+                  pid: 'source',
+                  author: 'alice',
+                  authorId: '1',
+                  message:
+                      '<a href="https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=572057&pid=41554030&fromuid=420637">findpost</a>',
+                  number: 1,
+                  isFirst: true,
+                  dateline: 'today',
+                ),
+            ],
+          ),
+        );
+      });
+      final locator = _FakeThreadPostLocator(
+        const ThreadPostLocation(
+          tid: '572057',
+          pid: '41554030',
+          page: 2,
+          url:
+              'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=572057&page=2#pid41554030',
+        ),
+      );
+
+      await tester.pumpWidget(
+        _buildTestApp(repository, threadPostLocator: locator),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      await tester.tapAt(
+        tester.getTopLeft(_richTextContaining('findpost')) + const Offset(4, 8),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(locator.lastTid, '572057');
+      expect(locator.lastPid, '41554030');
+      expect(locator.lastSourceUri?.query, contains('goto=findpost'));
+      expect(
+        find.byKey(const Key('thread-post-card-41554030')),
+        findsOneWidget,
+      );
+      expect(_richTextContaining('定位后的楼层'), findsOneWidget);
+    });
+
+    testWidgets('keeps large thread pages lazy built for smoother rendering', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '55',
+            subject: '大文本帖子',
+            author: 'alice',
+            replies: 80,
+            views: 12,
+            currentPage: 1,
+            lastPage: 1,
+            perPage: 80,
+            posts: [
+              for (var index = 0; index < 80; index++)
+                ThreadPost(
+                  pid: 'bulk-$index',
+                  author: 'author',
+                  authorId: '$index',
+                  message: '<p>正文 $index ${'长文本 '.padRight(260, 'x')}</p>',
+                  number: index + 1,
+                  isFirst: index == 0,
+                  dateline: 'today',
+                ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      final list = tester.widget<ListView>(
+        find.byKey(const Key('thread-detail-list')),
+      );
+      expect(list.cacheExtent, 900);
+      expect(find.byKey(const Key('thread-post-card-bulk-0')), findsOneWidget);
+      expect(find.byKey(const Key('thread-post-card-bulk-79')), findsNothing);
+    });
+
     testWidgets('uses current thread page as post image referer', (
       tester,
     ) async {
@@ -836,7 +1027,7 @@ void main() {
       expect(find.text('点评成功'), findsOneWidget);
     });
 
-    testWidgets('opens comment sheet for every post even without comment url', (
+    testWidgets('hides comment action when post has no comment url', (
       tester,
     ) async {
       final repository = _FakeThreadRepository((tid, page) async {
@@ -871,19 +1062,18 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('thread-post-actions-p2')), findsOneWidget);
-      expect(find.text('点评'), findsOneWidget);
-
-      await tester.tap(find.text('点评'));
-      await tester.pumpAndSettle();
-
-      expect(commentRepository.loadedSeed?.tid, '100');
-      expect(commentRepository.loadedSeed?.pid, 'p2');
-      expect(commentRepository.loadedSeed?.page, 2);
+      final postActions = find.byKey(const Key('thread-post-actions-p2'));
+      expect(postActions, findsOneWidget);
       expect(
-        find.byKey(const Key('thread-post-comment-sheet')),
+        find.descendant(of: postActions, matching: find.text('点评')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: postActions, matching: find.text('回复')),
         findsOneWidget,
       );
+      expect(commentRepository.loadedSeed, isNull);
+      expect(commentRepository.loadedUrl, isNull);
     });
 
     testWidgets('shows comic add-to-shelf button for comic candidate post', (
@@ -1189,6 +1379,7 @@ Widget _buildTestApp(
   ThreadPostCommentRepository? postCommentRepository,
   ThreadPollVoteRepository? pollVoteRepository,
   YamiboTagThreadPageRepository? tagThreadPageRepository,
+  ThreadPostLocator? threadPostLocator,
 }) {
   return ProviderScope(
     overrides: [
@@ -1211,6 +1402,9 @@ Widget _buildTestApp(
       ),
       threadPollVoteRepositoryProvider.overrideWithValue(
         pollVoteRepository ?? _FakeThreadPollVoteRepository(),
+      ),
+      threadPostLocatorProvider.overrideWithValue(
+        threadPostLocator ?? _FakeThreadPostLocator(null),
       ),
       forumTagRepositoryProvider.overrideWithValue(_FakeForumTagRepository()),
       yamiboTagThreadPageRepositoryProvider.overrideWithValue(
@@ -1355,6 +1549,33 @@ class _FakeThreadPollVoteRepository implements ThreadPollVoteRepository {
     called = true;
     lastRequest = request;
     return result;
+  }
+}
+
+class _FakeThreadPostLocator implements ThreadPostLocator {
+  _FakeThreadPostLocator(this.location);
+
+  final ThreadPostLocation? location;
+  String? lastTid;
+  String? lastPid;
+  Uri? lastSourceUri;
+
+  @override
+  Future<ApiResult<ThreadPostLocation>> locate({
+    required String tid,
+    required String pid,
+    required Uri sourceUri,
+  }) async {
+    lastTid = tid;
+    lastPid = pid;
+    lastSourceUri = sourceUri;
+    final value = location;
+    if (value == null) {
+      return const ApiFailure<ThreadPostLocation>(
+        ApiError(type: ApiErrorType.business, message: '测试未配置楼层定位'),
+      );
+    }
+    return ApiSuccess<ThreadPostLocation>(value);
   }
 }
 
