@@ -76,8 +76,10 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   Widget build(BuildContext context) {
     final navigator = ref.watch(forumWebViewNavigatorProvider);
     final asyncState = ref.watch(forumWebViewControllerProvider);
+    final initialUri = ref.watch(forumWebViewInitialUriProvider);
+    final popOnRootBack = ref.watch(forumWebViewPopOnRootBackProvider);
     final overlayStyle = _resolveSystemUiOverlayStyle(context);
-    final homeUri = navigator.homeUri;
+    final homeUri = initialUri ?? navigator.homeUri;
     final state =
         asyncState.asData?.value ??
         ForumWebViewState(
@@ -111,12 +113,14 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: overlayStyle,
       child: PopScope<Object?>(
-        canPop: _shouldAllowRoutePop(state),
+        canPop: _shouldAllowRoutePop(state, popOnRootBack: popOnRootBack),
         onPopInvokedWithResult: (didPop, _) {
           if (didPop) {
             return;
           }
-          unawaited(_handleBackNavigation(driver, state));
+          unawaited(
+            _handleBackNavigation(driver, state, popOnRootBack: popOnRootBack),
+          );
         },
         child: Scaffold(
           key: const Key('forum-webview-page'),
@@ -125,6 +129,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
             state,
             driver,
             overlayStyle: overlayStyle,
+            popOnRootBack: popOnRootBack,
           ),
           body: Stack(
             fit: StackFit.expand,
@@ -171,9 +176,11 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       capabilityProfile: capabilityProfile,
       visualPolicy: initialVisualPolicy,
     );
-    final networkPolicy = networkPolicyResolver.resolve(navigator.homeUri);
+    final initialUri =
+        ref.read(forumWebViewInitialUriProvider) ?? navigator.homeUri;
+    final networkPolicy = networkPolicyResolver.resolve(initialUri);
     final bootstrapConfig = ForumWebViewBootstrapConfig(
-      initialUri: navigator.homeUri,
+      initialUri: initialUri,
       capabilityProfile: capabilityProfile,
       visualPolicy: visualPolicy,
       initialUserScripts: initialUserScripts,
@@ -216,17 +223,17 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       return;
     }
 
-    final cookies = await bootstrapper.buildSeedCookies(uri: navigator.homeUri);
+    final cookies = await bootstrapper.buildSeedCookies(uri: initialUri);
     if (!mounted) {
       return;
     }
 
-    await driver.seedCookies(domain: navigator.homeUri.host, cookies: cookies);
+    await driver.seedCookies(domain: initialUri.host, cookies: cookies);
     if (!mounted) {
       return;
     }
 
-    await _loadManagedUri(driver, navigator.homeUri);
+    await _loadManagedUri(driver, initialUri);
   }
 
   void _handlePageStarted(String url) {
@@ -372,6 +379,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     ForumWebViewState state,
     ForumWebViewDriver driver, {
     required SystemUiOverlayStyle overlayStyle,
+    required bool popOnRootBack,
   }) {
     final title = _resolveTitle(state);
 
@@ -383,7 +391,13 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           : BackButton(
               key: const Key('forum-webview-back-button'),
               onPressed: () {
-                unawaited(_handleBackNavigation(driver, state));
+                unawaited(
+                  _handleBackNavigation(
+                    driver,
+                    state,
+                    popOnRootBack: popOnRootBack,
+                  ),
+                );
               },
             ),
       title: Text(title),
@@ -713,10 +727,15 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
 
   Future<void> _handleBackNavigation(
     ForumWebViewDriver driver,
-    ForumWebViewState state,
-  ) async {
+    ForumWebViewState state, {
+    required bool popOnRootBack,
+  }) async {
     if (state.canGoBack) {
       await driver.goBack();
+      return;
+    }
+    if (popOnRootBack) {
+      Navigator.of(context).maybePop();
       return;
     }
     if (state.pageKind == ForumWebViewPageKind.home) {
@@ -730,7 +749,13 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     );
   }
 
-  bool _shouldAllowRoutePop(ForumWebViewState state) {
+  bool _shouldAllowRoutePop(
+    ForumWebViewState state, {
+    required bool popOnRootBack,
+  }) {
+    if (popOnRootBack && !state.canGoBack) {
+      return true;
+    }
     return !state.canGoBack && state.pageKind == ForumWebViewPageKind.home;
   }
 

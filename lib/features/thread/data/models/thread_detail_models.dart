@@ -99,6 +99,14 @@ class ThreadPostRatingSummary {
   final String? viewAllUrl;
 }
 
+class ThreadPostTagLink {
+  const ThreadPostTagLink({required this.label, required this.url, this.tagId});
+
+  final String label;
+  final String url;
+  final String? tagId;
+}
+
 class ThreadPost {
   ThreadPost({
     required this.pid,
@@ -115,6 +123,7 @@ class ThreadPost {
     this.rateSummary,
     this.ratingSummary,
     this.poll,
+    this.tagLinks = const <ThreadPostTagLink>[],
     this.attachmentImages = const <ForumPostAttachmentImage>[],
   });
 
@@ -132,6 +141,7 @@ class ThreadPost {
   final String? rateSummary;
   final ThreadPostRatingSummary? ratingSummary;
   final ThreadPoll? poll;
+  final List<ThreadPostTagLink> tagLinks;
 
   /// Raw Discuz attachment metadata. Entries may be images or non-image files.
   final List<ForumPostAttachmentImage> attachmentImages;

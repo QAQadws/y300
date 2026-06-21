@@ -16,6 +16,10 @@ final forumWebViewControllerProvider =
       ForumWebViewState
     >(ForumWebViewController.new);
 
+final forumWebViewInitialUriProvider = Provider<Uri?>((ref) => null);
+
+final forumWebViewPopOnRootBackProvider = Provider<bool>((ref) => false);
+
 class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
   late ForumWebViewNavigator _navigator;
   late ForumFavoriteRepository _favoriteRepository;
@@ -40,7 +44,7 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
   }
 
   ForumWebViewState _initialState() {
-    final homeUri = _navigator.homeUri;
+    final homeUri = _initialUri();
     return ForumWebViewState(
       currentUri: homeUri,
       pageKind: _navigator.classify(homeUri),
@@ -57,6 +61,11 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
       isLoading: true,
       loadingProgress: 0,
     );
+  }
+
+  Uri _initialUri() {
+    final initialUri = ref.read(forumWebViewInitialUriProvider);
+    return initialUri ?? _navigator.homeUri;
   }
 
   ForumWebViewState get _currentState {

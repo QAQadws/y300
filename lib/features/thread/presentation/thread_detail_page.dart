@@ -4,11 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
+import 'package:y300/features/tags/presentation/yamibo_tag_thread_page.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
@@ -140,6 +145,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                       _openPostCommentSheet(args, controller, post);
                     },
                     onCopyActionUrl: _copyActionUrl,
+                    onOpenPostLink: _openForumLink,
                     onOpenPostImages: _openPostImages,
                     onTogglePollOption: controller.togglePollOption,
                     onSubmitPollVote: controller.submitPollVote,
@@ -344,6 +350,61 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
 
   void _openPostImages(ThreadPost post, ThreadPostImageOpenRequest request) {
     _copyUrl('${post.number}# 图片链接', request.image.url);
+  }
+
+  void _openForumLink(String url) {
+    final destination = const YamiboForumLinkResolver().resolve(url);
+    if (destination == null) {
+      _copyUrl('链接', url);
+      return;
+    }
+    switch (destination.kind) {
+      case YamiboForumLinkKind.thread:
+        final tid = destination.tid;
+        if (tid == null || tid.isEmpty) {
+          _copyUrl('帖子链接', destination.uri.toString());
+          return;
+        }
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => ThreadDetailPage(tid: tid)),
+        );
+        return;
+      case YamiboForumLinkKind.tagThreadPage:
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) =>
+                YamiboTagThreadPage(url: destination.uri.toString()),
+          ),
+        );
+        return;
+      case YamiboForumLinkKind.managedWebView:
+        _openManagedWebView(destination.uri);
+        return;
+      case YamiboForumLinkKind.external:
+        _copyUrl('外部链接', destination.uri.toString());
+        return;
+    }
+  }
+
+  void _openManagedWebView(Uri uri) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ProviderScope(
+          overrides: [
+            forumWebViewInitialUriProvider.overrideWithValue(uri),
+            forumWebViewPopOnRootBackProvider.overrideWithValue(true),
+            forumWebViewDriverProvider.overrideWith((ref) {
+              final factory = ref.watch(forumWebViewDriverFactoryProvider);
+              return factory();
+            }),
+            forumWebViewControllerProvider.overrideWith(
+              ForumWebViewController.new,
+            ),
+          ],
+          child: const ForumWebViewPage(),
+        ),
+      ),
+    );
   }
 
   Future<void> _copyUrl(String label, String url) async {

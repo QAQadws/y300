@@ -13,6 +13,20 @@ class YamiboTagPagePagination {
   final int? totalPages;
   final String? nextPageUrl;
   final String? previousPageUrl;
+
+  YamiboTagPagePagination copyWith({
+    int? currentPage,
+    int? totalPages,
+    String? nextPageUrl,
+    String? previousPageUrl,
+  }) {
+    return YamiboTagPagePagination(
+      currentPage: currentPage ?? this.currentPage,
+      totalPages: totalPages ?? this.totalPages,
+      nextPageUrl: nextPageUrl ?? this.nextPageUrl,
+      previousPageUrl: previousPageUrl ?? this.previousPageUrl,
+    );
+  }
 }
 
 class YamiboTagPageParsing {

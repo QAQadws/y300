@@ -139,7 +139,30 @@ class ThreadDetailHtmlParser {
       rateSummary: _parseRateSummary(container, pid),
       ratingSummary: _parseRatingSummary(container, pid),
       poll: number == 1 ? _parsePoll(container) : null,
+      tagLinks: _parseTagLinks(container),
     );
+  }
+
+  List<ThreadPostTagLink> _parseTagLinks(html_dom.Element container) {
+    final output = <ThreadPostTagLink>[];
+    final seenUrls = <String>{};
+    for (final anchor in container.querySelectorAll(
+      '.ptg a[href*="misc.php"][href*="mod=tag"][href*="id="]',
+    )) {
+      final label = _cleanText(anchor.text);
+      final url = _resolve(anchor.attributes['href']);
+      if (label.isEmpty || url == null || !seenUrls.add(url)) {
+        continue;
+      }
+      output.add(
+        ThreadPostTagLink(
+          label: label,
+          url: url,
+          tagId: Uri.tryParse(url)?.queryParameters['id']?.trim(),
+        ),
+      );
+    }
+    return List<ThreadPostTagLink>.unmodifiable(output);
   }
 
   ThreadPoll? _parsePoll(html_dom.Element postContainer) {

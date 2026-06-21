@@ -27,6 +27,7 @@ class ThreadDetailContent extends StatelessWidget {
     required this.onOpenPostRate,
     required this.onOpenPostComment,
     required this.onCopyActionUrl,
+    required this.onOpenPostLink,
     this.onOpenPostImages,
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
@@ -47,6 +48,7 @@ class ThreadDetailContent extends StatelessWidget {
   final ValueChanged<ThreadPost> onOpenPostRate;
   final ValueChanged<ThreadPost> onOpenPostComment;
   final void Function(String label, String url) onCopyActionUrl;
+  final ValueChanged<String> onOpenPostLink;
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
   onOpenPostImages;
   final void Function(ThreadPoll poll, ThreadPollOption option)
@@ -88,6 +90,7 @@ class ThreadDetailContent extends StatelessWidget {
           onOpenPostRate: onOpenPostRate,
           onOpenPostComment: onOpenPostComment,
           onCopyActionUrl: onCopyActionUrl,
+          onOpenPostLink: onOpenPostLink,
           onOpenPostImages: onOpenPostImages,
           onTogglePollOption: onTogglePollOption,
           onSubmitPollVote: onSubmitPollVote,
@@ -304,6 +307,7 @@ class ThreadPostCard extends StatelessWidget {
     required this.onOpenPostRate,
     required this.onOpenPostComment,
     required this.onCopyActionUrl,
+    required this.onOpenPostLink,
     required this.onOpenPostImages,
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
@@ -320,6 +324,7 @@ class ThreadPostCard extends StatelessWidget {
   final ValueChanged<ThreadPost> onOpenPostRate;
   final ValueChanged<ThreadPost> onOpenPostComment;
   final void Function(String label, String url) onCopyActionUrl;
+  final ValueChanged<String> onOpenPostLink;
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
   onOpenPostImages;
   final void Function(ThreadPoll poll, ThreadPollOption option)
@@ -381,10 +386,19 @@ class ThreadPostCard extends StatelessWidget {
                     data: post.message,
                     key: Key('thread-post-${post.pid}'),
                     imageHeaderBuilder: imageHeaderBuilder,
+                    onOpenLink: onOpenPostLink,
                     onOpenImage: (request) =>
                         onOpenPostImages?.call(post, request),
                   ),
                 ),
+                if (post.tagLinks.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  ThreadPostTagLinksSection(
+                    tags: post.tagLinks,
+                    palette: palette,
+                    onOpenTag: onOpenPostLink,
+                  ),
+                ],
                 if (post.poll != null) ...[
                   const SizedBox(height: 10),
                   ThreadPollCard(
@@ -702,6 +716,57 @@ class ThreadPostActionRow extends StatelessWidget {
           palette: palette,
           onPressed: () => onOpenPostReply(post),
         ),
+      ],
+    );
+  }
+}
+
+class ThreadPostTagLinksSection extends StatelessWidget {
+  const ThreadPostTagLinksSection({
+    super.key,
+    required this.tags,
+    required this.palette,
+    required this.onOpenTag,
+  });
+
+  final List<ThreadPostTagLink> tags;
+  final ThreadDetailNativePalette palette;
+  final ValueChanged<String> onOpenTag;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      key: const Key('thread-post-tag-links'),
+      spacing: 7,
+      runSpacing: 7,
+      children: [
+        for (final tag in tags)
+          Material(
+            key: Key('thread-post-tag-link-${tag.tagId ?? tag.label}'),
+            color: palette.metricBackground.withValues(alpha: 0.58),
+            borderRadius: BorderRadius.circular(9),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(9),
+              onTap: () => onOpenTag(tag.url),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.sell_outlined, size: 13, color: palette.accent),
+                    const SizedBox(width: 4),
+                    Text(
+                      tag.label,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: palette.muted,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }

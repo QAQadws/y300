@@ -26,8 +26,11 @@ import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/tags/data/forum_tag_repository.dart';
 import 'package:y300/features/tags/data/tag_providers.dart';
+import 'package:y300/features/tags/data/yamibo_tag_thread_page_repository.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/tags/domain/forum_tag_models.dart';
+import 'package:y300/features/tags/domain/models/yamibo_tag_thread_page.dart';
+import 'package:y300/features/tags/domain/services/yamibo_tag_page_parsing.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_favorite_providers.dart';
 import 'package:y300/features/thread/data/thread_post_comment_repository.dart';
@@ -509,6 +512,153 @@ void main() {
       expect(pollVoteRepository.called, isFalse);
       expect(find.byIcon(Icons.check_box), findsNothing);
       expect(find.byIcon(Icons.check_box_outline_blank), findsNothing);
+    });
+
+    testWidgets('shows bottom tag links and opens native tag page', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '30',
+            subject: '漫画主题',
+            author: 'alice',
+            replies: 0,
+            views: 12,
+            currentPage: page,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+                tagLinks: const <ThreadPostTagLink>[
+                  ThreadPostTagLink(
+                    label: '狱门抚子在此',
+                    url: 'https://bbs.yamibo.com/misc.php?mod=tag&id=20674',
+                    tagId: '20674',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      });
+      final tagRepository = _FakeYamiboTagThreadPageRepository();
+
+      await tester.pumpWidget(
+        _buildTestApp(repository, tagThreadPageRepository: tagRepository),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(find.byKey(const Key('thread-post-tag-links')), findsOneWidget);
+      expect(find.text('狱门抚子在此'), findsOneWidget);
+
+      await tester.tap(find.text('狱门抚子在此'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(tagRepository.requestedUrls.single, contains('id=20674'));
+      expect(find.byKey(const Key('yamibo-tag-thread-page')), findsOneWidget);
+      expect(find.text('狱门抚子在此'), findsWidgets);
+    });
+
+    testWidgets('opens same-domain tag link from post body natively', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '30',
+            subject: '漫画主题',
+            author: 'alice',
+            replies: 0,
+            views: 12,
+            currentPage: page,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message:
+                    '<a href="https://bbs.yamibo.com/misc.php?mod=tag&id=20674">目录</a>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+      final tagRepository = _FakeYamiboTagThreadPageRepository();
+
+      await tester.pumpWidget(
+        _buildTestApp(repository, tagThreadPageRepository: tagRepository),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      await tester.tapAt(
+        tester.getTopLeft(_richTextContaining('目录')) + const Offset(4, 8),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(tagRepository.requestedUrls.single, contains('id=20674'));
+      expect(find.byKey(const Key('yamibo-tag-thread-page')), findsOneWidget);
+    });
+
+    testWidgets('opens same-domain thread link from post body natively', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '30',
+            subject: tid == '572514' ? '跳转后的帖子' : '漫画主题',
+            author: 'alice',
+            replies: 0,
+            views: 12,
+            currentPage: page,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p$tid',
+                author: 'alice',
+                authorId: '1',
+                message: tid == '572514'
+                    ? '<p>新帖子正文</p>'
+                    : '<a href="https://bbs.yamibo.com/thread-572514-1-1.html">00</a>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      await tester.tapAt(
+        tester.getTopLeft(_richTextContaining('00')) + const Offset(4, 8),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(find.text('跳转后的帖子'), findsWidgets);
+      expect(_richTextContaining('新帖子正文'), findsOneWidget);
     });
 
     testWidgets('uses current thread page as post image referer', (
@@ -1038,6 +1188,7 @@ Widget _buildTestApp(
   ThreadPostRateRepository? postRateRepository,
   ThreadPostCommentRepository? postCommentRepository,
   ThreadPollVoteRepository? pollVoteRepository,
+  YamiboTagThreadPageRepository? tagThreadPageRepository,
 }) {
   return ProviderScope(
     overrides: [
@@ -1062,6 +1213,9 @@ Widget _buildTestApp(
         pollVoteRepository ?? _FakeThreadPollVoteRepository(),
       ),
       forumTagRepositoryProvider.overrideWithValue(_FakeForumTagRepository()),
+      yamiboTagThreadPageRepositoryProvider.overrideWithValue(
+        tagThreadPageRepository ?? _FakeYamiboTagThreadPageRepository(),
+      ),
       composerDraftRepositoryProvider.overrideWithValue(
         _MemoryComposerDraftRepository(),
       ),
@@ -1132,6 +1286,35 @@ class _FakeForumTagRepository implements ForumTagRepository {
         ],
       ),
     ]);
+  }
+}
+
+class _FakeYamiboTagThreadPageRepository
+    implements YamiboTagThreadPageRepository {
+  final List<String> requestedUrls = <String>[];
+
+  @override
+  Future<ApiResult<YamiboTagThreadPageData>> load(String url) async {
+    requestedUrls.add(url);
+    return const ApiSuccess<YamiboTagThreadPageData>(
+      YamiboTagThreadPageData(
+        url:
+            'https://bbs.yamibo.com/misc.php?mod=tag&id=20674&type=thread&page=1',
+        tagId: '20674',
+        tagName: '狱门抚子在此',
+        pagination: YamiboTagPagePagination(currentPage: 1, totalPages: 1),
+        threads: <YamiboTagThreadItem>[
+          YamiboTagThreadItem(
+            tid: '549277',
+            threadUrl: 'https://bbs.yamibo.com/thread-549277-1-1.html',
+            subject: '狱门抚子在此 00',
+            forumName: '中文百合漫画区',
+            replyCount: 24,
+            viewCount: 6111,
+          ),
+        ],
+      ),
+    );
   }
 }
 
