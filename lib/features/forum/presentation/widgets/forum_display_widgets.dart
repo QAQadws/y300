@@ -1291,70 +1291,61 @@ class _ThreadCardState extends State<_ThreadCard> {
               ),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
-                child: Row(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _Avatar(
-                      url: thread.avatarUrl,
-                      author: thread.author,
-                      palette: palette,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: _ThreadAuthorBlock(
-                                  thread: thread,
-                                  palette: palette,
-                                ),
-                              ),
-                              if (thread.badgeLabel?.isNotEmpty == true) ...[
-                                const SizedBox(width: 6),
-                                _ThreadBadge(
-                                  label: thread.badgeLabel!,
-                                  palette: palette,
-                                ),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 7),
-                          Text(
-                            thread.subject,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleSmall
-                                ?.copyWith(
-                                  color: titleColor,
-                                  height: 1.28,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                          ),
-                          if (thread.excerpt.trim().isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              thread.excerpt.trim(),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(
-                                    color: palette.bodyText,
-                                    height: 1.35,
-                                  ),
-                            ),
-                          ],
-                          const SizedBox(height: 10),
-                          _ThreadFooter(
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _Avatar(
+                          url: thread.avatarUrl,
+                          author: thread.author,
+                          palette: palette,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _ThreadAuthorBlock(
                             thread: thread,
-                            onTapTag: widget.onTapTag,
+                            palette: palette,
+                          ),
+                        ),
+                        if (thread.badgeLabel?.isNotEmpty == true) ...[
+                          const SizedBox(width: 6),
+                          _ThreadBadge(
+                            label: thread.badgeLabel!,
                             palette: palette,
                           ),
                         ],
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    Text(
+                      thread.subject,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: titleColor,
+                        height: 1.28,
+                        fontWeight: FontWeight.w700,
                       ),
+                    ),
+                    if (thread.excerpt.trim().isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        thread.excerpt.trim(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: palette.bodyText,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    _ThreadFooter(
+                      thread: thread,
+                      onTapTag: widget.onTapTag,
+                      palette: palette,
                     ),
                   ],
                 ),

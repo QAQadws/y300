@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
@@ -369,103 +370,110 @@ class ThreadPostCard extends StatelessWidget {
       decoration: highlighted
           ? _highlightedCardDecoration(palette)
           : _cardDecoration(palette),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ThreadAuthorAvatar(
-            key: Key('thread-author-avatar-${post.pid}'),
-            author: post.author,
-            avatarUrl: post.avatarUrl,
-            palette: palette,
-            onTap: post.authorId.trim().isEmpty
-                ? null
-                : () => onOpenAuthorProfile(post),
-          ),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _PostHeader(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ThreadAuthorAvatar(
+                key: Key('thread-author-avatar-${post.pid}'),
+                author: post.author,
+                avatarUrl: post.avatarUrl,
+                palette: palette,
+                onTap: post.authorId.trim().isEmpty
+                    ? null
+                    : () => onOpenAuthorProfile(post),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: _PostHeader(
                   post: post,
                   palette: palette,
                   onOpenAuthorProfile: post.authorId.trim().isEmpty
                       ? null
                       : () => onOpenAuthorProfile(post),
                 ),
-                if (showComicEntry) ...[
-                  const SizedBox(height: 8),
-                  CandidateShelfActionRow(
-                    label: '漫画 · $sourceTagLabel',
-                    inShelf: state.isInShelf,
-                    isLoading: state.isComicActionLoading,
-                    onPressed: onAddComicToShelf,
-                  ),
-                ],
-                if (showNovelEntry) ...[
-                  const SizedBox(height: 8),
-                  CandidateShelfActionRow(
-                    label: '小说 · $sourceTagLabel',
-                    inShelf: state.isNovelInShelf,
-                    isLoading: state.isNovelActionLoading,
-                    onPressed: onAddNovelToShelf,
-                  ),
-                ],
-                const SizedBox(height: 8),
-                DefaultTextStyle.merge(
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: palette.bodyText,
-                    height: 1.5,
-                  ),
-                  child: ThreadPostHtml(
-                    data: post.message,
-                    key: Key('thread-post-${post.pid}'),
-                    imageHeaderBuilder: imageHeaderBuilder,
-                    onOpenLink: onOpenPostLink,
-                    onOpenImage: (request) =>
-                        onOpenPostImages?.call(post, request),
-                  ),
-                ),
-                if (post.tagLinks.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  ThreadPostTagLinksSection(
-                    tags: post.tagLinks,
-                    palette: palette,
-                    onOpenTag: onOpenPostLink,
-                  ),
-                ],
-                if (post.poll != null) ...[
-                  const SizedBox(height: 10),
-                  ThreadPollCard(
-                    poll: post.poll!,
-                    selectedOptionIds: state.selectedPollOptionIds,
-                    isSubmitting: state.isPollVoteSubmitting,
-                    hint: state.pollVoteHint,
-                    onToggleOption: (option) =>
-                        onTogglePollOption(post.poll!, option),
-                    onSubmit: () => onSubmitPollVote(post.poll!),
-                    palette: palette,
-                  ),
-                ],
-                if (post.ratingSummary != null) ...[
-                  const SizedBox(height: 10),
-                  ThreadPostRatingSection(
-                    summary: post.ratingSummary!,
-                    palette: palette,
-                    onCopyActionUrl: onCopyActionUrl,
-                  ),
-                ],
-                const SizedBox(height: 10),
-                ThreadPostActionRow(
-                  post: post,
-                  palette: palette,
-                  onOpenPostReply: onOpenPostReply,
-                  onOpenPostRate: onOpenPostRate,
-                  onOpenPostComment: onOpenPostComment,
-                  onCopyActionUrl: onCopyActionUrl,
-                ),
-              ],
+              ),
+            ],
+          ),
+          if (showComicEntry) ...[
+            const SizedBox(height: 8),
+            CandidateShelfActionRow(
+              label: '漫画 · $sourceTagLabel',
+              inShelf: state.isInShelf,
+              isLoading: state.isComicActionLoading,
+              onPressed: onAddComicToShelf,
             ),
+          ],
+          if (showNovelEntry) ...[
+            const SizedBox(height: 8),
+            CandidateShelfActionRow(
+              label: '小说 · $sourceTagLabel',
+              inShelf: state.isNovelInShelf,
+              isLoading: state.isNovelActionLoading,
+              onPressed: onAddNovelToShelf,
+            ),
+          ],
+          const SizedBox(height: 8),
+          DefaultTextStyle.merge(
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: palette.bodyText,
+              height: 1.5,
+            ),
+            child: ThreadPostHtml(
+              data: post.message,
+              key: Key('thread-post-${post.pid}'),
+              imageHeaderBuilder: imageHeaderBuilder,
+              onOpenLink: onOpenPostLink,
+              onOpenImage: (request) => onOpenPostImages?.call(post, request),
+            ),
+          ),
+          if (post.tagLinks.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ThreadPostTagLinksSection(
+              tags: post.tagLinks,
+              palette: palette,
+              onOpenTag: onOpenPostLink,
+            ),
+          ],
+          if (post.poll != null) ...[
+            const SizedBox(height: 10),
+            ThreadPollCard(
+              poll: post.poll!,
+              selectedOptionIds: state.selectedPollOptionIds,
+              isSubmitting: state.isPollVoteSubmitting,
+              hint: state.pollVoteHint,
+              onToggleOption: (option) =>
+                  onTogglePollOption(post.poll!, option),
+              onSubmit: () => onSubmitPollVote(post.poll!),
+              palette: palette,
+            ),
+          ],
+          if (post.comments.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ThreadPostCommentSection(
+              comments: post.comments,
+              imageHeaderBuilder: imageHeaderBuilder,
+              palette: palette,
+            ),
+          ],
+          if (post.ratingSummary != null) ...[
+            const SizedBox(height: 10),
+            ThreadPostRatingSection(
+              summary: post.ratingSummary!,
+              palette: palette,
+              onCopyActionUrl: onCopyActionUrl,
+            ),
+          ],
+          const SizedBox(height: 10),
+          ThreadPostActionRow(
+            post: post,
+            palette: palette,
+            onOpenPostReply: onOpenPostReply,
+            onOpenPostRate: onOpenPostRate,
+            onOpenPostComment: onOpenPostComment,
+            onCopyActionUrl: onCopyActionUrl,
           ),
         ],
       ),
@@ -528,6 +536,212 @@ class _PostHeader extends StatelessWidget {
         const SizedBox(width: 8),
         ThreadPill(label: '${post.number}#', palette: palette),
       ],
+    );
+  }
+}
+
+class ThreadPostCommentSection extends StatelessWidget {
+  const ThreadPostCommentSection({
+    super.key,
+    required this.comments,
+    required this.imageHeaderBuilder,
+    required this.palette,
+  });
+
+  final List<ThreadPostCommentEntry> comments;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final ThreadDetailNativePalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      key: const Key('thread-post-comment-section'),
+      padding: const EdgeInsets.fromLTRB(10, 9, 10, 10),
+      decoration: BoxDecoration(
+        color: palette.metricBackground.withValues(alpha: 0.36),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.chat_bubble_outline, size: 15, color: palette.accent),
+              const SizedBox(width: 5),
+              Text(
+                '点评',
+                style: textTheme.labelLarge?.copyWith(
+                  color: palette.title,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 9),
+          for (var index = 0; index < comments.length; index++) ...[
+            if (index > 0)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: palette.outlineSoft,
+                ),
+              ),
+            ThreadPostCommentRow(
+              comment: comments[index],
+              imageHeaderBuilder: imageHeaderBuilder,
+              palette: palette,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class ThreadPostCommentRow extends StatelessWidget {
+  const ThreadPostCommentRow({
+    super.key,
+    required this.comment,
+    required this.imageHeaderBuilder,
+    required this.palette,
+  });
+
+  final ThreadPostCommentEntry comment;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final ThreadDetailNativePalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _ThreadCommentAvatar(
+          comment: comment,
+          imageHeaderBuilder: imageHeaderBuilder,
+          palette: palette,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      comment.author.isEmpty ? '用户' : comment.author,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.labelMedium?.copyWith(
+                        color: palette.author,
+                        fontWeight: FontWeight.w800,
+                        height: 1.15,
+                      ),
+                    ),
+                  ),
+                  if (comment.dateline.trim().isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        comment.dateline,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right,
+                        style: textTheme.labelSmall?.copyWith(
+                          color: palette.softText,
+                          height: 1.15,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              if (comment.message.trim().isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  comment.message,
+                  style: textTheme.bodySmall?.copyWith(
+                    color: palette.bodyText,
+                    fontWeight: FontWeight.w500,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ThreadCommentAvatar extends StatelessWidget {
+  const _ThreadCommentAvatar({
+    required this.comment,
+    required this.imageHeaderBuilder,
+    required this.palette,
+  });
+
+  final ThreadPostCommentEntry comment;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final ThreadDetailNativePalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    const size = 24.0;
+    final imageUrl = comment.avatarUrl?.trim();
+    final fallback = _ThreadCommentAvatarFallback(
+      author: comment.author,
+      palette: palette,
+    );
+    return ClipOval(
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: imageUrl == null || imageUrl.isEmpty
+            ? fallback
+            : LibraryCachedImage(
+                imageUrl: imageUrl,
+                fit: BoxFit.cover,
+                width: size,
+                height: size,
+                placeholder: fallback,
+                errorPlaceholder: fallback,
+                headerBuilder: imageHeaderBuilder,
+              ),
+      ),
+    );
+  }
+}
+
+class _ThreadCommentAvatarFallback extends StatelessWidget {
+  const _ThreadCommentAvatarFallback({
+    required this.author,
+    required this.palette,
+  });
+
+  final String author;
+  final ThreadDetailNativePalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: palette.avatarBackground,
+      child: Center(
+        child: Text(
+          _authorInitial(author),
+          style: TextStyle(
+            color: palette.avatarForeground,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
     );
   }
 }

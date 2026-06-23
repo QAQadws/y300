@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widget_previews.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
 import 'package:y300/features/forum/presentation/forum_display_controller.dart';
@@ -336,3 +338,68 @@ class _AppBarStatText extends StatelessWidget {
     );
   }
 }
+
+Widget forumDisplayPreviewShell(Widget child) {
+  return MaterialApp(
+    debugShowCheckedModeBanner: false,
+    theme: AppTheme.light(),
+    home: Scaffold(body: SafeArea(child: child)),
+  );
+}
+
+@Preview(
+  name: 'Forum display thread card',
+  group: 'Forum/Display',
+  size: Size(393, 260),
+  wrapper: forumDisplayPreviewShell,
+)
+Widget forumDisplayThreadCardPreview() {
+  return ForumDisplayContent(
+    state: ForumDisplayPageState(
+      fid: '33',
+      title: '海域区',
+      currentPage: 1,
+      hasMore: false,
+      isLoadingInitial: false,
+      isLoadingMore: false,
+      threads: [_forumDisplayPreviewThread],
+      query: const ForumDisplayQuery(fid: '33'),
+      todayPosts: 42,
+      totalThreads: 120345,
+      rank: 3,
+      lastPage: 1,
+    ),
+    scrollController: ScrollController(),
+    filterAnchorKey: GlobalKey(),
+    headImageKey: GlobalKey(),
+    onLoadMore: () {},
+    onLoadPrevious: () {},
+    onSelectPage: (_) {},
+    onOpenFilter: (_) {},
+    onOpenThreadTag: (_) {},
+    onOpenThread: (_) {},
+    onCopyThreadLink: (_) {},
+    onOpenTopEntry: (_) {},
+    onOpenSubForum: (_) {},
+  );
+}
+
+final ForumThreadSummary _forumDisplayPreviewThread = ForumThreadSummary(
+  tid: 'preview-thread',
+  typeid: '86',
+  sourceTagName: '讨论',
+  subject: '后面楼主参加活动的应该就是梅小雪那篇武侠了吧',
+  author: '蜥蜴少女与神明',
+  replies: 128,
+  views: 4096,
+  dateline: '2026-06-23 12:48',
+  uid: '278948',
+  avatarUrl:
+      'https://bbs.yamibo.com/uc_server/data/avatar/000/27/89/48_avatar_small.jpg',
+  authorUrl: 'https://bbs.yamibo.com/home.php?mod=space&uid=278948',
+  threadUrl: 'https://bbs.yamibo.com/thread-preview-1-1.html',
+  excerpt: '那篇很好啊我很喜欢，角色之间的互动很轻盈，读起来像是在夏天的海边慢慢展开的一封信。',
+  sourceTagUrl:
+      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=33&typeid=86',
+  badgeLabel: '投票',
+);

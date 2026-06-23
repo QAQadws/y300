@@ -107,6 +107,24 @@ class ThreadPostTagLink {
   final String? tagId;
 }
 
+class ThreadPostCommentEntry {
+  const ThreadPostCommentEntry({
+    required this.author,
+    required this.message,
+    required this.dateline,
+    this.authorId,
+    this.authorUrl,
+    this.avatarUrl,
+  });
+
+  final String author;
+  final String message;
+  final String dateline;
+  final String? authorId;
+  final String? authorUrl;
+  final String? avatarUrl;
+}
+
 class ThreadPost {
   ThreadPost({
     required this.pid,
@@ -124,6 +142,7 @@ class ThreadPost {
     this.ratingSummary,
     this.poll,
     this.tagLinks = const <ThreadPostTagLink>[],
+    this.comments = const <ThreadPostCommentEntry>[],
     this.attachmentImages = const <ForumPostAttachmentImage>[],
   });
 
@@ -142,6 +161,7 @@ class ThreadPost {
   final ThreadPostRatingSummary? ratingSummary;
   final ThreadPoll? poll;
   final List<ThreadPostTagLink> tagLinks;
+  final List<ThreadPostCommentEntry> comments;
 
   /// Raw Discuz attachment metadata. Entries may be images or non-image files.
   final List<ForumPostAttachmentImage> attachmentImages;

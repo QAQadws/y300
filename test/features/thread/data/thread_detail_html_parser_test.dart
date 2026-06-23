@@ -115,6 +115,42 @@ void main() {
       expect(poll.options.first.colorHex, '#E92725');
     });
 
+    test(
+      'parses desktop post comments with avatar author message and time',
+      () {
+        final html = File(
+          'docs/html/帖子详细页/帖子中有帖子楼跳转链接.html',
+        ).readAsStringSync();
+
+        final result = parser.parse(
+          html,
+          fallbackTid: '572057',
+          fallbackPage: 1,
+        );
+
+        final firstPost = result.posts.first;
+        expect(firstPost.pid, '41554028');
+        expect(firstPost.comments, hasLength(2));
+        expect(firstPost.comments.first.author, '13549697590');
+        expect(firstPost.comments.first.authorId, '601436');
+        expect(
+          firstPost.comments.first.avatarUrl,
+          contains('000/60/14/36_avatar_small.jpg'),
+        );
+        expect(firstPost.comments.first.message, '爱看义妹系的有福了（比如我）');
+        expect(firstPost.comments.first.dateline, '2026-6-12 12:12');
+        expect(firstPost.comments.last.author, 'jingyuan3795');
+        expect(firstPost.comments.last.message, '我说百合骨科是对的😋');
+
+        final commentedReply = result.posts.firstWhere(
+          (post) => post.pid == '41554366',
+        );
+        expect(commentedReply.comments.single.author, 'lztlzt');
+        expect(commentedReply.comments.single.message, '那就标题就有点误导人了(☉｡☉)!');
+        expect(commentedReply.comments.single.dateline, '2026-6-7 00:40');
+      },
+    );
+
     test('keeps desktop attachment image real urls for comic thread', () {
       final html = File('docs/html/帖子详细页/一个电脑端漫画帖子.html').readAsStringSync();
 

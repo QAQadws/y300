@@ -99,6 +99,16 @@ void main() {
                       'https://bbs.yamibo.com/forum.php?mod=misc&action=comment',
                   replyUrl:
                       'https://bbs.yamibo.com/forum.php?mod=post&action=reply',
+                  comments: const <ThreadPostCommentEntry>[
+                    ThreadPostCommentEntry(
+                      author: '花実',
+                      authorId: '231169',
+                      avatarUrl:
+                          'https://bbs.yamibo.com/uc_server/data/avatar/000/23/11/69_avatar_small.jpg',
+                      message: '活该你日和你国同性恋权益烂的要死',
+                      dateline: '2026-6-21 12:31',
+                    ),
+                  ],
                   ratingSummary: const ThreadPostRatingSummary(
                     participantText: '参与人数 1',
                     scoreText: '积分 +2',
@@ -188,7 +198,14 @@ void main() {
       expect(pollSubmitBeforeSelection.onPressed, isNull);
       expect(find.byKey(const Key('thread-post-actions-p1')), findsOneWidget);
       expect(find.text('评分'), findsAtLeastNWidgets(1));
-      expect(find.text('点评'), findsOneWidget);
+      expect(find.text('点评'), findsNWidgets(2));
+      expect(
+        find.byKey(const Key('thread-post-comment-section')),
+        findsOneWidget,
+      );
+      expect(find.text('花実'), findsOneWidget);
+      expect(find.text('活该你日和你国同性恋权益烂的要死'), findsOneWidget);
+      expect(find.text('2026-6-21 12:31'), findsOneWidget);
       expect(
         find.byKey(const Key('thread-post-rating-section')),
         findsOneWidget,

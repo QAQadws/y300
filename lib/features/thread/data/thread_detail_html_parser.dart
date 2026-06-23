@@ -140,7 +140,66 @@ class ThreadDetailHtmlParser {
       ratingSummary: _parseRatingSummary(container, pid),
       poll: number == 1 ? _parsePoll(container) : null,
       tagLinks: _parseTagLinks(container),
+      comments: _parsePostComments(container, pid),
     );
+  }
+
+  List<ThreadPostCommentEntry> _parsePostComments(
+    html_dom.Element container,
+    String pid,
+  ) {
+    final commentRoot =
+        container.querySelector('#comment_$pid.cm') ??
+        container.querySelector('div[id="comment_$pid"]') ??
+        container.querySelector('div[id^="comment_"].cm');
+    if (commentRoot == null) {
+      return const <ThreadPostCommentEntry>[];
+    }
+
+    final output = <ThreadPostCommentEntry>[];
+    for (final item in commentRoot.querySelectorAll('.pstl')) {
+      final authorAnchor =
+          item.querySelector('.psta a.xi2[href]') ??
+          _firstTextAnchor(item.querySelector('.psta') ?? item);
+      final messageNode = item.querySelector('.psti');
+      final author = _cleanText(authorAnchor?.text ?? '');
+      final message = _parsePostCommentMessage(messageNode);
+      final dateline = _parsePostCommentDateline(messageNode);
+      if (author.isEmpty && message.isEmpty && dateline.isEmpty) {
+        continue;
+      }
+      final authorUrl = _resolve(authorAnchor?.attributes['href']);
+      output.add(
+        ThreadPostCommentEntry(
+          author: author,
+          authorId: _extractUid(authorUrl),
+          authorUrl: authorUrl,
+          avatarUrl: _resolve(
+            item.querySelector('.psta img.user_avatar')?.attributes['src'] ??
+                item.querySelector('.psta img')?.attributes['src'],
+          ),
+          message: message,
+          dateline: dateline,
+        ),
+      );
+    }
+    return List<ThreadPostCommentEntry>.unmodifiable(output);
+  }
+
+  String _parsePostCommentMessage(html_dom.Element? messageNode) {
+    if (messageNode == null) {
+      return '';
+    }
+    final clone = messageNode.clone(true);
+    clone.querySelectorAll('.xg1, script, style').forEach((node) {
+      node.remove();
+    });
+    return _cleanText(clone.text);
+  }
+
+  String _parsePostCommentDateline(html_dom.Element? messageNode) {
+    final text = _cleanText(messageNode?.querySelector('.xg1')?.text ?? '');
+    return text.replaceFirst(RegExp(r'^发表于\s*'), '').trim();
   }
 
   List<ThreadPostTagLink> _parseTagLinks(html_dom.Element container) {

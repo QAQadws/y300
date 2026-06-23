@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widget_previews.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/network_providers.dart';
@@ -907,3 +909,119 @@ class _ThreadErrorView extends StatelessWidget {
     );
   }
 }
+
+Widget threadDetailPreviewShell(Widget child) {
+  return MaterialApp(
+    debugShowCheckedModeBanner: false,
+    theme: AppTheme.light(),
+    home: Scaffold(
+      body: SafeArea(
+        child: ColoredBox(
+          color: ThreadDetailNativePalette.resolve(AppTheme.light()).background,
+          child: child,
+        ),
+      ),
+    ),
+  );
+}
+
+@Preview(
+  name: 'Thread detail post card',
+  group: 'Thread/Detail',
+  size: Size(393, 520),
+  wrapper: threadDetailPreviewShell,
+)
+Widget threadDetailPostCardPreview() {
+  final state = ThreadDetailPageState.initial(tid: '572529', subject: '帖子楼卡片预览')
+      .copyWith(
+        fid: '33',
+        typeid: '86',
+        sourceTagName: '讨论',
+        currentPage: 1,
+        lastPage: 8,
+        views: 4096,
+        replies: 128,
+        posts: <ThreadPost>[_threadDetailPreviewPost],
+      );
+  final palette = ThreadDetailNativePalette.resolve(AppTheme.light());
+  return SingleChildScrollView(
+    padding: const EdgeInsets.all(12),
+    child: ThreadPostCard(
+      post: _threadDetailPreviewPost,
+      state: state,
+      sourceTagLabel: '讨论',
+      imageHeaderBuilder: null,
+      onAddComicToShelf: () {},
+      onAddNovelToShelf: () {},
+      onOpenPostReply: (_) {},
+      onOpenPostRate: (_) {},
+      onOpenPostComment: (_) {},
+      onOpenAuthorProfile: (_) {},
+      onCopyActionUrl: (_, _) {},
+      onOpenPostLink: (_) {},
+      onOpenPostImages: null,
+      onTogglePollOption: (_, _) {},
+      onSubmitPollVote: (_) {},
+      palette: palette,
+    ),
+  );
+}
+
+final ThreadPost _threadDetailPreviewPost = ThreadPost(
+  pid: 'preview-post',
+  author: '蜥蜴少女与神明',
+  authorId: '278948',
+  number: 12,
+  isFirst: false,
+  dateline: '2026-06-23 12:48',
+  avatarUrl:
+      'https://bbs.yamibo.com/uc_server/data/avatar/000/27/89/48_avatar_small.jpg',
+  replyUrl:
+      'https://bbs.yamibo.com/forum.php?mod=post&action=reply&fid=33&tid=572529&repquote=preview-post',
+  rateUrl:
+      'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&tid=572529&pid=preview-post',
+  commentUrl:
+      'https://bbs.yamibo.com/forum.php?mod=misc&action=comment&tid=572529&pid=preview-post',
+  message:
+      '<div class="quote"><blockquote><b>hsyhlj</b>: 后面楼主参加活动的应该就是梅小雪那篇武侠了吧。</blockquote></div>'
+      '<p>那篇很好啊我很喜欢 <img src="static/image/smiley/comcom/2.gif" class="vm"> '
+      '角色之间的互动很轻盈，读起来像是在夏天的海边慢慢展开的一封信。</p>',
+  tagLinks: const <ThreadPostTagLink>[
+    ThreadPostTagLink(
+      label: '百合',
+      tagId: '20674',
+      url: 'https://bbs.yamibo.com/misc.php?mod=tag&id=20674&type=thread',
+    ),
+    ThreadPostTagLink(
+      label: '读后感',
+      tagId: '21920',
+      url: 'https://bbs.yamibo.com/misc.php?mod=tag&id=21920&type=thread',
+    ),
+  ],
+  comments: const <ThreadPostCommentEntry>[
+    ThreadPostCommentEntry(
+      author: '花実',
+      authorId: '231169',
+      avatarUrl:
+          'https://bbs.yamibo.com/uc_server/data/avatar/000/23/11/69_avatar_small.jpg',
+      message: '这一段点评会展示在正文下面，头像、名称、内容和时间都保留下来。',
+      dateline: '2026-06-23 13:12',
+    ),
+    ThreadPostCommentEntry(
+      author: 'tagami',
+      authorId: '14577',
+      avatarUrl:
+          'https://bbs.yamibo.com/uc_server/data/avatar/000/01/45/77_avatar_small.jpg',
+      message: '短点评也应该保持轻量，不抢正文和评分的视觉层级。',
+      dateline: '2026-06-23 13:18',
+    ),
+  ],
+  ratingSummary: const ThreadPostRatingSummary(
+    participantText: '已有 2 人评分',
+    scoreText: '积分 +8',
+    ratings: <ThreadPostRating>[
+      ThreadPostRating(userName: 'hsyhlj', score: '+5', reason: '我很赞同'),
+      ThreadPostRating(userName: 'thessky', score: '+3', reason: '好萌好萌好萌'),
+    ],
+  ),
+);
