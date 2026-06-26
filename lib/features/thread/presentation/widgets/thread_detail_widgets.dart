@@ -360,7 +360,7 @@ class _PostHeader extends StatelessWidget {
   }
 }
 
-class ThreadPostCommentSection extends StatelessWidget {
+class ThreadPostCommentSection extends StatefulWidget {
   const ThreadPostCommentSection({
     super.key,
     required this.comments,
@@ -373,51 +373,209 @@ class ThreadPostCommentSection extends StatelessWidget {
   final ThreadDetailNativePalette palette;
 
   @override
+  State<ThreadPostCommentSection> createState() =>
+      _ThreadPostCommentSectionState();
+}
+
+class _ThreadPostCommentSectionState extends State<ThreadPostCommentSection>
+    with SingleTickerProviderStateMixin {
+  var _expanded = true;
+
+  @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
     return Container(
       key: const Key('thread-post-comment-section'),
       padding: const EdgeInsets.fromLTRB(10, 9, 10, 10),
       decoration: BoxDecoration(
-        color: palette.panelBackground,
+        color: widget.palette.panelBackground,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          _CollapsibleSectionHeader(
+            key: const Key('thread-post-comment-header'),
+            label: '点评',
+            icon: Icons.chat_bubble_outline,
+            palette: widget.palette,
+            showSummaries: !_expanded,
+            collapsedSummaries: [
+              _SectionSummaryPill(
+                label: widget.comments.length.toString(),
+                palette: widget.palette,
+              ),
+            ],
+            onTap: () => setState(() => _expanded = !_expanded),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: _expanded
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 9),
+                      for (
+                        var index = 0;
+                        index < widget.comments.length;
+                        index++
+                      ) ...[
+                        if (index > 0)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Divider(
+                              height: 1,
+                              thickness: 1,
+                              color: widget.palette.outlineSoft,
+                            ),
+                          ),
+                        ThreadPostCommentRow(
+                          comment: widget.comments[index],
+                          imageHeaderBuilder: widget.imageHeaderBuilder,
+                          palette: widget.palette,
+                        ),
+                      ],
+                    ],
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CollapsibleSectionHeader extends StatelessWidget {
+  const _CollapsibleSectionHeader({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.palette,
+    required this.showSummaries,
+    required this.collapsedSummaries,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final ThreadDetailNativePalette palette;
+  final bool showSummaries;
+  final List<Widget> collapsedSummaries;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
             children: [
-              Icon(Icons.chat_bubble_outline, size: 15, color: palette.accent),
+              Icon(icon, size: 15, color: palette.accent),
               const SizedBox(width: 5),
               Text(
-                '点评',
+                label,
                 style: textTheme.labelLarge?.copyWith(
                   color: palette.title,
                   fontWeight: FontWeight.w800,
                 ),
               ),
+              const Spacer(),
+              if (showSummaries) Wrap(spacing: 5, children: collapsedSummaries),
             ],
           ),
-          const SizedBox(height: 9),
-          for (var index = 0; index < comments.length; index++) ...[
-            if (index > 0)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Divider(
-                  height: 1,
-                  thickness: 1,
-                  color: palette.outlineSoft,
-                ),
-              ),
-            ThreadPostCommentRow(
-              comment: comments[index],
-              imageHeaderBuilder: imageHeaderBuilder,
-              palette: palette,
-            ),
-          ],
-        ],
+        ),
       ),
     );
+  }
+}
+
+class _SectionSummaryPill extends StatelessWidget {
+  const _SectionSummaryPill({required this.label, required this.palette});
+
+  final String label;
+  final ThreadDetailNativePalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 22,
+      padding: const EdgeInsets.symmetric(horizontal: 7),
+      decoration: BoxDecoration(
+        color: palette.chipBackground,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: palette.muted,
+          fontWeight: FontWeight.w700,
+          height: 1,
+        ),
+      ),
+    );
+  }
+}
+
+class _ThreadPostRatingCollapseSummary {
+  const _ThreadPostRatingCollapseSummary({
+    required this.countLabel,
+    required this.scoreLabel,
+  });
+
+  final String countLabel;
+  final String? scoreLabel;
+
+  factory _ThreadPostRatingCollapseSummary.from(
+    ThreadPostRatingSummary summary,
+  ) {
+    final count = _firstInt(summary.participantText) ?? summary.ratings.length;
+    final score =
+        _firstSignedInt(summary.scoreText) ?? _sumRatingScores(summary.ratings);
+    return _ThreadPostRatingCollapseSummary(
+      countLabel: count.toString(),
+      scoreLabel: score == null ? null : _formatSignedScore(score),
+    );
+  }
+
+  static int? _firstInt(String text) {
+    return int.tryParse(RegExp(r'\d+').firstMatch(text)?.group(0) ?? '');
+  }
+
+  static int? _firstSignedInt(String text) {
+    final match = RegExp(r'[+-]?\s*\d+').firstMatch(text);
+    if (match == null) {
+      return null;
+    }
+    return int.tryParse(match.group(0)!.replaceAll(' ', ''));
+  }
+
+  static int? _sumRatingScores(List<ThreadPostRating> ratings) {
+    var hasScore = false;
+    var total = 0;
+    for (final rating in ratings) {
+      final score = _firstSignedInt(rating.score);
+      if (score == null) {
+        continue;
+      }
+      hasScore = true;
+      total += score;
+    }
+    return hasScore ? total : null;
+  }
+
+  static String _formatSignedScore(int score) {
+    if (score > 0) {
+      return '+$score';
+    }
+    return score.toString();
   }
 }
 
@@ -566,7 +724,7 @@ class _ThreadCommentAvatarFallback extends StatelessWidget {
   }
 }
 
-class ThreadPostRatingSection extends StatelessWidget {
+class ThreadPostRatingSection extends StatefulWidget {
   const ThreadPostRatingSection({
     super.key,
     required this.summary,
@@ -579,83 +737,122 @@ class ThreadPostRatingSection extends StatelessWidget {
   final void Function(String label, String url) onCopyActionUrl;
 
   @override
+  State<ThreadPostRatingSection> createState() =>
+      _ThreadPostRatingSectionState();
+}
+
+class _ThreadPostRatingSectionState extends State<ThreadPostRatingSection>
+    with SingleTickerProviderStateMixin {
+  var _expanded = true;
+
+  @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final collapsedSummary = _ThreadPostRatingCollapseSummary.from(
+      widget.summary,
+    );
     return Container(
       key: const Key('thread-post-rating-section'),
       padding: const EdgeInsets.fromLTRB(10, 9, 10, 9),
       decoration: BoxDecoration(
-        color: palette.panelBackground,
+        color: widget.palette.panelBackground,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.favorite_outline, size: 15, color: palette.accent),
-              const SizedBox(width: 5),
-              Text(
-                '评分',
-                style: textTheme.labelLarge?.copyWith(
-                  color: palette.title,
-                  fontWeight: FontWeight.w800,
-                ),
+          _CollapsibleSectionHeader(
+            key: const Key('thread-post-rating-header'),
+            label: '评分',
+            icon: Icons.favorite_outline,
+            palette: widget.palette,
+            showSummaries: !_expanded,
+            collapsedSummaries: [
+              _SectionSummaryPill(
+                label: collapsedSummary.countLabel,
+                palette: widget.palette,
               ),
+              if (collapsedSummary.scoreLabel != null)
+                _SectionSummaryPill(
+                  label: collapsedSummary.scoreLabel!,
+                  palette: widget.palette,
+                ),
             ],
+            onTap: () => setState(() => _expanded = !_expanded),
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: Text(
-                  summary.participantText.isEmpty
-                      ? '参与人数'
-                      : summary.participantText,
-                  style: textTheme.labelSmall?.copyWith(
-                    color: palette.muted,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  summary.scoreText.isEmpty ? '积分' : summary.scoreText,
-                  style: textTheme.labelSmall?.copyWith(
-                    color: palette.muted,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 3,
-                child: Text(
-                  '理由',
-                  style: textTheme.labelSmall?.copyWith(
-                    color: palette.muted,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
+          AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: _expanded
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              widget.summary.participantText.isEmpty
+                                  ? '参与人数'
+                                  : widget.summary.participantText,
+                              style: textTheme.labelSmall?.copyWith(
+                                color: widget.palette.muted,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              widget.summary.scoreText.isEmpty
+                                  ? '积分'
+                                  : widget.summary.scoreText,
+                              style: textTheme.labelSmall?.copyWith(
+                                color: widget.palette.muted,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              '理由',
+                              style: textTheme.labelSmall?.copyWith(
+                                color: widget.palette.muted,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      for (final rating in widget.summary.ratings) ...[
+                        const SizedBox(height: 6),
+                        ThreadPostRatingRow(
+                          rating: rating,
+                          palette: widget.palette,
+                        ),
+                      ],
+                      if (widget.summary.viewAllUrl?.trim().isNotEmpty ==
+                          true) ...[
+                        const SizedBox(height: 7),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: ThreadRatingLinkButton(
+                            label: '查看全部评分',
+                            palette: widget.palette,
+                            onPressed: () => widget.onCopyActionUrl(
+                              '查看全部评分',
+                              widget.summary.viewAllUrl!,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  )
+                : const SizedBox(width: double.infinity),
           ),
-          for (final rating in summary.ratings) ...[
-            const SizedBox(height: 6),
-            ThreadPostRatingRow(rating: rating, palette: palette),
-          ],
-          if (summary.viewAllUrl?.trim().isNotEmpty == true) ...[
-            const SizedBox(height: 7),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: ThreadRatingLinkButton(
-                label: '查看全部评分',
-                palette: palette,
-                onPressed: () => onCopyActionUrl('查看全部评分', summary.viewAllUrl!),
-              ),
-            ),
-          ],
         ],
       ),
     );

@@ -281,6 +281,56 @@ void main() {
       expect(find.text('子子子车'), findsOneWidget);
       expect(find.text('我很赞同'), findsOneWidget);
       expect(find.text('查看全部评分'), findsOneWidget);
+      expect(find.byIcon(Icons.keyboard_arrow_down), findsNothing);
+
+      await tester.tap(find.byKey(const Key('thread-post-comment-header')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 220));
+      expect(find.text('花実'), findsNothing);
+      expect(find.text('活该你日和你国同性恋权益烂的要死'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('thread-post-comment-section')),
+          matching: find.text('1'),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const Key('thread-post-comment-header')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 220));
+      expect(find.text('花実'), findsOneWidget);
+      expect(find.text('活该你日和你国同性恋权益烂的要死'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('thread-post-rating-header')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 220));
+      expect(find.text('参与人数 1'), findsNothing);
+      expect(find.text('积分 +2'), findsNothing);
+      expect(find.text('子子子车'), findsNothing);
+      expect(find.text('查看全部评分'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('thread-post-rating-section')),
+          matching: find.text('1'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('thread-post-rating-section')),
+          matching: find.text('+2'),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const Key('thread-post-rating-header')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 220));
+      expect(find.text('参与人数 1'), findsOneWidget);
+      expect(find.text('积分 +2'), findsOneWidget);
+      expect(find.text('子子子车'), findsOneWidget);
+      expect(find.text('查看全部评分'), findsOneWidget);
       expect(find.byKey(const Key('thread-replies-header')), findsNothing);
       expect(find.text('全部回复'), findsNothing);
       expect(find.byKey(const Key('thread-reply-input')), findsNothing);
