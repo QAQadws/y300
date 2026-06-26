@@ -258,6 +258,23 @@ void main() {
       expect(pollSummaryText.style?.fontWeight, FontWeight.w500);
       final pollOptionText = tester.widget<Text>(find.text('选项A'));
       expect(pollOptionText.style?.fontWeight, FontWeight.w400);
+
+      await tester.tap(find.byKey(const Key('thread-poll-header')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 220));
+      expect(find.text('选项A'), findsNothing);
+      expect(find.byKey(const Key('thread-poll-submit-button')), findsNothing);
+      expect(find.text('2项'), findsNothing);
+      expect(find.text('2人'), findsNothing);
+
+      await tester.tap(find.byKey(const Key('thread-poll-header')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 220));
+      expect(find.text('选项A'), findsOneWidget);
+      expect(
+        find.byKey(const Key('thread-poll-submit-button')),
+        findsOneWidget,
+      );
       final commentSection = tester.widget<Container>(
         find.byKey(const Key('thread-post-comment-section')),
       );

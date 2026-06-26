@@ -1361,7 +1361,7 @@ class _ThreadPostCommentSheetState extends State<ThreadPostCommentSheet> {
   }
 }
 
-class ThreadPollCard extends StatelessWidget {
+class ThreadPollCard extends StatefulWidget {
   const ThreadPollCard({
     super.key,
     required this.poll,
@@ -1382,88 +1382,133 @@ class ThreadPollCard extends StatelessWidget {
   final ThreadDetailNativePalette palette;
 
   @override
+  State<ThreadPollCard> createState() => _ThreadPollCardState();
+}
+
+class _ThreadPollCardState extends State<ThreadPollCard>
+    with SingleTickerProviderStateMixin {
+  var _expanded = true;
+
+  @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final canSubmit =
-        poll.canVote &&
-        selectedOptionIds.isNotEmpty &&
-        !isSubmitting &&
-        (poll.actionUrl?.trim().isNotEmpty ?? false);
-    final statusText = poll.statusText?.trim();
+        widget.poll.canVote &&
+        widget.selectedOptionIds.isNotEmpty &&
+        !widget.isSubmitting &&
+        (widget.poll.actionUrl?.trim().isNotEmpty ?? false);
+    final statusText = widget.poll.statusText?.trim();
     return Container(
       key: const Key('thread-poll-card'),
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
       decoration: BoxDecoration(
-        color: palette.panelBackground,
+        color: widget.palette.panelBackground,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            poll.summary,
-            style: textTheme.labelLarge?.copyWith(
-              color: palette.title,
-              fontWeight: FontWeight.w500,
+          Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            child: InkWell(
+              key: const Key('thread-poll-header'),
+              onTap: () => setState(() => _expanded = !_expanded),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.poll.summary,
+                        style: textTheme.labelLarge?.copyWith(
+                          color: widget.palette.title,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-          if (poll.deadlineText?.trim().isNotEmpty == true) ...[
-            const SizedBox(height: 5),
-            Text(
-              poll.deadlineText!.trim(),
-              style: textTheme.labelSmall?.copyWith(color: palette.muted),
-            ),
-          ],
-          const SizedBox(height: 9),
-          for (final option in poll.options) ...[
-            ThreadPollOptionTile(
-              option: option,
-              palette: palette,
-              isMultipleChoice: poll.isMultipleChoice,
-              showSelector: poll.canVote,
-              selected: selectedOptionIds.contains(option.id),
-              enabled: poll.canVote && !isSubmitting,
-              onTap: () => onToggleOption(option),
-            ),
-            const SizedBox(height: 8),
-          ],
-          if (statusText != null && statusText.isNotEmpty) ...[
-            Text(
-              statusText,
-              key: const Key('thread-poll-status-text'),
-              style: textTheme.labelSmall?.copyWith(
-                color: palette.muted,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-          if (hint?.trim().isNotEmpty == true) ...[
-            Text(
-              hint!.trim(),
-              key: const Key('thread-poll-vote-hint'),
-              style: textTheme.labelSmall?.copyWith(
-                color: palette.muted,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-          if (poll.canVote)
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                key: const Key('thread-poll-submit-button'),
-                onPressed: canSubmit ? onSubmit : null,
-                child: isSubmitting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('提交'),
-              ),
-            ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: _expanded
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (widget.poll.deadlineText?.trim().isNotEmpty ==
+                          true) ...[
+                        const SizedBox(height: 5),
+                        Text(
+                          widget.poll.deadlineText!.trim(),
+                          style: textTheme.labelSmall?.copyWith(
+                            color: widget.palette.muted,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 9),
+                      for (final option in widget.poll.options) ...[
+                        ThreadPollOptionTile(
+                          option: option,
+                          palette: widget.palette,
+                          isMultipleChoice: widget.poll.isMultipleChoice,
+                          showSelector: widget.poll.canVote,
+                          selected: widget.selectedOptionIds.contains(
+                            option.id,
+                          ),
+                          enabled: widget.poll.canVote && !widget.isSubmitting,
+                          onTap: () => widget.onToggleOption(option),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      if (statusText != null && statusText.isNotEmpty) ...[
+                        Text(
+                          statusText,
+                          key: const Key('thread-poll-status-text'),
+                          style: textTheme.labelSmall?.copyWith(
+                            color: widget.palette.muted,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      if (widget.hint?.trim().isNotEmpty == true) ...[
+                        Text(
+                          widget.hint!.trim(),
+                          key: const Key('thread-poll-vote-hint'),
+                          style: textTheme.labelSmall?.copyWith(
+                            color: widget.palette.muted,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      if (widget.poll.canVote)
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            key: const Key('thread-poll-submit-button'),
+                            onPressed: canSubmit ? widget.onSubmit : null,
+                            child: widget.isSubmitting
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text('提交'),
+                          ),
+                        ),
+                    ],
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
         ],
       ),
     );
