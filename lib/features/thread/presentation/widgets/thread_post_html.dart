@@ -17,12 +17,8 @@ class ThreadPostBodyStyle {
     this.textStyle,
     this.linkTextStyle,
     this.imageBorderRadius = const BorderRadius.all(Radius.circular(8)),
-    this.imageMinHeight = 96,
-    this.imageMaxHeight = 520,
-    this.imageFallbackAspectRatio = 3 / 4,
-    this.imageMinAspectRatio = 0.4,
-    this.imageMaxAspectRatio = 2.2,
-    this.imageFit = BoxFit.contain,
+    this.imageFallbackAspectRatio = 0.7,
+    this.imageFit = BoxFit.fitWidth,
   });
 
   static const ThreadPostBodyStyle defaults = ThreadPostBodyStyle();
@@ -31,11 +27,7 @@ class ThreadPostBodyStyle {
   final TextStyle? textStyle;
   final TextStyle? linkTextStyle;
   final BorderRadius imageBorderRadius;
-  final double imageMinHeight;
-  final double imageMaxHeight;
   final double imageFallbackAspectRatio;
-  final double imageMinAspectRatio;
-  final double imageMaxAspectRatio;
   final BoxFit imageFit;
 
   ThreadPostBodyStyle copyWith({
@@ -43,11 +35,7 @@ class ThreadPostBodyStyle {
     TextStyle? textStyle,
     TextStyle? linkTextStyle,
     BorderRadius? imageBorderRadius,
-    double? imageMinHeight,
-    double? imageMaxHeight,
     double? imageFallbackAspectRatio,
-    double? imageMinAspectRatio,
-    double? imageMaxAspectRatio,
     BoxFit? imageFit,
   }) {
     return ThreadPostBodyStyle(
@@ -55,12 +43,8 @@ class ThreadPostBodyStyle {
       textStyle: textStyle ?? this.textStyle,
       linkTextStyle: linkTextStyle ?? this.linkTextStyle,
       imageBorderRadius: imageBorderRadius ?? this.imageBorderRadius,
-      imageMinHeight: imageMinHeight ?? this.imageMinHeight,
-      imageMaxHeight: imageMaxHeight ?? this.imageMaxHeight,
       imageFallbackAspectRatio:
           imageFallbackAspectRatio ?? this.imageFallbackAspectRatio,
-      imageMinAspectRatio: imageMinAspectRatio ?? this.imageMinAspectRatio,
-      imageMaxAspectRatio: imageMaxAspectRatio ?? this.imageMaxAspectRatio,
       imageFit: imageFit ?? this.imageFit,
     );
   }
@@ -404,7 +388,7 @@ class ThreadPostTextBlockView extends StatelessWidget {
   }
 }
 
-class ThreadPostImageBlockView extends StatelessWidget {
+class ThreadPostImageBlockView extends StatefulWidget {
   const ThreadPostImageBlockView({
     super.key,
     required this.document,
@@ -414,6 +398,7 @@ class ThreadPostImageBlockView extends StatelessWidget {
     this.style = ThreadPostBodyStyle.defaults,
     this.onOpenImage,
     this.onOpenImages,
+    @visibleForTesting this.imageProviderOverride,
   });
 
   final ThreadPostBodyDocument document;
@@ -424,46 +409,54 @@ class ThreadPostImageBlockView extends StatelessWidget {
   final ThreadPostImageOpenHandler? onOpenImage;
   final void Function(List<ThreadPostImageBlock> images, int initialIndex)?
   onOpenImages;
+  final ImageProvider? imageProviderOverride;
+
+  @override
+  State<ThreadPostImageBlockView> createState() =>
+      _ThreadPostImageBlockViewState();
+}
+
+class _ThreadPostImageBlockViewState extends State<ThreadPostImageBlockView> {
+  double? _resolvedAspectRatio;
+
+  @override
+  void didUpdateWidget(covariant ThreadPostImageBlockView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.image.url != widget.image.url) {
+      _resolvedAspectRatio = null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final aspectRatio = _estimatedAspectRatio(image);
+    final aspectRatio = _resolvedAspectRatio ?? _fallbackAspectRatio();
     return SelectionContainer.disabled(
       child: Material(
         color: Colors.transparent,
-        borderRadius: style.imageBorderRadius,
+        borderRadius: widget.style.imageBorderRadius,
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          key: Key('thread-post-image-${image.index}'),
+          key: Key('thread-post-image-${widget.image.index}'),
           onTap: () => _openImage(context),
           child: ClipRRect(
-            borderRadius: style.imageBorderRadius,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final width = constraints.maxWidth.isFinite
-                    ? constraints.maxWidth
-                    : MediaQuery.sizeOf(context).width;
-                final height = (width / aspectRatio).clamp(
-                  style.imageMinHeight,
-                  style.imageMaxHeight,
-                );
-                return SizedBox(
-                  height: height,
-                  child: LibraryCachedImage(
-                    imageUrl: image.url,
-                    fit: style.imageFit,
-                    placeholder: _ThreadPostImagePlaceholder(
-                      label: '图片加载中',
-                      icon: Icons.image_outlined,
-                    ),
-                    errorPlaceholder: _ThreadPostImagePlaceholder(
-                      label: '图片加载失败',
-                      icon: Icons.broken_image_outlined,
-                    ),
-                    headerBuilder: imageHeaderBuilder,
-                  ),
-                );
-              },
+            borderRadius: widget.style.imageBorderRadius,
+            child: AspectRatio(
+              aspectRatio: aspectRatio,
+              child: LibraryCachedImage(
+                imageUrl: widget.image.url,
+                imageProviderOverride: widget.imageProviderOverride,
+                fit: widget.style.imageFit,
+                placeholder: const _ThreadPostImagePlaceholder(
+                  label: '图片加载中',
+                  icon: Icons.image_outlined,
+                ),
+                errorPlaceholder: const _ThreadPostImagePlaceholder(
+                  label: '图片加载失败',
+                  icon: Icons.broken_image_outlined,
+                ),
+                headerBuilder: widget.imageHeaderBuilder,
+                onImageResolved: _handleImageResolved,
+              ),
             ),
           ),
         ),
@@ -472,42 +465,56 @@ class ThreadPostImageBlockView extends StatelessWidget {
   }
 
   void _openImage(BuildContext context) {
-    final initialIndex = images.indexWhere((item) => item.url == image.url);
-    final resolvedIndex = initialIndex < 0 ? image.index : initialIndex;
-    final imageHandler = onOpenImage;
+    final initialIndex = widget.images.indexWhere(
+      (item) => item.url == widget.image.url,
+    );
+    final resolvedIndex = initialIndex < 0 ? widget.image.index : initialIndex;
+    final imageHandler = widget.onOpenImage;
     if (imageHandler != null) {
       imageHandler(
         ThreadPostImageOpenRequest(
-          document: document,
-          images: images,
-          image: image,
+          document: widget.document,
+          images: widget.images,
+          image: widget.image,
           initialIndex: resolvedIndex,
         ),
       );
       return;
     }
-    final callback = onOpenImages;
+    final callback = widget.onOpenImages;
     if (callback != null) {
-      callback(images, resolvedIndex);
+      callback(widget.images, resolvedIndex);
       return;
     }
-    Clipboard.setData(ClipboardData(text: image.url));
+    Clipboard.setData(ClipboardData(text: widget.image.url));
     ScaffoldMessenger.maybeOf(
       context,
     )?.showSnackBar(const SnackBar(content: Text('图片链接已复制')));
   }
 
-  double _estimatedAspectRatio(ThreadPostImageBlock image) {
-    final width = image.originalWidth;
-    final height = image.originalHeight;
-    if (width != null && height != null && width > 0 && height > 0) {
-      return (width / height)
-          .clamp(style.imageMinAspectRatio, style.imageMaxAspectRatio)
-          .toDouble();
+  void _handleImageResolved(Size size) {
+    final width = size.width;
+    final height = size.height;
+    if (width <= 0 || height <= 0) {
+      return;
     }
-    return style.imageFallbackAspectRatio
-        .clamp(style.imageMinAspectRatio, style.imageMaxAspectRatio)
-        .toDouble();
+    final next = width / height;
+    if (_resolvedAspectRatio == next) {
+      return;
+    }
+    setState(() {
+      _resolvedAspectRatio = next;
+    });
+  }
+
+  double _fallbackAspectRatio() {
+    return _validAspectRatio(widget.style.imageFallbackAspectRatio);
+  }
+
+  double _validAspectRatio(double value) {
+    return value.isFinite && value > 0
+        ? value
+        : ThreadPostBodyStyle.defaults.imageFallbackAspectRatio;
   }
 }
 

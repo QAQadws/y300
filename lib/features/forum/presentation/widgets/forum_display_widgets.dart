@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
 import 'package:y300/features/forum/presentation/forum_display_state.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
+import 'package:y300/shared/widgets/forum_native_surface.dart';
 
 class ForumDisplayContent extends StatefulWidget {
   const ForumDisplayContent({
@@ -1255,13 +1256,7 @@ class _ThreadCardState extends State<_ThreadCard> {
       child: DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: palette.stateLayer.withValues(alpha: 0.05),
-              blurRadius: 7,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          boxShadow: ForumNativeSurfaceShadows.card(palette.stateLayer),
         ),
         child: Material(
           color: palette.surfaceContainerLow,

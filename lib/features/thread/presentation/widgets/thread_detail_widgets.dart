@@ -8,6 +8,7 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
+import 'package:y300/shared/widgets/forum_native_surface.dart';
 import 'package:y300/shared/widgets/shelf/candidate_shelf_action_row.dart';
 
 class ThreadDetailContent extends StatelessWidget {
@@ -21,10 +22,6 @@ class ThreadDetailContent extends StatelessWidget {
     required this.sourceTagLabel,
     required this.onLoadPreviousPage,
     required this.onLoadNextPage,
-    required this.onOpenOnlyAuthor,
-    required this.onOpenAllPosts,
-    required this.onOpenReverseOrder,
-    required this.onOpenNormalOrder,
     required this.onAddComicToShelf,
     required this.onAddNovelToShelf,
     required this.onOpenPostReply,
@@ -46,10 +43,6 @@ class ThreadDetailContent extends StatelessWidget {
   final String sourceTagLabel;
   final VoidCallback onLoadPreviousPage;
   final VoidCallback onLoadNextPage;
-  final VoidCallback onOpenOnlyAuthor;
-  final VoidCallback onOpenAllPosts;
-  final VoidCallback onOpenReverseOrder;
-  final VoidCallback onOpenNormalOrder;
   final VoidCallback onAddComicToShelf;
   final VoidCallback onAddNovelToShelf;
   final ValueChanged<ThreadPost> onOpenPostReply;
@@ -116,22 +109,6 @@ class ThreadDetailContent extends StatelessWidget {
           onSubmitPollVote: onSubmitPollVote,
           palette: palette,
         );
-        if (post.isFirst && state.posts.length > 1) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              postCard,
-              ThreadRepliesHeader(
-                state: state,
-                palette: palette,
-                onOpenOnlyAuthor: onOpenOnlyAuthor,
-                onOpenAllPosts: onOpenAllPosts,
-                onOpenReverseOrder: onOpenReverseOrder,
-                onOpenNormalOrder: onOpenNormalOrder,
-              ),
-            ],
-          );
-        }
         return postCard;
       },
     );
@@ -195,120 +172,6 @@ class ThreadDetailHeaderCard extends StatelessWidget {
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class ThreadRepliesHeader extends StatelessWidget {
-  const ThreadRepliesHeader({
-    super.key,
-    required this.state,
-    required this.palette,
-    required this.onOpenOnlyAuthor,
-    required this.onOpenAllPosts,
-    required this.onOpenReverseOrder,
-    required this.onOpenNormalOrder,
-  });
-
-  final ThreadDetailPageState state;
-  final ThreadDetailNativePalette palette;
-  final VoidCallback onOpenOnlyAuthor;
-  final VoidCallback onOpenAllPosts;
-  final VoidCallback onOpenReverseOrder;
-  final VoidCallback onOpenNormalOrder;
-
-  @override
-  Widget build(BuildContext context) {
-    final currentPage = state.currentPage <= 0 ? 1 : state.currentPage;
-    final pageLabel = state.lastPage == null || state.lastPage! <= 1
-        ? '第 $currentPage 页'
-        : '第 $currentPage / ${state.lastPage} 页';
-    return Container(
-      key: const Key('thread-replies-header'),
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(
-        color: palette.metricBackground.withValues(alpha: 0.56),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        children: [
-          Text(
-            '全部回复',
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: palette.title,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(width: 5),
-          Text(
-            state.replies.toString(),
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: palette.author,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const Spacer(),
-          ThreadReplyHeaderAction(
-            label: state.isOnlyAuthorView ? '显示全部楼层' : '只看该作者',
-            palette: palette,
-            onPressed: state.isOnlyAuthorView
-                ? onOpenAllPosts
-                : onOpenOnlyAuthor,
-          ),
-          const SizedBox(width: 6),
-          ThreadReplyHeaderAction(
-            label: state.isReverseOrderView ? '正序浏览' : '倒序浏览',
-            palette: palette,
-            onPressed: state.isReverseOrderView
-                ? onOpenNormalOrder
-                : onOpenReverseOrder,
-          ),
-          const SizedBox(width: 6),
-          Text(
-            pageLabel,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: palette.softText,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class ThreadReplyHeaderAction extends StatelessWidget {
-  const ThreadReplyHeaderAction({
-    super.key,
-    required this.label,
-    required this.palette,
-    required this.onPressed,
-  });
-
-  final String label;
-  final ThreadDetailNativePalette palette;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: palette.card.withValues(alpha: 0.72),
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onPressed,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: palette.muted,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -1762,13 +1625,7 @@ BoxDecoration _cardDecoration(ThreadDetailNativePalette palette) {
   return BoxDecoration(
     color: palette.card,
     borderRadius: BorderRadius.circular(12),
-    boxShadow: [
-      BoxShadow(
-        color: palette.stateLayer.withValues(alpha: 0.42),
-        blurRadius: 7,
-        offset: const Offset(0, 2),
-      ),
-    ],
+    boxShadow: ForumNativeSurfaceShadows.card(palette.stateLayer),
   );
 }
 
@@ -1776,13 +1633,7 @@ BoxDecoration _highlightedCardDecoration(ThreadDetailNativePalette palette) {
   return BoxDecoration(
     color: palette.accent.withValues(alpha: 0.10),
     borderRadius: BorderRadius.circular(12),
-    boxShadow: [
-      BoxShadow(
-        color: palette.accent.withValues(alpha: 0.22),
-        blurRadius: 10,
-        offset: const Offset(0, 3),
-      ),
-    ],
+    boxShadow: ForumNativeSurfaceShadows.card(palette.stateLayer),
   );
 }
 

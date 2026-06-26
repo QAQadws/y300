@@ -11,6 +11,7 @@ import 'package:y300/features/forum/data/models/forum_display_models.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_home_widgets.dart';
+import 'package:y300/shared/widgets/forum_native_surface.dart';
 
 void main() {
   group('ForumDisplayPage', () {
@@ -138,12 +139,16 @@ void main() {
         lessThanOrEqualTo(2),
       );
       expect(find.text('帖子A'), findsOneWidget);
-      expect(find.text('公告区'), findsWidgets);
-      expect(find.text('第1页'), findsOneWidget);
-
       final palette = ForumDisplayThemePalette.resolve(
         Theme.of(tester.element(find.byType(ForumDisplayPage))),
       );
+      expect(
+        _threadCardShadowDecoration(tester, '100').boxShadow,
+        ForumNativeSurfaceShadows.card(palette.stateLayer),
+      );
+      expect(find.text('公告区'), findsWidgets);
+      expect(find.text('第1页'), findsOneWidget);
+
       final currentPageButton = tester.widget<TextButton>(
         find.byKey(const Key('forum-display-current-page-button')),
       );
@@ -1049,6 +1054,23 @@ BoxDecoration _firstAnimatedContainerDecoration(
     }
   }
   throw StateError('No BoxDecoration AnimatedContainer found.');
+}
+
+BoxDecoration _threadCardShadowDecoration(WidgetTester tester, String tid) {
+  final threadFinder = find.byKey(Key('forum-thread-$tid'));
+  expect(threadFinder, findsOneWidget);
+  final decoratedBoxes = find
+      .ancestor(of: threadFinder, matching: find.byType(DecoratedBox))
+      .evaluate();
+  for (final element in decoratedBoxes) {
+    final widget = element.widget as DecoratedBox;
+    final decoration = widget.decoration;
+    if (decoration is BoxDecoration &&
+        decoration.boxShadow?.isNotEmpty == true) {
+      return decoration;
+    }
+  }
+  throw StateError('No thread card shadow decoration found.');
 }
 
 class _FakeForumDisplayRepository implements ForumDisplayRepository {

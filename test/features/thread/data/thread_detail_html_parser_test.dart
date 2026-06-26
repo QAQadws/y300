@@ -24,6 +24,8 @@ void main() {
         expect(result.fid, '33');
         expect(result.typeid, '410');
         expect(result.typeName, '理性探讨');
+        expect(result.forumName, '海域區');
+        expect(result.forumUrl, contains('forum-33-1.html'));
         expect(result.subject, '突发奇想，调查一下大家对于两种百合形态的偏好');
         expect(result.views, 937);
         expect(result.replies, 67);
@@ -158,6 +160,8 @@ void main() {
 
       expect(result.tid, '571955');
       expect(result.fid, '30');
+      expect(result.forumName, '中文百合漫画区');
+      expect(result.forumUrl, contains('forum-30-1.html'));
       expect(result.subject, contains('狱门抚子'));
       expect(result.views, 2426);
       expect(result.replies, 9);

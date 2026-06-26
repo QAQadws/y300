@@ -108,6 +108,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     return Scaffold(
       backgroundColor: palette.background,
       appBar: AppBar(
+        centerTitle: false,
         title: _ThreadDetailAppBarTitle(state: state),
         actions: [
           IconButton(
@@ -127,9 +128,19 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                   )
                 : Icon(
                     state.isThreadFavorited
-                        ? Icons.favorite
-                        : Icons.favorite_border,
+                        ? Icons.star
+                        : Icons.star_border_outlined,
                   ),
+          ),
+          IconButton(
+            key: const Key('thread-detail-appbar-reply-button'),
+            tooltip: '回复帖子',
+            onPressed: asyncState.value == null
+                ? null
+                : () {
+                    _openThreadReplyComposer(args, state);
+                  },
+            icon: const Icon(Icons.reply),
           ),
           if (state.fid == '30')
             IconButton(
@@ -175,10 +186,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                     sourceTagLabel: _sourceTagLabel(state),
                     onLoadPreviousPage: controller.loadPreviousPage,
                     onLoadNextPage: controller.loadNextPage,
-                    onOpenOnlyAuthor: controller.openOnlyAuthor,
-                    onOpenAllPosts: controller.openAllPosts,
-                    onOpenReverseOrder: controller.openReverseOrder,
-                    onOpenNormalOrder: controller.openNormalOrder,
                     onAddComicToShelf: controller.addToShelf,
                     onAddNovelToShelf: controller.addNovelToShelf,
                     onOpenPostReply: (post) {
@@ -197,25 +204,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                     onTogglePollOption: controller.togglePollOption,
                     onSubmitPollVote: controller.submitPollVote,
                   ),
-          ),
-          _ReplyComposer(
-            hint: state.replyHint,
-            onReply: asyncState.value == null
-                ? null
-                : () {
-                    _openThreadReplyComposer(args, state);
-                  },
-            onFavorite:
-                asyncState.value == null ||
-                    state.isThreadFavoriteActionLoading ||
-                    state.isThreadFavorited
-                ? null
-                : controller.favoriteThread,
-            favoriteSelected: state.isThreadFavorited,
-            favoriteLoading: state.isThreadFavoriteActionLoading,
-            onShare: state.shareUrl?.trim().isEmpty ?? true
-                ? null
-                : () => _copyUrl('分享链接', state.shareUrl!),
           ),
         ],
       ),
@@ -705,25 +693,10 @@ class _ThreadDetailAppBarTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final forumName = state.forumName?.trim();
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          state.subject.isNotEmpty ? state.subject : '帖子详情',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        if (forumName != null && forumName.isNotEmpty)
-          Text(
-            forumName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: DefaultTextStyle.of(
-              context,
-            ).style.copyWith(fontSize: 11, fontWeight: FontWeight.w600),
-          ),
-      ],
+    return Text(
+      forumName == null || forumName.isEmpty ? '帖子详情' : forumName,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
     );
   }
 }
@@ -786,98 +759,6 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
             return;
         }
       },
-    );
-  }
-}
-
-class _ReplyComposer extends StatelessWidget {
-  const _ReplyComposer({
-    required this.hint,
-    required this.onReply,
-    required this.onFavorite,
-    required this.favoriteSelected,
-    required this.favoriteLoading,
-    required this.onShare,
-  });
-
-  final String? hint;
-  final VoidCallback? onReply;
-  final VoidCallback? onFavorite;
-  final bool favoriteSelected;
-  final bool favoriteLoading;
-  final VoidCallback? onShare;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-        ),
-      ),
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (hint != null && hint!.trim().isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  hint!,
-                  key: const Key('thread-reply-hint'),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-            ),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  key: const Key('thread-reply-input'),
-                  onPressed: onReply,
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('发表回复'),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                key: const Key('thread-detail-bottom-favorite-button'),
-                tooltip: favoriteSelected ? '已收藏' : '收藏帖子',
-                onPressed: onFavorite,
-                icon: favoriteLoading
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Icon(
-                        favoriteSelected
-                            ? Icons.star
-                            : Icons.star_border_outlined,
-                      ),
-              ),
-              if (onShare != null)
-                IconButton(
-                  key: const Key('thread-detail-share-button'),
-                  tooltip: '分享',
-                  onPressed: onShare,
-                  icon: const Icon(Icons.ios_share_outlined),
-                ),
-              const SizedBox(width: 4),
-              FilledButton(
-                key: const Key('thread-reply-submit-button'),
-                onPressed: onReply,
-                child: const Text('回复'),
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }

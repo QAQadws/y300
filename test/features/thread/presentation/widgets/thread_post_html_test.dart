@@ -1,8 +1,12 @@
+import 'dart:ui' as ui;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
+import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 
 void main() {
@@ -11,13 +15,18 @@ void main() {
     (tester) async {
       await tester.pumpWidget(
         MaterialApp(
-          home: ThreadPostHtml(
-            data: '<img file="data/attachment/forum/page-1.jpg" />',
-            imageHeaderBuilder: const _StaticImageHeaderBuilder(
-              <String, String>{
-                'Referer': 'https://bbs.yamibo.com/',
-                'Cookie': 'auth=token123',
-              },
+          home: Center(
+            child: SizedBox(
+              width: 140,
+              child: ThreadPostHtml(
+                data: '<img file="data/attachment/forum/page-1.jpg" />',
+                imageHeaderBuilder: const _StaticImageHeaderBuilder(
+                  <String, String>{
+                    'Referer': 'https://bbs.yamibo.com/',
+                    'Cookie': 'auth=token123',
+                  },
+                ),
+              ),
             ),
           ),
         ),
@@ -193,9 +202,14 @@ void main() {
     (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
-          home: ThreadPostHtml(
-            data:
-                '<img data-original="//bbs.yamibo.com/data/attachment/forum/page-2.jpg" />',
+          home: Center(
+            child: SizedBox(
+              width: 140,
+              child: ThreadPostHtml(
+                data:
+                    '<img data-original="//bbs.yamibo.com/data/attachment/forum/page-2.jpg" />',
+              ),
+            ),
           ),
         ),
       );
@@ -219,9 +233,14 @@ void main() {
     (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
-          home: ThreadPostHtml(
-            data:
-                '<img src="static/image/common/none.gif" file="data/attachment/forum/page-real.jpg" />',
+          home: Center(
+            child: SizedBox(
+              width: 140,
+              child: ThreadPostHtml(
+                data:
+                    '<img src="static/image/common/none.gif" file="data/attachment/forum/page-real.jpg" />',
+              ),
+            ),
           ),
         ),
       );
@@ -245,8 +264,11 @@ void main() {
     (tester) async {
       await tester.pumpWidget(
         MaterialApp(
-          home: ThreadPostHtml(
-            data: '''
+          home: Center(
+            child: SizedBox(
+              width: 140,
+              child: ThreadPostHtml(
+                data: '''
 <ignore_js_op>
   <img id="aimg_1597001"
        aid="1597001"
@@ -258,11 +280,13 @@ void main() {
        inpost="1" />
 </ignore_js_op>
 ''',
-            imageHeaderBuilder: const _StaticImageHeaderBuilder(
-              <String, String>{
-                'Referer': 'https://bbs.yamibo.com/',
-                'Cookie': 'auth=token123',
-              },
+                imageHeaderBuilder: const _StaticImageHeaderBuilder(
+                  <String, String>{
+                    'Referer': 'https://bbs.yamibo.com/',
+                    'Cookie': 'auth=token123',
+                  },
+                ),
+              ),
             ),
           ),
         ),
@@ -286,22 +310,107 @@ void main() {
     },
   );
 
+  testWidgets(
+    'ThreadPostHtml uses full-width 7/10 placeholders for post images',
+    (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Center(
+            child: SizedBox(
+              width: 140,
+              child: ThreadPostHtml(
+                data: '''
+<img file="data/attachment/forum/page-1.jpg" />
+<img file="data/attachment/forum/page-2.jpg" />
+''',
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      final imageBlocks = find.byType(ThreadPostImageBlockView);
+      expect(imageBlocks, findsNWidgets(2));
+      final firstSize = tester.getSize(imageBlocks.first);
+      expect(firstSize.width, 140);
+      expect(firstSize.width / firstSize.height, closeTo(0.7, 0.01));
+
+      final defaultSpacers = tester
+          .widgetList<SizedBox>(find.byType(SizedBox))
+          .where(
+            (box) => box.height == ThreadPostBodyStyle.defaults.blockSpacing,
+          );
+      expect(defaultSpacers.length, greaterThanOrEqualTo(1));
+    },
+  );
+
+  testWidgets('ThreadPostImageBlockView switches to resolved image ratio', (
+    tester,
+  ) async {
+    final image = await tester.runAsync(
+      () => createTestImage(width: 1000, height: 500, cache: false),
+    );
+    final testImage = image!;
+    addTearDown(testImage.dispose);
+    final provider = _SynchronousImageProvider(testImage);
+    const imageBlock = ThreadPostImageBlock(
+      url: 'https://bbs.yamibo.com/data/attachment/forum/page-real.jpg',
+      rawUrl: 'data/attachment/forum/page-real.jpg',
+      index: 0,
+    );
+    const document = ThreadPostBodyDocument(
+      blocks: <ThreadPostBodyBlock>[imageBlock],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: SizedBox(
+            width: 350,
+            child: ThreadPostImageBlockView(
+              document: document,
+              image: imageBlock,
+              images: <ThreadPostImageBlock>[imageBlock],
+              imageProviderOverride: provider,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump();
+
+    final imageBlockSize = tester.getSize(
+      find.byType(ThreadPostImageBlockView),
+    );
+    expect(imageBlockSize.width, 350);
+    expect(imageBlockSize.width / imageBlockSize.height, closeTo(2.0, 0.01));
+    final cachedImage = tester.widget<LibraryCachedImage>(
+      find.byType(LibraryCachedImage),
+    );
+    expect(cachedImage.fit, BoxFit.fitWidth);
+  });
+
   testWidgets('ThreadPostHtml exposes image group open request', (
     tester,
   ) async {
     ThreadPostImageOpenRequest? opened;
     await tester.pumpWidget(
       MaterialApp(
-        home: ThreadPostHtml(
-          data: '''
+        home: Center(
+          child: SizedBox(
+            width: 140,
+            child: ThreadPostHtml(
+              data: '''
 <img file="data/attachment/forum/page-1.jpg" />
 <img file="data/attachment/forum/page-2.jpg" />
 ''',
-          style: const ThreadPostBodyStyle(
-            imageMinHeight: 80,
-            imageMaxHeight: 120,
+              onOpenImage: (request) => opened = request,
+            ),
           ),
-          onOpenImage: (request) => opened = request,
         ),
       ),
     );
@@ -342,4 +451,28 @@ class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
 
   @override
   Future<Map<String, String>> buildHeaders(String imageUrl) async => headers;
+}
+
+class _SynchronousImageProvider
+    extends ImageProvider<_SynchronousImageProvider> {
+  const _SynchronousImageProvider(this.image);
+
+  final ui.Image image;
+
+  @override
+  Future<_SynchronousImageProvider> obtainKey(
+    ImageConfiguration configuration,
+  ) {
+    return SynchronousFuture<_SynchronousImageProvider>(this);
+  }
+
+  @override
+  ImageStreamCompleter loadImage(
+    _SynchronousImageProvider key,
+    ImageDecoderCallback decode,
+  ) {
+    return OneFrameImageStreamCompleter(
+      SynchronousFuture<ImageInfo>(ImageInfo(image: image)),
+    );
+  }
 }

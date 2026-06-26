@@ -64,8 +64,9 @@ class ThreadDetailHtmlParser {
     final typeAnchor = document.querySelector('.vwthd h1.ts a[href*="typeid"]');
     final typeName = _stripBrackets(_cleanText(typeAnchor?.text ?? ''));
     final forumAnchor =
-        document.querySelector('a[rel="curforum"][fid]') ??
-        document.querySelector('a[href*="forumdisplay"][href*="fid="]');
+        _parseBreadcrumbForumAnchor(document) ??
+        document.querySelector('a[href*="forumdisplay"][href*="fid="]') ??
+        document.querySelector('a[rel="curforum"][fid]');
     final statText = _cleanText(
       document.querySelector('#postlist .hm')?.text ?? '',
     );
@@ -79,6 +80,19 @@ class ThreadDetailHtmlParser {
       views: _parseLabeledInt(statText, '查看'),
       replies: _parseLabeledInt(statText, '回复'),
     );
+  }
+
+  html_dom.Element? _parseBreadcrumbForumAnchor(html_dom.Document document) {
+    final anchors = document.querySelectorAll(
+      '#pt a[href*="forum-"], #pt a[href*="forumdisplay"][href*="fid="]',
+    );
+    for (final anchor in anchors.reversed) {
+      final name = _cleanText(anchor.text);
+      if (name.isNotEmpty) {
+        return anchor;
+      }
+    }
+    return null;
   }
 
   List<ThreadPost> _parsePosts(html_dom.Document document) {
@@ -689,6 +703,12 @@ class ThreadDetailHtmlParser {
   }
 
   String? _extractFid(html_dom.Document document) {
+    final breadcrumbFid = _extractForumFid(
+      _resolve(_parseBreadcrumbForumAnchor(document)?.attributes['href']),
+    );
+    if (breadcrumbFid != null && breadcrumbFid.isNotEmpty) {
+      return breadcrumbFid;
+    }
     final curTypeFid = document
         .querySelector('a[rel="curforum"][fid]')
         ?.attributes['fid'];
@@ -696,17 +716,21 @@ class ThreadDetailHtmlParser {
       return curTypeFid.trim();
     }
     for (final anchor in document.querySelectorAll(
-      'a[href*="forumdisplay"][href*="fid="], a[href*="action=newthread"][href*="fid="]',
+      '#pt a[href*="forum-"], a[href*="forumdisplay"][href*="fid="], a[href*="action=newthread"][href*="fid="]',
     )) {
-      final fid = _extractQueryValue(
-        _resolve(anchor.attributes['href']),
-        'fid',
-      );
+      final fid = _extractForumFid(_resolve(anchor.attributes['href']));
       if (fid != null && fid.isNotEmpty) {
         return fid;
       }
     }
     return null;
+  }
+
+  String? _extractForumFid(String? url) {
+    return _extractQueryValue(url, 'fid') ??
+        RegExp(
+          r'forum-(\d+)-',
+        ).firstMatch(Uri.tryParse(url ?? '')?.path ?? '')?.group(1);
   }
 
   String? _extractTypeId(html_dom.Document document) {

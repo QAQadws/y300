@@ -43,6 +43,8 @@ import 'package:y300/features/thread/data/thread_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/services/thread_favorite_action_service.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
+import 'package:y300/shared/widgets/forum_native_surface.dart';
 
 void main() {
   setUp(() {
@@ -181,6 +183,27 @@ void main() {
 
       expect(find.byKey(const Key('thread-detail-list')), findsOneWidget);
       expect(find.text('海域區'), findsOneWidget);
+      expect(_appBarTitleText('海域區'), findsOneWidget);
+      expect(_appBarTitleText('测试主题'), findsNothing);
+      expect(
+        find.byKey(const Key('thread-detail-appbar-reply-button')),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.reply), findsOneWidget);
+      expect(find.byIcon(Icons.star_border_outlined), findsOneWidget);
+      expect(find.byKey(const Key('thread-detail-share-button')), findsNothing);
+      expect(
+        _centerDxOf(
+          tester,
+          find.byKey(const Key('thread-detail-favorite-button')),
+        ),
+        lessThan(
+          _centerDxOf(
+            tester,
+            find.byKey(const Key('thread-detail-appbar-reply-button')),
+          ),
+        ),
+      );
       expect(
         find.byKey(const Key('thread-detail-header-card')),
         findsOneWidget,
@@ -189,6 +212,17 @@ void main() {
       expect(find.text('12'), findsOneWidget);
       expect(find.text('第 1 / 2 页'), findsOneWidget);
       expect(find.byKey(const Key('thread-post-card-p1')), findsOneWidget);
+      final postCard = tester.widget<Container>(
+        find.byKey(const Key('thread-post-card-p1')),
+      );
+      final postCardDecoration = postCard.decoration as BoxDecoration;
+      final detailPalette = ThreadDetailNativePalette.resolve(
+        Theme.of(tester.element(find.byType(ThreadDetailPage))),
+      );
+      expect(
+        postCardDecoration.boxShadow,
+        ForumNativeSurfaceShadows.card(detailPalette.stateLayer),
+      );
       expect(_richTextContaining('第一条回复'), findsOneWidget);
       expect(find.byKey(const Key('thread-poll-card')), findsOneWidget);
       expect(find.text('选项A'), findsOneWidget);
@@ -216,6 +250,9 @@ void main() {
       expect(find.text('我很赞同'), findsOneWidget);
       expect(find.text('查看全部评分'), findsOneWidget);
       expect(find.byKey(const Key('thread-replies-header')), findsNothing);
+      expect(find.text('全部回复'), findsNothing);
+      expect(find.byKey(const Key('thread-reply-input')), findsNothing);
+      expect(find.byKey(const Key('thread-reply-submit-button')), findsNothing);
 
       await tester.dragUntilVisible(
         find.byKey(const Key('thread-detail-load-more-button')),
@@ -240,11 +277,7 @@ void main() {
       expect(_richTextContaining('第二条回复'), findsOneWidget);
       expect(
         find.byKey(const Key('thread-detail-bottom-favorite-button')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const Key('thread-detail-share-button')),
-        findsOneWidget,
+        findsNothing,
       );
       await tester.tap(find.byKey(const Key('thread-detail-more-menu')));
       await tester.pumpAndSettle();
@@ -736,7 +769,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('目标帖子'), findsWidgets);
+      expect(_appBarTitleText('目标帖子'), findsNothing);
       expect(
         find.byKey(const Key('thread-post-card-41560047')),
         findsOneWidget,
@@ -1399,7 +1432,7 @@ void main() {
 
       expect(favoriteActionService.called, isTrue);
       expect(favoriteActionService.lastTid, '100');
-      expect(find.byIcon(Icons.favorite), findsOneWidget);
+      expect(find.byIcon(Icons.star), findsOneWidget);
       expect(find.text('收藏成功'), findsOneWidget);
     });
 
@@ -1438,7 +1471,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('thread-reply-submit-button')));
+      expect(find.byKey(const Key('thread-reply-submit-button')), findsNothing);
+      expect(find.byKey(const Key('thread-reply-input')), findsNothing);
+
+      await tester.tap(
+        find.byKey(const Key('thread-detail-appbar-reply-button')),
+      );
       await tester.pumpAndSettle();
 
       expect(
@@ -1548,6 +1586,20 @@ Finder _popupMenuText(String text) {
     of: find.byType(PopupMenuItem<String>),
     matching: find.text(text),
   );
+}
+
+Finder _appBarTitleText(String text) {
+  return find.descendant(
+    of: find.descendant(
+      of: find.byType(AppBar),
+      matching: find.byType(NavigationToolbar),
+    ),
+    matching: find.text(text),
+  );
+}
+
+double _centerDxOf(WidgetTester tester, Finder finder) {
+  return tester.getCenter(finder).dx;
 }
 
 Finder _richTextContaining(String text) {
