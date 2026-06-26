@@ -56,6 +56,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   final Map<String, int> _targetScrollAttempts = <String, int>{};
   Timer? _highlightClearTimer;
   String? _highlightPostPid;
+  bool _suppressTargetScrollForPageAction = false;
 
   @override
   void initState() {
@@ -184,8 +185,23 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                     targetPid: widget.targetPid,
                     imageHeaderBuilder: imageHeaderBuilder,
                     sourceTagLabel: _sourceTagLabel(state),
-                    onLoadPreviousPage: controller.loadPreviousPage,
-                    onLoadNextPage: controller.loadNextPage,
+                    onLoadPreviousPage: () {
+                      unawaited(
+                        _runPageActionAndScrollTop(controller.loadPreviousPage),
+                      );
+                    },
+                    onLoadNextPage: () {
+                      unawaited(
+                        _runPageActionAndScrollTop(controller.loadNextPage),
+                      );
+                    },
+                    onLoadPageNumber: (page) {
+                      unawaited(
+                        _runPageActionAndScrollTop(
+                          () => controller.loadPage(page),
+                        ),
+                      );
+                    },
                     onOpenPostReply: (post) {
                       _openPostReplyComposer(args, state, post);
                     },
@@ -233,6 +249,34 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
           },
         )
         .toString();
+  }
+
+  Future<void> _runPageActionAndScrollTop(
+    FutureOr<void> Function() action,
+  ) async {
+    _suppressTargetScrollForPageAction = true;
+    try {
+      await action();
+      if (!mounted) {
+        return;
+      }
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || !_scrollController.hasClients) {
+        return;
+      }
+      final position = _scrollController.position;
+      final targetOffset = position.minScrollExtent;
+      if ((position.pixels - targetOffset).abs() < 1) {
+        return;
+      }
+      await _scrollController.animateTo(
+        targetOffset,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      );
+    } finally {
+      _suppressTargetScrollForPageAction = false;
+    }
   }
 
   Future<void> _openThreadReplyComposer(
@@ -397,6 +441,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   }
 
   void _scheduleTargetPostScroll(ThreadDetailPageState? state) {
+    if (_suppressTargetScrollForPageAction) {
+      return;
+    }
     final targetPid = widget.targetPid?.trim();
     if (targetPid == null || targetPid.isEmpty || state == null) {
       return;

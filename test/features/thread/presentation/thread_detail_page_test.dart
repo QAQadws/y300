@@ -368,12 +368,33 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('下一页'), findsOneWidget);
+      final detailPageButtonKeys = [
+        const Key('thread-detail-previous-page-button'),
+        const Key('thread-detail-current-page-button'),
+        const Key('thread-detail-load-more-button'),
+      ];
+      for (final key in detailPageButtonKeys) {
+        final pageButton = tester.widget<TextButton>(
+          find.descendant(
+            of: find.byKey(key),
+            matching: find.byType(TextButton),
+          ),
+        );
+        expect(
+          pageButton.style?.backgroundColor?.resolve({}),
+          detailPalette.chipBackground,
+        );
+      }
       await tester.tap(find.byKey(const Key('thread-detail-load-more-button')));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
+      await tester.pump(const Duration(milliseconds: 260));
 
       expect(_richTextContaining('第一条回复'), findsNothing);
       expect(_richTextContaining('第二条回复'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byKey(const Key('thread-post-card-p2'))).dy,
+        lessThan(120),
+      );
       expect(
         find.byKey(const Key('thread-detail-bottom-favorite-button')),
         findsNothing,
@@ -391,6 +412,140 @@ void main() {
       expect(repository.queryHistory.last['ordertype'], '1');
       expect(_richTextContaining('第一条回复'), findsOneWidget);
       expect(callCount, 3);
+    });
+
+    testWidgets('current page button opens quick jump dialog and returns top', (
+      tester,
+    ) async {
+      final requestedPages = <int>[];
+      final repository = _FakeThreadRepository((tid, page, query) async {
+        requestedPages.add(page);
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            subject: '测试主题',
+            author: 'alice',
+            replies: 80,
+            views: 120,
+            currentPage: page,
+            lastPage: 20,
+            previousPageUrl: page > 1
+                ? 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=${page - 1}'
+                : null,
+            nextPageUrl: page < 20
+                ? 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=${page + 1}'
+                : null,
+            perPage: 1,
+            posts: [
+              ThreadPost(
+                pid: 'p$page',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>第$page页正文</p>',
+                number: page,
+                isFirst: page == 1,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      await tester.dragUntilVisible(
+        find.byKey(const Key('thread-detail-current-page-button')),
+        find.byKey(const Key('thread-detail-list')),
+        const Offset(0, -260),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const Key('thread-detail-current-page-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('thread-detail-page-picker-dialog')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('thread-detail-page-plus-5-button')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('thread-detail-page-plus-10-button')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('thread-detail-page-plus-50-button')),
+        findsOneWidget,
+      );
+      final plus50 = tester.widget<OutlinedButton>(
+        find.byKey(const Key('thread-detail-page-plus-50-button')),
+      );
+      expect(plus50.onPressed, isNull);
+
+      await tester.enterText(
+        find.byKey(const Key('thread-detail-page-input')),
+        '3',
+      );
+      await tester.tap(
+        find.byKey(const Key('thread-detail-page-confirm-button')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 260));
+
+      expect(requestedPages, <int>[1, 3]);
+      expect(_richTextContaining('第3页正文'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byKey(const Key('thread-post-card-p3'))).dy,
+        lessThan(120),
+      );
+
+      await tester.dragUntilVisible(
+        find.byKey(const Key('thread-detail-current-page-button')),
+        find.byKey(const Key('thread-detail-list')),
+        const Offset(0, -260),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const Key('thread-detail-current-page-button')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('thread-detail-page-plus-5-button')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 260));
+
+      expect(requestedPages, <int>[1, 3, 8]);
+      expect(_richTextContaining('第8页正文'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byKey(const Key('thread-post-card-p8'))).dy,
+        lessThan(120),
+      );
+
+      await tester.dragUntilVisible(
+        find.byKey(const Key('thread-detail-previous-page-button')),
+        find.byKey(const Key('thread-detail-list')),
+        const Offset(0, -260),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const Key('thread-detail-previous-page-button')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 260));
+
+      expect(requestedPages, <int>[1, 3, 8, 7]);
+      expect(_richTextContaining('第7页正文'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byKey(const Key('thread-post-card-p7'))).dy,
+        lessThan(120),
+      );
     });
 
     testWidgets(

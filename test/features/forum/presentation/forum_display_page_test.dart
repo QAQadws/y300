@@ -157,17 +157,31 @@ void main() {
       expect(find.text('公告区'), findsWidgets);
       expect(find.text('第1页'), findsOneWidget);
 
-      final currentPageButton = tester.widget<TextButton>(
-        find.byKey(const Key('forum-display-current-page-button')),
-      );
-      expect(
-        currentPageButton.style?.backgroundColor?.resolve({}),
-        palette.surfaceContainerHigh.withValues(alpha: 0.42),
-      );
-      final currentPageShape =
-          currentPageButton.style?.shape?.resolve({}) as RoundedRectangleBorder;
-      expect(currentPageShape.side, BorderSide.none);
-      expect(currentPageShape.borderRadius, BorderRadius.circular(10));
+      const pageButtonKeys = [
+        Key('forum-display-prev-page-button'),
+        Key('forum-display-current-page-button'),
+        Key('forum-display-load-more-button'),
+      ];
+      for (final key in pageButtonKeys) {
+        final buttonWithKey = find.byKey(key);
+        final descendantButton = find.descendant(
+          of: buttonWithKey,
+          matching: find.byType(TextButton),
+        );
+        final pageButton = tester.widget<TextButton>(
+          descendantButton.evaluate().isEmpty
+              ? buttonWithKey
+              : descendantButton,
+        );
+        expect(
+          pageButton.style?.backgroundColor?.resolve({}),
+          palette.surfaceContainerHigh.withValues(alpha: 0.42),
+        );
+        final pageButtonShape =
+            pageButton.style?.shape?.resolve({}) as RoundedRectangleBorder;
+        expect(pageButtonShape.side, BorderSide.none);
+        expect(pageButtonShape.borderRadius, BorderRadius.circular(10));
+      }
     });
 
     testWidgets('loads next page when tapping load more', (tester) async {
@@ -581,6 +595,18 @@ void main() {
         find.byKey(const Key('forum-display-current-page-button')),
       );
       await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('forum-display-page-plus-5-button')),
+        findsOneWidget,
+      );
+      final plus10 = tester.widget<OutlinedButton>(
+        find.byKey(const Key('forum-display-page-plus-10-button')),
+      );
+      final plus50 = tester.widget<OutlinedButton>(
+        find.byKey(const Key('forum-display-page-plus-50-button')),
+      );
+      expect(plus10.onPressed, isNull);
+      expect(plus50.onPressed, isNull);
       await tester.enterText(
         find.byKey(const Key('forum-display-page-input')),
         '3',
@@ -593,6 +619,19 @@ void main() {
 
       expect(repository.lastQuery?.page, 3);
       expect(find.text('第3页结果'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const Key('forum-display-current-page-button')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('forum-display-page-plus-5-button')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(repository.lastQuery?.page, 8);
+      expect(find.text('第8页结果'), findsOneWidget);
     });
 
     testWidgets('renders HTML-first forum chrome and pinned entries', (

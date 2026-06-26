@@ -1811,16 +1811,47 @@ class _ForumDisplayPagePickerDialogState
     final lastPage = widget.lastPage;
     return AlertDialog(
       title: const Text('选择页码'),
-      content: TextField(
-        key: const Key('forum-display-page-input'),
-        controller: _controller,
-        autofocus: true,
-        keyboardType: TextInputType.number,
-        decoration: InputDecoration(
-          labelText: lastPage == null ? '页码' : '页码（1-$lastPage）',
-          errorText: _errorText,
-        ),
-        onSubmitted: (_) => _submit(context),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            key: const Key('forum-display-page-input'),
+            controller: _controller,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: lastPage == null ? '页码' : '页码（1-$lastPage）',
+              errorText: _errorText,
+            ),
+            onSubmitted: (_) => _submit(context),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _ForumDisplayPageIncrementButton(
+                buttonKey: const Key('forum-display-page-plus-5-button'),
+                increment: 5,
+                currentPage: widget.currentPage,
+                lastPage: lastPage,
+              ),
+              _ForumDisplayPageIncrementButton(
+                buttonKey: const Key('forum-display-page-plus-10-button'),
+                increment: 10,
+                currentPage: widget.currentPage,
+                lastPage: lastPage,
+              ),
+              _ForumDisplayPageIncrementButton(
+                buttonKey: const Key('forum-display-page-plus-50-button'),
+                increment: 50,
+                currentPage: widget.currentPage,
+                lastPage: lastPage,
+              ),
+            ],
+          ),
+        ],
       ),
       actions: [
         TextButton(
@@ -1848,6 +1879,32 @@ class _ForumDisplayPagePickerDialogState
       return;
     }
     Navigator.of(context).pop(page);
+  }
+}
+
+class _ForumDisplayPageIncrementButton extends StatelessWidget {
+  const _ForumDisplayPageIncrementButton({
+    required this.buttonKey,
+    required this.increment,
+    required this.currentPage,
+    required this.lastPage,
+  });
+
+  final Key buttonKey;
+  final int increment;
+  final int currentPage;
+  final int? lastPage;
+
+  @override
+  Widget build(BuildContext context) {
+    final targetPage = currentPage + increment;
+    final maxPage = lastPage;
+    final enabled = maxPage == null || targetPage <= maxPage;
+    return OutlinedButton(
+      key: buttonKey,
+      onPressed: enabled ? () => Navigator.of(context).pop(targetPage) : null,
+      child: Text('+$increment'),
+    );
   }
 }
 
@@ -1892,14 +1949,15 @@ ButtonStyle _pageButtonStyle(
   required bool emphasized,
 }) {
   return TextButton.styleFrom(
-    backgroundColor: emphasized
-        ? palette.surfaceContainerHigh.withValues(alpha: enabled ? 0.42 : 0.22)
-        : Colors.transparent,
+    backgroundColor: palette.surfaceContainerHigh.withValues(alpha: 0.42),
+    disabledBackgroundColor: palette.surfaceContainerHigh.withValues(
+      alpha: 0.42,
+    ),
     disabledForegroundColor: palette.disabledText,
     foregroundColor: enabled ? palette.accent : palette.disabledText,
     padding: const EdgeInsets.symmetric(horizontal: 14),
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(emphasized ? 10 : 6),
+      borderRadius: BorderRadius.circular(10),
       side: BorderSide.none,
     ),
     textStyle: Theme.of(
