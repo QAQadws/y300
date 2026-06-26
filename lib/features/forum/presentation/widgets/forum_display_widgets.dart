@@ -1553,7 +1553,6 @@ class _MetricChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: palette.surfaceContainerHigh.withValues(alpha: 0.42),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: palette.outlineSoft),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

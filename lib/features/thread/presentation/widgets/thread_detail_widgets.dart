@@ -60,12 +60,9 @@ class ThreadDetailContent extends StatelessWidget {
       controller: scrollController,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
       cacheExtent: 900,
-      itemCount: state.posts.length + (hasTargetPost ? 3 : 2),
+      itemCount: state.posts.length + (hasTargetPost ? 2 : 1),
       itemBuilder: (context, index) {
-        if (index == 0) {
-          return ThreadDetailHeaderCard(state: state, palette: palette);
-        }
-        if (index == state.posts.length + 1) {
+        if (index == state.posts.length) {
           return ThreadLoadMoreSection(
             hasMore: state.hasMore,
             isLoadingMore: state.isLoadingMore,
@@ -76,14 +73,14 @@ class ThreadDetailContent extends StatelessWidget {
             palette: palette,
           );
         }
-        if (hasTargetPost && index == state.posts.length + 2) {
+        if (hasTargetPost && index == state.posts.length + 1) {
           return SizedBox(
             key: const Key('thread-detail-target-scroll-spacer'),
             height: MediaQuery.sizeOf(context).height * 0.72,
           );
         }
 
-        final post = state.posts[index - 1];
+        final post = state.posts[index];
         final postCard = ThreadPostCard(
           post: post,
           state: state,
@@ -103,68 +100,6 @@ class ThreadDetailContent extends StatelessWidget {
         );
         return postCard;
       },
-    );
-  }
-}
-
-class ThreadDetailHeaderCard extends StatelessWidget {
-  const ThreadDetailHeaderCard({
-    super.key,
-    required this.state,
-    required this.palette,
-  });
-
-  final ThreadDetailPageState state;
-  final ThreadDetailNativePalette palette;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final typeName = state.typeName?.trim();
-    final pageText = state.lastPage == null || state.lastPage! <= 1
-        ? '第 ${state.currentPage <= 0 ? 1 : state.currentPage} 页'
-        : '第 ${state.currentPage} / ${state.lastPage} 页';
-
-    return Container(
-      key: const Key('thread-detail-header-card'),
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.fromLTRB(14, 13, 14, 12),
-      decoration: _cardDecoration(palette),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (typeName != null && typeName.isNotEmpty) ...[
-            ThreadPill(label: typeName, palette: palette, emphasized: true),
-            const SizedBox(height: 8),
-          ],
-          Text(
-            state.subject.isNotEmpty ? state.subject : '帖子详情',
-            style: textTheme.titleMedium?.copyWith(
-              color: palette.title,
-              fontWeight: FontWeight.w800,
-              height: 1.25,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              ThreadMetricPill(
-                icon: Icons.visibility_outlined,
-                label: state.views.toString(),
-                palette: palette,
-              ),
-              ThreadMetricPill(
-                icon: Icons.forum_outlined,
-                label: state.replies.toString(),
-                palette: palette,
-              ),
-              ThreadPill(label: pageText, palette: palette),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }
@@ -219,6 +154,10 @@ class ThreadPostCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (post.isFirst) ...[
+            _FirstPostThreadSummary(state: state, palette: palette),
+            const SizedBox(height: 11),
+          ],
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -236,6 +175,8 @@ class ThreadPostCard extends StatelessWidget {
                 child: _PostHeader(
                   post: post,
                   palette: palette,
+                  viewsLabel: post.isFirst ? state.views.toString() : null,
+                  repliesLabel: post.isFirst ? state.replies.toString() : null,
                   onOpenAuthorProfile: post.authorId.trim().isEmpty
                       ? null
                       : () => onOpenAuthorProfile(post),
@@ -309,20 +250,52 @@ class ThreadPostCard extends StatelessWidget {
   }
 }
 
+class _FirstPostThreadSummary extends StatelessWidget {
+  const _FirstPostThreadSummary({required this.state, required this.palette});
+
+  final ThreadDetailPageState state;
+  final ThreadDetailNativePalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Column(
+      key: const Key('thread-detail-first-post-summary'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          state.subject.isNotEmpty ? state.subject : '帖子详情',
+          style: textTheme.titleMedium?.copyWith(
+            color: palette.title,
+            fontWeight: FontWeight.w800,
+            height: 1.24,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _PostHeader extends StatelessWidget {
   const _PostHeader({
     required this.post,
     required this.palette,
+    this.viewsLabel,
+    this.repliesLabel,
     this.onOpenAuthorProfile,
   });
 
   final ThreadPost post;
   final ThreadDetailNativePalette palette;
+  final String? viewsLabel;
+  final String? repliesLabel;
   final VoidCallback? onOpenAuthorProfile;
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final views = viewsLabel?.trim();
+    final replies = repliesLabel?.trim();
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -362,7 +335,26 @@ class _PostHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        ThreadPill(label: '${post.number}#', palette: palette),
+        Wrap(
+          spacing: 6,
+          runSpacing: 5,
+          alignment: WrapAlignment.end,
+          children: [
+            if (views != null && views.isNotEmpty)
+              ThreadMetricPill(
+                icon: Icons.visibility_outlined,
+                label: views,
+                palette: palette,
+              ),
+            if (replies != null && replies.isNotEmpty)
+              ThreadMetricPill(
+                icon: Icons.forum_outlined,
+                label: replies,
+                palette: palette,
+              ),
+            ThreadPill(label: '${post.number}#', palette: palette),
+          ],
+        ),
       ],
     );
   }
@@ -387,7 +379,7 @@ class ThreadPostCommentSection extends StatelessWidget {
       key: const Key('thread-post-comment-section'),
       padding: const EdgeInsets.fromLTRB(10, 9, 10, 10),
       decoration: BoxDecoration(
-        color: palette.metricBackground.withValues(alpha: 0.36),
+        color: palette.panelBackground,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -593,7 +585,7 @@ class ThreadPostRatingSection extends StatelessWidget {
       key: const Key('thread-post-rating-section'),
       padding: const EdgeInsets.fromLTRB(10, 9, 10, 9),
       decoration: BoxDecoration(
-        color: palette.metricBackground.withValues(alpha: 0.44),
+        color: palette.panelBackground,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -833,7 +825,7 @@ class ThreadPostTagLinksSection extends StatelessWidget {
         for (final tag in tags)
           Material(
             key: Key('thread-post-tag-link-${tag.tagId ?? tag.label}'),
-            color: palette.metricBackground.withValues(alpha: 0.58),
+            color: palette.chipBackground,
             borderRadius: BorderRadius.circular(9),
             child: InkWell(
               borderRadius: BorderRadius.circular(9),
@@ -879,7 +871,7 @@ class ThreadActionChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: palette.metricBackground.withValues(alpha: 0.52),
+      color: palette.chipBackground,
       borderRadius: BorderRadius.circular(9),
       child: InkWell(
         borderRadius: BorderRadius.circular(9),
@@ -1205,9 +1197,8 @@ class ThreadPollCard extends StatelessWidget {
       key: const Key('thread-poll-card'),
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
       decoration: BoxDecoration(
-        color: palette.metricBackground.withValues(alpha: 0.52),
+        color: palette.panelBackground,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: palette.outlineSoft),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1216,7 +1207,7 @@ class ThreadPollCard extends StatelessWidget {
             poll.summary,
             style: textTheme.labelLarge?.copyWith(
               color: palette.title,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w500,
             ),
           ),
           if (poll.deadlineText?.trim().isNotEmpty == true) ...[
@@ -1341,7 +1332,7 @@ class ThreadPollOptionTile extends StatelessWidget {
                       option.label,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: palette.bodyText,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w400,
                       ),
                     ),
                   ),
@@ -1463,7 +1454,7 @@ class ThreadMetricPill extends StatelessWidget {
       height: 25,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
-        color: palette.metricBackground,
+        color: palette.chipBackground,
         borderRadius: BorderRadius.circular(9),
       ),
       child: Row(
@@ -1503,7 +1494,7 @@ class ThreadPill extends StatelessWidget {
       decoration: BoxDecoration(
         color: emphasized
             ? palette.accent.withValues(alpha: 0.10)
-            : palette.metricBackground.withValues(alpha: 0.72),
+            : palette.chipBackground,
         borderRadius: BorderRadius.circular(9),
       ),
       child: Text(
@@ -1562,7 +1553,7 @@ class ThreadLoadMoreSection extends StatelessWidget {
             height: 34,
             padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
-              color: palette.metricBackground.withValues(alpha: 0.64),
+              color: palette.chipBackground,
               borderRadius: BorderRadius.circular(10),
             ),
             alignment: Alignment.center,

@@ -8,6 +8,8 @@ class ThreadDetailNativePalette {
     required this.card,
     required this.cardElevated,
     required this.metricBackground,
+    required this.chipBackground,
+    required this.panelBackground,
     required this.accent,
     required this.onAccent,
     required this.title,
@@ -27,6 +29,8 @@ class ThreadDetailNativePalette {
   final Color card;
   final Color cardElevated;
   final Color metricBackground;
+  final Color chipBackground;
+  final Color panelBackground;
   final Color accent;
   final Color onAccent;
   final Color title;
@@ -50,12 +54,24 @@ class ThreadDetailNativePalette {
         theme.appBarTheme.foregroundColor ?? scheme.onPrimary;
 
     if (!isDark) {
+      final listTagChipBackground =
+          (Color.lerp(
+                    AppThemeTokens.navigationBarBackground,
+                    AppThemeTokens.forumWebviewSectionBackground,
+                    0.58,
+                  ) ??
+                  AppThemeTokens.navigationBarBackground)
+              .withValues(alpha: 0.42);
       return ThreadDetailNativePalette(
         background: AppThemeTokens.scaffoldBackground,
         card: AppThemeTokens.forumWebviewSectionBackground,
         cardElevated: AppThemeTokens.forumWebviewSectionBackground,
         metricBackground: AppThemeTokens.navigationBarBackground.withValues(
           alpha: 0.58,
+        ),
+        chipBackground: listTagChipBackground,
+        panelBackground: AppThemeTokens.navigationBarBackground.withValues(
+          alpha: 0.18,
         ),
         accent: appBarBackground,
         onAccent: appBarForeground,
@@ -78,6 +94,8 @@ class ThreadDetailNativePalette {
       card: scheme.surfaceContainer,
       cardElevated: scheme.surfaceContainerHighest.withValues(alpha: 0.68),
       metricBackground: scheme.surfaceContainerHighest.withValues(alpha: 0.72),
+      chipBackground: scheme.surfaceContainerHighest.withValues(alpha: 0.42),
+      panelBackground: scheme.surfaceContainerHighest.withValues(alpha: 0.28),
       accent: appBarBackground,
       onAccent: appBarForeground,
       title: scheme.onSurface,

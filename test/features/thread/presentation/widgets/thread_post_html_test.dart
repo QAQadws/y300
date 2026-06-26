@@ -10,6 +10,13 @@ import 'package:y300/features/thread/domain/models/thread_post_body_document.dar
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 
 void main() {
+  test('ThreadPostBodyStyle uses smaller default image radius', () {
+    expect(
+      ThreadPostBodyStyle.defaults.imageBorderRadius,
+      const BorderRadius.all(Radius.circular(4)),
+    );
+  });
+
   testWidgets(
     'ThreadPostHtml renders post images through request header builder',
     (tester) async {
@@ -117,6 +124,10 @@ void main() {
               'https://bbs.yamibo.com/static/image/smiley/comcom/2.gif',
     );
     expect(inlineImages, findsOneWidget);
+    final richText = tester.widget<RichText>(_postRichTexts());
+    final rootSpan = richText.text as TextSpan;
+    final stickerSpan = rootSpan.children!.whereType<WidgetSpan>().single;
+    expect(stickerSpan.alignment, PlaceholderAlignment.bottom);
     final fixedSmileyBoxes = tester
         .widgetList<SizedBox>(find.byType(SizedBox))
         .where((box) => box.width == 22 && box.height == 22);
@@ -179,6 +190,40 @@ void main() {
 
     final spacers = tester.widgetList<SizedBox>(find.byType(SizedBox));
     expect(spacers.any((box) => box.height == 18), isTrue);
+  });
+
+  testWidgets('ThreadPostHtml renders Discuz edit status more quietly', (
+    tester,
+  ) async {
+    const bodyStyle = TextStyle(fontSize: 20, color: Colors.black);
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: DefaultTextStyle(
+          style: bodyStyle,
+          child: ThreadPostHtml(
+            data:
+                '<i class="pstatus"> 本帖最后由 GuGu_ 于 2026-6-16 01:41 编辑 </i><br /><p>正文</p>',
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    final editText = tester.widget<RichText>(_postRichTexts().first);
+    final editRootSpan = editText.text as TextSpan;
+    final editSpan = editRootSpan.children!.single as TextSpan;
+    expect(editSpan.text, '本帖最后由 GuGu_ 于 2026-6-16 01:41 编辑');
+    expect(editSpan.style?.fontStyle, FontStyle.italic);
+    expect(editSpan.style?.fontSize, lessThan(bodyStyle.fontSize!));
+    expect(editSpan.style?.color?.a, lessThan(bodyStyle.color!.a));
+
+    final bodyText = tester.widget<RichText>(_postRichTexts().last);
+    final bodyRootSpan = bodyText.text as TextSpan;
+    final bodySpan = bodyRootSpan.children!.single as TextSpan;
+    expect(bodySpan.text, '正文');
+    expect(bodySpan.style?.fontSize, bodyStyle.fontSize);
+    expect(bodySpan.style?.color, bodyStyle.color);
   });
 
   testWidgets('ThreadPostHtml exposes link tap callback', (tester) async {

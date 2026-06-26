@@ -16,7 +16,7 @@ class ThreadPostBodyStyle {
     this.blockSpacing = 10,
     this.textStyle,
     this.linkTextStyle,
-    this.imageBorderRadius = const BorderRadius.all(Radius.circular(8)),
+    this.imageBorderRadius = const BorderRadius.all(Radius.circular(4)),
     this.imageFallbackAspectRatio = 0.7,
     this.imageFit = BoxFit.fitWidth,
   });
@@ -323,25 +323,30 @@ class ThreadPostTextBlockView extends StatelessWidget {
   ) {
     final linkUrl = run.linkUrl?.trim();
     final isLink = linkUrl != null && linkUrl.isNotEmpty;
+    final text = textTransformer?.call(run.text) ?? run.text;
     final linkStyle = baseStyle
         .copyWith(
           decoration: TextDecoration.underline,
           color: Theme.of(context).colorScheme.primary,
         )
         .merge(style.linkTextStyle);
+    var spanStyle = (isLink ? linkStyle : baseStyle).copyWith(
+      fontWeight: run.isBold
+          ? FontWeight.w800
+          : (isLink ? linkStyle.fontWeight : baseStyle.fontWeight),
+      fontStyle: run.isItalic
+          ? FontStyle.italic
+          : (isLink ? linkStyle.fontStyle : baseStyle.fontStyle),
+      decoration: run.isUnderline || isLink
+          ? TextDecoration.underline
+          : baseStyle.decoration,
+    );
+    if (_isDiscuzEditStatus(run, text)) {
+      spanStyle = _editStatusStyle(context, spanStyle);
+    }
     return TextSpan(
-      text: textTransformer?.call(run.text) ?? run.text,
-      style: (isLink ? linkStyle : baseStyle).copyWith(
-        fontWeight: run.isBold
-            ? FontWeight.w800
-            : (isLink ? linkStyle.fontWeight : baseStyle.fontWeight),
-        fontStyle: run.isItalic
-            ? FontStyle.italic
-            : (isLink ? linkStyle.fontStyle : baseStyle.fontStyle),
-        decoration: run.isUnderline || isLink
-            ? TextDecoration.underline
-            : (isLink ? linkStyle.decoration : baseStyle.decoration),
-      ),
+      text: text,
+      style: spanStyle,
       recognizer: isLink
           ? (TapGestureRecognizer()
               ..onTap = () {
@@ -364,7 +369,7 @@ class ThreadPostTextBlockView extends StatelessWidget {
     ThreadPostInlineImage image,
   ) {
     return WidgetSpan(
-      alignment: PlaceholderAlignment.middle,
+      alignment: PlaceholderAlignment.bottom,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 1),
         child: KeyedSubtree(
@@ -384,7 +389,28 @@ class ThreadPostTextBlockView extends StatelessWidget {
       ),
     );
   }
+
+  bool _isDiscuzEditStatus(ThreadPostTextRun run, String text) {
+    return run.isItalic && _discuzEditStatusPattern.hasMatch(text.trim());
+  }
+
+  TextStyle _editStatusStyle(BuildContext context, TextStyle source) {
+    final fallbackStyle = DefaultTextStyle.of(context).style;
+    final baseFontSize = source.fontSize ?? fallbackStyle.fontSize;
+    final baseColor =
+        source.color ??
+        fallbackStyle.color ??
+        Theme.of(context).colorScheme.onSurface;
+    return source.copyWith(
+      fontSize: baseFontSize == null ? null : baseFontSize * 0.88,
+      color: baseColor.withValues(alpha: 0.62),
+    );
+  }
 }
+
+final RegExp _discuzEditStatusPattern = RegExp(
+  r'^本帖最后由\s*.+?\s*于\s*\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}\s*编辑$',
+);
 
 class ThreadPostImageBlockView extends StatefulWidget {
   const ThreadPostImageBlockView({

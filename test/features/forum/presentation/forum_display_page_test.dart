@@ -146,6 +146,14 @@ void main() {
         _threadCardShadowDecoration(tester, '100').boxShadow,
         ForumNativeSurfaceShadows.card(palette.stateLayer),
       );
+      final metricChipContainer = tester.widget<Container>(
+        find
+            .ancestor(of: find.text('5'), matching: find.byType(Container))
+            .first,
+      );
+      final metricChipDecoration =
+          metricChipContainer.decoration as BoxDecoration;
+      expect(metricChipDecoration.border, isNull);
       expect(find.text('公告区'), findsWidgets);
       expect(find.text('第1页'), findsOneWidget);
 

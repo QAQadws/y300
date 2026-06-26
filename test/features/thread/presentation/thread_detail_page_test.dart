@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/composer_shared/data/composer_draft_repository.dart';
@@ -39,6 +40,7 @@ import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/services/thread_favorite_action_service.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
+import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 
 void main() {
@@ -47,6 +49,17 @@ void main() {
   });
 
   group('ThreadDetailPage', () {
+    test('light chip background follows forum list thread tag chip', () {
+      final theme = AppTheme.light();
+      final detailPalette = ThreadDetailNativePalette.resolve(theme);
+      final displayPalette = ForumDisplayThemePalette.resolve(theme);
+
+      expect(
+        detailPalette.chipBackground,
+        displayPalette.surfaceContainerHigh.withValues(alpha: 0.42),
+      );
+    });
+
     testWidgets('shows posts and switches thread pages', (tester) async {
       var callCount = 0;
       final repository = _FakeThreadRepository((tid, page, query) async {
@@ -199,13 +212,14 @@ void main() {
           ),
         ),
       );
+      expect(find.byKey(const Key('thread-detail-header-card')), findsNothing);
       expect(
-        find.byKey(const Key('thread-detail-header-card')),
+        find.byKey(const Key('thread-detail-first-post-summary')),
         findsOneWidget,
       );
-      expect(find.text('理性探讨'), findsOneWidget);
+      expect(find.text('理性探讨'), findsNothing);
       expect(find.text('12'), findsOneWidget);
-      expect(find.text('第 1 / 2 页'), findsOneWidget);
+      expect(find.text('第 1 / 2 页'), findsNothing);
       expect(find.byKey(const Key('thread-post-card-p1')), findsOneWidget);
       final postCard = tester.widget<Container>(
         find.byKey(const Key('thread-post-card-p1')),
@@ -232,6 +246,24 @@ void main() {
         find.byKey(const Key('thread-post-comment-section')),
         findsOneWidget,
       );
+      final pollCard = tester.widget<Container>(
+        find.byKey(const Key('thread-poll-card')),
+      );
+      final pollCardDecoration = pollCard.decoration as BoxDecoration;
+      expect(pollCardDecoration.color, detailPalette.panelBackground);
+      expect(pollCardDecoration.border, isNull);
+      final pollSummaryText = tester.widget<Text>(
+        find.text('单选投票 , 投票后结果可见, 共有 2 人参与投票'),
+      );
+      expect(pollSummaryText.style?.fontWeight, FontWeight.w500);
+      final pollOptionText = tester.widget<Text>(find.text('选项A'));
+      expect(pollOptionText.style?.fontWeight, FontWeight.w400);
+      final commentSection = tester.widget<Container>(
+        find.byKey(const Key('thread-post-comment-section')),
+      );
+      final commentSectionDecoration =
+          commentSection.decoration as BoxDecoration;
+      expect(commentSectionDecoration.color, detailPalette.panelBackground);
       expect(find.text('花実'), findsOneWidget);
       expect(find.text('活该你日和你国同性恋权益烂的要死'), findsOneWidget);
       expect(find.text('2026-6-21 12:31'), findsOneWidget);
@@ -239,6 +271,11 @@ void main() {
         find.byKey(const Key('thread-post-rating-section')),
         findsOneWidget,
       );
+      final ratingSection = tester.widget<Container>(
+        find.byKey(const Key('thread-post-rating-section')),
+      );
+      final ratingSectionDecoration = ratingSection.decoration as BoxDecoration;
+      expect(ratingSectionDecoration.color, detailPalette.panelBackground);
       expect(find.text('参与人数 1'), findsOneWidget);
       expect(find.text('积分 +2'), findsOneWidget);
       expect(find.text('子子子车'), findsOneWidget);
