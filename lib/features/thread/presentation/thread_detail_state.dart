@@ -32,11 +32,6 @@ class ThreadDetailPageState {
     required this.posts,
     required this.comicCandidateInfo,
     required this.parsedComicPost,
-    required this.isInShelf,
-    required this.isComicActionLoading,
-    required this.isNovelCandidate,
-    required this.isNovelInShelf,
-    required this.isNovelActionLoading,
     required this.isThreadFavorited,
     required this.isThreadFavoriteActionLoading,
     required this.threadFavoriteHint,
@@ -77,11 +72,6 @@ class ThreadDetailPageState {
   final List<ThreadPost> posts;
   final ComicCandidateInfo comicCandidateInfo;
   final ParsedComicPost parsedComicPost;
-  final bool isInShelf;
-  final bool isComicActionLoading;
-  final bool isNovelCandidate;
-  final bool isNovelInShelf;
-  final bool isNovelActionLoading;
   final bool isThreadFavorited;
   final bool isThreadFavoriteActionLoading;
   final String? threadFavoriteHint;
@@ -131,11 +121,6 @@ class ThreadDetailPageState {
       posts: const <ThreadPost>[],
       comicCandidateInfo: ComicCandidateInfo.notCandidate,
       parsedComicPost: ParsedComicPost.empty,
-      isInShelf: false,
-      isComicActionLoading: false,
-      isNovelCandidate: false,
-      isNovelInShelf: false,
-      isNovelActionLoading: false,
       isThreadFavorited: false,
       isThreadFavoriteActionLoading: false,
       threadFavoriteHint: null,
@@ -178,11 +163,6 @@ class ThreadDetailPageState {
     List<ThreadPost>? posts,
     ComicCandidateInfo? comicCandidateInfo,
     ParsedComicPost? parsedComicPost,
-    bool? isInShelf,
-    bool? isComicActionLoading,
-    bool? isNovelCandidate,
-    bool? isNovelInShelf,
-    bool? isNovelActionLoading,
     bool? isThreadFavorited,
     bool? isThreadFavoriteActionLoading,
     String? threadFavoriteHint,
@@ -248,11 +228,6 @@ class ThreadDetailPageState {
       posts: posts ?? this.posts,
       comicCandidateInfo: comicCandidateInfo ?? this.comicCandidateInfo,
       parsedComicPost: parsedComicPost ?? this.parsedComicPost,
-      isInShelf: isInShelf ?? this.isInShelf,
-      isComicActionLoading: isComicActionLoading ?? this.isComicActionLoading,
-      isNovelCandidate: isNovelCandidate ?? this.isNovelCandidate,
-      isNovelInShelf: isNovelInShelf ?? this.isNovelInShelf,
-      isNovelActionLoading: isNovelActionLoading ?? this.isNovelActionLoading,
       isThreadFavorited: isThreadFavorited ?? this.isThreadFavorited,
       isThreadFavoriteActionLoading:
           isThreadFavoriteActionLoading ?? this.isThreadFavoriteActionLoading,

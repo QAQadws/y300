@@ -4,13 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/comic/data/comic_parser_service.dart';
-import 'package:y300/features/comic/data/comic_providers.dart';
-import 'package:y300/features/comic/data/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_post_aggregation_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
-import 'package:y300/features/novel/data/models/novel_models.dart';
-import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/tags/data/tag_providers.dart';
@@ -234,98 +230,6 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
   Future<void> resetThreadView() async {
     await _replaceWithPage(page: 1, queryParameters: const <String, String>{});
-  }
-
-  Future<void> addToShelf() async {
-    final current = state.value;
-    if (current == null ||
-        current.isComicActionLoading ||
-        current.contentKind != ThreadContentKind.comic) {
-      return;
-    }
-    final snapshot = current;
-
-    state = AsyncData(
-      snapshot.copyWith(isComicActionLoading: true, clearError: true),
-    );
-    final comicId = _buildComicId(tid: snapshot.tid);
-
-    try {
-      await _readComicRepository().addToShelf(
-        comicId: comicId,
-        tid: snapshot.tid,
-        fid: snapshot.fid,
-        sourceTypeId: snapshot.typeid,
-        sourceTagName: snapshot.sourceTagName,
-        title: snapshot.subject,
-        parsedPost: snapshot.parsedComicPost,
-      );
-
-      if (!ref.mounted) {
-        return;
-      }
-      state = AsyncData(
-        snapshot.copyWith(isComicActionLoading: false, isInShelf: true),
-      );
-    } catch (error) {
-      if (!ref.mounted) {
-        return;
-      }
-      state = AsyncData(
-        snapshot.copyWith(
-          isComicActionLoading: false,
-          errorMessage: '加入书架失败：$error',
-        ),
-      );
-    }
-  }
-
-  Future<void> addNovelToShelf() async {
-    final current = state.value;
-    if (current == null ||
-        current.isNovelActionLoading ||
-        current.contentKind != ThreadContentKind.novel) {
-      return;
-    }
-    final snapshot = current;
-
-    state = AsyncData(
-      snapshot.copyWith(isNovelActionLoading: true, clearError: true),
-    );
-
-    try {
-      final fid = current.fid.trim();
-      final tid = current.tid.trim();
-      final repository = ref.read(novelRepositoryProvider);
-      final novelId = 'novel:$fid:$tid';
-
-      await repository.upsertNovelBySeed(
-        seed: NovelRefreshSeed(
-          fid: fid,
-          tid: tid,
-          typeid: current.typeid,
-          tagName: current.sourceTagName,
-        ),
-      );
-      await repository.refreshEpisodes(novelId: novelId);
-
-      if (!ref.mounted) {
-        return;
-      }
-      state = AsyncData(
-        snapshot.copyWith(isNovelActionLoading: false, isNovelInShelf: true),
-      );
-    } catch (error) {
-      if (!ref.mounted) {
-        return;
-      }
-      state = AsyncData(
-        snapshot.copyWith(
-          isNovelActionLoading: false,
-          errorMessage: '加入小说书架失败：$error',
-        ),
-      );
-    }
   }
 
   Future<void> favoriteThread() async {
@@ -687,23 +591,6 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         parseMessage: aggregation.parseMessage,
         attachmentImageUrls: aggregation.attachmentImageUrls,
       );
-      // 内容类型由 fid + typeid + 来源标签统一判定，避免漫画/小说入口各自维护规则。
-      final comicCandidate = contentKind == ThreadContentKind.comic;
-      final comicId = _buildComicId(tid: _args.tid);
-      final isInShelf = comicCandidate
-          ? await _readComicRepository().isInShelf(comicId: comicId)
-          : false;
-      final novelCandidate = contentKind == ThreadContentKind.novel;
-      var isNovelInShelf = false;
-      if (novelCandidate) {
-        final novelId = 'novel:${data.fid}:${_args.tid}';
-        isNovelInShelf =
-            await ref
-                .read(novelRepositoryProvider)
-                .getDetail(novelId: novelId) !=
-            null;
-      }
-
       return ThreadDetailPageState(
         tid: _args.tid,
         fid: data.fid,
@@ -733,11 +620,6 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         posts: merged,
         comicCandidateInfo: comicMeta.$1,
         parsedComicPost: comicMeta.$2,
-        isInShelf: isInShelf,
-        isComicActionLoading: false,
-        isNovelCandidate: novelCandidate,
-        isNovelInShelf: isNovelInShelf,
-        isNovelActionLoading: false,
         isThreadFavorited: false,
         isThreadFavoriteActionLoading: false,
         threadFavoriteHint: null,
@@ -780,11 +662,6 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       posts: previous,
       comicCandidateInfo: ComicCandidateInfo.notCandidate,
       parsedComicPost: ParsedComicPost.empty,
-      isInShelf: false,
-      isComicActionLoading: false,
-      isNovelCandidate: false,
-      isNovelInShelf: false,
-      isNovelActionLoading: false,
       isThreadFavorited: false,
       isThreadFavoriteActionLoading: false,
       threadFavoriteHint: null,
@@ -942,10 +819,6 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     return ref.read(threadRepositoryProvider);
   }
 
-  ComicRepository _readComicRepository() {
-    return ref.read(comicRepositoryProvider);
-  }
-
   (ComicCandidateInfo, ParsedComicPost) _parseComicWhenTagged({
     required bool isComic,
     required String subject,
@@ -974,10 +847,6 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       ),
       parsed,
     );
-  }
-
-  String _buildComicId({required String tid}) {
-    return 'yamibo:$tid';
   }
 
   Future<String?> _findSourceTagName({

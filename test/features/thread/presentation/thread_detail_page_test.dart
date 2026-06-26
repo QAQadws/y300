@@ -11,11 +11,6 @@ import 'package:y300/features/composer_shared/data/composer_upload_notification_
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
-import 'package:y300/features/comic/data/comic_providers.dart';
-import 'package:y300/features/comic/data/comic_repository.dart';
-import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
-import 'package:y300/features/comic/domain/models/comic_models.dart';
-import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
@@ -1128,7 +1123,7 @@ void main() {
       expect(commentRepository.loadedUrl, isNull);
     });
 
-    testWidgets('shows comic add-to-shelf button for comic candidate post', (
+    testWidgets('hides local shelf entry for comic candidate post', (
       tester,
     ) async {
       final repository = _FakeThreadRepository((tid, page) async {
@@ -1163,20 +1158,13 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      expect(
-        find.byKey(const Key('comic-add-to-shelf-button')),
-        findsOneWidget,
-      );
-      await tester.tap(find.byKey(const Key('comic-add-to-shelf-button')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
-
-      expect(find.byKey(const Key('comic-in-shelf-button')), findsOneWidget);
-      expect(find.text('漫画 · 韩国漫画'), findsOneWidget);
+      expect(find.byKey(const Key('comic-add-to-shelf-button')), findsNothing);
+      expect(find.byKey(const Key('comic-in-shelf-button')), findsNothing);
+      expect(find.text('漫画 · 韩国漫画'), findsNothing);
       expect(find.textContaining('漫画候选（评分'), findsNothing);
     });
 
-    testWidgets('shows novel add-to-shelf button for fid 49 first post', (
+    testWidgets('hides local shelf entry for fid 49 novel first post', (
       tester,
     ) async {
       final repository = _FakeThreadRepository((tid, page) async {
@@ -1214,19 +1202,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      expect(find.text('小说 · 原创'), findsOneWidget);
-      expect(
-        find.byKey(const Key('comic-add-to-shelf-button')),
-        findsOneWidget,
-      );
-
-      await tester.tap(find.byKey(const Key('comic-add-to-shelf-button')).last);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
-
-      expect(find.byKey(const Key('comic-in-shelf-button')), findsOneWidget);
-      expect(novelRepository.upsertCalled, isTrue);
-      expect(novelRepository.refreshCalled, isTrue);
+      expect(find.text('小说 · 原创'), findsNothing);
+      expect(find.byKey(const Key('comic-add-to-shelf-button')), findsNothing);
+      expect(find.byKey(const Key('comic-in-shelf-button')), findsNothing);
+      expect(novelRepository.upsertCalled, isFalse);
+      expect(novelRepository.refreshCalled, isFalse);
     });
 
     testWidgets(
@@ -1275,7 +1255,7 @@ void main() {
 
         expect(
           find.byKey(const Key('comic-add-to-shelf-button')),
-          findsOneWidget,
+          findsNothing,
         );
       },
     );
@@ -1516,7 +1496,6 @@ Widget _buildTestApp(
   return ProviderScope(
     overrides: [
       threadRepositoryProvider.overrideWithValue(repository),
-      comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
       novelRepositoryProvider.overrideWithValue(
         novelRepository ?? _FakeNovelRepository(),
       ),
@@ -1987,189 +1966,6 @@ class _NoopComposerUploadNotificationService
 
   @override
   Future<void> showProgress({required int current, required int total}) async {}
-}
-
-class _FakeComicRepository implements ComicRepository {
-  final Set<String> _ids = <String>{};
-
-  @override
-  Future<void> addToShelf({
-    required String comicId,
-    required String tid,
-    required String fid,
-    String? sourceTypeId,
-    String? sourceTagName,
-    required String title,
-    required ParsedComicPost parsedPost,
-  }) async {
-    _ids.add(comicId);
-  }
-
-  @override
-  Future<void> removeFromShelf({required String comicId}) async {
-    _ids.remove(comicId);
-  }
-
-  @override
-  Future<void> purgeWork({required String comicId}) async {
-    _ids.remove(comicId);
-  }
-
-  @override
-  Future<String> createCategory({required String name}) async =>
-      'mock-category';
-
-  @override
-  Future<void> clearEpisodeImageCache({required String episodeId}) async {}
-
-  @override
-  Future<void> deleteCategory({required String categoryId}) async {}
-
-  @override
-  Future<ComicDetail?> getComicDetail({required String comicId}) async => null;
-
-  @override
-  Future<List<ComicEpisodeItem>> getComicEpisodes({
-    required String comicId,
-    bool descending = true,
-  }) async {
-    return const <ComicEpisodeItem>[];
-  }
-
-  @override
-  Future<List<ComicEpisodeImageItem>> getEpisodeImages({
-    required String episodeId,
-  }) async {
-    return const <ComicEpisodeImageItem>[];
-  }
-
-  @override
-  Future<ComicShelfDisplaySettings> getDisplaySettings() async {
-    return const ComicShelfDisplaySettings(gridColumnCount: 3);
-  }
-
-  @override
-  Future<List<ComicShelfCategory>> getCategories() async {
-    return <ComicShelfCategory>[
-      ComicShelfCategory(
-        categoryId: 'default',
-        name: '默认',
-        sortOrder: 0,
-        createdAt: DateTime(2026, 1, 1),
-      ),
-    ];
-  }
-
-  @override
-  Future<List<ComicShelfItem>> getShelfItems({
-    String categoryId = 'default',
-  }) async {
-    return const <ComicShelfItem>[];
-  }
-
-  @override
-  Future<bool> isInShelf({required String comicId}) async {
-    return _ids.contains(comicId);
-  }
-
-  @override
-  Future<ComicReadingProgress?> getLastReadProgress({
-    required String comicId,
-  }) async => null;
-
-  @override
-  Future<ComicEpisodeRefreshResult> mergeEpisodesFromLinks({
-    required String comicId,
-    required List<ComicEpisodeLink> episodeLinks,
-    required String fallbackSourceTid,
-  }) async {
-    return const ComicEpisodeRefreshResult(
-      insertedCount: 0,
-      updatedCount: 0,
-      totalCount: 0,
-    );
-  }
-
-  @override
-  Future<void> moveComicToCategory({
-    required String comicId,
-    required String fromCategoryId,
-    required String toCategoryId,
-  }) async {}
-
-  @override
-  Future<void> renameCategory({
-    required String categoryId,
-    required String newName,
-  }) async {}
-
-  @override
-  Future<void> updateCustomCover({
-    required String comicId,
-    required String? customCoverImageUrl,
-  }) async {}
-
-  @override
-  Future<void> updateCustomCoverFromLocalFile({
-    required String comicId,
-    required String localCoverPath,
-    String? sourceEpisodeId,
-    int? sourceImageIndex,
-    String? sourceImageUrl,
-  }) async {}
-
-  @override
-  Future<void> updateCustomMetadata({
-    required String comicId,
-    String? customTitle,
-    String? customAuthor,
-    String? customTranslationGroup,
-    String? customSearchTitle,
-  }) async {}
-
-  @override
-  Future<void> clearCustomMetadata({
-    required String comicId,
-    bool title = false,
-    bool author = false,
-    bool translationGroup = false,
-    bool searchTitle = false,
-  }) async {}
-
-  @override
-  Future<void> updateGridColumnCount({required int columnCount}) async {}
-
-  @override
-  Future<void> saveEpisodeImages({
-    required String episodeId,
-    required List<String> imageUrls,
-  }) async {}
-
-  @override
-  Future<void> updateEpisodeImageCacheStatus({
-    required String episodeId,
-    required String imageUrl,
-    required String cacheStatus,
-    String? cacheLocalPath,
-  }) async {}
-
-  @override
-  Future<void> updateLastReadProgress({
-    required String comicId,
-    required String episodeId,
-    required int imageIndex,
-    required double scrollOffset,
-  }) async {}
-
-  @override
-  Future<void> updateCatalogUrl({
-    required String comicId,
-    required String catalogUrl,
-  }) async {}
-
-  @override
-  Future<Set<String>> getKnownEpisodeTids({required String comicId}) async =>
-      <String>{};
 }
 
 class _FakeNovelRepository implements NovelRepository {

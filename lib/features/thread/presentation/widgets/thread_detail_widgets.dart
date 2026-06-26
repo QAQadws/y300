@@ -4,12 +4,10 @@ import 'package:y300/features/cache/presentation/widgets/library_cached_image.da
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
-import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
-import 'package:y300/shared/widgets/shelf/candidate_shelf_action_row.dart';
 
 class ThreadDetailContent extends StatelessWidget {
   const ThreadDetailContent({
@@ -22,8 +20,6 @@ class ThreadDetailContent extends StatelessWidget {
     required this.sourceTagLabel,
     required this.onLoadPreviousPage,
     required this.onLoadNextPage,
-    required this.onAddComicToShelf,
-    required this.onAddNovelToShelf,
     required this.onOpenPostReply,
     required this.onOpenPostRate,
     required this.onOpenPostComment,
@@ -43,8 +39,6 @@ class ThreadDetailContent extends StatelessWidget {
   final String sourceTagLabel;
   final VoidCallback onLoadPreviousPage;
   final VoidCallback onLoadNextPage;
-  final VoidCallback onAddComicToShelf;
-  final VoidCallback onAddNovelToShelf;
   final ValueChanged<ThreadPost> onOpenPostReply;
   final ValueChanged<ThreadPost> onOpenPostRate;
   final ValueChanged<ThreadPost> onOpenPostComment;
@@ -96,8 +90,6 @@ class ThreadDetailContent extends StatelessWidget {
           highlighted: post.pid == highlightPostPid,
           sourceTagLabel: sourceTagLabel,
           imageHeaderBuilder: imageHeaderBuilder,
-          onAddComicToShelf: onAddComicToShelf,
-          onAddNovelToShelf: onAddNovelToShelf,
           onOpenPostReply: onOpenPostReply,
           onOpenPostRate: onOpenPostRate,
           onOpenPostComment: onOpenPostComment,
@@ -185,8 +177,6 @@ class ThreadPostCard extends StatelessWidget {
     this.highlighted = false,
     required this.sourceTagLabel,
     required this.imageHeaderBuilder,
-    required this.onAddComicToShelf,
-    required this.onAddNovelToShelf,
     required this.onOpenPostReply,
     required this.onOpenPostRate,
     required this.onOpenPostComment,
@@ -204,8 +194,6 @@ class ThreadPostCard extends StatelessWidget {
   final bool highlighted;
   final String sourceTagLabel;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
-  final VoidCallback onAddComicToShelf;
-  final VoidCallback onAddNovelToShelf;
   final ValueChanged<ThreadPost> onOpenPostReply;
   final ValueChanged<ThreadPost> onOpenPostRate;
   final ValueChanged<ThreadPost> onOpenPostComment;
@@ -221,11 +209,6 @@ class ThreadPostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final showComicEntry =
-        post.isFirst && state.contentKind == ThreadContentKind.comic;
-    final showNovelEntry =
-        post.isFirst && state.contentKind == ThreadContentKind.novel;
-
     return Container(
       key: Key('thread-post-card-${post.pid}'),
       margin: const EdgeInsets.only(bottom: 10),
@@ -260,24 +243,6 @@ class ThreadPostCard extends StatelessWidget {
               ),
             ],
           ),
-          if (showComicEntry) ...[
-            const SizedBox(height: 8),
-            CandidateShelfActionRow(
-              label: '漫画 · $sourceTagLabel',
-              inShelf: state.isInShelf,
-              isLoading: state.isComicActionLoading,
-              onPressed: onAddComicToShelf,
-            ),
-          ],
-          if (showNovelEntry) ...[
-            const SizedBox(height: 8),
-            CandidateShelfActionRow(
-              label: '小说 · $sourceTagLabel',
-              inShelf: state.isNovelInShelf,
-              isLoading: state.isNovelActionLoading,
-              onPressed: onAddNovelToShelf,
-            ),
-          ],
           const SizedBox(height: 8),
           DefaultTextStyle.merge(
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(

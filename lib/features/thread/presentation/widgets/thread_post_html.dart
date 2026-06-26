@@ -367,10 +367,8 @@ class ThreadPostTextBlockView extends StatelessWidget {
       alignment: PlaceholderAlignment.middle,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 1),
-        child: SizedBox(
+        child: KeyedSubtree(
           key: Key('thread-post-inline-image-${image.url}'),
-          width: 22,
-          height: 22,
           child: LibraryCachedImage(
             imageUrl: image.url,
             fit: BoxFit.contain,

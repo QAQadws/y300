@@ -186,8 +186,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                     sourceTagLabel: _sourceTagLabel(state),
                     onLoadPreviousPage: controller.loadPreviousPage,
                     onLoadNextPage: controller.loadNextPage,
-                    onAddComicToShelf: controller.addToShelf,
-                    onAddNovelToShelf: controller.addNovelToShelf,
                     onOpenPostReply: (post) {
                       _openPostReplyComposer(args, state, post);
                     },
@@ -832,8 +830,6 @@ Widget threadDetailPostCardPreview() {
       state: state,
       sourceTagLabel: '讨论',
       imageHeaderBuilder: null,
-      onAddComicToShelf: () {},
-      onAddNovelToShelf: () {},
       onOpenPostReply: (_) {},
       onOpenPostRate: (_) {},
       onOpenPostComment: (_) {},

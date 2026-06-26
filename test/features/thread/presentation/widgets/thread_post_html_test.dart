@@ -117,6 +117,10 @@ void main() {
               'https://bbs.yamibo.com/static/image/smiley/comcom/2.gif',
     );
     expect(inlineImages, findsOneWidget);
+    final fixedSmileyBoxes = tester
+        .widgetList<SizedBox>(find.byType(SizedBox))
+        .where((box) => box.width == 22 && box.height == 22);
+    expect(fixedSmileyBoxes, isEmpty);
     final image = tester.widget<Image>(find.byType(Image));
     final provider = image.image as NetworkImage;
     expect(provider.headers?['Referer'], 'https://bbs.yamibo.com/');
