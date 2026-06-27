@@ -7,6 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
+import 'package:y300/features/cache/domain/cache_key_canonicalizer.dart';
+import 'package:y300/features/cache/domain/document_cache_models.dart';
+import 'package:y300/features/cache/domain/storage_usage_models.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
 
 void main() {
@@ -48,11 +51,81 @@ void main() {
       expect(result.errorOrNull?.message, contains('帖子详情 HTML 加载失败'));
     },
   );
+
+  test(
+    'ThreadDetailHtmlRepository writes successful HTML to document cache',
+    () async {
+      final adapter = _ThreadDetailHtmlTestAdapter();
+      final documentCache = _FakeDocumentCacheService();
+      final now = DateTime(2026, 1, 1);
+      final repository = _buildRepository(
+        adapter,
+        documentCacheService: documentCache,
+        now: () => now,
+      );
+
+      final result = await repository.getThreadDetail(
+        tid: '572529',
+        page: 3,
+        queryParameters: const <String, String>{'ordertype': '1'},
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(documentCache.putDocuments, hasLength(1));
+      final cached = documentCache.putDocuments.single;
+      expect(cached.body, _html);
+      expect(cached.ownerType, CacheOwnerType.thread);
+      expect(cached.ownerId, contains('tid=572529'));
+      expect(cached.ownerId, contains('page=3'));
+      expect(cached.ownerId, contains('ordertype=1'));
+      expect(cached.contentType, 'text/html');
+      expect(cached.statusCode, 200);
+      expect(cached.fetchedAt, now);
+    },
+  );
+
+  test(
+    'ThreadDetailHtmlRepository parses cached HTML when network fails',
+    () async {
+      final adapter = _ThreadDetailHtmlTestAdapter(statusCode: 503);
+      final documentCache = _FakeDocumentCacheService();
+      final now = DateTime(2026, 1, 1, 10);
+      final repository = _buildRepository(
+        adapter,
+        documentCacheService: documentCache,
+        now: () => now,
+      );
+      final descriptor = documentCache.descriptorForThread(
+        tid: '572529',
+        page: 1,
+      );
+      documentCache.seed(
+        CachedDocument(
+          cacheKey: descriptor.cacheKey,
+          ownerType: descriptor.ownerType,
+          ownerId: descriptor.ownerId,
+          sourceUrl: descriptor.sourceUrl,
+          body: _html,
+          fetchedAt: DateTime(2026, 1, 1, 9),
+          updatedAt: DateTime(2026, 1, 1, 9),
+        ),
+      );
+
+      final result = await repository.getThreadDetail(tid: '572529');
+
+      expect(result.isSuccess, isTrue);
+      expect(result.dataOrNull!.subject, '测试帖子');
+      expect(documentCache.touchedKeys, <String>[descriptor.cacheKey]);
+      expect(documentCache.touchedAt[descriptor.cacheKey], now);
+    },
+  );
 }
 
 ThreadDetailHtmlRepository _buildRepository(
-  _ThreadDetailHtmlTestAdapter adapter,
-) {
+  _ThreadDetailHtmlTestAdapter adapter, {
+  DocumentCacheService? documentCacheService,
+  DateTime Function()? now,
+}) {
   final gateway = YamiboHttpGateway(
     cookieStore: CookieStore(),
     logger: Logger(level: Level.off),
@@ -67,6 +140,8 @@ ThreadDetailHtmlRepository _buildRepository(
   );
   return ThreadDetailHtmlRepository(
     htmlClient: YamiboHtmlClient(gateway: gateway),
+    documentCacheService: documentCacheService,
+    now: now,
   );
 }
 
@@ -91,6 +166,64 @@ class _ThreadDetailHtmlTestAdapter implements HttpClientAdapter {
     return ResponseBody.fromString(
       statusCode == 200 ? _html : 'unavailable',
       statusCode,
+    );
+  }
+}
+
+class _FakeDocumentCacheService implements DocumentCacheService {
+  final _documents = <String, CachedDocument>{};
+  final putDocuments = <CachedDocument>[];
+  final touchedKeys = <String>[];
+  final touchedAt = <String, DateTime>{};
+
+  DocumentCacheDescriptor descriptorForThread({
+    required String tid,
+    required int page,
+  }) {
+    return const CacheKeyCanonicalizer().threadDetail(tid: tid, page: page);
+  }
+
+  void seed(CachedDocument document) {
+    _documents[document.cacheKey] = document;
+  }
+
+  @override
+  Future<CachedDocument?> getByKey(String cacheKey) async {
+    return _documents[cacheKey];
+  }
+
+  @override
+  Future<void> put(CachedDocument document) async {
+    putDocuments.add(document);
+    _documents[document.cacheKey] = document;
+  }
+
+  @override
+  Future<void> touch(String cacheKey, DateTime accessedAt) async {
+    touchedKeys.add(cacheKey);
+    touchedAt[cacheKey] = accessedAt;
+  }
+
+  @override
+  Future<int> deleteByOwner({
+    required CacheOwnerType ownerType,
+    required String ownerId,
+  }) async {
+    final before = _documents.length;
+    _documents.removeWhere(
+      (_, document) =>
+          document.ownerType == ownerType && document.ownerId == ownerId,
+    );
+    return before - _documents.length;
+  }
+
+  @override
+  Future<StorageUsageSection> calculateUsage() async {
+    return const StorageUsageSection(
+      bucket: StorageBucket.pageCache,
+      label: '页面缓存',
+      bytes: 0,
+      clearable: false,
     );
   }
 }

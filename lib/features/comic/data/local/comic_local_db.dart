@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 21;
+  static const int dbVersion = 22;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -32,6 +32,7 @@ class ComicLocalDb {
   static const String favoriteCategoriesTable = 'favorite_categories';
   static const String favoriteThreadCategoryTable = 'favorite_thread_category';
   static const String cachedImagesTable = 'cached_images';
+  static const String cachedDocumentsTable = 'cached_documents';
   static const String comicSearchRefreshQueueTable =
       'comic_search_refresh_queue';
 
@@ -174,6 +175,7 @@ class ComicLocalDb {
     await _createPhase7PerformanceIndexes(db);
     await _createFavoriteTables(db);
     await _createImageCacheTables(db);
+    await _createDocumentCacheTables(db);
     await _createComicSearchRefreshQueueTable(db);
   }
 
@@ -572,6 +574,42 @@ class ComicLocalDb {
     );
   }
 
+  /// 原生模式 Phase 3：HTML 文档缓存。
+  ///
+  /// 只保存 GET 页面 HTML；评分、点评、投票、回复等提交响应不进入这里。
+  static Future<void> _createDocumentCacheTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $cachedDocumentsTable (
+        cache_key TEXT PRIMARY KEY,
+        namespace TEXT NOT NULL,
+        owner_type TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        source_url TEXT NOT NULL,
+        request_profile TEXT NOT NULL DEFAULT 'logged_in',
+        body TEXT NOT NULL,
+        content_type TEXT,
+        status_code INTEGER,
+        body_bytes INTEGER NOT NULL DEFAULT 0,
+        fetched_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        last_accessed_at INTEGER
+      )
+    ''');
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_cached_documents_owner ON '
+      '$cachedDocumentsTable(owner_type, owner_id, updated_at DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_cached_documents_namespace ON '
+      '$cachedDocumentsTable(namespace, updated_at DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_cached_documents_access ON '
+      '$cachedDocumentsTable(last_accessed_at, updated_at)',
+    );
+  }
+
   /// 收藏自动刷新阶段 3：漫画搜索等待队列。
   ///
   /// 队列表只保存“需要走搜索/当前帖回退”的后台刷新任务；catalog-only
@@ -623,6 +661,7 @@ class ComicLocalDb {
 
   static const List<String> _managedTablesInDropOrder = <String>[
     comicSearchRefreshQueueTable,
+    cachedDocumentsTable,
     favoriteThreadCategoryTable,
     favoriteCategoriesTable,
     favoriteThreadsTable,

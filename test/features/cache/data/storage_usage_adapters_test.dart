@@ -3,8 +3,10 @@ import 'dart:io' as io;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:y300/features/cache/data/document_cache_service.dart';
 import 'package:y300/features/cache/data/image_cache_repository.dart';
 import 'package:y300/features/cache/data/storage_usage_adapters.dart';
+import 'package:y300/features/cache/domain/document_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/storage_usage_models.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
@@ -64,6 +66,42 @@ void main() {
       );
 
       await deleteDatabase(dbName);
+    },
+  );
+
+  test(
+    'PageCacheStorageAccountingAdapter reports document cache usage',
+    () async {
+      const dbName = 'storage_usage_page_cache_test.db';
+      await deleteDatabase(dbName);
+      final db = await ComicLocalDb.open(databaseName: dbName);
+      final documentCache = LocalDocumentCacheService(Future.value(db));
+      final now = DateTime(2026, 1, 1);
+      addTearDown(() async {
+        await db.close();
+        await deleteDatabase(dbName);
+      });
+
+      await documentCache.put(
+        CachedDocument(
+          cacheKey: 'document|thread|tid=1&page=1',
+          ownerType: CacheOwnerType.thread,
+          ownerId: 'tid=1&page=1',
+          sourceUrl: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1',
+          body: 'abc',
+          fetchedAt: now,
+          updatedAt: now,
+        ),
+      );
+
+      final section = await PageCacheStorageAccountingAdapter(
+        documentCacheService: documentCache,
+      ).calculateUsage();
+
+      expect(section.bucket, StorageBucket.pageCache);
+      expect(section.bytes, 3);
+      expect(section.clearable, isTrue);
+      expect(section.slices.single.label, '帖子详情 HTML（1）');
     },
   );
 

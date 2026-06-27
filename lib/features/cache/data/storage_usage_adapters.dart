@@ -4,6 +4,7 @@ import 'dart:io' as io;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:y300/features/cache/domain/document_cache_models.dart';
 import 'package:y300/features/cache/data/image_cache_repository.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/storage_usage_models.dart';
@@ -72,6 +73,22 @@ class ImageCacheStorageAccountingAdapter implements StorageAccountingAdapter {
       return '$role$retention';
     }
     return group.protected ? '$role（受保护）' : role;
+  }
+}
+
+class PageCacheStorageAccountingAdapter implements StorageAccountingAdapter {
+  const PageCacheStorageAccountingAdapter({
+    required DocumentCacheService documentCacheService,
+  }) : _documentCacheService = documentCacheService;
+
+  final DocumentCacheService _documentCacheService;
+
+  @override
+  StorageBucket get bucket => StorageBucket.pageCache;
+
+  @override
+  Future<StorageUsageSection> calculateUsage() {
+    return _documentCacheService.calculateUsage();
   }
 }
 

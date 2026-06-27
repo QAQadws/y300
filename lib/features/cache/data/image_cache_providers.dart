@@ -2,6 +2,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/default_image_cache_service.dart';
+import 'package:y300/features/cache/data/document_cache_service.dart';
 import 'package:y300/features/cache/data/image_cache_directory_provider.dart';
 import 'package:y300/features/cache/data/image_cache_manager_factory.dart';
 import 'package:y300/features/cache/data/image_cache_repository.dart';
@@ -9,6 +10,7 @@ import 'package:y300/features/cache/data/protected_cover_file_store.dart';
 import 'package:y300/features/cache/data/storage_accounting_service.dart';
 import 'package:y300/features/cache/data/storage_usage_adapters.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
+import 'package:y300/features/cache/domain/document_cache_models.dart';
 import 'package:y300/features/cache/domain/protected_cover_cache_maintenance.dart';
 import 'package:y300/features/cache/domain/storage_usage_models.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
@@ -35,6 +37,10 @@ final imageCacheManagerProvider = FutureProvider<BaseCacheManager>((ref) async {
 
 final imageCacheRepositoryProvider = Provider<ImageCacheRepository>((ref) {
   return LocalImageCacheRepository(ComicLocalDb.open());
+});
+
+final documentCacheServiceProvider = Provider<DocumentCacheService>((ref) {
+  return LocalDocumentCacheService(ComicLocalDb.open());
 });
 
 final protectedCoverFileStoreProvider = Provider<ProtectedCoverFileStore>((
@@ -67,6 +73,9 @@ final storageAccountingServiceProvider = Provider<StorageAccountingService>((
   return DefaultStorageAccountingService(
     adapters: <StorageAccountingAdapter>[
       ImageCacheStorageAccountingAdapter(repository: imageCacheRepository),
+      PageCacheStorageAccountingAdapter(
+        documentCacheService: ref.watch(documentCacheServiceProvider),
+      ),
       const ComposerDraftStorageAccountingAdapter(),
       DownloadStorageAccountingAdapter(
         storageService: ref.watch(downloadStorageServiceProvider),
