@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/cache/domain/storage_usage_models.dart';
 import 'package:y300/features/more/presentation/data_storage_controller.dart';
 
 class DataStoragePage extends ConsumerWidget {
@@ -24,6 +25,8 @@ class DataStoragePage extends ConsumerWidget {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              _StorageUsageOverview(report: viewState.usageReport),
+              const Divider(height: 32),
               ListTile(
                 key: const Key('data-storage-image-cache-usage'),
                 contentPadding: EdgeInsets.zero,
@@ -31,12 +34,16 @@ class DataStoragePage extends ConsumerWidget {
                   '清除图片缓存',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                 ),
-                subtitle: Text('已使用：${formatDataStorageBytes(viewState.imageCacheUsageBytes)}'),
+                subtitle: Text(
+                  '已使用：${formatDataStorageBytes(viewState.imageCacheUsageBytes)}',
+                ),
                 trailing: FilledButton(
                   key: const Key('data-storage-clear-image-cache-button'),
                   onPressed: viewState.isUpdating
                       ? null
-                      : () => ref.read(dataStorageControllerProvider.notifier).clearImageCache(),
+                      : () => ref
+                            .read(dataStorageControllerProvider.notifier)
+                            .clearImageCache(),
                   child: const Text('清除'),
                 ),
               ),
@@ -55,8 +62,10 @@ class DataStoragePage extends ConsumerWidget {
                 onChanged: viewState.isUpdating
                     ? null
                     : (value) => ref
-                        .read(dataStorageControllerProvider.notifier)
-                        .updateImageCacheMaxBytes(value.round() * 1024 * 1024),
+                          .read(dataStorageControllerProvider.notifier)
+                          .updateImageCacheMaxBytes(
+                            value.round() * 1024 * 1024,
+                          ),
               ),
               Text(
                 '封面、作品信息、标签和阅读状态不会被清除；建议不要频繁清理缓存。',
@@ -94,18 +103,21 @@ class DataStoragePage extends ConsumerWidget {
                 key: const Key('data-storage-choose-directory-button'),
                 onPressed: viewState.isUpdating
                     ? null
-                    : () => ref.read(dataStorageControllerProvider.notifier).chooseStorageDirectory(),
+                    : () => ref
+                          .read(dataStorageControllerProvider.notifier)
+                          .chooseStorageDirectory(),
                 icon: const Icon(Icons.folder_open),
                 label: const Text('选择自定义目录'),
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
                 key: const Key('data-storage-restore-default-button'),
-                onPressed: viewState.isUpdating || viewState.customStoragePath == null
+                onPressed:
+                    viewState.isUpdating || viewState.customStoragePath == null
                     ? null
                     : () => ref
-                        .read(dataStorageControllerProvider.notifier)
-                        .restoreDefaultStorageDirectory(),
+                          .read(dataStorageControllerProvider.notifier)
+                          .restoreDefaultStorageDirectory(),
                 icon: const Icon(Icons.restore),
                 label: const Text('恢复默认'),
               ),
@@ -121,6 +133,94 @@ class DataStoragePage extends ConsumerWidget {
           );
         },
       ),
+    );
+  }
+}
+
+class _StorageUsageOverview extends StatelessWidget {
+  const _StorageUsageOverview({required this.report});
+
+  final StorageUsageReport report;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      key: const Key('data-storage-usage-overview'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '缓存与数据总览',
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '总计：${formatDataStorageBytes(report.totalBytes)}',
+          key: const Key('data-storage-usage-total'),
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 12),
+        for (final section in report.sections) ...[
+          _StorageUsageSectionTile(section: section),
+          const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+}
+
+class _StorageUsageSectionTile extends StatelessWidget {
+  const _StorageUsageSectionTile({required this.section});
+
+  final StorageUsageSection section;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Column(
+      key: Key('data-storage-usage-section-${section.bucket.id}'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                section.label,
+                style: textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Text(
+              formatDataStorageBytes(section.bytes),
+              style: textTheme.bodyMedium,
+            ),
+          ],
+        ),
+        if (section.slices.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          for (final slice in section.slices.take(4))
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      slice.label,
+                      style: textTheme.bodySmall,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(
+                    slice.bytes > 0 ? formatDataStorageBytes(slice.bytes) : '',
+                    style: textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ],
     );
   }
 }

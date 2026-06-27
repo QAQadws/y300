@@ -102,3 +102,7 @@ abstract class StorageAccountingAdapter {
 
   Future<StorageUsageSection> calculateUsage();
 }
+
+abstract class StorageAccountingService {
+  Future<StorageUsageReport> loadUsageReport();
+}

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
+import 'package:y300/features/cache/domain/storage_usage_models.dart';
 import 'package:y300/features/more/data/data_storage_settings_repository.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
@@ -8,6 +9,7 @@ import 'package:y300/features/storage/domain/download_storage_service.dart';
 class DataStorageViewState {
   const DataStorageViewState({
     required this.imageCacheUsageBytes,
+    required this.usageReport,
     required this.imageCacheMaxBytes,
     required this.storagePath,
     required this.defaultStoragePath,
@@ -17,6 +19,7 @@ class DataStorageViewState {
   });
 
   final int imageCacheUsageBytes;
+  final StorageUsageReport usageReport;
   final int imageCacheMaxBytes;
   final String storagePath;
   final String defaultStoragePath;
@@ -35,6 +38,7 @@ class DataStorageViewState {
 
   DataStorageViewState copyWith({
     int? imageCacheUsageBytes,
+    StorageUsageReport? usageReport,
     int? imageCacheMaxBytes,
     String? storagePath,
     String? defaultStoragePath,
@@ -46,6 +50,7 @@ class DataStorageViewState {
   }) {
     return DataStorageViewState(
       imageCacheUsageBytes: imageCacheUsageBytes ?? this.imageCacheUsageBytes,
+      usageReport: usageReport ?? this.usageReport,
       imageCacheMaxBytes: imageCacheMaxBytes ?? this.imageCacheMaxBytes,
       storagePath: storagePath ?? this.storagePath,
       defaultStoragePath: defaultStoragePath ?? this.defaultStoragePath,
@@ -58,33 +63,38 @@ class DataStorageViewState {
   }
 }
 
-final dataStorageSettingsRepositoryProvider = Provider<DataStorageSettingsRepository>((ref) {
-  return DataStorageSettingsRepositoryImpl(
-    storageLocationRepository: ref.watch(storageLocationRepositoryProvider),
-  );
-});
+final dataStorageSettingsRepositoryProvider =
+    Provider<DataStorageSettingsRepository>((ref) {
+      return DataStorageSettingsRepositoryImpl(
+        storageLocationRepository: ref.watch(storageLocationRepositoryProvider),
+      );
+    });
 
 final dataStorageControllerProvider =
-    AsyncNotifierProvider.autoDispose<DataStorageController, DataStorageViewState>(
-  DataStorageController.new,
-);
+    AsyncNotifierProvider.autoDispose<
+      DataStorageController,
+      DataStorageViewState
+    >(DataStorageController.new);
 
 class DataStorageController extends AsyncNotifier<DataStorageViewState> {
   late final DataStorageSettingsRepository _repository;
   late final ImageCacheService _imageCacheService;
+  late final StorageAccountingService _storageAccountingService;
   late final DownloadStorageService _downloadStorageService;
 
   @override
   Future<DataStorageViewState> build() async {
     _repository = ref.read(dataStorageSettingsRepositoryProvider);
     _imageCacheService = ref.read(imageCacheServiceProvider);
+    _storageAccountingService = ref.read(storageAccountingServiceProvider);
     _downloadStorageService = ref.read(downloadStorageServiceProvider);
     final base = await _loadStorageState();
-    final usage = await _imageCacheService.calculateUsageBytes();
+    final usageReport = await _storageAccountingService.loadUsageReport();
     final maxBytes = await _repository.getImageCacheMaxBytes();
 
     return DataStorageViewState(
-      imageCacheUsageBytes: usage,
+      imageCacheUsageBytes: _imageCacheUsageBytes(usageReport),
+      usageReport: usageReport,
       imageCacheMaxBytes: maxBytes,
       storagePath: base.storagePath,
       defaultStoragePath: base.defaultStoragePath,
@@ -100,13 +110,14 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
     }
     state = AsyncData(current.copyWith(isUpdating: true, clearHint: true));
     await _imageCacheService.clearUnprotected();
-    final usage = await _imageCacheService.calculateUsageBytes();
+    final usageReport = await _storageAccountingService.loadUsageReport();
     if (!ref.mounted) {
       return;
     }
     state = AsyncData(
       current.copyWith(
-        imageCacheUsageBytes: usage,
+        imageCacheUsageBytes: _imageCacheUsageBytes(usageReport),
+        usageReport: usageReport,
         isUpdating: false,
         hint: '已清除非封面图片缓存',
       ),
@@ -122,13 +133,14 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
     await _repository.setImageCacheMaxBytes(bytes);
     final maxBytes = await _repository.getImageCacheMaxBytes();
     await _imageCacheService.pruneToLimit(maxBytes: maxBytes);
-    final usage = await _imageCacheService.calculateUsageBytes();
+    final usageReport = await _storageAccountingService.loadUsageReport();
     if (!ref.mounted) {
       return;
     }
     state = AsyncData(
       current.copyWith(
-        imageCacheUsageBytes: usage,
+        imageCacheUsageBytes: _imageCacheUsageBytes(usageReport),
+        usageReport: usageReport,
         imageCacheMaxBytes: maxBytes,
         isUpdating: false,
         hint: '图片缓存上限已更新',
@@ -208,13 +220,14 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
       return;
     }
     state = AsyncData(current.copyWith(isUpdating: true, clearHint: true));
-    final usage = await _imageCacheService.calculateUsageBytes();
+    final usageReport = await _storageAccountingService.loadUsageReport();
     if (!ref.mounted) {
       return;
     }
     state = AsyncData(
       current.copyWith(
-        imageCacheUsageBytes: usage,
+        imageCacheUsageBytes: _imageCacheUsageBytes(usageReport),
+        usageReport: usageReport,
         isUpdating: false,
       ),
     );
@@ -231,6 +244,15 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
       defaultStoragePath: defaultPath,
       customStoragePath: customPath,
     );
+  }
+
+  int _imageCacheUsageBytes(StorageUsageReport report) {
+    for (final section in report.sections) {
+      if (section.bucket == StorageBucket.imageCache) {
+        return section.bytes;
+      }
+    }
+    return 0;
   }
 }
 
