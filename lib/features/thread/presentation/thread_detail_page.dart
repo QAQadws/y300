@@ -1012,6 +1012,7 @@ class _ThreadPostSelectableCopyPage extends StatelessWidget {
                 images: plan.images,
                 imageHeaderBuilder: imageHeaderBuilder,
                 imageCacheOwnerId: threadId,
+                resourceLayoutHints: plan.resourceLayoutHints,
                 selectionEnabled: true,
                 onOpenLink: onOpenLink,
                 onOpenImage: onOpenImage,

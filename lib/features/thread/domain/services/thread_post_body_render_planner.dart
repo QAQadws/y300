@@ -4,6 +4,7 @@ import 'package:y300/features/thread/domain/models/thread_post_body_render_setti
 import 'package:y300/features/thread/domain/services/thread_post_body_anchor.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_document_normalizer.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
+import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
 
 class ThreadPostBodyRenderPlanner {
   const ThreadPostBodyRenderPlanner({
@@ -11,11 +12,14 @@ class ThreadPostBodyRenderPlanner {
     this.normalizer = const ThreadPostBodyDocumentNormalizer(
       maxTextRunLength: 600,
     ),
+    this.resourceLayoutHintResolver =
+        const ThreadPostResourceLayoutHintResolver(),
     this.maxSegmentTextLength = 600,
   }) : assert(maxSegmentTextLength > 0);
 
   final ThreadPostBodyParser parser;
   final ThreadPostBodyDocumentNormalizer normalizer;
+  final ThreadPostResourceLayoutHintResolver resourceLayoutHintResolver;
   final int maxSegmentTextLength;
 
   ThreadPostBodyRenderPlan plan(
@@ -83,6 +87,7 @@ class ThreadPostBodyRenderPlanner {
       images: document.images,
       segments: List<ThreadPostBodySegment>.unmodifiable(segments),
       usesListSegments: segments.length > 1,
+      resourceLayoutHints: resourceLayoutHintResolver.resolve(document),
     );
   }
 

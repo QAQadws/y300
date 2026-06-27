@@ -14,6 +14,7 @@ import 'package:y300/features/cache/presentation/widgets/library_cached_image.da
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
+import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_document_normalizer.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
@@ -878,6 +879,122 @@ void main() {
     );
     expect(imageBlockSize.width, 350);
     expect(imageBlockSize.width / imageBlockSize.height, closeTo(2.0, 0.01));
+  });
+
+  testWidgets(
+    'ThreadPostImageBlockView does not let default layout hint override cached ratio',
+    (tester) async {
+      final cacheService = _SizedImageCacheService(<String, CachedImageResult>{
+        'thread-inline-page': const CachedImageResult(
+          success: true,
+          cacheKey: 'thread-inline-page',
+          width: 1000,
+          height: 500,
+        ),
+      });
+      const imageBlock = ThreadPostImageBlock(
+        url: 'https://bbs.yamibo.com/data/attachment/forum/page-real.jpg',
+        rawUrl: 'data/attachment/forum/page-real.jpg',
+        index: 0,
+      );
+      const document = ThreadPostBodyDocument(
+        blocks: <ThreadPostBodyBlock>[imageBlock],
+      );
+      final hints = ThreadPostResourceLayoutHints(
+        blockImages: <String, ThreadPostBlockImageLayoutHint>{
+          ThreadPostResourceLayoutHints.blockImageKey(
+            imageBlock,
+          ): const ThreadPostBlockImageLayoutHint(
+            aspectRatio: 0.7,
+            source: ThreadPostResourceLayoutHintSource.contentDefault,
+            lockForCurrentBuild: false,
+          ),
+        },
+      );
+
+      await tester.pumpWidget(
+        _testAppWithCacheService(
+          imageCacheService: cacheService,
+          home: Center(
+            child: SizedBox(
+              width: 350,
+              child: ThreadPostImageBlockView(
+                document: document,
+                image: imageBlock,
+                images: <ThreadPostImageBlock>[imageBlock],
+                resourceLayoutHints: hints,
+                blockImageCacheRequestBuilder: (_) => const ImageCacheRequest(
+                  cacheKey: 'thread-inline-page',
+                  sourceUrl:
+                      'https://bbs.yamibo.com/data/attachment/forum/page-real.jpg',
+                  ownerType: ImageCacheOwnerType.thread,
+                  ownerId: 'tid-1',
+                  role: ImageCacheRole.threadInline,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      final imageBlockSize = tester.getSize(
+        find.byType(ThreadPostImageBlockView),
+      );
+      expect(imageBlockSize.width, 350);
+      expect(imageBlockSize.width / imageBlockSize.height, closeTo(2.0, 0.01));
+    },
+  );
+
+  testWidgets('ThreadPostImageBlockView uses layout hint when locked', (
+    tester,
+  ) async {
+    const imageBlock = ThreadPostImageBlock(
+      url: 'https://bbs.yamibo.com/data/attachment/forum/page-real.jpg',
+      rawUrl: 'data/attachment/forum/page-real.jpg',
+      index: 0,
+    );
+    const document = ThreadPostBodyDocument(
+      blocks: <ThreadPostBodyBlock>[imageBlock],
+    );
+    final hints = ThreadPostResourceLayoutHints(
+      blockImages: <String, ThreadPostBlockImageLayoutHint>{
+        ThreadPostResourceLayoutHints.blockImageKey(
+          imageBlock,
+        ): const ThreadPostBlockImageLayoutHint(
+          aspectRatio: 1.5,
+          source: ThreadPostResourceLayoutHintSource.htmlAttribute,
+          lockForCurrentBuild: true,
+        ),
+      },
+    );
+
+    await tester.pumpWidget(
+      _testApp(
+        home: Center(
+          child: SizedBox(
+            width: 300,
+            child: ThreadPostImageBlockView(
+              document: document,
+              image: imageBlock,
+              images: <ThreadPostImageBlock>[imageBlock],
+              resourceLayoutHints: hints,
+              resourceLayoutPolicy:
+                  ThreadPostResourceLayoutPolicy.lockedForReading,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    final imageBlockSize = tester.getSize(
+      find.byType(ThreadPostImageBlockView),
+    );
+    expect(imageBlockSize.width, 300);
+    expect(imageBlockSize.width / imageBlockSize.height, closeTo(1.5, 0.01));
   });
 
   testWidgets('ThreadPostImageBlockView ignores cached ratio when locked', (

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 
 void main() {
@@ -75,6 +76,43 @@ void main() {
       expect(plan.segments, hasLength(4));
       expect(plan.segments[1].blocks, <ThreadPostBodyBlock>[firstImage]);
       expect(plan.segments[3].blocks, <ThreadPostBodyBlock>[secondImage]);
+      expect(
+        plan.resourceLayoutHints.blockImage(firstImage)?.source,
+        ThreadPostResourceLayoutHintSource.contentDefault,
+      );
+    });
+
+    test('adds resource layout hints to render plans', () {
+      const planner = ThreadPostBodyRenderPlanner();
+      const image = ThreadPostImageBlock(
+        url: 'https://bbs.yamibo.com/a.jpg',
+        rawUrl: 'a.jpg',
+        index: 0,
+        originalWidth: 1200,
+        originalHeight: 800,
+      );
+      const inlineImage = ThreadPostInlineImage(
+        url: 'https://bbs.yamibo.com/static/image/smiley/comcom/2.gif',
+        rawUrl: 'static/image/smiley/comcom/2.gif',
+        originalWidth: 28,
+        originalHeight: 20,
+      );
+      const document = ThreadPostBodyDocument(
+        blocks: <ThreadPostBodyBlock>[
+          image,
+          ThreadPostTextBlock(
+            runs: <ThreadPostTextRun>[
+              ThreadPostTextRun(text: '', inlineImage: inlineImage),
+            ],
+          ),
+        ],
+      );
+
+      final plan = planner.planDocument(document);
+
+      expect(plan.resourceLayoutHints.blockImage(image)?.aspectRatio, 1.5);
+      expect(plan.resourceLayoutHints.inlineImage(inlineImage)?.width, 28);
+      expect(plan.resourceLayoutHints.inlineImage(inlineImage)?.height, 20);
     });
 
     test('keeps quote blocks intact', () {

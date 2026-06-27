@@ -10,8 +10,10 @@ import 'package:y300/features/cache/presentation/widgets/cached_library_image.da
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
+import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_document_normalizer.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
+import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
 
 typedef ThreadPostTextTransformer = String Function(String text);
 typedef ThreadPostLinkTapHandler = void Function(String url);
@@ -83,6 +85,21 @@ class ThreadPostResourceLayoutPolicy {
 
   final bool lockImageAspectRatioForCurrentBuild;
   final bool lockInlineImageSizeForCurrentBuild;
+
+  @override
+  bool operator ==(Object other) {
+    return other is ThreadPostResourceLayoutPolicy &&
+        other.lockImageAspectRatioForCurrentBuild ==
+            lockImageAspectRatioForCurrentBuild &&
+        other.lockInlineImageSizeForCurrentBuild ==
+            lockInlineImageSizeForCurrentBuild;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    lockImageAspectRatioForCurrentBuild,
+    lockInlineImageSizeForCurrentBuild,
+  );
 }
 
 class ThreadPostImageOpenRequest {
@@ -146,6 +163,7 @@ class ThreadPostHtml extends StatefulWidget {
 
 class _ThreadPostHtmlState extends State<ThreadPostHtml> {
   late ThreadPostBodyDocument _document;
+  late ThreadPostResourceLayoutHints _resourceLayoutHints;
   late _ThreadPostDocumentCacheKey _documentCacheKey;
 
   @override
@@ -165,6 +183,12 @@ class _ThreadPostHtmlState extends State<ThreadPostHtml> {
   void _parseDocument() {
     _documentCacheKey = _cacheKeyFor(widget);
     _document = widget.normalizer.normalize(widget.parser.parse(widget.data));
+    _resourceLayoutHints = ThreadPostResourceLayoutHintResolver(
+      defaultBlockImageAspectRatio: widget.style.imageFallbackAspectRatio,
+      lockForCurrentBuild:
+          widget.resourceLayoutPolicy.lockImageAspectRatioForCurrentBuild ||
+          widget.resourceLayoutPolicy.lockInlineImageSizeForCurrentBuild,
+    ).resolve(_document);
   }
 
   _ThreadPostDocumentCacheKey _cacheKeyFor(ThreadPostHtml widget) {
@@ -173,6 +197,8 @@ class _ThreadPostHtmlState extends State<ThreadPostHtml> {
       parser: widget.parser,
       normalizer: widget.normalizer,
       renderSettingsSignature: widget.renderSettings.signature,
+      imageFallbackAspectRatio: widget.style.imageFallbackAspectRatio,
+      resourceLayoutPolicy: widget.resourceLayoutPolicy,
     );
   }
 
@@ -191,6 +217,7 @@ class _ThreadPostHtmlState extends State<ThreadPostHtml> {
       imageCacheOwnerId: widget.imageCacheOwnerId,
       blockImageCacheRequestBuilder: widget.blockImageCacheRequestBuilder,
       inlineImageCacheRequestBuilder: widget.inlineImageCacheRequestBuilder,
+      resourceLayoutHints: _resourceLayoutHints,
       style: effectiveStyle,
       resourceLayoutPolicy: widget.resourceLayoutPolicy,
       textTransformer: widget.textTransformer,
@@ -228,12 +255,16 @@ class _ThreadPostDocumentCacheKey {
     required this.parser,
     required this.normalizer,
     required this.renderSettingsSignature,
+    required this.imageFallbackAspectRatio,
+    required this.resourceLayoutPolicy,
   });
 
   final String data;
   final ThreadPostBodyParser parser;
   final ThreadPostBodyDocumentNormalizer normalizer;
   final String renderSettingsSignature;
+  final double imageFallbackAspectRatio;
+  final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
 
   @override
   bool operator ==(Object other) {
@@ -241,7 +272,9 @@ class _ThreadPostDocumentCacheKey {
         other.data == data &&
         identical(other.parser, parser) &&
         identical(other.normalizer, normalizer) &&
-        other.renderSettingsSignature == renderSettingsSignature;
+        other.renderSettingsSignature == renderSettingsSignature &&
+        other.imageFallbackAspectRatio == imageFallbackAspectRatio &&
+        other.resourceLayoutPolicy == resourceLayoutPolicy;
   }
 
   @override
@@ -250,6 +283,8 @@ class _ThreadPostDocumentCacheKey {
     identityHashCode(parser),
     identityHashCode(normalizer),
     renderSettingsSignature,
+    imageFallbackAspectRatio,
+    resourceLayoutPolicy,
   );
 }
 
@@ -263,6 +298,7 @@ class ThreadPostBodySegmentView extends StatelessWidget {
     this.imageCacheOwnerId,
     this.blockImageCacheRequestBuilder,
     this.inlineImageCacheRequestBuilder,
+    this.resourceLayoutHints = ThreadPostResourceLayoutHints.empty,
     this.style = ThreadPostBodyStyle.defaults,
     this.resourceLayoutPolicy = ThreadPostResourceLayoutPolicy.defaults,
     this.textTransformer,
@@ -281,6 +317,7 @@ class ThreadPostBodySegmentView extends StatelessWidget {
   final ThreadPostBlockImageCacheRequestBuilder? blockImageCacheRequestBuilder;
   final ThreadPostInlineImageCacheRequestBuilder?
   inlineImageCacheRequestBuilder;
+  final ThreadPostResourceLayoutHints resourceLayoutHints;
   final ThreadPostBodyStyle style;
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
   final ThreadPostTextTransformer? textTransformer;
@@ -301,6 +338,7 @@ class ThreadPostBodySegmentView extends StatelessWidget {
       imageCacheOwnerId: imageCacheOwnerId,
       blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
       inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
+      resourceLayoutHints: resourceLayoutHints,
       style: style,
       resourceLayoutPolicy: resourceLayoutPolicy,
       textTransformer: textTransformer,
@@ -323,6 +361,7 @@ class ThreadPostBodyView extends StatelessWidget {
     this.imageCacheOwnerId,
     this.blockImageCacheRequestBuilder,
     this.inlineImageCacheRequestBuilder,
+    this.resourceLayoutHints = ThreadPostResourceLayoutHints.empty,
     this.style = ThreadPostBodyStyle.defaults,
     this.resourceLayoutPolicy = ThreadPostResourceLayoutPolicy.defaults,
     this.textTransformer,
@@ -341,6 +380,7 @@ class ThreadPostBodyView extends StatelessWidget {
   final ThreadPostBlockImageCacheRequestBuilder? blockImageCacheRequestBuilder;
   final ThreadPostInlineImageCacheRequestBuilder?
   inlineImageCacheRequestBuilder;
+  final ThreadPostResourceLayoutHints resourceLayoutHints;
   final ThreadPostBodyStyle style;
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
   final ThreadPostTextTransformer? textTransformer;
@@ -367,6 +407,7 @@ class ThreadPostBodyView extends StatelessWidget {
             imageCacheOwnerId: imageCacheOwnerId,
             blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
             inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
+            resourceLayoutHints: resourceLayoutHints,
             style: style,
             resourceLayoutPolicy: resourceLayoutPolicy,
             textTransformer: textTransformer,
@@ -408,6 +449,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
     required this.imageCacheOwnerId,
     required this.blockImageCacheRequestBuilder,
     required this.inlineImageCacheRequestBuilder,
+    required this.resourceLayoutHints,
     required this.style,
     required this.resourceLayoutPolicy,
     required this.textTransformer,
@@ -425,6 +467,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
   final ThreadPostBlockImageCacheRequestBuilder? blockImageCacheRequestBuilder;
   final ThreadPostInlineImageCacheRequestBuilder?
   inlineImageCacheRequestBuilder;
+  final ThreadPostResourceLayoutHints resourceLayoutHints;
   final ThreadPostBodyStyle style;
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
   final ThreadPostTextTransformer? textTransformer;
@@ -443,6 +486,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
         imageHeaderBuilder: imageHeaderBuilder,
         imageCacheOwnerId: imageCacheOwnerId,
         inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
+        resourceLayoutHints: resourceLayoutHints,
         style: style,
         resourceLayoutPolicy: resourceLayoutPolicy,
         textTransformer: textTransformer,
@@ -458,6 +502,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
         imageHeaderBuilder: imageHeaderBuilder,
         imageCacheOwnerId: imageCacheOwnerId,
         blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
+        resourceLayoutHints: resourceLayoutHints,
         style: style,
         resourceLayoutPolicy: resourceLayoutPolicy,
         onOpenImage: onOpenImage,
@@ -473,6 +518,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
         imageCacheOwnerId: imageCacheOwnerId,
         blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
         inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
+        resourceLayoutHints: resourceLayoutHints,
         style: style,
         resourceLayoutPolicy: resourceLayoutPolicy,
         textTransformer: textTransformer,
@@ -496,6 +542,7 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
     required this.imageCacheOwnerId,
     required this.blockImageCacheRequestBuilder,
     required this.inlineImageCacheRequestBuilder,
+    required this.resourceLayoutHints,
     required this.style,
     required this.resourceLayoutPolicy,
     required this.textTransformer,
@@ -513,6 +560,7 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
   final ThreadPostBlockImageCacheRequestBuilder? blockImageCacheRequestBuilder;
   final ThreadPostInlineImageCacheRequestBuilder?
   inlineImageCacheRequestBuilder;
+  final ThreadPostResourceLayoutHints resourceLayoutHints;
   final ThreadPostBodyStyle style;
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
   final ThreadPostTextTransformer? textTransformer;
@@ -552,6 +600,7 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
               imageCacheOwnerId: imageCacheOwnerId,
               blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
               inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
+              resourceLayoutHints: resourceLayoutHints,
               style: quoteStyle,
               resourceLayoutPolicy: resourceLayoutPolicy,
               textTransformer: textTransformer,
@@ -574,6 +623,7 @@ class ThreadPostTextBlockView extends StatelessWidget {
     this.imageHeaderBuilder,
     this.imageCacheOwnerId,
     this.inlineImageCacheRequestBuilder,
+    this.resourceLayoutHints = ThreadPostResourceLayoutHints.empty,
     this.style = ThreadPostBodyStyle.defaults,
     this.resourceLayoutPolicy = ThreadPostResourceLayoutPolicy.defaults,
     this.textTransformer,
@@ -586,6 +636,7 @@ class ThreadPostTextBlockView extends StatelessWidget {
   final String? imageCacheOwnerId;
   final ThreadPostInlineImageCacheRequestBuilder?
   inlineImageCacheRequestBuilder;
+  final ThreadPostResourceLayoutHints resourceLayoutHints;
   final ThreadPostBodyStyle style;
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
   final ThreadPostTextTransformer? textTransformer;
@@ -672,6 +723,7 @@ class ThreadPostTextBlockView extends StatelessWidget {
       image: image,
       request: request,
       imageHeaderBuilder: imageHeaderBuilder,
+      layoutHint: resourceLayoutHints.inlineImage(image),
       resourceLayoutPolicy: resourceLayoutPolicy,
     );
     return WidgetSpan(
@@ -709,12 +761,14 @@ class _ThreadPostInlineImageView extends ConsumerStatefulWidget {
     required this.image,
     required this.request,
     required this.imageHeaderBuilder,
+    required this.layoutHint,
     required this.resourceLayoutPolicy,
   });
 
   final ThreadPostInlineImage image;
   final ImageCacheRequest request;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final ThreadPostInlineImageLayoutHint? layoutHint;
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
 
   @override
@@ -751,7 +805,11 @@ class _ThreadPostInlineImageViewState
   @override
   Widget build(BuildContext context) {
     final originalSize = _inlineImageOriginalSize(widget.image);
-    final size = originalSize ?? (_locksInlineImageSize ? null : _cachedSize);
+    final hintSize = _hintSize();
+    final size =
+        hintSize ??
+        originalSize ??
+        (_locksInlineImageSize ? null : _cachedSize);
     final child = CachedLibraryImage(
       request: widget.request,
       fit: BoxFit.contain,
@@ -806,6 +864,20 @@ class _ThreadPostInlineImageViewState
   bool get _locksInlineImageSize =>
       widget.resourceLayoutPolicy.lockInlineImageSizeForCurrentBuild;
 
+  Size? _hintSize() {
+    final hint = widget.layoutHint;
+    if (hint == null) {
+      return null;
+    }
+    final size = Size(hint.width, hint.height);
+    return size.width.isFinite &&
+            size.height.isFinite &&
+            size.width > 0 &&
+            size.height > 0
+        ? size
+        : null;
+  }
+
   Size? _inlineImageOriginalSize(ThreadPostInlineImage image) {
     final width = image.originalWidth;
     final height = image.originalHeight;
@@ -834,6 +906,7 @@ class ThreadPostImageBlockView extends ConsumerStatefulWidget {
     this.imageHeaderBuilder,
     this.imageCacheOwnerId,
     this.blockImageCacheRequestBuilder,
+    this.resourceLayoutHints = ThreadPostResourceLayoutHints.empty,
     this.style = ThreadPostBodyStyle.defaults,
     this.resourceLayoutPolicy = ThreadPostResourceLayoutPolicy.defaults,
     this.onOpenImage,
@@ -847,6 +920,7 @@ class ThreadPostImageBlockView extends ConsumerStatefulWidget {
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final String? imageCacheOwnerId;
   final ThreadPostBlockImageCacheRequestBuilder? blockImageCacheRequestBuilder;
+  final ThreadPostResourceLayoutHints resourceLayoutHints;
   final ThreadPostBodyStyle style;
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
   final ThreadPostImageOpenHandler? onOpenImage;
@@ -890,10 +964,13 @@ class _ThreadPostImageBlockViewState
   Widget build(BuildContext context) {
     final request = _cacheRequest();
     final aspectRatio = _locksImageAspectRatio
-        ? _htmlAspectRatio() ?? _fallbackAspectRatio()
+        ? _hintAspectRatio(includeContentDefault: true) ??
+              _htmlAspectRatio() ??
+              _fallbackAspectRatio()
         : _resolvedAspectRatio ??
               _htmlAspectRatio() ??
               _cachedAspectRatio ??
+              _hintAspectRatio(includeContentDefault: false) ??
               _fallbackAspectRatio();
     return SelectionContainer.disabled(
       child: Material(
@@ -1026,6 +1103,19 @@ class _ThreadPostImageBlockViewState
       return null;
     }
     return width / height;
+  }
+
+  double? _hintAspectRatio({required bool includeContentDefault}) {
+    final hint = widget.resourceLayoutHints.blockImage(widget.image);
+    if (!includeContentDefault &&
+        hint?.source == ThreadPostResourceLayoutHintSource.contentDefault) {
+      return null;
+    }
+    final ratio = hint?.aspectRatio;
+    if (ratio == null || !ratio.isFinite || ratio <= 0) {
+      return null;
+    }
+    return ratio;
   }
 
   double _fallbackAspectRatio() {

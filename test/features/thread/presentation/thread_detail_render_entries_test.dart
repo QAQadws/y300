@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 import 'package:y300/features/thread/presentation/thread_detail_render_entries.dart';
@@ -115,6 +116,27 @@ void main() {
       ]);
       expect(bodyEntries.first.plan!.usesListSegments, isTrue);
       expect(entries.last.kind, ThreadDetailRenderEntryKind.targetSpacer);
+    });
+
+    test('render plans expose resource layout hints', () {
+      final planner = ThreadDetailRenderEntryPlanner();
+      final post = ThreadPost(
+        pid: 'p-hint',
+        author: 'alice',
+        authorId: '1',
+        message:
+            '<img file="data/attachment/forum/1.jpg" width="120" height="80">',
+        number: 1,
+        isFirst: true,
+        dateline: 'today',
+      );
+
+      final plan = planner.planFor(post);
+      final image = plan.images.single;
+      final hint = plan.resourceLayoutHints.blockImage(image);
+
+      expect(hint?.aspectRatio, 1.5);
+      expect(hint?.source, ThreadPostResourceLayoutHintSource.htmlAttribute);
     });
 
     test('reuses render plans across repeated entry builds', () {

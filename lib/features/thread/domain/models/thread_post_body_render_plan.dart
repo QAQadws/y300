@@ -1,4 +1,5 @@
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 
 class ThreadPostBodyRenderPlan {
   const ThreadPostBodyRenderPlan({
@@ -6,6 +7,7 @@ class ThreadPostBodyRenderPlan {
     required this.images,
     required this.segments,
     required this.usesListSegments,
+    this.resourceLayoutHints = ThreadPostResourceLayoutHints.empty,
   });
 
   final ThreadPostBodyDocument document;
@@ -18,6 +20,8 @@ class ThreadPostBodyRenderPlan {
   /// dedicated copy page renders the full floor body when cross-block selection
   /// is needed.
   final bool usesListSegments;
+
+  final ThreadPostResourceLayoutHints resourceLayoutHints;
 }
 
 class ThreadPostBodySegment {

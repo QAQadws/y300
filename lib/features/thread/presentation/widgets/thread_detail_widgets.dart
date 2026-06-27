@@ -307,6 +307,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
             images: plan.images,
             imageHeaderBuilder: imageHeaderBuilder,
             imageCacheOwnerId: threadId,
+            resourceLayoutHints: plan.resourceLayoutHints,
             resourceLayoutPolicy:
                 ThreadPostResourceLayoutPolicy.lockedForReading,
             selectionEnabled: false,
@@ -370,6 +371,7 @@ class _ThreadPostCardBodySegmentEntry extends StatelessWidget {
             images: plan.images,
             imageHeaderBuilder: imageHeaderBuilder,
             imageCacheOwnerId: threadId,
+            resourceLayoutHints: plan.resourceLayoutHints,
             resourceLayoutPolicy:
                 ThreadPostResourceLayoutPolicy.lockedForReading,
             selectionEnabled: false,
