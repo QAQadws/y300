@@ -30,8 +30,10 @@ class UnifiedDetailPage extends StatefulWidget {
 
   final DetailModuleAdapter adapter;
   final String workId;
-  final Future<void> Function(BuildContext context, ReaderRouteTarget target) onOpenReader;
-  final Future<void> Function(BuildContext context, ThreadRouteTarget target) onOpenThread;
+  final Future<void> Function(BuildContext context, ReaderRouteTarget target)
+  onOpenReader;
+  final Future<void> Function(BuildContext context, ThreadRouteTarget target)
+  onOpenThread;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
 
   @override
@@ -65,6 +67,11 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
         return;
       }
       setState(() {});
+      final changed = await _controller.refreshStaleSourceMetadata();
+      if (!mounted || !changed) {
+        return;
+      }
+      setState(() {});
     });
   }
 
@@ -77,7 +84,8 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   }
 
   void _handleScroll() {
-    final shouldShow = _scrollController.hasClients &&
+    final shouldShow =
+        _scrollController.hasClients &&
         _scrollController.offset >= _collapsedTitleRevealOffset;
     if (shouldShow != _showCollapsedTitle && mounted) {
       setState(() => _showCollapsedTitle = shouldShow);
@@ -89,7 +97,9 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     final state = _controller.state;
     final header = state.header;
     final topInset = MediaQuery.of(context).padding.top;
-    final detailPalette = const UnifiedDetailPaletteResolver().resolve(Theme.of(context));
+    final detailPalette = const UnifiedDetailPaletteResolver().resolve(
+      Theme.of(context),
+    );
     final appBarForeground = _showCollapsedTitle
         ? detailPalette.collapsedAppBarForeground
         : detailPalette.onHeader;
@@ -107,13 +117,11 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
         shadowColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
         foregroundColor: appBarForeground,
-        iconTheme: IconThemeData(
-          color: appBarForeground,
-        ),
+        iconTheme: IconThemeData(color: appBarForeground),
         titleTextStyle: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: appBarForeground,
-              fontWeight: FontWeight.w600,
-            ),
+          color: appBarForeground,
+          fontWeight: FontWeight.w600,
+        ),
         title: AnimatedOpacity(
           duration: const Duration(milliseconds: 180),
           opacity: _showCollapsedTitle ? 1 : 0,
@@ -139,7 +147,10 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
             icon: const Icon(Icons.more_vert),
             itemBuilder: (context) => [
               const PopupMenuItem(value: 'refresh', child: Text('刷新')),
-              const PopupMenuItem(value: 'change-category', child: Text('修改分类')),
+              const PopupMenuItem(
+                value: 'change-category',
+                child: Text('修改分类'),
+              ),
               if (widget.adapter is DetailMetadataEditor)
                 const PopupMenuItem(
                   key: Key('unified-detail-edit-metadata'),
@@ -166,7 +177,9 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
               onRefresh: _refreshAndShowFeedback,
               child: CustomScrollView(
                 controller: _scrollController,
-                physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: ClampingScrollPhysics(),
+                ),
                 slivers: [
                   if (header != null)
                     SliverToBoxAdapter(
@@ -179,7 +192,8 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         onToggleShelf: () => _showMoveCategorySheet(),
                         onRefresh: _refreshAndShowFeedback,
                         onOpenThread: () async {
-                          final target = await widget.adapter.getThreadRouteTarget(workId: widget.workId);
+                          final target = await widget.adapter
+                              .getThreadRouteTarget(workId: widget.workId);
                           if (!context.mounted || target == null) {
                             return;
                           }
@@ -187,20 +201,26 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         },
                       ),
                     ),
-                  if (state.errorMessage != null && state.errorMessage!.isNotEmpty)
+                  if (state.errorMessage != null &&
+                      state.errorMessage!.isNotEmpty)
                     SliverToBoxAdapter(
                       child: UnifiedDetailErrorPanel(
                         message: state.errorMessage!,
-                        topPadding: header == null ? topInset + kToolbarHeight : 10,
+                        topPadding: header == null
+                            ? topInset + kToolbarHeight
+                            : 10,
                         onRetry: _retryLoad,
                       ),
                     ),
                   if (header != null)
                     SliverToBoxAdapter(
                       child: UnifiedDetailIntroSection(
-                        intro: header.intro?.trim().isNotEmpty == true ? header.intro! : '暂无简介',
+                        intro: header.intro?.trim().isNotEmpty == true
+                            ? header.intro!
+                            : '暂无简介',
                         expanded: _introExpanded,
-                        onToggle: () => setState(() => _introExpanded = !_introExpanded),
+                        onToggle: () =>
+                            setState(() => _introExpanded = !_introExpanded),
                       ),
                     ),
                   if (header != null)
@@ -216,7 +236,9 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                       chapterCount: state.chapters.length,
                       filterSummary: _chapterFilterSummary(state.filters),
                       sortSummary: _chapterSortSummary(state.chapterSortOption),
-                      sortAscending: state.chapterSortOption.direction == LibrarySortDirection.asc,
+                      sortAscending:
+                          state.chapterSortOption.direction ==
+                          LibrarySortDirection.asc,
                       onFilterTap: _showChapterFilterSheet,
                       onSortTap: _toggleChapterSortDirection,
                       onDownloadSelected: _handleDownloadMenuAction,
@@ -230,10 +252,14 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                     itemBuilder: (context, index) {
                       final chapter = state.chapters[index];
                       return UnifiedDetailChapterTile(
-                        tileKey: ValueKey<String>('unified-detail-chapter-${chapter.episodeId}'),
+                        tileKey: ValueKey<String>(
+                          'unified-detail-chapter-${chapter.episodeId}',
+                        ),
                         chapter: chapter,
                         subtitle: _chapterSubtitle(chapter),
-                        isDownloading: _downloadingEpisodeIds.contains(chapter.episodeId),
+                        isDownloading: _downloadingEpisodeIds.contains(
+                          chapter.episodeId,
+                        ),
                         downloadIconSize: _chapterDownloadIconSize,
                         onTap: () => _openChapter(chapter),
                         onLongPress: () => _showChapterActions(chapter),
@@ -404,7 +430,9 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       LibraryChapterSortField.name => '名称',
       LibraryChapterSortField.tid => '来源',
     };
-    final direction = option.direction == LibrarySortDirection.asc ? '升序' : '降序';
+    final direction = option.direction == LibrarySortDirection.asc
+        ? '升序'
+        : '降序';
     return '$field$direction';
   }
 
@@ -432,11 +460,15 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                       children: [
                         const UnifiedDetailSheetSectionHeader(title: '筛选'),
                         UnifiedDetailTriStateLine(
-                          lineKey: const Key('unified-detail-filter-downloaded'),
+                          lineKey: const Key(
+                            'unified-detail-filter-downloaded',
+                          ),
                           label: '已下载',
                           value: selectedFilters.downloaded,
                           onChanged: (v) => setSheetState(
-                            () => selectedFilters = selectedFilters.copyWith(downloaded: v),
+                            () => selectedFilters = selectedFilters.copyWith(
+                              downloaded: v,
+                            ),
                           ),
                         ),
                         UnifiedDetailTriStateLine(
@@ -444,15 +476,21 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                           label: '未读',
                           value: selectedFilters.unread,
                           onChanged: (v) => setSheetState(
-                            () => selectedFilters = selectedFilters.copyWith(unread: v),
+                            () => selectedFilters = selectedFilters.copyWith(
+                              unread: v,
+                            ),
                           ),
                         ),
                         UnifiedDetailTriStateLine(
-                          lineKey: const Key('unified-detail-filter-bookmarked'),
+                          lineKey: const Key(
+                            'unified-detail-filter-bookmarked',
+                          ),
                           label: '已加书签',
                           value: selectedFilters.bookmarked,
                           onChanged: (v) => setSheetState(
-                            () => selectedFilters = selectedFilters.copyWith(bookmarked: v),
+                            () => selectedFilters = selectedFilters.copyWith(
+                              bookmarked: v,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -461,10 +499,22 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                           key: const Key('unified-detail-sort-field'),
                           initialValue: selectedSortField,
                           items: const [
-                            DropdownMenuItem(value: LibraryChapterSortField.chapterIndex, child: Text('按章节编号')),
-                            DropdownMenuItem(value: LibraryChapterSortField.date, child: Text('按日期')),
-                            DropdownMenuItem(value: LibraryChapterSortField.name, child: Text('按名称')),
-                            DropdownMenuItem(value: LibraryChapterSortField.tid, child: Text('按来源')),
+                            DropdownMenuItem(
+                              value: LibraryChapterSortField.chapterIndex,
+                              child: Text('按章节编号'),
+                            ),
+                            DropdownMenuItem(
+                              value: LibraryChapterSortField.date,
+                              child: Text('按日期'),
+                            ),
+                            DropdownMenuItem(
+                              value: LibraryChapterSortField.name,
+                              child: Text('按名称'),
+                            ),
+                            DropdownMenuItem(
+                              value: LibraryChapterSortField.tid,
+                              child: Text('按来源'),
+                            ),
                           ],
                           onChanged: (value) {
                             if (value != null) {
@@ -480,12 +530,22 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                             const Spacer(),
                             SegmentedButton<LibrarySortDirection>(
                               segments: const [
-                                ButtonSegment(value: LibrarySortDirection.asc, label: Text('升序')),
-                                ButtonSegment(value: LibrarySortDirection.desc, label: Text('降序')),
+                                ButtonSegment(
+                                  value: LibrarySortDirection.asc,
+                                  label: Text('升序'),
+                                ),
+                                ButtonSegment(
+                                  value: LibrarySortDirection.desc,
+                                  label: Text('降序'),
+                                ),
                               ],
-                              selected: <LibrarySortDirection>{selectedDirection},
+                              selected: <LibrarySortDirection>{
+                                selectedDirection,
+                              },
                               onSelectionChanged: (values) {
-                                setSheetState(() => selectedDirection = values.first);
+                                setSheetState(
+                                  () => selectedDirection = values.first,
+                                );
                               },
                             ),
                           ],
@@ -495,18 +555,28 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                           children: [
                             Expanded(
                               child: OutlinedButton(
-                                onPressed: () => Navigator.of(sheetContext).pop(),
+                                onPressed: () =>
+                                    Navigator.of(sheetContext).pop(),
                                 child: const Text('取消'),
                               ),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
                               child: FilledButton(
-                                key: const Key('unified-detail-apply-filter-sort'),
+                                key: const Key(
+                                  'unified-detail-apply-filter-sort',
+                                ),
                                 onPressed: () async {
-                                  await _controller.updateFilters(selectedFilters);
-                                  await _controller.updateChapterSortField(selectedSortField);
-                                  final now = _controller.state.chapterSortOption.direction;
+                                  await _controller.updateFilters(
+                                    selectedFilters,
+                                  );
+                                  await _controller.updateChapterSortField(
+                                    selectedSortField,
+                                  );
+                                  final now = _controller
+                                      .state
+                                      .chapterSortOption
+                                      .direction;
                                   if (now != selectedDirection) {
                                     await _controller.toggleSortDirection();
                                   }
@@ -574,7 +644,9 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                   leading: const Icon(Icons.delete_outline),
                   title: const Text('删除该章节下载'),
                   onTap: () async {
-                    await _controller.deleteChapterDownload(episodeId: chapter.episodeId);
+                    await _controller.deleteChapterDownload(
+                      episodeId: chapter.episodeId,
+                    );
                     if (!mounted || !sheetContext.mounted) {
                       return;
                     }
@@ -690,31 +762,38 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
             sourceValue: header.sourceTranslationGroup,
           ),
           initialSearchTitle: header.customSearchTitle ?? '',
-          titleSourceText: _sourceText('来源标题', header.sourceTitle ?? header.title),
-          authorSourceText: _sourceText('来源作者', header.sourceAuthor ?? header.author),
+          titleSourceText: _sourceText(
+            '来源标题',
+            header.sourceTitle ?? header.title,
+          ),
+          authorSourceText: _sourceText(
+            '来源作者',
+            header.sourceAuthor ?? header.author,
+          ),
           groupSourceText: _sourceText(
             '来源汉化组',
             header.sourceTranslationGroup ?? header.translationGroup,
           ),
-          onSave: ({
-            customTitle,
-            customAuthor,
-            customTranslationGroup,
-            customSearchTitle,
-          }) async {
-            await editor.updateCustomMetadata(
-              workId: widget.workId,
-              customTitle: customTitle,
-              customAuthor: customAuthor,
-              customTranslationGroup: customTranslationGroup,
-              customSearchTitle: customSearchTitle,
-            );
-            await _controller.reload();
-            if (!mounted) {
-              return;
-            }
-            setState(() {});
-          },
+          onSave:
+              ({
+                customTitle,
+                customAuthor,
+                customTranslationGroup,
+                customSearchTitle,
+              }) async {
+                await editor.updateCustomMetadata(
+                  workId: widget.workId,
+                  customTitle: customTitle,
+                  customAuthor: customAuthor,
+                  customTranslationGroup: customTranslationGroup,
+                  customSearchTitle: customSearchTitle,
+                );
+                await _controller.reload();
+                if (!mounted) {
+                  return;
+                }
+                setState(() {});
+              },
         );
       },
     );
@@ -914,7 +993,6 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       },
     );
   }
-
 }
 
 String _sourceText(String label, String? value) {
@@ -939,4 +1017,3 @@ String _metadataInitialValue({
       _emptyToNull(sourceValue ?? '') ??
       '';
 }
-

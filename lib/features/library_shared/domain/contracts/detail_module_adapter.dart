@@ -2,11 +2,7 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 
-enum DetailRefreshStatus {
-  immediate,
-  queued,
-  skipped,
-}
+enum DetailRefreshStatus { immediate, queued, skipped }
 
 class DetailRefreshResult {
   const DetailRefreshResult({
@@ -61,9 +57,7 @@ abstract class DetailModuleAdapter {
   LibraryModuleKey get moduleKey;
 
   /// 读取详情头部信息。
-  Future<LibraryDetailHeader> loadHeader({
-    required String workId,
-  });
+  Future<LibraryDetailHeader> loadHeader({required String workId});
 
   /// 读取章节列表。
   Future<List<LibraryChapterItem>> loadChapters({
@@ -91,9 +85,7 @@ abstract class DetailModuleAdapter {
     required bool isDownloaded,
   });
 
-  Future<void> clearAllReadState({
-    required String workId,
-  });
+  Future<void> clearAllReadState({required String workId});
 
   Future<void> deleteChapterDownload({
     required String workId,
@@ -108,10 +100,7 @@ abstract class DetailModuleAdapter {
   /// 作品级动作。
   Future<DetailRefreshResult> refreshWork({required String workId});
 
-  Future<void> updateIntro({
-    required String workId,
-    required String intro,
-  });
+  Future<void> updateIntro({required String workId, required String intro});
 
   /// 修改作品所在分类（详情页 more 菜单动作）。
   Future<void> moveWorkToCategory({
@@ -123,9 +112,7 @@ abstract class DetailModuleAdapter {
   Future<List<LibraryCategory>> loadCategories();
 
   /// 读取当前作品绑定标签。
-  Future<List<LibraryTag>> getWorkTags({
-    required String workId,
-  });
+  Future<List<LibraryTag>> getWorkTags({required String workId});
 
   /// 读取可用标签池。
   Future<List<LibraryTag>> getAllTags();
@@ -149,9 +136,7 @@ abstract class DetailModuleAdapter {
   });
 
   /// 原帖路由参数。
-  Future<ThreadRouteTarget?> getThreadRouteTarget({
-    required String workId,
-  });
+  Future<ThreadRouteTarget?> getThreadRouteTarget({required String workId});
 
   /// 阅读器路由参数（开始/继续）。
   Future<ReaderRouteTarget?> getReaderRouteTarget({
@@ -174,12 +159,20 @@ abstract class DetailMetadataEditor {
   });
 }
 
+/// Optional source metadata freshness hook.
+///
+/// Detail pages always load local metadata first. Adapters that implement this
+/// hook may then perform a throttled background source check and refresh their
+/// local source metadata without blocking first paint.
+abstract class DetailSourceMetadataFreshness {
+  Future<bool> shouldCheckSourceMetadata({required String workId});
+
+  Future<DetailRefreshResult> refreshSourceMetadata({required String workId});
+}
+
 /// 原帖跳转目标。
 class ThreadRouteTarget {
-  const ThreadRouteTarget({
-    required this.tid,
-    this.subject,
-  });
+  const ThreadRouteTarget({required this.tid, this.subject});
 
   final String tid;
   final String? subject;
@@ -187,10 +180,7 @@ class ThreadRouteTarget {
 
 /// 阅读器跳转目标。
 class ReaderRouteTarget {
-  const ReaderRouteTarget({
-    required this.workId,
-    required this.episodeId,
-  });
+  const ReaderRouteTarget({required this.workId, required this.episodeId});
 
   final String workId;
   final String episodeId;

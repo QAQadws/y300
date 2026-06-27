@@ -1,28 +1,41 @@
-﻿import 'package:y300/features/library_shared/data/library_state_repository.dart';
+import 'package:y300/features/library_shared/data/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
+import 'package:y300/features/cache/domain/image_cache_keys.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/image_cache_service.dart';
+import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
+import 'package:y300/features/library_shared/domain/services/library_work_freshness_policy.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 
 /// 小说详情适配器（Phase 6）。
-class NovelDetailAdapter implements DetailModuleAdapter {
+class NovelDetailAdapter
+    implements DetailModuleAdapter, DetailSourceMetadataFreshness {
   NovelDetailAdapter(
     this._repository, {
     NovelDownloadService? downloadService,
+    ImageCacheService? imageCacheService,
     ReadingStateBatchWriter? readingStateBatchWriter,
+    LibraryWorkFreshnessPolicy freshnessPolicy =
+        const LibraryWorkFreshnessPolicy.detailDefaults(),
     required LibraryStateRepository stateRepository,
-  })  : _downloadService = downloadService,
-        _readingStateBatchWriter = readingStateBatchWriter,
-        _stateRepository = stateRepository;
+  }) : _downloadService = downloadService,
+       _coverCacheService = LibraryCoverCacheService(imageCacheService),
+       _readingStateBatchWriter = readingStateBatchWriter,
+       _freshnessPolicy = freshnessPolicy,
+       _stateRepository = stateRepository;
 
   final NovelRepository _repository;
   final NovelDownloadService? _downloadService;
+  final LibraryCoverCacheService _coverCacheService;
   final ReadingStateBatchWriter? _readingStateBatchWriter;
+  final LibraryWorkFreshnessPolicy _freshnessPolicy;
   final LibraryStateRepository _stateRepository;
 
   @override
@@ -42,13 +55,39 @@ class NovelDetailAdapter implements DetailModuleAdapter {
       moduleKey: LibraryModuleKey.novel,
       workId: workId,
     );
+    final coverImageUrl = detail.coverImageUrl;
+    var coverLocalPath = detail.coverLocalPath;
+    if ((coverLocalPath == null || coverLocalPath.trim().isEmpty) &&
+        coverImageUrl != null &&
+        coverImageUrl.trim().isNotEmpty) {
+      final cachedCover = await _coverCacheService.ensureProtectedCover(
+        cacheKey: ImageCacheKeys.novelCover(workId),
+        sourceUrl: coverImageUrl,
+        ownerType: ImageCacheOwnerType.novel,
+        ownerId: workId,
+        role: ImageCacheRole.cover,
+      );
+      final localPath = cachedCover?.localPath?.trim();
+      if (localPath != null && localPath.isNotEmpty) {
+        coverLocalPath = localPath;
+        if (_repository is NovelCoverCacheWriter) {
+          await (_repository as NovelCoverCacheWriter).updateCoverCache(
+            novelId: workId,
+            coverImageUrl: coverImageUrl,
+            coverLocalPath: coverLocalPath,
+          );
+        }
+      }
+    }
     return LibraryDetailHeader(
       workId: detail.novelId,
       title: detail.title,
-      coverImageUrl: detail.coverImageUrl,
-      coverLocalPath: detail.coverLocalPath,
+      coverImageUrl: coverImageUrl,
+      coverLocalPath: coverLocalPath,
       customCoverLocalPath: detail.customCoverLocalPath,
       author: detail.author,
+      sourceTitle: detail.sourceTitle,
+      sourceAuthor: detail.sourceAuthor,
       sourceTid: detail.sourceTid,
       sourceTypeId: detail.sourceTypeId,
       sourceTagName: detail.sourceTagName,
@@ -157,7 +196,10 @@ class NovelDetailAdapter implements DetailModuleAdapter {
       );
       return;
     }
-    final episodes = await _repository.getEpisodes(novelId: workId, descending: false);
+    final episodes = await _repository.getEpisodes(
+      novelId: workId,
+      descending: false,
+    );
     for (final episode in episodes) {
       await _stateRepository.upsertEpisodeState(
         moduleKey: LibraryModuleKey.novel,
@@ -189,22 +231,36 @@ class NovelDetailAdapter implements DetailModuleAdapter {
 
   @override
   Future<void> downloadAll({required String workId}) async {
-    final episodes = await _repository.getEpisodes(novelId: workId, descending: false);
+    final episodes = await _repository.getEpisodes(
+      novelId: workId,
+      descending: false,
+    );
     for (final episode in episodes) {
-      await markChapterDownloaded(workId: workId, episodeId: episode.episodeId, isDownloaded: true);
+      await markChapterDownloaded(
+        workId: workId,
+        episodeId: episode.episodeId,
+        isDownloaded: true,
+      );
     }
   }
 
   @override
   Future<void> downloadUnread({required String workId}) async {
-    final episodes = await _repository.getEpisodes(novelId: workId, descending: false);
+    final episodes = await _repository.getEpisodes(
+      novelId: workId,
+      descending: false,
+    );
     for (final episode in episodes) {
       final state = await _stateRepository.getEpisodeState(
         moduleKey: LibraryModuleKey.novel,
         episodeId: episode.episodeId,
       );
       if (!(state?.isRead ?? false)) {
-        await markChapterDownloaded(workId: workId, episodeId: episode.episodeId, isDownloaded: true);
+        await markChapterDownloaded(
+          workId: workId,
+          episodeId: episode.episodeId,
+          isDownloaded: true,
+        );
       }
     }
   }
@@ -215,7 +271,10 @@ class NovelDetailAdapter implements DetailModuleAdapter {
     required bool preferContinue,
   }) async {
     final progress = await _repository.getReadingProgress(novelId: workId);
-    final episodes = await _repository.getEpisodes(novelId: workId, descending: false);
+    final episodes = await _repository.getEpisodes(
+      novelId: workId,
+      descending: false,
+    );
     if (episodes.isEmpty) {
       return null;
     }
@@ -224,11 +283,16 @@ class NovelDetailAdapter implements DetailModuleAdapter {
         episodes.any((episode) => episode.episodeId == progress.episodeId)) {
       return ReaderRouteTarget(workId: workId, episodeId: progress.episodeId);
     }
-    return ReaderRouteTarget(workId: workId, episodeId: episodes.first.episodeId);
+    return ReaderRouteTarget(
+      workId: workId,
+      episodeId: episodes.first.episodeId,
+    );
   }
 
   @override
-  Future<ThreadRouteTarget?> getThreadRouteTarget({required String workId}) async {
+  Future<ThreadRouteTarget?> getThreadRouteTarget({
+    required String workId,
+  }) async {
     final detail = await _repository.getDetail(novelId: workId);
     if (detail == null) {
       return null;
@@ -298,6 +362,39 @@ class NovelDetailAdapter implements DetailModuleAdapter {
       mode: NovelEpisodeRefreshMode.incremental,
     );
     return DetailRefreshResult.immediate;
+  }
+
+  @override
+  Future<bool> shouldCheckSourceMetadata({required String workId}) async {
+    final state = await _stateRepository.getWorkState(
+      moduleKey: LibraryModuleKey.novel,
+      workId: workId,
+    );
+    return _freshnessPolicy.shouldCheck(
+      lastCheckedAt: state?.checkUpdatedAt,
+      now: DateTime.now(),
+    );
+  }
+
+  @override
+  Future<DetailRefreshResult> refreshSourceMetadata({
+    required String workId,
+  }) async {
+    final checkedAt = DateTime.now();
+    await _stateRepository.upsertWorkState(
+      moduleKey: LibraryModuleKey.novel,
+      workId: workId,
+      checkUpdatedAt: checkedAt,
+    );
+    final result = await refreshWork(workId: workId);
+    if (result.shouldReload) {
+      await _stateRepository.upsertWorkState(
+        moduleKey: LibraryModuleKey.novel,
+        workId: workId,
+        fetchedUpdatedAt: DateTime.now(),
+      );
+    }
+    return result;
   }
 
   @override
@@ -396,7 +493,9 @@ class NovelDetailAdapter implements DetailModuleAdapter {
   Future<String?> _findCurrentCategoryId(String workId) async {
     final categories = await _repository.getCategories();
     for (final category in categories) {
-      final works = await _repository.getShelfItems(categoryId: category.categoryId);
+      final works = await _repository.getShelfItems(
+        categoryId: category.categoryId,
+      );
       if (works.any((item) => item.novelId == workId)) {
         return category.categoryId;
       }
@@ -408,18 +507,20 @@ class NovelDetailAdapter implements DetailModuleAdapter {
     List<LibraryChapterItem> source,
     LibraryFilterSet filters,
   ) {
-    return source.where((chapter) {
-      if (!_matchTriState(filters.downloaded, chapter.isDownloaded)) {
-        return false;
-      }
-      if (!_matchTriState(filters.unread, !chapter.isRead)) {
-        return false;
-      }
-      if (!_matchTriState(filters.bookmarked, chapter.isBookmarked)) {
-        return false;
-      }
-      return true;
-    }).toList(growable: false);
+    return source
+        .where((chapter) {
+          if (!_matchTriState(filters.downloaded, chapter.isDownloaded)) {
+            return false;
+          }
+          if (!_matchTriState(filters.unread, !chapter.isRead)) {
+            return false;
+          }
+          if (!_matchTriState(filters.bookmarked, chapter.isBookmarked)) {
+            return false;
+          }
+          return true;
+        })
+        .toList(growable: false);
   }
 
   List<LibraryChapterItem> _sortChapters(
@@ -429,12 +530,21 @@ class NovelDetailAdapter implements DetailModuleAdapter {
     final list = [...source];
     int compare(LibraryChapterItem a, LibraryChapterItem b) {
       final result = switch (sortOption.field) {
-        LibraryChapterSortField.chapterIndex => a.orderIndex.compareTo(b.orderIndex),
-        LibraryChapterSortField.date => (a.publishTimeText ?? '').compareTo(b.publishTimeText ?? ''),
+        LibraryChapterSortField.chapterIndex => a.orderIndex.compareTo(
+          b.orderIndex,
+        ),
+        LibraryChapterSortField.date => (a.publishTimeText ?? '').compareTo(
+          b.publishTimeText ?? '',
+        ),
         LibraryChapterSortField.name => a.title.compareTo(b.title),
-        LibraryChapterSortField.tid => _compareNumericText(a.sourcePid ?? '', b.sourcePid ?? ''),
+        LibraryChapterSortField.tid => _compareNumericText(
+          a.sourcePid ?? '',
+          b.sourcePid ?? '',
+        ),
       };
-      return sortOption.direction == LibrarySortDirection.asc ? result : -result;
+      return sortOption.direction == LibrarySortDirection.asc
+          ? result
+          : -result;
     }
 
     list.sort(compare);

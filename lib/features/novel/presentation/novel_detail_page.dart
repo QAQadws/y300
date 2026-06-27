@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_detail_page.dart';
 import 'package:y300/features/novel/data/novel_providers.dart';
@@ -10,10 +11,7 @@ import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
 /// 小说详情页（Phase 4）：统一详情页薄壳接入。
 class NovelDetailPage extends ConsumerWidget {
-  const NovelDetailPage({
-    super.key,
-    required this.novelId,
-  });
+  const NovelDetailPage({super.key, required this.novelId});
 
   final String novelId;
 
@@ -22,6 +20,7 @@ class NovelDetailPage extends ConsumerWidget {
     final adapter = NovelDetailAdapter(
       ref.watch(novelRepositoryProvider),
       downloadService: ref.watch(novelDownloadServiceProvider),
+      imageCacheService: ref.watch(imageCacheServiceProvider),
       readingStateBatchWriter: ref.watch(readingStateBatchWriterProvider),
       stateRepository: ref.watch(libraryStateRepositoryProvider),
     );

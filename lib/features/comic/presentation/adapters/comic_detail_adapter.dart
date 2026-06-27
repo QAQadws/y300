@@ -1,4 +1,4 @@
-﻿import 'package:y300/features/cache/domain/image_cache_keys.dart';
+import 'package:y300/features/cache/domain/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/comic/data/comic_download_service.dart';
@@ -20,6 +20,8 @@ import 'package:y300/features/library_shared/domain/contracts/detail_module_adap
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
+import 'package:y300/features/library_shared/domain/services/library_work_freshness_policy.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
 
@@ -29,7 +31,11 @@ import 'package:y300/features/library_shared/domain/services/reading_state_batch
 /// 刷新抓取通过 ComicEpisodeRefreshService 下沉到漫画域 services，
 /// 而“合并章节/提升封面/通知书架”则统一交给 ComicRefreshOutcomeApplier，
 /// 保证统一详情页只保留编排，不耦合漫画刷新策略细节。
-class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
+class ComicDetailAdapter
+    implements
+        DetailModuleAdapter,
+        DetailMetadataEditor,
+        DetailSourceMetadataFreshness {
   ComicDetailAdapter(
     this._repository, {
     ComicEpisodeRefreshService? refreshService,
@@ -44,20 +50,23 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
     ComicEpisodeDiscoveryService? discoveryService,
     ComicReaderFeatureFlags featureFlags = ComicReaderFeatureFlags.defaults,
     ComicTitleAnalyzer titleAnalyzer = const PetitComicTitleAnalyzer(),
+    LibraryWorkFreshnessPolicy freshnessPolicy =
+        const LibraryWorkFreshnessPolicy.detailDefaults(),
     required LibraryStateRepository stateRepository,
-  })  : _refreshService = refreshService,
-        _searchQueue = searchQueue,
-        _firstEpisodeCoverService = firstEpisodeCoverService,
-        _refreshOutcomeApplier = refreshOutcomeApplier,
-        _downloadService = downloadService,
-        _imageCacheService = imageCacheService,
-        _readingStateBatchWriter = readingStateBatchWriter,
-        _bulkDownloadUseCase = bulkDownloadUseCase,
-        _incrementalDiscovery = incrementalDiscovery,
-        _discoveryService = discoveryService,
-        _featureFlags = featureFlags,
-        _titleAnalyzer = titleAnalyzer,
-        _stateRepository = stateRepository;
+  }) : _refreshService = refreshService,
+       _searchQueue = searchQueue,
+       _firstEpisodeCoverService = firstEpisodeCoverService,
+       _refreshOutcomeApplier = refreshOutcomeApplier,
+       _downloadService = downloadService,
+       _coverCacheService = LibraryCoverCacheService(imageCacheService),
+       _readingStateBatchWriter = readingStateBatchWriter,
+       _bulkDownloadUseCase = bulkDownloadUseCase,
+       _incrementalDiscovery = incrementalDiscovery,
+       _discoveryService = discoveryService,
+       _featureFlags = featureFlags,
+       _titleAnalyzer = titleAnalyzer,
+       _freshnessPolicy = freshnessPolicy,
+       _stateRepository = stateRepository;
 
   final ComicRepository _repository;
   final ComicEpisodeRefreshService? _refreshService;
@@ -65,13 +74,14 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
   final ComicFirstEpisodeCoverService? _firstEpisodeCoverService;
   final ComicRefreshOutcomeApplier? _refreshOutcomeApplier;
   final ComicDownloadService? _downloadService;
-  final ImageCacheService? _imageCacheService;
+  final LibraryCoverCacheService _coverCacheService;
   final ReadingStateBatchWriter? _readingStateBatchWriter;
   final BulkDownloadUseCase? _bulkDownloadUseCase;
   final ComicIncrementalEpisodeDiscovery? _incrementalDiscovery;
   final ComicEpisodeDiscoveryService? _discoveryService;
   final ComicReaderFeatureFlags _featureFlags;
   final ComicTitleAnalyzer _titleAnalyzer;
+  final LibraryWorkFreshnessPolicy _freshnessPolicy;
   final LibraryStateRepository _stateRepository;
 
   @override
@@ -93,8 +103,9 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
     );
     final inShelf = await _repository.isInShelf(comicId: workId);
     final useCustomMetadata = _featureFlags.readerCustomMetadataEnabled;
-    final customCoverImageUrl =
-        useCustomMetadata ? detail.customCoverImageUrl?.trim() : null;
+    final customCoverImageUrl = useCustomMetadata
+        ? detail.customCoverImageUrl?.trim()
+        : null;
     // Local repository returns `coverImageUrl` as custom-or-source for normal
     // UI.  The feature flag must be able to suppress that custom layer fully.
     var coverImageUrl = useCustomMetadata
@@ -103,8 +114,9 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
     var coverLocalPath = useCustomMetadata
         ? detail.coverLocalPath
         : _sourceCoverLocalPath(detail);
-    var customCoverLocalPath =
-        useCustomMetadata ? detail.customCoverLocalPath : null;
+    var customCoverLocalPath = useCustomMetadata
+        ? detail.customCoverLocalPath
+        : null;
     if (coverImageUrl == null || coverImageUrl.trim().isEmpty) {
       final promoted = await _firstEpisodeCoverService?.promoteIfPossible(
         comicId: workId,
@@ -118,8 +130,9 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
           coverLocalPath = useCustomMetadata
               ? refreshed.coverLocalPath
               : _sourceCoverLocalPath(refreshed);
-          customCoverLocalPath =
-              useCustomMetadata ? refreshed.customCoverLocalPath : null;
+          customCoverLocalPath = useCustomMetadata
+              ? refreshed.customCoverLocalPath
+              : null;
         }
       }
       // 漫画初始封面使用“tid 最小的话的第一张图”。orderIndex 只代表
@@ -194,8 +207,9 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
       sourceTitle: detail.sourceTitle,
       customTitle: useCustomMetadata ? detail.customTitle : null,
       sourceTranslationGroup: detail.sourceTranslationGroup,
-      customTranslationGroup:
-          useCustomMetadata ? detail.customTranslationGroup : null,
+      customTranslationGroup: useCustomMetadata
+          ? detail.customTranslationGroup
+          : null,
       customSearchTitle: useCustomMetadata ? detail.customSearchTitle : null,
       sourceTid: detail.sourceTid,
       sourceTypeId: detail.sourceTypeId,
@@ -207,13 +221,18 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
   }
 
   Future<String?> _loadFirstEpisodeImageUrl(String workId) async {
-    final episodes = await _repository.getComicEpisodes(comicId: workId, descending: false);
+    final episodes = await _repository.getComicEpisodes(
+      comicId: workId,
+      descending: false,
+    );
     if (episodes.isEmpty) {
       return null;
     }
     final ordered = [...episodes]..sort(_compareEpisodesByFirstTid);
     for (final episode in ordered) {
-      final images = await _repository.getEpisodeImages(episodeId: episode.episodeId);
+      final images = await _repository.getEpisodeImages(
+        episodeId: episode.episodeId,
+      );
       if (images.isNotEmpty) {
         return images.first.imageUrl;
       }
@@ -263,7 +282,9 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
         LibraryChapterItem(
           episodeId: item.episodeId,
           workId: item.comicId,
-          title: item.episodeTitle?.trim().isNotEmpty == true ? item.episodeTitle! : '章节 ${item.sourceTid}',
+          title: item.episodeTitle?.trim().isNotEmpty == true
+              ? item.episodeTitle!
+              : '章节 ${item.sourceTid}',
           orderIndex: item.orderIndex,
           sourceTid: item.sourceTid,
           publishTimeText: item.publishTimeText,
@@ -292,7 +313,9 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
       return null;
     }
     final rawImageIndex = progress.imageIndex < 0 ? 0 : progress.imageIndex;
-    final images = await _repository.getEpisodeImages(episodeId: episode.episodeId);
+    final images = await _repository.getEpisodeImages(
+      episodeId: episode.episodeId,
+    );
     if (images.isEmpty) {
       final pageNumber = rawImageIndex + 1;
       return LibraryChapterProgressInfo(
@@ -323,7 +346,10 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
       );
       return;
     }
-    final episodes = await _repository.getComicEpisodes(comicId: workId, descending: false);
+    final episodes = await _repository.getComicEpisodes(
+      comicId: workId,
+      descending: false,
+    );
     for (final episode in episodes) {
       await _stateRepository.upsertEpisodeState(
         moduleKey: LibraryModuleKey.comic,
@@ -360,22 +386,36 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
       await bulkDownloadUseCase.downloadComics(<String>{workId});
       return;
     }
-    final episodes = await _repository.getComicEpisodes(comicId: workId, descending: false);
+    final episodes = await _repository.getComicEpisodes(
+      comicId: workId,
+      descending: false,
+    );
     for (final episode in episodes) {
-      await markChapterDownloaded(workId: workId, episodeId: episode.episodeId, isDownloaded: true);
+      await markChapterDownloaded(
+        workId: workId,
+        episodeId: episode.episodeId,
+        isDownloaded: true,
+      );
     }
   }
 
   @override
   Future<void> downloadUnread({required String workId}) async {
-    final episodes = await _repository.getComicEpisodes(comicId: workId, descending: false);
+    final episodes = await _repository.getComicEpisodes(
+      comicId: workId,
+      descending: false,
+    );
     for (final episode in episodes) {
       final state = await _stateRepository.getEpisodeState(
         moduleKey: LibraryModuleKey.comic,
         episodeId: episode.episodeId,
       );
       if (!(state?.isRead ?? false)) {
-        await markChapterDownloaded(workId: workId, episodeId: episode.episodeId, isDownloaded: true);
+        await markChapterDownloaded(
+          workId: workId,
+          episodeId: episode.episodeId,
+          isDownloaded: true,
+        );
       }
     }
   }
@@ -385,15 +425,15 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
     required String workId,
     required bool preferContinue,
   }) async {
-    final episodes = await _repository.getComicEpisodes(comicId: workId, descending: false);
+    final episodes = await _repository.getComicEpisodes(
+      comicId: workId,
+      descending: false,
+    );
     if (episodes.isEmpty) {
       return null;
     }
     final targetEpisodeId = preferContinue
-        ? await _resolveContinueEpisodeId(
-            workId: workId,
-            episodes: episodes,
-          )
+        ? await _resolveContinueEpisodeId(workId: workId, episodes: episodes)
         : episodes.first.episodeId;
     return ReaderRouteTarget(workId: workId, episodeId: targetEpisodeId);
   }
@@ -420,7 +460,9 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
     required String workId,
     required List<ComicEpisodeItem> episodes,
   }) async {
-    final validEpisodeIds = episodes.map((episode) => episode.episodeId).toSet();
+    final validEpisodeIds = episodes
+        .map((episode) => episode.episodeId)
+        .toSet();
 
     final progress = await _repository.getLastReadProgress(comicId: workId);
     if (progress != null && validEpisodeIds.contains(progress.episodeId)) {
@@ -452,7 +494,9 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
   }
 
   @override
-  Future<ThreadRouteTarget?> getThreadRouteTarget({required String workId}) async {
+  Future<ThreadRouteTarget?> getThreadRouteTarget({
+    required String workId,
+  }) async {
     final detail = await _repository.getComicDetail(comicId: workId);
     if (detail == null) {
       return null;
@@ -553,8 +597,9 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
         catalogUrl: discoveredCatalogUrl,
       );
       // 立即尝试 catalog 快速路径
-      final catalogRetry = await refreshService
-          .fetchCatalogDirect(discoveredCatalogUrl);
+      final catalogRetry = await refreshService.fetchCatalogDirect(
+        discoveredCatalogUrl,
+      );
       if (catalogRetry.catalogMatched && catalogRetry.hasLinks) {
         await _applyRefreshOutcome(
           applier: refreshOutcomeApplier,
@@ -614,6 +659,39 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
       status: DetailRefreshStatus.skipped,
       message: '未提取到新的章节链接',
     );
+  }
+
+  @override
+  Future<bool> shouldCheckSourceMetadata({required String workId}) async {
+    final state = await _stateRepository.getWorkState(
+      moduleKey: LibraryModuleKey.comic,
+      workId: workId,
+    );
+    return _freshnessPolicy.shouldCheck(
+      lastCheckedAt: state?.checkUpdatedAt,
+      now: DateTime.now(),
+    );
+  }
+
+  @override
+  Future<DetailRefreshResult> refreshSourceMetadata({
+    required String workId,
+  }) async {
+    final checkedAt = DateTime.now();
+    await _stateRepository.upsertWorkState(
+      moduleKey: LibraryModuleKey.comic,
+      workId: workId,
+      checkUpdatedAt: checkedAt,
+    );
+    final result = await refreshWork(workId: workId);
+    if (result.shouldReload) {
+      await _stateRepository.upsertWorkState(
+        moduleKey: LibraryModuleKey.comic,
+        workId: workId,
+        fetchedUpdatedAt: DateTime.now(),
+      );
+    }
+    return result;
   }
 
   Future<ParsedThreadResult?> _fetchAndParseCurrentThread(String tid) async {
@@ -684,8 +762,9 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
       sourceTid: detail.sourceTid,
       displayTitle: detail.displayTitle,
       sourceTitle: detail.sourceTitle,
-      customTitle:
-          _featureFlags.readerCustomMetadataEnabled ? detail.customTitle : null,
+      customTitle: _featureFlags.readerCustomMetadataEnabled
+          ? detail.customTitle
+          : null,
       customSearchTitle: _featureFlags.readerCustomMetadataEnabled
           ? detail.customSearchTitle
           : null,
@@ -705,7 +784,10 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
     }
     final displayTitle = detail.displayTitle.trim();
     if (displayTitle.isNotEmpty) {
-      final cleanBookName = _titleAnalyzer.analyze(displayTitle).cleanBookName.trim();
+      final cleanBookName = _titleAnalyzer
+          .analyze(displayTitle)
+          .cleanBookName
+          .trim();
       if (cleanBookName.isNotEmpty) {
         return cleanBookName;
       }
@@ -827,7 +909,9 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
   Future<String?> _findCurrentCategoryId(String workId) async {
     final categories = await _repository.getCategories();
     for (final category in categories) {
-      final works = await _repository.getShelfItems(categoryId: category.categoryId);
+      final works = await _repository.getShelfItems(
+        categoryId: category.categoryId,
+      );
       if (works.any((item) => item.comicId == workId)) {
         return category.categoryId;
       }
@@ -841,39 +925,33 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
     required String cacheKey,
     required ImageCacheRole role,
   }) async {
-    final cacheService = _imageCacheService;
-    if (cacheService == null) {
-      return null;
-    }
-    final result = await cacheService.ensureCached(
-      ImageCacheRequest(
-        cacheKey: cacheKey,
-        sourceUrl: sourceUrl,
-        ownerType: ImageCacheOwnerType.comic,
-        ownerId: comicId,
-        role: role,
-        protected: true,
-      ),
+    return _coverCacheService.ensureProtectedCover(
+      cacheKey: cacheKey,
+      sourceUrl: sourceUrl,
+      ownerType: ImageCacheOwnerType.comic,
+      ownerId: comicId,
+      role: role,
     );
-    return result.success ? result : null;
   }
 
   List<LibraryChapterItem> _applyFilters(
     List<LibraryChapterItem> source,
     LibraryFilterSet filters,
   ) {
-    return source.where((chapter) {
-      if (!_matchTriState(filters.downloaded, chapter.isDownloaded)) {
-        return false;
-      }
-      if (!_matchTriState(filters.unread, !chapter.isRead)) {
-        return false;
-      }
-      if (!_matchTriState(filters.bookmarked, chapter.isBookmarked)) {
-        return false;
-      }
-      return true;
-    }).toList(growable: false);
+    return source
+        .where((chapter) {
+          if (!_matchTriState(filters.downloaded, chapter.isDownloaded)) {
+            return false;
+          }
+          if (!_matchTriState(filters.unread, !chapter.isRead)) {
+            return false;
+          }
+          if (!_matchTriState(filters.bookmarked, chapter.isBookmarked)) {
+            return false;
+          }
+          return true;
+        })
+        .toList(growable: false);
   }
 
   List<LibraryChapterItem> _sortChapters(
@@ -883,12 +961,20 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
     final list = [...source];
     int compare(LibraryChapterItem a, LibraryChapterItem b) {
       final result = switch (sortOption.field) {
-        LibraryChapterSortField.chapterIndex => a.orderIndex.compareTo(b.orderIndex),
-        LibraryChapterSortField.date => (a.publishTimeText ?? '').compareTo(b.publishTimeText ?? ''),
+        LibraryChapterSortField.chapterIndex => a.orderIndex.compareTo(
+          b.orderIndex,
+        ),
+        LibraryChapterSortField.date => (a.publishTimeText ?? '').compareTo(
+          b.publishTimeText ?? '',
+        ),
         LibraryChapterSortField.name => a.title.compareTo(b.title),
-        LibraryChapterSortField.tid => (a.sourceTid ?? '').compareTo(b.sourceTid ?? ''),
+        LibraryChapterSortField.tid => (a.sourceTid ?? '').compareTo(
+          b.sourceTid ?? '',
+        ),
       };
-      return sortOption.direction == LibrarySortDirection.asc ? result : -result;
+      return sortOption.direction == LibrarySortDirection.asc
+          ? result
+          : -result;
     }
 
     list.sort(compare);

@@ -70,9 +70,9 @@ class UnifiedDetailController {
   UnifiedDetailController({
     required DetailModuleAdapter adapter,
     required String workId,
-  })  : _adapter = adapter,
-        _workId = workId,
-        _state = UnifiedDetailState.initial();
+  }) : _adapter = adapter,
+       _workId = workId,
+       _state = UnifiedDetailState.initial();
 
   final DetailModuleAdapter _adapter;
   final String _workId;
@@ -87,6 +87,32 @@ class UnifiedDetailController {
   /// 仅重新读取本地详情与章节状态，不触发模块侧“更新章节”动作。
   Future<void> reload() async {
     await _load();
+  }
+
+  Future<bool> refreshStaleSourceMetadata() async {
+    final freshness = _adapter is DetailSourceMetadataFreshness
+        ? _adapter as DetailSourceMetadataFreshness
+        : null;
+    if (freshness == null || _state.header == null) {
+      return false;
+    }
+    try {
+      final shouldCheck = await freshness.shouldCheckSourceMetadata(
+        workId: _workId,
+      );
+      if (!shouldCheck) {
+        return false;
+      }
+      final result = await freshness.refreshSourceMetadata(workId: _workId);
+      if (!result.shouldReload) {
+        return false;
+      }
+      await _load();
+      return true;
+    } catch (_) {
+      // Background freshness checks must never block opening local metadata.
+      return false;
+    }
   }
 
   Future<DetailRefreshResult> refresh() async {
@@ -109,7 +135,8 @@ class UnifiedDetailController {
   }
 
   Future<void> toggleSortDirection() async {
-    final nextDirection = _state.chapterSortOption.direction == LibrarySortDirection.asc
+    final nextDirection =
+        _state.chapterSortOption.direction == LibrarySortDirection.asc
         ? LibrarySortDirection.desc
         : LibrarySortDirection.asc;
     _state = _state.copyWith(
@@ -178,10 +205,7 @@ class UnifiedDetailController {
   }
 
   Future<void> deleteChapterDownload({required String episodeId}) async {
-    await _adapter.deleteChapterDownload(
-      workId: _workId,
-      episodeId: episodeId,
-    );
+    await _adapter.deleteChapterDownload(workId: _workId, episodeId: episodeId);
     await _loadChaptersOnly();
   }
 
@@ -201,10 +225,7 @@ class UnifiedDetailController {
         clearError: true,
       );
     } catch (error) {
-      _state = _state.copyWith(
-        isLoading: false,
-        errorMessage: '$error',
-      );
+      _state = _state.copyWith(isLoading: false, errorMessage: '$error');
     }
   }
 
@@ -215,10 +236,7 @@ class UnifiedDetailController {
         filters: _state.filters,
         sortOption: _state.chapterSortOption,
       );
-      _state = _state.copyWith(
-        chapters: chapters,
-        clearError: true,
-      );
+      _state = _state.copyWith(chapters: chapters, clearError: true);
     } catch (error) {
       _state = _state.copyWith(errorMessage: '$error');
     }

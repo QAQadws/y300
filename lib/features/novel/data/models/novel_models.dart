@@ -1,4 +1,4 @@
-﻿class NovelItem {
+class NovelItem {
   const NovelItem({
     required this.novelId,
     required this.sourceTid,
@@ -28,6 +28,15 @@
   final DateTime updatedAt;
   final int episodeCount;
   final String categoryId;
+
+  /// Transitional source metadata aliases.
+  ///
+  /// Novel persistence has not been migrated to source/custom columns yet, so
+  /// the current stored title/author are treated as source metadata. Detail and
+  /// shelf adapters should use these aliases when wiring source-aware UI.
+  String get sourceTitle => title;
+
+  String? get sourceAuthor => author;
 }
 
 class NovelEpisodeItem {
@@ -66,24 +75,11 @@ class NovelChapterContent {
   final List<String> paragraphs;
 }
 
-enum NovelReaderThemePreset {
-  light,
-  sepia,
-  dark,
-  followSystem,
-}
+enum NovelReaderThemePreset { light, sepia, dark, followSystem }
 
-enum NovelReaderFlowMode {
-  vertical,
-  pagedLtr,
-  pagedRtl,
-}
+enum NovelReaderFlowMode { vertical, pagedLtr, pagedRtl }
 
-enum NovelReaderTextAlignMode {
-  start,
-  justify,
-  center,
-}
+enum NovelReaderTextAlignMode { start, justify, center }
 
 extension NovelReaderThemePresetCodec on NovelReaderThemePreset {
   String get storageValue {
@@ -185,8 +181,8 @@ class NovelReaderPreferences {
     this.showChapterTitle = true,
     String? themeMode,
   }) : themePreset = themeMode == null
-            ? themePreset
-            : NovelReaderThemePresetCodec.fromStorage(themeMode);
+           ? themePreset
+           : NovelReaderThemePresetCodec.fromStorage(themeMode);
 
   const NovelReaderPreferences._({
     required this.fontSize,
@@ -261,20 +257,20 @@ class NovelReaderPreferences {
 
   @override
   int get hashCode => Object.hash(
-        fontSize,
-        lineHeight,
-        paragraphSpacing,
-        pagePadding,
-        fontFamily,
-        flowMode,
-        themePreset,
-        contentMaxWidth,
-        firstLineIndent,
-        fontWeight,
-        textAlign,
-        showProgressIndicator,
-        showChapterTitle,
-      );
+    fontSize,
+    lineHeight,
+    paragraphSpacing,
+    pagePadding,
+    fontFamily,
+    flowMode,
+    themePreset,
+    contentMaxWidth,
+    firstLineIndent,
+    fontWeight,
+    textAlign,
+    showProgressIndicator,
+    showChapterTitle,
+  );
 
   NovelReaderPreferences copyWith({
     double? fontSize,
@@ -306,7 +302,8 @@ class NovelReaderPreferences {
       firstLineIndent: firstLineIndent ?? this.firstLineIndent,
       fontWeight: fontWeight ?? this.fontWeight,
       textAlign: textAlign ?? this.textAlign,
-      showProgressIndicator: showProgressIndicator ?? this.showProgressIndicator,
+      showProgressIndicator:
+          showProgressIndicator ?? this.showProgressIndicator,
       showChapterTitle: showChapterTitle ?? this.showChapterTitle,
     );
   }

@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -48,27 +48,54 @@ void main() {
     expect(adapter.refreshWorkCount, 0);
   });
 
-  test('refresh stores queued result without reloading local chapters', () async {
-    final adapter = _FakeDetailAdapter()
-      ..refreshResult = DetailRefreshResult.queued(
-        estimatedDuration: const Duration(milliseconds: 10500),
-        queuePosition: 1,
+  test(
+    'refreshStaleSourceMetadata reloads only after optional freshness hook',
+    () async {
+      final adapter = _FreshnessDetailAdapter();
+      final controller = UnifiedDetailController(
+        adapter: adapter,
+        workId: 'work-1',
       );
-    final controller = UnifiedDetailController(
-      adapter: adapter,
-      workId: 'work-1',
-    );
 
-    await controller.initialize();
-    final beforeLoadCount = adapter.loadHeaderCount;
-    final result = await controller.refresh();
+      await controller.initialize();
 
-    expect(result.status, DetailRefreshStatus.queued);
-    expect(controller.state.lastRefreshResult?.message, '更新预计耗时10.5s');
-    expect(adapter.refreshWorkCount, 1);
-    expect(adapter.loadHeaderCount, beforeLoadCount);
-    expect(controller.state.isRefreshing, isFalse);
-  });
+      expect(controller.state.header?.title, '本地作品');
+      expect(adapter.refreshSourceMetadataCount, 0);
+      expect(adapter.loadHeaderCount, 1);
+
+      final changed = await controller.refreshStaleSourceMetadata();
+
+      expect(changed, isTrue);
+      expect(controller.state.header?.title, '刷新后作品');
+      expect(adapter.refreshSourceMetadataCount, 1);
+      expect(adapter.loadHeaderCount, 2);
+    },
+  );
+
+  test(
+    'refresh stores queued result without reloading local chapters',
+    () async {
+      final adapter = _FakeDetailAdapter()
+        ..refreshResult = DetailRefreshResult.queued(
+          estimatedDuration: const Duration(milliseconds: 10500),
+          queuePosition: 1,
+        );
+      final controller = UnifiedDetailController(
+        adapter: adapter,
+        workId: 'work-1',
+      );
+
+      await controller.initialize();
+      final beforeLoadCount = adapter.loadHeaderCount;
+      final result = await controller.refresh();
+
+      expect(result.status, DetailRefreshStatus.queued);
+      expect(controller.state.lastRefreshResult?.message, '更新预计耗时10.5s');
+      expect(adapter.refreshWorkCount, 1);
+      expect(adapter.loadHeaderCount, beforeLoadCount);
+      expect(controller.state.isRefreshing, isFalse);
+    },
+  );
 
   test('updateFilters and chapter actions update state', () async {
     final adapter = _FakeDetailAdapter();
@@ -121,10 +148,7 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
   int refreshWorkCount = 0;
   DetailRefreshResult refreshResult = DetailRefreshResult.immediate;
 
-  final Map<String, bool> _read = <String, bool>{
-    'e1': false,
-    'e2': false,
-  };
+  final Map<String, bool> _read = <String, bool>{'e1': false, 'e2': false};
   final Map<String, bool> _downloaded = <String, bool>{
     'e1': false,
     'e2': false,
@@ -170,7 +194,9 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
   }
 
   @override
-  Future<ThreadRouteTarget?> getThreadRouteTarget({required String workId}) async {
+  Future<ThreadRouteTarget?> getThreadRouteTarget({
+    required String workId,
+  }) async {
     return const ThreadRouteTarget(tid: '100');
   }
 
@@ -201,18 +227,20 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
       ),
     ];
 
-    return base.where((chapter) {
-      if (!_match(filters.downloaded, chapter.isDownloaded)) {
-        return false;
-      }
-      if (!_match(filters.unread, !chapter.isRead)) {
-        return false;
-      }
-      if (!_match(filters.bookmarked, chapter.isBookmarked)) {
-        return false;
-      }
-      return true;
-    }).toList(growable: false);
+    return base
+        .where((chapter) {
+          if (!_match(filters.downloaded, chapter.isDownloaded)) {
+            return false;
+          }
+          if (!_match(filters.unread, !chapter.isRead)) {
+            return false;
+          }
+          if (!_match(filters.bookmarked, chapter.isBookmarked)) {
+            return false;
+          }
+          return true;
+        })
+        .toList(growable: false);
   }
 
   bool _match(TriStateFilterValue value, bool actual) {
@@ -313,4 +341,34 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
     required String workId,
     required String tagId,
   }) async {}
+}
+
+class _FreshnessDetailAdapter extends _FakeDetailAdapter
+    implements DetailSourceMetadataFreshness {
+  int refreshSourceMetadataCount = 0;
+  bool refreshed = false;
+
+  @override
+  Future<LibraryDetailHeader> loadHeader({required String workId}) async {
+    loadHeaderCount++;
+    return LibraryDetailHeader(
+      workId: workId,
+      title: refreshed ? '刷新后作品' : '本地作品',
+      inShelf: true,
+    );
+  }
+
+  @override
+  Future<bool> shouldCheckSourceMetadata({required String workId}) async {
+    return true;
+  }
+
+  @override
+  Future<DetailRefreshResult> refreshSourceMetadata({
+    required String workId,
+  }) async {
+    refreshSourceMetadataCount++;
+    refreshed = true;
+    return DetailRefreshResult.immediate;
+  }
 }

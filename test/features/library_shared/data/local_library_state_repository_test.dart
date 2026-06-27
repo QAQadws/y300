@@ -17,9 +17,7 @@ void main() {
     setUp(() async {
       await deleteDatabase(dbName);
       final dbFuture = ComicLocalDb.open(databaseName: dbName);
-      repository = LocalLibraryStateRepository(
-        dbFuture,
-      );
+      repository = LocalLibraryStateRepository(dbFuture);
       db = await dbFuture;
     });
 
@@ -44,6 +42,39 @@ void main() {
       expect(state!.lastReadEpisodeId, 'e1');
       expect(state.introText, 'intro');
     });
+
+    test(
+      'partial work state updates preserve freshness and intro metadata',
+      () async {
+        final checkedAt = DateTime(2026, 6, 1);
+        final fetchedAt = DateTime(2026, 6, 2);
+        await repository.upsertWorkState(
+          moduleKey: LibraryModuleKey.comic,
+          workId: 'yamibo:100',
+          checkUpdatedAt: checkedAt,
+          fetchedUpdatedAt: fetchedAt,
+          introText: 'source intro',
+        );
+
+        await repository.upsertWorkState(
+          moduleKey: LibraryModuleKey.comic,
+          workId: 'yamibo:100',
+          lastReadEpisodeId: 'episode-2',
+          lastReadAt: DateTime(2026, 6, 3),
+        );
+
+        final state = await repository.getWorkState(
+          moduleKey: LibraryModuleKey.comic,
+          workId: 'yamibo:100',
+        );
+
+        expect(state, isNotNull);
+        expect(state!.lastReadEpisodeId, 'episode-2');
+        expect(state.checkUpdatedAt, checkedAt);
+        expect(state.fetchedUpdatedAt, fetchedAt);
+        expect(state.introText, 'source intro');
+      },
+    );
 
     test('can upsert and count episode states', () async {
       await repository.upsertEpisodeState(
@@ -104,282 +135,295 @@ void main() {
       expect(state.readAt, isNull);
     });
 
-    test('setWorksReadState fills comic episode states and preserves flags', () async {
-      await _insertComic(db, comicId: 'comic:batch-a', title: 'Batch A');
-      await _insertComic(db, comicId: 'comic:batch-b', title: 'Batch B');
-      await _insertComicEpisode(
-        db,
-        episodeId: 'comic:batch-a:1',
-        comicId: 'comic:batch-a',
-        orderIndex: 0,
-      );
-      await _insertComicEpisode(
-        db,
-        episodeId: 'comic:batch-a:2',
-        comicId: 'comic:batch-a',
-        orderIndex: 1,
-      );
-      await _insertComicEpisode(
-        db,
-        episodeId: 'comic:batch-b:1',
-        comicId: 'comic:batch-b',
-        orderIndex: 0,
-      );
-      final downloadedAt = DateTime(2026, 5, 1);
-      await repository.upsertEpisodeState(
-        moduleKey: LibraryModuleKey.comic,
-        episodeId: 'comic:batch-a:2',
-        workId: 'comic:batch-a',
-        isDownloaded: true,
-        isBookmarked: true,
-        downloadedAt: downloadedAt,
-      );
-
-      await repository.setWorksReadState(
-        moduleKey: LibraryModuleKey.comic,
-        workIds: <String>{'comic:batch-a'},
-        isRead: true,
-        readAt: DateTime(2026, 5, 2),
-      );
-
-      expect(
-        await repository.countReadEpisodes(
-          moduleKey: LibraryModuleKey.comic,
-          workId: 'comic:batch-a',
-        ),
-        2,
-      );
-      expect(
-        await repository.countUnreadEpisodes(
-          moduleKey: LibraryModuleKey.comic,
-          workId: 'comic:batch-a',
-        ),
-        0,
-      );
-      final existing = await repository.getEpisodeState(
-        moduleKey: LibraryModuleKey.comic,
-        episodeId: 'comic:batch-a:2',
-      );
-      expect(existing?.isDownloaded, isTrue);
-      expect(existing?.isBookmarked, isTrue);
-      expect(existing?.downloadedAt, downloadedAt);
-      expect(
-        await repository.getEpisodeState(
-          moduleKey: LibraryModuleKey.comic,
+    test(
+      'setWorksReadState fills comic episode states and preserves flags',
+      () async {
+        await _insertComic(db, comicId: 'comic:batch-a', title: 'Batch A');
+        await _insertComic(db, comicId: 'comic:batch-b', title: 'Batch B');
+        await _insertComicEpisode(
+          db,
+          episodeId: 'comic:batch-a:1',
+          comicId: 'comic:batch-a',
+          orderIndex: 0,
+        );
+        await _insertComicEpisode(
+          db,
+          episodeId: 'comic:batch-a:2',
+          comicId: 'comic:batch-a',
+          orderIndex: 1,
+        );
+        await _insertComicEpisode(
+          db,
           episodeId: 'comic:batch-b:1',
-        ),
-        isNull,
-      );
-
-      await repository.setWorksReadState(
-        moduleKey: LibraryModuleKey.comic,
-        workIds: <String>{'comic:batch-a'},
-        isRead: false,
-      );
-
-      expect(
-        await repository.countReadEpisodes(
+          comicId: 'comic:batch-b',
+          orderIndex: 0,
+        );
+        final downloadedAt = DateTime(2026, 5, 1);
+        await repository.upsertEpisodeState(
           moduleKey: LibraryModuleKey.comic,
+          episodeId: 'comic:batch-a:2',
           workId: 'comic:batch-a',
-        ),
-        0,
-      );
-      expect(
-        await repository.countUnreadEpisodes(
+          isDownloaded: true,
+          isBookmarked: true,
+          downloadedAt: downloadedAt,
+        );
+
+        await repository.setWorksReadState(
           moduleKey: LibraryModuleKey.comic,
-          workId: 'comic:batch-a',
-        ),
-        2,
-      );
-      final unread = await repository.getEpisodeState(
-        moduleKey: LibraryModuleKey.comic,
-        episodeId: 'comic:batch-a:1',
-      );
-      expect(unread?.isRead, isFalse);
-      expect(unread?.readAt, isNull);
-    });
+          workIds: <String>{'comic:batch-a'},
+          isRead: true,
+          readAt: DateTime(2026, 5, 2),
+        );
 
-    test('setWorksReadState only updates novel episodes for target module', () async {
-      await _insertNovel(db, novelId: 'novel:batch-a', title: 'Novel A');
-      await _insertNovel(db, novelId: 'novel:batch-b', title: 'Novel B');
-      await _insertNovelEpisode(
-        db,
-        episodeId: 'novel:batch-a:1',
-        novelId: 'novel:batch-a',
-        contentType: 'novel',
-        orderIndex: 0,
-      );
-      await _insertNovelEpisode(
-        db,
-        episodeId: 'novel:batch-a:comic-like',
-        novelId: 'novel:batch-a',
-        contentType: 'comic',
-        orderIndex: 1,
-      );
-      await _insertNovelEpisode(
-        db,
-        episodeId: 'novel:batch-b:1',
-        novelId: 'novel:batch-b',
-        contentType: 'novel',
-        orderIndex: 0,
-      );
-      await _insertComic(db, comicId: 'novel:batch-a', title: 'Same id comic');
-      await _insertComicEpisode(
-        db,
-        episodeId: 'comic:same-id:1',
-        comicId: 'novel:batch-a',
-        orderIndex: 0,
-      );
+        expect(
+          await repository.countReadEpisodes(
+            moduleKey: LibraryModuleKey.comic,
+            workId: 'comic:batch-a',
+          ),
+          2,
+        );
+        expect(
+          await repository.countUnreadEpisodes(
+            moduleKey: LibraryModuleKey.comic,
+            workId: 'comic:batch-a',
+          ),
+          0,
+        );
+        final existing = await repository.getEpisodeState(
+          moduleKey: LibraryModuleKey.comic,
+          episodeId: 'comic:batch-a:2',
+        );
+        expect(existing?.isDownloaded, isTrue);
+        expect(existing?.isBookmarked, isTrue);
+        expect(existing?.downloadedAt, downloadedAt);
+        expect(
+          await repository.getEpisodeState(
+            moduleKey: LibraryModuleKey.comic,
+            episodeId: 'comic:batch-b:1',
+          ),
+          isNull,
+        );
 
-      await repository.setWorksReadState(
-        moduleKey: LibraryModuleKey.novel,
-        workIds: <String>{'novel:batch-a'},
-        isRead: true,
-        readAt: DateTime(2026, 5, 3),
-      );
+        await repository.setWorksReadState(
+          moduleKey: LibraryModuleKey.comic,
+          workIds: <String>{'comic:batch-a'},
+          isRead: false,
+        );
 
-      expect(
-        await repository.countReadEpisodes(
-          moduleKey: LibraryModuleKey.novel,
-          workId: 'novel:batch-a',
-        ),
-        1,
-      );
-      expect(
-        await repository.getEpisodeState(
-          moduleKey: LibraryModuleKey.novel,
+        expect(
+          await repository.countReadEpisodes(
+            moduleKey: LibraryModuleKey.comic,
+            workId: 'comic:batch-a',
+          ),
+          0,
+        );
+        expect(
+          await repository.countUnreadEpisodes(
+            moduleKey: LibraryModuleKey.comic,
+            workId: 'comic:batch-a',
+          ),
+          2,
+        );
+        final unread = await repository.getEpisodeState(
+          moduleKey: LibraryModuleKey.comic,
+          episodeId: 'comic:batch-a:1',
+        );
+        expect(unread?.isRead, isFalse);
+        expect(unread?.readAt, isNull);
+      },
+    );
+
+    test(
+      'setWorksReadState only updates novel episodes for target module',
+      () async {
+        await _insertNovel(db, novelId: 'novel:batch-a', title: 'Novel A');
+        await _insertNovel(db, novelId: 'novel:batch-b', title: 'Novel B');
+        await _insertNovelEpisode(
+          db,
+          episodeId: 'novel:batch-a:1',
+          novelId: 'novel:batch-a',
+          contentType: 'novel',
+          orderIndex: 0,
+        );
+        await _insertNovelEpisode(
+          db,
           episodeId: 'novel:batch-a:comic-like',
-        ),
-        isNull,
-      );
-      expect(
-        await repository.getEpisodeState(
-          moduleKey: LibraryModuleKey.novel,
+          novelId: 'novel:batch-a',
+          contentType: 'comic',
+          orderIndex: 1,
+        );
+        await _insertNovelEpisode(
+          db,
           episodeId: 'novel:batch-b:1',
-        ),
-        isNull,
-      );
-      expect(
-        await repository.getEpisodeState(
-          moduleKey: LibraryModuleKey.comic,
+          novelId: 'novel:batch-b',
+          contentType: 'novel',
+          orderIndex: 0,
+        );
+        await _insertComic(
+          db,
+          comicId: 'novel:batch-a',
+          title: 'Same id comic',
+        );
+        await _insertComicEpisode(
+          db,
           episodeId: 'comic:same-id:1',
-        ),
-        isNull,
-      );
-    });
+          comicId: 'novel:batch-a',
+          orderIndex: 0,
+        );
 
-    test('purgeWorkState removes only target work state, episode state and tags', () async {
-      await repository.upsertWorkState(
-        moduleKey: LibraryModuleKey.comic,
-        workId: 'comic:purge',
-        lastReadEpisodeId: 'comic-ep-1',
-      );
-      await repository.upsertEpisodeState(
-        moduleKey: LibraryModuleKey.comic,
-        episodeId: 'comic-ep-1',
-        workId: 'comic:purge',
-        isRead: true,
-      );
-      final comicTagId = await repository.createTag(name: '待清理');
-      await repository.bindTagToWork(
-        moduleKey: LibraryModuleKey.comic,
-        workId: 'comic:purge',
-        tagId: comicTagId,
-      );
+        await repository.setWorksReadState(
+          moduleKey: LibraryModuleKey.novel,
+          workIds: <String>{'novel:batch-a'},
+          isRead: true,
+          readAt: DateTime(2026, 5, 3),
+        );
 
-      await repository.upsertWorkState(
-        moduleKey: LibraryModuleKey.comic,
-        workId: 'comic:keep',
-        lastReadEpisodeId: 'comic-ep-2',
-      );
-      await repository.upsertEpisodeState(
-        moduleKey: LibraryModuleKey.comic,
-        episodeId: 'comic-ep-2',
-        workId: 'comic:keep',
-        isRead: false,
-      );
+        expect(
+          await repository.countReadEpisodes(
+            moduleKey: LibraryModuleKey.novel,
+            workId: 'novel:batch-a',
+          ),
+          1,
+        );
+        expect(
+          await repository.getEpisodeState(
+            moduleKey: LibraryModuleKey.novel,
+            episodeId: 'novel:batch-a:comic-like',
+          ),
+          isNull,
+        );
+        expect(
+          await repository.getEpisodeState(
+            moduleKey: LibraryModuleKey.novel,
+            episodeId: 'novel:batch-b:1',
+          ),
+          isNull,
+        );
+        expect(
+          await repository.getEpisodeState(
+            moduleKey: LibraryModuleKey.comic,
+            episodeId: 'comic:same-id:1',
+          ),
+          isNull,
+        );
+      },
+    );
 
-      await repository.upsertWorkState(
-        moduleKey: LibraryModuleKey.novel,
-        workId: 'comic:purge',
-        lastReadEpisodeId: 'novel-ep-1',
-      );
-      await repository.upsertEpisodeState(
-        moduleKey: LibraryModuleKey.novel,
-        episodeId: 'novel-ep-1',
-        workId: 'comic:purge',
-        isRead: false,
-      );
-      final novelTagId = await repository.createTag(name: '保留');
-      await repository.bindTagToWork(
-        moduleKey: LibraryModuleKey.novel,
-        workId: 'comic:purge',
-        tagId: novelTagId,
-      );
-
-      await repository.purgeWorkState(
-        moduleKey: LibraryModuleKey.comic,
-        workId: 'comic:purge',
-      );
-
-      expect(
-        await repository.getWorkState(
+    test(
+      'purgeWorkState removes only target work state, episode state and tags',
+      () async {
+        await repository.upsertWorkState(
           moduleKey: LibraryModuleKey.comic,
           workId: 'comic:purge',
-        ),
-        isNull,
-      );
-      expect(
-        await repository.getEpisodeState(
+          lastReadEpisodeId: 'comic-ep-1',
+        );
+        await repository.upsertEpisodeState(
           moduleKey: LibraryModuleKey.comic,
           episodeId: 'comic-ep-1',
-        ),
-        isNull,
-      );
-      expect(
-        await repository.hasAnyTag(
+          workId: 'comic:purge',
+          isRead: true,
+        );
+        final comicTagId = await repository.createTag(name: '待清理');
+        await repository.bindTagToWork(
           moduleKey: LibraryModuleKey.comic,
           workId: 'comic:purge',
-        ),
-        isFalse,
-      );
+          tagId: comicTagId,
+        );
 
-      expect(
-        await repository.getWorkState(
+        await repository.upsertWorkState(
           moduleKey: LibraryModuleKey.comic,
           workId: 'comic:keep',
-        ),
-        isNotNull,
-      );
-      expect(
-        await repository.getEpisodeState(
+          lastReadEpisodeId: 'comic-ep-2',
+        );
+        await repository.upsertEpisodeState(
           moduleKey: LibraryModuleKey.comic,
           episodeId: 'comic-ep-2',
-        ),
-        isNotNull,
-      );
-      expect(
-        await repository.getWorkState(
+          workId: 'comic:keep',
+          isRead: false,
+        );
+
+        await repository.upsertWorkState(
           moduleKey: LibraryModuleKey.novel,
           workId: 'comic:purge',
-        ),
-        isNotNull,
-      );
-      expect(
-        await repository.getEpisodeState(
+          lastReadEpisodeId: 'novel-ep-1',
+        );
+        await repository.upsertEpisodeState(
           moduleKey: LibraryModuleKey.novel,
           episodeId: 'novel-ep-1',
-        ),
-        isNotNull,
-      );
-      expect(
-        await repository.hasAnyTag(
+          workId: 'comic:purge',
+          isRead: false,
+        );
+        final novelTagId = await repository.createTag(name: '保留');
+        await repository.bindTagToWork(
           moduleKey: LibraryModuleKey.novel,
           workId: 'comic:purge',
-        ),
-        isTrue,
-      );
-    });
+          tagId: novelTagId,
+        );
+
+        await repository.purgeWorkState(
+          moduleKey: LibraryModuleKey.comic,
+          workId: 'comic:purge',
+        );
+
+        expect(
+          await repository.getWorkState(
+            moduleKey: LibraryModuleKey.comic,
+            workId: 'comic:purge',
+          ),
+          isNull,
+        );
+        expect(
+          await repository.getEpisodeState(
+            moduleKey: LibraryModuleKey.comic,
+            episodeId: 'comic-ep-1',
+          ),
+          isNull,
+        );
+        expect(
+          await repository.hasAnyTag(
+            moduleKey: LibraryModuleKey.comic,
+            workId: 'comic:purge',
+          ),
+          isFalse,
+        );
+
+        expect(
+          await repository.getWorkState(
+            moduleKey: LibraryModuleKey.comic,
+            workId: 'comic:keep',
+          ),
+          isNotNull,
+        );
+        expect(
+          await repository.getEpisodeState(
+            moduleKey: LibraryModuleKey.comic,
+            episodeId: 'comic-ep-2',
+          ),
+          isNotNull,
+        );
+        expect(
+          await repository.getWorkState(
+            moduleKey: LibraryModuleKey.novel,
+            workId: 'comic:purge',
+          ),
+          isNotNull,
+        );
+        expect(
+          await repository.getEpisodeState(
+            moduleKey: LibraryModuleKey.novel,
+            episodeId: 'novel-ep-1',
+          ),
+          isNotNull,
+        );
+        expect(
+          await repository.hasAnyTag(
+            moduleKey: LibraryModuleKey.novel,
+            workId: 'comic:purge',
+          ),
+          isTrue,
+        );
+      },
+    );
 
     test('can save and load display settings', () async {
       await repository.upsertDisplaySettings(
@@ -437,17 +481,14 @@ Future<void> _insertComic(
   required String title,
 }) {
   final now = DateTime(2026, 1, 1).millisecondsSinceEpoch;
-  return db.insert(
-    ComicLocalDb.comicsTable,
-    <String, Object?>{
-      'comic_id': comicId,
-      'source_tid': comicId,
-      'source_fid': '30',
-      'title': title,
-      'created_at': now,
-      'updated_at': now,
-    },
-  );
+  return db.insert(ComicLocalDb.comicsTable, <String, Object?>{
+    'comic_id': comicId,
+    'source_tid': comicId,
+    'source_fid': '30',
+    'title': title,
+    'created_at': now,
+    'updated_at': now,
+  });
 }
 
 Future<void> _insertComicEpisode(
@@ -456,17 +497,14 @@ Future<void> _insertComicEpisode(
   required String comicId,
   required int orderIndex,
 }) {
-  return db.insert(
-    ComicLocalDb.episodesTable,
-    <String, Object?>{
-      'episode_id': episodeId,
-      'comic_id': comicId,
-      'episode_title': 'Episode $orderIndex',
-      'source_tid': '$orderIndex',
-      'source_url': 'thread-$orderIndex-1-1.html',
-      'order_index': orderIndex,
-    },
-  );
+  return db.insert(ComicLocalDb.episodesTable, <String, Object?>{
+    'episode_id': episodeId,
+    'comic_id': comicId,
+    'episode_title': 'Episode $orderIndex',
+    'source_tid': '$orderIndex',
+    'source_url': 'thread-$orderIndex-1-1.html',
+    'order_index': orderIndex,
+  });
 }
 
 Future<void> _insertNovel(
@@ -474,17 +512,14 @@ Future<void> _insertNovel(
   required String novelId,
   required String title,
 }) {
-  return db.insert(
-    ComicLocalDb.worksTable,
-    <String, Object?>{
-      'work_id': novelId,
-      'content_type': 'novel',
-      'source_tid': novelId,
-      'source_fid': '75',
-      'title': title,
-      'updated_at': DateTime(2026, 1, 1).millisecondsSinceEpoch,
-    },
-  );
+  return db.insert(ComicLocalDb.worksTable, <String, Object?>{
+    'work_id': novelId,
+    'content_type': 'novel',
+    'source_tid': novelId,
+    'source_fid': '75',
+    'title': title,
+    'updated_at': DateTime(2026, 1, 1).millisecondsSinceEpoch,
+  });
 }
 
 Future<void> _insertNovelEpisode(
@@ -494,16 +529,13 @@ Future<void> _insertNovelEpisode(
   required String contentType,
   required int orderIndex,
 }) {
-  return db.insert(
-    ComicLocalDb.workEpisodesTable,
-    <String, Object?>{
-      'episode_id': episodeId,
-      'work_id': novelId,
-      'content_type': contentType,
-      'source_tid': novelId,
-      'source_pid': '$orderIndex',
-      'episode_title': 'Chapter $orderIndex',
-      'order_index': orderIndex,
-    },
-  );
+  return db.insert(ComicLocalDb.workEpisodesTable, <String, Object?>{
+    'episode_id': episodeId,
+    'work_id': novelId,
+    'content_type': contentType,
+    'source_tid': novelId,
+    'source_pid': '$orderIndex',
+    'episode_title': 'Chapter $orderIndex',
+    'order_index': orderIndex,
+  });
 }
