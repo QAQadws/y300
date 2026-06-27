@@ -7,6 +7,8 @@ class ThreadPostBodyRenderPlan {
     required this.images,
     required this.segments,
     required this.usesListSegments,
+    required this.renderSettingsSignature,
+    required this.resourceHintResolverSignature,
     this.resourceLayoutHints = ThreadPostResourceLayoutHints.empty,
   });
 
@@ -21,7 +23,11 @@ class ThreadPostBodyRenderPlan {
   /// is needed.
   final bool usesListSegments;
 
+  final String renderSettingsSignature;
+  final String resourceHintResolverSignature;
   final ThreadPostResourceLayoutHints resourceLayoutHints;
+
+  String get resourceHintSignature => resourceLayoutHints.signature;
 }
 
 class ThreadPostBodySegment {

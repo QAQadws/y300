@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
@@ -91,9 +94,25 @@ class ThreadDetailRenderEntryPlanner {
   ThreadDetailPostBodyRenderPlanCacheKey _cacheKeyFor(ThreadPost post) {
     return ThreadDetailPostBodyRenderPlanCacheKey(
       pid: post.pid,
-      message: post.message,
+      messageHash: _hashMessage(post.message),
       renderSettingsSignature: _renderSettings.signature,
+      resourceHintResolverSignature:
+          _bodyRenderPlanner.resourceHintResolverSignature,
     );
+  }
+
+  @visibleForTesting
+  ThreadDetailPostBodyRenderPlanCacheKey cacheKeyForPost(ThreadPost post) {
+    return _cacheKeyFor(post);
+  }
+
+  String _hashMessage(String message) {
+    var hash = 0xcbf29ce484222325;
+    for (final byte in utf8.encode(message)) {
+      hash = (hash ^ byte) * 0x100000001b3;
+      hash = hash.toUnsigned(64);
+    }
+    return hash.toRadixString(16).padLeft(16, '0');
   }
 }
 
@@ -205,22 +224,30 @@ class ThreadDetailRenderEntry {
 class ThreadDetailPostBodyRenderPlanCacheKey {
   const ThreadDetailPostBodyRenderPlanCacheKey({
     required this.pid,
-    required this.message,
+    required this.messageHash,
     required this.renderSettingsSignature,
+    required this.resourceHintResolverSignature,
   });
 
   final String pid;
-  final String message;
+  final String messageHash;
   final String renderSettingsSignature;
+  final String resourceHintResolverSignature;
 
   @override
   bool operator ==(Object other) {
     return other is ThreadDetailPostBodyRenderPlanCacheKey &&
         other.pid == pid &&
-        other.message == message &&
-        other.renderSettingsSignature == renderSettingsSignature;
+        other.messageHash == messageHash &&
+        other.renderSettingsSignature == renderSettingsSignature &&
+        other.resourceHintResolverSignature == resourceHintResolverSignature;
   }
 
   @override
-  int get hashCode => Object.hash(pid, message, renderSettingsSignature);
+  int get hashCode => Object.hash(
+    pid,
+    messageHash,
+    renderSettingsSignature,
+    resourceHintResolverSignature,
+  );
 }

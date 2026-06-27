@@ -31,6 +31,9 @@ class ThreadPostBlockImageLayoutHint {
   final double aspectRatio;
   final ThreadPostResourceLayoutHintSource source;
   final bool lockForCurrentBuild;
+
+  String get signature =>
+      '${aspectRatio.toStringAsFixed(6)}|${source.name}|$lockForCurrentBuild';
 }
 
 class ThreadPostInlineImageLayoutHint {
@@ -48,6 +51,9 @@ class ThreadPostInlineImageLayoutHint {
 
   ThreadPostResourceDimension get dimension =>
       ThreadPostResourceDimension(width: width, height: height);
+
+  String get signature =>
+      '${width.toStringAsFixed(3)}x${height.toStringAsFixed(3)}|${source.name}|$lockForCurrentBuild';
 }
 
 class ThreadPostResourceLayoutHints {
@@ -69,6 +75,19 @@ class ThreadPostResourceLayoutHints {
     return inlineImages[inlineImageKey(image)];
   }
 
+  String get signature {
+    if (blockImages.isEmpty && inlineImages.isEmpty) {
+      return 'empty';
+    }
+    final parts = <String>[
+      for (final entry in _sortedBlockImageEntries())
+        'b:${entry.key}:${entry.value.signature}',
+      for (final entry in _sortedInlineImageEntries())
+        'i:${entry.key}:${entry.value.signature}',
+    ];
+    return parts.join(';');
+  }
+
   static String blockImageKey(ThreadPostImageBlock image) {
     final anchorId = image.anchorId.trim();
     if (anchorId.isNotEmpty) {
@@ -81,5 +100,19 @@ class ThreadPostResourceLayoutHints {
     final width = image.originalWidth;
     final height = image.originalHeight;
     return 'inline:${image.url}|${image.rawUrl}|$width|$height';
+  }
+
+  List<MapEntry<String, ThreadPostBlockImageLayoutHint>>
+  _sortedBlockImageEntries() {
+    final entries = blockImages.entries.toList();
+    entries.sort((a, b) => a.key.compareTo(b.key));
+    return entries;
+  }
+
+  List<MapEntry<String, ThreadPostInlineImageLayoutHint>>
+  _sortedInlineImageEntries() {
+    final entries = inlineImages.entries.toList();
+    entries.sort((a, b) => a.key.compareTo(b.key));
+    return entries;
   }
 }

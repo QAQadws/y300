@@ -1,9 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
+import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
 import 'package:y300/features/thread/presentation/thread_detail_render_entries.dart';
 
 void main() {
@@ -222,6 +224,91 @@ void main() {
 
       expect(identical(firstPlan, secondPlan), isTrue);
       expect(identical(firstPlan, changedPlan), isFalse);
+    });
+
+    test('cache keys use message hash instead of raw message', () {
+      final planner = ThreadDetailRenderEntryPlanner();
+      final post = ThreadPost(
+        pid: 'p-key',
+        author: 'alice',
+        authorId: '1',
+        message: '<p>非常长的正文内容</p>',
+        number: 1,
+        isFirst: true,
+        dateline: 'today',
+      );
+
+      final key = planner.cacheKeyForPost(post);
+
+      expect(key.pid, 'p-key');
+      expect(key.messageHash, isNot(post.message));
+      expect(key.messageHash.length, 16);
+      expect(
+        key.renderSettingsSignature,
+        ThreadPostBodyRenderSettings.defaults.signature,
+      );
+      expect(
+        key.resourceHintResolverSignature,
+        const ThreadPostResourceLayoutHintResolver().signature,
+      );
+    });
+
+    test('render settings participate in render plan cache keys', () {
+      final post = ThreadPost(
+        pid: 'p-settings',
+        author: 'alice',
+        authorId: '1',
+        message: '<p>正文</p>',
+        number: 1,
+        isFirst: true,
+        dateline: 'today',
+      );
+      final defaultPlanner = ThreadDetailRenderEntryPlanner();
+      final largeTextPlanner = ThreadDetailRenderEntryPlanner(
+        renderSettings: ThreadPostBodyRenderSettings.defaults.copyWith(
+          fontSize: 20,
+        ),
+      );
+
+      final defaultKey = defaultPlanner.cacheKeyForPost(post);
+      final largeTextKey = largeTextPlanner.cacheKeyForPost(post);
+
+      expect(defaultKey.messageHash, largeTextKey.messageHash);
+      expect(
+        defaultKey.renderSettingsSignature,
+        isNot(largeTextKey.renderSettingsSignature),
+      );
+      expect(defaultKey, isNot(largeTextKey));
+    });
+
+    test('resource hint resolver signature participates in cache keys', () {
+      final post = ThreadPost(
+        pid: 'p-resource-hint',
+        author: 'alice',
+        authorId: '1',
+        message: '<img file="data/attachment/forum/1.jpg">',
+        number: 1,
+        isFirst: true,
+        dateline: 'today',
+      );
+      final defaultPlanner = ThreadDetailRenderEntryPlanner();
+      final alternateHintPlanner = ThreadDetailRenderEntryPlanner(
+        bodyRenderPlanner: const ThreadPostBodyRenderPlanner(
+          resourceLayoutHintResolver: ThreadPostResourceLayoutHintResolver(
+            defaultBlockImageAspectRatio: 1.0,
+          ),
+        ),
+      );
+
+      final defaultKey = defaultPlanner.cacheKeyForPost(post);
+      final alternateKey = alternateHintPlanner.cacheKeyForPost(post);
+
+      expect(defaultKey.messageHash, alternateKey.messageHash);
+      expect(
+        defaultKey.resourceHintResolverSignature,
+        isNot(alternateKey.resourceHintResolverSignature),
+      );
+      expect(defaultKey, isNot(alternateKey));
     });
   });
 }

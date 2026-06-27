@@ -22,16 +22,23 @@ class ThreadPostBodyRenderPlanner {
   final ThreadPostResourceLayoutHintResolver resourceLayoutHintResolver;
   final int maxSegmentTextLength;
 
+  String get resourceHintResolverSignature =>
+      resourceLayoutHintResolver.signature;
+
   ThreadPostBodyRenderPlan plan(
     String html, {
     ThreadPostBodyRenderSettings renderSettings =
         ThreadPostBodyRenderSettings.defaults,
   }) {
     final document = normalizer.normalize(parser.parse(html));
-    return planDocument(document);
+    return planDocument(document, renderSettings: renderSettings);
   }
 
-  ThreadPostBodyRenderPlan planDocument(ThreadPostBodyDocument document) {
+  ThreadPostBodyRenderPlan planDocument(
+    ThreadPostBodyDocument document, {
+    ThreadPostBodyRenderSettings renderSettings =
+        ThreadPostBodyRenderSettings.defaults,
+  }) {
     final segments = <ThreadPostBodySegment>[];
     var pendingBlocks = <ThreadPostBodyBlock>[];
     var pendingTextLength = 0;
@@ -87,6 +94,8 @@ class ThreadPostBodyRenderPlanner {
       images: document.images,
       segments: List<ThreadPostBodySegment>.unmodifiable(segments),
       usesListSegments: segments.length > 1,
+      renderSettingsSignature: renderSettings.signature,
+      resourceHintResolverSignature: resourceHintResolverSignature,
       resourceLayoutHints: resourceLayoutHintResolver.resolve(document),
     );
   }

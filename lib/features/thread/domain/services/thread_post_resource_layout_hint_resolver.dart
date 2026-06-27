@@ -10,6 +10,13 @@ class ThreadPostResourceLayoutHintResolver {
   final double defaultBlockImageAspectRatio;
   final bool lockForCurrentBuild;
 
+  String get signature {
+    return [
+      defaultBlockImageAspectRatio.toStringAsFixed(6),
+      lockForCurrentBuild,
+    ].join('|');
+  }
+
   ThreadPostResourceLayoutHints resolve(ThreadPostBodyDocument document) {
     final blockImages = <String, ThreadPostBlockImageLayoutHint>{};
     final inlineImages = <String, ThreadPostInlineImageLayoutHint>{};

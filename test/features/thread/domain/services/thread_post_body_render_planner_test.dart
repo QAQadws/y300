@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
+import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
 
 void main() {
   group('ThreadPostBodyRenderPlanner', () {
@@ -113,6 +115,36 @@ void main() {
       expect(plan.resourceLayoutHints.blockImage(image)?.aspectRatio, 1.5);
       expect(plan.resourceLayoutHints.inlineImage(inlineImage)?.width, 28);
       expect(plan.resourceLayoutHints.inlineImage(inlineImage)?.height, 20);
+    });
+
+    test('records render settings and resource hint signatures', () {
+      const planner = ThreadPostBodyRenderPlanner(
+        resourceLayoutHintResolver: ThreadPostResourceLayoutHintResolver(
+          defaultBlockImageAspectRatio: 1.0,
+          lockForCurrentBuild: true,
+        ),
+      );
+      const document = ThreadPostBodyDocument(
+        blocks: <ThreadPostBodyBlock>[
+          ThreadPostImageBlock(
+            url: 'https://bbs.yamibo.com/a.jpg',
+            rawUrl: 'a.jpg',
+            index: 0,
+          ),
+        ],
+      );
+      final settings = ThreadPostBodyRenderSettings.defaults.copyWith(
+        fontSize: 20,
+      );
+
+      final plan = planner.planDocument(document, renderSettings: settings);
+
+      expect(plan.renderSettingsSignature, settings.signature);
+      expect(
+        plan.resourceHintResolverSignature,
+        planner.resourceHintResolverSignature,
+      );
+      expect(plan.resourceHintSignature, plan.resourceLayoutHints.signature);
     });
 
     test('keeps quote blocks intact', () {
