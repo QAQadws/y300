@@ -75,6 +75,7 @@ class ThreadPostInlineImage {
     required this.url,
     required this.rawUrl,
     this.altText,
+    this.titleText,
     this.originalWidth,
     this.originalHeight,
   });
@@ -82,6 +83,7 @@ class ThreadPostInlineImage {
   final String url;
   final String rawUrl;
   final String? altText;
+  final String? titleText;
   final double? originalWidth;
   final double? originalHeight;
 }
