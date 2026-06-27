@@ -39,6 +39,7 @@ class ThreadDetailContent extends StatefulWidget {
     required this.onOpenPostCopyActions,
     this.diagnosticRecorder = const NoopThreadDetailDiagnosticRecorder(),
     this.onPostBuilt,
+    this.onBodySegmentBuilt,
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
   });
@@ -64,6 +65,8 @@ class ThreadDetailContent extends StatefulWidget {
   onOpenPostCopyActions;
   final ThreadDetailDiagnosticRecorder diagnosticRecorder;
   final ValueChanged<int>? onPostBuilt;
+  final void Function(ThreadPostBodyRenderPlan plan, int segmentIndex)?
+  onBodySegmentBuilt;
   final void Function(ThreadPoll poll, ThreadPollOption option)
   onTogglePollOption;
   final ValueChanged<ThreadPoll> onSubmitPollVote;
@@ -152,11 +155,13 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           child: header,
         );
       case ThreadDetailRenderEntryKind.postBody:
+        final plan = entry.requirePlan();
+        widget.onBodySegmentBuilt?.call(plan, 0);
         return _ThreadPostCardBodyEntry(
           key: Key(entry.key),
           post: entry.post!,
           threadId: widget.state.tid,
-          plan: entry.requirePlan(),
+          plan: plan,
           highlighted: entry.post!.pid == widget.highlightPostPid,
           imageHeaderBuilder: widget.imageHeaderBuilder,
           imageOpenContext: _imageOpenContext(entry.post!),
@@ -166,6 +171,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           onOpenPostCopyActions: widget.onOpenPostCopyActions,
         );
       case ThreadDetailRenderEntryKind.postBodySegment:
+        widget.onBodySegmentBuilt?.call(entry.plan!, entry.segment!.index);
         final segmentEntry = _ThreadPostCardBodySegmentEntry(
           key: Key(entry.key),
           post: entry.post!,

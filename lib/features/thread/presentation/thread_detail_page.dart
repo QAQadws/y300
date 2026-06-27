@@ -266,12 +266,14 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                       _openPostCopyActions(state, post, plan);
                     },
                     diagnosticRecorder: diagnosticRecorder,
-                    onPostBuilt: _enableThreadPostMediaPreload
-                        ? (index) {
-                            _mediaPreloadQueue?.preloadNearbyPosts(
-                              tid: state.tid,
-                              posts: state.posts,
-                              centerIndex: index,
+                    onBodySegmentBuilt: _enableThreadPostMediaPreload
+                        ? (plan, segmentIndex) {
+                            _mediaPreloadQueue?.schedule(
+                              ThreadResourcePrewarmTask(
+                                tid: state.tid,
+                                plan: plan,
+                                segmentIndex: segmentIndex,
+                              ),
                             );
                           }
                         : null,
