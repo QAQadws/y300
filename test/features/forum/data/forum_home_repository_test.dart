@@ -13,6 +13,11 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_resource_client.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/cache_key_canonicalizer.dart';
+import 'package:y300/features/cache/domain/document_cache_models.dart';
+import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
+import 'package:y300/features/cache/domain/storage_usage_models.dart';
 import 'package:y300/features/auth/data/auth_repository.dart';
 import 'package:y300/features/favorites/data/favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
@@ -68,6 +73,113 @@ void main() {
       },
     );
 
+    test('writes successful HTML and parsed payload to page caches', () async {
+      final adapter = _ForumHomeHtmlTestAdapter();
+      final documentCache = _FakeDocumentCacheService();
+      final snapshotCache = _FakeParsedSnapshotCacheService<ForumHomePayload>();
+      final now = DateTime(2026, 1, 1, 10);
+      final repository = _buildHtmlRepository(
+        adapter,
+        documentCacheService: documentCache,
+        snapshotCacheService: snapshotCache,
+        now: () => now,
+      );
+
+      final result = await repository.getForumHomePayload();
+
+      expect(result.isSuccess, isTrue);
+      expect(documentCache.putDocuments, hasLength(1));
+      final document = documentCache.putDocuments.single;
+      expect(document.ownerType, CacheOwnerType.forum);
+      expect(document.ownerId, 'home');
+      expect(document.body, _mobileHomeHtml);
+      expect(document.contentType, 'text/html');
+      expect(document.statusCode, 200);
+      expect(document.fetchedAt, now);
+      expect(snapshotCache.putValues, hasLength(1));
+      expect(
+        snapshotCache.putValues.single.forumIndex.forums.map(
+          (forum) => forum.fid,
+        ),
+        <String>['16', '370'],
+      );
+      expect(snapshotCache.putDescriptors.single.snapshotType, 'forum.home');
+    });
+
+    test('returns fresh home snapshot before network request', () async {
+      final adapter = _ForumHomeHtmlTestAdapter(failMobileIndex: true);
+      final snapshotCache = _FakeParsedSnapshotCacheService<ForumHomePayload>();
+      final descriptor = const CacheKeyCanonicalizer().forumHomeSnapshot();
+      snapshotCache.seed(
+        descriptor,
+        ForumHomePayload(
+          forumIndex: ForumIndexData(
+            categories: <ForumCategory>[
+              ForumCategory(fid: 'cached-1', name: '缓存分类', forums: ['88']),
+            ],
+            forums: <ForumItem>[
+              ForumItem(
+                fid: '88',
+                name: '缓存版块',
+                threads: 0,
+                posts: 0,
+                todayPosts: 0,
+                description: '',
+                icon: '',
+                subForums: <ForumItem>[],
+              ),
+            ],
+          ),
+          isLoggedIn: false,
+          favoriteForums: const <FavoriteForum>[],
+        ),
+      );
+      final repository = _buildHtmlRepository(
+        adapter,
+        snapshotCacheService: snapshotCache,
+      );
+
+      final result = await repository.getForumHomePayload();
+
+      expect(result.isSuccess, isTrue);
+      expect(result.dataOrNull!.forumIndex.forums.single.name, '缓存版块');
+      expect(adapter.htmlRequestedUris, isEmpty);
+      expect(adapter.imageRequestedUris, isEmpty);
+    });
+
+    test('parses cached home HTML when network fails', () async {
+      final adapter = _ForumHomeHtmlTestAdapter(failMobileIndex: true);
+      final documentCache = _FakeDocumentCacheService();
+      final now = DateTime(2026, 1, 1, 11);
+      final descriptor = const CacheKeyCanonicalizer().forumHome();
+      documentCache.seed(
+        CachedDocument(
+          cacheKey: descriptor.cacheKey,
+          ownerType: descriptor.ownerType,
+          ownerId: descriptor.ownerId,
+          sourceUrl: descriptor.sourceUrl,
+          body: _mobileHomeHtml,
+          fetchedAt: DateTime(2026, 1, 1, 10),
+          updatedAt: DateTime(2026, 1, 1, 10),
+        ),
+      );
+      final repository = _buildHtmlRepository(
+        adapter,
+        documentCacheService: documentCache,
+        now: () => now,
+      );
+
+      final result = await repository.getForumHomePayload();
+
+      expect(result.isSuccess, isTrue);
+      expect(result.dataOrNull!.forumIndex.forums.map((forum) => forum.fid), [
+        '16',
+        '370',
+      ]);
+      expect(documentCache.touchedKeys, <String>[descriptor.cacheKey]);
+      expect(documentCache.touchedAt[descriptor.cacheKey], now);
+    });
+
     test(
       'returns failure when mobile HTML request fails without API fallback',
       () async {
@@ -106,6 +218,12 @@ void main() {
             ),
             imageRequestHeaderBuilderProvider.overrideWithValue(
               const _StaticImageRequestHeaderBuilder(),
+            ),
+            documentCacheServiceProvider.overrideWithValue(
+              _FakeDocumentCacheService(),
+            ),
+            parsedSnapshotCacheServiceProvider.overrideWithValue(
+              _FakeParsedSnapshotCacheService<ForumHomePayload>(),
             ),
           ],
         );
@@ -259,8 +377,11 @@ SessionInfo _loggedOutSession() {
 }
 
 ForumHomeHtmlRepository _buildHtmlRepository(
-  _ForumHomeHtmlTestAdapter adapter,
-) {
+  _ForumHomeHtmlTestAdapter adapter, {
+  DocumentCacheService? documentCacheService,
+  ParsedSnapshotCacheService? snapshotCacheService,
+  DateTime Function()? now,
+}) {
   final gateway = _buildGateway(adapter);
   return ForumHomeHtmlRepository(
     htmlClient: YamiboHtmlClient(gateway: gateway),
@@ -268,6 +389,9 @@ ForumHomeHtmlRepository _buildHtmlRepository(
       resourceClient: YamiboResourceClient(gateway: gateway),
       headerBuilder: const _StaticImageRequestHeaderBuilder(),
     ),
+    documentCacheService: documentCacheService,
+    snapshotCacheService: snapshotCacheService,
+    now: now,
   );
 }
 
@@ -410,6 +534,148 @@ class _CountingFavoriteRepository implements FavoriteRepository {
     required int page,
   }) async {
     throw StateError('favorite threads are not part of this test');
+  }
+}
+
+class _FakeParsedSnapshotCacheService<T> implements ParsedSnapshotCacheService {
+  final _snapshots = <String, T>{};
+  final putDescriptors = <SnapshotCacheDescriptor>[];
+  final putValues = <T>[];
+
+  void seed(SnapshotCacheDescriptor descriptor, T value) {
+    _snapshots[descriptor.cacheKey] = value;
+  }
+
+  @override
+  Future<CachedSnapshot<R>?> get<R>(
+    SnapshotCacheDescriptor descriptor,
+    SnapshotCodec<R> codec,
+  ) async {
+    final value = _snapshots[descriptor.cacheKey];
+    if (value is! R) {
+      return null;
+    }
+    return CachedSnapshot<R>(
+      cacheKey: descriptor.cacheKey,
+      ownerType: descriptor.ownerType,
+      ownerId: descriptor.ownerId,
+      snapshotType: codec.snapshotType,
+      codecVersion: codec.codecVersion,
+      parserVersion: codec.parserVersion,
+      value: value,
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+      staleAt: DateTime(2099, 1, 1),
+      expiresAt: DateTime(2099, 1, 2),
+    );
+  }
+
+  @override
+  Future<void> put<R>(
+    SnapshotCacheDescriptor descriptor,
+    R value,
+    SnapshotCodec<R> codec, {
+    required SnapshotCachePolicy policy,
+  }) async {
+    putDescriptors.add(descriptor);
+    if (value is T) {
+      putValues.add(value);
+      _snapshots[descriptor.cacheKey] = value;
+    }
+  }
+
+  @override
+  Future<void> touch(String cacheKey, DateTime accessedAt) async {}
+
+  @override
+  Future<int> deleteByOwner({
+    required CacheOwnerType ownerType,
+    required String ownerId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<int> deleteByOwnerPrefix({
+    required CacheOwnerType ownerType,
+    required String ownerIdPrefix,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<StorageUsageSection> calculateUsage() async {
+    return const StorageUsageSection(
+      bucket: StorageBucket.pageCache,
+      label: '页面缓存',
+      bytes: 0,
+      clearable: false,
+    );
+  }
+}
+
+class _FakeDocumentCacheService implements DocumentCacheService {
+  final _documents = <String, CachedDocument>{};
+  final putDocuments = <CachedDocument>[];
+  final touchedKeys = <String>[];
+  final touchedAt = <String, DateTime>{};
+
+  void seed(CachedDocument document) {
+    _documents[document.cacheKey] = document;
+  }
+
+  @override
+  Future<CachedDocument?> getByKey(String cacheKey) async {
+    return _documents[cacheKey];
+  }
+
+  @override
+  Future<void> put(CachedDocument document) async {
+    putDocuments.add(document);
+    _documents[document.cacheKey] = document;
+  }
+
+  @override
+  Future<void> touch(String cacheKey, DateTime accessedAt) async {
+    touchedKeys.add(cacheKey);
+    touchedAt[cacheKey] = accessedAt;
+  }
+
+  @override
+  Future<int> deleteByOwner({
+    required CacheOwnerType ownerType,
+    required String ownerId,
+  }) async {
+    final before = _documents.length;
+    _documents.removeWhere(
+      (_, document) =>
+          document.ownerType == ownerType && document.ownerId == ownerId,
+    );
+    return before - _documents.length;
+  }
+
+  @override
+  Future<int> deleteByOwnerPrefix({
+    required CacheOwnerType ownerType,
+    required String ownerIdPrefix,
+  }) async {
+    final before = _documents.length;
+    _documents.removeWhere(
+      (_, document) =>
+          document.ownerType == ownerType &&
+          document.ownerId.startsWith(ownerIdPrefix),
+    );
+    return before - _documents.length;
+  }
+
+  @override
+  Future<StorageUsageSection> calculateUsage() async {
+    return const StorageUsageSection(
+      bucket: StorageBucket.pageCache,
+      label: '页面缓存',
+      bytes: 0,
+      clearable: false,
+    );
   }
 }
 

@@ -7,7 +7,32 @@ class CacheKeyCanonicalizer {
   const CacheKeyCanonicalizer();
 
   static const String forumDisplaySnapshotType = 'forum.display';
+  static const String forumHomeSnapshotType = 'forum.home';
   static const String threadDetailSnapshotType = 'thread.detail';
+
+  DocumentCacheDescriptor forumHome({
+    DocumentRequestProfile requestProfile = DocumentRequestProfile.loggedIn,
+  }) {
+    final canonicalParameters = _canonicalQueryParameters(
+      const <String, String>{'mobile': '2'},
+    );
+    final uri = Uri.parse(
+      AppConfig.siteBaseUrl,
+    ).replace(path: '/index.php', queryParameters: canonicalParameters);
+    return DocumentCacheDescriptor(
+      cacheKey: _canonicalKey(
+        namespace: CacheNamespace.document,
+        ownerType: CacheOwnerType.forum,
+        ownerId: 'home',
+        requestProfile: requestProfile,
+        uri: uri,
+      ),
+      ownerType: CacheOwnerType.forum,
+      ownerId: 'home',
+      sourceUrl: uri.toString(),
+      requestProfile: requestProfile,
+    );
+  }
 
   DocumentCacheDescriptor threadDetail({
     required String tid,
@@ -104,6 +129,22 @@ class CacheKeyCanonicalizer {
       ownerType: document.ownerType,
       ownerId: document.ownerId,
       snapshotType: threadDetailSnapshotType,
+      sourceDocumentKey: document.cacheKey,
+    );
+  }
+
+  SnapshotCacheDescriptor forumHomeSnapshot({
+    DocumentRequestProfile requestProfile = DocumentRequestProfile.loggedIn,
+  }) {
+    final document = forumHome(requestProfile: requestProfile);
+    return SnapshotCacheDescriptor(
+      cacheKey: document.cacheKey.replaceFirst(
+        '${CacheNamespace.document.id}|',
+        '${CacheNamespace.snapshot.id}|',
+      ),
+      ownerType: document.ownerType,
+      ownerId: document.ownerId,
+      snapshotType: forumHomeSnapshotType,
       sourceDocumentKey: document.cacheKey,
     );
   }

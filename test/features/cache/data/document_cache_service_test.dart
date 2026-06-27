@@ -84,4 +84,50 @@ void main() {
     await db.close();
     await deleteDatabase(dbName);
   });
+
+  test('LocalDocumentCacheService deletes documents by owner prefix', () async {
+    const dbName = 'document_cache_owner_prefix_test.db';
+    await deleteDatabase(dbName);
+    final db = await ComicLocalDb.open(databaseName: dbName);
+    final service = LocalDocumentCacheService(Future.value(db));
+    final now = DateTime(2026, 1, 1);
+    addTearDown(() async {
+      await db.close();
+      await deleteDatabase(dbName);
+    });
+
+    Future<void> put(String key, String ownerId) {
+      return service.put(
+        CachedDocument(
+          cacheKey: key,
+          ownerType: CacheOwnerType.thread,
+          ownerId: ownerId,
+          sourceUrl: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1',
+          body: 'cached',
+          fetchedAt: now,
+          updatedAt: now,
+        ),
+      );
+    }
+
+    await put('document|thread|tid=1&page=1', 'tid=1&page=1');
+    await put(
+      'document|thread|tid=1&page=2&authorid=9',
+      'tid=1&page=2&authorid=9',
+    );
+    await put('document|thread|tid=2&page=1', 'tid=2&page=1');
+
+    final deleted = await service.deleteByOwnerPrefix(
+      ownerType: CacheOwnerType.thread,
+      ownerIdPrefix: 'tid=1',
+    );
+
+    expect(deleted, 2);
+    expect(await service.getByKey('document|thread|tid=1&page=1'), isNull);
+    expect(
+      await service.getByKey('document|thread|tid=1&page=2&authorid=9'),
+      isNull,
+    );
+    expect(await service.getByKey('document|thread|tid=2&page=1'), isNotNull);
+  });
 }

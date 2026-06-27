@@ -288,6 +288,14 @@ class _FakeParsedSnapshotCacheService<T> implements ParsedSnapshotCacheService {
   }
 
   @override
+  Future<int> deleteByOwnerPrefix({
+    required CacheOwnerType ownerType,
+    required String ownerIdPrefix,
+  }) async {
+    return 0;
+  }
+
+  @override
   Future<StorageUsageSection> calculateUsage() async {
     return const StorageUsageSection(
       bucket: StorageBucket.pageCache,
@@ -341,6 +349,20 @@ class _FakeDocumentCacheService implements DocumentCacheService {
     _documents.removeWhere(
       (_, document) =>
           document.ownerType == ownerType && document.ownerId == ownerId,
+    );
+    return before - _documents.length;
+  }
+
+  @override
+  Future<int> deleteByOwnerPrefix({
+    required CacheOwnerType ownerType,
+    required String ownerIdPrefix,
+  }) async {
+    final before = _documents.length;
+    _documents.removeWhere(
+      (_, document) =>
+          document.ownerType == ownerType &&
+          document.ownerId.startsWith(ownerIdPrefix),
     );
     return before - _documents.length;
   }

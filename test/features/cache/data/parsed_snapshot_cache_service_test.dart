@@ -158,6 +158,77 @@ void main() {
     expect(section.bytes, greaterThan(0));
     expect(section.slices.single.label, 'test.snapshot快照（1）');
   });
+
+  test(
+    'LocalParsedSnapshotCacheService deletes snapshots by owner prefix',
+    () async {
+      const dbName = 'parsed_snapshot_cache_owner_prefix_test.db';
+      await deleteDatabase(dbName);
+      final db = await ComicLocalDb.open(databaseName: dbName);
+      final service = LocalParsedSnapshotCacheService(Future.value(db));
+      addTearDown(() async {
+        await db.close();
+        await deleteDatabase(dbName);
+      });
+      const codec = _StringSnapshotCodec();
+
+      Future<void> put(String key, String ownerId, String value) {
+        return service.put(
+          SnapshotCacheDescriptor(
+            cacheKey: key,
+            ownerType: CacheOwnerType.thread,
+            ownerId: ownerId,
+            snapshotType: 'test.snapshot',
+          ),
+          value,
+          codec,
+          policy: const SnapshotCachePolicy(
+            freshFor: Duration(minutes: 5),
+            keepStaleFor: Duration(days: 1),
+          ),
+        );
+      }
+
+      await put('snapshot|thread|tid=1&page=1', 'tid=1&page=1', 'one');
+      await put(
+        'snapshot|thread|tid=1&page=2&ordertype=1',
+        'tid=1&page=2&ordertype=1',
+        'two',
+      );
+      await put('snapshot|thread|tid=2&page=1', 'tid=2&page=1', 'other');
+
+      final deleted = await service.deleteByOwnerPrefix(
+        ownerType: CacheOwnerType.thread,
+        ownerIdPrefix: 'tid=1',
+      );
+
+      expect(deleted, 2);
+      expect(
+        await service.get(
+          const SnapshotCacheDescriptor(
+            cacheKey: 'snapshot|thread|tid=1&page=1',
+            ownerType: CacheOwnerType.thread,
+            ownerId: 'tid=1&page=1',
+            snapshotType: 'test.snapshot',
+          ),
+          codec,
+        ),
+        isNull,
+      );
+      expect(
+        await service.get(
+          const SnapshotCacheDescriptor(
+            cacheKey: 'snapshot|thread|tid=2&page=1',
+            ownerType: CacheOwnerType.thread,
+            ownerId: 'tid=2&page=1',
+            snapshotType: 'test.snapshot',
+          ),
+          codec,
+        ),
+        isNotNull,
+      );
+    },
+  );
 }
 
 class _StringSnapshotCodec implements SnapshotCodec<String> {

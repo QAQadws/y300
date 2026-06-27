@@ -4,9 +4,14 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/auth/data/auth_repository.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/cache_key_canonicalizer.dart';
+import 'package:y300/features/cache/domain/document_cache_models.dart';
+import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/forum_home_carousel_image_probe.dart';
 import 'package:y300/features/forum/data/forum_home_html_parser.dart';
+import 'package:y300/features/forum/data/forum_home_snapshot_codec.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 import 'package:y300/features/forum/data/models/forum_home_html_models.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
@@ -39,16 +44,44 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
     required YamiboHtmlClient htmlClient,
     required ForumHomeCarouselImageProbe imageProbe,
     ForumHomeHtmlParser parser = const ForumHomeHtmlParser(),
+    DocumentCacheService? documentCacheService,
+    ParsedSnapshotCacheService? snapshotCacheService,
+    CacheKeyCanonicalizer cacheKeyCanonicalizer = const CacheKeyCanonicalizer(),
+    ForumHomeSnapshotCodec snapshotCodec = const ForumHomeSnapshotCodec(),
+    SnapshotCachePolicy snapshotPolicy = const SnapshotCachePolicy(
+      freshFor: Duration(minutes: 5),
+      keepStaleFor: Duration(days: 1),
+    ),
+    DateTime Function()? now,
   }) : _htmlClient = htmlClient,
        _imageProbe = imageProbe,
-       _parser = parser;
+       _parser = parser,
+       _documentCacheService = documentCacheService,
+       _snapshotCacheService = snapshotCacheService,
+       _cacheKeyCanonicalizer = cacheKeyCanonicalizer,
+       _snapshotCodec = snapshotCodec,
+       _snapshotPolicy = snapshotPolicy,
+       _now = now ?? DateTime.now;
 
   final YamiboHtmlClient _htmlClient;
   final ForumHomeCarouselImageProbe _imageProbe;
   final ForumHomeHtmlParser _parser;
+  final DocumentCacheService? _documentCacheService;
+  final ParsedSnapshotCacheService? _snapshotCacheService;
+  final CacheKeyCanonicalizer _cacheKeyCanonicalizer;
+  final ForumHomeSnapshotCodec _snapshotCodec;
+  final SnapshotCachePolicy _snapshotPolicy;
+  final DateTime Function() _now;
 
   @override
   Future<ApiResult<ForumHomePayload>> getForumHomePayload() async {
+    final documentDescriptor = _cacheKeyCanonicalizer.forumHome();
+    final snapshotDescriptor = _cacheKeyCanonicalizer.forumHomeSnapshot();
+    final snapshot = await _getFreshSnapshot(snapshotDescriptor);
+    if (snapshot != null) {
+      return ApiSuccess(snapshot);
+    }
+
     final htmlResult = await _htmlClient.getMobilePage(
       path: '/index.php',
       queryParameters: const <String, String>{'mobile': '2'},
@@ -59,6 +92,13 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
       ),
     );
     if (htmlResult case ApiFailure<String>(:final error)) {
+      final cached = await _parseCachedDocument(
+        documentDescriptor: documentDescriptor,
+        snapshotDescriptor: snapshotDescriptor,
+      );
+      if (cached != null) {
+        return ApiSuccess(cached);
+      }
       return ApiFailure(
         ApiError(
           type: error.type,
@@ -71,9 +111,11 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
     }
 
     try {
-      final htmlData = _parser.parse(htmlResult.dataOrNull ?? '');
-      final resolved = await _withResolvedCarouselAspectRatio(htmlData);
-      return ApiSuccess(_toPayload(resolved));
+      final html = htmlResult.dataOrNull ?? '';
+      final payload = await _parsePayload(html);
+      await _putDocument(descriptor: documentDescriptor, html: html);
+      await _putSnapshot(descriptor: snapshotDescriptor, payload: payload);
+      return ApiSuccess(payload);
     } catch (error) {
       return ApiFailure(
         ApiError(
@@ -82,6 +124,128 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
           raw: error,
         ),
       );
+    }
+  }
+
+  Future<ForumHomePayload> _parsePayload(String html) async {
+    final htmlData = _parser.parse(html);
+    final resolved = await _withResolvedCarouselAspectRatio(htmlData);
+    return _toPayload(resolved);
+  }
+
+  Future<ForumHomePayload?> _parseCachedDocument({
+    required DocumentCacheDescriptor documentDescriptor,
+    required SnapshotCacheDescriptor snapshotDescriptor,
+  }) async {
+    final cache = _documentCacheService;
+    if (cache == null) {
+      return null;
+    }
+    final document = await _safeGetCachedDocument(
+      cache,
+      documentDescriptor.cacheKey,
+    );
+    if (document == null) {
+      return null;
+    }
+    try {
+      final payload = await _parsePayload(document.body);
+      await _safeTouchCachedDocument(cache, document.cacheKey, _now());
+      await _putSnapshot(descriptor: snapshotDescriptor, payload: payload);
+      return payload;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<ForumHomePayload?> _getFreshSnapshot(
+    SnapshotCacheDescriptor descriptor,
+  ) async {
+    final cache = _snapshotCacheService;
+    if (cache == null) {
+      return null;
+    }
+    try {
+      final snapshot = await cache.get(descriptor, _snapshotCodec);
+      if (snapshot == null || !snapshot.isFresh(_now())) {
+        return null;
+      }
+      return snapshot.value;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _putDocument({
+    required DocumentCacheDescriptor descriptor,
+    required String html,
+  }) async {
+    final cache = _documentCacheService;
+    if (cache == null) {
+      return;
+    }
+    final now = _now();
+    try {
+      await cache.put(
+        CachedDocument(
+          cacheKey: descriptor.cacheKey,
+          ownerType: descriptor.ownerType,
+          ownerId: descriptor.ownerId,
+          sourceUrl: descriptor.sourceUrl,
+          requestProfile: descriptor.requestProfile,
+          body: html,
+          contentType: 'text/html',
+          statusCode: 200,
+          fetchedAt: now,
+          updatedAt: now,
+          lastAccessedAt: now,
+        ),
+      );
+    } catch (_) {
+      // 首页网络加载成功时，缓存写入失败不应阻断渲染。
+    }
+  }
+
+  Future<void> _putSnapshot({
+    required SnapshotCacheDescriptor descriptor,
+    required ForumHomePayload payload,
+  }) async {
+    final cache = _snapshotCacheService;
+    if (cache == null) {
+      return;
+    }
+    try {
+      await cache.put(
+        descriptor,
+        payload,
+        _snapshotCodec,
+        policy: _snapshotPolicy,
+      );
+    } catch (_) {
+      // Snapshot 写入失败不应阻断首页展示。
+    }
+  }
+
+  Future<CachedDocument?> _safeGetCachedDocument(
+    DocumentCacheService cache,
+    String cacheKey,
+  ) async {
+    try {
+      return await cache.getByKey(cacheKey);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _safeTouchCachedDocument(
+    DocumentCacheService cache,
+    String cacheKey,
+    DateTime accessedAt,
+  ) async {
+    try {
+      await cache.touch(cacheKey, accessedAt);
+    } catch (_) {
+      return;
     }
   }
 
@@ -263,5 +427,7 @@ final forumHomeRepositoryProvider = Provider<ForumHomeRepository>((ref) {
       resourceClient: ref.watch(yamiboResourceClientProvider),
       headerBuilder: ref.watch(imageRequestHeaderBuilderProvider),
     ),
+    documentCacheService: ref.watch(documentCacheServiceProvider),
+    snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
   );
 });

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/domain/cache_key_canonicalizer.dart';
+import 'package:y300/features/cache/domain/storage_usage_models.dart';
 
 void main() {
   test('threadDetail canonical key is stable for sorted query parameters', () {
@@ -76,5 +77,20 @@ void main() {
     expect(first.cacheKey, second.cacheKey);
     expect(first.cacheKey, isNot(different.cacheKey));
     expect(first.snapshotType, CacheKeyCanonicalizer.forumDisplaySnapshotType);
+  });
+
+  test('forumHome document and snapshot keys share the home owner', () {
+    const canonicalizer = CacheKeyCanonicalizer();
+
+    final document = canonicalizer.forumHome();
+    final snapshot = canonicalizer.forumHomeSnapshot();
+
+    expect(document.ownerType, CacheOwnerType.forum);
+    expect(document.ownerId, 'home');
+    expect(document.sourceUrl, 'https://bbs.yamibo.com/index.php?mobile=2');
+    expect(snapshot.ownerType, CacheOwnerType.forum);
+    expect(snapshot.ownerId, 'home');
+    expect(snapshot.snapshotType, CacheKeyCanonicalizer.forumHomeSnapshotType);
+    expect(snapshot.sourceDocumentKey, document.cacheKey);
   });
 }

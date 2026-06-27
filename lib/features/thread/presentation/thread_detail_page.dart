@@ -418,7 +418,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       return;
     }
     _showSnackBar(result.message.trim().isEmpty ? '回复成功' : result.message);
-    await ref.read(threadDetailControllerProvider(args).notifier).refresh();
+    await ref
+        .read(threadDetailControllerProvider(args).notifier)
+        .refreshAfterMutation();
   }
 
   Future<void> _copyActionUrl(String label, String url) {

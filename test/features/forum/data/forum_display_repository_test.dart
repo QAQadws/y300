@@ -8,6 +8,7 @@ import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/features/cache/domain/cache_key_canonicalizer.dart';
+import 'package:y300/features/cache/domain/document_cache_models.dart';
 import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/storage_usage_models.dart';
 import 'package:y300/features/forum/data/forum_display_repository.dart';
@@ -102,6 +103,76 @@ void main() {
   );
 
   test(
+    'ForumDisplayHtmlRepository writes successful HTML to document cache',
+    () async {
+      final adapter = _ForumDisplayHtmlTestAdapter();
+      final documentCache = _FakeDocumentCacheService();
+      final now = DateTime(2026, 1, 1, 10);
+      final repository = _buildRepository(
+        adapter,
+        documentCacheService: documentCache,
+        now: () => now,
+      );
+
+      final result = await repository.getForumDisplay(fid: '30', page: 2);
+
+      expect(result.isSuccess, isTrue);
+      expect(documentCache.putDocuments, hasLength(1));
+      final document = documentCache.putDocuments.single;
+      expect(document.body, _html);
+      expect(document.ownerType, CacheOwnerType.forumDisplay);
+      expect(document.ownerId, contains('fid=30'));
+      expect(document.ownerId, contains('page=2'));
+      expect(document.contentType, 'text/html');
+      expect(document.statusCode, 200);
+      expect(document.fetchedAt, now);
+    },
+  );
+
+  test(
+    'ForumDisplayHtmlRepository parses cached document when network fails',
+    () async {
+      final adapter = _ForumDisplayHtmlTestAdapter(statusCode: 503);
+      final documentCache = _FakeDocumentCacheService();
+      final now = DateTime(2026, 1, 1, 11);
+      final repository = _buildRepository(
+        adapter,
+        documentCacheService: documentCache,
+        now: () => now,
+      );
+      final descriptor = const CacheKeyCanonicalizer().forumDisplay(
+        fid: '30',
+        page: 2,
+        queryParameters: const <String, String>{
+          'mod': 'forumdisplay',
+          'fid': '30',
+          'mobile': '2',
+          'page': '2',
+        },
+      );
+      documentCache.seed(
+        CachedDocument(
+          cacheKey: descriptor.cacheKey,
+          ownerType: descriptor.ownerType,
+          ownerId: descriptor.ownerId,
+          sourceUrl: descriptor.sourceUrl,
+          body: _html,
+          fetchedAt: DateTime(2026, 1, 1, 10),
+          updatedAt: DateTime(2026, 1, 1, 10),
+        ),
+      );
+
+      final result = await repository.getForumDisplay(fid: '30', page: 2);
+
+      expect(result.isSuccess, isTrue);
+      expect(result.dataOrNull!.forumName, '中文百合漫画区');
+      expect(result.dataOrNull!.threads.single.tid, '572604');
+      expect(documentCache.touchedKeys, <String>[descriptor.cacheKey]);
+      expect(documentCache.touchedAt[descriptor.cacheKey], now);
+    },
+  );
+
+  test(
     'ForumDisplayHtmlRepository returns fresh snapshot before network',
     () async {
       final adapter = _ForumDisplayHtmlTestAdapter(statusCode: 503);
@@ -143,7 +214,9 @@ void main() {
 
 ForumDisplayHtmlRepository _buildRepository(
   _ForumDisplayHtmlTestAdapter adapter, {
+  DocumentCacheService? documentCacheService,
   ParsedSnapshotCacheService? snapshotCacheService,
+  DateTime Function()? now,
 }) {
   final gateway = YamiboHttpGateway(
     cookieStore: CookieStore(),
@@ -159,7 +232,9 @@ ForumDisplayHtmlRepository _buildRepository(
   );
   return ForumDisplayHtmlRepository(
     htmlClient: YamiboHtmlClient(gateway: gateway),
+    documentCacheService: documentCacheService,
     snapshotCacheService: snapshotCacheService,
+    now: now,
   );
 }
 
@@ -244,6 +319,79 @@ class _FakeParsedSnapshotCacheService<T> implements ParsedSnapshotCacheService {
     required String ownerId,
   }) async {
     return 0;
+  }
+
+  @override
+  Future<int> deleteByOwnerPrefix({
+    required CacheOwnerType ownerType,
+    required String ownerIdPrefix,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<StorageUsageSection> calculateUsage() async {
+    return const StorageUsageSection(
+      bucket: StorageBucket.pageCache,
+      label: '页面缓存',
+      bytes: 0,
+      clearable: false,
+    );
+  }
+}
+
+class _FakeDocumentCacheService implements DocumentCacheService {
+  final _documents = <String, CachedDocument>{};
+  final putDocuments = <CachedDocument>[];
+  final touchedKeys = <String>[];
+  final touchedAt = <String, DateTime>{};
+
+  void seed(CachedDocument document) {
+    _documents[document.cacheKey] = document;
+  }
+
+  @override
+  Future<CachedDocument?> getByKey(String cacheKey) async {
+    return _documents[cacheKey];
+  }
+
+  @override
+  Future<void> put(CachedDocument document) async {
+    putDocuments.add(document);
+    _documents[document.cacheKey] = document;
+  }
+
+  @override
+  Future<void> touch(String cacheKey, DateTime accessedAt) async {
+    touchedKeys.add(cacheKey);
+    touchedAt[cacheKey] = accessedAt;
+  }
+
+  @override
+  Future<int> deleteByOwner({
+    required CacheOwnerType ownerType,
+    required String ownerId,
+  }) async {
+    final before = _documents.length;
+    _documents.removeWhere(
+      (_, document) =>
+          document.ownerType == ownerType && document.ownerId == ownerId,
+    );
+    return before - _documents.length;
+  }
+
+  @override
+  Future<int> deleteByOwnerPrefix({
+    required CacheOwnerType ownerType,
+    required String ownerIdPrefix,
+  }) async {
+    final before = _documents.length;
+    _documents.removeWhere(
+      (_, document) =>
+          document.ownerType == ownerType &&
+          document.ownerId.startsWith(ownerIdPrefix),
+    );
+    return before - _documents.length;
   }
 
   @override

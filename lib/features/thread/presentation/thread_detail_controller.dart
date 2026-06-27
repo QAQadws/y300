@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/comic/data/comic_parser_service.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_post_aggregation_service.dart';
@@ -82,6 +83,14 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         queryParameters: current?.queryParameters ?? const <String, String>{},
       ),
     );
+  }
+
+  Future<void> refreshAfterMutation() async {
+    final current = state.value;
+    if (current != null) {
+      await _invalidateCurrentThreadCache(current.tid);
+    }
+    await refresh();
   }
 
   Future<void> loadMore() async {
@@ -360,6 +369,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
     final message = (result as ApiSuccess<ThreadPollVoteResult>).data.message
         .trim();
+    await _invalidateCurrentThreadCache(afterSubmit.tid);
     final reloaded = await _loadPage(
       page: afterSubmit.currentPage <= 0 ? 1 : afterSubmit.currentPage,
       previous: const <ThreadPost>[],
@@ -410,6 +420,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     }
     final current = state.value;
     if (current != null) {
+      await _invalidateCurrentThreadCache(current.tid);
       final reloaded = await _loadPage(
         page: current.currentPage <= 0 ? 1 : current.currentPage,
         previous: const <ThreadPost>[],
@@ -470,6 +481,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     }
     final current = state.value;
     if (current != null) {
+      await _invalidateCurrentThreadCache(current.tid);
       final reloaded = await _loadPage(
         page: current.currentPage <= 0 ? 1 : current.currentPage,
         previous: const <ThreadPost>[],
@@ -542,6 +554,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       if (latest == null) {
         return;
       }
+      await _invalidateCurrentThreadCache(latest.tid);
       final reloaded = await _loadPage(
         page: latest.currentPage <= 0 ? 1 : latest.currentPage,
         previous: const <ThreadPost>[],
@@ -817,6 +830,22 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
   ThreadRepository _readRepository() {
     return ref.read(threadRepositoryProvider);
+  }
+
+  Future<void> _invalidateCurrentThreadCache(String tid) async {
+    final value = tid.trim();
+    if (value.isEmpty) {
+      return;
+    }
+    try {
+      await ref
+          .read(nativePageCacheInvalidationServiceProvider)
+          .invalidateThread(value);
+    } catch (_) {
+      // Cache invalidation is best-effort; successful user actions should still
+      // reload through the normal repository path if cache maintenance fails.
+      return;
+    }
   }
 
   (ComicCandidateInfo, ParsedComicPost) _parseComicWhenTagged({

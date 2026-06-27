@@ -4,6 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/image_cache_service.dart';
+import 'package:y300/features/cache/domain/native_page_cache_invalidation_service.dart';
 import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/composer_shared/data/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/composer_image_picker.dart';
@@ -718,9 +722,14 @@ void main() {
         );
       });
       final pollVoteRepository = _FakeThreadPollVoteRepository();
+      final invalidationService = _FakeNativePageCacheInvalidationService();
 
       await tester.pumpWidget(
-        _buildTestApp(repository, pollVoteRepository: pollVoteRepository),
+        _buildTestApp(
+          repository,
+          pollVoteRepository: pollVoteRepository,
+          pageCacheInvalidationService: invalidationService,
+        ),
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
@@ -741,6 +750,7 @@ void main() {
       expect(pollVoteRepository.lastRequest?.actionUrl, contains('votepoll'));
       expect(pollVoteRepository.lastRequest?.formHash, 'fh_poll');
       expect(pollVoteRepository.lastRequest?.optionIds, <String>['1']);
+      expect(invalidationService.invalidatedThreadIds, <String>['100']);
       expect(callCount, 2);
       expect(find.text('投票成功'), findsOneWidget);
       expect(find.text('100%'), findsOneWidget);
@@ -1243,9 +1253,14 @@ void main() {
         );
       });
       final rateRepository = _FakeThreadPostRateRepository();
+      final invalidationService = _FakeNativePageCacheInvalidationService();
 
       await tester.pumpWidget(
-        _buildTestApp(repository, postRateRepository: rateRepository),
+        _buildTestApp(
+          repository,
+          postRateRepository: rateRepository,
+          pageCacheInvalidationService: invalidationService,
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -1266,6 +1281,7 @@ void main() {
       expect(rateRepository.lastDraft?.score, 5);
       expect(rateRepository.lastDraft?.reason, '我很赞同');
       expect(rateRepository.lastDraft?.notifyAuthor, isFalse);
+      expect(invalidationService.invalidatedThreadIds, <String>['100']);
       expect(loadCount, 2);
       expect(find.text('评分成功'), findsOneWidget);
     });
@@ -1303,9 +1319,14 @@ void main() {
         );
       });
       final commentRepository = _FakeThreadPostCommentRepository();
+      final invalidationService = _FakeNativePageCacheInvalidationService();
 
       await tester.pumpWidget(
-        _buildTestApp(repository, postCommentRepository: commentRepository),
+        _buildTestApp(
+          repository,
+          postCommentRepository: commentRepository,
+          pageCacheInvalidationService: invalidationService,
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -1329,6 +1350,7 @@ void main() {
 
       expect(commentRepository.lastDraft?.form.pid, 'p1');
       expect(commentRepository.lastDraft?.message, '这是测试点评');
+      expect(invalidationService.invalidatedThreadIds, <String>['100']);
       expect(loadCount, 2);
       expect(find.text('点评成功'), findsOneWidget);
     });
@@ -1704,9 +1726,14 @@ void main() {
         );
       });
       final replyRepo = _FakeReplyRepository();
+      final invalidationService = _FakeNativePageCacheInvalidationService();
 
       await tester.pumpWidget(
-        _buildTestApp(repository, replyRepository: replyRepo),
+        _buildTestApp(
+          repository,
+          replyRepository: replyRepo,
+          pageCacheInvalidationService: invalidationService,
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -1736,6 +1763,7 @@ void main() {
 
       expect(replyRepo.called, isTrue);
       expect(replyRepo.lastDraft?.message, '这是测试回复');
+      expect(invalidationService.invalidatedThreadIds, <String>['100']);
       expect(find.text('回复发布成功'), findsOneWidget);
     });
   });
@@ -1751,10 +1779,16 @@ Widget _buildTestApp(
   ThreadPollVoteRepository? pollVoteRepository,
   YamiboTagThreadPageRepository? tagThreadPageRepository,
   ThreadPostLocator? threadPostLocator,
+  NativePageCacheInvalidationService? pageCacheInvalidationService,
 }) {
   return ProviderScope(
     overrides: [
       threadRepositoryProvider.overrideWithValue(repository),
+      imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
+      nativePageCacheInvalidationServiceProvider.overrideWithValue(
+        pageCacheInvalidationService ??
+            _FakeNativePageCacheInvalidationService(),
+      ),
       novelRepositoryProvider.overrideWithValue(
         novelRepository ?? _FakeNovelRepository(),
       ),
@@ -1798,6 +1832,66 @@ Widget _buildTestApp(
       home: ThreadDetailPage(tid: '100', subject: '测试主题'),
     ),
   );
+}
+
+class _NoopImageCacheService implements ImageCacheService {
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    return CachedImageResult(success: true, cacheKey: request.cacheKey);
+  }
+
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async => null;
+
+  @override
+  Future<CachedImageResult> copyProtectedLocalFile(
+    ImageCacheLocalCopyRequest request,
+  ) async {
+    return CachedImageResult(
+      success: true,
+      cacheKey: request.cacheKey,
+      localPath: request.sourcePath,
+    );
+  }
+
+  @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
+
+  @override
+  Future<void> pruneToLimit({required int maxBytes}) async {}
+
+  @override
+  Future<void> clearUnprotected() async {}
+}
+
+class _FakeNativePageCacheInvalidationService
+    implements NativePageCacheInvalidationService {
+  final invalidatedThreadIds = <String>[];
+  final invalidatedForumDisplayIds = <String>[];
+  var homeInvalidationCount = 0;
+
+  @override
+  Future<void> invalidateThread(String tid) async {
+    invalidatedThreadIds.add(tid);
+  }
+
+  @override
+  Future<void> invalidateForumDisplay(String fid) async {
+    invalidatedForumDisplayIds.add(fid);
+  }
+
+  @override
+  Future<void> invalidateForumHome() async {
+    homeInvalidationCount++;
+  }
 }
 
 ThreadPost _post({

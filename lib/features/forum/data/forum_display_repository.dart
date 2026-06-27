@@ -6,6 +6,7 @@ import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/cache_key_canonicalizer.dart';
+import 'package:y300/features/cache/domain/document_cache_models.dart';
 import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/forum/data/forum_display_html_parser.dart';
 import 'package:y300/features/forum/data/forum_display_snapshot_codec.dart';
@@ -26,6 +27,7 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
   ForumDisplayHtmlRepository({
     required YamiboHtmlClient htmlClient,
     ForumDisplayHtmlParser parser = const ForumDisplayHtmlParser(),
+    DocumentCacheService? documentCacheService,
     ParsedSnapshotCacheService? snapshotCacheService,
     CacheKeyCanonicalizer cacheKeyCanonicalizer = const CacheKeyCanonicalizer(),
     ForumDisplaySnapshotCodec snapshotCodec = const ForumDisplaySnapshotCodec(),
@@ -36,6 +38,7 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
     DateTime Function()? now,
   }) : _htmlClient = htmlClient,
        _parser = parser,
+       _documentCacheService = documentCacheService,
        _snapshotCacheService = snapshotCacheService,
        _cacheKeyCanonicalizer = cacheKeyCanonicalizer,
        _snapshotCodec = snapshotCodec,
@@ -44,6 +47,7 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
 
   final YamiboHtmlClient _htmlClient;
   final ForumDisplayHtmlParser _parser;
+  final DocumentCacheService? _documentCacheService;
   final ParsedSnapshotCacheService? _snapshotCacheService;
   final CacheKeyCanonicalizer _cacheKeyCanonicalizer;
   final ForumDisplaySnapshotCodec _snapshotCodec;
@@ -65,6 +69,11 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
     ForumDisplayQuery query,
   ) async {
     final requestParameters = query.toRequestParameters();
+    final documentDescriptor = _cacheKeyCanonicalizer.forumDisplay(
+      fid: query.fid,
+      page: query.page,
+      queryParameters: requestParameters,
+    );
     final snapshotDescriptor = _cacheKeyCanonicalizer.forumDisplaySnapshot(
       fid: query.fid,
       page: query.page,
@@ -86,6 +95,14 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
     );
 
     if (htmlResult case ApiFailure<String>(:final error)) {
+      final cached = await _parseCachedDocument(
+        documentDescriptor: documentDescriptor,
+        snapshotDescriptor: snapshotDescriptor,
+        query: query,
+      );
+      if (cached != null) {
+        return ApiSuccess(cached);
+      }
       return ApiFailure(
         ApiError(
           type: error.type,
@@ -98,11 +115,13 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
     }
 
     try {
+      final html = htmlResult.dataOrNull ?? '';
       final data = _parser.parse(
-        htmlResult.dataOrNull ?? '',
+        html,
         fallbackFid: query.fid,
         fallbackPage: query.page,
       );
+      await _putDocument(descriptor: documentDescriptor, html: html);
       await _putSnapshot(descriptor: snapshotDescriptor, data: data);
       return ApiSuccess(data);
     } catch (error) {
@@ -113,6 +132,36 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
           raw: error,
         ),
       );
+    }
+  }
+
+  Future<ForumDisplayData?> _parseCachedDocument({
+    required DocumentCacheDescriptor documentDescriptor,
+    required SnapshotCacheDescriptor snapshotDescriptor,
+    required ForumDisplayQuery query,
+  }) async {
+    final cache = _documentCacheService;
+    if (cache == null) {
+      return null;
+    }
+    final document = await _safeGetCachedDocument(
+      cache,
+      documentDescriptor.cacheKey,
+    );
+    if (document == null) {
+      return null;
+    }
+    try {
+      final data = _parser.parse(
+        document.body,
+        fallbackFid: query.fid,
+        fallbackPage: query.page,
+      );
+      await _safeTouchCachedDocument(cache, document.cacheKey, _now());
+      await _putSnapshot(descriptor: snapshotDescriptor, data: data);
+      return data;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -134,6 +183,36 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
     }
   }
 
+  Future<void> _putDocument({
+    required DocumentCacheDescriptor descriptor,
+    required String html,
+  }) async {
+    final cache = _documentCacheService;
+    if (cache == null) {
+      return;
+    }
+    final now = _now();
+    try {
+      await cache.put(
+        CachedDocument(
+          cacheKey: descriptor.cacheKey,
+          ownerType: descriptor.ownerType,
+          ownerId: descriptor.ownerId,
+          sourceUrl: descriptor.sourceUrl,
+          requestProfile: descriptor.requestProfile,
+          body: html,
+          contentType: 'text/html',
+          statusCode: 200,
+          fetchedAt: now,
+          updatedAt: now,
+          lastAccessedAt: now,
+        ),
+      );
+    } catch (_) {
+      // HTML 文档写入失败不应阻断帖子列表展示。
+    }
+  }
+
   Future<void> _putSnapshot({
     required SnapshotCacheDescriptor descriptor,
     required ForumDisplayData data,
@@ -151,6 +230,29 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
       );
     } catch (_) {
       // Snapshot 写入失败不应阻断帖子列表展示。
+    }
+  }
+
+  Future<CachedDocument?> _safeGetCachedDocument(
+    DocumentCacheService cache,
+    String cacheKey,
+  ) async {
+    try {
+      return await cache.getByKey(cacheKey);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _safeTouchCachedDocument(
+    DocumentCacheService cache,
+    String cacheKey,
+    DateTime accessedAt,
+  ) async {
+    try {
+      await cache.touch(cacheKey, accessedAt);
+    } catch (_) {
+      return;
     }
   }
 }
@@ -185,6 +287,7 @@ class DiscuzForumDisplayRepository implements ForumDisplayRepository {
 final forumDisplayRepositoryProvider = Provider<ForumDisplayRepository>((ref) {
   return ForumDisplayHtmlRepository(
     htmlClient: ref.watch(yamiboHtmlClientProvider),
+    documentCacheService: ref.watch(documentCacheServiceProvider),
     snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
   );
 });

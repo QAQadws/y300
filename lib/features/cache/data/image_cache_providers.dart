@@ -12,6 +12,7 @@ import 'package:y300/features/cache/data/storage_accounting_service.dart';
 import 'package:y300/features/cache/data/storage_usage_adapters.dart';
 import 'package:y300/features/cache/domain/document_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
+import 'package:y300/features/cache/domain/native_page_cache_invalidation_service.dart';
 import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/protected_cover_cache_maintenance.dart';
 import 'package:y300/features/cache/domain/storage_usage_models.dart';
@@ -50,6 +51,14 @@ final parsedSnapshotCacheServiceProvider = Provider<ParsedSnapshotCacheService>(
     return LocalParsedSnapshotCacheService(ComicLocalDb.open());
   },
 );
+
+final nativePageCacheInvalidationServiceProvider =
+    Provider<NativePageCacheInvalidationService>((ref) {
+      return DefaultNativePageCacheInvalidationService(
+        documentCache: ref.watch(documentCacheServiceProvider),
+        snapshotCache: ref.watch(parsedSnapshotCacheServiceProvider),
+      );
+    });
 
 final protectedCoverFileStoreProvider = Provider<ProtectedCoverFileStore>((
   ref,

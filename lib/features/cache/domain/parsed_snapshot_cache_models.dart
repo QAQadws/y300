@@ -100,5 +100,10 @@ abstract class ParsedSnapshotCacheService {
     required String ownerId,
   });
 
+  Future<int> deleteByOwnerPrefix({
+    required CacheOwnerType ownerType,
+    required String ownerIdPrefix,
+  });
+
   Future<StorageUsageSection> calculateUsage();
 }

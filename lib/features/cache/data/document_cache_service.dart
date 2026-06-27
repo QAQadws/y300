@@ -74,6 +74,19 @@ class LocalDocumentCacheService implements DocumentCacheService {
   }
 
   @override
+  Future<int> deleteByOwnerPrefix({
+    required CacheOwnerType ownerType,
+    required String ownerIdPrefix,
+  }) async {
+    final db = await _dbFuture;
+    return db.delete(
+      ComicLocalDb.cachedDocumentsTable,
+      where: 'owner_type = ? AND owner_id LIKE ?',
+      whereArgs: <Object>[ownerType.id, '$ownerIdPrefix%'],
+    );
+  }
+
+  @override
   Future<StorageUsageSection> calculateUsage() async {
     final db = await _dbFuture;
     final rows = await db.rawQuery('''

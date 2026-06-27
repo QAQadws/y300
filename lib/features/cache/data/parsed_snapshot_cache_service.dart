@@ -111,6 +111,19 @@ class LocalParsedSnapshotCacheService implements ParsedSnapshotCacheService {
   }
 
   @override
+  Future<int> deleteByOwnerPrefix({
+    required CacheOwnerType ownerType,
+    required String ownerIdPrefix,
+  }) async {
+    final db = await _dbFuture;
+    return db.delete(
+      ComicLocalDb.cachedSnapshotsTable,
+      where: 'owner_type = ? AND owner_id LIKE ?',
+      whereArgs: <Object>[ownerType.id, '$ownerIdPrefix%'],
+    );
+  }
+
+  @override
   Future<StorageUsageSection> calculateUsage() async {
     final db = await _dbFuture;
     final rows = await db.rawQuery('''
@@ -200,6 +213,7 @@ class LocalParsedSnapshotCacheService implements ParsedSnapshotCacheService {
 
   String _snapshotLabel(String snapshotType) {
     return switch (snapshotType) {
+      'forum.home' => '论坛首页',
       'forum.display' => '帖子列表',
       'thread.detail' => '帖子详情',
       _ => snapshotType.isEmpty ? '页面解析' : snapshotType,
