@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 
 /// Binds an explicit cache request to [LibraryCachedImage].
@@ -87,9 +88,34 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
       placeholder: widget.placeholder,
       errorPlaceholder: widget.errorPlaceholder,
       headerBuilder: widget.headerBuilder,
-      onImageResolved: widget.onImageResolved,
+      onImageResolved: (size) => _handleImageResolved(request, size),
       onImageFailed: widget.onImageFailed,
     );
+  }
+
+  void _handleImageResolved(ImageCacheRequest? request, Size size) {
+    final cacheKey = request?.cacheKey.trim();
+    if (cacheKey != null && cacheKey.isNotEmpty) {
+      final service = ref.read(imageCacheServiceProvider);
+      if (service is ImageCacheDimensionRecorder) {
+        final recorder = service as ImageCacheDimensionRecorder;
+        unawaited(_recordDimensions(recorder, cacheKey, size));
+      }
+    }
+    widget.onImageResolved?.call(size);
+  }
+
+  Future<void> _recordDimensions(
+    ImageCacheDimensionRecorder service,
+    String cacheKey,
+    Size size,
+  ) async {
+    try {
+      await service.recordResolvedDimensions(cacheKey: cacheKey, size: size);
+    } catch (_) {
+      // Image size metadata only improves future layout hints; display should
+      // never fail because persisting the hint failed.
+    }
   }
 
   void _ensureCached() {

@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 
 abstract class ImageCacheService {
@@ -22,4 +24,11 @@ abstract class ImageCacheService {
   Future<void> pruneToLimit({required int maxBytes});
 
   Future<void> clearUnprotected();
+}
+
+abstract class ImageCacheDimensionRecorder {
+  Future<void> recordResolvedDimensions({
+    required String cacheKey,
+    required Size size,
+  });
 }

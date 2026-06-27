@@ -1,7 +1,9 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/forum_image_cache_requests.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
@@ -73,7 +75,7 @@ class ThreadPostImageOpenRequest {
       images.map((image) => image.url).toList(growable: false);
 }
 
-class ThreadPostHtml extends StatelessWidget {
+class ThreadPostHtml extends StatefulWidget {
   const ThreadPostHtml({
     super.key,
     required this.data,
@@ -104,22 +106,47 @@ class ThreadPostHtml extends StatelessWidget {
   onOpenImages;
 
   @override
+  State<ThreadPostHtml> createState() => _ThreadPostHtmlState();
+}
+
+class _ThreadPostHtmlState extends State<ThreadPostHtml> {
+  late ThreadPostBodyDocument _document;
+
+  @override
+  void initState() {
+    super.initState();
+    _parseDocument();
+  }
+
+  @override
+  void didUpdateWidget(covariant ThreadPostHtml oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.data != widget.data || oldWidget.parser != widget.parser) {
+      _parseDocument();
+    }
+  }
+
+  void _parseDocument() {
+    _document = widget.parser.parse(widget.data);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final document = parser.parse(data);
+    final document = _document;
     if (document.blocks.isEmpty) {
       return const SizedBox.shrink();
     }
     return ThreadPostBodyView(
       document: document,
-      imageHeaderBuilder: imageHeaderBuilder,
-      imageCacheOwnerId: imageCacheOwnerId,
-      blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
-      inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
-      style: style,
-      textTransformer: textTransformer,
-      onOpenLink: onOpenLink,
-      onOpenImage: onOpenImage,
-      onOpenImages: onOpenImages,
+      imageHeaderBuilder: widget.imageHeaderBuilder,
+      imageCacheOwnerId: widget.imageCacheOwnerId,
+      blockImageCacheRequestBuilder: widget.blockImageCacheRequestBuilder,
+      inlineImageCacheRequestBuilder: widget.inlineImageCacheRequestBuilder,
+      style: widget.style,
+      textTransformer: widget.textTransformer,
+      onOpenLink: widget.onOpenLink,
+      onOpenImage: widget.onOpenImage,
+      onOpenImages: widget.onOpenImages,
     );
   }
 }
@@ -423,28 +450,48 @@ class ThreadPostTextBlockView extends StatelessWidget {
     BuildContext context,
     ThreadPostInlineImage image,
   ) {
+    final size = _inlineImageOriginalSize(image);
+    final child = CachedLibraryImage(
+      request:
+          inlineImageCacheRequestBuilder?.call(image) ??
+          ForumImageCacheRequests.remoteSmiley(url: image.url),
+      fit: BoxFit.contain,
+      width: size?.width,
+      height: size?.height,
+      placeholder: const SizedBox.shrink(),
+      errorPlaceholder: Icon(
+        Icons.image_not_supported_outlined,
+        size: (size?.shortestSide ?? 14).clamp(12, 18).toDouble(),
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+      headerBuilder: imageHeaderBuilder,
+    );
     return WidgetSpan(
       alignment: PlaceholderAlignment.bottom,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 1),
         child: KeyedSubtree(
           key: Key('thread-post-inline-image-${image.url}'),
-          child: CachedLibraryImage(
-            request:
-                inlineImageCacheRequestBuilder?.call(image) ??
-                ForumImageCacheRequests.remoteSmiley(url: image.url),
-            fit: BoxFit.contain,
-            placeholder: const SizedBox.shrink(),
-            errorPlaceholder: Icon(
-              Icons.image_not_supported_outlined,
-              size: 14,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-            headerBuilder: imageHeaderBuilder,
-          ),
+          child: size == null
+              ? child
+              : SizedBox(width: size.width, height: size.height, child: child),
         ),
       ),
     );
+  }
+
+  Size? _inlineImageOriginalSize(ThreadPostInlineImage image) {
+    final width = image.originalWidth;
+    final height = image.originalHeight;
+    if (width != null &&
+        height != null &&
+        width.isFinite &&
+        height.isFinite &&
+        width > 0 &&
+        height > 0) {
+      return Size(width, height);
+    }
+    return null;
   }
 
   bool _isDiscuzEditStatus(ThreadPostTextRun run, String text) {
@@ -469,7 +516,7 @@ final RegExp _discuzEditStatusPattern = RegExp(
   r'^本帖最后由\s*.+?\s*于\s*\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}\s*编辑$',
 );
 
-class ThreadPostImageBlockView extends StatefulWidget {
+class ThreadPostImageBlockView extends ConsumerStatefulWidget {
   const ThreadPostImageBlockView({
     super.key,
     required this.document,
@@ -497,24 +544,41 @@ class ThreadPostImageBlockView extends StatefulWidget {
   final ImageProvider? imageProviderOverride;
 
   @override
-  State<ThreadPostImageBlockView> createState() =>
+  ConsumerState<ThreadPostImageBlockView> createState() =>
       _ThreadPostImageBlockViewState();
 }
 
-class _ThreadPostImageBlockViewState extends State<ThreadPostImageBlockView> {
+class _ThreadPostImageBlockViewState
+    extends ConsumerState<ThreadPostImageBlockView> {
   double? _resolvedAspectRatio;
+  double? _cachedAspectRatio;
+  String? _loadedCacheKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCachedAspectRatio();
+  }
 
   @override
   void didUpdateWidget(covariant ThreadPostImageBlockView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.image.url != widget.image.url) {
       _resolvedAspectRatio = null;
+      _cachedAspectRatio = null;
+      _loadedCacheKey = null;
+      _loadCachedAspectRatio();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final aspectRatio = _resolvedAspectRatio ?? _fallbackAspectRatio();
+    final request = _cacheRequest();
+    final aspectRatio =
+        _resolvedAspectRatio ??
+        _htmlAspectRatio() ??
+        _cachedAspectRatio ??
+        _fallbackAspectRatio();
     return SelectionContainer.disabled(
       child: Material(
         color: Colors.transparent,
@@ -528,7 +592,7 @@ class _ThreadPostImageBlockViewState extends State<ThreadPostImageBlockView> {
             child: AspectRatio(
               aspectRatio: aspectRatio,
               child: CachedLibraryImage(
-                request: _cacheRequest(),
+                request: request,
                 imageProviderOverride: widget.imageProviderOverride,
                 fit: widget.style.imageFit,
                 placeholder: const _ThreadPostImagePlaceholder(
@@ -590,6 +654,47 @@ class _ThreadPostImageBlockViewState extends State<ThreadPostImageBlockView> {
     setState(() {
       _resolvedAspectRatio = next;
     });
+  }
+
+  Future<void> _loadCachedAspectRatio() async {
+    final request = _cacheRequest();
+    final cacheKey = request.cacheKey.trim();
+    if (cacheKey.isEmpty || _loadedCacheKey == cacheKey) {
+      return;
+    }
+    _loadedCacheKey = cacheKey;
+    final result = await ref
+        .read(imageCacheServiceProvider)
+        .getCached(cacheKey);
+    if (!mounted || _loadedCacheKey != cacheKey || result == null) {
+      return;
+    }
+    final width = result.width;
+    final height = result.height;
+    if (width == null || height == null || width <= 0 || height <= 0) {
+      return;
+    }
+    final next = width / height;
+    if (next == _cachedAspectRatio) {
+      return;
+    }
+    setState(() {
+      _cachedAspectRatio = next;
+    });
+  }
+
+  double? _htmlAspectRatio() {
+    final width = widget.image.originalWidth;
+    final height = widget.image.originalHeight;
+    if (width == null ||
+        height == null ||
+        !width.isFinite ||
+        !height.isFinite ||
+        width <= 0 ||
+        height <= 0) {
+      return null;
+    }
+    return width / height;
   }
 
   double _fallbackAspectRatio() {

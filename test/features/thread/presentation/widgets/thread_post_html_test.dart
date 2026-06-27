@@ -12,6 +12,7 @@ import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 
 Widget _testApp({required Widget home}) {
@@ -19,6 +20,16 @@ Widget _testApp({required Widget home}) {
     overrides: [
       imageCacheServiceProvider.overrideWithValue(_FailingImageCacheService()),
     ],
+    child: MaterialApp(home: home),
+  );
+}
+
+Widget _testAppWithCacheService({
+  required ImageCacheService imageCacheService,
+  required Widget home,
+}) {
+  return ProviderScope(
+    overrides: [imageCacheServiceProvider.overrideWithValue(imageCacheService)],
     child: MaterialApp(home: home),
   );
 }
@@ -144,7 +155,7 @@ void main() {
     expect(stickerSpan.alignment, PlaceholderAlignment.bottom);
     final fixedSmileyBoxes = tester
         .widgetList<SizedBox>(find.byType(SizedBox))
-        .where((box) => box.width == 22 && box.height == 22);
+        .where((box) => box.width == 24 && box.height == 24);
     expect(fixedSmileyBoxes, isEmpty);
     final image = tester.widget<Image>(find.byType(Image));
     final provider = image.image as NetworkImage;
@@ -153,6 +164,45 @@ void main() {
       _postRichTextPlainTexts(tester).any((text) => text.contains('那篇很好啊我很喜欢')),
       isTrue,
     );
+  });
+
+  testWidgets('ThreadPostHtml uses parsed smiley dimensions when available', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _testApp(
+        home: const ThreadPostHtml(
+          data:
+              '喜欢 <img src="static/image/smiley/comcom/2.gif" width="32" height="18">',
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    final fixedSmileyBoxes = tester
+        .widgetList<SizedBox>(find.byType(SizedBox))
+        .where((box) => box.width == 32 && box.height == 18);
+    expect(fixedSmileyBoxes, isNotEmpty);
+  });
+
+  testWidgets('ThreadPostHtml caches parsed document across rebuilds', (
+    tester,
+  ) async {
+    final parser = _CountingThreadPostBodyParser();
+    await tester.pumpWidget(
+      _testApp(
+        home: ThreadPostHtml(data: '<p>正文</p>', parser: parser),
+      ),
+    );
+    await tester.pumpWidget(
+      _testApp(
+        home: ThreadPostHtml(data: '<p>正文</p>', parser: parser),
+      ),
+    );
+
+    expect(parser.parseCount, 1);
+    expect(_postRichTextPlainTexts(tester), contains('正文'));
   });
 
   testWidgets('ThreadPostHtml treats bare blockquote as a quote block', (
@@ -457,6 +507,59 @@ void main() {
     expect(cachedImage.fit, BoxFit.fitWidth);
   });
 
+  testWidgets('ThreadPostImageBlockView reuses cached image ratio hint', (
+    tester,
+  ) async {
+    final cacheService = _SizedImageCacheService(<String, CachedImageResult>{
+      'thread-inline-page': const CachedImageResult(
+        success: true,
+        cacheKey: 'thread-inline-page',
+        width: 1000,
+        height: 500,
+      ),
+    });
+    const imageBlock = ThreadPostImageBlock(
+      url: 'https://bbs.yamibo.com/data/attachment/forum/page-real.jpg',
+      rawUrl: 'data/attachment/forum/page-real.jpg',
+      index: 0,
+    );
+    const document = ThreadPostBodyDocument(
+      blocks: <ThreadPostBodyBlock>[imageBlock],
+    );
+
+    await tester.pumpWidget(
+      _testAppWithCacheService(
+        imageCacheService: cacheService,
+        home: Center(
+          child: SizedBox(
+            width: 350,
+            child: ThreadPostImageBlockView(
+              document: document,
+              image: imageBlock,
+              images: <ThreadPostImageBlock>[imageBlock],
+              blockImageCacheRequestBuilder: (_) => const ImageCacheRequest(
+                cacheKey: 'thread-inline-page',
+                sourceUrl:
+                    'https://bbs.yamibo.com/data/attachment/forum/page-real.jpg',
+                ownerType: ImageCacheOwnerType.thread,
+                ownerId: 'tid-1',
+                role: ImageCacheRole.threadInline,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    final imageBlockSize = tester.getSize(
+      find.byType(ThreadPostImageBlockView),
+    );
+    expect(imageBlockSize.width, 350);
+    expect(imageBlockSize.width / imageBlockSize.height, closeTo(2.0, 0.01));
+  });
+
   testWidgets('ThreadPostHtml exposes image group open request', (
     tester,
   ) async {
@@ -516,6 +619,16 @@ class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
   Future<Map<String, String>> buildHeaders(String imageUrl) async => headers;
 }
 
+class _CountingThreadPostBodyParser extends ThreadPostBodyParser {
+  var parseCount = 0;
+
+  @override
+  ThreadPostBodyDocument parse(String html) {
+    parseCount += 1;
+    return super.parse(html);
+  }
+}
+
 class _SynchronousImageProvider
     extends ImageProvider<_SynchronousImageProvider> {
   const _SynchronousImageProvider(this.image);
@@ -572,4 +685,15 @@ class _FailingImageCacheService implements ImageCacheService {
 
   @override
   Future<void> clearUnprotected() async {}
+}
+
+class _SizedImageCacheService extends _FailingImageCacheService {
+  _SizedImageCacheService(this.results);
+
+  final Map<String, CachedImageResult> results;
+
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async {
+    return results[cacheKey];
+  }
 }

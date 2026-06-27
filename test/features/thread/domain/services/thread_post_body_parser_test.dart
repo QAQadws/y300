@@ -45,5 +45,30 @@ void main() {
       expect(document.blocks, isEmpty);
       expect(document.images, isEmpty);
     });
+
+    test('parses smiley dimensions when present', () {
+      final document = parser.parse(
+        '喜欢 <img src="static/image/smiley/comcom/2.gif" width="32" height="18" />',
+      );
+
+      final text = document.blocks.single as ThreadPostTextBlock;
+      final smiley = text.runs.last.inlineImage;
+      expect(smiley, isNotNull);
+      expect(smiley!.url, endsWith('/static/image/smiley/comcom/2.gif'));
+      expect(smiley.originalWidth, 32);
+      expect(smiley.originalHeight, 18);
+    });
+
+    test('parses smiley without dimensions', () {
+      final document = parser.parse(
+        '喜欢 <img src="static/image/smiley/comcom/2.gif" />',
+      );
+
+      final text = document.blocks.single as ThreadPostTextBlock;
+      final smiley = text.runs.last.inlineImage;
+      expect(smiley, isNotNull);
+      expect(smiley!.originalWidth, isNull);
+      expect(smiley.originalHeight, isNull);
+    });
   });
 }

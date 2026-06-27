@@ -106,9 +106,9 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
                 onOpenThreadTag: (thread) => _runAndReturnToFilter(
                   () => controller.openThreadTag(thread),
                 ),
-                onOpenThread: (thread) => _openThread(context, thread),
+                onOpenThread: (thread) => _openThread(context, state, thread),
                 onCopyThreadLink: (thread) => _copyThreadLink(context, thread),
-                onOpenTopEntry: (entry) => _openTopEntry(context, entry),
+                onOpenTopEntry: (entry) => _openTopEntry(context, state, entry),
                 onOpenSubForum: (subForum) => _openSubForum(context, subForum),
               ),
             ),
@@ -206,11 +206,18 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
     );
   }
 
-  void _openThread(BuildContext context, ForumThreadSummary thread) {
+  void _openThread(
+    BuildContext context,
+    ForumDisplayPageState state,
+    ForumThreadSummary thread,
+  ) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            ThreadDetailPage(tid: thread.tid, subject: thread.subject),
+        builder: (_) => ThreadDetailPage(
+          tid: thread.tid,
+          subject: thread.subject,
+          initialForumName: _forumNameForThreadDetail(state),
+        ),
       ),
     );
   }
@@ -253,15 +260,28 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
         .toString();
   }
 
-  void _openTopEntry(BuildContext context, ForumDisplayTopEntry entry) {
+  void _openTopEntry(
+    BuildContext context,
+    ForumDisplayPageState state,
+    ForumDisplayTopEntry entry,
+  ) {
     if (entry.tid.trim().isEmpty) {
       return;
     }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => ThreadDetailPage(tid: entry.tid, subject: entry.title),
+        builder: (_) => ThreadDetailPage(
+          tid: entry.tid,
+          subject: entry.title,
+          initialForumName: _forumNameForThreadDetail(state),
+        ),
       ),
     );
+  }
+
+  String? _forumNameForThreadDetail(ForumDisplayPageState state) {
+    final title = state.title.trim();
+    return title.isEmpty ? null : title;
   }
 
   void _openSubForum(BuildContext context, ForumDisplaySubForum subForum) {

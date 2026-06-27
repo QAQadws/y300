@@ -1692,17 +1692,13 @@ class ThreadAuthorAvatar extends StatelessWidget {
                 color: palette.avatarBackground,
                 child: forumDefaultAvatarImage(width: 34, height: 34),
               )
-            : CachedLibraryImage(
-                request: ForumImageCacheRequests.avatar(
-                  ownerId: authorId,
-                  ownerType: ImageCacheOwnerType.thread,
-                  url: imageUrl!,
-                ),
+            : Image.network(
+                imageUrl!,
                 fit: BoxFit.cover,
                 width: 34,
                 height: 34,
-                placeholder: placeholder,
-                errorPlaceholder: placeholder,
+                gaplessPlayback: true,
+                errorBuilder: (context, error, stackTrace) => placeholder,
               ),
       ),
     );

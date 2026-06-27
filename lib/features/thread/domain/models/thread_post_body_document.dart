@@ -61,11 +61,15 @@ class ThreadPostInlineImage {
     required this.url,
     required this.rawUrl,
     this.altText,
+    this.originalWidth,
+    this.originalHeight,
   });
 
   final String url;
   final String rawUrl;
   final String? altText;
+  final double? originalWidth;
+  final double? originalHeight;
 }
 
 class ThreadPostImageBlock extends ThreadPostBodyBlock {

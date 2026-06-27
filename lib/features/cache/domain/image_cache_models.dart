@@ -111,6 +111,8 @@ class CachedImageRecord {
     this.localPath,
     required this.bytes,
     this.mimeType,
+    this.width,
+    this.height,
     required this.protected,
     this.retentionClass = ImageRetentionClass.ephemeral,
     required this.createdAt,
@@ -128,6 +130,8 @@ class CachedImageRecord {
   final String? localPath;
   final int bytes;
   final String? mimeType;
+  final int? width;
+  final int? height;
   final bool protected;
   final ImageRetentionClass retentionClass;
   final DateTime createdAt;
@@ -139,6 +143,8 @@ class CachedImageRecord {
     String? localPath,
     int? bytes,
     String? mimeType,
+    int? width,
+    int? height,
     bool? protected,
     ImageRetentionClass? retentionClass,
     DateTime? updatedAt,
@@ -155,6 +161,8 @@ class CachedImageRecord {
       localPath: localPath ?? this.localPath,
       bytes: bytes ?? this.bytes,
       mimeType: mimeType ?? this.mimeType,
+      width: width ?? this.width,
+      height: height ?? this.height,
       protected: protected ?? this.protected,
       retentionClass: retentionClass ?? this.retentionClass,
       createdAt: createdAt,
@@ -171,6 +179,8 @@ class CachedImageResult {
     this.localPath,
     this.bytes = 0,
     this.fromCache = false,
+    this.width,
+    this.height,
   });
 
   final bool success;
@@ -178,6 +188,8 @@ class CachedImageResult {
   final String? localPath;
   final int bytes;
   final bool fromCache;
+  final int? width;
+  final int? height;
 
   static const CachedImageResult failed = CachedImageResult(success: false);
 }

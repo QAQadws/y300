@@ -1,5 +1,6 @@
 import 'dart:io' as io;
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:file/file.dart' as file;
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
@@ -247,6 +248,39 @@ void main() {
       expect(await existingPage.exists(), isFalse);
     },
   );
+
+  test(
+    'recordResolvedDimensions updates existing cache record dimensions',
+    () async {
+      final repository = _MemoryImageCacheRepository();
+      repository.records['page-1'] = CachedImageRecord(
+        cacheKey: 'page-1',
+        ownerType: ImageCacheOwnerType.thread.dbValue,
+        ownerId: 'tid-1',
+        role: ImageCacheRole.threadInline.dbValue,
+        localPath: '/tmp/page.jpg',
+        bytes: 1,
+        protected: false,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      );
+      final service = DefaultImageCacheService(
+        repository: repository,
+        cacheManagerFuture: Future<BaseCacheManager>.value(
+          _UnusedCacheManager(),
+        ),
+        directoryResolver: const ImageCacheDirectoryResolver(),
+      );
+
+      await service.recordResolvedDimensions(
+        cacheKey: 'page-1',
+        size: const Size(900, 1200),
+      );
+
+      expect(repository.records['page-1']?.width, 900);
+      expect(repository.records['page-1']?.height, 1200);
+    },
+  );
 }
 
 class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
@@ -342,6 +376,25 @@ class _MemoryImageCacheRepository implements ImageCacheRepository {
 
   @override
   Future<void> touch(String cacheKey, DateTime accessedAt) async {}
+
+  @override
+  Future<void> updateDimensions({
+    required String cacheKey,
+    required int width,
+    required int height,
+    required DateTime updatedAt,
+  }) async {
+    final record = records[cacheKey];
+    if (record == null) {
+      return;
+    }
+    records[cacheKey] = record.copyWith(
+      width: width,
+      height: height,
+      updatedAt: updatedAt,
+      lastAccessedAt: updatedAt,
+    );
+  }
 
   @override
   Future<void> upsert(CachedImageRecord record) async {

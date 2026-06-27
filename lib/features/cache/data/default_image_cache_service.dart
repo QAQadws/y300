@@ -1,4 +1,5 @@
 import 'dart:io' as io;
+import 'dart:ui';
 
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:path/path.dart' as p;
@@ -42,7 +43,8 @@ class CacheManagerImageFileDownloader implements ImageFileDownloader {
   }
 }
 
-class DefaultImageCacheService implements ImageCacheService {
+class DefaultImageCacheService
+    implements ImageCacheService, ImageCacheDimensionRecorder {
   DefaultImageCacheService({
     required ImageCacheRepository repository,
     required Future<BaseCacheManager> cacheManagerFuture,
@@ -104,6 +106,8 @@ class DefaultImageCacheService implements ImageCacheService {
             bytes: bytes,
             now: now,
             createdAt: existing?.createdAt,
+            width: existing?.width,
+            height: existing?.height,
           ),
         );
         _recordImageEvent(
@@ -120,6 +124,8 @@ class DefaultImageCacheService implements ImageCacheService {
           localPath: file.path,
           bytes: bytes,
           fromCache: true,
+          width: existing?.width,
+          height: existing?.height,
         );
       }
       _recordImageEvent(
@@ -145,6 +151,8 @@ class DefaultImageCacheService implements ImageCacheService {
           bytes: bytes,
           now: now,
           createdAt: existing?.createdAt,
+          width: existing?.width,
+          height: existing?.height,
         ),
       );
       _recordImageEvent(
@@ -161,6 +169,8 @@ class DefaultImageCacheService implements ImageCacheService {
         localPath: cached.file.path,
         bytes: bytes,
         fromCache: true,
+        width: existing?.width,
+        height: existing?.height,
       );
     }
 
@@ -189,6 +199,8 @@ class DefaultImageCacheService implements ImageCacheService {
           bytes: bytes,
           now: now,
           createdAt: existing?.createdAt,
+          width: sourceChanged ? null : existing?.width,
+          height: sourceChanged ? null : existing?.height,
         ),
       );
       _recordImageEvent(
@@ -203,6 +215,8 @@ class DefaultImageCacheService implements ImageCacheService {
         cacheKey: cacheKey,
         localPath: localPath,
         bytes: bytes,
+        width: sourceChanged ? null : existing?.width,
+        height: sourceChanged ? null : existing?.height,
       );
     } catch (_) {
       _recordImageEvent(
@@ -231,8 +245,7 @@ class DefaultImageCacheService implements ImageCacheService {
       return null;
     }
     final record = await _repository.getByKey(normalized);
-    final path = record?.localPath?.trim();
-    if (path == null || path.isEmpty) {
+    if (record == null) {
       _diagnosticRecorder.record(
         CacheDiagnosticEvent(
           event: 'miss',
@@ -240,6 +253,20 @@ class DefaultImageCacheService implements ImageCacheService {
           bucket: StorageBucket.imageCache,
           cacheKey: normalized,
           reason: 'record_missing',
+          hit: false,
+        ),
+      );
+      return null;
+    }
+    final path = record.localPath?.trim();
+    if (path == null || path.isEmpty) {
+      _diagnosticRecorder.record(
+        CacheDiagnosticEvent(
+          event: 'miss',
+          namespace: CacheNamespace.image,
+          bucket: StorageBucket.imageCache,
+          cacheKey: normalized,
+          reason: 'path_missing',
           hit: false,
         ),
       );
@@ -278,6 +305,27 @@ class DefaultImageCacheService implements ImageCacheService {
       localPath: path,
       bytes: bytes,
       fromCache: true,
+      width: record.width,
+      height: record.height,
+    );
+  }
+
+  @override
+  Future<void> recordResolvedDimensions({
+    required String cacheKey,
+    required Size size,
+  }) async {
+    final normalized = cacheKey.trim();
+    final width = size.width.round();
+    final height = size.height.round();
+    if (normalized.isEmpty || width <= 0 || height <= 0) {
+      return;
+    }
+    await _repository.updateDimensions(
+      cacheKey: normalized,
+      width: width,
+      height: height,
+      updatedAt: DateTime.now(),
     );
   }
 
@@ -426,6 +474,8 @@ class DefaultImageCacheService implements ImageCacheService {
     required int bytes,
     required DateTime now,
     DateTime? createdAt,
+    int? width,
+    int? height,
   }) {
     return CachedImageRecord(
       cacheKey: request.cacheKey,
@@ -437,6 +487,8 @@ class DefaultImageCacheService implements ImageCacheService {
       lastSourceUrl: sourceUrl,
       localPath: localPath,
       bytes: bytes,
+      width: width,
+      height: height,
       protected: request.protected,
       retentionClass: request.effectiveRetentionClass,
       createdAt: createdAt ?? now,

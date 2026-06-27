@@ -88,6 +88,8 @@ class ThreadPostBodyParser {
       url: normalized,
       rawUrl: rawUrl,
       altText: image.attributes['alt']?.trim(),
+      originalWidth: _parseDimension(image.attributes['width']),
+      originalHeight: _parseDimension(image.attributes['height']),
     );
   }
 

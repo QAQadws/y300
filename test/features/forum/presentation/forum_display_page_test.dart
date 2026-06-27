@@ -12,6 +12,9 @@ import 'package:y300/features/forum/data/models/forum_display_models.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_home_widgets.dart';
+import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/data/thread_repository.dart';
+import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 
@@ -73,7 +76,9 @@ void main() {
         (fid, page, query) => completer.future,
       );
 
-      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpWidget(
+        _buildTestApp(repository, threadRepository: _FakeThreadRepository()),
+      );
 
       expect(find.byType(Scaffold), findsOneWidget);
       expect(find.byKey(const Key('forum-display-list')), findsNothing);
@@ -158,6 +163,25 @@ void main() {
       expect(metricChipDecoration.border, isNull);
       expect(find.text('公告区'), findsWidgets);
       expect(find.text('第1页'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('forum-thread-100')));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byType(AppBar).last,
+          matching: find.text('公告区'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(AppBar).last,
+          matching: find.text('帖子详情'),
+        ),
+        findsNothing,
+      );
+      Navigator.of(tester.element(find.byType(ThreadDetailPage))).pop();
+      await tester.pumpAndSettle();
 
       const pageButtonKeys = [
         Key('forum-display-prev-page-button'),
@@ -1038,9 +1062,17 @@ void main() {
   });
 }
 
-Widget _buildTestApp(ForumDisplayRepository repository) {
+Widget _buildTestApp(
+  ForumDisplayRepository repository, {
+  ThreadRepository? threadRepository,
+}) {
+  final overrides = [
+    forumDisplayRepositoryProvider.overrideWithValue(repository),
+    if (threadRepository != null)
+      threadRepositoryProvider.overrideWithValue(threadRepository),
+  ];
   return ProviderScope(
-    overrides: [forumDisplayRepositoryProvider.overrideWithValue(repository)],
+    overrides: overrides,
     child: const MaterialApp(
       home: ForumDisplayPage(fid: '2', title: '公告区'),
     ),
@@ -1238,5 +1270,39 @@ class _FakeForumDisplayRepository implements ForumDisplayRepository {
     lastQuery = query;
     cachePolicies.add(cachePolicy);
     return _loader(query.fid, query.page, query);
+  }
+}
+
+class _FakeThreadRepository implements ThreadRepository {
+  @override
+  Future<ApiResult<ThreadDetailData>> getThreadDetail({
+    required String tid,
+    int page = 1,
+    Map<String, String> queryParameters = const <String, String>{},
+  }) async {
+    return ApiSuccess(
+      ThreadDetailData(
+        tid: tid,
+        fid: '2',
+        forumName: '公告区',
+        subject: '帖子A',
+        author: 'alice',
+        replies: 0,
+        views: 1,
+        currentPage: 1,
+        perPage: 20,
+        posts: [
+          ThreadPost(
+            pid: 'p1',
+            author: 'alice',
+            authorId: '1',
+            message: '<p>正文</p>',
+            number: 1,
+            isFirst: true,
+            dateline: 'today',
+          ),
+        ],
+      ),
+    );
   }
 }

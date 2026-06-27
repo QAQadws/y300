@@ -458,7 +458,52 @@ void main() {
       );
     });
 
-    testWidgets('defers cached thread content during route entrance', (
+    testWidgets('normal author avatar uses direct network image', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          _threadDetailData(
+            tid: tid,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                avatarUrl:
+                    'https://bbs.yamibo.com/uc_server/data/avatar/000/00/00/01_avatar_small.jpg',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpAndSettle();
+
+      final avatarImage = tester.widget<Image>(
+        find
+            .descendant(
+              of: find.byKey(const Key('thread-author-avatar-p1')),
+              matching: find.byType(Image),
+            )
+            .first,
+      );
+      expect(
+        avatarImage.image,
+        isA<NetworkImage>().having(
+          (provider) => provider.url,
+          'url',
+          'https://bbs.yamibo.com/uc_server/data/avatar/000/00/00/01_avatar_small.jpg',
+        ),
+      );
+    });
+
+    testWidgets('uses initial forum name before parsed thread detail arrives', (
       tester,
     ) async {
       final repository = _FakeThreadRepository((tid, page) async {
@@ -483,34 +528,25 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: _threadDetailOverrides(repository),
-          child: MaterialApp(
-            home: Builder(
-              builder: (context) => TextButton(
-                key: const Key('open-thread-detail'),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) =>
-                          const ThreadDetailPage(tid: '100', subject: '测试主题'),
-                    ),
-                  );
-                },
-                child: const Text('open'),
-              ),
+          child: const MaterialApp(
+            home: ThreadDetailPage(
+              tid: '100',
+              subject: '测试主题',
+              initialForumName: '公告区',
             ),
           ),
         ),
       );
 
-      await tester.tap(find.byKey(const Key('open-thread-detail')));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 80));
 
-      expect(find.byKey(const Key('thread-post-card-p1')), findsNothing);
+      expect(_appBarTitleText('公告区'), findsOneWidget);
+      expect(_appBarTitleText('帖子详情'), findsNothing);
 
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('thread-post-card-p1')), findsOneWidget);
+      expect(_appBarTitleText('公告区'), findsOneWidget);
     });
 
     testWidgets('current page button opens quick jump dialog and returns top', (

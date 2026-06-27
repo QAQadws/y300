@@ -10,6 +10,13 @@ abstract class ImageCacheRepository implements ProtectedCoverCacheStore {
 
   Future<void> touch(String cacheKey, DateTime accessedAt);
 
+  Future<void> updateDimensions({
+    required String cacheKey,
+    required int width,
+    required int height,
+    required DateTime updatedAt,
+  });
+
   Future<List<CachedImageRecord>> listByOwner({
     required String ownerType,
     required String ownerId,
@@ -67,6 +74,8 @@ class LocalImageCacheRepository implements ImageCacheRepository {
       'local_path': _normalizeNullable(record.localPath),
       'bytes': record.bytes,
       'mime_type': _normalizeNullable(record.mimeType),
+      'width': record.width,
+      'height': record.height,
       'protected': record.protected ? 1 : 0,
       'retention_class': retentionClass.dbValue,
       'created_at': createdAt.millisecondsSinceEpoch,
@@ -83,6 +92,30 @@ class LocalImageCacheRepository implements ImageCacheRepository {
       <String, Object?>{
         'last_accessed_at': accessedAt.millisecondsSinceEpoch,
         'updated_at': accessedAt.millisecondsSinceEpoch,
+      },
+      where: 'cache_key = ?',
+      whereArgs: <Object>[cacheKey],
+    );
+  }
+
+  @override
+  Future<void> updateDimensions({
+    required String cacheKey,
+    required int width,
+    required int height,
+    required DateTime updatedAt,
+  }) async {
+    if (cacheKey.trim().isEmpty || width <= 0 || height <= 0) {
+      return;
+    }
+    final db = await _dbFuture;
+    await db.update(
+      ComicLocalDb.cachedImagesTable,
+      <String, Object?>{
+        'width': width,
+        'height': height,
+        'updated_at': updatedAt.millisecondsSinceEpoch,
+        'last_accessed_at': updatedAt.millisecondsSinceEpoch,
       },
       where: 'cache_key = ?',
       whereArgs: <Object>[cacheKey],
@@ -185,6 +218,8 @@ class LocalImageCacheRepository implements ImageCacheRepository {
       localPath: row['local_path'] as String?,
       bytes: row['bytes'] as int? ?? 0,
       mimeType: row['mime_type'] as String?,
+      width: row['width'] as int?,
+      height: row['height'] as int?,
       protected: (row['protected'] as int? ?? 0) == 1,
       retentionClass: _retentionClassFromDb(
         row['retention_class'] as String?,

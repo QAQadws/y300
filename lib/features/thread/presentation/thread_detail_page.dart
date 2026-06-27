@@ -38,12 +38,14 @@ class ThreadDetailPage extends ConsumerStatefulWidget {
     this.subject = '',
     this.initialPage,
     this.targetPid,
+    this.initialForumName,
   });
 
   final String tid;
   final String subject;
   final int? initialPage;
   final String? targetPid;
+  final String? initialForumName;
 
   @override
   ConsumerState<ThreadDetailPage> createState() => _ThreadDetailPageState();
@@ -55,11 +57,8 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   final Set<String> _pendingTargetScrollKeys = <String>{};
   final Map<String, int> _targetScrollAttempts = <String, int>{};
   Timer? _highlightClearTimer;
-  Timer? _initialContentRevealTimer;
   String? _highlightPostPid;
   bool _suppressTargetScrollForPageAction = false;
-  bool _initialContentRevealScheduled = false;
-  bool _initialContentGateOpen = false;
 
   @override
   void initState() {
@@ -68,15 +67,8 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _scheduleInitialContentReveal();
-  }
-
-  @override
   void dispose() {
     _highlightClearTimer?.cancel();
-    _initialContentRevealTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -115,16 +107,15 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     );
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
     _scheduleTargetPostScroll(state);
-    final shouldDeferInitialContent =
-        !_initialContentGateOpen &&
-        asyncState.hasValue &&
-        state.posts.isNotEmpty;
 
     return Scaffold(
       backgroundColor: palette.background,
       appBar: AppBar(
         centerTitle: false,
-        title: _ThreadDetailAppBarTitle(state: state),
+        title: _ThreadDetailAppBarTitle(
+          state: state,
+          initialForumName: widget.initialForumName,
+        ),
         actions: [
           IconButton(
             key: const Key('thread-detail-favorite-button'),
@@ -185,9 +176,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       body: Column(
         children: [
           Expanded(
-            child:
-                shouldDeferInitialContent ||
-                    (asyncState.isLoading && state.posts.isEmpty)
+            child: (asyncState.isLoading && state.posts.isEmpty)
                 ? const SizedBox.shrink()
                 : state.errorMessage != null && state.posts.isEmpty
                 ? _ThreadErrorView(
@@ -238,43 +227,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         ],
       ),
     );
-  }
-
-  void _scheduleInitialContentReveal() {
-    if (_initialContentGateOpen || _initialContentRevealScheduled) {
-      return;
-    }
-    _initialContentRevealScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _initialContentGateOpen) {
-        return;
-      }
-      final delay = _initialContentRevealDelayFor(ModalRoute.of(context));
-      if (delay <= Duration.zero) {
-        _openInitialContentGate();
-        return;
-      }
-      _initialContentRevealTimer?.cancel();
-      _initialContentRevealTimer = Timer(delay, () {
-        _openInitialContentGate();
-      });
-    });
-  }
-
-  Duration _initialContentRevealDelayFor(ModalRoute<Object?>? route) {
-    if (route == null || route.isFirst) {
-      return Duration.zero;
-    }
-    return route.transitionDuration;
-  }
-
-  void _openInitialContentGate() {
-    if (_initialContentGateOpen || !mounted) {
-      return;
-    }
-    setState(() {
-      _initialContentGateOpen = true;
-    });
   }
 
   String _sourceTagLabel(ThreadDetailPageState state) {
@@ -786,15 +738,20 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
 }
 
 class _ThreadDetailAppBarTitle extends StatelessWidget {
-  const _ThreadDetailAppBarTitle({required this.state});
+  const _ThreadDetailAppBarTitle({required this.state, this.initialForumName});
 
   final ThreadDetailPageState state;
+  final String? initialForumName;
 
   @override
   Widget build(BuildContext context) {
-    final forumName = state.forumName?.trim();
+    final parsedForumName = state.forumName?.trim();
+    final fallbackForumName = initialForumName?.trim();
+    final forumName = parsedForumName?.isNotEmpty == true
+        ? parsedForumName
+        : fallbackForumName;
     return Text(
-      forumName == null || forumName.isEmpty ? '帖子详情' : forumName,
+      forumName == null || forumName.isEmpty ? '' : forumName,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
     );

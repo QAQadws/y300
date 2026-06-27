@@ -42,6 +42,8 @@ void main() {
           role: 'comic_page',
           localPath: '/tmp/page.jpg',
           bytes: 20,
+          width: 640,
+          height: 960,
           protected: false,
           createdAt: now,
           updatedAt: now,
@@ -88,6 +90,25 @@ void main() {
       expect(cover, isNotNull);
       expect(cover!.protected, isTrue);
       expect(cover.retentionClass, ImageRetentionClass.protected);
+
+      final page = await repository.getByKey(
+        'comic/yamibo:100/yamibo:100:101/000',
+      );
+      expect(page, isNotNull);
+      expect(page!.width, 640);
+      expect(page.height, 960);
+
+      await repository.updateDimensions(
+        cacheKey: 'comic/yamibo:100/yamibo:100:101/000',
+        width: 800,
+        height: 1200,
+        updatedAt: now.add(const Duration(minutes: 1)),
+      );
+      final updatedPage = await repository.getByKey(
+        'comic/yamibo:100/yamibo:100:101/000',
+      );
+      expect(updatedPage?.width, 800);
+      expect(updatedPage?.height, 1200);
 
       await deleteDatabase(dbName);
     },
