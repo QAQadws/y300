@@ -12,7 +12,9 @@ import 'package:y300/features/cache/domain/image_cache_models.dart';
 
 void main() {
   test('ensureCached passes anti-hotlink headers to downloader', () async {
-    final tempDir = await io.Directory.systemTemp.createTemp('y300-image-cache-test-');
+    final tempDir = await io.Directory.systemTemp.createTemp(
+      'y300-image-cache-test-',
+    );
     addTearDown(() async {
       if (await tempDir.exists()) {
         await tempDir.delete(recursive: true);
@@ -49,172 +51,202 @@ void main() {
     });
   });
 
-  test('ensureCached normalizes relative source url before building headers', () async {
-    final tempDir = await io.Directory.systemTemp.createTemp('y300-image-cache-test-');
-    addTearDown(() async {
-      if (await tempDir.exists()) {
-        await tempDir.delete(recursive: true);
-      }
-    });
-    final imageFile = io.File('${tempDir.path}/downloaded.jpg');
-    await imageFile.writeAsBytes(<int>[1, 2, 3, 4]);
-    final downloader = _SpyImageFileDownloader(localPath: imageFile.path);
-    final headerBuilder = _SpyImageHeaderBuilder();
-    final repository = _MemoryImageCacheRepository();
-    final service = DefaultImageCacheService(
-      repository: repository,
-      cacheManagerFuture: Future<BaseCacheManager>.value(_UnusedCacheManager()),
-      directoryResolver: const ImageCacheDirectoryResolver(),
-      headerBuilder: headerBuilder,
-      downloader: downloader,
-    );
+  test(
+    'ensureCached normalizes relative source url before building headers',
+    () async {
+      final tempDir = await io.Directory.systemTemp.createTemp(
+        'y300-image-cache-test-',
+      );
+      addTearDown(() async {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      });
+      final imageFile = io.File('${tempDir.path}/downloaded.jpg');
+      await imageFile.writeAsBytes(<int>[1, 2, 3, 4]);
+      final downloader = _SpyImageFileDownloader(localPath: imageFile.path);
+      final headerBuilder = _SpyImageHeaderBuilder();
+      final repository = _MemoryImageCacheRepository();
+      final service = DefaultImageCacheService(
+        repository: repository,
+        cacheManagerFuture: Future<BaseCacheManager>.value(
+          _UnusedCacheManager(),
+        ),
+        directoryResolver: const ImageCacheDirectoryResolver(),
+        headerBuilder: headerBuilder,
+        downloader: downloader,
+      );
 
-    await service.ensureCached(
-      const ImageCacheRequest(
-        cacheKey: 'comic-page-1',
-        sourceUrl: 'data/attachment/test.jpg',
-        ownerType: ImageCacheOwnerType.comic,
-        ownerId: 'yamibo:100',
-        role: ImageCacheRole.comicPage,
-      ),
-    );
+      await service.ensureCached(
+        const ImageCacheRequest(
+          cacheKey: 'comic-page-1',
+          sourceUrl: 'data/attachment/test.jpg',
+          ownerType: ImageCacheOwnerType.comic,
+          ownerId: 'yamibo:100',
+          role: ImageCacheRole.comicPage,
+        ),
+      );
 
-    expect(headerBuilder.lastUrl, 'https://bbs.yamibo.com/data/attachment/test.jpg');
-    expect(downloader.lastSourceUrl, 'https://bbs.yamibo.com/data/attachment/test.jpg');
-    expect(
-      repository.records['comic-page-1']?.lastSourceUrl,
-      'https://bbs.yamibo.com/data/attachment/test.jpg',
-    );
-  });
+      expect(
+        headerBuilder.lastUrl,
+        'https://bbs.yamibo.com/data/attachment/test.jpg',
+      );
+      expect(
+        downloader.lastSourceUrl,
+        'https://bbs.yamibo.com/data/attachment/test.jpg',
+      );
+      expect(
+        repository.records['comic-page-1']?.lastSourceUrl,
+        'https://bbs.yamibo.com/data/attachment/test.jpg',
+      );
+    },
+  );
 
-  test('ensureCached redownloads when a stable key gets a new source url', () async {
-    final tempDir = await io.Directory.systemTemp.createTemp('y300-image-cache-test-');
-    addTearDown(() async {
-      if (await tempDir.exists()) {
-        await tempDir.delete(recursive: true);
-      }
-    });
-    final oldFile = io.File('${tempDir.path}/old.jpg');
-    final newFile = io.File('${tempDir.path}/new.jpg');
-    await oldFile.writeAsBytes(<int>[1, 2, 3]);
-    await newFile.writeAsBytes(<int>[4, 5, 6, 7]);
+  test(
+    'ensureCached redownloads when a stable key gets a new source url',
+    () async {
+      final tempDir = await io.Directory.systemTemp.createTemp(
+        'y300-image-cache-test-',
+      );
+      addTearDown(() async {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      });
+      final oldFile = io.File('${tempDir.path}/old.jpg');
+      final newFile = io.File('${tempDir.path}/new.jpg');
+      await oldFile.writeAsBytes(<int>[1, 2, 3]);
+      await newFile.writeAsBytes(<int>[4, 5, 6, 7]);
 
-    final repository = _MemoryImageCacheRepository();
-    repository.records['cover/comic/yamibo:100'] = CachedImageRecord(
-      cacheKey: 'cover/comic/yamibo:100',
-      ownerType: ImageCacheOwnerType.comic.dbValue,
-      ownerId: 'yamibo:100',
-      role: ImageCacheRole.cover.dbValue,
-      lastSourceUrl: 'https://bbs.yamibo.com/data/attachment/old.jpg',
-      localPath: oldFile.path,
-      bytes: 3,
-      protected: true,
-      createdAt: DateTime(2026, 1, 1),
-      updatedAt: DateTime(2026, 1, 1),
-    );
-    final downloader = _SpyImageFileDownloader(localPath: newFile.path);
-    final service = DefaultImageCacheService(
-      repository: repository,
-      cacheManagerFuture: Future<BaseCacheManager>.value(_UnusedCacheManager()),
-      directoryResolver: const ImageCacheDirectoryResolver(),
-      downloader: downloader,
-    );
-
-    final result = await service.ensureCached(
-      const ImageCacheRequest(
+      final repository = _MemoryImageCacheRepository();
+      repository.records['cover/comic/yamibo:100'] = CachedImageRecord(
         cacheKey: 'cover/comic/yamibo:100',
-        sourceUrl: 'https://bbs.yamibo.com/data/attachment/new.jpg',
-        ownerType: ImageCacheOwnerType.comic,
-        ownerId: 'yamibo:100',
-        role: ImageCacheRole.cover,
-        protected: true,
-      ),
-    );
-
-    expect(result.success, isTrue);
-    expect(result.localPath, newFile.path);
-    expect(result.fromCache, isFalse);
-    expect(downloader.lastSourceUrl, 'https://bbs.yamibo.com/data/attachment/new.jpg');
-    expect(downloader.lastForce, isTrue);
-    expect(
-      repository.records['cover/comic/yamibo:100']?.lastSourceUrl,
-      'https://bbs.yamibo.com/data/attachment/new.jpg',
-    );
-  });
-
-  test('deleteByOwner removes all owner records and ignores missing files', () async {
-    final tempDir = await io.Directory.systemTemp.createTemp('y300-image-cache-test-');
-    addTearDown(() async {
-      if (await tempDir.exists()) {
-        await tempDir.delete(recursive: true);
-      }
-    });
-    final existingProtected = io.File('${tempDir.path}/protected.jpg');
-    final existingPage = io.File('${tempDir.path}/page.jpg');
-    await existingProtected.writeAsBytes(<int>[1, 2, 3]);
-    await existingPage.writeAsBytes(<int>[4, 5, 6]);
-
-    final repository = _MemoryImageCacheRepository()
-      ..records['cover-1'] = CachedImageRecord(
-        cacheKey: 'cover-1',
         ownerType: ImageCacheOwnerType.comic.dbValue,
         ownerId: 'yamibo:100',
         role: ImageCacheRole.cover.dbValue,
-        localPath: existingProtected.path,
+        lastSourceUrl: 'https://bbs.yamibo.com/data/attachment/old.jpg',
+        localPath: oldFile.path,
         bytes: 3,
-        protected: true,
-        createdAt: DateTime(2026, 1, 1),
-        updatedAt: DateTime(2026, 1, 1),
-      )
-      ..records['page-1'] = CachedImageRecord(
-        cacheKey: 'page-1',
-        ownerType: ImageCacheOwnerType.comic.dbValue,
-        ownerId: 'yamibo:100',
-        role: ImageCacheRole.comicPage.dbValue,
-        localPath: existingPage.path,
-        bytes: 3,
-        protected: false,
-        createdAt: DateTime(2026, 1, 1),
-        updatedAt: DateTime(2026, 1, 1),
-      )
-      ..records['missing-1'] = CachedImageRecord(
-        cacheKey: 'missing-1',
-        ownerType: ImageCacheOwnerType.comic.dbValue,
-        ownerId: 'yamibo:100',
-        role: ImageCacheRole.comicPage.dbValue,
-        localPath: '${tempDir.path}/missing.jpg',
-        bytes: 0,
-        protected: false,
-        createdAt: DateTime(2026, 1, 1),
-        updatedAt: DateTime(2026, 1, 1),
-      )
-      ..records['other-owner'] = CachedImageRecord(
-        cacheKey: 'other-owner',
-        ownerType: ImageCacheOwnerType.comic.dbValue,
-        ownerId: 'yamibo:200',
-        role: ImageCacheRole.cover.dbValue,
-        localPath: '${tempDir.path}/other.jpg',
-        bytes: 0,
         protected: true,
         createdAt: DateTime(2026, 1, 1),
         updatedAt: DateTime(2026, 1, 1),
       );
-    final service = DefaultImageCacheService(
-      repository: repository,
-      cacheManagerFuture: Future<BaseCacheManager>.value(_UnusedCacheManager()),
-      directoryResolver: const ImageCacheDirectoryResolver(),
-    );
+      final downloader = _SpyImageFileDownloader(localPath: newFile.path);
+      final service = DefaultImageCacheService(
+        repository: repository,
+        cacheManagerFuture: Future<BaseCacheManager>.value(
+          _UnusedCacheManager(),
+        ),
+        directoryResolver: const ImageCacheDirectoryResolver(),
+        downloader: downloader,
+      );
 
-    final deletedCount = await service.deleteByOwner(
-      ownerType: ImageCacheOwnerType.comic,
-      ownerId: 'yamibo:100',
-    );
+      final result = await service.ensureCached(
+        const ImageCacheRequest(
+          cacheKey: 'cover/comic/yamibo:100',
+          sourceUrl: 'https://bbs.yamibo.com/data/attachment/new.jpg',
+          ownerType: ImageCacheOwnerType.comic,
+          ownerId: 'yamibo:100',
+          role: ImageCacheRole.cover,
+          protected: true,
+        ),
+      );
 
-    expect(deletedCount, 3);
-    expect(repository.records.keys, <String>{'other-owner'});
-    expect(await existingProtected.exists(), isFalse);
-    expect(await existingPage.exists(), isFalse);
-  });
+      expect(result.success, isTrue);
+      expect(result.localPath, newFile.path);
+      expect(result.fromCache, isFalse);
+      expect(
+        downloader.lastSourceUrl,
+        'https://bbs.yamibo.com/data/attachment/new.jpg',
+      );
+      expect(downloader.lastForce, isTrue);
+      expect(
+        repository.records['cover/comic/yamibo:100']?.lastSourceUrl,
+        'https://bbs.yamibo.com/data/attachment/new.jpg',
+      );
+    },
+  );
+
+  test(
+    'deleteByOwner removes all owner records and ignores missing files',
+    () async {
+      final tempDir = await io.Directory.systemTemp.createTemp(
+        'y300-image-cache-test-',
+      );
+      addTearDown(() async {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      });
+      final existingProtected = io.File('${tempDir.path}/protected.jpg');
+      final existingPage = io.File('${tempDir.path}/page.jpg');
+      await existingProtected.writeAsBytes(<int>[1, 2, 3]);
+      await existingPage.writeAsBytes(<int>[4, 5, 6]);
+
+      final repository = _MemoryImageCacheRepository()
+        ..records['cover-1'] = CachedImageRecord(
+          cacheKey: 'cover-1',
+          ownerType: ImageCacheOwnerType.comic.dbValue,
+          ownerId: 'yamibo:100',
+          role: ImageCacheRole.cover.dbValue,
+          localPath: existingProtected.path,
+          bytes: 3,
+          protected: true,
+          createdAt: DateTime(2026, 1, 1),
+          updatedAt: DateTime(2026, 1, 1),
+        )
+        ..records['page-1'] = CachedImageRecord(
+          cacheKey: 'page-1',
+          ownerType: ImageCacheOwnerType.comic.dbValue,
+          ownerId: 'yamibo:100',
+          role: ImageCacheRole.comicPage.dbValue,
+          localPath: existingPage.path,
+          bytes: 3,
+          protected: false,
+          createdAt: DateTime(2026, 1, 1),
+          updatedAt: DateTime(2026, 1, 1),
+        )
+        ..records['missing-1'] = CachedImageRecord(
+          cacheKey: 'missing-1',
+          ownerType: ImageCacheOwnerType.comic.dbValue,
+          ownerId: 'yamibo:100',
+          role: ImageCacheRole.comicPage.dbValue,
+          localPath: '${tempDir.path}/missing.jpg',
+          bytes: 0,
+          protected: false,
+          createdAt: DateTime(2026, 1, 1),
+          updatedAt: DateTime(2026, 1, 1),
+        )
+        ..records['other-owner'] = CachedImageRecord(
+          cacheKey: 'other-owner',
+          ownerType: ImageCacheOwnerType.comic.dbValue,
+          ownerId: 'yamibo:200',
+          role: ImageCacheRole.cover.dbValue,
+          localPath: '${tempDir.path}/other.jpg',
+          bytes: 0,
+          protected: true,
+          createdAt: DateTime(2026, 1, 1),
+          updatedAt: DateTime(2026, 1, 1),
+        );
+      final service = DefaultImageCacheService(
+        repository: repository,
+        cacheManagerFuture: Future<BaseCacheManager>.value(
+          _UnusedCacheManager(),
+        ),
+        directoryResolver: const ImageCacheDirectoryResolver(),
+      );
+
+      final deletedCount = await service.deleteByOwner(
+        ownerType: ImageCacheOwnerType.comic,
+        ownerId: 'yamibo:100',
+      );
+
+      expect(deletedCount, 3);
+      expect(repository.records.keys, <String>{'other-owner'});
+      expect(await existingProtected.exists(), isFalse);
+      expect(await existingPage.exists(), isFalse);
+    },
+  );
 }
 
 class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
@@ -266,12 +298,18 @@ class _MemoryImageCacheRepository implements ImageCacheRepository {
   Future<int> calculateUsageBytes({required bool includeProtected}) async => 0;
 
   @override
+  Future<List<ImageCacheUsageGroup>> calculateUsageGroups() async {
+    return const <ImageCacheUsageGroup>[];
+  }
+
+  @override
   Future<void> deleteByKey(String cacheKey) async {
     records.remove(cacheKey);
   }
 
   @override
-  Future<CachedImageRecord?> getByKey(String cacheKey) async => records[cacheKey];
+  Future<CachedImageRecord?> getByKey(String cacheKey) async =>
+      records[cacheKey];
 
   @override
   Future<List<CachedImageRecord>> listByOwner({
@@ -279,12 +317,16 @@ class _MemoryImageCacheRepository implements ImageCacheRepository {
     required String ownerId,
   }) async {
     return records.values
-        .where((record) => record.ownerType == ownerType && record.ownerId == ownerId)
+        .where(
+          (record) =>
+              record.ownerType == ownerType && record.ownerId == ownerId,
+        )
         .toList(growable: false);
   }
 
   @override
-  Future<List<CachedImageRecord>> listUnprotectedByAccessTime() async => const <CachedImageRecord>[];
+  Future<List<CachedImageRecord>> listUnprotectedByAccessTime() async =>
+      const <CachedImageRecord>[];
 
   @override
   Future<List<CachedImageRecord>> listProtectedCovers() async {
@@ -322,7 +364,11 @@ class _UnusedCacheManager implements BaseCacheManager {
   Future<void> emptyCache() async {}
 
   @override
-  Stream<FileInfo> getFile(String url, {String? key, Map<String, String>? headers}) {
+  Stream<FileInfo> getFile(
+    String url, {
+    String? key,
+    Map<String, String>? headers,
+  }) {
     throw UnimplementedError();
   }
 
@@ -340,13 +386,20 @@ class _UnusedCacheManager implements BaseCacheManager {
   }
 
   @override
-  Future<FileInfo?> getFileFromCache(String key, {bool ignoreMemCache = false}) async => null;
+  Future<FileInfo?> getFileFromCache(
+    String key, {
+    bool ignoreMemCache = false,
+  }) async => null;
 
   @override
   Future<FileInfo?> getFileFromMemory(String key) async => null;
 
   @override
-  Future<file.File> getSingleFile(String url, {String? key, Map<String, String>? headers}) {
+  Future<file.File> getSingleFile(
+    String url, {
+    String? key,
+    Map<String, String>? headers,
+  }) {
     throw UnimplementedError();
   }
 

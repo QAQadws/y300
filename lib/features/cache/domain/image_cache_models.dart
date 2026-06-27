@@ -139,3 +139,22 @@ class CachedImageResult {
 
   static const CachedImageResult failed = CachedImageResult(success: false);
 }
+
+class ImageCacheUsageGroup {
+  const ImageCacheUsageGroup({
+    required this.ownerType,
+    required this.role,
+    required this.protected,
+    required this.bytes,
+  });
+
+  final String ownerType;
+  final String role;
+  final bool protected;
+  final int bytes;
+
+  String get id {
+    final protection = protected ? 'protected' : 'clearable';
+    return '$ownerType:$role:$protection';
+  }
+}

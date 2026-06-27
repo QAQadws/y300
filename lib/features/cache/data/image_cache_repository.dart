@@ -19,6 +19,8 @@ abstract class ImageCacheRepository implements ProtectedCoverCacheStore {
 
   Future<int> calculateUsageBytes({required bool includeProtected});
 
+  Future<List<ImageCacheUsageGroup>> calculateUsageGroups();
+
   Future<List<CachedImageRecord>> listUnprotectedByAccessTime();
 
   @override
@@ -53,26 +55,22 @@ class LocalImageCacheRepository implements ImageCacheRepository {
     final db = await _dbFuture;
     final existing = await getByKey(record.cacheKey);
     final createdAt = existing?.createdAt ?? record.createdAt;
-    await db.insert(
-      ComicLocalDb.cachedImagesTable,
-      <String, Object?>{
-        'cache_key': record.cacheKey,
-        'owner_type': record.ownerType,
-        'owner_id': record.ownerId,
-        'episode_id': _normalizeNullable(record.episodeId),
-        'image_index': record.imageIndex,
-        'role': record.role,
-        'last_source_url': _normalizeNullable(record.lastSourceUrl),
-        'local_path': _normalizeNullable(record.localPath),
-        'bytes': record.bytes,
-        'mime_type': _normalizeNullable(record.mimeType),
-        'protected': record.protected ? 1 : 0,
-        'created_at': createdAt.millisecondsSinceEpoch,
-        'updated_at': record.updatedAt.millisecondsSinceEpoch,
-        'last_accessed_at': record.lastAccessedAt?.millisecondsSinceEpoch,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert(ComicLocalDb.cachedImagesTable, <String, Object?>{
+      'cache_key': record.cacheKey,
+      'owner_type': record.ownerType,
+      'owner_id': record.ownerId,
+      'episode_id': _normalizeNullable(record.episodeId),
+      'image_index': record.imageIndex,
+      'role': record.role,
+      'last_source_url': _normalizeNullable(record.lastSourceUrl),
+      'local_path': _normalizeNullable(record.localPath),
+      'bytes': record.bytes,
+      'mime_type': _normalizeNullable(record.mimeType),
+      'protected': record.protected ? 1 : 0,
+      'created_at': createdAt.millisecondsSinceEpoch,
+      'updated_at': record.updatedAt.millisecondsSinceEpoch,
+      'last_accessed_at': record.lastAccessedAt?.millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   @override
@@ -107,14 +105,33 @@ class LocalImageCacheRepository implements ImageCacheRepository {
   @override
   Future<int> calculateUsageBytes({required bool includeProtected}) async {
     final db = await _dbFuture;
-    final rows = await db.rawQuery(
-      '''
+    final rows = await db.rawQuery('''
       SELECT COALESCE(SUM(bytes), 0) AS total
       FROM ${ComicLocalDb.cachedImagesTable}
       ${includeProtected ? '' : 'WHERE protected = 0'}
-      ''',
-    );
+      ''');
     return rows.first['total'] as int? ?? 0;
+  }
+
+  @override
+  Future<List<ImageCacheUsageGroup>> calculateUsageGroups() async {
+    final db = await _dbFuture;
+    final rows = await db.rawQuery('''
+      SELECT owner_type, role, protected, COALESCE(SUM(bytes), 0) AS total
+      FROM ${ComicLocalDb.cachedImagesTable}
+      GROUP BY owner_type, role, protected
+      ORDER BY owner_type ASC, role ASC, protected ASC
+      ''');
+    return rows
+        .map((row) {
+          return ImageCacheUsageGroup(
+            ownerType: row['owner_type'] as String? ?? '',
+            role: row['role'] as String? ?? '',
+            protected: (row['protected'] as int? ?? 0) == 1,
+            bytes: row['total'] as int? ?? 0,
+          );
+        })
+        .toList(growable: false);
   }
 
   @override
@@ -166,8 +183,12 @@ class LocalImageCacheRepository implements ImageCacheRepository {
       bytes: row['bytes'] as int? ?? 0,
       mimeType: row['mime_type'] as String?,
       protected: (row['protected'] as int? ?? 0) == 1,
-      createdAt: _toDateTime(row['created_at']) ?? DateTime.fromMillisecondsSinceEpoch(0),
-      updatedAt: _toDateTime(row['updated_at']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+      createdAt:
+          _toDateTime(row['created_at']) ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      updatedAt:
+          _toDateTime(row['updated_at']) ??
+          DateTime.fromMillisecondsSinceEpoch(0),
       lastAccessedAt: _toDateTime(row['last_accessed_at']),
     );
   }
