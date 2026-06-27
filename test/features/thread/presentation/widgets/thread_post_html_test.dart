@@ -12,6 +12,7 @@ import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_document_normalizer.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
@@ -106,6 +107,127 @@ void main() {
       expect(_postRichTextPlainTexts(tester), contains('链接'));
     },
   );
+
+  testWidgets('ThreadPostBodyView only creates SelectionArea when enabled', (
+    tester,
+  ) async {
+    const document = ThreadPostBodyDocument(
+      blocks: <ThreadPostBodyBlock>[
+        ThreadPostTextBlock(
+          runs: <ThreadPostTextRun>[ThreadPostTextRun(text: '可复制正文')],
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _testApp(
+        home: ThreadPostBodyView(
+          document: document,
+          blocks: document.blocks,
+          images: <ThreadPostImageBlock>[],
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(SelectionArea), findsNothing);
+    expect(
+      tester.widget<RichText>(find.byType(RichText)).selectionRegistrar,
+      isNull,
+    );
+
+    await tester.pumpWidget(
+      _testApp(
+        home: ThreadPostBodyView(
+          document: document,
+          blocks: document.blocks,
+          images: <ThreadPostImageBlock>[],
+          selectionEnabled: true,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(SelectionArea), findsOneWidget);
+    expect(
+      tester.widget<RichText>(find.byType(RichText)).selectionRegistrar,
+      isNotNull,
+    );
+  });
+
+  testWidgets('ThreadPostBodyView wires quote text into selection mode', (
+    tester,
+  ) async {
+    const document = ThreadPostBodyDocument(
+      blocks: <ThreadPostBodyBlock>[
+        ThreadPostQuoteBlock(
+          blocks: <ThreadPostBodyBlock>[
+            ThreadPostTextBlock(
+              runs: <ThreadPostTextRun>[ThreadPostTextRun(text: '引用正文')],
+            ),
+          ],
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _testApp(
+        home: ThreadPostBodyView(
+          document: document,
+          blocks: document.blocks,
+          images: <ThreadPostImageBlock>[],
+          selectionEnabled: true,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(ThreadPostQuoteBlockView), findsOneWidget);
+    expect(find.byType(SelectionArea), findsOneWidget);
+    expect(
+      tester.widget<RichText>(find.byType(RichText)).selectionRegistrar,
+      isNotNull,
+    );
+  });
+
+  testWidgets('ThreadPostBodyView avoids selection area for image-only body', (
+    tester,
+  ) async {
+    const imageBlock = ThreadPostImageBlock(
+      url: 'https://bbs.yamibo.com/data/attachment/forum/page.jpg',
+      rawUrl: 'data/attachment/forum/page.jpg',
+      index: 0,
+    );
+    const document = ThreadPostBodyDocument(
+      blocks: <ThreadPostBodyBlock>[imageBlock],
+    );
+
+    await tester.pumpWidget(
+      _testApp(
+        home: Center(
+          child: SizedBox(
+            width: 140,
+            child: ThreadPostBodyView(
+              document: document,
+              blocks: document.blocks,
+              images: <ThreadPostImageBlock>[imageBlock],
+              selectionEnabled: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(SelectionArea), findsNothing);
+    expect(
+      find.ancestor(
+        of: find.byKey(const Key('thread-post-image-0')),
+        matching: find.byType(SelectionContainer),
+      ),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('ThreadPostHtml renders reply quote as a quote block', (
     tester,
@@ -752,6 +874,59 @@ void main() {
     ]);
     expect(opened!.document.images, hasLength(2));
   });
+
+  testWidgets(
+    'ThreadPostBodySegmentView opens images with full document group',
+    (tester) async {
+      ThreadPostImageOpenRequest? opened;
+      const firstImage = ThreadPostImageBlock(
+        url: 'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
+        rawUrl: 'data/attachment/forum/page-1.jpg',
+        index: 0,
+      );
+      const secondImage = ThreadPostImageBlock(
+        url: 'https://bbs.yamibo.com/data/attachment/forum/page-2.jpg',
+        rawUrl: 'data/attachment/forum/page-2.jpg',
+        index: 1,
+      );
+      const document = ThreadPostBodyDocument(
+        blocks: <ThreadPostBodyBlock>[firstImage, secondImage],
+      );
+      const segment = ThreadPostBodySegment(
+        index: 1,
+        blocks: <ThreadPostBodyBlock>[secondImage],
+        anchorId: 'segment-1',
+      );
+
+      await tester.pumpWidget(
+        _testApp(
+          home: Center(
+            child: SizedBox(
+              width: 140,
+              child: ThreadPostBodySegmentView(
+                document: document,
+                segment: segment,
+                images: document.images,
+                onOpenImage: (request) => opened = request,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('thread-post-image-1')));
+      await tester.pump();
+
+      expect(opened, isNotNull);
+      expect(opened!.initialIndex, 1);
+      expect(opened!.image, secondImage);
+      expect(opened!.imageUrls, <String>[
+        'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
+        'https://bbs.yamibo.com/data/attachment/forum/page-2.jpg',
+      ]);
+    },
+  );
 }
 
 Finder _postRichTexts() {

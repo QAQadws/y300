@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
@@ -26,12 +27,15 @@ import 'package:y300/features/thread/data/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/thread_post_locator.dart';
 import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
+import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
+import 'package:y300/features/thread/domain/services/thread_post_body_plain_text_extractor.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_post_media_preload_queue.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
+import 'package:y300/shared/widgets/forum_native_surface.dart';
 
 // Temporary diagnostic switch: media preloading can parse/decode nearby heavy
 // posts on the UI isolate while scrolling. Keep it disabled until the thread
@@ -67,6 +71,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   String? _highlightPostPid;
   bool _suppressTargetScrollForPageAction = false;
   ThreadPostMediaPreloadQueue? _mediaPreloadQueue;
+  ImageRequestHeaderBuilder? _latestImageHeaderBuilder;
 
   @override
   void initState() {
@@ -98,6 +103,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     final imageHeaderBuilder = ref.watch(
       imageRequestHeaderBuilderForRefererProvider(_imageRefererFor(state)),
     );
+    _latestImageHeaderBuilder = imageHeaderBuilder;
     if (_enableThreadPostMediaPreload) {
       _mediaPreloadQueue ??= ThreadPostMediaPreloadQueue(
         imageCacheService: ref.read(imageCacheServiceProvider),
@@ -217,7 +223,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                     highlightPostPid: _highlightPostPid,
                     targetPid: widget.targetPid,
                     imageHeaderBuilder: imageHeaderBuilder,
-                    sourceTagLabel: _sourceTagLabel(state),
                     onLoadPreviousPage: () {
                       unawaited(
                         _runPageActionAndScrollTop(controller.loadPreviousPage),
@@ -248,6 +253,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                     onCopyActionUrl: _copyActionUrl,
                     onOpenPostLink: _openForumLink,
                     onOpenPostImages: _openPostImages,
+                    onOpenPostCopyActions: _openPostCopyActions,
                     onPostBuilt: _enableThreadPostMediaPreload
                         ? (index) {
                             _mediaPreloadQueue?.preloadNearbyPosts(
@@ -264,15 +270,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         ],
       ),
     );
-  }
-
-  String _sourceTagLabel(ThreadDetailPageState state) {
-    final tagName = state.sourceTagName?.trim();
-    if (tagName != null && tagName.isNotEmpty) {
-      return tagName;
-    }
-    final typeid = state.typeid.trim();
-    return typeid.isEmpty ? '未标记' : 'typeid=$typeid';
   }
 
   String _imageRefererFor(ThreadDetailPageState state) {
@@ -501,6 +498,49 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
 
   void _openPostImages(ThreadPost post, ThreadPostImageOpenRequest request) {
     _copyUrl('${post.number}# 图片链接', request.image.url);
+  }
+
+  Future<void> _openPostCopyActions(
+    ThreadPost post,
+    ThreadPostBodyRenderPlan plan,
+  ) async {
+    final action = await showModalBottomSheet<_ThreadPostCopyAction>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => const _ThreadPostCopyActionSheet(),
+    );
+    if (!mounted || action == null) {
+      return;
+    }
+    switch (action) {
+      case _ThreadPostCopyAction.select:
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => _ThreadPostSelectableCopyPage(
+              post: post,
+              threadId: widget.tid,
+              plan: plan,
+              imageHeaderBuilder: _latestImageHeaderBuilder,
+              onOpenLink: _openForumLink,
+              onOpenImage: (request) => _openPostImages(post, request),
+            ),
+          ),
+        );
+        return;
+      case _ThreadPostCopyAction.copyAll:
+        await _copyPostPlainText(post, plan);
+        return;
+    }
+  }
+
+  Future<void> _copyPostPlainText(
+    ThreadPost post,
+    ThreadPostBodyRenderPlan plan,
+  ) {
+    final text = const ThreadPostBodyPlainTextExtractor().extract(
+      plan.document,
+    );
+    return _copyUrl('${post.number}# 正文', text);
   }
 
   void _openAuthorProfile(ThreadPost post) {
@@ -887,6 +927,103 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
   }
 }
 
+enum _ThreadPostCopyAction { select, copyAll }
+
+class _ThreadPostCopyActionSheet extends StatelessWidget {
+  const _ThreadPostCopyActionSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+        child: SingleChildScrollView(
+          child: Column(
+            key: const Key('thread-post-copy-action-sheet'),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                key: const Key('thread-post-select-copy-action'),
+                dense: true,
+                leading: const Icon(Icons.text_fields),
+                title: const Text('选择复制'),
+                onTap: () =>
+                    Navigator.of(context).pop(_ThreadPostCopyAction.select),
+              ),
+              ListTile(
+                key: const Key('thread-post-copy-all-action'),
+                dense: true,
+                leading: const Icon(Icons.copy_all_outlined),
+                title: const Text('全部复制'),
+                onTap: () =>
+                    Navigator.of(context).pop(_ThreadPostCopyAction.copyAll),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ThreadPostSelectableCopyPage extends StatelessWidget {
+  const _ThreadPostSelectableCopyPage({
+    required this.post,
+    required this.threadId,
+    required this.plan,
+    required this.imageHeaderBuilder,
+    required this.onOpenLink,
+    required this.onOpenImage,
+  });
+
+  final ThreadPost post;
+  final String threadId;
+  final ThreadPostBodyRenderPlan plan;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final ValueChanged<String> onOpenLink;
+  final ThreadPostImageOpenHandler onOpenImage;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
+    return Scaffold(
+      key: const Key('thread-post-selectable-copy-page'),
+      backgroundColor: palette.background,
+      appBar: AppBar(centerTitle: false, title: const Text('选择复制')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
+        children: [
+          Container(
+            key: Key('thread-post-selectable-copy-body-${post.pid}'),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: palette.card,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: ForumNativeSurfaceShadows.card(palette.stateLayer),
+            ),
+            child: DefaultTextStyle.merge(
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: palette.bodyText,
+                height: 1.5,
+              ),
+              child: ThreadPostBodyView(
+                document: plan.document,
+                blocks: plan.document.blocks,
+                images: plan.images,
+                imageHeaderBuilder: imageHeaderBuilder,
+                imageCacheOwnerId: threadId,
+                selectionEnabled: true,
+                onOpenLink: onOpenLink,
+                onOpenImage: onOpenImage,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ThreadErrorView extends StatelessWidget {
   const _ThreadErrorView({required this.message, required this.onRetry});
 
@@ -954,7 +1091,6 @@ Widget threadDetailPostCardPreview() {
     child: ThreadPostCard(
       post: _threadDetailPreviewPost,
       state: state,
-      sourceTagLabel: '讨论',
       imageHeaderBuilder: null,
       onOpenPostReply: (_) {},
       onOpenPostRate: (_) {},

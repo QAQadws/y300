@@ -6,13 +6,15 @@ import 'package:y300/features/cache/presentation/widgets/cached_library_image.da
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
+import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
+import 'package:y300/features/thread/presentation/thread_detail_render_entries.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 
-class ThreadDetailContent extends StatelessWidget {
+class ThreadDetailContent extends StatefulWidget {
   const ThreadDetailContent({
     super.key,
     required this.state,
@@ -20,7 +22,6 @@ class ThreadDetailContent extends StatelessWidget {
     this.highlightPostPid,
     this.targetPid,
     required this.imageHeaderBuilder,
-    required this.sourceTagLabel,
     required this.onLoadPreviousPage,
     required this.onLoadNextPage,
     required this.onLoadPageNumber,
@@ -31,6 +32,7 @@ class ThreadDetailContent extends StatelessWidget {
     required this.onCopyActionUrl,
     required this.onOpenPostLink,
     this.onOpenPostImages,
+    required this.onOpenPostCopyActions,
     this.onPostBuilt,
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
@@ -41,7 +43,6 @@ class ThreadDetailContent extends StatelessWidget {
   final String? highlightPostPid;
   final String? targetPid;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
-  final String sourceTagLabel;
   final VoidCallback onLoadPreviousPage;
   final VoidCallback onLoadNextPage;
   final ValueChanged<int> onLoadPageNumber;
@@ -53,66 +54,432 @@ class ThreadDetailContent extends StatelessWidget {
   final ValueChanged<String> onOpenPostLink;
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
   onOpenPostImages;
+  final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
+  onOpenPostCopyActions;
   final ValueChanged<int>? onPostBuilt;
   final void Function(ThreadPoll poll, ThreadPollOption option)
   onTogglePollOption;
   final ValueChanged<ThreadPoll> onSubmitPollVote;
 
   @override
+  State<ThreadDetailContent> createState() => _ThreadDetailContentState();
+}
+
+class _ThreadDetailContentState extends State<ThreadDetailContent> {
+  final ThreadDetailRenderEntryPlanner _entryPlanner =
+      ThreadDetailRenderEntryPlanner();
+
+  @override
+  void didUpdateWidget(covariant ThreadDetailContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.state.posts, widget.state.posts) ||
+        oldWidget.state.currentPage != widget.state.currentPage) {
+      _entryPlanner.prune(widget.state.posts);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
-    final hasTargetPost = targetPid?.trim().isNotEmpty == true;
+    final entries = _entryPlanner.buildEntries(
+      posts: widget.state.posts,
+      targetPid: widget.targetPid,
+    );
     return ListView.builder(
       key: const Key('thread-detail-list'),
-      controller: scrollController,
+      controller: widget.scrollController,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
       cacheExtent: 900,
-      itemCount: state.posts.length + (hasTargetPost ? 2 : 1),
+      itemCount: entries.length,
       itemBuilder: (context, index) {
-        if (index == state.posts.length) {
-          return ThreadLoadMoreSection(
-            hasMore: state.hasMore,
-            isLoadingMore: state.isLoadingMore,
-            currentPage: state.currentPage <= 0 ? 1 : state.currentPage,
-            lastPage: state.lastPage,
-            canLoadPrevious: state.currentPage > 1,
-            onLoadPreviousPage: onLoadPreviousPage,
-            onLoadNextPage: onLoadNextPage,
-            onLoadPageNumber: onLoadPageNumber,
-            palette: palette,
-          );
-        }
-        if (hasTargetPost && index == state.posts.length + 1) {
-          return SizedBox(
-            key: const Key('thread-detail-target-scroll-spacer'),
-            height: MediaQuery.sizeOf(context).height * 0.72,
-          );
-        }
+        return _buildEntry(context, entries[index], palette);
+      },
+    );
+  }
 
-        final post = state.posts[index];
-        final postCard = ThreadPostCard(
-          post: post,
-          state: state,
-          highlighted: post.pid == highlightPostPid,
-          sourceTagLabel: sourceTagLabel,
-          imageHeaderBuilder: imageHeaderBuilder,
-          onOpenPostReply: onOpenPostReply,
-          onOpenPostRate: onOpenPostRate,
-          onOpenPostComment: onOpenPostComment,
-          onOpenAuthorProfile: onOpenAuthorProfile,
-          onCopyActionUrl: onCopyActionUrl,
-          onOpenPostLink: onOpenPostLink,
-          onOpenPostImages: onOpenPostImages,
-          onTogglePollOption: onTogglePollOption,
-          onSubmitPollVote: onSubmitPollVote,
+  Widget _buildEntry(
+    BuildContext context,
+    ThreadDetailRenderEntry entry,
+    ThreadDetailNativePalette palette,
+  ) {
+    switch (entry.kind) {
+      case ThreadDetailRenderEntryKind.postHeader:
+        final header = _ThreadPostCardHeaderEntry(
+          key: Key(entry.key),
+          post: entry.post!,
+          state: widget.state,
+          highlighted: entry.post!.pid == widget.highlightPostPid,
           palette: palette,
+          onOpenAuthorProfile: widget.onOpenAuthorProfile,
         );
         return _PostBuildObserver(
-          index: index,
-          onPostBuilt: onPostBuilt,
-          child: postCard,
+          index: entry.postIndex,
+          onPostBuilt: widget.onPostBuilt,
+          child: header,
         );
-      },
+      case ThreadDetailRenderEntryKind.postBody:
+        return _ThreadPostCardBodyEntry(
+          key: Key(entry.key),
+          post: entry.post!,
+          threadId: widget.state.tid,
+          plan: entry.requirePlan(),
+          highlighted: entry.post!.pid == widget.highlightPostPid,
+          imageHeaderBuilder: widget.imageHeaderBuilder,
+          palette: palette,
+          onOpenPostLink: widget.onOpenPostLink,
+          onOpenPostImages: widget.onOpenPostImages,
+          onOpenPostCopyActions: widget.onOpenPostCopyActions,
+        );
+      case ThreadDetailRenderEntryKind.postBodySegment:
+        final segmentEntry = _ThreadPostCardBodySegmentEntry(
+          key: Key(entry.key),
+          post: entry.post!,
+          threadId: widget.state.tid,
+          plan: entry.plan!,
+          segment: entry.segment!,
+          highlighted: entry.post!.pid == widget.highlightPostPid,
+          imageHeaderBuilder: widget.imageHeaderBuilder,
+          palette: palette,
+          onOpenPostLink: widget.onOpenPostLink,
+          onOpenPostImages: widget.onOpenPostImages,
+          onOpenPostCopyActions: widget.onOpenPostCopyActions,
+        );
+        if (entry.segment!.index == 0) {
+          return KeyedSubtree(
+            key: Key('thread-post-body-${entry.post!.pid}'),
+            child: segmentEntry,
+          );
+        }
+        return segmentEntry;
+      case ThreadDetailRenderEntryKind.postFooter:
+        return _ThreadPostCardFooterEntry(
+          key: Key(entry.key),
+          post: entry.post!,
+          state: widget.state,
+          highlighted: entry.post!.pid == widget.highlightPostPid,
+          imageHeaderBuilder: widget.imageHeaderBuilder,
+          onOpenPostReply: widget.onOpenPostReply,
+          onOpenPostRate: widget.onOpenPostRate,
+          onOpenPostComment: widget.onOpenPostComment,
+          onCopyActionUrl: widget.onCopyActionUrl,
+          onOpenPostLink: widget.onOpenPostLink,
+          onTogglePollOption: widget.onTogglePollOption,
+          onSubmitPollVote: widget.onSubmitPollVote,
+          palette: palette,
+        );
+      case ThreadDetailRenderEntryKind.pagination:
+        return ThreadLoadMoreSection(
+          key: const Key('thread-detail-pagination'),
+          hasMore: widget.state.hasMore,
+          isLoadingMore: widget.state.isLoadingMore,
+          currentPage: widget.state.currentPage <= 0
+              ? 1
+              : widget.state.currentPage,
+          lastPage: widget.state.lastPage,
+          canLoadPrevious: widget.state.currentPage > 1,
+          onLoadPreviousPage: widget.onLoadPreviousPage,
+          onLoadNextPage: widget.onLoadNextPage,
+          onLoadPageNumber: widget.onLoadPageNumber,
+          palette: palette,
+        );
+      case ThreadDetailRenderEntryKind.targetSpacer:
+        return SizedBox(
+          key: const Key('thread-detail-target-scroll-spacer'),
+          height: MediaQuery.sizeOf(context).height * 0.72,
+        );
+    }
+  }
+}
+
+class _ThreadPostCardHeaderEntry extends StatelessWidget {
+  const _ThreadPostCardHeaderEntry({
+    super.key,
+    required this.post,
+    required this.state,
+    required this.highlighted,
+    required this.palette,
+    required this.onOpenAuthorProfile,
+  });
+
+  final ThreadPost post;
+  final ThreadDetailPageState state;
+  final bool highlighted;
+  final ThreadDetailNativePalette palette;
+  final ValueChanged<ThreadPost> onOpenAuthorProfile;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: Key('thread-post-card-${post.pid}'),
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+      decoration: _cardSegmentDecoration(
+        palette: palette,
+        highlighted: highlighted,
+        position: _ThreadPostCardSegmentPosition.header,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (post.isFirst) ...[
+            _FirstPostThreadSummary(state: state, palette: palette),
+            const SizedBox(height: 11),
+          ],
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ThreadAuthorAvatar(
+                key: Key('thread-author-avatar-${post.pid}'),
+                author: post.author,
+                authorId: post.authorId,
+                avatarUrl: post.avatarUrl,
+                palette: palette,
+                onTap: post.authorId.trim().isEmpty
+                    ? null
+                    : () => onOpenAuthorProfile(post),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: _PostHeader(
+                  post: post,
+                  palette: palette,
+                  viewsLabel: post.isFirst ? state.views.toString() : null,
+                  repliesLabel: post.isFirst ? state.replies.toString() : null,
+                  onOpenAuthorProfile: post.authorId.trim().isEmpty
+                      ? null
+                      : () => onOpenAuthorProfile(post),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ThreadPostCardBodyEntry extends StatelessWidget {
+  const _ThreadPostCardBodyEntry({
+    super.key,
+    required this.post,
+    required this.threadId,
+    required this.plan,
+    required this.highlighted,
+    required this.imageHeaderBuilder,
+    required this.palette,
+    required this.onOpenPostLink,
+    required this.onOpenPostImages,
+    required this.onOpenPostCopyActions,
+  });
+
+  final ThreadPost post;
+  final String threadId;
+  final ThreadPostBodyRenderPlan plan;
+  final bool highlighted;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final ThreadDetailNativePalette palette;
+  final ValueChanged<String> onOpenPostLink;
+  final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
+  onOpenPostImages;
+  final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
+  onOpenPostCopyActions;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onLongPress: () => onOpenPostCopyActions(post, plan),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+        decoration: _cardSegmentDecoration(
+          palette: palette,
+          highlighted: highlighted,
+          position: _ThreadPostCardSegmentPosition.middle,
+        ),
+        child: DefaultTextStyle.merge(
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: palette.bodyText,
+            height: 1.5,
+          ),
+          child: ThreadPostBodyView(
+            key: Key('thread-post-${post.pid}'),
+            document: plan.document,
+            blocks: plan.document.blocks,
+            images: plan.images,
+            imageHeaderBuilder: imageHeaderBuilder,
+            imageCacheOwnerId: threadId,
+            selectionEnabled: false,
+            onOpenLink: onOpenPostLink,
+            onOpenImage: (request) => onOpenPostImages?.call(post, request),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ThreadPostCardBodySegmentEntry extends StatelessWidget {
+  const _ThreadPostCardBodySegmentEntry({
+    super.key,
+    required this.post,
+    required this.threadId,
+    required this.plan,
+    required this.segment,
+    required this.highlighted,
+    required this.imageHeaderBuilder,
+    required this.palette,
+    required this.onOpenPostLink,
+    required this.onOpenPostImages,
+    required this.onOpenPostCopyActions,
+  });
+
+  final ThreadPost post;
+  final String threadId;
+  final ThreadPostBodyRenderPlan plan;
+  final ThreadPostBodySegment segment;
+  final bool highlighted;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final ThreadDetailNativePalette palette;
+  final ValueChanged<String> onOpenPostLink;
+  final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
+  onOpenPostImages;
+  final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
+  onOpenPostCopyActions;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onLongPress: () => onOpenPostCopyActions(post, plan),
+      child: Container(
+        padding: EdgeInsets.fromLTRB(10, _segmentTopPadding(segment), 10, 0),
+        decoration: _cardSegmentDecoration(
+          palette: palette,
+          highlighted: highlighted,
+          position: _ThreadPostCardSegmentPosition.middle,
+        ),
+        child: DefaultTextStyle.merge(
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: palette.bodyText,
+            height: 1.5,
+          ),
+          child: ThreadPostBodySegmentView(
+            document: plan.document,
+            segment: segment,
+            images: plan.images,
+            imageHeaderBuilder: imageHeaderBuilder,
+            imageCacheOwnerId: threadId,
+            selectionEnabled: false,
+            onOpenLink: onOpenPostLink,
+            onOpenImage: (request) => onOpenPostImages?.call(post, request),
+          ),
+        ),
+      ),
+    );
+  }
+
+  double _segmentTopPadding(ThreadPostBodySegment segment) {
+    if (segment.index == 0) {
+      return 8;
+    }
+    final blocks = segment.blocks;
+    if (blocks.isNotEmpty && blocks.first.continuesPrevious) {
+      return 0;
+    }
+    return ThreadPostBodyStyle.defaults.blockSpacing;
+  }
+}
+
+class _ThreadPostCardFooterEntry extends StatelessWidget {
+  const _ThreadPostCardFooterEntry({
+    super.key,
+    required this.post,
+    required this.state,
+    required this.highlighted,
+    required this.imageHeaderBuilder,
+    required this.onOpenPostReply,
+    required this.onOpenPostRate,
+    required this.onOpenPostComment,
+    required this.onCopyActionUrl,
+    required this.onOpenPostLink,
+    required this.onTogglePollOption,
+    required this.onSubmitPollVote,
+    required this.palette,
+  });
+
+  final ThreadPost post;
+  final ThreadDetailPageState state;
+  final bool highlighted;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final ValueChanged<ThreadPost> onOpenPostReply;
+  final ValueChanged<ThreadPost> onOpenPostRate;
+  final ValueChanged<ThreadPost> onOpenPostComment;
+  final void Function(String label, String url) onCopyActionUrl;
+  final ValueChanged<String> onOpenPostLink;
+  final void Function(ThreadPoll poll, ThreadPollOption option)
+  onTogglePollOption;
+  final ValueChanged<ThreadPoll> onSubmitPollVote;
+  final ThreadDetailNativePalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 11),
+      decoration: _cardSegmentDecoration(
+        palette: palette,
+        highlighted: highlighted,
+        position: _ThreadPostCardSegmentPosition.footer,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (post.tagLinks.isNotEmpty) ...[
+            ThreadPostTagLinksSection(
+              tags: post.tagLinks,
+              palette: palette,
+              onOpenTag: onOpenPostLink,
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (post.poll != null) ...[
+            ThreadPollCard(
+              poll: post.poll!,
+              selectedOptionIds: state.selectedPollOptionIds,
+              isSubmitting: state.isPollVoteSubmitting,
+              hint: state.pollVoteHint,
+              onToggleOption: (option) =>
+                  onTogglePollOption(post.poll!, option),
+              onSubmit: () => onSubmitPollVote(post.poll!),
+              palette: palette,
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (post.comments.isNotEmpty) ...[
+            ThreadPostCommentSection(
+              comments: post.comments,
+              imageHeaderBuilder: imageHeaderBuilder,
+              palette: palette,
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (post.ratingSummary != null) ...[
+            ThreadPostRatingSection(
+              summary: post.ratingSummary!,
+              palette: palette,
+              onCopyActionUrl: onCopyActionUrl,
+            ),
+            const SizedBox(height: 10),
+          ],
+          ThreadPostActionRow(
+            post: post,
+            palette: palette,
+            onOpenPostReply: onOpenPostReply,
+            onOpenPostRate: onOpenPostRate,
+            onOpenPostComment: onOpenPostComment,
+            onCopyActionUrl: onCopyActionUrl,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -164,13 +531,16 @@ class _PostBuildObserverState extends State<_PostBuildObserver> {
   }
 }
 
+/// Single-card preview/compat renderer.
+///
+/// The production native thread detail page uses [ThreadDetailContent], which
+/// renders post header/body/footer entries separately to keep long posts lazy.
 class ThreadPostCard extends StatelessWidget {
   const ThreadPostCard({
     super.key,
     required this.post,
     required this.state,
     this.highlighted = false,
-    required this.sourceTagLabel,
     required this.imageHeaderBuilder,
     required this.onOpenPostReply,
     required this.onOpenPostRate,
@@ -187,7 +557,6 @@ class ThreadPostCard extends StatelessWidget {
   final ThreadPost post;
   final ThreadDetailPageState state;
   final bool highlighted;
-  final String sourceTagLabel;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<ThreadPost> onOpenPostReply;
   final ValueChanged<ThreadPost> onOpenPostRate;
@@ -2072,6 +2441,31 @@ BoxDecoration _highlightedCardDecoration(ThreadDetailNativePalette palette) {
     color: palette.accent.withValues(alpha: 0.10),
     borderRadius: BorderRadius.circular(12),
     boxShadow: ForumNativeSurfaceShadows.card(palette.stateLayer),
+  );
+}
+
+enum _ThreadPostCardSegmentPosition { header, middle, footer }
+
+BoxDecoration _cardSegmentDecoration({
+  required ThreadDetailNativePalette palette,
+  required bool highlighted,
+  required _ThreadPostCardSegmentPosition position,
+}) {
+  final radius = switch (position) {
+    _ThreadPostCardSegmentPosition.header => const BorderRadius.vertical(
+      top: Radius.circular(12),
+    ),
+    _ThreadPostCardSegmentPosition.middle => BorderRadius.zero,
+    _ThreadPostCardSegmentPosition.footer => const BorderRadius.vertical(
+      bottom: Radius.circular(12),
+    ),
+  };
+  return BoxDecoration(
+    color: highlighted ? palette.accent.withValues(alpha: 0.10) : palette.card,
+    borderRadius: radius,
+    boxShadow: position == _ThreadPostCardSegmentPosition.header
+        ? ForumNativeSurfaceShadows.card(palette.stateLayer)
+        : null,
   );
 }
 

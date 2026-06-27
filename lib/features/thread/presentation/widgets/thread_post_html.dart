@@ -8,6 +8,7 @@ import 'package:y300/features/cache/domain/forum_image_cache_requests.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_document_normalizer.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
@@ -20,10 +21,6 @@ typedef ThreadPostBlockImageCacheRequestBuilder =
     ImageCacheRequest Function(ThreadPostImageBlock image);
 typedef ThreadPostInlineImageCacheRequestBuilder =
     ImageCacheRequest Function(ThreadPostInlineImage image);
-
-// Temporary diagnostic switch: SelectionArea can add measurable layout and hit
-// test cost for long posts with many RichText/WidgetSpan fragments.
-const bool _enableThreadPostBodySelection = false;
 
 class ThreadPostBodyStyle {
   const ThreadPostBodyStyle({
@@ -94,6 +91,7 @@ class ThreadPostHtml extends StatefulWidget {
     this.style = ThreadPostBodyStyle.defaults,
     this.renderSettings = ThreadPostBodyRenderSettings.defaults,
     this.textTransformer,
+    this.selectionEnabled = false,
     this.onOpenLink,
     this.onOpenImage,
     this.onOpenImages,
@@ -110,6 +108,7 @@ class ThreadPostHtml extends StatefulWidget {
   final ThreadPostBodyStyle style;
   final ThreadPostBodyRenderSettings renderSettings;
   final ThreadPostTextTransformer? textTransformer;
+  final bool selectionEnabled;
   final ThreadPostLinkTapHandler? onOpenLink;
   final ThreadPostImageOpenHandler? onOpenImage;
   final void Function(List<ThreadPostImageBlock> images, int initialIndex)?
@@ -160,12 +159,15 @@ class _ThreadPostHtmlState extends State<ThreadPostHtml> {
     final effectiveStyle = _effectiveStyle(widget.style, widget.renderSettings);
     return ThreadPostBodyView(
       document: document,
+      blocks: document.blocks,
+      images: document.images,
       imageHeaderBuilder: widget.imageHeaderBuilder,
       imageCacheOwnerId: widget.imageCacheOwnerId,
       blockImageCacheRequestBuilder: widget.blockImageCacheRequestBuilder,
       inlineImageCacheRequestBuilder: widget.inlineImageCacheRequestBuilder,
       style: effectiveStyle,
       textTransformer: widget.textTransformer,
+      selectionEnabled: widget.selectionEnabled,
       onOpenLink: widget.onOpenLink,
       onOpenImage: widget.onOpenImage,
       onOpenImages: widget.onOpenImages,
@@ -224,22 +226,28 @@ class _ThreadPostDocumentCacheKey {
   );
 }
 
-class ThreadPostBodyView extends StatelessWidget {
-  const ThreadPostBodyView({
+class ThreadPostBodySegmentView extends StatelessWidget {
+  const ThreadPostBodySegmentView({
     super.key,
     required this.document,
+    required this.segment,
+    required this.images,
     this.imageHeaderBuilder,
     this.imageCacheOwnerId,
     this.blockImageCacheRequestBuilder,
     this.inlineImageCacheRequestBuilder,
     this.style = ThreadPostBodyStyle.defaults,
     this.textTransformer,
+    this.selectionEnabled = false,
+    this.createSelectionArea = true,
     this.onOpenLink,
     this.onOpenImage,
     this.onOpenImages,
   });
 
   final ThreadPostBodyDocument document;
+  final ThreadPostBodySegment segment;
+  final List<ThreadPostImageBlock> images;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final String? imageCacheOwnerId;
   final ThreadPostBlockImageCacheRequestBuilder? blockImageCacheRequestBuilder;
@@ -247,6 +255,8 @@ class ThreadPostBodyView extends StatelessWidget {
   inlineImageCacheRequestBuilder;
   final ThreadPostBodyStyle style;
   final ThreadPostTextTransformer? textTransformer;
+  final bool selectionEnabled;
+  final bool createSelectionArea;
   final ThreadPostLinkTapHandler? onOpenLink;
   final ThreadPostImageOpenHandler? onOpenImage;
   final void Function(List<ThreadPostImageBlock> images, int initialIndex)?
@@ -254,8 +264,63 @@ class ThreadPostBodyView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final blocks = document.blocks;
-    final images = document.images;
+    return ThreadPostBodyView(
+      document: document,
+      blocks: segment.blocks,
+      images: images,
+      imageHeaderBuilder: imageHeaderBuilder,
+      imageCacheOwnerId: imageCacheOwnerId,
+      blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
+      inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
+      style: style,
+      textTransformer: textTransformer,
+      selectionEnabled: selectionEnabled,
+      createSelectionArea: createSelectionArea,
+      onOpenLink: onOpenLink,
+      onOpenImage: onOpenImage,
+      onOpenImages: onOpenImages,
+    );
+  }
+}
+
+class ThreadPostBodyView extends StatelessWidget {
+  const ThreadPostBodyView({
+    super.key,
+    required this.document,
+    required this.blocks,
+    required this.images,
+    this.imageHeaderBuilder,
+    this.imageCacheOwnerId,
+    this.blockImageCacheRequestBuilder,
+    this.inlineImageCacheRequestBuilder,
+    this.style = ThreadPostBodyStyle.defaults,
+    this.textTransformer,
+    this.selectionEnabled = false,
+    this.createSelectionArea = true,
+    this.onOpenLink,
+    this.onOpenImage,
+    this.onOpenImages,
+  });
+
+  final ThreadPostBodyDocument document;
+  final List<ThreadPostBodyBlock> blocks;
+  final List<ThreadPostImageBlock> images;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageCacheOwnerId;
+  final ThreadPostBlockImageCacheRequestBuilder? blockImageCacheRequestBuilder;
+  final ThreadPostInlineImageCacheRequestBuilder?
+  inlineImageCacheRequestBuilder;
+  final ThreadPostBodyStyle style;
+  final ThreadPostTextTransformer? textTransformer;
+  final bool selectionEnabled;
+  final bool createSelectionArea;
+  final ThreadPostLinkTapHandler? onOpenLink;
+  final ThreadPostImageOpenHandler? onOpenImage;
+  final void Function(List<ThreadPostImageBlock> images, int initialIndex)?
+  onOpenImages;
+
+  @override
+  Widget build(BuildContext context) {
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -272,6 +337,7 @@ class ThreadPostBodyView extends StatelessWidget {
             inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
             style: style,
             textTransformer: textTransformer,
+            selectionEnabled: selectionEnabled,
             onOpenLink: onOpenLink,
             onOpenImage: onOpenImage,
             onOpenImages: onOpenImages,
@@ -279,7 +345,24 @@ class ThreadPostBodyView extends StatelessWidget {
         ],
       ],
     );
-    return _enableThreadPostBodySelection ? SelectionArea(child: body) : body;
+    return selectionEnabled && createSelectionArea && _hasSelectableText(blocks)
+        ? SelectionArea(child: body)
+        : body;
+  }
+
+  bool _hasSelectableText(List<ThreadPostBodyBlock> blocks) {
+    for (final block in blocks) {
+      if (block is ThreadPostTextBlock &&
+          block.runs.any(
+            (run) => run.inlineImage == null && run.text.trim().isNotEmpty,
+          )) {
+        return true;
+      }
+      if (block is ThreadPostQuoteBlock && _hasSelectableText(block.blocks)) {
+        return true;
+      }
+    }
+    return false;
   }
 }
 
@@ -294,6 +377,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
     required this.inlineImageCacheRequestBuilder,
     required this.style,
     required this.textTransformer,
+    this.selectionEnabled = false,
     required this.onOpenLink,
     required this.onOpenImage,
     required this.onOpenImages,
@@ -309,6 +393,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
   inlineImageCacheRequestBuilder;
   final ThreadPostBodyStyle style;
   final ThreadPostTextTransformer? textTransformer;
+  final bool selectionEnabled;
   final ThreadPostLinkTapHandler? onOpenLink;
   final ThreadPostImageOpenHandler? onOpenImage;
   final void Function(List<ThreadPostImageBlock> images, int initialIndex)?
@@ -325,6 +410,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
         inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
         style: style,
         textTransformer: textTransformer,
+        selectionEnabled: selectionEnabled,
         onOpenLink: onOpenLink,
       );
     }
@@ -352,6 +438,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
         inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
         style: style,
         textTransformer: textTransformer,
+        selectionEnabled: selectionEnabled,
         onOpenLink: onOpenLink,
         onOpenImage: onOpenImage,
         onOpenImages: onOpenImages,
@@ -373,6 +460,7 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
     required this.inlineImageCacheRequestBuilder,
     required this.style,
     required this.textTransformer,
+    required this.selectionEnabled,
     required this.onOpenLink,
     required this.onOpenImage,
     required this.onOpenImages,
@@ -388,6 +476,7 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
   inlineImageCacheRequestBuilder;
   final ThreadPostBodyStyle style;
   final ThreadPostTextTransformer? textTransformer;
+  final bool selectionEnabled;
   final ThreadPostLinkTapHandler? onOpenLink;
   final ThreadPostImageOpenHandler? onOpenImage;
   final void Function(List<ThreadPostImageBlock> images, int initialIndex)?
@@ -425,6 +514,7 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
               inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
               style: quoteStyle,
               textTransformer: textTransformer,
+              selectionEnabled: selectionEnabled,
               onOpenLink: onOpenLink,
               onOpenImage: onOpenImage,
               onOpenImages: onOpenImages,
@@ -445,6 +535,7 @@ class ThreadPostTextBlockView extends StatelessWidget {
     this.inlineImageCacheRequestBuilder,
     this.style = ThreadPostBodyStyle.defaults,
     this.textTransformer,
+    this.selectionEnabled = false,
     this.onOpenLink,
   });
 
@@ -455,6 +546,7 @@ class ThreadPostTextBlockView extends StatelessWidget {
   inlineImageCacheRequestBuilder;
   final ThreadPostBodyStyle style;
   final ThreadPostTextTransformer? textTransformer;
+  final bool selectionEnabled;
   final ThreadPostLinkTapHandler? onOpenLink;
 
   @override
@@ -469,10 +561,10 @@ class ThreadPostTextBlockView extends StatelessWidget {
                 : _inlineImageSpan(context, run.inlineImage!),
         ],
       ),
-      selectionRegistrar: _enableThreadPostBodySelection
+      selectionRegistrar: selectionEnabled
           ? SelectionContainer.maybeOf(context)
           : null,
-      selectionColor: _enableThreadPostBodySelection
+      selectionColor: selectionEnabled
           ? DefaultSelectionStyle.of(context).selectionColor
           : null,
     );

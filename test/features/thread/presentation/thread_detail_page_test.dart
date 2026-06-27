@@ -230,6 +230,7 @@ void main() {
       expect(find.text('12'), findsOneWidget);
       expect(find.text('第 1 / 2 页'), findsNothing);
       expect(find.byKey(const Key('thread-post-card-p1')), findsOneWidget);
+      expect(find.byType(ThreadPostCard), findsNothing);
       final postCard = tester.widget<Container>(
         find.byKey(const Key('thread-post-card-p1')),
       );
@@ -668,7 +669,6 @@ void main() {
             body: ThreadDetailContent(
               state: state,
               imageHeaderBuilder: null,
-              sourceTagLabel: '未标记',
               onLoadPreviousPage: () {},
               onLoadNextPage: () {},
               onLoadPageNumber: (_) {},
@@ -678,6 +678,7 @@ void main() {
               onOpenAuthorProfile: (_) {},
               onCopyActionUrl: (_, _) {},
               onOpenPostLink: (_) {},
+              onOpenPostCopyActions: (_, _) {},
               onTogglePollOption: (_, _) {},
               onSubmitPollVote: (_) {},
             ),
@@ -688,14 +689,14 @@ void main() {
       await tester.pump();
 
       final expandedHeight = tester
-          .getSize(find.byKey(const Key('thread-post-card-p1')))
+          .getSize(find.byKey(const Key('thread-post-comment-section')))
           .height;
 
       await tester.tap(find.byKey(const Key('thread-post-comment-header')));
       await tester.pump();
 
       final collapsedHeight = tester
-          .getSize(find.byKey(const Key('thread-post-card-p1')))
+          .getSize(find.byKey(const Key('thread-post-comment-section')))
           .height;
       expect(collapsedHeight, lessThan(expandedHeight));
       expect(find.text('第一条点评内容'), findsNothing);
@@ -1495,6 +1496,313 @@ void main() {
       expect(list.cacheExtent, 900);
       expect(find.byKey(const Key('thread-post-card-bulk-0')), findsOneWidget);
       expect(find.byKey(const Key('thread-post-card-bulk-79')), findsNothing);
+    });
+
+    testWidgets('renders long text post as lazy body segments', (tester) async {
+      tester.view.physicalSize = const Size(390, 260);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      final longParagraph = List.filled(520, '长正文片段').join();
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '55',
+            subject: '长正文帖子',
+            author: 'alice',
+            replies: 0,
+            views: 12,
+            currentPage: 1,
+            lastPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'long-1',
+                author: 'author',
+                authorId: '1',
+                message: '<p>$longParagraph</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(find.byKey(const Key('thread-post-card-long-1')), findsOneWidget);
+      expect(find.byKey(const Key('thread-post-body-long-1')), findsOneWidget);
+      expect(
+        find.byKey(const Key('thread-post-body-long-1-0')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('thread-post-body-long-1-3')), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('thread-post-body-long-1')),
+          matching: find.byType(SelectionArea),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.ancestor(
+          of: find.byKey(const Key('thread-detail-list')),
+          matching: find.byType(SelectionArea),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.ancestor(
+          of: find.byType(Scrollable).first,
+          matching: find.byType(SelectionArea),
+        ),
+        findsNothing,
+      );
+      final bodyRichTexts = tester.widgetList<RichText>(
+        find.descendant(
+          of: find.byKey(const Key('thread-post-body-long-1')),
+          matching: find.byType(RichText),
+        ),
+      );
+      expect(bodyRichTexts, isNotEmpty);
+      expect(
+        bodyRichTexts.every((text) => text.selectionRegistrar == null),
+        isTrue,
+      );
+    });
+
+    testWidgets('uses lazy body segment entries for image dense posts', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 260);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      final imageHtml = List.generate(
+        7,
+        (index) =>
+            '<img src="static/image/common/none.gif" file="data/attachment/forum/page-$index.jpg" />',
+      ).join();
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '55',
+            subject: '多图帖子',
+            author: 'alice',
+            replies: 0,
+            views: 12,
+            currentPage: 1,
+            lastPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'image-1',
+                author: 'author',
+                authorId: '1',
+                message: '<p>开头</p>$imageHtml<p>结尾</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(find.byKey(const Key('thread-post-card-image-1')), findsOneWidget);
+      expect(
+        find.byKey(const Key('thread-post-body-image-1-0')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('thread-post-body-image-1-6')), findsNothing);
+
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('thread-post-body-image-1-6')),
+        320,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pump();
+
+      expect(
+        find.byKey(const Key('thread-post-body-image-1-6')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('long pressing post body opens copy actions and copy page', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 260);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final copiedTexts = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            final data = Map<String, dynamic>.from(call.arguments as Map);
+            copiedTexts.add(data['text'] as String);
+          }
+          return null;
+        },
+      );
+      addTearDown(() {
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        );
+      });
+      final longParagraph = List.filled(360, '长正文片段').join();
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '55',
+            subject: '复制测试',
+            author: 'alice',
+            replies: 1,
+            views: 12,
+            currentPage: 1,
+            lastPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'copy-1',
+                author: 'author',
+                authorId: '1',
+                message:
+                    '<p>第一段 <a href="thread-1-1-1.html">链接文本</a> $longParagraph</p>'
+                    '<div class="quote"><blockquote><b>作者</b>: 引用正文</blockquote></div>'
+                    '<img file="data/attachment/forum/page.jpg" />'
+                    '<p>尾段 <img src="static/image/smiley/comcom/2.gif" alt="[笑]"></p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+              ThreadPost(
+                pid: 'copy-2',
+                author: 'other',
+                authorId: '2',
+                message: '<p>其它楼正文</p>',
+                number: 2,
+                isFirst: false,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(find.byKey(const Key('thread-post-body-copy-1')), findsOneWidget);
+      expect(
+        find.byKey(const Key('thread-post-body-copy-1-0')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('thread-post-body-copy-1')),
+          matching: find.byType(SelectionArea),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.ancestor(
+          of: find.byKey(const Key('thread-detail-list')),
+          matching: find.byType(SelectionArea),
+        ),
+        findsNothing,
+      );
+      final headerRichTexts = tester.widgetList<RichText>(
+        find.descendant(
+          of: find.byKey(const Key('thread-post-card-copy-1')),
+          matching: find.byType(RichText),
+        ),
+      );
+      expect(headerRichTexts, isNotEmpty);
+      expect(
+        headerRichTexts.every((text) => text.selectionRegistrar == null),
+        isTrue,
+      );
+      expect(find.byKey(const Key('thread-post-card-copy-1')), findsOneWidget);
+
+      await _longPressVisibleTop(
+        tester,
+        find.byKey(const Key('thread-post-body-copy-1-0')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('thread-post-copy-action-sheet')),
+        findsOneWidget,
+      );
+      expect(find.text('选择复制'), findsOneWidget);
+      expect(find.text('全部复制'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('thread-post-copy-all-action')));
+      await tester.pumpAndSettle();
+
+      expect(copiedTexts.single, contains('第一段链接文本'));
+      expect(copiedTexts.single, contains('作者: 引用正文'));
+      expect(copiedTexts.single, contains('尾段[笑]'));
+      expect(copiedTexts.single, isNot(contains('page.jpg')));
+      expect(find.text('1# 正文已复制'), findsOneWidget);
+
+      await _longPressVisibleTop(
+        tester,
+        find.byKey(const Key('thread-post-body-copy-1-0')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('thread-post-select-copy-action')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('thread-post-selectable-copy-page')),
+        findsOneWidget,
+      );
+      expect(find.text('选择复制'), findsOneWidget);
+      expect(
+        find.byKey(const Key('thread-post-selectable-copy-body-copy-1')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('thread-post-selectable-copy-body-copy-1')),
+          matching: find.byType(SelectionArea),
+        ),
+        findsOneWidget,
+      );
+      final copyPageRichTexts = tester.widgetList<RichText>(
+        find.descendant(
+          of: find.byKey(const Key('thread-post-selectable-copy-body-copy-1')),
+          matching: find.byType(RichText),
+        ),
+      );
+      expect(
+        copyPageRichTexts.any((text) => text.selectionRegistrar != null),
+        isTrue,
+      );
     });
 
     testWidgets('uses current thread page as post image referer', (
@@ -2332,6 +2640,21 @@ Finder _richTextContaining(String text) {
   return find.byWidgetPredicate((widget) {
     return widget is RichText && widget.text.toPlainText().contains(text);
   });
+}
+
+Future<void> _longPressVisibleTop(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.pump();
+  final topLeft = tester.getTopLeft(finder);
+  final size = tester.getSize(finder);
+  final viewHeight =
+      tester.view.physicalSize.height / tester.view.devicePixelRatio;
+  final y = (topLeft.dy + 8).clamp(1.0, viewHeight - 1);
+  final x = (topLeft.dx + size.width / 2).clamp(
+    1.0,
+    tester.view.physicalSize.width / tester.view.devicePixelRatio - 1,
+  );
+  await tester.longPressAt(Offset(x, y));
 }
 
 class _FakeForumTagRepository implements ForumTagRepository {

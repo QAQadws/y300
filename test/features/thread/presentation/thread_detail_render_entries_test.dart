@@ -1,0 +1,215 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
+import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
+import 'package:y300/features/thread/presentation/thread_detail_render_entries.dart';
+
+void main() {
+  group('ThreadDetailRenderEntryPlanner', () {
+    test('builds one body entry for short text posts', () {
+      final parser = _CountingThreadPostBodyParser();
+      final planner = ThreadDetailRenderEntryPlanner(
+        bodyRenderPlanner: ThreadPostBodyRenderPlanner(parser: parser),
+      );
+
+      final entries = planner.buildEntries(
+        posts: <ThreadPost>[
+          ThreadPost(
+            pid: 'p1',
+            author: 'alice',
+            authorId: '1',
+            message: '<p>普通正文</p>',
+            number: 1,
+            isFirst: true,
+            dateline: 'today',
+          ),
+        ],
+      );
+
+      expect(entries.map((entry) => entry.kind), <ThreadDetailRenderEntryKind>[
+        ThreadDetailRenderEntryKind.postHeader,
+        ThreadDetailRenderEntryKind.postBody,
+        ThreadDetailRenderEntryKind.postFooter,
+        ThreadDetailRenderEntryKind.pagination,
+      ]);
+      expect(entries[1].key, 'thread-post-body-p1');
+      expect(entries[1].requirePlan().usesListSegments, isFalse);
+      expect(parser.parseCount, 1);
+    });
+
+    test('builds segment entries for long text posts', () {
+      final parser = _CountingThreadPostBodyParser();
+      final planner = ThreadDetailRenderEntryPlanner(
+        bodyRenderPlanner: ThreadPostBodyRenderPlanner(
+          parser: parser,
+          maxSegmentTextLength: 6,
+        ),
+      );
+
+      final entries = planner.buildEntries(
+        posts: <ThreadPost>[
+          ThreadPost(
+            pid: 'p-long',
+            author: 'alice',
+            authorId: '1',
+            message: '<p>abcdefghijklmnop</p>',
+            number: 1,
+            isFirst: true,
+            dateline: 'today',
+          ),
+        ],
+      );
+
+      final bodyEntries = entries
+          .where(
+            (entry) =>
+                entry.kind == ThreadDetailRenderEntryKind.postBodySegment,
+          )
+          .toList();
+
+      expect(bodyEntries.map((entry) => entry.key), <String>[
+        'thread-post-body-p-long-0',
+        'thread-post-body-p-long-1',
+        'thread-post-body-p-long-2',
+      ]);
+      expect(bodyEntries.first.plan!.usesListSegments, isTrue);
+      expect(parser.parseCount, 1);
+    });
+
+    test('builds segment entries for image bodies', () {
+      final planner = ThreadDetailRenderEntryPlanner();
+
+      final entries = planner.buildEntries(
+        posts: <ThreadPost>[
+          ThreadPost(
+            pid: 'p2',
+            author: 'alice',
+            authorId: '1',
+            message:
+                '<p>开头</p>'
+                '<img file="data/attachment/forum/1.jpg">'
+                '<img file="data/attachment/forum/2.jpg">'
+                '<p>结尾</p>',
+            number: 1,
+            isFirst: true,
+            dateline: 'today',
+          ),
+        ],
+        targetPid: 'p2',
+      );
+
+      final bodyEntries = entries
+          .where(
+            (entry) =>
+                entry.kind == ThreadDetailRenderEntryKind.postBodySegment,
+          )
+          .toList();
+
+      expect(bodyEntries, hasLength(4));
+      expect(bodyEntries.map((entry) => entry.key), <String>[
+        'thread-post-body-p2-0',
+        'thread-post-body-p2-1',
+        'thread-post-body-p2-2',
+        'thread-post-body-p2-3',
+      ]);
+      expect(bodyEntries.first.plan!.usesListSegments, isTrue);
+      expect(entries.last.kind, ThreadDetailRenderEntryKind.targetSpacer);
+    });
+
+    test('reuses render plans across repeated entry builds', () {
+      final parser = _CountingThreadPostBodyParser();
+      final planner = ThreadDetailRenderEntryPlanner(
+        bodyRenderPlanner: ThreadPostBodyRenderPlanner(parser: parser),
+      );
+      final post = ThreadPost(
+        pid: 'p-cached',
+        author: 'alice',
+        authorId: '1',
+        message: '<p>开头</p><img file="data/attachment/forum/1.jpg">',
+        number: 1,
+        isFirst: true,
+        dateline: 'today',
+      );
+
+      planner.buildEntries(posts: <ThreadPost>[post]);
+      planner.buildEntries(posts: <ThreadPost>[post]);
+
+      expect(parser.parseCount, 1);
+    });
+
+    test('keeps short smiley-only text in one body entry', () {
+      final parser = _CountingThreadPostBodyParser();
+      final planner = ThreadDetailRenderEntryPlanner(
+        bodyRenderPlanner: ThreadPostBodyRenderPlanner(parser: parser),
+      );
+      final smileys = List.filled(
+        12,
+        '<img src="static/image/smiley/comcom/2.gif" class="vm">',
+      ).join();
+
+      final entries = planner.buildEntries(
+        posts: <ThreadPost>[
+          ThreadPost(
+            pid: 'p-smiley',
+            author: 'alice',
+            authorId: '1',
+            message: '<p>正文 $smileys</p>',
+            number: 1,
+            isFirst: true,
+            dateline: 'today',
+          ),
+        ],
+      );
+
+      expect(entries.map((entry) => entry.kind), <ThreadDetailRenderEntryKind>[
+        ThreadDetailRenderEntryKind.postHeader,
+        ThreadDetailRenderEntryKind.postBody,
+        ThreadDetailRenderEntryKind.postFooter,
+        ThreadDetailRenderEntryKind.pagination,
+      ]);
+      expect(entries[1].requirePlan().usesListSegments, isFalse);
+      expect(parser.parseCount, 1);
+    });
+
+    test('reuses render plans until the post message changes', () {
+      final planner = ThreadDetailRenderEntryPlanner();
+      final post = ThreadPost(
+        pid: 'p3',
+        author: 'alice',
+        authorId: '1',
+        message: '<p>旧正文</p>',
+        number: 1,
+        isFirst: true,
+        dateline: 'today',
+      );
+
+      final firstPlan = planner.planFor(post);
+      final secondPlan = planner.planFor(post);
+      final changedPlan = planner.planFor(
+        ThreadPost(
+          pid: 'p3',
+          author: 'alice',
+          authorId: '1',
+          message: '<p>新正文</p>',
+          number: 1,
+          isFirst: true,
+          dateline: 'today',
+        ),
+      );
+
+      expect(identical(firstPlan, secondPlan), isTrue);
+      expect(identical(firstPlan, changedPlan), isFalse);
+    });
+  });
+}
+
+class _CountingThreadPostBodyParser extends ThreadPostBodyParser {
+  var parseCount = 0;
+
+  @override
+  ThreadPostBodyDocument parse(String html) {
+    parseCount += 1;
+    return super.parse(html);
+  }
+}
