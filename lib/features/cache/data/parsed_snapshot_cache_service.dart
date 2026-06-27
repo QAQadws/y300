@@ -124,6 +124,16 @@ class LocalParsedSnapshotCacheService implements ParsedSnapshotCacheService {
   }
 
   @override
+  Future<int> deleteExpired(DateTime now) async {
+    final db = await _dbFuture;
+    return db.delete(
+      ComicLocalDb.cachedSnapshotsTable,
+      where: 'expires_at IS NOT NULL AND expires_at <= ?',
+      whereArgs: <Object>[now.millisecondsSinceEpoch],
+    );
+  }
+
+  @override
   Future<StorageUsageSection> calculateUsage() async {
     final db = await _dbFuture;
     final rows = await db.rawQuery('''

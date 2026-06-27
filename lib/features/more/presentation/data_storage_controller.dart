@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
-import 'package:y300/features/cache/domain/image_cache_service.dart';
+import 'package:y300/features/cache/domain/cache_maintenance_models.dart';
 import 'package:y300/features/cache/domain/storage_usage_models.dart';
 import 'package:y300/features/more/data/data_storage_settings_repository.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
@@ -78,14 +78,14 @@ final dataStorageControllerProvider =
 
 class DataStorageController extends AsyncNotifier<DataStorageViewState> {
   late final DataStorageSettingsRepository _repository;
-  late final ImageCacheService _imageCacheService;
+  late final CacheMaintenanceService _cacheMaintenanceService;
   late final StorageAccountingService _storageAccountingService;
   late final DownloadStorageService _downloadStorageService;
 
   @override
   Future<DataStorageViewState> build() async {
     _repository = ref.read(dataStorageSettingsRepositoryProvider);
-    _imageCacheService = ref.read(imageCacheServiceProvider);
+    _cacheMaintenanceService = ref.read(cacheMaintenanceServiceProvider);
     _storageAccountingService = ref.read(storageAccountingServiceProvider);
     _downloadStorageService = ref.read(downloadStorageServiceProvider);
     final base = await _loadStorageState();
@@ -109,8 +109,10 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
       return;
     }
     state = AsyncData(current.copyWith(isUpdating: true, clearHint: true));
-    await _imageCacheService.clearUnprotected();
-    final usageReport = await _storageAccountingService.loadUsageReport();
+    await _cacheMaintenanceService.clear(
+      const CacheClearRequest(scope: CacheClearScope.imageCache),
+    );
+    final usageReport = await _cacheMaintenanceService.usageAfterMaintenance();
     if (!ref.mounted) {
       return;
     }
@@ -132,8 +134,10 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
     state = AsyncData(current.copyWith(isUpdating: true, clearHint: true));
     await _repository.setImageCacheMaxBytes(bytes);
     final maxBytes = await _repository.getImageCacheMaxBytes();
-    await _imageCacheService.pruneToLimit(maxBytes: maxBytes);
-    final usageReport = await _storageAccountingService.loadUsageReport();
+    await _cacheMaintenanceService.prune(
+      CachePruneRequest(imageCacheMaxBytes: maxBytes),
+    );
+    final usageReport = await _cacheMaintenanceService.usageAfterMaintenance();
     if (!ref.mounted) {
       return;
     }

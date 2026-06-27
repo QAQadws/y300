@@ -1,6 +1,7 @@
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/cache/data/cache_maintenance_service.dart';
 import 'package:y300/features/cache/data/default_image_cache_service.dart';
 import 'package:y300/features/cache/data/document_cache_service.dart';
 import 'package:y300/features/cache/data/image_cache_directory_provider.dart';
@@ -11,6 +12,7 @@ import 'package:y300/features/cache/data/protected_cover_file_store.dart';
 import 'package:y300/features/cache/data/storage_accounting_service.dart';
 import 'package:y300/features/cache/data/storage_usage_adapters.dart';
 import 'package:y300/features/cache/domain/document_cache_models.dart';
+import 'package:y300/features/cache/domain/cache_maintenance_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/cache/domain/native_page_cache_invalidation_service.dart';
 import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
@@ -80,6 +82,21 @@ final imageCacheServiceProvider = Provider<ImageCacheService>((ref) {
     cacheManagerFuture: ref.watch(imageCacheManagerProvider.future),
     directoryResolver: ref.watch(imageCacheDirectoryResolverProvider),
     headerBuilder: ref.watch(imageRequestHeaderBuilderProvider),
+  );
+});
+
+final cacheMaintenanceServiceProvider = Provider<CacheMaintenanceService>((
+  ref,
+) {
+  return DefaultCacheMaintenanceService(
+    imageCacheService: ref.watch(imageCacheServiceProvider),
+    documentCacheService: ref.watch(documentCacheServiceProvider),
+    snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
+    storageAccountingService: ref.watch(storageAccountingServiceProvider),
+    protectedCoverMaintenance: ref.watch(
+      protectedCoverCacheMaintenanceProvider,
+    ),
+    protectedCoverOwnerExists: (_) => true,
   );
 });
 

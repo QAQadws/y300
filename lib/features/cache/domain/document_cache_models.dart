@@ -89,5 +89,7 @@ abstract class DocumentCacheService {
     required String ownerIdPrefix,
   });
 
+  Future<int> deleteOlderThan(DateTime cutoff);
+
   Future<StorageUsageSection> calculateUsage();
 }

@@ -229,6 +229,72 @@ void main() {
       );
     },
   );
+
+  test('LocalParsedSnapshotCacheService deletes expired snapshots', () async {
+    const dbName = 'parsed_snapshot_cache_prune_test.db';
+    await deleteDatabase(dbName);
+    final now = DateTime(2026, 1, 1, 10);
+    var currentTime = now;
+    final db = await ComicLocalDb.open(databaseName: dbName);
+    final service = LocalParsedSnapshotCacheService(
+      Future.value(db),
+      now: () => currentTime,
+    );
+    addTearDown(() async {
+      await db.close();
+      await deleteDatabase(dbName);
+    });
+    const codec = _StringSnapshotCodec();
+
+    Future<void> put(String key, Duration keepStaleFor) {
+      return service.put(
+        SnapshotCacheDescriptor(
+          cacheKey: key,
+          ownerType: CacheOwnerType.thread,
+          ownerId: key,
+          snapshotType: 'test.snapshot',
+        ),
+        key,
+        codec,
+        policy: SnapshotCachePolicy(
+          freshFor: const Duration(minutes: 1),
+          keepStaleFor: keepStaleFor,
+        ),
+      );
+    }
+
+    await put('expired', const Duration(minutes: 1));
+    await put('fresh', const Duration(days: 1));
+    currentTime = now.add(const Duration(minutes: 2));
+
+    final deleted = await service.deleteExpired(currentTime);
+
+    expect(deleted, 1);
+    expect(
+      await service.get(
+        const SnapshotCacheDescriptor(
+          cacheKey: 'expired',
+          ownerType: CacheOwnerType.thread,
+          ownerId: 'expired',
+          snapshotType: 'test.snapshot',
+        ),
+        codec,
+      ),
+      isNull,
+    );
+    expect(
+      await service.get(
+        const SnapshotCacheDescriptor(
+          cacheKey: 'fresh',
+          ownerType: CacheOwnerType.thread,
+          ownerId: 'fresh',
+          snapshotType: 'test.snapshot',
+        ),
+        codec,
+      ),
+      isNotNull,
+    );
+  });
 }
 
 class _StringSnapshotCodec implements SnapshotCodec<String> {

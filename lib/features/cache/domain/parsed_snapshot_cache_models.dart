@@ -105,5 +105,7 @@ abstract class ParsedSnapshotCacheService {
     required String ownerIdPrefix,
   });
 
+  Future<int> deleteExpired(DateTime now);
+
   Future<StorageUsageSection> calculateUsage();
 }

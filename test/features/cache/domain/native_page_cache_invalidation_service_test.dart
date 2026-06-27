@@ -100,6 +100,9 @@ class _RecordingDocumentCacheService implements DocumentCacheService {
   }
 
   @override
+  Future<int> deleteOlderThan(DateTime cutoff) async => 0;
+
+  @override
   Future<StorageUsageSection> calculateUsage() async {
     return const StorageUsageSection(
       bucket: StorageBucket.pageCache,
@@ -151,6 +154,9 @@ class _RecordingParsedSnapshotCacheService
     deletedPrefixes.add(_OwnerPrefixCall(ownerType, ownerIdPrefix));
     return 0;
   }
+
+  @override
+  Future<int> deleteExpired(DateTime now) async => 0;
 
   @override
   Future<StorageUsageSection> calculateUsage() async {

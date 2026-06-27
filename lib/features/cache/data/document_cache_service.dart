@@ -87,6 +87,16 @@ class LocalDocumentCacheService implements DocumentCacheService {
   }
 
   @override
+  Future<int> deleteOlderThan(DateTime cutoff) async {
+    final db = await _dbFuture;
+    return db.delete(
+      ComicLocalDb.cachedDocumentsTable,
+      where: 'updated_at < ?',
+      whereArgs: <Object>[cutoff.millisecondsSinceEpoch],
+    );
+  }
+
+  @override
   Future<StorageUsageSection> calculateUsage() async {
     final db = await _dbFuture;
     final rows = await db.rawQuery('''

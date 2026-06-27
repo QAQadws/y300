@@ -130,4 +130,41 @@ void main() {
     );
     expect(await service.getByKey('document|thread|tid=2&page=1'), isNotNull);
   });
+
+  test(
+    'LocalDocumentCacheService deletes documents older than cutoff',
+    () async {
+      const dbName = 'document_cache_prune_test.db';
+      await deleteDatabase(dbName);
+      final db = await ComicLocalDb.open(databaseName: dbName);
+      final service = LocalDocumentCacheService(Future.value(db));
+      addTearDown(() async {
+        await db.close();
+        await deleteDatabase(dbName);
+      });
+
+      Future<void> put(String key, DateTime updatedAt) {
+        return service.put(
+          CachedDocument(
+            cacheKey: key,
+            ownerType: CacheOwnerType.thread,
+            ownerId: key,
+            sourceUrl: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1',
+            body: 'cached',
+            fetchedAt: updatedAt,
+            updatedAt: updatedAt,
+          ),
+        );
+      }
+
+      await put('old', DateTime(2026, 1, 1));
+      await put('new', DateTime(2026, 1, 10));
+
+      final deleted = await service.deleteOlderThan(DateTime(2026, 1, 5));
+
+      expect(deleted, 1);
+      expect(await service.getByKey('old'), isNull);
+      expect(await service.getByKey('new'), isNotNull);
+    },
+  );
 }

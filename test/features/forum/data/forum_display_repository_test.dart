@@ -330,6 +330,9 @@ class _FakeParsedSnapshotCacheService<T> implements ParsedSnapshotCacheService {
   }
 
   @override
+  Future<int> deleteExpired(DateTime now) async => 0;
+
+  @override
   Future<StorageUsageSection> calculateUsage() async {
     return const StorageUsageSection(
       bucket: StorageBucket.pageCache,
@@ -393,6 +396,9 @@ class _FakeDocumentCacheService implements DocumentCacheService {
     );
     return before - _documents.length;
   }
+
+  @override
+  Future<int> deleteOlderThan(DateTime cutoff) async => 0;
 
   @override
   Future<StorageUsageSection> calculateUsage() async {
