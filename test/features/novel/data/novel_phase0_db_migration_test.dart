@@ -30,7 +30,7 @@ void main() {
         isTrue,
       );
       expect(tableNames.contains(ComicLocalDb.readerBookmarksTable), isTrue);
-      expect(ComicLocalDb.dbVersion, 22);
+      expect(ComicLocalDb.dbVersion, 23);
 
       final indexRows = await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='index'",

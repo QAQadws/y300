@@ -9,7 +9,9 @@ import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/features/cache/domain/cache_key_canonicalizer.dart';
 import 'package:y300/features/cache/domain/document_cache_models.dart';
+import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/storage_usage_models.dart';
+import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
 
 void main() {
@@ -85,6 +87,61 @@ void main() {
   );
 
   test(
+    'ThreadDetailHtmlRepository writes successful parse to snapshot cache',
+    () async {
+      final adapter = _ThreadDetailHtmlTestAdapter();
+      final snapshotCache = _FakeParsedSnapshotCacheService<ThreadDetailData>();
+      final repository = _buildRepository(
+        adapter,
+        snapshotCacheService: snapshotCache,
+      );
+
+      final result = await repository.getThreadDetail(tid: '572529', page: 3);
+
+      expect(result.isSuccess, isTrue);
+      expect(snapshotCache.putValues, hasLength(1));
+      expect(snapshotCache.putValues.single.subject, '测试帖子');
+      expect(snapshotCache.putDescriptors.single.snapshotType, 'thread.detail');
+    },
+  );
+
+  test(
+    'ThreadDetailHtmlRepository returns fresh snapshot before network request',
+    () async {
+      final adapter = _ThreadDetailHtmlTestAdapter(statusCode: 503);
+      final snapshotCache = _FakeParsedSnapshotCacheService<ThreadDetailData>();
+      final descriptor = const CacheKeyCanonicalizer().threadDetailSnapshot(
+        tid: '572529',
+        page: 1,
+      );
+      snapshotCache.seed(
+        descriptor,
+        ThreadDetailData(
+          tid: '572529',
+          fid: '33',
+          subject: '缓存帖子',
+          author: 'cached',
+          replies: 0,
+          views: 0,
+          currentPage: 1,
+          perPage: 20,
+          posts: const <ThreadPost>[],
+        ),
+      );
+      final repository = _buildRepository(
+        adapter,
+        snapshotCacheService: snapshotCache,
+      );
+
+      final result = await repository.getThreadDetail(tid: '572529');
+
+      expect(result.isSuccess, isTrue);
+      expect(result.dataOrNull!.subject, '缓存帖子');
+      expect(adapter.requestedUris, isEmpty);
+    },
+  );
+
+  test(
     'ThreadDetailHtmlRepository parses cached HTML when network fails',
     () async {
       final adapter = _ThreadDetailHtmlTestAdapter(statusCode: 503);
@@ -124,6 +181,7 @@ void main() {
 ThreadDetailHtmlRepository _buildRepository(
   _ThreadDetailHtmlTestAdapter adapter, {
   DocumentCacheService? documentCacheService,
+  ParsedSnapshotCacheService? snapshotCacheService,
   DateTime Function()? now,
 }) {
   final gateway = YamiboHttpGateway(
@@ -141,6 +199,7 @@ ThreadDetailHtmlRepository _buildRepository(
   return ThreadDetailHtmlRepository(
     htmlClient: YamiboHtmlClient(gateway: gateway),
     documentCacheService: documentCacheService,
+    snapshotCacheService: snapshotCacheService,
     now: now,
   );
 }
@@ -166,6 +225,75 @@ class _ThreadDetailHtmlTestAdapter implements HttpClientAdapter {
     return ResponseBody.fromString(
       statusCode == 200 ? _html : 'unavailable',
       statusCode,
+    );
+  }
+}
+
+class _FakeParsedSnapshotCacheService<T> implements ParsedSnapshotCacheService {
+  final _snapshots = <String, T>{};
+  final putDescriptors = <SnapshotCacheDescriptor>[];
+  final putValues = <T>[];
+
+  void seed(SnapshotCacheDescriptor descriptor, T value) {
+    _snapshots[descriptor.cacheKey] = value;
+  }
+
+  @override
+  Future<CachedSnapshot<R>?> get<R>(
+    SnapshotCacheDescriptor descriptor,
+    SnapshotCodec<R> codec,
+  ) async {
+    final value = _snapshots[descriptor.cacheKey];
+    if (value is! R) {
+      return null;
+    }
+    return CachedSnapshot<R>(
+      cacheKey: descriptor.cacheKey,
+      ownerType: descriptor.ownerType,
+      ownerId: descriptor.ownerId,
+      snapshotType: codec.snapshotType,
+      codecVersion: codec.codecVersion,
+      parserVersion: codec.parserVersion,
+      value: value,
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+      staleAt: DateTime(2099, 1, 1),
+      expiresAt: DateTime(2099, 1, 2),
+    );
+  }
+
+  @override
+  Future<void> put<R>(
+    SnapshotCacheDescriptor descriptor,
+    R value,
+    SnapshotCodec<R> codec, {
+    required SnapshotCachePolicy policy,
+  }) async {
+    putDescriptors.add(descriptor);
+    if (value is T) {
+      putValues.add(value);
+      _snapshots[descriptor.cacheKey] = value;
+    }
+  }
+
+  @override
+  Future<void> touch(String cacheKey, DateTime accessedAt) async {}
+
+  @override
+  Future<int> deleteByOwner({
+    required CacheOwnerType ownerType,
+    required String ownerId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<StorageUsageSection> calculateUsage() async {
+    return const StorageUsageSection(
+      bucket: StorageBucket.pageCache,
+      label: '页面缓存',
+      bytes: 0,
+      clearable: false,
     );
   }
 }

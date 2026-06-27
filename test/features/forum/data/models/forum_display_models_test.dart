@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/forum/data/forum_display_snapshot_codec.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
 
 void main() {
@@ -77,11 +78,7 @@ void main() {
 
     test('supports fallback keys threadlist and perpage', () {
       final variables = <String, dynamic>{
-        'forum': <String, dynamic>{
-          'fid': '9',
-          'name': '测试区',
-          'threads': '1',
-        },
+        'forum': <String, dynamic>{'fid': '9', 'name': '测试区', 'threads': '1'},
         'perpage': '10',
         'threadlist': <Map<String, dynamic>>[
           <String, dynamic>{
@@ -102,6 +99,80 @@ void main() {
       expect(data.threads, hasLength(1));
       expect(data.threads.first.author, 'fallback-author');
       expect(data.threads.first.dateline, '1700000000');
+    });
+  });
+
+  group('ForumDisplaySnapshotCodec', () {
+    test('round trips parsed forum display data', () {
+      final source = ForumDisplayData(
+        fid: '30',
+        forumName: '中文百合漫画区',
+        currentPage: 2,
+        perPage: 20,
+        totalThreads: 100,
+        headImageUrl: 'head',
+        forumIconUrl: 'icon',
+        todayPosts: 8,
+        rank: 1,
+        postUrl: 'post',
+        searchUrl: 'search',
+        favoriteUrl: 'favorite',
+        previousPageUrl: 'prev',
+        nextPageUrl: 'next',
+        lastPage: 5,
+        hasMoreOverride: true,
+        primaryFilters: const <ForumDisplayFilterItem>[
+          ForumDisplayFilterItem(label: '全部', url: 'all', isSelected: true),
+        ],
+        typeFilters: const <ForumDisplayFilterItem>[
+          ForumDisplayFilterItem(label: '長篇連載', url: 'type', typeid: '69'),
+        ],
+        subForums: const <ForumDisplaySubForum>[
+          ForumDisplaySubForum(fid: '31', title: '子版块', url: 'sub'),
+        ],
+        topEntries: const <ForumDisplayTopEntry>[
+          ForumDisplayTopEntry(
+            title: '公告',
+            url: 'announcement',
+            tid: '1',
+            badgeLabel: '公告',
+            titleColorHex: '#531104',
+            isAnnouncement: true,
+          ),
+        ],
+        threads: <ForumThreadSummary>[
+          ForumThreadSummary(
+            tid: '572604',
+            typeid: '69',
+            sourceTagName: '長篇連載',
+            subject: '测试帖子',
+            author: 'alice',
+            replies: 1,
+            views: 12,
+            dateline: '2026-6-18',
+            uid: '10',
+            avatarUrl: 'avatar',
+            authorUrl: 'author',
+            threadUrl: 'thread',
+            excerpt: '摘要',
+            sourceTagUrl: 'tag',
+            badgeLabel: '投票',
+            titleColorHex: '#E92725',
+            isLocked: true,
+          ),
+        ],
+      );
+      const codec = ForumDisplaySnapshotCodec();
+
+      final decoded = codec.decode(codec.encode(source));
+
+      expect(decoded.forumName, source.forumName);
+      expect(decoded.primaryFilters.single.isSelected, isTrue);
+      expect(decoded.typeFilters.single.typeid, '69');
+      expect(decoded.subForums.single.title, '子版块');
+      expect(decoded.topEntries.single.isAnnouncement, isTrue);
+      expect(decoded.threads.single.sourceTagName, '長篇連載');
+      expect(decoded.threads.single.isLocked, isTrue);
     });
   });
 }

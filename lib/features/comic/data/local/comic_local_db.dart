@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 22;
+  static const int dbVersion = 23;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -33,6 +33,7 @@ class ComicLocalDb {
   static const String favoriteThreadCategoryTable = 'favorite_thread_category';
   static const String cachedImagesTable = 'cached_images';
   static const String cachedDocumentsTable = 'cached_documents';
+  static const String cachedSnapshotsTable = 'cached_snapshots';
   static const String comicSearchRefreshQueueTable =
       'comic_search_refresh_queue';
 
@@ -176,6 +177,7 @@ class ComicLocalDb {
     await _createFavoriteTables(db);
     await _createImageCacheTables(db);
     await _createDocumentCacheTables(db);
+    await _createSnapshotCacheTables(db);
     await _createComicSearchRefreshQueueTable(db);
   }
 
@@ -610,6 +612,45 @@ class ComicLocalDb {
     );
   }
 
+  /// 原生模式 Phase 4：解析快照缓存。
+  ///
+  /// `parser_version` 与 `codec_version` 用于让 parser/model 结构变更后
+  /// 自动忽略旧快照，避免 UI 读取过期结构。
+  static Future<void> _createSnapshotCacheTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $cachedSnapshotsTable (
+        cache_key TEXT PRIMARY KEY,
+        owner_type TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        snapshot_type TEXT NOT NULL,
+        codec_version INTEGER NOT NULL,
+        parser_version INTEGER NOT NULL,
+        source_document_key TEXT,
+        payload_json TEXT NOT NULL,
+        payload_bytes INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        last_accessed_at INTEGER,
+        stale_at INTEGER,
+        expires_at INTEGER,
+        FOREIGN KEY (source_document_key) REFERENCES $cachedDocumentsTable(cache_key) ON DELETE SET NULL
+      )
+    ''');
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_cached_snapshots_owner ON '
+      '$cachedSnapshotsTable(owner_type, owner_id, updated_at DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_cached_snapshots_type_version ON '
+      '$cachedSnapshotsTable(snapshot_type, codec_version, parser_version)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_cached_snapshots_access ON '
+      '$cachedSnapshotsTable(last_accessed_at, updated_at)',
+    );
+  }
+
   /// 收藏自动刷新阶段 3：漫画搜索等待队列。
   ///
   /// 队列表只保存“需要走搜索/当前帖回退”的后台刷新任务；catalog-only
@@ -661,6 +702,7 @@ class ComicLocalDb {
 
   static const List<String> _managedTablesInDropOrder = <String>[
     comicSearchRefreshQueueTable,
+    cachedSnapshotsTable,
     cachedDocumentsTable,
     favoriteThreadCategoryTable,
     favoriteCategoriesTable,

@@ -4,9 +4,10 @@ import 'dart:io' as io;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/cache/domain/document_cache_models.dart';
 import 'package:y300/features/cache/data/image_cache_repository.dart';
+import 'package:y300/features/cache/domain/document_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/storage_usage_models.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/composer_shared/data/shared_preferences_composer_draft_repository.dart';
@@ -79,16 +80,33 @@ class ImageCacheStorageAccountingAdapter implements StorageAccountingAdapter {
 class PageCacheStorageAccountingAdapter implements StorageAccountingAdapter {
   const PageCacheStorageAccountingAdapter({
     required DocumentCacheService documentCacheService,
-  }) : _documentCacheService = documentCacheService;
+    ParsedSnapshotCacheService? snapshotCacheService,
+  }) : _documentCacheService = documentCacheService,
+       _snapshotCacheService = snapshotCacheService;
 
   final DocumentCacheService _documentCacheService;
+  final ParsedSnapshotCacheService? _snapshotCacheService;
 
   @override
   StorageBucket get bucket => StorageBucket.pageCache;
 
   @override
-  Future<StorageUsageSection> calculateUsage() {
-    return _documentCacheService.calculateUsage();
+  Future<StorageUsageSection> calculateUsage() async {
+    final documentSection = await _documentCacheService.calculateUsage();
+    final snapshotSection = await _snapshotCacheService?.calculateUsage();
+    final sections = <StorageUsageSection>[documentSection, ?snapshotSection];
+    final slices = sections
+        .expand((section) => section.slices)
+        .where((slice) => slice.bytes > 0)
+        .toList(growable: false);
+    final total = sections.fold<int>(0, (sum, section) => sum + section.bytes);
+    return StorageUsageSection(
+      bucket: bucket,
+      label: bucket.label,
+      bytes: total,
+      clearable: slices.any((slice) => !slice.protected),
+      slices: slices,
+    );
   }
 }
 

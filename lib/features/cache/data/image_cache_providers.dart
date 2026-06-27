@@ -6,11 +6,13 @@ import 'package:y300/features/cache/data/document_cache_service.dart';
 import 'package:y300/features/cache/data/image_cache_directory_provider.dart';
 import 'package:y300/features/cache/data/image_cache_manager_factory.dart';
 import 'package:y300/features/cache/data/image_cache_repository.dart';
+import 'package:y300/features/cache/data/parsed_snapshot_cache_service.dart';
 import 'package:y300/features/cache/data/protected_cover_file_store.dart';
 import 'package:y300/features/cache/data/storage_accounting_service.dart';
 import 'package:y300/features/cache/data/storage_usage_adapters.dart';
-import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/cache/domain/document_cache_models.dart';
+import 'package:y300/features/cache/domain/image_cache_service.dart';
+import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/protected_cover_cache_maintenance.dart';
 import 'package:y300/features/cache/domain/storage_usage_models.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
@@ -42,6 +44,12 @@ final imageCacheRepositoryProvider = Provider<ImageCacheRepository>((ref) {
 final documentCacheServiceProvider = Provider<DocumentCacheService>((ref) {
   return LocalDocumentCacheService(ComicLocalDb.open());
 });
+
+final parsedSnapshotCacheServiceProvider = Provider<ParsedSnapshotCacheService>(
+  (ref) {
+    return LocalParsedSnapshotCacheService(ComicLocalDb.open());
+  },
+);
 
 final protectedCoverFileStoreProvider = Provider<ProtectedCoverFileStore>((
   ref,
@@ -75,6 +83,7 @@ final storageAccountingServiceProvider = Provider<StorageAccountingService>((
       ImageCacheStorageAccountingAdapter(repository: imageCacheRepository),
       PageCacheStorageAccountingAdapter(
         documentCacheService: ref.watch(documentCacheServiceProvider),
+        snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
       ),
       const ComposerDraftStorageAccountingAdapter(),
       DownloadStorageAccountingAdapter(

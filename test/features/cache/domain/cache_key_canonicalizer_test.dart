@@ -47,4 +47,34 @@ void main() {
     expect(allPosts.cacheKey, isNot(reverseOrder.cacheKey));
     expect(authorOnly.cacheKey, isNot(reverseOrder.cacheKey));
   });
+
+  test('forumDisplay snapshot key is stable and separates filter variants', () {
+    const canonicalizer = CacheKeyCanonicalizer();
+
+    final first = canonicalizer.forumDisplaySnapshot(
+      fid: '30',
+      page: 2,
+      queryParameters: const <String, String>{
+        'typeid': '69',
+        'filter': 'typeid',
+      },
+    );
+    final second = canonicalizer.forumDisplaySnapshot(
+      fid: '30',
+      page: 2,
+      queryParameters: const <String, String>{
+        'filter': 'typeid',
+        'typeid': '69',
+      },
+    );
+    final different = canonicalizer.forumDisplaySnapshot(
+      fid: '30',
+      page: 2,
+      queryParameters: const <String, String>{'filter': 'digest'},
+    );
+
+    expect(first.cacheKey, second.cacheKey);
+    expect(first.cacheKey, isNot(different.cacheKey));
+    expect(first.snapshotType, CacheKeyCanonicalizer.forumDisplaySnapshotType);
+  });
 }

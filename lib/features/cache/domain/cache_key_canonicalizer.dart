@@ -1,9 +1,13 @@
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/cache/domain/document_cache_models.dart';
+import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/storage_usage_models.dart';
 
 class CacheKeyCanonicalizer {
   const CacheKeyCanonicalizer();
+
+  static const String forumDisplaySnapshotType = 'forum.display';
+  static const String threadDetailSnapshotType = 'thread.detail';
 
   DocumentCacheDescriptor threadDetail({
     required String tid,
@@ -44,6 +48,90 @@ class CacheKeyCanonicalizer {
     );
   }
 
+  DocumentCacheDescriptor forumDisplay({
+    required String fid,
+    required int page,
+    Map<String, String> queryParameters = const <String, String>{},
+    DocumentRequestProfile requestProfile = DocumentRequestProfile.loggedIn,
+  }) {
+    final canonicalParameters = _canonicalQueryParameters(<String, String>{
+      ...queryParameters,
+      'mod': 'forumdisplay',
+      'fid': fid,
+      'mobile': '2',
+      if (page > 1) 'page': page.toString(),
+    });
+    final uri = Uri.parse(
+      AppConfig.siteBaseUrl,
+    ).replace(path: '/forum.php', queryParameters: canonicalParameters);
+    final ownerId = _forumDisplayOwnerId(
+      fid: fid,
+      page: page,
+      params: canonicalParameters,
+    );
+    return DocumentCacheDescriptor(
+      cacheKey: _canonicalKey(
+        namespace: CacheNamespace.document,
+        ownerType: CacheOwnerType.forumDisplay,
+        ownerId: ownerId,
+        requestProfile: requestProfile,
+        uri: uri,
+      ),
+      ownerType: CacheOwnerType.forumDisplay,
+      ownerId: ownerId,
+      sourceUrl: uri.toString(),
+      requestProfile: requestProfile,
+    );
+  }
+
+  SnapshotCacheDescriptor threadDetailSnapshot({
+    required String tid,
+    required int page,
+    Map<String, String> queryParameters = const <String, String>{},
+    DocumentRequestProfile requestProfile = DocumentRequestProfile.loggedIn,
+  }) {
+    final document = threadDetail(
+      tid: tid,
+      page: page,
+      queryParameters: queryParameters,
+      requestProfile: requestProfile,
+    );
+    return SnapshotCacheDescriptor(
+      cacheKey: document.cacheKey.replaceFirst(
+        '${CacheNamespace.document.id}|',
+        '${CacheNamespace.snapshot.id}|',
+      ),
+      ownerType: document.ownerType,
+      ownerId: document.ownerId,
+      snapshotType: threadDetailSnapshotType,
+      sourceDocumentKey: document.cacheKey,
+    );
+  }
+
+  SnapshotCacheDescriptor forumDisplaySnapshot({
+    required String fid,
+    required int page,
+    Map<String, String> queryParameters = const <String, String>{},
+    DocumentRequestProfile requestProfile = DocumentRequestProfile.loggedIn,
+  }) {
+    final document = forumDisplay(
+      fid: fid,
+      page: page,
+      queryParameters: queryParameters,
+      requestProfile: requestProfile,
+    );
+    return SnapshotCacheDescriptor(
+      cacheKey: document.cacheKey.replaceFirst(
+        '${CacheNamespace.document.id}|',
+        '${CacheNamespace.snapshot.id}|',
+      ),
+      ownerType: document.ownerType,
+      ownerId: document.ownerId,
+      snapshotType: forumDisplaySnapshotType,
+      sourceDocumentKey: document.cacheKey,
+    );
+  }
+
   Map<String, String> _canonicalQueryParameters(Map<String, String> params) {
     final normalized = <String, String>{};
     for (final entry in params.entries) {
@@ -70,6 +158,24 @@ class CacheKeyCanonicalizer {
       'page=$page',
       if (params.containsKey('authorid')) 'authorid=${params['authorid']}',
       if (params.containsKey('ordertype')) 'ordertype=${params['ordertype']}',
+    ];
+    return variants.join('&');
+  }
+
+  String _forumDisplayOwnerId({
+    required String fid,
+    required int page,
+    required Map<String, String> params,
+  }) {
+    final variants = <String>[
+      'fid=$fid',
+      'page=$page',
+      for (final entry in params.entries)
+        if (entry.key != 'mod' &&
+            entry.key != 'mobile' &&
+            entry.key != 'fid' &&
+            entry.key != 'page')
+          '${entry.key}=${entry.value}',
     ];
     return variants.join('&');
   }

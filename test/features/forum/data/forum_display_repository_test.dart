@@ -7,6 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
+import 'package:y300/features/cache/domain/cache_key_canonicalizer.dart';
+import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
+import 'package:y300/features/cache/domain/storage_usage_models.dart';
 import 'package:y300/features/forum/data/forum_display_repository.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
 
@@ -17,50 +20,56 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
-  test('ForumDisplayHtmlRepository requests mobile forumdisplay HTML', () async {
-    final adapter = _ForumDisplayHtmlTestAdapter();
-    final repository = _buildRepository(adapter);
+  test(
+    'ForumDisplayHtmlRepository requests mobile forumdisplay HTML',
+    () async {
+      final adapter = _ForumDisplayHtmlTestAdapter();
+      final repository = _buildRepository(adapter);
 
-    final result = await repository.getForumDisplay(fid: '30', page: 2);
+      final result = await repository.getForumDisplay(fid: '30', page: 2);
 
-    expect(result.isSuccess, isTrue);
-    expect(result.dataOrNull!.forumName, '中文百合漫画区');
-    expect(result.dataOrNull!.threads.single.tid, '572604');
-    final requested = Uri.parse(adapter.requestedUris.single);
-    expect(requested.origin, 'https://bbs.yamibo.com');
-    expect(requested.path, '/forum.php');
-    expect(requested.queryParameters['mod'], 'forumdisplay');
-    expect(requested.queryParameters['fid'], '30');
-    expect(requested.queryParameters['page'], '2');
-    expect(requested.queryParameters['mobile'], '2');
-    expect(adapter.userAgents.single, contains('Mobile'));
-  });
+      expect(result.isSuccess, isTrue);
+      expect(result.dataOrNull!.forumName, '中文百合漫画区');
+      expect(result.dataOrNull!.threads.single.tid, '572604');
+      final requested = Uri.parse(adapter.requestedUris.single);
+      expect(requested.origin, 'https://bbs.yamibo.com');
+      expect(requested.path, '/forum.php');
+      expect(requested.queryParameters['mod'], 'forumdisplay');
+      expect(requested.queryParameters['fid'], '30');
+      expect(requested.queryParameters['page'], '2');
+      expect(requested.queryParameters['mobile'], '2');
+      expect(adapter.userAgents.single, contains('Mobile'));
+    },
+  );
 
-  test('ForumDisplayHtmlRepository keeps forumdisplay query parameters', () async {
-    final adapter = _ForumDisplayHtmlTestAdapter();
-    final repository = _buildRepository(adapter);
+  test(
+    'ForumDisplayHtmlRepository keeps forumdisplay query parameters',
+    () async {
+      final adapter = _ForumDisplayHtmlTestAdapter();
+      final repository = _buildRepository(adapter);
 
-    final result = await repository.getForumDisplayByQuery(
-      const ForumDisplayQuery(
-        fid: '30',
-        page: 3,
-        parameters: <String, String>{
-          'filter': 'typeid',
-          'typeid': '69',
-          'orderby': 'lastpost',
-        },
-      ),
-    );
+      final result = await repository.getForumDisplayByQuery(
+        const ForumDisplayQuery(
+          fid: '30',
+          page: 3,
+          parameters: <String, String>{
+            'filter': 'typeid',
+            'typeid': '69',
+            'orderby': 'lastpost',
+          },
+        ),
+      );
 
-    expect(result.isSuccess, isTrue);
-    expect(adapter.requestedUris.single, contains('mod=forumdisplay'));
-    expect(adapter.requestedUris.single, contains('fid=30'));
-    expect(adapter.requestedUris.single, contains('page=3'));
-    expect(adapter.requestedUris.single, contains('filter=typeid'));
-    expect(adapter.requestedUris.single, contains('typeid=69'));
-    expect(adapter.requestedUris.single, contains('orderby=lastpost'));
-    expect(adapter.requestedUris.single, contains('mobile=2'));
-  });
+      expect(result.isSuccess, isTrue);
+      expect(adapter.requestedUris.single, contains('mod=forumdisplay'));
+      expect(adapter.requestedUris.single, contains('fid=30'));
+      expect(adapter.requestedUris.single, contains('page=3'));
+      expect(adapter.requestedUris.single, contains('filter=typeid'));
+      expect(adapter.requestedUris.single, contains('typeid=69'));
+      expect(adapter.requestedUris.single, contains('orderby=lastpost'));
+      expect(adapter.requestedUris.single, contains('mobile=2'));
+    },
+  );
 
   test('ForumDisplayHtmlRepository wraps HTML request failure', () async {
     final adapter = _ForumDisplayHtmlTestAdapter(statusCode: 503);
@@ -72,11 +81,70 @@ void main() {
     expect(result.errorOrNull?.statusCode, 503);
     expect(result.errorOrNull?.message, contains('帖子列表 HTML 加载失败'));
   });
+
+  test(
+    'ForumDisplayHtmlRepository writes successful parse to snapshot cache',
+    () async {
+      final adapter = _ForumDisplayHtmlTestAdapter();
+      final snapshotCache = _FakeParsedSnapshotCacheService<ForumDisplayData>();
+      final repository = _buildRepository(
+        adapter,
+        snapshotCacheService: snapshotCache,
+      );
+
+      final result = await repository.getForumDisplay(fid: '30', page: 2);
+
+      expect(result.isSuccess, isTrue);
+      expect(snapshotCache.putValues, hasLength(1));
+      expect(snapshotCache.putValues.single.forumName, '中文百合漫画区');
+      expect(snapshotCache.putDescriptors.single.snapshotType, 'forum.display');
+    },
+  );
+
+  test(
+    'ForumDisplayHtmlRepository returns fresh snapshot before network',
+    () async {
+      final adapter = _ForumDisplayHtmlTestAdapter(statusCode: 503);
+      final snapshotCache = _FakeParsedSnapshotCacheService<ForumDisplayData>();
+      final descriptor = const CacheKeyCanonicalizer().forumDisplaySnapshot(
+        fid: '30',
+        page: 2,
+        queryParameters: const <String, String>{
+          'mod': 'forumdisplay',
+          'fid': '30',
+          'mobile': '2',
+          'page': '2',
+        },
+      );
+      snapshotCache.seed(
+        descriptor,
+        ForumDisplayData(
+          fid: '30',
+          forumName: '缓存版块',
+          currentPage: 2,
+          perPage: 20,
+          totalThreads: 0,
+          threads: const <ForumThreadSummary>[],
+        ),
+      );
+      final repository = _buildRepository(
+        adapter,
+        snapshotCacheService: snapshotCache,
+      );
+
+      final result = await repository.getForumDisplay(fid: '30', page: 2);
+
+      expect(result.isSuccess, isTrue);
+      expect(result.dataOrNull!.forumName, '缓存版块');
+      expect(adapter.requestedUris, isEmpty);
+    },
+  );
 }
 
 ForumDisplayHtmlRepository _buildRepository(
-  _ForumDisplayHtmlTestAdapter adapter,
-) {
+  _ForumDisplayHtmlTestAdapter adapter, {
+  ParsedSnapshotCacheService? snapshotCacheService,
+}) {
   final gateway = YamiboHttpGateway(
     cookieStore: CookieStore(),
     logger: Logger(level: Level.off),
@@ -91,6 +159,7 @@ ForumDisplayHtmlRepository _buildRepository(
   );
   return ForumDisplayHtmlRepository(
     htmlClient: YamiboHtmlClient(gateway: gateway),
+    snapshotCacheService: snapshotCacheService,
   );
 }
 
@@ -115,6 +184,75 @@ class _ForumDisplayHtmlTestAdapter implements HttpClientAdapter {
     return ResponseBody.fromString(
       statusCode == 200 ? _html : 'unavailable',
       statusCode,
+    );
+  }
+}
+
+class _FakeParsedSnapshotCacheService<T> implements ParsedSnapshotCacheService {
+  final _snapshots = <String, T>{};
+  final putDescriptors = <SnapshotCacheDescriptor>[];
+  final putValues = <T>[];
+
+  void seed(SnapshotCacheDescriptor descriptor, T value) {
+    _snapshots[descriptor.cacheKey] = value;
+  }
+
+  @override
+  Future<CachedSnapshot<R>?> get<R>(
+    SnapshotCacheDescriptor descriptor,
+    SnapshotCodec<R> codec,
+  ) async {
+    final value = _snapshots[descriptor.cacheKey];
+    if (value is! R) {
+      return null;
+    }
+    return CachedSnapshot<R>(
+      cacheKey: descriptor.cacheKey,
+      ownerType: descriptor.ownerType,
+      ownerId: descriptor.ownerId,
+      snapshotType: codec.snapshotType,
+      codecVersion: codec.codecVersion,
+      parserVersion: codec.parserVersion,
+      value: value,
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+      staleAt: DateTime(2099, 1, 1),
+      expiresAt: DateTime(2099, 1, 2),
+    );
+  }
+
+  @override
+  Future<void> put<R>(
+    SnapshotCacheDescriptor descriptor,
+    R value,
+    SnapshotCodec<R> codec, {
+    required SnapshotCachePolicy policy,
+  }) async {
+    putDescriptors.add(descriptor);
+    if (value is T) {
+      putValues.add(value);
+      _snapshots[descriptor.cacheKey] = value;
+    }
+  }
+
+  @override
+  Future<void> touch(String cacheKey, DateTime accessedAt) async {}
+
+  @override
+  Future<int> deleteByOwner({
+    required CacheOwnerType ownerType,
+    required String ownerId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<StorageUsageSection> calculateUsage() async {
+    return const StorageUsageSection(
+      bucket: StorageBucket.pageCache,
+      label: '页面缓存',
+      bytes: 0,
+      clearable: false,
     );
   }
 }

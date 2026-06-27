@@ -5,9 +5,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/cache/data/document_cache_service.dart';
 import 'package:y300/features/cache/data/image_cache_repository.dart';
+import 'package:y300/features/cache/data/parsed_snapshot_cache_service.dart';
 import 'package:y300/features/cache/data/storage_usage_adapters.dart';
 import 'package:y300/features/cache/domain/document_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/storage_usage_models.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
@@ -76,6 +78,7 @@ void main() {
       await deleteDatabase(dbName);
       final db = await ComicLocalDb.open(databaseName: dbName);
       final documentCache = LocalDocumentCacheService(Future.value(db));
+      final snapshotCache = LocalParsedSnapshotCacheService(Future.value(db));
       final now = DateTime(2026, 1, 1);
       addTearDown(() async {
         await db.close();
@@ -93,15 +96,33 @@ void main() {
           updatedAt: now,
         ),
       );
+      await snapshotCache.put(
+        const SnapshotCacheDescriptor(
+          cacheKey: 'snapshot|thread|tid=1&page=1',
+          ownerType: CacheOwnerType.thread,
+          ownerId: 'tid=1&page=1',
+          snapshotType: 'thread.detail',
+        ),
+        'hello',
+        const _StringSnapshotCodec(),
+        policy: const SnapshotCachePolicy(
+          freshFor: Duration(minutes: 5),
+          keepStaleFor: Duration(days: 1),
+        ),
+      );
 
       final section = await PageCacheStorageAccountingAdapter(
         documentCacheService: documentCache,
+        snapshotCacheService: snapshotCache,
       ).calculateUsage();
 
       expect(section.bucket, StorageBucket.pageCache);
-      expect(section.bytes, 3);
+      expect(section.bytes, greaterThan(3));
       expect(section.clearable, isTrue);
-      expect(section.slices.single.label, '帖子详情 HTML（1）');
+      expect(
+        section.slices.map((slice) => slice.label),
+        containsAll(<String>['帖子详情 HTML（1）', '帖子详情快照（1）']),
+      );
     },
   );
 
@@ -206,6 +227,26 @@ void main() {
       expect(section.slices.map((slice) => slice.label), contains('漫画作品：1'));
     },
   );
+}
+
+class _StringSnapshotCodec implements SnapshotCodec<String> {
+  const _StringSnapshotCodec();
+
+  @override
+  String get snapshotType => 'thread.detail';
+
+  @override
+  int get codecVersion => 1;
+
+  @override
+  int get parserVersion => 1;
+
+  @override
+  Object? encode(String value) => <String, Object?>{'value': value};
+
+  @override
+  String decode(Object? json) =>
+      (json as Map<String, dynamic>)['value'] as String;
 }
 
 class _FakeDownloadStorageService implements DownloadStorageService {
