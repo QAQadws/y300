@@ -6,6 +6,7 @@ import 'package:y300/features/cache/presentation/widgets/cached_library_image.da
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
+import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/presentation/thread_detail_render_entries.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
@@ -22,6 +23,7 @@ class ThreadDetailContent extends StatefulWidget {
     this.highlightPostPid,
     this.targetPid,
     required this.imageHeaderBuilder,
+    required this.imageReferer,
     required this.onLoadPreviousPage,
     required this.onLoadNextPage,
     required this.onLoadPageNumber,
@@ -43,6 +45,7 @@ class ThreadDetailContent extends StatefulWidget {
   final String? highlightPostPid;
   final String? targetPid;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String imageReferer;
   final VoidCallback onLoadPreviousPage;
   final VoidCallback onLoadNextPage;
   final ValueChanged<int> onLoadPageNumber;
@@ -125,6 +128,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           plan: entry.requirePlan(),
           highlighted: entry.post!.pid == widget.highlightPostPid,
           imageHeaderBuilder: widget.imageHeaderBuilder,
+          imageOpenContext: _imageOpenContext(entry.post!),
           palette: palette,
           onOpenPostLink: widget.onOpenPostLink,
           onOpenPostImages: widget.onOpenPostImages,
@@ -139,6 +143,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           segment: entry.segment!,
           highlighted: entry.post!.pid == widget.highlightPostPid,
           imageHeaderBuilder: widget.imageHeaderBuilder,
+          imageOpenContext: _imageOpenContext(entry.post!),
           palette: palette,
           onOpenPostLink: widget.onOpenPostLink,
           onOpenPostImages: widget.onOpenPostImages,
@@ -188,6 +193,22 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           height: MediaQuery.sizeOf(context).height * 0.72,
         );
     }
+  }
+
+  ThreadImageOpenContext _imageOpenContext(ThreadPost post) {
+    return ThreadImageOpenContext(
+      tid: widget.state.tid,
+      pid: post.pid,
+      postNumber: post.number,
+      referer: widget.imageReferer,
+      cacheKeyForImage: (image) {
+        return ForumImageCacheRequests.threadInline(
+          tid: widget.state.tid,
+          url: image.url,
+          imageIndex: image.index,
+        ).cacheKey;
+      },
+    );
   }
 }
 
@@ -265,6 +286,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
     required this.plan,
     required this.highlighted,
     required this.imageHeaderBuilder,
+    required this.imageOpenContext,
     required this.palette,
     required this.onOpenPostLink,
     required this.onOpenPostImages,
@@ -276,6 +298,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
   final ThreadPostBodyRenderPlan plan;
   final bool highlighted;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final ThreadImageOpenContext imageOpenContext;
   final ThreadDetailNativePalette palette;
   final ValueChanged<String> onOpenPostLink;
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
@@ -307,6 +330,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
             images: plan.images,
             imageHeaderBuilder: imageHeaderBuilder,
             imageCacheOwnerId: threadId,
+            imageOpenContext: imageOpenContext,
             resourceLayoutHints: plan.resourceLayoutHints,
             resourceLayoutPolicy:
                 ThreadPostResourceLayoutPolicy.lockedForReading,
@@ -329,6 +353,7 @@ class _ThreadPostCardBodySegmentEntry extends StatelessWidget {
     required this.segment,
     required this.highlighted,
     required this.imageHeaderBuilder,
+    required this.imageOpenContext,
     required this.palette,
     required this.onOpenPostLink,
     required this.onOpenPostImages,
@@ -341,6 +366,7 @@ class _ThreadPostCardBodySegmentEntry extends StatelessWidget {
   final ThreadPostBodySegment segment;
   final bool highlighted;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final ThreadImageOpenContext imageOpenContext;
   final ThreadDetailNativePalette palette;
   final ValueChanged<String> onOpenPostLink;
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
@@ -371,6 +397,7 @@ class _ThreadPostCardBodySegmentEntry extends StatelessWidget {
             images: plan.images,
             imageHeaderBuilder: imageHeaderBuilder,
             imageCacheOwnerId: threadId,
+            imageOpenContext: imageOpenContext,
             resourceLayoutHints: plan.resourceLayoutHints,
             resourceLayoutPolicy:
                 ThreadPostResourceLayoutPolicy.lockedForReading,

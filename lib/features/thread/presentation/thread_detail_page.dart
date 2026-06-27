@@ -11,6 +11,7 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/forum_image_cache_requests.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
@@ -27,6 +28,7 @@ import 'package:y300/features/thread/data/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/thread_post_locator.dart';
 import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
+import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_plain_text_extractor.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
@@ -223,6 +225,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                     highlightPostPid: _highlightPostPid,
                     targetPid: widget.targetPid,
                     imageHeaderBuilder: imageHeaderBuilder,
+                    imageReferer: _imageRefererFor(state),
                     onLoadPreviousPage: () {
                       unawaited(
                         _runPageActionAndScrollTop(controller.loadPreviousPage),
@@ -253,7 +256,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                     onCopyActionUrl: _copyActionUrl,
                     onOpenPostLink: _openForumLink,
                     onOpenPostImages: _openPostImages,
-                    onOpenPostCopyActions: _openPostCopyActions,
+                    onOpenPostCopyActions: (post, plan) {
+                      _openPostCopyActions(state, post, plan);
+                    },
                     onPostBuilt: _enableThreadPostMediaPreload
                         ? (index) {
                             _mediaPreloadQueue?.preloadNearbyPosts(
@@ -501,6 +506,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   }
 
   Future<void> _openPostCopyActions(
+    ThreadDetailPageState state,
     ThreadPost post,
     ThreadPostBodyRenderPlan plan,
   ) async {
@@ -519,6 +525,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
             builder: (_) => _ThreadPostSelectableCopyPage(
               post: post,
               threadId: widget.tid,
+              imageReferer: _imageRefererFor(state),
               plan: plan,
               imageHeaderBuilder: _latestImageHeaderBuilder,
               onOpenLink: _openForumLink,
@@ -970,6 +977,7 @@ class _ThreadPostSelectableCopyPage extends StatelessWidget {
   const _ThreadPostSelectableCopyPage({
     required this.post,
     required this.threadId,
+    required this.imageReferer,
     required this.plan,
     required this.imageHeaderBuilder,
     required this.onOpenLink,
@@ -978,6 +986,7 @@ class _ThreadPostSelectableCopyPage extends StatelessWidget {
 
   final ThreadPost post;
   final String threadId;
+  final String imageReferer;
   final ThreadPostBodyRenderPlan plan;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<String> onOpenLink;
@@ -1012,6 +1021,19 @@ class _ThreadPostSelectableCopyPage extends StatelessWidget {
                 images: plan.images,
                 imageHeaderBuilder: imageHeaderBuilder,
                 imageCacheOwnerId: threadId,
+                imageOpenContext: ThreadImageOpenContext(
+                  tid: threadId,
+                  pid: post.pid,
+                  postNumber: post.number,
+                  referer: imageReferer,
+                  cacheKeyForImage: (image) {
+                    return ForumImageCacheRequests.threadInline(
+                      tid: threadId,
+                      url: image.url,
+                      imageIndex: image.index,
+                    ).cacheKey;
+                  },
+                ),
                 resourceLayoutHints: plan.resourceLayoutHints,
                 selectionEnabled: true,
                 onOpenLink: onOpenLink,

@@ -11,6 +11,7 @@ import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
+import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
@@ -1114,6 +1115,14 @@ void main() {
 <img file="data/attachment/forum/page-1.jpg" />
 <img file="data/attachment/forum/page-2.jpg" />
 ''',
+              imageOpenContext: ThreadImageOpenContext(
+                tid: '100',
+                pid: 'p1',
+                postNumber: 1,
+                referer:
+                    'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
+                cacheKeyForImage: (image) => 'cache-${image.index}',
+              ),
               onOpenImage: (request) => opened = request,
             ),
           ),
@@ -1133,6 +1142,18 @@ void main() {
       'https://bbs.yamibo.com/data/attachment/forum/page-2.jpg',
     ]);
     expect(opened!.document.images, hasLength(2));
+    final readerRequest = opened!.readerRequest;
+    expect(readerRequest, isNotNull);
+    expect(readerRequest!.tid, '100');
+    expect(readerRequest.pid, 'p1');
+    expect(readerRequest.postNumber, 1);
+    expect(
+      readerRequest.referer,
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
+    );
+    expect(readerRequest.initialIndex, 1);
+    expect(readerRequest.initialEntry?.cacheKey, 'cache-1');
+    expect(readerRequest.group.urls, opened!.imageUrls);
   });
 
   testWidgets(
@@ -1167,6 +1188,13 @@ void main() {
                 document: document,
                 segment: segment,
                 images: document.images,
+                imageOpenContext: ThreadImageOpenContext(
+                  tid: '100',
+                  pid: 'p1',
+                  postNumber: 1,
+                  referer: 'https://bbs.yamibo.com/thread-100-1-1.html',
+                  cacheKeyForImage: (image) => 'cache-${image.index}',
+                ),
                 onOpenImage: (request) => opened = request,
               ),
             ),
@@ -1185,6 +1213,9 @@ void main() {
         'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
         'https://bbs.yamibo.com/data/attachment/forum/page-2.jpg',
       ]);
+      expect(opened!.readerRequest?.group.entries, hasLength(2));
+      expect(opened!.readerRequest?.initialEntry?.url, secondImage.url);
+      expect(opened!.readerRequest?.initialEntry?.cacheKey, 'cache-1');
     },
   );
 }

@@ -7,6 +7,7 @@ import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/forum_image_cache_requests.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
+import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
@@ -108,12 +109,14 @@ class ThreadPostImageOpenRequest {
     required this.images,
     required this.image,
     required this.initialIndex,
+    this.readerRequest,
   });
 
   final ThreadPostBodyDocument document;
   final List<ThreadPostImageBlock> images;
   final ThreadPostImageBlock image;
   final int initialIndex;
+  final ThreadImageOpenRequest? readerRequest;
 
   List<String> get imageUrls =>
       images.map((image) => image.url).toList(growable: false);
@@ -127,6 +130,7 @@ class ThreadPostHtml extends StatefulWidget {
     this.imageCacheOwnerId,
     this.blockImageCacheRequestBuilder,
     this.inlineImageCacheRequestBuilder,
+    this.imageOpenContext,
     this.parser = const ThreadPostBodyParser(),
     this.normalizer = const ThreadPostBodyDocumentNormalizer(),
     this.style = ThreadPostBodyStyle.defaults,
@@ -145,6 +149,7 @@ class ThreadPostHtml extends StatefulWidget {
   final ThreadPostBlockImageCacheRequestBuilder? blockImageCacheRequestBuilder;
   final ThreadPostInlineImageCacheRequestBuilder?
   inlineImageCacheRequestBuilder;
+  final ThreadImageOpenContext? imageOpenContext;
   final ThreadPostBodyParser parser;
   final ThreadPostBodyDocumentNormalizer normalizer;
   final ThreadPostBodyStyle style;
@@ -217,6 +222,7 @@ class _ThreadPostHtmlState extends State<ThreadPostHtml> {
       imageCacheOwnerId: widget.imageCacheOwnerId,
       blockImageCacheRequestBuilder: widget.blockImageCacheRequestBuilder,
       inlineImageCacheRequestBuilder: widget.inlineImageCacheRequestBuilder,
+      imageOpenContext: widget.imageOpenContext,
       resourceLayoutHints: _resourceLayoutHints,
       style: effectiveStyle,
       resourceLayoutPolicy: widget.resourceLayoutPolicy,
@@ -298,6 +304,7 @@ class ThreadPostBodySegmentView extends StatelessWidget {
     this.imageCacheOwnerId,
     this.blockImageCacheRequestBuilder,
     this.inlineImageCacheRequestBuilder,
+    this.imageOpenContext,
     this.resourceLayoutHints = ThreadPostResourceLayoutHints.empty,
     this.style = ThreadPostBodyStyle.defaults,
     this.resourceLayoutPolicy = ThreadPostResourceLayoutPolicy.defaults,
@@ -317,6 +324,7 @@ class ThreadPostBodySegmentView extends StatelessWidget {
   final ThreadPostBlockImageCacheRequestBuilder? blockImageCacheRequestBuilder;
   final ThreadPostInlineImageCacheRequestBuilder?
   inlineImageCacheRequestBuilder;
+  final ThreadImageOpenContext? imageOpenContext;
   final ThreadPostResourceLayoutHints resourceLayoutHints;
   final ThreadPostBodyStyle style;
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
@@ -338,6 +346,7 @@ class ThreadPostBodySegmentView extends StatelessWidget {
       imageCacheOwnerId: imageCacheOwnerId,
       blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
       inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
+      imageOpenContext: imageOpenContext,
       resourceLayoutHints: resourceLayoutHints,
       style: style,
       resourceLayoutPolicy: resourceLayoutPolicy,
@@ -361,6 +370,7 @@ class ThreadPostBodyView extends StatelessWidget {
     this.imageCacheOwnerId,
     this.blockImageCacheRequestBuilder,
     this.inlineImageCacheRequestBuilder,
+    this.imageOpenContext,
     this.resourceLayoutHints = ThreadPostResourceLayoutHints.empty,
     this.style = ThreadPostBodyStyle.defaults,
     this.resourceLayoutPolicy = ThreadPostResourceLayoutPolicy.defaults,
@@ -380,6 +390,7 @@ class ThreadPostBodyView extends StatelessWidget {
   final ThreadPostBlockImageCacheRequestBuilder? blockImageCacheRequestBuilder;
   final ThreadPostInlineImageCacheRequestBuilder?
   inlineImageCacheRequestBuilder;
+  final ThreadImageOpenContext? imageOpenContext;
   final ThreadPostResourceLayoutHints resourceLayoutHints;
   final ThreadPostBodyStyle style;
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
@@ -407,6 +418,7 @@ class ThreadPostBodyView extends StatelessWidget {
             imageCacheOwnerId: imageCacheOwnerId,
             blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
             inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
+            imageOpenContext: imageOpenContext,
             resourceLayoutHints: resourceLayoutHints,
             style: style,
             resourceLayoutPolicy: resourceLayoutPolicy,
@@ -449,6 +461,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
     required this.imageCacheOwnerId,
     required this.blockImageCacheRequestBuilder,
     required this.inlineImageCacheRequestBuilder,
+    required this.imageOpenContext,
     required this.resourceLayoutHints,
     required this.style,
     required this.resourceLayoutPolicy,
@@ -467,6 +480,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
   final ThreadPostBlockImageCacheRequestBuilder? blockImageCacheRequestBuilder;
   final ThreadPostInlineImageCacheRequestBuilder?
   inlineImageCacheRequestBuilder;
+  final ThreadImageOpenContext? imageOpenContext;
   final ThreadPostResourceLayoutHints resourceLayoutHints;
   final ThreadPostBodyStyle style;
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
@@ -502,6 +516,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
         imageHeaderBuilder: imageHeaderBuilder,
         imageCacheOwnerId: imageCacheOwnerId,
         blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
+        imageOpenContext: imageOpenContext,
         resourceLayoutHints: resourceLayoutHints,
         style: style,
         resourceLayoutPolicy: resourceLayoutPolicy,
@@ -518,6 +533,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
         imageCacheOwnerId: imageCacheOwnerId,
         blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
         inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
+        imageOpenContext: imageOpenContext,
         resourceLayoutHints: resourceLayoutHints,
         style: style,
         resourceLayoutPolicy: resourceLayoutPolicy,
@@ -542,6 +558,7 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
     required this.imageCacheOwnerId,
     required this.blockImageCacheRequestBuilder,
     required this.inlineImageCacheRequestBuilder,
+    required this.imageOpenContext,
     required this.resourceLayoutHints,
     required this.style,
     required this.resourceLayoutPolicy,
@@ -560,6 +577,7 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
   final ThreadPostBlockImageCacheRequestBuilder? blockImageCacheRequestBuilder;
   final ThreadPostInlineImageCacheRequestBuilder?
   inlineImageCacheRequestBuilder;
+  final ThreadImageOpenContext? imageOpenContext;
   final ThreadPostResourceLayoutHints resourceLayoutHints;
   final ThreadPostBodyStyle style;
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
@@ -600,6 +618,7 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
               imageCacheOwnerId: imageCacheOwnerId,
               blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
               inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
+              imageOpenContext: imageOpenContext,
               resourceLayoutHints: resourceLayoutHints,
               style: quoteStyle,
               resourceLayoutPolicy: resourceLayoutPolicy,
@@ -906,6 +925,7 @@ class ThreadPostImageBlockView extends ConsumerStatefulWidget {
     this.imageHeaderBuilder,
     this.imageCacheOwnerId,
     this.blockImageCacheRequestBuilder,
+    this.imageOpenContext,
     this.resourceLayoutHints = ThreadPostResourceLayoutHints.empty,
     this.style = ThreadPostBodyStyle.defaults,
     this.resourceLayoutPolicy = ThreadPostResourceLayoutPolicy.defaults,
@@ -920,6 +940,7 @@ class ThreadPostImageBlockView extends ConsumerStatefulWidget {
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final String? imageCacheOwnerId;
   final ThreadPostBlockImageCacheRequestBuilder? blockImageCacheRequestBuilder;
+  final ThreadImageOpenContext? imageOpenContext;
   final ThreadPostResourceLayoutHints resourceLayoutHints;
   final ThreadPostBodyStyle style;
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
@@ -1019,6 +1040,7 @@ class _ThreadPostImageBlockViewState
           images: widget.images,
           image: widget.image,
           initialIndex: resolvedIndex,
+          readerRequest: _readerRequest(resolvedIndex),
         ),
       );
       return;
@@ -1032,6 +1054,38 @@ class _ThreadPostImageBlockViewState
     ScaffoldMessenger.maybeOf(
       context,
     )?.showSnackBar(const SnackBar(content: Text('图片链接已复制')));
+  }
+
+  ThreadImageOpenRequest? _readerRequest(int initialIndex) {
+    final context = widget.imageOpenContext;
+    if (context == null) {
+      return null;
+    }
+    final entries = widget.images
+        .map((image) {
+          return ThreadPostImageEntry(
+            url: image.url,
+            rawUrl: image.rawUrl,
+            indexInPost: image.index,
+            cacheKey: context.cacheKeyForImage(image),
+            aid: image.aid,
+            layoutHint: widget.resourceLayoutHints.blockImage(image),
+          );
+        })
+        .toList(growable: false);
+    return ThreadImageOpenRequest(
+      tid: context.tid,
+      pid: context.pid,
+      postNumber: context.postNumber,
+      referer: context.referer,
+      group: ThreadPostImageGroup(
+        tid: context.tid,
+        pid: context.pid,
+        postNumber: context.postNumber,
+        entries: entries,
+      ),
+      initialIndex: initialIndex,
+    );
   }
 
   void _handleImageResolved(Size size) {

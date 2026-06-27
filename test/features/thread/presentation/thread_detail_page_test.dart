@@ -48,6 +48,7 @@ import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
@@ -669,6 +670,8 @@ void main() {
             body: ThreadDetailContent(
               state: state,
               imageHeaderBuilder: null,
+              imageReferer:
+                  'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
               onLoadPreviousPage: () {},
               onLoadNextPage: () {},
               onLoadPageNumber: (_) {},
@@ -701,6 +704,87 @@ void main() {
       expect(collapsedHeight, lessThan(expandedHeight));
       expect(find.text('第一条点评内容'), findsNothing);
     });
+
+    testWidgets(
+      'ThreadDetailContent builds reader image request with thread context',
+      (tester) async {
+        ThreadPostImageOpenRequest? opened;
+        final state = ThreadDetailPageState.initial(tid: '100', subject: '测试主题')
+            .copyWith(
+              currentPage: 1,
+              posts: [
+                ThreadPost(
+                  pid: 'p1',
+                  author: 'alice',
+                  authorId: '1',
+                  message:
+                      '<img file="data/attachment/forum/page-1.jpg" width="200" height="120">'
+                      '<img file="data/attachment/forum/page-2.jpg" width="200" height="120">',
+                  number: 1,
+                  isFirst: true,
+                  dateline: 'today',
+                ),
+              ],
+            );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              imageCacheServiceProvider.overrideWithValue(
+                _NoopImageCacheService(),
+              ),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: ThreadDetailContent(
+                  state: state,
+                  imageHeaderBuilder: null,
+                  imageReferer:
+                      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
+                  onLoadPreviousPage: () {},
+                  onLoadNextPage: () {},
+                  onLoadPageNumber: (_) {},
+                  onOpenPostReply: (_) {},
+                  onOpenPostRate: (_) {},
+                  onOpenPostComment: (_) {},
+                  onOpenAuthorProfile: (_) {},
+                  onCopyActionUrl: (_, _) {},
+                  onOpenPostLink: (_) {},
+                  onOpenPostImages: (_, request) => opened = request,
+                  onOpenPostCopyActions: (_, _) {},
+                  onTogglePollOption: (_, _) {},
+                  onSubmitPollVote: (_) {},
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('thread-post-image-0')));
+        await tester.pump();
+
+        final readerRequest = opened?.readerRequest;
+        expect(readerRequest, isNotNull);
+        expect(readerRequest!.tid, '100');
+        expect(readerRequest.pid, 'p1');
+        expect(readerRequest.postNumber, 1);
+        expect(
+          readerRequest.referer,
+          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
+        );
+        expect(readerRequest.initialIndex, 0);
+        expect(readerRequest.group.entries, hasLength(2));
+        expect(
+          readerRequest.initialEntry?.cacheKey,
+          startsWith('thread/inline/'),
+        );
+        expect(
+          readerRequest.initialEntry?.url,
+          'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
+        );
+      },
+    );
 
     testWidgets('uses initial forum name before parsed thread detail arrives', (
       tester,
