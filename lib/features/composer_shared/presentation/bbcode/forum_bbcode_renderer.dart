@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bbcode/flutter_bbcode.dart';
+import 'package:y300/features/cache/domain/forum_image_cache_requests.dart';
+import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_tokenizer.dart';
@@ -60,9 +62,9 @@ class FlutterBbCodeForumRenderer extends ForumBbCodeRenderer {
   }) {
     final colorScheme = Theme.of(context).colorScheme;
     final textStyle =
-        Theme.of(context).textTheme.bodyMedium?.copyWith(
-          color: colorScheme.onSurface,
-        ) ??
+        Theme.of(
+          context,
+        ).textTheme.bodyMedium?.copyWith(color: colorScheme.onSurface) ??
         TextStyle(color: colorScheme.onSurface);
     final stickerEncoded = stickerTokenizer.encodeForPreview(source, stickers);
     final previewSource = attachTokenizer.encodeForPreview(
@@ -104,12 +106,12 @@ class _AttachPreviewTag extends WrappedStyleTag {
     this.maxImageWidth,
     this.attachImageBuilder,
     this.attachFileExists,
-  )   : _attachmentsByAid = {
-          for (final attachment in imageAttachments)
-            if (attachment.canEnterSubmitPayload)
-              attachment.aid!.trim(): attachment,
-        },
-        super(ComposerAttachBbCodeTokenizer.previewTag);
+  ) : _attachmentsByAid = {
+        for (final attachment in imageAttachments)
+          if (attachment.canEnterSubmitPayload)
+            attachment.aid!.trim(): attachment,
+      },
+      super(ComposerAttachBbCodeTokenizer.previewTag);
 
   final Map<String, ComposerImageAttachment> _attachmentsByAid;
   final double maxImageWidth;
@@ -171,19 +173,14 @@ class _AttachSourceFallbackTag extends WrappedStyleTag {
 
 List<InlineSpan> _attachTextFallback(FlutterRenderer renderer, String aid) {
   return [
-    TextSpan(
-      text: '[attach]$aid[/attach]',
-      style: renderer.getCurrentStyle(),
-    ),
+    TextSpan(text: '[attach]$aid[/attach]', style: renderer.getCurrentStyle()),
   ];
 }
 
 class _StickerPreviewTag extends WrappedStyleTag {
   _StickerPreviewTag(List<StickerItem> stickers)
-      : _stickersByCode = {
-          for (final sticker in stickers) sticker.code: sticker,
-        },
-        super(StickerBbCodeTokenizer.previewTag);
+    : _stickersByCode = {for (final sticker in stickers) sticker.code: sticker},
+      super(StickerBbCodeTokenizer.previewTag);
 
   final Map<String, StickerItem> _stickersByCode;
 
@@ -204,12 +201,12 @@ class _StickerPreviewTag extends WrappedStyleTag {
     return [
       WidgetSpan(
         alignment: PlaceholderAlignment.bottom,
-        child: Image.asset(
-          sticker.assetPath,
+        child: CachedLibraryImage(
+          request: ForumImageCacheRequests.remoteSmiley(url: sticker.imageUrl),
           key: Key('reply-bbcode-preview-sticker-${sticker.code}'),
-          errorBuilder: (_, _, _) => const Icon(
-            Icons.broken_image_outlined,
-          ),
+          fit: BoxFit.contain,
+          placeholder: const SizedBox.shrink(),
+          errorPlaceholder: const Icon(Icons.broken_image_outlined),
         ),
       ),
     ];

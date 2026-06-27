@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/cache/domain/forum_image_cache_requests.dart';
+import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/composer_shared/data/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 
@@ -44,8 +46,9 @@ class StickerPickerSheet extends ConsumerWidget {
             if (visibleGroups.isEmpty) {
               return const Center(
                 child: Text(
-                  '',
+                  '需要联网加载表情包',
                   key: Key('reply-sticker-picker-empty'),
+                  textAlign: TextAlign.center,
                 ),
               );
             }
@@ -165,7 +168,9 @@ class _StickerPickerContentState extends ConsumerState<_StickerPickerContent> {
       return;
     }
     final index = controller.index;
-    if (index == _lastSavedIndex || index < 0 || index >= widget.groups.length) {
+    if (index == _lastSavedIndex ||
+        index < 0 ||
+        index >= widget.groups.length) {
       return;
     }
     if (_saveGroupAt(index)) {
@@ -178,9 +183,7 @@ class _StickerPickerContentState extends ConsumerState<_StickerPickerContent> {
       return false;
     }
     final groupId = widget.groups[index].id;
-    unawaited(
-      _persistLastGroupId(groupId),
-    );
+    unawaited(_persistLastGroupId(groupId));
     return true;
   }
 
@@ -193,10 +196,7 @@ class _StickerPickerContentState extends ConsumerState<_StickerPickerContent> {
 }
 
 class StickerGrid extends StatelessWidget {
-  const StickerGrid({
-    super.key,
-    required this.stickers,
-  });
+  const StickerGrid({super.key, required this.stickers});
 
   final List<StickerItem> stickers;
 
@@ -214,20 +214,20 @@ class StickerGrid extends StatelessWidget {
         final sticker = stickers[index];
         return IconButton(
           key: Key('reply-sticker-item-${sticker.code}'),
-          constraints: const BoxConstraints.tightFor(
-            width: 56,
-            height: 56,
-          ),
+          constraints: const BoxConstraints.tightFor(width: 56, height: 56),
           padding: EdgeInsets.zero,
           onPressed: () {
             Navigator.of(context).pop(sticker);
           },
-          icon: Image.asset(
-            sticker.assetPath,
+          icon: CachedLibraryImage(
+            request: ForumImageCacheRequests.remoteSmiley(
+              url: sticker.imageUrl,
+            ),
             width: 48,
             height: 48,
             fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => const Icon(Icons.broken_image_outlined),
+            placeholder: const SizedBox.shrink(),
+            errorPlaceholder: const Icon(Icons.broken_image_outlined),
           ),
         );
       },

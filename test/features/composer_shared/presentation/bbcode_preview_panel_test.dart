@@ -1,8 +1,13 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/image_cache_keys.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
@@ -26,9 +31,7 @@ void main() {
   testWidgets('BbCodePreviewPanel renders color tag without crashing', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      _buildPanel(source: '[color=#999999]灰色内容[/color]'),
-    );
+    await tester.pumpWidget(_buildPanel(source: '[color=#999999]灰色内容[/color]'));
 
     expect(find.text('灰色内容', findRichText: true), findsOneWidget);
   });
@@ -63,7 +66,9 @@ void main() {
     expect(find.text(badSource), findsOneWidget);
   });
 
-  testWidgets('BbCodePreviewPanel disables remote image preview', (tester) async {
+  testWidgets('BbCodePreviewPanel disables remote image preview', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       _buildPanel(source: '[img]https://example.com/a.png[/img]'),
     );
@@ -75,44 +80,34 @@ void main() {
     );
   });
 
-  testWidgets('BbCodePreviewPanel renders known sticker as asset image', (
-    tester,
-  ) async {
-    const sticker = StickerItem(
-      code: '{:9_656:}',
-      assetPath: 'assets/stickers/bugcat/Capoo16.gif',
-      rawCodePattern: '{:9_656:}',
-    );
+  testWidgets(
+    'BbCodePreviewPanel renders known sticker as cached remote image',
+    (tester) async {
+      final sticker = _sticker();
 
-    await tester.pumpWidget(
-      _buildPanel(
-        source: '表情{:9_656:}',
-        stickers: const [sticker],
-      ),
-    );
+      await tester.pumpWidget(
+        _buildPanel(source: '表情{:9_656:}', stickers: [sticker]),
+      );
 
-    expect(
-      find.byKey(const Key('reply-bbcode-preview-sticker-{:9_656:}')),
-      findsOneWidget,
-    );
-    expect(find.byType(Image), findsOneWidget);
-    expect(find.textContaining('{:9_656:}', findRichText: true), findsNothing);
-  });
+      expect(
+        find.byKey(const Key('reply-bbcode-preview-sticker-{:9_656:}')),
+        findsOneWidget,
+      );
+      expect(find.byType(Image), findsOneWidget);
+      expect(
+        find.textContaining('{:9_656:}', findRichText: true),
+        findsNothing,
+      );
+    },
+  );
 
   testWidgets('BbCodePreviewPanel aligns sticker bottom with text', (
     tester,
   ) async {
-    const sticker = StickerItem(
-      code: '{:9_656:}',
-      assetPath: 'assets/stickers/bugcat/Capoo16.gif',
-      rawCodePattern: '{:9_656:}',
-    );
+    final sticker = _sticker();
 
     await tester.pumpWidget(
-      _buildPanel(
-        source: '文字{:9_656:}',
-        stickers: const [sticker],
-      ),
+      _buildPanel(source: '文字{:9_656:}', stickers: [sticker]),
     );
 
     final stickerSpan = _findWidgetSpan(
@@ -124,20 +119,13 @@ void main() {
     expect(stickerSpan!.alignment, PlaceholderAlignment.bottom);
   });
 
-  testWidgets('BbCodePreviewPanel hides known sticker code when asset fails', (
+  testWidgets('BbCodePreviewPanel hides known sticker code when image fails', (
     tester,
   ) async {
-    const sticker = StickerItem(
-      code: '{:9_656:}',
-      assetPath: 'assets/stickers/missing.gif',
-      rawCodePattern: '{:9_656:}',
-    );
+    final sticker = _sticker(imagePath: 'missing/missing.gif');
 
     await tester.pumpWidget(
-      _buildPanel(
-        source: '{:9_656:}',
-        stickers: const [sticker],
-      ),
+      _buildPanel(source: '{:9_656:}', stickers: [sticker]),
     );
     await tester.pump();
 
@@ -150,7 +138,10 @@ void main() {
   ) async {
     await tester.pumpWidget(_buildPanel(source: '未知{:9_999:}'));
 
-    expect(find.textContaining('{:9_999:}', findRichText: true), findsOneWidget);
+    expect(
+      find.textContaining('{:9_999:}', findRichText: true),
+      findsOneWidget,
+    );
   });
 
   testWidgets('BbCodePreviewPanel renders known attach as local image', (
@@ -171,58 +162,62 @@ void main() {
       find.byKey(const Key('reply-bbcode-preview-attach-123456')),
     );
     expect(previewImage.file.path, path);
-    expect(find.textContaining('[attach]123456[/attach]', findRichText: true),
-        findsNothing);
-  });
-
-  testWidgets('BbCodePreviewPanel keeps multiple attach images in source order', (
-    tester,
-  ) async {
-    const firstPath = 'E:/test/reply/first.png';
-    const secondPath = 'E:/test/reply/second.png';
-
-    await tester.pumpWidget(
-      _buildPanel(
-        source: '[attach]111[/attach]\n文字\n[attach]222[/attach]',
-        imageAttachments: [
-          _uploadedAttachment(aid: '222', path: secondPath),
-          _uploadedAttachment(aid: '111', path: firstPath),
-        ],
-      ),
-    );
-    await tester.pump();
-
-    final firstCenter = tester.getCenter(
-      find.byKey(const Key('reply-bbcode-preview-attach-111')),
-    );
-    final secondCenter = tester.getCenter(
-      find.byKey(const Key('reply-bbcode-preview-attach-222')),
-    );
-    expect(firstCenter.dy, lessThan(secondCenter.dy));
-  });
-
-  testWidgets('BbCodePreviewPanel does not show broken image for missing file', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _buildPanel(
-        source: '[attach]123456[/attach]',
-        renderer: FlutterBbCodeForumRenderer(
-          attachImageBuilder: _buildTestAttachPreviewImage,
-        ),
-        imageAttachments: [
-          _uploadedAttachment(aid: '123456', path: '/missing/local.png'),
-        ],
-      ),
-    );
-    await tester.pump();
-
     expect(
-      find.byKey(const Key('reply-bbcode-preview-attach-123456')),
+      find.textContaining('[attach]123456[/attach]', findRichText: true),
       findsNothing,
     );
-    expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
   });
+
+  testWidgets(
+    'BbCodePreviewPanel keeps multiple attach images in source order',
+    (tester) async {
+      const firstPath = 'E:/test/reply/first.png';
+      const secondPath = 'E:/test/reply/second.png';
+
+      await tester.pumpWidget(
+        _buildPanel(
+          source: '[attach]111[/attach]\n文字\n[attach]222[/attach]',
+          imageAttachments: [
+            _uploadedAttachment(aid: '222', path: secondPath),
+            _uploadedAttachment(aid: '111', path: firstPath),
+          ],
+        ),
+      );
+      await tester.pump();
+
+      final firstCenter = tester.getCenter(
+        find.byKey(const Key('reply-bbcode-preview-attach-111')),
+      );
+      final secondCenter = tester.getCenter(
+        find.byKey(const Key('reply-bbcode-preview-attach-222')),
+      );
+      expect(firstCenter.dy, lessThan(secondCenter.dy));
+    },
+  );
+
+  testWidgets(
+    'BbCodePreviewPanel does not show broken image for missing file',
+    (tester) async {
+      await tester.pumpWidget(
+        _buildPanel(
+          source: '[attach]123456[/attach]',
+          renderer: FlutterBbCodeForumRenderer(
+            attachImageBuilder: _buildTestAttachPreviewImage,
+          ),
+          imageAttachments: [
+            _uploadedAttachment(aid: '123456', path: '/missing/local.png'),
+          ],
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        find.byKey(const Key('reply-bbcode-preview-attach-123456')),
+        findsNothing,
+      );
+      expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
+    },
+  );
 
   testWidgets('BbCodePreviewPanel keeps invalid attachment statuses as text', (
     tester,
@@ -238,51 +233,44 @@ void main() {
         _buildPanel(
           source: '[attach]123456[/attach]',
           imageAttachments: [
-            _uploadedAttachment(
-              aid: '123456',
-              path: path,
-              status: status,
-            ),
+            _uploadedAttachment(aid: '123456', path: path, status: status),
           ],
         ),
       );
 
       expect(find.byType(Image), findsNothing);
-      expect(find.textContaining('[attach]123456[/attach]', findRichText: true),
-        findsOneWidget);
+      expect(
+        find.textContaining('[attach]123456[/attach]', findRichText: true),
+        findsOneWidget,
+      );
     }
   });
 
-  testWidgets('BbCodePreviewPanel supports stickers and attach images together', (
-    tester,
-  ) async {
-    const sticker = StickerItem(
-      code: '{:9_656:}',
-      assetPath: 'assets/stickers/bugcat/Capoo16.gif',
-      rawCodePattern: '{:9_656:}',
-    );
-    const path = 'E:/test/reply/mixed.png';
+  testWidgets(
+    'BbCodePreviewPanel supports stickers and attach images together',
+    (tester) async {
+      final sticker = _sticker();
+      const path = 'E:/test/reply/mixed.png';
 
-    await tester.pumpWidget(
-      _buildPanel(
-        source: '{:9_656:}\n[attach]123456[/attach]',
-        stickers: const [sticker],
-        imageAttachments: [
-          _uploadedAttachment(aid: '123456', path: path),
-        ],
-      ),
-    );
-    await tester.pump();
+      await tester.pumpWidget(
+        _buildPanel(
+          source: '{:9_656:}\n[attach]123456[/attach]',
+          stickers: [sticker],
+          imageAttachments: [_uploadedAttachment(aid: '123456', path: path)],
+        ),
+      );
+      await tester.pump();
 
-    expect(
-      find.byKey(const Key('reply-bbcode-preview-sticker-{:9_656:}')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('reply-bbcode-preview-attach-123456')),
-      findsOneWidget,
-    );
-  });
+      expect(
+        find.byKey(const Key('reply-bbcode-preview-sticker-{:9_656:}')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('reply-bbcode-preview-attach-123456')),
+        findsOneWidget,
+      );
+    },
+  );
 }
 
 Widget _buildPanel({
@@ -294,14 +282,34 @@ Widget _buildPanel({
 }) {
   return MaterialApp(
     theme: AppTheme.light(),
-    home: Scaffold(
-      body: BbCodePreviewPanel(
-        source: source,
-        renderer: renderer ?? _testRenderer,
-        stickers: stickers,
-        imageAttachments: imageAttachments,
+    home: ProviderScope(
+      overrides: [
+        imageCacheServiceProvider.overrideWithValue(
+          _FailingImageCacheService(),
+        ),
+      ],
+      child: Scaffold(
+        body: BbCodePreviewPanel(
+          source: source,
+          renderer: renderer ?? _testRenderer,
+          stickers: stickers,
+          imageAttachments: imageAttachments,
+        ),
       ),
     ),
+  );
+}
+
+StickerItem _sticker({
+  String code = '{:9_656:}',
+  String imagePath = 'bugcat/Capoo16.gif',
+}) {
+  return StickerItem(
+    code: code,
+    rawCodePattern: code,
+    imagePath: imagePath,
+    imageUrl: 'https://bbs.yamibo.com/static/image/smiley/$imagePath',
+    cacheKey: ImageCacheKeys.remoteSmiley(imagePath),
   );
 }
 
@@ -336,10 +344,7 @@ bool _testAttachFileExists(File file) {
 }
 
 class _TestAttachPreviewImage extends StatelessWidget {
-  const _TestAttachPreviewImage({
-    super.key,
-    required this.file,
-  });
+  const _TestAttachPreviewImage({super.key, required this.file});
 
   final File file;
 
@@ -347,6 +352,40 @@ class _TestAttachPreviewImage extends StatelessWidget {
   Widget build(BuildContext context) {
     return const SizedBox(width: 28, height: 28);
   }
+}
+
+class _FailingImageCacheService implements ImageCacheService {
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    return CachedImageResult.failed;
+  }
+
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async => null;
+
+  @override
+  Future<CachedImageResult> copyProtectedLocalFile(
+    ImageCacheLocalCopyRequest request,
+  ) async {
+    return CachedImageResult.failed;
+  }
+
+  @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
+
+  @override
+  Future<void> pruneToLimit({required int maxBytes}) async {}
+
+  @override
+  Future<void> clearUnprotected() async {}
 }
 
 WidgetSpan? _findWidgetSpan(Iterable<RichText> richTexts, Key childKey) {

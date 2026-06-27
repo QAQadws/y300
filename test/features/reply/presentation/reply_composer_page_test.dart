@@ -6,6 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/image_cache_keys.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/composer_shared/data/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/composer_providers.dart';
@@ -24,13 +28,14 @@ import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 
 void main() {
   testWidgets('ReplyComposerPage builds dark theme chrome', (tester) async {
-    await tester.pumpWidget(
-      _buildPage(theme: AppTheme.dark()),
-    );
+    await tester.pumpWidget(_buildPage(theme: AppTheme.dark()));
     await tester.pump();
 
     expect(find.byType(Scaffold), findsOneWidget);
-    expect(find.byKey(const Key('reply-composer-message-input')), findsOneWidget);
+    expect(
+      find.byKey(const Key('reply-composer-message-input')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('reply-composer-send-button')), findsOneWidget);
   });
 
@@ -46,12 +51,18 @@ void main() {
       find.byKey(const Key('reply-composer-sticker-button')),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('reply-composer-message-input')), findsOneWidget);
+    expect(
+      find.byKey(const Key('reply-composer-message-input')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const Key('reply-composer-use-signature-switch')),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('reply-composer-image-button')), findsOneWidget);
+    expect(
+      find.byKey(const Key('reply-composer-image-button')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('reply-composer-send-button')), findsOneWidget);
   });
 
@@ -161,8 +172,10 @@ void main() {
       find.byKey(const Key('reply-bbcode-preview-attach-123456')),
     );
     expect(previewImage.file.path, path);
-    expect(find.textContaining('[attach]123456[/attach]', findRichText: true),
-        findsNothing);
+    expect(
+      find.textContaining('[attach]123456[/attach]', findRichText: true),
+      findsNothing,
+    );
   });
 
   testWidgets('ReplyComposerPage omits expired restored image attachment', (
@@ -234,7 +247,10 @@ void main() {
     await tester.tap(find.text('源码'));
     await tester.pump();
 
-    expect(find.byKey(const Key('reply-composer-message-input')), findsOneWidget);
+    expect(
+      find.byKey(const Key('reply-composer-message-input')),
+      findsOneWidget,
+    );
     expect(find.text('[b]粗体内容[/b]'), findsOneWidget);
   });
 
@@ -281,9 +297,7 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(
-      _buildLauncher(replyRepository: replyRepository),
-    );
+    await tester.pumpWidget(_buildLauncher(replyRepository: replyRepository));
 
     await tester.tap(find.byKey(const Key('open-reply-composer-page')));
     await tester.pumpAndSettle();
@@ -322,7 +336,7 @@ void main() {
     expect(find.text('前{:9_656:}后'), findsOneWidget);
   });
 
-  testWidgets('ReplyComposerPage previews inserted sticker as asset image', (
+  testWidgets('ReplyComposerPage previews inserted sticker as remote image', (
     tester,
   ) async {
     await tester.pumpWidget(_buildPage(stickerGroups: _stickerGroups));
@@ -436,11 +450,7 @@ void main() {
     preparationCompleter.complete(
       const ApiSuccess<ReplyPreparation>(
         ReplyPreparation(
-          target: ReplyTarget.post(
-            fid: '33',
-            tid: '572063',
-            pid: '41554317',
-          ),
+          target: ReplyTarget.post(fid: '33', tid: '572063', pid: '41554317'),
           reference: ReplyReference(),
         ),
       ),
@@ -462,11 +472,7 @@ void main() {
         ),
         imageUploadCoordinator: _FakeReplyImageUploadCoordinator(
           events: [
-            ComposerImageUploadEvent.started(
-              localId: '',
-              current: 1,
-              total: 1,
-            ),
+            ComposerImageUploadEvent.started(localId: '', current: 1, total: 1),
           ],
         ),
       ),
@@ -592,8 +598,10 @@ void main() {
         find.byKey(const Key('reply-bbcode-preview-attach-123456')),
         findsOneWidget,
       );
-      expect(find.textContaining('[attach]123456[/attach]', findRichText: true),
-          findsNothing);
+      expect(
+        find.textContaining('[attach]123456[/attach]', findRichText: true),
+        findsNothing,
+      );
 
       await tester.tap(find.text('源码'));
       await tester.pump();
@@ -611,49 +619,50 @@ void main() {
     },
   );
 
-  testWidgets('ReplyComposerPage shows upload failure without changing message', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _buildPage(
-        imagePicker: _FakeReplyImagePicker(
-          images: const [
-            ReplyPickedImage(
-              path: '/gallery/first.jpg',
-              fileName: 'first.jpg',
-              mimeType: 'image/jpeg',
-              originalIndex: 0,
-            ),
-          ],
+  testWidgets(
+    'ReplyComposerPage shows upload failure without changing message',
+    (tester) async {
+      await tester.pumpWidget(
+        _buildPage(
+          imagePicker: _FakeReplyImagePicker(
+            images: const [
+              ReplyPickedImage(
+                path: '/gallery/first.jpg',
+                fileName: 'first.jpg',
+                mimeType: 'image/jpeg',
+                originalIndex: 0,
+              ),
+            ],
+          ),
+          imageUploadCoordinator: _FakeReplyImageUploadCoordinator(
+            events: [
+              ComposerImageUploadEvent.failed(
+                localId: '',
+                current: 1,
+                total: 1,
+                errorMessage: '图片上传失败',
+              ),
+              const ComposerImageUploadEvent.completed(total: 1),
+            ],
+          ),
         ),
-        imageUploadCoordinator: _FakeReplyImageUploadCoordinator(
-          events: [
-            ComposerImageUploadEvent.failed(
-              localId: '',
-              current: 1,
-              total: 1,
-              errorMessage: '图片上传失败',
-            ),
-            const ComposerImageUploadEvent.completed(total: 1),
-          ],
-        ),
-      ),
-    );
-    await tester.pump();
-    await tester.enterText(
-      find.byKey(const Key('reply-composer-message-input')),
-      '正文',
-    );
-    await tester.pump();
+      );
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const Key('reply-composer-message-input')),
+        '正文',
+      );
+      await tester.pump();
 
-    await tester.tap(find.byKey(const Key('reply-composer-image-button')));
-    await tester.pump();
-    await tester.pump();
+      await tester.tap(find.byKey(const Key('reply-composer-image-button')));
+      await tester.pump();
+      await tester.pump();
 
-    expect(find.textContaining('上传失败'), findsWidgets);
-    expect(find.text('正文'), findsOneWidget);
-    expect(find.textContaining('[attach]'), findsNothing);
-  });
+      expect(find.textContaining('上传失败'), findsWidgets);
+      expect(find.text('正文'), findsOneWidget);
+      expect(find.textContaining('[attach]'), findsNothing);
+    },
+  );
 
   testWidgets('ReplyComposerPage submits post reply with reference fields', (
     tester,
@@ -696,9 +705,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('保存草稿并离开？'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('reply-composer-continue-edit-button')));
+    await tester.tap(
+      find.byKey(const Key('reply-composer-continue-edit-button')),
+    );
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('reply-composer-message-input')), findsOneWidget);
+    expect(
+      find.byKey(const Key('reply-composer-message-input')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('ReplyComposerPage saves draft and leaves after confirmation', (
@@ -720,7 +734,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('open-reply-composer-page')), findsOneWidget);
-    expect((await draftRepository.loadDraft(_threadArgs().identity))?.message, '离开前保存');
+    expect(
+      (await draftRepository.loadDraft(_threadArgs().identity))?.message,
+      '离开前保存',
+    );
   });
 
   testWidgets('ReplyComposerPage leaves without confirmation for empty input', (
@@ -737,28 +754,29 @@ void main() {
     expect(find.byKey(const Key('open-reply-composer-page')), findsOneWidget);
   });
 
-  testWidgets('ReplyComposerPage successful submit does not show leave confirm', (
-    tester,
-  ) async {
-    final replyRepository = _FakeReplyRepository(
-      result: const ApiSuccess<ReplySubmissionResult>(
-        ReplySubmissionResult(message: '回复发布成功'),
-      ),
-    );
-    await tester.pumpWidget(_buildLauncher(replyRepository: replyRepository));
-    await tester.tap(find.byKey(const Key('open-reply-composer-page')));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const Key('reply-composer-message-input')),
-      '提交内容',
-    );
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('reply-composer-send-button')));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'ReplyComposerPage successful submit does not show leave confirm',
+    (tester) async {
+      final replyRepository = _FakeReplyRepository(
+        result: const ApiSuccess<ReplySubmissionResult>(
+          ReplySubmissionResult(message: '回复发布成功'),
+        ),
+      );
+      await tester.pumpWidget(_buildLauncher(replyRepository: replyRepository));
+      await tester.tap(find.byKey(const Key('open-reply-composer-page')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('reply-composer-message-input')),
+        '提交内容',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('reply-composer-send-button')));
+      await tester.pumpAndSettle();
 
-    expect(find.text('保存草稿并离开？'), findsNothing);
-    expect(find.byKey(const Key('open-reply-composer-page')), findsOneWidget);
-  });
+      expect(find.text('保存草稿并离开？'), findsNothing);
+      expect(find.byKey(const Key('open-reply-composer-page')), findsOneWidget);
+    },
+  );
 }
 
 Widget _buildPage({
@@ -797,6 +815,7 @@ Widget _buildPage({
             .read(stickerPickerPreferencesRepositoryProvider)
             .loadLastGroupId();
       }),
+      imageCacheServiceProvider.overrideWithValue(_FailingImageCacheService()),
     ],
     child: MaterialApp(
       theme: theme,
@@ -851,6 +870,7 @@ Widget _buildLauncher({
             .read(stickerPickerPreferencesRepositoryProvider)
             .loadLastGroupId();
       }),
+      imageCacheServiceProvider.overrideWithValue(_FailingImageCacheService()),
     ],
     child: MaterialApp(
       theme: theme,
@@ -859,19 +879,23 @@ Widget _buildLauncher({
   );
 }
 
-const _stickerGroups = [
+final _stickerGroups = [
   StickerGroup(
     id: 'bugcat',
     title: '貓貓蟲',
-    stickers: [
-      StickerItem(
-        code: '{:9_656:}',
-        assetPath: 'assets/stickers/bugcat/Capoo16.gif',
-        rawCodePattern: '{:9_656:}',
-      ),
-    ],
+    stickers: [_sticker(code: '{:9_656:}', imagePath: 'bugcat/Capoo16.gif')],
   ),
 ];
+
+StickerItem _sticker({required String code, required String imagePath}) {
+  return StickerItem(
+    code: code,
+    rawCodePattern: code,
+    imagePath: imagePath,
+    imageUrl: 'https://bbs.yamibo.com/static/image/smiley/$imagePath',
+    cacheKey: ImageCacheKeys.remoteSmiley(imagePath),
+  );
+}
 
 ReplyComposerArgs _threadArgs() {
   return const ReplyComposerArgs(
@@ -895,9 +919,7 @@ ReplyComposerArgs _postArgs() {
 }
 
 class _ReplyComposerLauncher extends StatelessWidget {
-  const _ReplyComposerLauncher({
-    required this.onResult,
-  });
+  const _ReplyComposerLauncher({required this.onResult});
 
   final ValueChanged<ReplyComposerResult> onResult;
 
@@ -908,11 +930,12 @@ class _ReplyComposerLauncher extends StatelessWidget {
         child: FilledButton(
           key: const Key('open-reply-composer-page'),
           onPressed: () async {
-            final result = await Navigator.of(context).push<ReplyComposerResult>(
-              MaterialPageRoute<ReplyComposerResult>(
-                builder: (_) => ReplyComposerPage(args: _threadArgs()),
-              ),
-            );
+            final result = await Navigator.of(context)
+                .push<ReplyComposerResult>(
+                  MaterialPageRoute<ReplyComposerResult>(
+                    builder: (_) => ReplyComposerPage(args: _threadArgs()),
+                  ),
+                );
             if (result != null) {
               onResult(result);
             }
@@ -925,9 +948,7 @@ class _ReplyComposerLauncher extends StatelessWidget {
 }
 
 class _MemoryReplyDraftRepository implements ComposerDraftRepository {
-  _MemoryReplyDraftRepository({
-    DateTime Function()? now,
-  }) : _now = now;
+  _MemoryReplyDraftRepository({DateTime Function()? now}) : _now = now;
 
   final Map<String, ComposerDraftSnapshot> _drafts =
       <String, ComposerDraftSnapshot>{};
@@ -946,12 +967,16 @@ class _MemoryReplyDraftRepository implements ComposerDraftRepository {
     required String tid,
   }) async {
     return _drafts.values
-        .where((draft) => draft.identity.fid == fid && draft.identity.tid == tid)
+        .where(
+          (draft) => draft.identity.fid == fid && draft.identity.tid == tid,
+        )
         .toList(growable: false);
   }
 
   @override
-  Future<ComposerDraftSnapshot?> loadDraft(ComposerDraftIdentity identity) async {
+  Future<ComposerDraftSnapshot?> loadDraft(
+    ComposerDraftIdentity identity,
+  ) async {
     final draft = _drafts[identity.storageKey];
     final now = _now;
     if (draft == null || now == null) {
@@ -982,10 +1007,7 @@ class _MemoryReplyDraftRepository implements ComposerDraftRepository {
     Duration maxAge = const Duration(days: 30),
     int maxCount = 100,
   }) async {
-    return ComposerDraftPruneResult(
-      removedCount: 0,
-      keptCount: _drafts.length,
-    );
+    return ComposerDraftPruneResult(removedCount: 0, keptCount: _drafts.length);
   }
 
   @override
@@ -1030,10 +1052,7 @@ bool _testAttachFileExists(File file) {
 }
 
 class _TestAttachPreviewImage extends StatelessWidget {
-  const _TestAttachPreviewImage({
-    super.key,
-    required this.file,
-  });
+  const _TestAttachPreviewImage({super.key, required this.file});
 
   final File file;
 
@@ -1058,10 +1077,42 @@ class _FakeStickerPickerPreferencesRepository
   }
 }
 
+class _FailingImageCacheService implements ImageCacheService {
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    return CachedImageResult.failed;
+  }
+
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async => null;
+
+  @override
+  Future<CachedImageResult> copyProtectedLocalFile(
+    ImageCacheLocalCopyRequest request,
+  ) async {
+    return CachedImageResult.failed;
+  }
+
+  @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
+
+  @override
+  Future<void> pruneToLimit({required int maxBytes}) async {}
+
+  @override
+  Future<void> clearUnprotected() async {}
+}
+
 class _FakeReplyImagePicker implements ComposerImagePicker {
-  _FakeReplyImagePicker({
-    this.images = const <ComposerPickedImage>[],
-  });
+  _FakeReplyImagePicker({this.images = const <ComposerPickedImage>[]});
 
   final List<ComposerPickedImage> images;
 
@@ -1071,7 +1122,8 @@ class _FakeReplyImagePicker implements ComposerImagePicker {
   }
 }
 
-class _FakeReplyImageUploadCoordinator implements ComposerImageUploadCoordinator {
+class _FakeReplyImageUploadCoordinator
+    implements ComposerImageUploadCoordinator {
   _FakeReplyImageUploadCoordinator({
     this.events = const <ComposerImageUploadEvent>[],
   });
@@ -1093,22 +1145,26 @@ class _FakeReplyImageUploadCoordinator implements ComposerImageUploadCoordinator
       }
       final localId = event.localId.isNotEmpty
           ? event.localId
-          : attachments[
-                  (event.current - 1).clamp(0, attachments.length - 1).toInt()]
-              .localId;
+          : attachments[(event.current - 1)
+                    .clamp(0, attachments.length - 1)
+                    .toInt()]
+                .localId;
       yield switch (event.type) {
-        ComposerImageUploadEventType.started => ComposerImageUploadEvent.started(
+        ComposerImageUploadEventType.started =>
+          ComposerImageUploadEvent.started(
             localId: localId,
             current: event.current,
             total: event.total,
           ),
-        ComposerImageUploadEventType.progress => ComposerImageUploadEvent.progress(
+        ComposerImageUploadEventType.progress =>
+          ComposerImageUploadEvent.progress(
             localId: localId,
             current: event.current,
             total: event.total,
             progress: event.progress ?? 0,
           ),
-        ComposerImageUploadEventType.uploaded => ComposerImageUploadEvent.uploaded(
+        ComposerImageUploadEventType.uploaded =>
+          ComposerImageUploadEvent.uploaded(
             localId: localId,
             current: event.current,
             total: event.total,
@@ -1119,14 +1175,13 @@ class _FakeReplyImageUploadCoordinator implements ComposerImageUploadCoordinator
             ),
           ),
         ComposerImageUploadEventType.failed => ComposerImageUploadEvent.failed(
-            localId: localId,
-            current: event.current,
-            total: event.total,
-            errorMessage: event.errorMessage ?? '图片上传失败',
-          ),
-        ComposerImageUploadEventType.completed => ComposerImageUploadEvent.completed(
-            total: event.total,
-          ),
+          localId: localId,
+          current: event.current,
+          total: event.total,
+          errorMessage: event.errorMessage ?? '图片上传失败',
+        ),
+        ComposerImageUploadEventType.completed =>
+          ComposerImageUploadEvent.completed(total: event.total),
       };
     }
   }
@@ -1144,10 +1199,7 @@ class _FakeReplyUploadNotificationService
   }) async {}
 
   @override
-  Future<void> showProgress({
-    required int current,
-    required int total,
-  }) async {}
+  Future<void> showProgress({required int current, required int total}) async {}
 }
 
 class _FakeReplyRepository implements ReplyRepository {
@@ -1156,29 +1208,29 @@ class _FakeReplyRepository implements ReplyRepository {
     ApiResult<ReplyPreparation>? preparationResult,
     this.asyncPreparationResult,
   }) : result =
-            result ??
-            const ApiSuccess<ReplySubmissionResult>(
-              ReplySubmissionResult(message: '回复成功'),
-            ),
-        preparationResult =
-            preparationResult ??
-            const ApiSuccess<ReplyPreparation>(
-              ReplyPreparation(
-                target: ReplyTarget.post(
-                  fid: '33',
-                  tid: '572063',
-                  pid: '41554317',
-                ),
-                reference: ReplyReference(
-                  formHash: 'prepared-formhash',
-                  noticeAuthor: 'notice-token',
-                  noticeTrimStr: '[quote]引用[/quote]',
-                  noticeAuthorMsg: '引用正文',
-                  repPid: '41554317',
-                  repPost: '41554317',
-                ),
-              ),
-            );
+           result ??
+           const ApiSuccess<ReplySubmissionResult>(
+             ReplySubmissionResult(message: '回复成功'),
+           ),
+       preparationResult =
+           preparationResult ??
+           const ApiSuccess<ReplyPreparation>(
+             ReplyPreparation(
+               target: ReplyTarget.post(
+                 fid: '33',
+                 tid: '572063',
+                 pid: '41554317',
+               ),
+               reference: ReplyReference(
+                 formHash: 'prepared-formhash',
+                 noticeAuthor: 'notice-token',
+                 noticeTrimStr: '[quote]引用[/quote]',
+                 noticeAuthorMsg: '引用正文',
+                 repPid: '41554317',
+                 repPost: '41554317',
+               ),
+             ),
+           );
 
   final ApiResult<ReplySubmissionResult> result;
   final ApiResult<ReplyPreparation> preparationResult;

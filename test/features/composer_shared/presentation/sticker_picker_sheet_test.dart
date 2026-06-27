@@ -3,6 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/image_cache_keys.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/composer_shared/data/composer_providers.dart';
 import 'package:y300/features/composer_shared/data/sticker_picker_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
@@ -11,13 +15,12 @@ import 'package:y300/features/composer_shared/presentation/widgets/sticker_picke
 void main() {
   testWidgets('StickerPickerSheet shows loading state', (tester) async {
     final completer = Completer<List<StickerGroup>>();
-    await tester.pumpWidget(
-      _buildSheet(
-        loadGroups: () => completer.future,
-      ),
-    );
+    await tester.pumpWidget(_buildSheet(loadGroups: () => completer.future));
 
-    expect(find.byKey(const Key('reply-sticker-picker-loading')), findsOneWidget);
+    expect(
+      find.byKey(const Key('reply-sticker-picker-loading')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('StickerPickerSheet shows error state', (tester) async {
@@ -34,14 +37,11 @@ void main() {
   });
 
   testWidgets('StickerPickerSheet shows empty state', (tester) async {
-    await tester.pumpWidget(
-      _buildSheet(
-        loadGroups: () async => const [],
-      ),
-    );
+    await tester.pumpWidget(_buildSheet(loadGroups: () async => const []));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('reply-sticker-picker-empty')), findsOneWidget);
+    expect(find.text('需要联网加载表情包'), findsOneWidget);
   });
 
   testWidgets('StickerPickerSheet shows groups and returns selected sticker', (
@@ -61,20 +61,25 @@ void main() {
                 .read(stickerPickerPreferencesRepositoryProvider)
                 .loadLastGroupId();
           }),
-        ],
-        child: const MaterialApp(
-          home: Scaffold(
-            body: StickerPickerSheet(),
+          imageCacheServiceProvider.overrideWithValue(
+            _FailingImageCacheService(),
           ),
-        ),
+        ],
+        child: const MaterialApp(home: Scaffold(body: StickerPickerSheet())),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('reply-sticker-group-tab-bugcat')), findsOneWidget);
+    expect(
+      find.byKey(const Key('reply-sticker-group-tab-bugcat')),
+      findsOneWidget,
+    );
     expect(find.text('貓貓蟲'), findsOneWidget);
     expect(find.text('{:9_656:}'), findsNothing);
-    expect(find.byKey(const Key('reply-sticker-item-{:9_656:}')), findsOneWidget);
+    expect(
+      find.byKey(const Key('reply-sticker-item-{:9_656:}')),
+      findsOneWidget,
+    );
 
     await tester.pumpWidget(
       ProviderScope(
@@ -88,6 +93,9 @@ void main() {
                 .read(stickerPickerPreferencesRepositoryProvider)
                 .loadLastGroupId();
           }),
+          imageCacheServiceProvider.overrideWithValue(
+            _FailingImageCacheService(),
+          ),
         ],
         child: MaterialApp(
           home: _PickerLauncher(
@@ -130,30 +138,28 @@ void main() {
   });
 }
 
-const _groups = [
+final _groups = [
   StickerGroup(
     id: 'bugcat',
     title: '貓貓蟲',
-    stickers: [
-      StickerItem(
-        code: '{:9_656:}',
-        assetPath: 'assets/stickers/bugcat/Capoo16.gif',
-        rawCodePattern: '{:9_656:}',
-      ),
-    ],
+    stickers: [_sticker(code: '{:9_656:}', imagePath: 'bugcat/Capoo16.gif')],
   ),
   StickerGroup(
     id: 'azukisan',
     title: '小豆泥',
-    stickers: [
-      StickerItem(
-        code: '{:6_1:}',
-        assetPath: 'assets/stickers/azukisan/1.gif',
-        rawCodePattern: '{:6_1:}',
-      ),
-    ],
+    stickers: [_sticker(code: '{:6_1:}', imagePath: 'azukisan/1.gif')],
   ),
 ];
+
+StickerItem _sticker({required String code, required String imagePath}) {
+  return StickerItem(
+    code: code,
+    rawCodePattern: code,
+    imagePath: imagePath,
+    imageUrl: 'https://bbs.yamibo.com/static/image/smiley/$imagePath',
+    cacheKey: ImageCacheKeys.remoteSmiley(imagePath),
+  );
+}
 
 Widget _buildSheet({
   required Future<List<StickerGroup>> Function() loadGroups,
@@ -172,19 +178,48 @@ Widget _buildSheet({
             .read(stickerPickerPreferencesRepositoryProvider)
             .loadLastGroupId();
       }),
+      imageCacheServiceProvider.overrideWithValue(_FailingImageCacheService()),
     ],
-    child: const MaterialApp(
-      home: Scaffold(
-        body: StickerPickerSheet(),
-      ),
-    ),
+    child: const MaterialApp(home: Scaffold(body: StickerPickerSheet())),
   );
 }
 
+class _FailingImageCacheService implements ImageCacheService {
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    return CachedImageResult.failed;
+  }
+
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async => null;
+
+  @override
+  Future<CachedImageResult> copyProtectedLocalFile(
+    ImageCacheLocalCopyRequest request,
+  ) async {
+    return CachedImageResult.failed;
+  }
+
+  @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
+
+  @override
+  Future<void> pruneToLimit({required int maxBytes}) async {}
+
+  @override
+  Future<void> clearUnprotected() async {}
+}
+
 class _PickerLauncher extends StatelessWidget {
-  const _PickerLauncher({
-    required this.onSelected,
-  });
+  const _PickerLauncher({required this.onSelected});
 
   final ValueChanged<StickerItem> onSelected;
 
@@ -210,9 +245,7 @@ class _PickerLauncher extends StatelessWidget {
 
 class _FakeStickerPickerPreferencesRepository
     implements StickerPickerPreferencesRepository {
-  _FakeStickerPickerPreferencesRepository({
-    this.lastGroupId,
-  });
+  _FakeStickerPickerPreferencesRepository({this.lastGroupId});
 
   String? lastGroupId;
 

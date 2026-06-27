@@ -33,7 +33,11 @@ final stickerCodeNormalizerProvider = Provider<StickerCodeNormalizer>((_) {
 final stickerCatalogRepositoryProvider = Provider<StickerCatalogRepository>((
   ref,
 ) {
-  return AssetStickerCatalogRepository(
+  return RemoteStickerCatalogRepository(
+    remoteDataSource: YamiboStickerCatalogRemoteDataSource(
+      gateway: ref.read(yamiboHttpGatewayProvider),
+    ),
+    cacheStore: const FileStickerCatalogCacheStore(),
     normalizer: ref.read(stickerCodeNormalizerProvider),
   );
 });
