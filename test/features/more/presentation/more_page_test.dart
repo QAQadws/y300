@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
@@ -15,6 +16,7 @@ import 'package:y300/features/profile/data/models/my_message_models.dart';
 import 'package:y300/features/profile/data/models/user_profile_models.dart';
 import 'package:y300/features/profile/data/my_message_repository.dart';
 import 'package:y300/features/profile/data/user_profile_repository.dart';
+import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
 
 void main() {
   testWidgets('MorePage builds dark theme chrome', (tester) async {
@@ -277,8 +279,80 @@ void main() {
 
     expect(controller.toggleCount, 1);
     expect(find.textContaining('诊断日志模式已开启'), findsOneWidget);
-    expect(find.textContaining('连续快速点击 5 次可关闭'), findsOneWidget);
+    expect(
+      find.byKey(const Key('more-thread-detail-diagnostic-switch')),
+      findsOneWidget,
+    );
   });
+
+  testWidgets(
+    'MorePage shows and controls thread detail diagnostics in diagnostic mode',
+    (tester) async {
+      final syncController = _FakeSyncDiagnosticModeController(enabled: true);
+      final threadController = _FakeThreadDetailDiagnosticController(
+        exportedText: 'entry build log',
+      );
+      final copiedTexts = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            final data = Map<String, dynamic>.from(call.arguments as Map);
+            copiedTexts.add(data['text'] as String);
+          }
+          return null;
+        },
+      );
+      addTearDown(() {
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        );
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(
+              _FakeAuthRepository(isLoggedIn: false),
+            ),
+            forumModeSettingsRepositoryProvider.overrideWithValue(
+              _FakeForumModeSettingsRepository(),
+            ),
+            syncDiagnosticModeControllerProvider.overrideWith(
+              () => syncController,
+            ),
+            threadDetailDiagnosticControllerProvider.overrideWith(
+              () => threadController,
+            ),
+            appAppearanceControllerProvider.overrideWith(
+              () => _FakeAppAppearanceController(),
+            ),
+          ],
+          child: const MaterialApp(home: MorePage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('more-thread-detail-diagnostic-switch')),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.byKey(const Key('more-thread-detail-diagnostic-switch')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(threadController.enabled, isTrue);
+      await tester.tap(
+        find.byKey(const Key('more-thread-detail-diagnostic-copy-entry')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(copiedTexts.single, 'entry build log');
+      expect(find.text('帖子详情诊断日志已复制'), findsOneWidget);
+    },
+  );
 
   testWidgets('MorePage opens appearance settings and changes theme mode', (
     tester,
@@ -435,6 +509,9 @@ class _FakeForumModeSettingsRepository implements ForumModeSettingsRepository {
 }
 
 class _FakeSyncDiagnosticModeController extends SyncDiagnosticModeController {
+  _FakeSyncDiagnosticModeController({bool enabled = false})
+    : _enabled = enabled;
+
   var toggleCount = 0;
   var _enabled = false;
 
@@ -449,6 +526,30 @@ class _FakeSyncDiagnosticModeController extends SyncDiagnosticModeController {
     _enabled = !_enabled;
     state = AsyncData(_enabled);
     return _enabled;
+  }
+}
+
+class _FakeThreadDetailDiagnosticController
+    extends ThreadDetailDiagnosticController {
+  _FakeThreadDetailDiagnosticController({this.exportedText = ''});
+
+  final String exportedText;
+  var enabled = false;
+
+  @override
+  Future<bool> build() async {
+    return enabled;
+  }
+
+  @override
+  Future<void> setEnabled(bool enabled) async {
+    this.enabled = enabled;
+    state = AsyncData(enabled);
+  }
+
+  @override
+  String exportText() {
+    return exportedText;
   }
 }
 

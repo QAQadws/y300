@@ -37,13 +37,17 @@ import 'package:y300/features/tags/domain/models/yamibo_tag_thread_page.dart';
 import 'package:y300/features/tags/domain/services/yamibo_tag_page_parsing.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_favorite_providers.dart';
+import 'package:y300/features/thread/data/thread_detail_diagnostic_settings_repository.dart';
 import 'package:y300/features/thread/data/thread_post_locator.dart';
 import 'package:y300/features/thread/data/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/data/thread_poll_vote_repository.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
+import 'package:y300/features/thread/domain/services/thread_detail_diagnostic_recorder.dart';
 import 'package:y300/features/thread/domain/services/thread_favorite_action_service.dart';
+import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
@@ -630,6 +634,65 @@ void main() {
         );
       },
     );
+
+    testWidgets('records thread detail diagnostic events when enabled', (
+      tester,
+    ) async {
+      final recorder = InMemoryThreadDetailDiagnosticRecorder(enabled: true);
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          _threadDetailData(
+            tid: tid,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ..._threadDetailOverrides(repository),
+            threadDetailDiagnosticRecorderProvider.overrideWithValue(recorder),
+            threadDetailDiagnosticSettingsRepositoryProvider.overrideWithValue(
+              _FakeThreadDetailDiagnosticSettingsRepository(enabled: true),
+            ),
+          ],
+          child: const MaterialApp(
+            home: ThreadDetailPage(tid: '100', subject: '测试主题'),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      final events = recorder.snapshot();
+      expect(
+        events.any(
+          (event) =>
+              event.type == ThreadDetailDiagnosticEventType.renderPlanCreate &&
+              event.pid == 'p1',
+        ),
+        isTrue,
+      );
+      expect(
+        events.any(
+          (event) =>
+              event.type == ThreadDetailDiagnosticEventType.entryBuild &&
+              event.entryKey == 'thread-post-header-p1',
+        ),
+        isTrue,
+      );
+    });
 
     testWidgets('collapsing comments reduces post card height', (tester) async {
       final state = ThreadDetailPageState.initial(tid: '100', subject: '测试主题')
@@ -2646,6 +2709,21 @@ class _NoopImageCacheService implements ImageCacheService {
 
   @override
   Future<void> clearUnprotected() async {}
+}
+
+class _FakeThreadDetailDiagnosticSettingsRepository
+    implements ThreadDetailDiagnosticSettingsRepository {
+  _FakeThreadDetailDiagnosticSettingsRepository({this.enabled = false});
+
+  bool enabled;
+
+  @override
+  Future<bool> loadScrollDiagnosticEnabled() async => enabled;
+
+  @override
+  Future<void> setScrollDiagnosticEnabled(bool enabled) async {
+    this.enabled = enabled;
+  }
 }
 
 class _RecordingImageCacheService extends _NoopImageCacheService {

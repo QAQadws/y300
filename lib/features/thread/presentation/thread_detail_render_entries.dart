@@ -2,8 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
+import 'package:y300/features/thread/domain/services/thread_detail_diagnostic_recorder.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 
 class ThreadDetailRenderEntryPlanner {
@@ -12,11 +14,15 @@ class ThreadDetailRenderEntryPlanner {
         const ThreadPostBodyRenderPlanner(),
     ThreadPostBodyRenderSettings renderSettings =
         ThreadPostBodyRenderSettings.defaults,
+    ThreadDetailDiagnosticRecorder diagnosticRecorder =
+        const NoopThreadDetailDiagnosticRecorder(),
   }) : _bodyRenderPlanner = bodyRenderPlanner,
-       _renderSettings = renderSettings;
+       _renderSettings = renderSettings,
+       _diagnosticRecorder = diagnosticRecorder;
 
   final ThreadPostBodyRenderPlanner _bodyRenderPlanner;
   final ThreadPostBodyRenderSettings _renderSettings;
+  final ThreadDetailDiagnosticRecorder _diagnosticRecorder;
   final Map<ThreadDetailPostBodyRenderPlanCacheKey, ThreadPostBodyRenderPlan>
   _bodyRenderPlanCache =
       <ThreadDetailPostBodyRenderPlanCacheKey, ThreadPostBodyRenderPlan>{};
@@ -75,13 +81,18 @@ class ThreadDetailRenderEntryPlanner {
 
   ThreadPostBodyRenderPlan planFor(ThreadPost post) {
     final key = _cacheKeyFor(post);
-    return _bodyRenderPlanCache.putIfAbsent(
-      key,
-      () => _bodyRenderPlanner.plan(
+    return _bodyRenderPlanCache.putIfAbsent(key, () {
+      _diagnosticRecorder.record(
+        type: ThreadDetailDiagnosticEventType.renderPlanCreate,
+        pid: post.pid,
+        message:
+            'create render plan page post=${post.number} hash=${key.messageHash}',
+      );
+      return _bodyRenderPlanner.plan(
         post.message,
         renderSettings: _renderSettings,
-      ),
-    );
+      );
+    });
   }
 
   void prune(List<ThreadPost> posts) {

@@ -6,8 +6,10 @@ import 'package:y300/features/cache/presentation/widgets/cached_library_image.da
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
+import 'package:y300/features/thread/domain/services/thread_detail_diagnostic_recorder.dart';
 import 'package:y300/features/thread/presentation/thread_detail_render_entries.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
@@ -35,6 +37,7 @@ class ThreadDetailContent extends StatefulWidget {
     required this.onOpenPostLink,
     this.onOpenPostImages,
     required this.onOpenPostCopyActions,
+    this.diagnosticRecorder = const NoopThreadDetailDiagnosticRecorder(),
     this.onPostBuilt,
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
@@ -59,6 +62,7 @@ class ThreadDetailContent extends StatefulWidget {
   onOpenPostImages;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
   onOpenPostCopyActions;
+  final ThreadDetailDiagnosticRecorder diagnosticRecorder;
   final ValueChanged<int>? onPostBuilt;
   final void Function(ThreadPoll poll, ThreadPollOption option)
   onTogglePollOption;
@@ -69,12 +73,24 @@ class ThreadDetailContent extends StatefulWidget {
 }
 
 class _ThreadDetailContentState extends State<ThreadDetailContent> {
-  final ThreadDetailRenderEntryPlanner _entryPlanner =
-      ThreadDetailRenderEntryPlanner();
+  late ThreadDetailRenderEntryPlanner _entryPlanner;
+
+  @override
+  void initState() {
+    super.initState();
+    _entryPlanner = ThreadDetailRenderEntryPlanner(
+      diagnosticRecorder: widget.diagnosticRecorder,
+    );
+  }
 
   @override
   void didUpdateWidget(covariant ThreadDetailContent oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.diagnosticRecorder, widget.diagnosticRecorder)) {
+      _entryPlanner = ThreadDetailRenderEntryPlanner(
+        diagnosticRecorder: widget.diagnosticRecorder,
+      );
+    }
     if (!identical(oldWidget.state.posts, widget.state.posts) ||
         oldWidget.state.currentPage != widget.state.currentPage) {
       _entryPlanner.prune(widget.state.posts);
@@ -95,8 +111,23 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       cacheExtent: 900,
       itemCount: entries.length,
       itemBuilder: (context, index) {
-        return _buildEntry(context, entries[index], palette);
+        final entry = entries[index];
+        _recordEntryBuild(entry);
+        return _buildEntry(context, entry, palette);
       },
+    );
+  }
+
+  void _recordEntryBuild(ThreadDetailRenderEntry entry) {
+    final position = widget.scrollController?.hasClients == true
+        ? widget.scrollController!.position.pixels
+        : null;
+    widget.diagnosticRecorder.record(
+      type: ThreadDetailDiagnosticEventType.entryBuild,
+      entryKey: entry.key,
+      pid: entry.post?.pid,
+      scrollOffset: position,
+      message: 'build ${entry.kind.name}',
     );
   }
 

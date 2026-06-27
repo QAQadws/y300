@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
@@ -11,6 +12,7 @@ import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/more/presentation/appearance_settings_page.dart';
 import 'package:y300/features/more/presentation/data_storage_page.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
+import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
 
 class MorePage extends ConsumerStatefulWidget {
   const MorePage({super.key});
@@ -38,6 +40,9 @@ class _MorePageState extends ConsumerState<MorePage> {
         AppAppearanceSettings.defaults();
     final diagnosticMode = ref.watch(syncDiagnosticModeControllerProvider);
     final diagnosticEnabled = diagnosticMode.asData?.value ?? false;
+    final threadDiagnosticEnabled =
+        ref.watch(threadDetailDiagnosticControllerProvider).asData?.value ??
+        false;
 
     return Scaffold(
       appBar: AppBar(title: const Text('更多')),
@@ -102,6 +107,24 @@ class _MorePageState extends ConsumerState<MorePage> {
             title: Text('阅读设置（预留）'),
             subtitle: Text('后续阶段接入阅读器细项配置'),
           ),
+          if (diagnosticEnabled) ...[
+            SwitchListTile(
+              key: const Key('more-thread-detail-diagnostic-switch'),
+              secondary: const Icon(Icons.bug_report_outlined),
+              title: const Text('帖子详情滚动诊断'),
+              subtitle: const Text('记录 entry 构建、render plan 和滚动操作'),
+              value: threadDiagnosticEnabled,
+              onChanged: (value) =>
+                  _setThreadDetailDiagnosticEnabled(context, ref, value),
+            ),
+            ListTile(
+              key: const Key('more-thread-detail-diagnostic-copy-entry'),
+              leading: const Icon(Icons.content_copy_outlined),
+              title: const Text('复制帖子详情诊断日志'),
+              subtitle: const Text('复制当前进程内最近的滚动诊断事件'),
+              onTap: () => _copyThreadDetailDiagnosticLog(context, ref),
+            ),
+          ],
           ListTile(
             key: const Key('more-about-placeholder'),
             leading: const Icon(Icons.info_outline),
@@ -114,6 +137,43 @@ class _MorePageState extends ConsumerState<MorePage> {
             onTap: _handleAboutTap,
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _setThreadDetailDiagnosticEnabled(
+    BuildContext context,
+    WidgetRef ref,
+    bool enabled,
+  ) async {
+    try {
+      await ref
+          .read(threadDetailDiagnosticControllerProvider.notifier)
+          .setEnabled(enabled);
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('帖子详情诊断设置失败：$error')));
+    }
+  }
+
+  Future<void> _copyThreadDetailDiagnosticLog(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final text = ref
+        .read(threadDetailDiagnosticControllerProvider.notifier)
+        .exportText();
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(text.trim().isEmpty ? '暂无帖子详情诊断日志' : '帖子详情诊断日志已复制'),
       ),
     );
   }

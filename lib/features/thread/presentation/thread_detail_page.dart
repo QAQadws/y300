@@ -28,10 +28,12 @@ import 'package:y300/features/thread/data/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/thread_post_locator.dart';
 import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_plain_text_extractor.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
+import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
 import 'package:y300/features/thread/presentation/thread_post_media_preload_queue.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
@@ -104,6 +106,10 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         ThreadDetailPageState.initial(tid: widget.tid, subject: widget.subject);
     final imageHeaderBuilder = ref.watch(
       imageRequestHeaderBuilderForRefererProvider(_imageRefererFor(state)),
+    );
+    ref.watch(threadDetailDiagnosticControllerProvider);
+    final diagnosticRecorder = ref.watch(
+      threadDetailDiagnosticRecorderProvider,
     );
     _latestImageHeaderBuilder = imageHeaderBuilder;
     if (_enableThreadPostMediaPreload) {
@@ -259,6 +265,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                     onOpenPostCopyActions: (post, plan) {
                       _openPostCopyActions(state, post, plan);
                     },
+                    diagnosticRecorder: diagnosticRecorder,
                     onPostBuilt: _enableThreadPostMediaPreload
                         ? (index) {
                             _mediaPreloadQueue?.preloadNearbyPosts(
@@ -313,6 +320,11 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       if ((position.pixels - targetOffset).abs() < 1) {
         return;
       }
+      _recordScrollDiagnostic(
+        type: ThreadDetailDiagnosticEventType.scrollAnimate,
+        scrollOffset: position.pixels,
+        message: 'page action scroll top -> ${targetOffset.toStringAsFixed(1)}',
+      );
       await _scrollController.animateTo(
         targetOffset,
         duration: const Duration(milliseconds: 220),
@@ -588,6 +600,11 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     int targetIndex,
   ) {
     _pendingTargetScrollKeys.add(key);
+    _recordScrollDiagnostic(
+      type: ThreadDetailDiagnosticEventType.targetPostScroll,
+      pid: targetPid,
+      message: 'queue target post scroll index=$targetIndex',
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _pendingTargetScrollKeys.remove(key);
       if (!mounted) {
@@ -626,6 +643,13 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     final targetOffset = revealed.offset
         .clamp(position.minScrollExtent, position.maxScrollExtent)
         .toDouble();
+    _recordScrollDiagnostic(
+      type: ThreadDetailDiagnosticEventType.scrollAnimate,
+      pid: targetPid,
+      scrollOffset: position.pixels,
+      message:
+          'target post animate index=$targetIndex -> ${targetOffset.toStringAsFixed(1)}',
+    );
     _scrollController.animateTo(
       targetOffset,
       duration: const Duration(milliseconds: 260),
@@ -660,6 +684,13 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       position: position,
     );
     _targetScrollAttempts[key] = attempt + 1;
+    _recordScrollDiagnostic(
+      type: ThreadDetailDiagnosticEventType.scrollJump,
+      pid: state.posts[targetIndex].pid,
+      scrollOffset: position.pixels,
+      message:
+          'rough target jump attempt=${attempt + 1} -> ${targetOffset.toStringAsFixed(1)}',
+    );
     _scrollController.jumpTo(targetOffset);
     _queueTargetPostScroll(
       state,
@@ -698,6 +729,22 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     return (position.maxScrollExtent * fraction)
         .clamp(position.minScrollExtent, position.maxScrollExtent)
         .toDouble();
+  }
+
+  void _recordScrollDiagnostic({
+    required ThreadDetailDiagnosticEventType type,
+    String? pid,
+    double? scrollOffset,
+    required String message,
+  }) {
+    ref
+        .read(threadDetailDiagnosticRecorderProvider)
+        .record(
+          type: type,
+          pid: pid,
+          scrollOffset: scrollOffset,
+          message: message,
+        );
   }
 
   ({int min, int max})? _builtPostIndexRange(ThreadDetailPageState state) {
