@@ -96,6 +96,8 @@ class ThreadDetailRenderEntryPlanner {
       pid: post.pid,
       messageHash: _hashMessage(post.message),
       renderSettingsSignature: _renderSettings.signature,
+      displayTransformerSignature:
+          _bodyRenderPlanner.displayTransformerSignature,
       resourceHintResolverSignature:
           _bodyRenderPlanner.resourceHintResolverSignature,
     );
@@ -226,12 +228,14 @@ class ThreadDetailPostBodyRenderPlanCacheKey {
     required this.pid,
     required this.messageHash,
     required this.renderSettingsSignature,
+    required this.displayTransformerSignature,
     required this.resourceHintResolverSignature,
   });
 
   final String pid;
   final String messageHash;
   final String renderSettingsSignature;
+  final String displayTransformerSignature;
   final String resourceHintResolverSignature;
 
   @override
@@ -240,6 +244,7 @@ class ThreadDetailPostBodyRenderPlanCacheKey {
         other.pid == pid &&
         other.messageHash == messageHash &&
         other.renderSettingsSignature == renderSettingsSignature &&
+        other.displayTransformerSignature == displayTransformerSignature &&
         other.resourceHintResolverSignature == resourceHintResolverSignature;
   }
 
@@ -248,6 +253,7 @@ class ThreadDetailPostBodyRenderPlanCacheKey {
     pid,
     messageHash,
     renderSettingsSignature,
+    displayTransformerSignature,
     resourceHintResolverSignature,
   );
 }

@@ -3,6 +3,7 @@ import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
+import 'package:y300/features/thread/domain/services/thread_post_body_display_transformer.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
@@ -251,6 +252,7 @@ void main() {
         key.resourceHintResolverSignature,
         const ThreadPostResourceLayoutHintResolver().signature,
       );
+      expect(key.displayTransformerSignature, 'identity');
     });
 
     test('render settings participate in render plan cache keys', () {
@@ -310,6 +312,49 @@ void main() {
       );
       expect(defaultKey, isNot(alternateKey));
     });
+
+    test('display transformer signature participates in cache keys', () {
+      final post = ThreadPost(
+        pid: 'p-display',
+        author: 'alice',
+        authorId: '1',
+        message: '<p>正文</p>',
+        number: 1,
+        isFirst: true,
+        dateline: 'today',
+      );
+      final defaultPlanner = ThreadDetailRenderEntryPlanner();
+      final transformedPlanner = ThreadDetailRenderEntryPlanner(
+        bodyRenderPlanner: const ThreadPostBodyRenderPlanner(
+          displayTransformer: ThreadPostBodyDisplayTransformer(
+            textTransformer: _replaceBodyText,
+            signature: 'replace-body-text',
+          ),
+        ),
+      );
+
+      final defaultKey = defaultPlanner.cacheKeyForPost(post);
+      final transformedKey = transformedPlanner.cacheKeyForPost(post);
+      final transformedPlan = transformedPlanner.planFor(post);
+
+      expect(defaultKey.messageHash, transformedKey.messageHash);
+      expect(
+        defaultKey.displayTransformerSignature,
+        isNot(transformedKey.displayTransformerSignature),
+      );
+      expect(defaultKey, isNot(transformedKey));
+      expect(transformedPlan.displayTransformerSignature, 'replace-body-text');
+      expect(
+        (transformedPlan.displayDocument.blocks.single as ThreadPostTextBlock)
+            .plainText,
+        '显示正文',
+      );
+      expect(
+        (transformedPlan.document.blocks.single as ThreadPostTextBlock)
+            .plainText,
+        '正文',
+      );
+    });
   });
 }
 
@@ -321,4 +366,8 @@ class _CountingThreadPostBodyParser extends ThreadPostBodyParser {
     parseCount += 1;
     return super.parse(html);
   }
+}
+
+String _replaceBodyText(String text) {
+  return text.replaceAll('正文', '显示正文');
 }

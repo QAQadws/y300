@@ -2,6 +2,7 @@ import 'package:y300/features/thread/domain/models/thread_post_body_document.dar
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_anchor.dart';
+import 'package:y300/features/thread/domain/services/thread_post_body_display_transformer.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_document_normalizer.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
 import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
@@ -14,16 +15,20 @@ class ThreadPostBodyRenderPlanner {
     ),
     this.resourceLayoutHintResolver =
         const ThreadPostResourceLayoutHintResolver(),
+    this.displayTransformer = const ThreadPostBodyDisplayTransformer(),
     this.maxSegmentTextLength = 600,
   }) : assert(maxSegmentTextLength > 0);
 
   final ThreadPostBodyParser parser;
   final ThreadPostBodyDocumentNormalizer normalizer;
   final ThreadPostResourceLayoutHintResolver resourceLayoutHintResolver;
+  final ThreadPostBodyDisplayTransformer displayTransformer;
   final int maxSegmentTextLength;
 
   String get resourceHintResolverSignature =>
       resourceLayoutHintResolver.signature;
+
+  String get displayTransformerSignature => displayTransformer.signature;
 
   ThreadPostBodyRenderPlan plan(
     String html, {
@@ -39,6 +44,7 @@ class ThreadPostBodyRenderPlanner {
     ThreadPostBodyRenderSettings renderSettings =
         ThreadPostBodyRenderSettings.defaults,
   }) {
+    final displayDocument = displayTransformer.transform(document);
     final segments = <ThreadPostBodySegment>[];
     var pendingBlocks = <ThreadPostBodyBlock>[];
     var pendingTextLength = 0;
@@ -60,7 +66,7 @@ class ThreadPostBodyRenderPlanner {
       pendingTextLength = 0;
     }
 
-    for (final sourceBlock in document.blocks) {
+    for (final sourceBlock in displayDocument.blocks) {
       for (final block in _segmentableBlocks(sourceBlock)) {
         if (block is ThreadPostImageBlock) {
           flushPending();
@@ -91,10 +97,12 @@ class ThreadPostBodyRenderPlanner {
 
     return ThreadPostBodyRenderPlan(
       document: document,
-      images: document.images,
+      displayDocument: displayDocument,
+      images: displayDocument.images,
       segments: List<ThreadPostBodySegment>.unmodifiable(segments),
       usesListSegments: segments.length > 1,
       renderSettingsSignature: renderSettings.signature,
+      displayTransformerSignature: displayTransformerSignature,
       resourceHintResolverSignature: resourceHintResolverSignature,
       resourceLayoutHints: resourceLayoutHintResolver.resolve(document),
     );

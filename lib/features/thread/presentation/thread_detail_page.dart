@@ -1017,7 +1017,7 @@ class _ThreadPostSelectableCopyPage extends StatelessWidget {
               ),
               child: ThreadPostBodyView(
                 document: plan.document,
-                blocks: plan.document.blocks,
+                blocks: plan.displayDocument.blocks,
                 images: plan.images,
                 imageHeaderBuilder: imageHeaderBuilder,
                 imageCacheOwnerId: threadId,

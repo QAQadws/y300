@@ -326,7 +326,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
           child: ThreadPostBodyView(
             key: Key('thread-post-${post.pid}'),
             document: plan.document,
-            blocks: plan.document.blocks,
+            blocks: plan.displayDocument.blocks,
             images: plan.images,
             imageHeaderBuilder: imageHeaderBuilder,
             imageCacheOwnerId: threadId,

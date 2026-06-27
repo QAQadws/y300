@@ -4,15 +4,18 @@ import 'package:y300/features/thread/domain/models/thread_post_resource_layout_h
 class ThreadPostBodyRenderPlan {
   const ThreadPostBodyRenderPlan({
     required this.document,
+    required this.displayDocument,
     required this.images,
     required this.segments,
     required this.usesListSegments,
     required this.renderSettingsSignature,
+    required this.displayTransformerSignature,
     required this.resourceHintResolverSignature,
     this.resourceLayoutHints = ThreadPostResourceLayoutHints.empty,
   });
 
   final ThreadPostBodyDocument document;
+  final ThreadPostBodyDocument displayDocument;
   final List<ThreadPostImageBlock> images;
   final List<ThreadPostBodySegment> segments;
 
@@ -24,6 +27,7 @@ class ThreadPostBodyRenderPlan {
   final bool usesListSegments;
 
   final String renderSettingsSignature;
+  final String displayTransformerSignature;
   final String resourceHintResolverSignature;
   final ThreadPostResourceLayoutHints resourceLayoutHints;
 

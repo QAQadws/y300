@@ -12,11 +12,11 @@ import 'package:y300/features/thread/domain/models/thread_post_body_document.dar
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
+import 'package:y300/features/thread/domain/services/thread_post_body_display_transformer.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_document_normalizer.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
 import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
 
-typedef ThreadPostTextTransformer = String Function(String text);
 typedef ThreadPostLinkTapHandler = void Function(String url);
 typedef ThreadPostImageOpenHandler =
     void Function(ThreadPostImageOpenRequest request);
@@ -168,6 +168,7 @@ class ThreadPostHtml extends StatefulWidget {
 
 class _ThreadPostHtmlState extends State<ThreadPostHtml> {
   late ThreadPostBodyDocument _document;
+  late ThreadPostBodyDocument _displayDocument;
   late ThreadPostResourceLayoutHints _resourceLayoutHints;
   late _ThreadPostDocumentCacheKey _documentCacheKey;
 
@@ -188,6 +189,12 @@ class _ThreadPostHtmlState extends State<ThreadPostHtml> {
   void _parseDocument() {
     _documentCacheKey = _cacheKeyFor(widget);
     _document = widget.normalizer.normalize(widget.parser.parse(widget.data));
+    _displayDocument = ThreadPostBodyDisplayTransformer(
+      textTransformer: widget.textTransformer,
+      signature: widget.renderSettings.textTransformerKey.isEmpty
+          ? 'widget'
+          : widget.renderSettings.textTransformerKey,
+    ).transform(_document);
     _resourceLayoutHints = ThreadPostResourceLayoutHintResolver(
       defaultBlockImageAspectRatio: widget.style.imageFallbackAspectRatio,
       lockForCurrentBuild:
@@ -202,6 +209,7 @@ class _ThreadPostHtmlState extends State<ThreadPostHtml> {
       parser: widget.parser,
       normalizer: widget.normalizer,
       renderSettingsSignature: widget.renderSettings.signature,
+      textTransformer: widget.textTransformer,
       imageFallbackAspectRatio: widget.style.imageFallbackAspectRatio,
       resourceLayoutPolicy: widget.resourceLayoutPolicy,
     );
@@ -210,14 +218,15 @@ class _ThreadPostHtmlState extends State<ThreadPostHtml> {
   @override
   Widget build(BuildContext context) {
     final document = _document;
-    if (document.blocks.isEmpty) {
+    final displayDocument = _displayDocument;
+    if (displayDocument.blocks.isEmpty) {
       return const SizedBox.shrink();
     }
     final effectiveStyle = _effectiveStyle(widget.style, widget.renderSettings);
     return ThreadPostBodyView(
       document: document,
-      blocks: document.blocks,
-      images: document.images,
+      blocks: displayDocument.blocks,
+      images: displayDocument.images,
       imageHeaderBuilder: widget.imageHeaderBuilder,
       imageCacheOwnerId: widget.imageCacheOwnerId,
       blockImageCacheRequestBuilder: widget.blockImageCacheRequestBuilder,
@@ -226,7 +235,6 @@ class _ThreadPostHtmlState extends State<ThreadPostHtml> {
       resourceLayoutHints: _resourceLayoutHints,
       style: effectiveStyle,
       resourceLayoutPolicy: widget.resourceLayoutPolicy,
-      textTransformer: widget.textTransformer,
       selectionEnabled: widget.selectionEnabled,
       onOpenLink: widget.onOpenLink,
       onOpenImage: widget.onOpenImage,
@@ -261,6 +269,7 @@ class _ThreadPostDocumentCacheKey {
     required this.parser,
     required this.normalizer,
     required this.renderSettingsSignature,
+    required this.textTransformer,
     required this.imageFallbackAspectRatio,
     required this.resourceLayoutPolicy,
   });
@@ -269,6 +278,7 @@ class _ThreadPostDocumentCacheKey {
   final ThreadPostBodyParser parser;
   final ThreadPostBodyDocumentNormalizer normalizer;
   final String renderSettingsSignature;
+  final ThreadPostTextTransformer? textTransformer;
   final double imageFallbackAspectRatio;
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
 
@@ -279,6 +289,7 @@ class _ThreadPostDocumentCacheKey {
         identical(other.parser, parser) &&
         identical(other.normalizer, normalizer) &&
         other.renderSettingsSignature == renderSettingsSignature &&
+        identical(other.textTransformer, textTransformer) &&
         other.imageFallbackAspectRatio == imageFallbackAspectRatio &&
         other.resourceLayoutPolicy == resourceLayoutPolicy;
   }
@@ -289,6 +300,7 @@ class _ThreadPostDocumentCacheKey {
     identityHashCode(parser),
     identityHashCode(normalizer),
     renderSettingsSignature,
+    identityHashCode(textTransformer),
     imageFallbackAspectRatio,
     resourceLayoutPolicy,
   );
@@ -308,7 +320,6 @@ class ThreadPostBodySegmentView extends StatelessWidget {
     this.resourceLayoutHints = ThreadPostResourceLayoutHints.empty,
     this.style = ThreadPostBodyStyle.defaults,
     this.resourceLayoutPolicy = ThreadPostResourceLayoutPolicy.defaults,
-    this.textTransformer,
     this.selectionEnabled = false,
     this.createSelectionArea = true,
     this.onOpenLink,
@@ -328,7 +339,6 @@ class ThreadPostBodySegmentView extends StatelessWidget {
   final ThreadPostResourceLayoutHints resourceLayoutHints;
   final ThreadPostBodyStyle style;
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
-  final ThreadPostTextTransformer? textTransformer;
   final bool selectionEnabled;
   final bool createSelectionArea;
   final ThreadPostLinkTapHandler? onOpenLink;
@@ -350,7 +360,6 @@ class ThreadPostBodySegmentView extends StatelessWidget {
       resourceLayoutHints: resourceLayoutHints,
       style: style,
       resourceLayoutPolicy: resourceLayoutPolicy,
-      textTransformer: textTransformer,
       selectionEnabled: selectionEnabled,
       createSelectionArea: createSelectionArea,
       onOpenLink: onOpenLink,
@@ -374,7 +383,6 @@ class ThreadPostBodyView extends StatelessWidget {
     this.resourceLayoutHints = ThreadPostResourceLayoutHints.empty,
     this.style = ThreadPostBodyStyle.defaults,
     this.resourceLayoutPolicy = ThreadPostResourceLayoutPolicy.defaults,
-    this.textTransformer,
     this.selectionEnabled = false,
     this.createSelectionArea = true,
     this.onOpenLink,
@@ -394,7 +402,6 @@ class ThreadPostBodyView extends StatelessWidget {
   final ThreadPostResourceLayoutHints resourceLayoutHints;
   final ThreadPostBodyStyle style;
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
-  final ThreadPostTextTransformer? textTransformer;
   final bool selectionEnabled;
   final bool createSelectionArea;
   final ThreadPostLinkTapHandler? onOpenLink;
@@ -422,7 +429,6 @@ class ThreadPostBodyView extends StatelessWidget {
             resourceLayoutHints: resourceLayoutHints,
             style: style,
             resourceLayoutPolicy: resourceLayoutPolicy,
-            textTransformer: textTransformer,
             selectionEnabled: selectionEnabled,
             onOpenLink: onOpenLink,
             onOpenImage: onOpenImage,
@@ -465,7 +471,6 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
     required this.resourceLayoutHints,
     required this.style,
     required this.resourceLayoutPolicy,
-    required this.textTransformer,
     this.selectionEnabled = false,
     required this.onOpenLink,
     required this.onOpenImage,
@@ -484,7 +489,6 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
   final ThreadPostResourceLayoutHints resourceLayoutHints;
   final ThreadPostBodyStyle style;
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
-  final ThreadPostTextTransformer? textTransformer;
   final bool selectionEnabled;
   final ThreadPostLinkTapHandler? onOpenLink;
   final ThreadPostImageOpenHandler? onOpenImage;
@@ -503,7 +507,6 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
         resourceLayoutHints: resourceLayoutHints,
         style: style,
         resourceLayoutPolicy: resourceLayoutPolicy,
-        textTransformer: textTransformer,
         selectionEnabled: selectionEnabled,
         onOpenLink: onOpenLink,
       );
@@ -537,7 +540,6 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
         resourceLayoutHints: resourceLayoutHints,
         style: style,
         resourceLayoutPolicy: resourceLayoutPolicy,
-        textTransformer: textTransformer,
         selectionEnabled: selectionEnabled,
         onOpenLink: onOpenLink,
         onOpenImage: onOpenImage,
@@ -562,7 +564,6 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
     required this.resourceLayoutHints,
     required this.style,
     required this.resourceLayoutPolicy,
-    required this.textTransformer,
     required this.selectionEnabled,
     required this.onOpenLink,
     required this.onOpenImage,
@@ -581,7 +582,6 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
   final ThreadPostResourceLayoutHints resourceLayoutHints;
   final ThreadPostBodyStyle style;
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
-  final ThreadPostTextTransformer? textTransformer;
   final bool selectionEnabled;
   final ThreadPostLinkTapHandler? onOpenLink;
   final ThreadPostImageOpenHandler? onOpenImage;
@@ -622,7 +622,6 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
               resourceLayoutHints: resourceLayoutHints,
               style: quoteStyle,
               resourceLayoutPolicy: resourceLayoutPolicy,
-              textTransformer: textTransformer,
               selectionEnabled: selectionEnabled,
               onOpenLink: onOpenLink,
               onOpenImage: onOpenImage,
@@ -645,7 +644,6 @@ class ThreadPostTextBlockView extends StatelessWidget {
     this.resourceLayoutHints = ThreadPostResourceLayoutHints.empty,
     this.style = ThreadPostBodyStyle.defaults,
     this.resourceLayoutPolicy = ThreadPostResourceLayoutPolicy.defaults,
-    this.textTransformer,
     this.selectionEnabled = false,
     this.onOpenLink,
   });
@@ -658,7 +656,6 @@ class ThreadPostTextBlockView extends StatelessWidget {
   final ThreadPostResourceLayoutHints resourceLayoutHints;
   final ThreadPostBodyStyle style;
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
-  final ThreadPostTextTransformer? textTransformer;
   final bool selectionEnabled;
   final ThreadPostLinkTapHandler? onOpenLink;
 
@@ -690,7 +687,7 @@ class ThreadPostTextBlockView extends StatelessWidget {
   ) {
     final linkUrl = run.linkUrl?.trim();
     final isLink = linkUrl != null && linkUrl.isNotEmpty;
-    final text = textTransformer?.call(run.text) ?? run.text;
+    final text = run.text;
     final linkStyle = baseStyle
         .copyWith(
           decoration: TextDecoration.underline,

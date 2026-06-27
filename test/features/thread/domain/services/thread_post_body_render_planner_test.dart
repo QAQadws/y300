@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
+import 'package:y300/features/thread/domain/services/thread_post_body_display_transformer.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
 
@@ -147,6 +148,45 @@ void main() {
       expect(plan.resourceHintSignature, plan.resourceLayoutHints.signature);
     });
 
+    test('keeps source document separate from display document', () {
+      const planner = ThreadPostBodyRenderPlanner(
+        displayTransformer: ThreadPostBodyDisplayTransformer(
+          textTransformer: _replaceOriginalText,
+          signature: 'replace-original-text',
+        ),
+      );
+      const document = ThreadPostBodyDocument(
+        blocks: <ThreadPostBodyBlock>[
+          ThreadPostTextBlock(
+            runs: <ThreadPostTextRun>[
+              ThreadPostTextRun(text: '原文'),
+              ThreadPostTextRun(
+                text: '',
+                inlineImage: ThreadPostInlineImage(
+                  url: 'https://bbs.yamibo.com/static/image/smiley/a.gif',
+                  rawUrl: 'static/image/smiley/a.gif',
+                  altText: '[笑]',
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final plan = planner.planDocument(document);
+      final sourceBlock = plan.document.blocks.single as ThreadPostTextBlock;
+      final displayBlock =
+          plan.displayDocument.blocks.single as ThreadPostTextBlock;
+      final segmentBlock =
+          plan.segments.single.blocks.single as ThreadPostTextBlock;
+
+      expect(sourceBlock.plainText, '原文');
+      expect(displayBlock.plainText, '显示文');
+      expect(segmentBlock.plainText, '显示文');
+      expect(identical(sourceBlock.runs.last, displayBlock.runs.last), isTrue);
+      expect(plan.displayTransformerSignature, 'replace-original-text');
+    });
+
     test('keeps quote blocks intact', () {
       const planner = ThreadPostBodyRenderPlanner(maxSegmentTextLength: 4);
       const quote = ThreadPostQuoteBlock(
@@ -221,4 +261,8 @@ void main() {
       );
     });
   });
+}
+
+String _replaceOriginalText(String text) {
+  return text.replaceAll('原文', '显示文');
 }
