@@ -1,4 +1,5 @@
 import 'package:y300/features/cache/domain/cache_maintenance_models.dart';
+import 'package:y300/features/cache/domain/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/document_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
@@ -14,6 +15,8 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
     required StorageAccountingService storageAccountingService,
     ProtectedCoverCacheMaintenance? protectedCoverMaintenance,
     bool Function(CachedImageRecord record)? protectedCoverOwnerExists,
+    CacheDiagnosticRecorder diagnosticRecorder =
+        const NoopCacheDiagnosticRecorder(),
     DateTime Function()? now,
   }) : _imageCacheService = imageCacheService,
        _documentCacheService = documentCacheService,
@@ -21,6 +24,7 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
        _storageAccountingService = storageAccountingService,
        _protectedCoverMaintenance = protectedCoverMaintenance,
        _protectedCoverOwnerExists = protectedCoverOwnerExists,
+       _diagnosticRecorder = diagnosticRecorder,
        _now = now ?? DateTime.now;
 
   final ImageCacheService _imageCacheService;
@@ -29,6 +33,7 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
   final StorageAccountingService _storageAccountingService;
   final ProtectedCoverCacheMaintenance? _protectedCoverMaintenance;
   final bool Function(CachedImageRecord record)? _protectedCoverOwnerExists;
+  final CacheDiagnosticRecorder _diagnosticRecorder;
   final DateTime Function() _now;
 
   @override
@@ -63,12 +68,28 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
         break;
     }
 
-    return CacheClearResult(
+    final result = CacheClearResult(
       imageCacheCleared: imageCacheCleared,
       deletedDocuments: deletedDocuments,
       deletedSnapshots: deletedSnapshots,
       deletedProtectedCoverRecords: deletedProtectedCoverRecords,
     );
+    _diagnosticRecorder.record(
+      CacheDiagnosticEvent(
+        event: 'prune',
+        namespace: CacheNamespace.document,
+        bucket: StorageBucket.pageCache,
+        reason: 'clear_${request.scope.name}',
+        fields: <String, Object?>{
+          'imageCacheCleared': result.imageCacheCleared,
+          'deletedDocuments': result.deletedDocuments,
+          'deletedSnapshots': result.deletedSnapshots,
+          'deletedProtectedCoverRecords': result.deletedProtectedCoverRecords,
+          'deletedEntries': result.deletedEntries,
+        },
+      ),
+    );
+    return result;
   }
 
   @override
@@ -82,11 +103,28 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
     final deletedProtectedCoverRecords = request.runProtectedCoverMaintenance
         ? await _runProtectedCoverMaintenanceIfConfigured()
         : 0;
-    return CachePruneResult(
+    final result = CachePruneResult(
       deletedDocuments: deletedDocuments,
       deletedSnapshots: deletedSnapshots,
       deletedProtectedCoverRecords: deletedProtectedCoverRecords,
     );
+    _diagnosticRecorder.record(
+      CacheDiagnosticEvent(
+        event: 'prune',
+        namespace: CacheNamespace.document,
+        bucket: StorageBucket.pageCache,
+        reason: 'scheduled_or_limit',
+        fields: <String, Object?>{
+          'imageCacheMaxBytes': request.imageCacheMaxBytes,
+          'documentMaxAgeDays': request.documentMaxAge.inDays,
+          'deletedDocuments': result.deletedDocuments,
+          'deletedSnapshots': result.deletedSnapshots,
+          'deletedProtectedCoverRecords': result.deletedProtectedCoverRecords,
+          'deletedEntries': result.deletedEntries,
+        },
+      ),
+    );
+    return result;
   }
 
   @override

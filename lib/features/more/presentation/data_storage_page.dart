@@ -26,6 +26,36 @@ class DataStoragePage extends ConsumerWidget {
             padding: const EdgeInsets.all(16),
             children: [
               _StorageUsageOverview(report: viewState.usageReport),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      key: const Key('data-storage-reload-usage-button'),
+                      onPressed: viewState.isUpdating
+                          ? null
+                          : () => ref
+                                .read(dataStorageControllerProvider.notifier)
+                                .reloadUsage(),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('重新统计'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      key: const Key('data-storage-export-diagnostics-button'),
+                      onPressed: viewState.isUpdating
+                          ? null
+                          : () => ref
+                                .read(dataStorageControllerProvider.notifier)
+                                .exportCacheDiagnostics(),
+                      icon: const Icon(Icons.file_download_outlined),
+                      label: const Text('缓存诊断导出'),
+                    ),
+                  ),
+                ],
+              ),
               const Divider(height: 32),
               ListTile(
                 key: const Key('data-storage-image-cache-usage'),

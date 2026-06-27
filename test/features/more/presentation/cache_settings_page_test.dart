@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/cache_diagnostic_models.dart';
+import 'package:y300/features/cache/domain/cache_maintenance_models.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/cache/domain/storage_usage_models.dart';
@@ -27,8 +29,14 @@ void main() {
         overrides: [
           dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+          cacheMaintenanceServiceProvider.overrideWithValue(
+            _FakeCacheMaintenanceService(),
+          ),
           storageAccountingServiceProvider.overrideWithValue(
             _FakeStorageAccountingService(),
+          ),
+          cacheDiagnosticExportServiceProvider.overrideWithValue(
+            _FakeCacheDiagnosticExportService(),
           ),
           downloadStorageServiceProvider.overrideWithValue(
             _FakeDownloadStorageService(repo: repo),
@@ -47,6 +55,11 @@ void main() {
     expect(
       find.byKey(const Key('data-storage-image-cache-max-slider')),
       findsOneWidget,
+    );
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('data-storage-choose-directory-button')),
+      120,
+      scrollable: find.byType(Scrollable).first,
     );
     expect(
       find.byKey(const Key('data-storage-choose-directory-button')),
@@ -69,8 +82,14 @@ void main() {
             imageCacheServiceProvider.overrideWithValue(
               _FakeImageCacheService(),
             ),
+            cacheMaintenanceServiceProvider.overrideWithValue(
+              _FakeCacheMaintenanceService(),
+            ),
             storageAccountingServiceProvider.overrideWithValue(
               _FakeStorageAccountingService(),
+            ),
+            cacheDiagnosticExportServiceProvider.overrideWithValue(
+              _FakeCacheDiagnosticExportService(),
             ),
             downloadStorageServiceProvider.overrideWithValue(
               _FakeDownloadStorageService(repo: repo),
@@ -107,6 +126,9 @@ void main() {
         overrides: [
           dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+          cacheMaintenanceServiceProvider.overrideWithValue(
+            _FakeCacheMaintenanceService(),
+          ),
           storageAccountingServiceProvider.overrideWithValue(
             _FakeStorageAccountingService(
               report: _usageReport(
@@ -134,6 +156,9 @@ void main() {
                 ],
               ),
             ),
+          ),
+          cacheDiagnosticExportServiceProvider.overrideWithValue(
+            _FakeCacheDiagnosticExportService(),
           ),
           downloadStorageServiceProvider.overrideWithValue(
             _FakeDownloadStorageService(repo: repo),
@@ -180,8 +205,14 @@ void main() {
             imageCacheServiceProvider.overrideWithValue(
               _FakeImageCacheService(),
             ),
+            cacheMaintenanceServiceProvider.overrideWithValue(
+              _FakeCacheMaintenanceService(),
+            ),
             storageAccountingServiceProvider.overrideWithValue(
               _FakeStorageAccountingService(),
+            ),
+            cacheDiagnosticExportServiceProvider.overrideWithValue(
+              _FakeCacheDiagnosticExportService(),
             ),
             downloadStorageServiceProvider.overrideWithValue(storage),
           ],
@@ -237,8 +268,14 @@ void main() {
         overrides: [
           dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+          cacheMaintenanceServiceProvider.overrideWithValue(
+            _FakeCacheMaintenanceService(),
+          ),
           storageAccountingServiceProvider.overrideWithValue(
             _FakeStorageAccountingService(),
+          ),
+          cacheDiagnosticExportServiceProvider.overrideWithValue(
+            _FakeCacheDiagnosticExportService(),
           ),
           downloadStorageServiceProvider.overrideWithValue(
             _FakeDownloadStorageService(repo: repo),
@@ -280,6 +317,121 @@ void main() {
     );
 
     expect(find.text('已恢复默认存储位置'), findsOneWidget);
+  });
+
+  testWidgets('DataStoragePage reloads usage report', (tester) async {
+    final repo = _FakeDataStorageSettingsRepository(
+      defaultPath: '/tmp/default-downloads',
+      customPath: null,
+    );
+    final accounting = _FakeStorageAccountingService(
+      report: _usageReport(
+        sections: const <StorageUsageSection>[
+          StorageUsageSection(
+            bucket: StorageBucket.imageCache,
+            label: '图片缓存',
+            bytes: 1024,
+            clearable: true,
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+          cacheMaintenanceServiceProvider.overrideWithValue(
+            _FakeCacheMaintenanceService(),
+          ),
+          storageAccountingServiceProvider.overrideWithValue(accounting),
+          cacheDiagnosticExportServiceProvider.overrideWithValue(
+            _FakeCacheDiagnosticExportService(),
+          ),
+          downloadStorageServiceProvider.overrideWithValue(
+            _FakeDownloadStorageService(repo: repo),
+          ),
+        ],
+        child: const MaterialApp(home: DataStoragePage()),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    final reloadButton = find.byKey(
+      const Key('data-storage-reload-usage-button'),
+    );
+    expect(reloadButton, findsOneWidget);
+
+    accounting.report = _usageReport(
+      sections: const <StorageUsageSection>[
+        StorageUsageSection(
+          bucket: StorageBucket.imageCache,
+          label: '图片缓存',
+          bytes: 2048,
+          clearable: true,
+        ),
+      ],
+    );
+    await tester.tap(reloadButton);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('data-storage-hint-text')),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('存储统计已刷新'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('data-storage-usage-total')),
+      -120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('总计：2.0 KB'), findsOneWidget);
+  });
+
+  testWidgets('DataStoragePage exports cache diagnostics', (tester) async {
+    final repo = _FakeDataStorageSettingsRepository(
+      defaultPath: '/tmp/default-downloads',
+      customPath: null,
+    );
+    final exporter = _FakeCacheDiagnosticExportService();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+          cacheMaintenanceServiceProvider.overrideWithValue(
+            _FakeCacheMaintenanceService(),
+          ),
+          storageAccountingServiceProvider.overrideWithValue(
+            _FakeStorageAccountingService(),
+          ),
+          cacheDiagnosticExportServiceProvider.overrideWithValue(exporter),
+          downloadStorageServiceProvider.overrideWithValue(
+            _FakeDownloadStorageService(repo: repo),
+          ),
+        ],
+        child: const MaterialApp(home: DataStoragePage()),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    final exportButton = find.byKey(
+      const Key('data-storage-export-diagnostics-button'),
+    );
+    expect(exportButton, findsOneWidget);
+    await tester.tap(exportButton);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('data-storage-hint-text')),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(exporter.exportCalls, 1);
+    expect(find.textContaining('缓存诊断已导出'), findsOneWidget);
   });
 
   test('formatDataStorageBytes uses KB, MB and GB units', () {
@@ -493,13 +645,56 @@ class _FakeImageCacheService implements ImageCacheService {
 }
 
 class _FakeStorageAccountingService implements StorageAccountingService {
-  const _FakeStorageAccountingService({StorageUsageReport? report})
-    : _report = report;
+  _FakeStorageAccountingService({this.report});
 
-  final StorageUsageReport? _report;
+  StorageUsageReport? report;
 
   @override
   Future<StorageUsageReport> loadUsageReport() async {
-    return _report ?? _usageReport();
+    return report ?? _usageReport();
+  }
+}
+
+class _FakeCacheMaintenanceService implements CacheMaintenanceService {
+  @override
+  Future<CacheClearResult> clear(CacheClearRequest request) async {
+    return const CacheClearResult(
+      imageCacheCleared: true,
+      deletedDocuments: 0,
+      deletedSnapshots: 0,
+      deletedProtectedCoverRecords: 0,
+    );
+  }
+
+  @override
+  Future<CachePruneResult> prune(CachePruneRequest request) async {
+    return const CachePruneResult(
+      deletedDocuments: 0,
+      deletedSnapshots: 0,
+      deletedProtectedCoverRecords: 0,
+    );
+  }
+
+  @override
+  Future<StorageUsageReport> usageAfterMaintenance() async {
+    return _usageReport();
+  }
+}
+
+class _FakeCacheDiagnosticExportService
+    implements CacheDiagnosticExportService {
+  int exportCalls = 0;
+
+  @override
+  Future<CacheDiagnosticExportResult> exportUsageReport(
+    StorageUsageReport report,
+  ) async {
+    exportCalls += 1;
+    return CacheDiagnosticExportResult(
+      path: '/tmp/default-downloads/diagnostics/cache.json',
+      totalBytes: report.totalBytes,
+      sectionCount: report.sections.length,
+      exportedAt: DateTime(2026, 6, 27),
+    );
   }
 }

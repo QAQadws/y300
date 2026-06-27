@@ -5,9 +5,11 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/cache_key_canonicalizer.dart';
 import 'package:y300/features/cache/domain/document_cache_models.dart';
 import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
+import 'package:y300/features/cache/domain/storage_usage_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_detail_html_parser.dart';
 import 'package:y300/features/thread/data/thread_post_locator.dart';
@@ -53,6 +55,8 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
       freshFor: Duration(minutes: 5),
       keepStaleFor: Duration(days: 7),
     ),
+    CacheDiagnosticRecorder diagnosticRecorder =
+        const NoopCacheDiagnosticRecorder(),
     DateTime Function()? now,
   }) : _htmlClient = htmlClient,
        _parser = parser,
@@ -61,6 +65,7 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
        _cacheKeyCanonicalizer = cacheKeyCanonicalizer,
        _snapshotCodec = snapshotCodec,
        _snapshotPolicy = snapshotPolicy,
+       _diagnosticRecorder = diagnosticRecorder,
        _now = now ?? DateTime.now;
 
   final YamiboHtmlClient _htmlClient;
@@ -70,6 +75,7 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
   final CacheKeyCanonicalizer _cacheKeyCanonicalizer;
   final ThreadDetailSnapshotCodec _snapshotCodec;
   final SnapshotCachePolicy _snapshotPolicy;
+  final CacheDiagnosticRecorder _diagnosticRecorder;
   final DateTime Function() _now;
 
   @override
@@ -92,6 +98,11 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
     if (snapshot != null) {
       return ApiSuccess(snapshot);
     }
+    _recordPageCacheEvent(
+      event: 'refresh',
+      descriptor: documentDescriptor,
+      reason: 'snapshot_not_fresh',
+    );
     final htmlResult = await _htmlClient.getDesktopPage(
       path: '/forum.php',
       queryParameters: <String, String>{
@@ -108,6 +119,15 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
     );
 
     if (htmlResult case ApiFailure<String>(:final error)) {
+      _recordPageCacheEvent(
+        event: 'refresh_failed',
+        descriptor: documentDescriptor,
+        reason: error.type.name,
+        fields: <String, Object?>{
+          'message': error.message,
+          if (error.statusCode != null) 'statusCode': error.statusCode,
+        },
+      );
       final cached = await _parseCachedDocument(
         descriptor: documentDescriptor,
         snapshotDescriptor: snapshotDescriptor,
@@ -115,6 +135,12 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
         page: page,
       );
       if (cached != null) {
+        _recordPageCacheEvent(
+          event: 'stale',
+          descriptor: documentDescriptor,
+          reason: 'network_failed_document_fallback',
+          hit: true,
+        );
         return ApiSuccess(cached);
       }
       return ApiFailure(
@@ -133,6 +159,11 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
       final data = _parser.parse(html, fallbackTid: tid, fallbackPage: page);
       await _putDocument(descriptor: documentDescriptor, html: html);
       await _putSnapshot(descriptor: snapshotDescriptor, data: data);
+      _recordPageCacheEvent(
+        event: 'refresh_succeeded',
+        descriptor: documentDescriptor,
+        fields: <String, Object?>{'bodyBytes': html.length},
+      );
       return ApiSuccess(data);
     } catch (error) {
       return ApiFailure(
@@ -226,6 +257,28 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
     }
   }
 
+  void _recordPageCacheEvent({
+    required String event,
+    required DocumentCacheDescriptor descriptor,
+    String? reason,
+    bool? hit,
+    Map<String, Object?> fields = const <String, Object?>{},
+  }) {
+    _diagnosticRecorder.record(
+      CacheDiagnosticEvent(
+        event: event,
+        namespace: CacheNamespace.document,
+        bucket: StorageBucket.pageCache,
+        cacheKey: descriptor.cacheKey,
+        ownerType: descriptor.ownerType,
+        ownerId: descriptor.ownerId,
+        hit: hit,
+        reason: reason,
+        fields: fields,
+      ),
+    );
+  }
+
   Future<ThreadDetailData?> _getFreshSnapshot(
     SnapshotCacheDescriptor descriptor,
   ) async {
@@ -270,6 +323,7 @@ final threadRepositoryProvider = Provider<ThreadRepository>((ref) {
     htmlClient: ref.watch(yamiboHtmlClientProvider),
     documentCacheService: ref.watch(documentCacheServiceProvider),
     snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
+    diagnosticRecorder: ref.watch(cacheDiagnosticRecorderProvider),
   );
 });
 

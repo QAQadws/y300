@@ -1,14 +1,20 @@
 import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
+import 'package:y300/features/cache/domain/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/document_cache_models.dart';
 import 'package:y300/features/cache/domain/storage_usage_models.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 
 class LocalDocumentCacheService implements DocumentCacheService {
-  LocalDocumentCacheService(this._dbFuture);
+  LocalDocumentCacheService(
+    this._dbFuture, {
+    CacheDiagnosticRecorder diagnosticRecorder =
+        const NoopCacheDiagnosticRecorder(),
+  }) : _diagnosticRecorder = diagnosticRecorder;
 
   final Future<Database> _dbFuture;
+  final CacheDiagnosticRecorder _diagnosticRecorder;
 
   @override
   Future<CachedDocument?> getByKey(String cacheKey) async {
@@ -20,9 +26,25 @@ class LocalDocumentCacheService implements DocumentCacheService {
       limit: 1,
     );
     if (rows.isEmpty) {
+      _recordDocumentEvent(
+        event: 'miss',
+        cacheKey: cacheKey,
+        reason: 'document_missing',
+        hit: false,
+      );
       return null;
     }
-    return _fromRow(rows.first);
+    final document = _fromRow(rows.first);
+    _recordDocumentEvent(
+      event: 'hit',
+      cacheKey: cacheKey,
+      ownerType: document.ownerType,
+      ownerId: document.ownerId,
+      reason: 'document_found',
+      hit: true,
+      fields: <String, Object?>{'bodyBytes': utf8.encode(document.body).length},
+    );
+    return document;
   }
 
   @override
@@ -47,6 +69,17 @@ class LocalDocumentCacheService implements DocumentCacheService {
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    _recordDocumentEvent(
+      event: 'write',
+      cacheKey: document.cacheKey,
+      ownerType: document.ownerType,
+      ownerId: document.ownerId,
+      reason: 'document_put',
+      fields: <String, Object?>{
+        'bodyBytes': utf8.encode(document.body).length,
+        'requestProfile': document.requestProfile.id,
+      },
+    );
   }
 
   @override
@@ -66,11 +99,19 @@ class LocalDocumentCacheService implements DocumentCacheService {
     required String ownerId,
   }) async {
     final db = await _dbFuture;
-    return db.delete(
+    final deleted = await db.delete(
       ComicLocalDb.cachedDocumentsTable,
       where: 'owner_type = ? AND owner_id = ?',
       whereArgs: <Object>[ownerType.id, ownerId],
     );
+    _recordDocumentEvent(
+      event: 'prune',
+      ownerType: ownerType,
+      ownerId: ownerId,
+      reason: 'owner_deleted',
+      fields: <String, Object?>{'deleted': deleted},
+    );
+    return deleted;
   }
 
   @override
@@ -79,21 +120,38 @@ class LocalDocumentCacheService implements DocumentCacheService {
     required String ownerIdPrefix,
   }) async {
     final db = await _dbFuture;
-    return db.delete(
+    final deleted = await db.delete(
       ComicLocalDb.cachedDocumentsTable,
       where: 'owner_type = ? AND owner_id LIKE ?',
       whereArgs: <Object>[ownerType.id, '$ownerIdPrefix%'],
     );
+    _recordDocumentEvent(
+      event: 'prune',
+      ownerType: ownerType,
+      ownerId: ownerIdPrefix,
+      reason: 'owner_prefix_deleted',
+      fields: <String, Object?>{'deleted': deleted},
+    );
+    return deleted;
   }
 
   @override
   Future<int> deleteOlderThan(DateTime cutoff) async {
     final db = await _dbFuture;
-    return db.delete(
+    final deleted = await db.delete(
       ComicLocalDb.cachedDocumentsTable,
       where: 'updated_at < ?',
       whereArgs: <Object>[cutoff.millisecondsSinceEpoch],
     );
+    _recordDocumentEvent(
+      event: 'prune',
+      reason: 'older_than_cutoff',
+      fields: <String, Object?>{
+        'deleted': deleted,
+        'cutoff': cutoff.toUtc().toIso8601String(),
+      },
+    );
+    return deleted;
   }
 
   @override
@@ -199,5 +257,29 @@ class LocalDocumentCacheService implements DocumentCacheService {
       'blog' => '日志',
       _ => ownerType.isEmpty ? '页面' : ownerType,
     };
+  }
+
+  void _recordDocumentEvent({
+    required String event,
+    String? cacheKey,
+    CacheOwnerType? ownerType,
+    String? ownerId,
+    String? reason,
+    bool? hit,
+    Map<String, Object?> fields = const <String, Object?>{},
+  }) {
+    _diagnosticRecorder.record(
+      CacheDiagnosticEvent(
+        event: event,
+        namespace: CacheNamespace.document,
+        bucket: StorageBucket.pageCache,
+        cacheKey: cacheKey,
+        ownerType: ownerType,
+        ownerId: ownerId,
+        hit: hit,
+        reason: reason,
+        fields: fields,
+      ),
+    );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/cache_maintenance_models.dart';
+import 'package:y300/features/cache/domain/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/storage_usage_models.dart';
 import 'package:y300/features/more/data/data_storage_settings_repository.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
@@ -79,6 +80,7 @@ final dataStorageControllerProvider =
 class DataStorageController extends AsyncNotifier<DataStorageViewState> {
   late final DataStorageSettingsRepository _repository;
   late final CacheMaintenanceService _cacheMaintenanceService;
+  late final CacheDiagnosticExportService _cacheDiagnosticExportService;
   late final StorageAccountingService _storageAccountingService;
   late final DownloadStorageService _downloadStorageService;
 
@@ -86,6 +88,9 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
   Future<DataStorageViewState> build() async {
     _repository = ref.read(dataStorageSettingsRepositoryProvider);
     _cacheMaintenanceService = ref.read(cacheMaintenanceServiceProvider);
+    _cacheDiagnosticExportService = ref.read(
+      cacheDiagnosticExportServiceProvider,
+    );
     _storageAccountingService = ref.read(storageAccountingServiceProvider);
     _downloadStorageService = ref.read(downloadStorageServiceProvider);
     final base = await _loadStorageState();
@@ -233,6 +238,30 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
         imageCacheUsageBytes: _imageCacheUsageBytes(usageReport),
         usageReport: usageReport,
         isUpdating: false,
+        hint: '存储统计已刷新',
+      ),
+    );
+  }
+
+  Future<void> exportCacheDiagnostics() async {
+    final current = state.value;
+    if (current == null || current.isUpdating) {
+      return;
+    }
+    state = AsyncData(current.copyWith(isUpdating: true, clearHint: true));
+    final usageReport = await _storageAccountingService.loadUsageReport();
+    final result = await _cacheDiagnosticExportService.exportUsageReport(
+      usageReport,
+    );
+    if (!ref.mounted) {
+      return;
+    }
+    state = AsyncData(
+      current.copyWith(
+        imageCacheUsageBytes: _imageCacheUsageBytes(usageReport),
+        usageReport: usageReport,
+        isUpdating: false,
+        hint: '缓存诊断已导出：${result.path}',
       ),
     );
   }

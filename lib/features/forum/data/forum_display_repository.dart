@@ -5,9 +5,11 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/cache_key_canonicalizer.dart';
 import 'package:y300/features/cache/domain/document_cache_models.dart';
 import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
+import 'package:y300/features/cache/domain/storage_usage_models.dart';
 import 'package:y300/features/forum/data/forum_display_html_parser.dart';
 import 'package:y300/features/forum/data/forum_display_snapshot_codec.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
@@ -35,6 +37,8 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
       freshFor: Duration(minutes: 3),
       keepStaleFor: Duration(hours: 12),
     ),
+    CacheDiagnosticRecorder diagnosticRecorder =
+        const NoopCacheDiagnosticRecorder(),
     DateTime Function()? now,
   }) : _htmlClient = htmlClient,
        _parser = parser,
@@ -43,6 +47,7 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
        _cacheKeyCanonicalizer = cacheKeyCanonicalizer,
        _snapshotCodec = snapshotCodec,
        _snapshotPolicy = snapshotPolicy,
+       _diagnosticRecorder = diagnosticRecorder,
        _now = now ?? DateTime.now;
 
   final YamiboHtmlClient _htmlClient;
@@ -52,6 +57,7 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
   final CacheKeyCanonicalizer _cacheKeyCanonicalizer;
   final ForumDisplaySnapshotCodec _snapshotCodec;
   final SnapshotCachePolicy _snapshotPolicy;
+  final CacheDiagnosticRecorder _diagnosticRecorder;
   final DateTime Function() _now;
 
   @override
@@ -84,6 +90,11 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
       return ApiSuccess(snapshot);
     }
 
+    _recordPageCacheEvent(
+      event: 'refresh',
+      descriptor: documentDescriptor,
+      reason: 'snapshot_not_fresh',
+    );
     final htmlResult = await _htmlClient.getMobilePage(
       path: '/forum.php',
       queryParameters: requestParameters,
@@ -95,12 +106,27 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
     );
 
     if (htmlResult case ApiFailure<String>(:final error)) {
+      _recordPageCacheEvent(
+        event: 'refresh_failed',
+        descriptor: documentDescriptor,
+        reason: error.type.name,
+        fields: <String, Object?>{
+          'message': error.message,
+          if (error.statusCode != null) 'statusCode': error.statusCode,
+        },
+      );
       final cached = await _parseCachedDocument(
         documentDescriptor: documentDescriptor,
         snapshotDescriptor: snapshotDescriptor,
         query: query,
       );
       if (cached != null) {
+        _recordPageCacheEvent(
+          event: 'stale',
+          descriptor: documentDescriptor,
+          reason: 'network_failed_document_fallback',
+          hit: true,
+        );
         return ApiSuccess(cached);
       }
       return ApiFailure(
@@ -123,6 +149,11 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
       );
       await _putDocument(descriptor: documentDescriptor, html: html);
       await _putSnapshot(descriptor: snapshotDescriptor, data: data);
+      _recordPageCacheEvent(
+        event: 'refresh_succeeded',
+        descriptor: documentDescriptor,
+        fields: <String, Object?>{'bodyBytes': html.length},
+      );
       return ApiSuccess(data);
     } catch (error) {
       return ApiFailure(
@@ -255,6 +286,28 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
       return;
     }
   }
+
+  void _recordPageCacheEvent({
+    required String event,
+    required DocumentCacheDescriptor descriptor,
+    String? reason,
+    bool? hit,
+    Map<String, Object?> fields = const <String, Object?>{},
+  }) {
+    _diagnosticRecorder.record(
+      CacheDiagnosticEvent(
+        event: event,
+        namespace: CacheNamespace.document,
+        bucket: StorageBucket.pageCache,
+        cacheKey: descriptor.cacheKey,
+        ownerType: descriptor.ownerType,
+        ownerId: descriptor.ownerId,
+        hit: hit,
+        reason: reason,
+        fields: fields,
+      ),
+    );
+  }
 }
 
 /// Discuz forumdisplay 实现，负责帖子列表分页拉取。
@@ -289,5 +342,6 @@ final forumDisplayRepositoryProvider = Provider<ForumDisplayRepository>((ref) {
     htmlClient: ref.watch(yamiboHtmlClientProvider),
     documentCacheService: ref.watch(documentCacheServiceProvider),
     snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
+    diagnosticRecorder: ref.watch(cacheDiagnosticRecorderProvider),
   );
 });

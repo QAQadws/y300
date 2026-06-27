@@ -5,9 +5,11 @@ import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/auth/data/auth_repository.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/cache_key_canonicalizer.dart';
 import 'package:y300/features/cache/domain/document_cache_models.dart';
 import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
+import 'package:y300/features/cache/domain/storage_usage_models.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/forum_home_carousel_image_probe.dart';
 import 'package:y300/features/forum/data/forum_home_html_parser.dart';
@@ -52,6 +54,8 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
       freshFor: Duration(minutes: 5),
       keepStaleFor: Duration(days: 1),
     ),
+    CacheDiagnosticRecorder diagnosticRecorder =
+        const NoopCacheDiagnosticRecorder(),
     DateTime Function()? now,
   }) : _htmlClient = htmlClient,
        _imageProbe = imageProbe,
@@ -61,6 +65,7 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
        _cacheKeyCanonicalizer = cacheKeyCanonicalizer,
        _snapshotCodec = snapshotCodec,
        _snapshotPolicy = snapshotPolicy,
+       _diagnosticRecorder = diagnosticRecorder,
        _now = now ?? DateTime.now;
 
   final YamiboHtmlClient _htmlClient;
@@ -71,6 +76,7 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
   final CacheKeyCanonicalizer _cacheKeyCanonicalizer;
   final ForumHomeSnapshotCodec _snapshotCodec;
   final SnapshotCachePolicy _snapshotPolicy;
+  final CacheDiagnosticRecorder _diagnosticRecorder;
   final DateTime Function() _now;
 
   @override
@@ -82,6 +88,11 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
       return ApiSuccess(snapshot);
     }
 
+    _recordPageCacheEvent(
+      event: 'refresh',
+      descriptor: documentDescriptor,
+      reason: 'snapshot_not_fresh',
+    );
     final htmlResult = await _htmlClient.getMobilePage(
       path: '/index.php',
       queryParameters: const <String, String>{'mobile': '2'},
@@ -92,11 +103,26 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
       ),
     );
     if (htmlResult case ApiFailure<String>(:final error)) {
+      _recordPageCacheEvent(
+        event: 'refresh_failed',
+        descriptor: documentDescriptor,
+        reason: error.type.name,
+        fields: <String, Object?>{
+          'message': error.message,
+          if (error.statusCode != null) 'statusCode': error.statusCode,
+        },
+      );
       final cached = await _parseCachedDocument(
         documentDescriptor: documentDescriptor,
         snapshotDescriptor: snapshotDescriptor,
       );
       if (cached != null) {
+        _recordPageCacheEvent(
+          event: 'stale',
+          descriptor: documentDescriptor,
+          reason: 'network_failed_document_fallback',
+          hit: true,
+        );
         return ApiSuccess(cached);
       }
       return ApiFailure(
@@ -115,6 +141,11 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
       final payload = await _parsePayload(html);
       await _putDocument(descriptor: documentDescriptor, html: html);
       await _putSnapshot(descriptor: snapshotDescriptor, payload: payload);
+      _recordPageCacheEvent(
+        event: 'refresh_succeeded',
+        descriptor: documentDescriptor,
+        fields: <String, Object?>{'bodyBytes': html.length},
+      );
       return ApiSuccess(payload);
     } catch (error) {
       return ApiFailure(
@@ -247,6 +278,28 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
     } catch (_) {
       return;
     }
+  }
+
+  void _recordPageCacheEvent({
+    required String event,
+    required DocumentCacheDescriptor descriptor,
+    String? reason,
+    bool? hit,
+    Map<String, Object?> fields = const <String, Object?>{},
+  }) {
+    _diagnosticRecorder.record(
+      CacheDiagnosticEvent(
+        event: event,
+        namespace: CacheNamespace.document,
+        bucket: StorageBucket.pageCache,
+        cacheKey: descriptor.cacheKey,
+        ownerType: descriptor.ownerType,
+        ownerId: descriptor.ownerId,
+        hit: hit,
+        reason: reason,
+        fields: fields,
+      ),
+    );
   }
 
   Future<ForumHomeHtmlData> _withResolvedCarouselAspectRatio(
@@ -429,5 +482,6 @@ final forumHomeRepositoryProvider = Provider<ForumHomeRepository>((ref) {
     ),
     documentCacheService: ref.watch(documentCacheServiceProvider),
     snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
+    diagnosticRecorder: ref.watch(cacheDiagnosticRecorderProvider),
   );
 });

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/misc.dart' as riverpod_misc;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:y300/features/cache/data/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/cache_maintenance_models.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
@@ -264,6 +265,71 @@ void main() {
       );
     },
   );
+
+  test('reload usage refreshes report through storage accounting', () async {
+    final accounting = _FakeStorageAccountingService(imageUsageBytes: 512);
+    final container = ProviderContainer(
+      overrides: [
+        dataStorageSettingsRepositoryProvider.overrideWithValue(
+          _FakeDataStorageSettingsRepository(defaultPath: 'C:/default-storage'),
+        ),
+        cacheMaintenanceServiceProvider.overrideWithValue(
+          _FakeCacheMaintenanceService(),
+        ),
+        storageAccountingServiceProvider.overrideWithValue(accounting),
+        cacheDiagnosticExportServiceProvider.overrideWithValue(
+          _FakeCacheDiagnosticExportService(),
+        ),
+        downloadStorageServiceProvider.overrideWithValue(
+          _FakeDownloadStorageService(rootPath: 'C:/default-storage'),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    final subscription = _keepDataStorageControllerAlive(container);
+    addTearDown(subscription.close);
+
+    await container.read(dataStorageControllerProvider.future);
+    accounting.imageUsageBytes = 2048;
+    await container.read(dataStorageControllerProvider.notifier).reloadUsage();
+
+    final value = container.read(dataStorageControllerProvider).value!;
+    expect(value.imageCacheUsageBytes, 2048);
+    expect(value.hint, '存储统计已刷新');
+  });
+
+  test('export cache diagnostics writes current usage report', () async {
+    final exporter = _FakeCacheDiagnosticExportService();
+    final accounting = _FakeStorageAccountingService(imageUsageBytes: 4096);
+    final container = ProviderContainer(
+      overrides: [
+        dataStorageSettingsRepositoryProvider.overrideWithValue(
+          _FakeDataStorageSettingsRepository(defaultPath: 'C:/default-storage'),
+        ),
+        cacheMaintenanceServiceProvider.overrideWithValue(
+          _FakeCacheMaintenanceService(),
+        ),
+        storageAccountingServiceProvider.overrideWithValue(accounting),
+        cacheDiagnosticExportServiceProvider.overrideWithValue(exporter),
+        downloadStorageServiceProvider.overrideWithValue(
+          _FakeDownloadStorageService(rootPath: 'C:/default-storage'),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    final subscription = _keepDataStorageControllerAlive(container);
+    addTearDown(subscription.close);
+
+    await container.read(dataStorageControllerProvider.future);
+    await container
+        .read(dataStorageControllerProvider.notifier)
+        .exportCacheDiagnostics();
+
+    final value = container.read(dataStorageControllerProvider).value!;
+    expect(exporter.exportCalls, 1);
+    expect(exporter.lastReport?.totalBytes, 4096);
+    expect(value.hint, contains('C:/default-storage/diagnostics/cache.json'));
+  });
 }
 
 ProviderSubscription<AsyncValue<DataStorageViewState>>
@@ -280,6 +346,9 @@ List<riverpod_misc.Override> _cacheProviderOverrides({
     ),
     storageAccountingServiceProvider.overrideWithValue(
       _FakeStorageAccountingService(imageUsageBytes: imageUsageBytes),
+    ),
+    cacheDiagnosticExportServiceProvider.overrideWithValue(
+      _FakeCacheDiagnosticExportService(),
     ),
   ];
 }
@@ -496,7 +565,7 @@ class _FakeImageCacheService implements ImageCacheService {
 class _FakeStorageAccountingService implements StorageAccountingService {
   _FakeStorageAccountingService({this.imageUsageBytes = 0});
 
-  final int imageUsageBytes;
+  int imageUsageBytes;
 
   @override
   Future<StorageUsageReport> loadUsageReport() async {
@@ -510,6 +579,26 @@ class _FakeStorageAccountingService implements StorageAccountingService {
         ),
       ],
       calculatedAt: DateTime(2026, 6, 27),
+    );
+  }
+}
+
+class _FakeCacheDiagnosticExportService
+    implements CacheDiagnosticExportService {
+  int exportCalls = 0;
+  StorageUsageReport? lastReport;
+
+  @override
+  Future<CacheDiagnosticExportResult> exportUsageReport(
+    StorageUsageReport report,
+  ) async {
+    exportCalls += 1;
+    lastReport = report;
+    return CacheDiagnosticExportResult(
+      path: 'C:/default-storage/diagnostics/cache.json',
+      totalBytes: report.totalBytes,
+      sectionCount: report.sections.length,
+      exportedAt: DateTime(2026, 6, 27),
     );
   }
 }
