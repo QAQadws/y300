@@ -4,7 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/image_cache_service.dart';
+import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/profile/data/models/profile_blog_models.dart';
 import 'package:y300/features/profile/data/profile_blog_repository.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
@@ -21,6 +24,9 @@ void main() {
           profileBlogRepositoryProvider.overrideWithValue(repository),
           imageRequestHeaderBuilderProvider.overrideWithValue(
             const _StaticImageHeaderBuilder(),
+          ),
+          imageCacheServiceProvider.overrideWithValue(
+            _FailingImageCacheService(),
           ),
         ],
         child: const MaterialApp(home: ProfileBlogPage()),
@@ -65,12 +71,48 @@ void main() {
     expect(
       find.byWidgetPredicate(
         (widget) =>
-            widget is LibraryCachedImage &&
-            widget.imageUrl?.contains('/uc_server/data/avatar/') == true,
+            widget is CachedLibraryImage &&
+            widget.request?.role == ImageCacheRole.avatar &&
+            widget.request?.sourceUrl.contains('/uc_server/data/avatar/') ==
+                true,
       ),
       findsWidgets,
     );
   });
+}
+
+class _FailingImageCacheService implements ImageCacheService {
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    return CachedImageResult.failed;
+  }
+
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async => null;
+
+  @override
+  Future<CachedImageResult> copyProtectedLocalFile(
+    ImageCacheLocalCopyRequest request,
+  ) async {
+    return CachedImageResult.failed;
+  }
+
+  @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
+
+  @override
+  Future<void> pruneToLimit({required int maxBytes}) async {}
+
+  @override
+  Future<void> clearUnprotected() async {}
 }
 
 class _FakeProfileBlogRepository implements ProfileBlogRepository {

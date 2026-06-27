@@ -55,6 +55,7 @@ class LocalImageCacheRepository implements ImageCacheRepository {
     final db = await _dbFuture;
     final existing = await getByKey(record.cacheKey);
     final createdAt = existing?.createdAt ?? record.createdAt;
+    final retentionClass = _effectiveRetentionClass(record);
     await db.insert(ComicLocalDb.cachedImagesTable, <String, Object?>{
       'cache_key': record.cacheKey,
       'owner_type': record.ownerType,
@@ -67,6 +68,7 @@ class LocalImageCacheRepository implements ImageCacheRepository {
       'bytes': record.bytes,
       'mime_type': _normalizeNullable(record.mimeType),
       'protected': record.protected ? 1 : 0,
+      'retention_class': retentionClass.dbValue,
       'created_at': createdAt.millisecondsSinceEpoch,
       'updated_at': record.updatedAt.millisecondsSinceEpoch,
       'last_accessed_at': record.lastAccessedAt?.millisecondsSinceEpoch,
@@ -117,16 +119,17 @@ class LocalImageCacheRepository implements ImageCacheRepository {
   Future<List<ImageCacheUsageGroup>> calculateUsageGroups() async {
     final db = await _dbFuture;
     final rows = await db.rawQuery('''
-      SELECT owner_type, role, protected, COALESCE(SUM(bytes), 0) AS total
+      SELECT owner_type, role, retention_class, protected, COALESCE(SUM(bytes), 0) AS total
       FROM ${ComicLocalDb.cachedImagesTable}
-      GROUP BY owner_type, role, protected
-      ORDER BY owner_type ASC, role ASC, protected ASC
+      GROUP BY owner_type, role, retention_class, protected
+      ORDER BY owner_type ASC, role ASC, retention_class ASC, protected ASC
       ''');
     return rows
         .map((row) {
           return ImageCacheUsageGroup(
             ownerType: row['owner_type'] as String? ?? '',
             role: row['role'] as String? ?? '',
+            retentionClass: row['retention_class'] as String? ?? '',
             protected: (row['protected'] as int? ?? 0) == 1,
             bytes: row['total'] as int? ?? 0,
           );
@@ -183,6 +186,10 @@ class LocalImageCacheRepository implements ImageCacheRepository {
       bytes: row['bytes'] as int? ?? 0,
       mimeType: row['mime_type'] as String?,
       protected: (row['protected'] as int? ?? 0) == 1,
+      retentionClass: _retentionClassFromDb(
+        row['retention_class'] as String?,
+        protected: (row['protected'] as int? ?? 0) == 1,
+      ),
       createdAt:
           _toDateTime(row['created_at']) ??
           DateTime.fromMillisecondsSinceEpoch(0),
@@ -203,5 +210,28 @@ class LocalImageCacheRepository implements ImageCacheRepository {
   String? _normalizeNullable(String? value) {
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
+
+  ImageRetentionClass _effectiveRetentionClass(CachedImageRecord record) {
+    if (record.protected &&
+        record.retentionClass == ImageRetentionClass.ephemeral) {
+      return ImageRetentionClass.protected;
+    }
+    return record.retentionClass;
+  }
+
+  ImageRetentionClass _retentionClassFromDb(
+    String? value, {
+    required bool protected,
+  }) {
+    final normalized = value?.trim();
+    for (final retentionClass in ImageRetentionClass.values) {
+      if (retentionClass.dbValue == normalized) {
+        return retentionClass;
+      }
+    }
+    return protected
+        ? ImageRetentionClass.protected
+        : ImageRetentionClass.ephemeral;
   }
 }

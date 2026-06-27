@@ -48,12 +48,12 @@ class DefaultImageCacheService implements ImageCacheService {
     ImageRequestHeaderBuilder? headerBuilder,
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
     ImageFileDownloader downloader = const CacheManagerImageFileDownloader(),
-  })  : _repository = repository,
-        _cacheManagerFuture = cacheManagerFuture,
-        _directoryResolver = directoryResolver,
-        _headerBuilder = headerBuilder,
-        _urlResolver = urlResolver,
-        _downloader = downloader;
+  }) : _repository = repository,
+       _cacheManagerFuture = cacheManagerFuture,
+       _directoryResolver = directoryResolver,
+       _headerBuilder = headerBuilder,
+       _urlResolver = urlResolver,
+       _downloader = downloader;
 
   final ImageCacheRepository _repository;
   final Future<BaseCacheManager> _cacheManagerFuture;
@@ -65,7 +65,8 @@ class DefaultImageCacheService implements ImageCacheService {
   @override
   Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
     final cacheKey = request.cacheKey.trim();
-    final sourceUrl = _urlResolver.resolve(request.sourceUrl) ?? request.sourceUrl.trim();
+    final sourceUrl =
+        _urlResolver.resolve(request.sourceUrl) ?? request.sourceUrl.trim();
     if (cacheKey.isEmpty || sourceUrl.isEmpty) {
       return CachedImageResult.failed;
     }
@@ -73,7 +74,8 @@ class DefaultImageCacheService implements ImageCacheService {
     final now = DateTime.now();
     final existing = await _repository.getByKey(cacheKey);
     final existingSourceUrl = existing?.lastSourceUrl?.trim();
-    final sourceChanged = existingSourceUrl != null &&
+    final sourceChanged =
+        existingSourceUrl != null &&
         existingSourceUrl.isNotEmpty &&
         existingSourceUrl != sourceUrl;
     final existingPath = existing?.localPath?.trim();
@@ -103,7 +105,9 @@ class DefaultImageCacheService implements ImageCacheService {
 
     final cacheManager = await _cacheManagerFuture;
     final cached = await cacheManager.getFileFromCache(cacheKey);
-    if (!sourceChanged && cached != null && await io.File(cached.file.path).exists()) {
+    if (!sourceChanged &&
+        cached != null &&
+        await io.File(cached.file.path).exists()) {
       final bytes = await io.File(cached.file.path).length();
       await _repository.upsert(
         _recordFromRequest(
@@ -199,7 +203,8 @@ class DefaultImageCacheService implements ImageCacheService {
     }
     final protectedDir = await _directoryResolver.resolveProtectedDirectory();
     final extension = p.extension(source.path).trim();
-    final fileName = '${_fileNameSafe(request.cacheKey)}${extension.isEmpty ? '.img' : extension}';
+    final fileName =
+        '${_fileNameSafe(request.cacheKey)}${extension.isEmpty ? '.img' : extension}';
     final target = io.File(p.join(protectedDir, fileName));
     await target.parent.create(recursive: true);
     await source.copy(target.path);
@@ -217,6 +222,7 @@ class DefaultImageCacheService implements ImageCacheService {
         localPath: target.path,
         bytes: bytes,
         protected: true,
+        retentionClass: request.retentionClass,
         createdAt: now,
         updatedAt: now,
         lastAccessedAt: now,
@@ -297,6 +303,7 @@ class DefaultImageCacheService implements ImageCacheService {
       localPath: localPath,
       bytes: bytes,
       protected: request.protected,
+      retentionClass: request.effectiveRetentionClass,
       createdAt: createdAt ?? now,
       updatedAt: now,
       lastAccessedAt: now,
@@ -324,5 +331,4 @@ class DefaultImageCacheService implements ImageCacheService {
   String _fileNameSafe(String value) {
     return value.trim().replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
   }
-
 }

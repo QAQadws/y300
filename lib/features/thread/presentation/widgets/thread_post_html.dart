@@ -2,7 +2,9 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:y300/core/network/image_request_headers.dart';
-import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
+import 'package:y300/features/cache/domain/forum_image_cache_requests.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
 
@@ -10,6 +12,10 @@ typedef ThreadPostTextTransformer = String Function(String text);
 typedef ThreadPostLinkTapHandler = void Function(String url);
 typedef ThreadPostImageOpenHandler =
     void Function(ThreadPostImageOpenRequest request);
+typedef ThreadPostBlockImageCacheRequestBuilder =
+    ImageCacheRequest Function(ThreadPostImageBlock image);
+typedef ThreadPostInlineImageCacheRequestBuilder =
+    ImageCacheRequest Function(ThreadPostInlineImage image);
 
 class ThreadPostBodyStyle {
   const ThreadPostBodyStyle({
@@ -72,6 +78,9 @@ class ThreadPostHtml extends StatelessWidget {
     super.key,
     required this.data,
     this.imageHeaderBuilder,
+    this.imageCacheOwnerId,
+    this.blockImageCacheRequestBuilder,
+    this.inlineImageCacheRequestBuilder,
     this.parser = const ThreadPostBodyParser(),
     this.style = ThreadPostBodyStyle.defaults,
     this.textTransformer,
@@ -82,6 +91,10 @@ class ThreadPostHtml extends StatelessWidget {
 
   final String data;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageCacheOwnerId;
+  final ThreadPostBlockImageCacheRequestBuilder? blockImageCacheRequestBuilder;
+  final ThreadPostInlineImageCacheRequestBuilder?
+  inlineImageCacheRequestBuilder;
   final ThreadPostBodyParser parser;
   final ThreadPostBodyStyle style;
   final ThreadPostTextTransformer? textTransformer;
@@ -99,6 +112,9 @@ class ThreadPostHtml extends StatelessWidget {
     return ThreadPostBodyView(
       document: document,
       imageHeaderBuilder: imageHeaderBuilder,
+      imageCacheOwnerId: imageCacheOwnerId,
+      blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
+      inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
       style: style,
       textTransformer: textTransformer,
       onOpenLink: onOpenLink,
@@ -113,6 +129,9 @@ class ThreadPostBodyView extends StatelessWidget {
     super.key,
     required this.document,
     this.imageHeaderBuilder,
+    this.imageCacheOwnerId,
+    this.blockImageCacheRequestBuilder,
+    this.inlineImageCacheRequestBuilder,
     this.style = ThreadPostBodyStyle.defaults,
     this.textTransformer,
     this.onOpenLink,
@@ -122,6 +141,10 @@ class ThreadPostBodyView extends StatelessWidget {
 
   final ThreadPostBodyDocument document;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageCacheOwnerId;
+  final ThreadPostBlockImageCacheRequestBuilder? blockImageCacheRequestBuilder;
+  final ThreadPostInlineImageCacheRequestBuilder?
+  inlineImageCacheRequestBuilder;
   final ThreadPostBodyStyle style;
   final ThreadPostTextTransformer? textTransformer;
   final ThreadPostLinkTapHandler? onOpenLink;
@@ -143,6 +166,9 @@ class ThreadPostBodyView extends StatelessWidget {
               block: blocks[index],
               images: document.images,
               imageHeaderBuilder: imageHeaderBuilder,
+              imageCacheOwnerId: imageCacheOwnerId,
+              blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
+              inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
               style: style,
               textTransformer: textTransformer,
               onOpenLink: onOpenLink,
@@ -162,6 +188,9 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
     required this.block,
     required this.images,
     required this.imageHeaderBuilder,
+    required this.imageCacheOwnerId,
+    required this.blockImageCacheRequestBuilder,
+    required this.inlineImageCacheRequestBuilder,
     required this.style,
     required this.textTransformer,
     required this.onOpenLink,
@@ -173,6 +202,10 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
   final ThreadPostBodyBlock block;
   final List<ThreadPostImageBlock> images;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageCacheOwnerId;
+  final ThreadPostBlockImageCacheRequestBuilder? blockImageCacheRequestBuilder;
+  final ThreadPostInlineImageCacheRequestBuilder?
+  inlineImageCacheRequestBuilder;
   final ThreadPostBodyStyle style;
   final ThreadPostTextTransformer? textTransformer;
   final ThreadPostLinkTapHandler? onOpenLink;
@@ -187,6 +220,8 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
       return ThreadPostTextBlockView(
         runs: block.runs,
         imageHeaderBuilder: imageHeaderBuilder,
+        imageCacheOwnerId: imageCacheOwnerId,
+        inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
         style: style,
         textTransformer: textTransformer,
         onOpenLink: onOpenLink,
@@ -198,6 +233,8 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
         image: block,
         images: images,
         imageHeaderBuilder: imageHeaderBuilder,
+        imageCacheOwnerId: imageCacheOwnerId,
+        blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
         style: style,
         onOpenImage: onOpenImage,
         onOpenImages: onOpenImages,
@@ -209,6 +246,9 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
         quote: block,
         images: images,
         imageHeaderBuilder: imageHeaderBuilder,
+        imageCacheOwnerId: imageCacheOwnerId,
+        blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
+        inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
         style: style,
         textTransformer: textTransformer,
         onOpenLink: onOpenLink,
@@ -227,6 +267,9 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
     required this.quote,
     required this.images,
     required this.imageHeaderBuilder,
+    required this.imageCacheOwnerId,
+    required this.blockImageCacheRequestBuilder,
+    required this.inlineImageCacheRequestBuilder,
     required this.style,
     required this.textTransformer,
     required this.onOpenLink,
@@ -238,6 +281,10 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
   final ThreadPostQuoteBlock quote;
   final List<ThreadPostImageBlock> images;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageCacheOwnerId;
+  final ThreadPostBlockImageCacheRequestBuilder? blockImageCacheRequestBuilder;
+  final ThreadPostInlineImageCacheRequestBuilder?
+  inlineImageCacheRequestBuilder;
   final ThreadPostBodyStyle style;
   final ThreadPostTextTransformer? textTransformer;
   final ThreadPostLinkTapHandler? onOpenLink;
@@ -270,6 +317,9 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
               block: quote.blocks[index],
               images: images,
               imageHeaderBuilder: imageHeaderBuilder,
+              imageCacheOwnerId: imageCacheOwnerId,
+              blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
+              inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
               style: quoteStyle,
               textTransformer: textTransformer,
               onOpenLink: onOpenLink,
@@ -288,6 +338,8 @@ class ThreadPostTextBlockView extends StatelessWidget {
     super.key,
     required this.runs,
     this.imageHeaderBuilder,
+    this.imageCacheOwnerId,
+    this.inlineImageCacheRequestBuilder,
     this.style = ThreadPostBodyStyle.defaults,
     this.textTransformer,
     this.onOpenLink,
@@ -295,6 +347,9 @@ class ThreadPostTextBlockView extends StatelessWidget {
 
   final List<ThreadPostTextRun> runs;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageCacheOwnerId;
+  final ThreadPostInlineImageCacheRequestBuilder?
+  inlineImageCacheRequestBuilder;
   final ThreadPostBodyStyle style;
   final ThreadPostTextTransformer? textTransformer;
   final ThreadPostLinkTapHandler? onOpenLink;
@@ -374,8 +429,10 @@ class ThreadPostTextBlockView extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 1),
         child: KeyedSubtree(
           key: Key('thread-post-inline-image-${image.url}'),
-          child: LibraryCachedImage(
-            imageUrl: image.url,
+          child: CachedLibraryImage(
+            request:
+                inlineImageCacheRequestBuilder?.call(image) ??
+                ForumImageCacheRequests.remoteSmiley(url: image.url),
             fit: BoxFit.contain,
             placeholder: const SizedBox.shrink(),
             errorPlaceholder: Icon(
@@ -419,6 +476,8 @@ class ThreadPostImageBlockView extends StatefulWidget {
     required this.image,
     required this.images,
     this.imageHeaderBuilder,
+    this.imageCacheOwnerId,
+    this.blockImageCacheRequestBuilder,
     this.style = ThreadPostBodyStyle.defaults,
     this.onOpenImage,
     this.onOpenImages,
@@ -429,6 +488,8 @@ class ThreadPostImageBlockView extends StatefulWidget {
   final ThreadPostImageBlock image;
   final List<ThreadPostImageBlock> images;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageCacheOwnerId;
+  final ThreadPostBlockImageCacheRequestBuilder? blockImageCacheRequestBuilder;
   final ThreadPostBodyStyle style;
   final ThreadPostImageOpenHandler? onOpenImage;
   final void Function(List<ThreadPostImageBlock> images, int initialIndex)?
@@ -466,8 +527,8 @@ class _ThreadPostImageBlockViewState extends State<ThreadPostImageBlockView> {
             borderRadius: widget.style.imageBorderRadius,
             child: AspectRatio(
               aspectRatio: aspectRatio,
-              child: LibraryCachedImage(
-                imageUrl: widget.image.url,
+              child: CachedLibraryImage(
+                request: _cacheRequest(),
                 imageProviderOverride: widget.imageProviderOverride,
                 fit: widget.style.imageFit,
                 placeholder: const _ThreadPostImagePlaceholder(
@@ -539,6 +600,19 @@ class _ThreadPostImageBlockViewState extends State<ThreadPostImageBlockView> {
     return value.isFinite && value > 0
         ? value
         : ThreadPostBodyStyle.defaults.imageFallbackAspectRatio;
+  }
+
+  ImageCacheRequest _cacheRequest() {
+    final builder = widget.blockImageCacheRequestBuilder;
+    if (builder != null) {
+      return builder(widget.image);
+    }
+    final ownerId = widget.imageCacheOwnerId?.trim();
+    return ForumImageCacheRequests.threadInline(
+      tid: ownerId == null || ownerId.isEmpty ? 'unknown' : ownerId,
+      url: widget.image.url,
+      imageIndex: widget.image.index,
+    );
   }
 }
 

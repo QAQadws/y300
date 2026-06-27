@@ -43,6 +43,7 @@ void main() {
           ownerType: 'thread',
           ownerId: '1',
           role: 'thread_inline',
+          retentionClass: ImageRetentionClass.recentReader,
           bytes: 40,
           protected: false,
           createdAt: now,
@@ -59,7 +60,7 @@ void main() {
       expect(section.clearable, isTrue);
       expect(
         section.slices.map((slice) => slice.label),
-        containsAll(<String>['封面（受保护）', '帖子图片']),
+        containsAll(<String>['封面（受保护）', '帖子图片（最近阅读）']),
       );
 
       await deleteDatabase(dbName);

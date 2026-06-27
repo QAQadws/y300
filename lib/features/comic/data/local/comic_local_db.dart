@@ -1,11 +1,11 @@
-﻿import 'package:sqflite/sqflite.dart';
+import 'package:sqflite/sqflite.dart';
 
 /// 漫画本地数据库定义与建表逻辑。
 class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 20;
+  static const int dbVersion = 21;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -32,7 +32,8 @@ class ComicLocalDb {
   static const String favoriteCategoriesTable = 'favorite_categories';
   static const String favoriteThreadCategoryTable = 'favorite_thread_category';
   static const String cachedImagesTable = 'cached_images';
-  static const String comicSearchRefreshQueueTable = 'comic_search_refresh_queue';
+  static const String comicSearchRefreshQueueTable =
+      'comic_search_refresh_queue';
 
   static Future<Database> open({String? databaseName}) {
     final targetDbName = databaseName ?? dbName;
@@ -186,14 +187,10 @@ class ComicLocalDb {
   }
 
   static Future<void> _seedDefaultSettings(Database db) async {
-    await db.insert(
-      settingsTable,
-      <String, Object?>{
-        'key': 'grid_column_count',
-        'value': '3',
-      },
-      conflictAlgorithm: ConflictAlgorithm.ignore,
-    );
+    await db.insert(settingsTable, <String, Object?>{
+      'key': 'grid_column_count',
+      'value': '3',
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
   static Future<void> _createReadingProgressTable(Database db) async {
@@ -353,16 +350,12 @@ class ComicLocalDb {
       )
     ''');
 
-    await db.insert(
-      novelCategoriesTable,
-      <String, Object?>{
-        'category_id': 'default',
-        'name': '默认',
-        'sort_order': 0,
-        'created_at': DateTime.now().millisecondsSinceEpoch,
-      },
-      conflictAlgorithm: ConflictAlgorithm.ignore,
-    );
+    await db.insert(novelCategoriesTable, <String, Object?>{
+      'category_id': 'default',
+      'name': '默认',
+      'sort_order': 0,
+      'created_at': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
 
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_novel_shelf_items_category_sort ON $novelShelfItemsTable(category_id, sort_order)',
@@ -558,6 +551,7 @@ class ComicLocalDb {
         bytes INTEGER NOT NULL DEFAULT 0,
         mime_type TEXT,
         protected INTEGER NOT NULL DEFAULT 0,
+        retention_class TEXT NOT NULL DEFAULT 'ephemeral',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         last_accessed_at INTEGER
@@ -570,7 +564,7 @@ class ComicLocalDb {
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_cached_images_prune ON '
-      '$cachedImagesTable(protected, last_accessed_at, updated_at)',
+      '$cachedImagesTable(protected, retention_class, last_accessed_at, updated_at)',
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_episode_images_stable_key ON '

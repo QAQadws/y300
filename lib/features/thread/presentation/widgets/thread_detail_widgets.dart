@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
-import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
+import 'package:y300/features/cache/domain/forum_image_cache_requests.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
@@ -168,6 +170,7 @@ class ThreadPostCard extends StatelessWidget {
               ThreadAuthorAvatar(
                 key: Key('thread-author-avatar-${post.pid}'),
                 author: post.author,
+                authorId: post.authorId,
                 avatarUrl: post.avatarUrl,
                 palette: palette,
                 onTap: post.authorId.trim().isEmpty
@@ -198,6 +201,7 @@ class ThreadPostCard extends StatelessWidget {
               data: post.message,
               key: Key('thread-post-${post.pid}'),
               imageHeaderBuilder: imageHeaderBuilder,
+              imageCacheOwnerId: state.tid,
               onOpenLink: onOpenPostLink,
               onOpenImage: (request) => onOpenPostImages?.call(post, request),
             ),
@@ -687,8 +691,14 @@ class _ThreadCommentAvatar extends StatelessWidget {
         height: size,
         child: imageUrl == null || imageUrl.isEmpty
             ? fallback
-            : LibraryCachedImage(
-                imageUrl: imageUrl,
+            : CachedLibraryImage(
+                request: ForumImageCacheRequests.avatar(
+                  ownerId: comment.authorId?.trim().isNotEmpty == true
+                      ? comment.authorId!
+                      : comment.author,
+                  ownerType: ImageCacheOwnerType.thread,
+                  url: imageUrl,
+                ),
                 fit: BoxFit.cover,
                 width: size,
                 height: size,
@@ -1644,12 +1654,14 @@ class ThreadAuthorAvatar extends StatelessWidget {
   const ThreadAuthorAvatar({
     super.key,
     required this.author,
+    required this.authorId,
     required this.avatarUrl,
     required this.palette,
     this.onTap,
   });
 
   final String author;
+  final String authorId;
   final String? avatarUrl;
   final ThreadDetailNativePalette palette;
   final VoidCallback? onTap;
@@ -1657,19 +1669,37 @@ class ThreadAuthorAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final imageUrl = avatarUrl?.trim();
-    final avatar = CircleAvatar(
-      radius: 17,
-      backgroundColor: palette.avatarBackground,
-      foregroundColor: palette.avatarForeground,
-      backgroundImage: imageUrl == null || imageUrl.isEmpty
-          ? null
-          : NetworkImage(imageUrl),
-      child: imageUrl == null || imageUrl.isEmpty
-          ? Text(
-              _authorInitial(author),
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            )
-          : null,
+    final placeholder = ColoredBox(
+      color: palette.avatarBackground,
+      child: Center(
+        child: Text(
+          _authorInitial(author),
+          style: TextStyle(
+            color: palette.avatarForeground,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+    );
+    final avatar = ClipOval(
+      child: SizedBox(
+        width: 34,
+        height: 34,
+        child: imageUrl == null || imageUrl.isEmpty
+            ? placeholder
+            : CachedLibraryImage(
+                request: ForumImageCacheRequests.avatar(
+                  ownerId: authorId,
+                  ownerType: ImageCacheOwnerType.thread,
+                  url: imageUrl,
+                ),
+                fit: BoxFit.cover,
+                width: 34,
+                height: 34,
+                placeholder: placeholder,
+                errorPlaceholder: placeholder,
+              ),
+      ),
     );
     if (onTap == null) {
       return avatar;

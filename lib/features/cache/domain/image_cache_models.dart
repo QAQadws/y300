@@ -1,7 +1,15 @@
 enum ImageCacheOwnerType {
+  forum('forum'),
+  forumDisplay('forum_display'),
   comic('comic'),
   novel('novel'),
-  thread('thread');
+  thread('thread'),
+  tag('tag'),
+  profile('profile'),
+  blog('blog'),
+  sticker('sticker'),
+  favorite('favorite'),
+  composer('composer');
 
   const ImageCacheOwnerType(this.dbValue);
 
@@ -12,9 +20,28 @@ enum ImageCacheRole {
   cover('cover'),
   customCover('custom_cover'),
   comicPage('comic_page'),
-  novelInline('novel_inline');
+  novelInline('novel_inline'),
+  forumHeadImage('forum_head_image'),
+  forumIcon('forum_icon'),
+  threadInline('thread_inline'),
+  threadAttachment('thread_attachment'),
+  avatar('avatar'),
+  remoteSmiley('remote_smiley'),
+  blogInline('blog_inline');
 
   const ImageCacheRole(this.dbValue);
+
+  final String dbValue;
+}
+
+enum ImageRetentionClass {
+  ephemeral('ephemeral'),
+  recentReader('recent_reader'),
+  sticky('sticky'),
+  protected('protected'),
+  downloaded('downloaded');
+
+  const ImageRetentionClass(this.dbValue);
 
   final String dbValue;
 }
@@ -29,6 +56,7 @@ class ImageCacheRequest {
     this.episodeId,
     this.imageIndex,
     this.protected = false,
+    this.retentionClass,
   });
 
   final String cacheKey;
@@ -39,6 +67,14 @@ class ImageCacheRequest {
   final String? episodeId;
   final int? imageIndex;
   final bool protected;
+  final ImageRetentionClass? retentionClass;
+
+  ImageRetentionClass get effectiveRetentionClass {
+    return retentionClass ??
+        (protected
+            ? ImageRetentionClass.protected
+            : ImageRetentionClass.ephemeral);
+  }
 }
 
 class ImageCacheLocalCopyRequest {
@@ -50,6 +86,7 @@ class ImageCacheLocalCopyRequest {
     required this.role,
     this.episodeId,
     this.imageIndex,
+    this.retentionClass = ImageRetentionClass.protected,
   });
 
   final String cacheKey;
@@ -59,6 +96,7 @@ class ImageCacheLocalCopyRequest {
   final ImageCacheRole role;
   final String? episodeId;
   final int? imageIndex;
+  final ImageRetentionClass retentionClass;
 }
 
 class CachedImageRecord {
@@ -74,6 +112,7 @@ class CachedImageRecord {
     required this.bytes,
     this.mimeType,
     required this.protected,
+    this.retentionClass = ImageRetentionClass.ephemeral,
     required this.createdAt,
     required this.updatedAt,
     this.lastAccessedAt,
@@ -90,6 +129,7 @@ class CachedImageRecord {
   final int bytes;
   final String? mimeType;
   final bool protected;
+  final ImageRetentionClass retentionClass;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? lastAccessedAt;
@@ -100,6 +140,7 @@ class CachedImageRecord {
     int? bytes,
     String? mimeType,
     bool? protected,
+    ImageRetentionClass? retentionClass,
     DateTime? updatedAt,
     DateTime? lastAccessedAt,
   }) {
@@ -115,6 +156,7 @@ class CachedImageRecord {
       bytes: bytes ?? this.bytes,
       mimeType: mimeType ?? this.mimeType,
       protected: protected ?? this.protected,
+      retentionClass: retentionClass ?? this.retentionClass,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       lastAccessedAt: lastAccessedAt ?? this.lastAccessedAt,
@@ -144,17 +186,19 @@ class ImageCacheUsageGroup {
   const ImageCacheUsageGroup({
     required this.ownerType,
     required this.role,
+    required this.retentionClass,
     required this.protected,
     required this.bytes,
   });
 
   final String ownerType;
   final String role;
+  final String retentionClass;
   final bool protected;
   final int bytes;
 
   String get id {
     final protection = protected ? 'protected' : 'clearable';
-    return '$ownerType:$role:$protection';
+    return '$ownerType:$role:$retentionClass:$protection';
   }
 }

@@ -4,9 +4,12 @@ import 'package:y300/app/theme/app_theme_tokens.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
+import 'package:y300/features/cache/domain/forum_image_cache_requests.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/profile/data/models/profile_blog_models.dart';
 import 'package:y300/features/profile/data/profile_blog_repository.dart';
+import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 
 @immutable
@@ -629,6 +632,9 @@ class _BlogDetailCard extends StatelessWidget {
             child: ThreadPostHtml(
               data: data.messageHtml,
               imageHeaderBuilder: imageHeaderBuilder,
+              imageCacheOwnerId: data.id,
+              blockImageCacheRequestBuilder: (image) =>
+                  _blogInlineImageRequest(data.id, image),
               onOpenLink: (url) => ScaffoldMessenger.of(
                 context,
               ).showSnackBar(SnackBar(content: Text(url))),
@@ -700,6 +706,9 @@ class _CommentCard extends StatelessWidget {
             child: ThreadPostHtml(
               data: comment.messageHtml,
               imageHeaderBuilder: imageHeaderBuilder,
+              imageCacheOwnerId: comment.id,
+              blockImageCacheRequestBuilder: (image) =>
+                  _blogInlineImageRequest(comment.id, image),
               onOpenLink: (url) => ScaffoldMessenger.of(
                 context,
               ).showSnackBar(SnackBar(content: Text(url))),
@@ -738,8 +747,12 @@ class _ProfileBlogAvatar extends StatelessWidget {
       child: ClipOval(
         child: url == null || url.isEmpty
             ? placeholder
-            : LibraryCachedImage(
-                imageUrl: url,
+            : CachedLibraryImage(
+                request: ForumImageCacheRequests.avatar(
+                  ownerId: url,
+                  ownerType: ImageCacheOwnerType.profile,
+                  url: url,
+                ),
                 fit: BoxFit.cover,
                 width: size,
                 height: size,
@@ -879,5 +892,16 @@ BoxDecoration _cardDecoration(_ProfileBlogPalette palette) {
         offset: const Offset(0, 3),
       ),
     ],
+  );
+}
+
+ImageCacheRequest _blogInlineImageRequest(
+  String blogId,
+  ThreadPostImageBlock image,
+) {
+  return ForumImageCacheRequests.blogInline(
+    blogId: blogId,
+    url: image.url,
+    imageIndex: image.index,
   );
 }

@@ -3,11 +3,25 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/image_cache_service.dart';
+import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
+
+Widget _testApp({required Widget home}) {
+  return ProviderScope(
+    overrides: [
+      imageCacheServiceProvider.overrideWithValue(_FailingImageCacheService()),
+    ],
+    child: MaterialApp(home: home),
+  );
+}
 
 void main() {
   test('ThreadPostBodyStyle uses smaller default image radius', () {
@@ -21,7 +35,7 @@ void main() {
     'ThreadPostHtml renders post images through request header builder',
     (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        _testApp(
           home: Center(
             child: SizedBox(
               width: 140,
@@ -62,8 +76,8 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: ThreadPostHtml(
+      _testApp(
+        home: const ThreadPostHtml(
           data:
               '<p>第一段 <strong>重点</strong></p><p><a href="thread-1-1-1.html">链接</a></p>',
         ),
@@ -83,8 +97,8 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: ThreadPostHtml(
+      _testApp(
+        home: const ThreadPostHtml(
           data:
               '<div class="quote"><blockquote><b>thessky</b>: 引用正文<br />第二行</blockquote></div><p>回复正文</p>',
         ),
@@ -103,7 +117,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: ThreadPostHtml(
           data:
               '那篇很好啊我很喜欢 <img src="static/image/smiley/comcom/2.gif" class="vm">',
@@ -119,8 +133,8 @@ void main() {
     expect(find.byType(ThreadPostImageBlockView), findsNothing);
     final inlineImages = find.byWidgetPredicate(
       (widget) =>
-          widget is LibraryCachedImage &&
-          widget.imageUrl ==
+          widget is CachedLibraryImage &&
+          widget.request?.sourceUrl ==
               'https://bbs.yamibo.com/static/image/smiley/comcom/2.gif',
     );
     expect(inlineImages, findsOneWidget);
@@ -145,8 +159,8 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: ThreadPostHtml(
+      _testApp(
+        home: const ThreadPostHtml(
           data: '<blockquote><strong>作者</strong>: 独立引用</blockquote>',
         ),
       ),
@@ -162,7 +176,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: ThreadPostHtml(
           data: '<p>第一段</p><p>第二段</p>',
           textTransformer: (text) => text.replaceAll('第一', '第壹'),
@@ -197,8 +211,8 @@ void main() {
   ) async {
     const bodyStyle = TextStyle(fontSize: 20, color: Colors.black);
     await tester.pumpWidget(
-      const MaterialApp(
-        home: DefaultTextStyle(
+      _testApp(
+        home: const DefaultTextStyle(
           style: bodyStyle,
           child: ThreadPostHtml(
             data:
@@ -229,7 +243,7 @@ void main() {
   testWidgets('ThreadPostHtml exposes link tap callback', (tester) async {
     String? openedUrl;
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: ThreadPostHtml(
           data: '<a href="thread-1-1-1.html">链接</a>',
           onOpenLink: (url) => openedUrl = url,
@@ -250,7 +264,7 @@ void main() {
     'ThreadPostHtml normalizes lazy-load attributes with shared defaults',
     (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        _testApp(
           home: Center(
             child: SizedBox(
               width: 140,
@@ -281,7 +295,7 @@ void main() {
     'ThreadPostHtml prefers desktop attachment file over placeholder src',
     (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        _testApp(
           home: Center(
             child: SizedBox(
               width: 140,
@@ -312,7 +326,7 @@ void main() {
     'ThreadPostHtml handles real desktop ignore_js_op attachment image blocks',
     (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        _testApp(
           home: Center(
             child: SizedBox(
               width: 140,
@@ -343,7 +357,7 @@ void main() {
 
       await tester.pump();
 
-      expect(find.byType(LibraryCachedImage), findsOneWidget);
+      expect(find.byType(CachedLibraryImage), findsOneWidget);
       expect(find.byKey(const Key('thread-post-image-0')), findsOneWidget);
       final image = tester.widget<Image>(find.byType(Image));
       expect(
@@ -363,7 +377,7 @@ void main() {
     'ThreadPostHtml uses full-width 7/10 placeholders for post images',
     (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        _testApp(
           home: Center(
             child: SizedBox(
               width: 140,
@@ -414,7 +428,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: Center(
           child: SizedBox(
             width: 350,
@@ -448,7 +462,7 @@ void main() {
   ) async {
     ThreadPostImageOpenRequest? opened;
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: Center(
           child: SizedBox(
             width: 140,
@@ -524,4 +538,38 @@ class _SynchronousImageProvider
       SynchronousFuture<ImageInfo>(ImageInfo(image: image)),
     );
   }
+}
+
+class _FailingImageCacheService implements ImageCacheService {
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    return CachedImageResult.failed;
+  }
+
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async => null;
+
+  @override
+  Future<CachedImageResult> copyProtectedLocalFile(
+    ImageCacheLocalCopyRequest request,
+  ) async {
+    return CachedImageResult.failed;
+  }
+
+  @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
+
+  @override
+  Future<void> pruneToLimit({required int maxBytes}) async {}
+
+  @override
+  Future<void> clearUnprotected() async {}
 }

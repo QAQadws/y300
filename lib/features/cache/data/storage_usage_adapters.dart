@@ -60,6 +60,17 @@ class ImageCacheStorageAccountingAdapter implements StorageAccountingAdapter {
       'blog_inline' => '日志图片',
       _ => group.role.isEmpty ? '未分类图片' : group.role,
     };
+    final retention = switch (group.retentionClass) {
+      'ephemeral' => '',
+      'recent_reader' => '（最近阅读）',
+      'sticky' => '（低淘汰）',
+      'protected' => '（受保护）',
+      'downloaded' => '（已下载）',
+      _ => group.retentionClass.isEmpty ? '' : '（${group.retentionClass}）',
+    };
+    if (retention.isNotEmpty) {
+      return '$role$retention';
+    }
     return group.protected ? '$role（受保护）' : role;
   }
 }

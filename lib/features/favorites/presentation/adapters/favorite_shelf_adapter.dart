@@ -22,10 +22,8 @@ import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
-typedef _FavoriteCoverWriteBack = Future<void> Function(
-  String sourceUrl,
-  String localPath,
-);
+typedef _FavoriteCoverWriteBack =
+    Future<void> Function(String sourceUrl, String localPath);
 typedef ComicCoverCacheWriterResolver = ComicCoverCacheWriter? Function();
 typedef NovelCoverCacheWriterResolver = NovelCoverCacheWriter? Function();
 typedef ShelfCategoryAssignUseCaseResolver =
@@ -54,25 +52,27 @@ class FavoriteShelfAdapter
     ShelfCategoryAssignUseCaseResolver? categoryAssignUseCaseResolver,
     UnfavoriteThreadUseCase? unfavoriteThreadUseCase,
     UnfavoriteThreadUseCaseResolver? unfavoriteThreadUseCaseResolver,
-  })  : _syncService = syncService,
-        _stateRepository = stateRepository,
-        _shelfRefreshBus = shelfRefreshBus,
-        _coverCacheService = imageCacheServiceResolver == null
-            ? LibraryCoverCacheService(imageCacheService)
-            : LibraryCoverCacheService.lazy(imageCacheServiceResolver),
-        _comicCoverCacheWriterResolver =
-            comicCoverCacheWriterResolver ?? (() => comicCoverCacheWriter),
-        _novelCoverCacheWriterResolver =
-            novelCoverCacheWriterResolver ?? (() => novelCoverCacheWriter),
-        _categoryAssignUseCaseResolver =
-            categoryAssignUseCaseResolver ?? (() => categoryAssignUseCase),
-        _unfavoriteThreadUseCaseResolver =
-            unfavoriteThreadUseCaseResolver ?? (() => unfavoriteThreadUseCase),
-        _supportsCategoryAssign =
-            categoryAssignUseCase != null || categoryAssignUseCaseResolver != null,
-        _supportsUnfavorite =
-            unfavoriteThreadUseCase != null || unfavoriteThreadUseCaseResolver != null,
-        _taskProgress = taskProgressHub?.progressFor(LibraryModuleKey.favorite);
+  }) : _syncService = syncService,
+       _stateRepository = stateRepository,
+       _shelfRefreshBus = shelfRefreshBus,
+       _coverCacheService = imageCacheServiceResolver == null
+           ? LibraryCoverCacheService(imageCacheService)
+           : LibraryCoverCacheService.lazy(imageCacheServiceResolver),
+       _comicCoverCacheWriterResolver =
+           comicCoverCacheWriterResolver ?? (() => comicCoverCacheWriter),
+       _novelCoverCacheWriterResolver =
+           novelCoverCacheWriterResolver ?? (() => novelCoverCacheWriter),
+       _categoryAssignUseCaseResolver =
+           categoryAssignUseCaseResolver ?? (() => categoryAssignUseCase),
+       _unfavoriteThreadUseCaseResolver =
+           unfavoriteThreadUseCaseResolver ?? (() => unfavoriteThreadUseCase),
+       _supportsCategoryAssign =
+           categoryAssignUseCase != null ||
+           categoryAssignUseCaseResolver != null,
+       _supportsUnfavorite =
+           unfavoriteThreadUseCase != null ||
+           unfavoriteThreadUseCaseResolver != null,
+       _taskProgress = taskProgressHub?.progressFor(LibraryModuleKey.favorite);
 
   final LocalFavoriteRepository _repository;
   final FavoriteSyncService _syncService;
@@ -216,7 +216,8 @@ class FavoriteShelfAdapter
       visibleMatchCountByCategory: <String, int>{
         for (final category in categories)
           category.categoryId:
-              (queried[category.categoryId] ?? const <LibraryWorkItem>[]).length,
+              (queried[category.categoryId] ?? const <LibraryWorkItem>[])
+                  .length,
       },
     );
   }
@@ -269,10 +270,7 @@ class FavoriteShelfAdapter
     required String categoryId,
     required String newName,
   }) {
-    return _repository.renameCategory(
-      categoryId: categoryId,
-      newName: newName,
-    );
+    return _repository.renameCategory(categoryId: categoryId, newName: newName);
   }
 
   @override
@@ -423,8 +421,9 @@ class FavoriteShelfAdapter
       final customSourceUrl = item.customCoverImageUrl?.trim();
       final useCustomCover =
           customSourceUrl != null && customSourceUrl.isNotEmpty;
-      final sourceUrl =
-          useCustomCover ? customSourceUrl : item.coverImageUrl?.trim();
+      final sourceUrl = useCustomCover
+          ? customSourceUrl
+          : item.coverImageUrl?.trim();
       if (sourceUrl == null || sourceUrl.isEmpty) {
         continue;
       }
@@ -509,7 +508,7 @@ class FavoriteShelfAdapter
     return switch (ownerType) {
       ImageCacheOwnerType.comic => ThreadContentKind.comic,
       ImageCacheOwnerType.novel => ThreadContentKind.novel,
-      ImageCacheOwnerType.thread => ThreadContentKind.forum,
+      _ => ThreadContentKind.forum,
     };
   }
 
@@ -532,7 +531,9 @@ class FavoriteShelfAdapter
                 )
               : ImageCacheKeys.comicCover(workId),
           ownerType: ImageCacheOwnerType.comic,
-          role: useCustomCover ? ImageCacheRole.customCover : ImageCacheRole.cover,
+          role: useCustomCover
+              ? ImageCacheRole.customCover
+              : ImageCacheRole.cover,
           writeBack: (sourceUrl, localPath) => writer.updateCoverCache(
             comicId: workId,
             coverImageUrl: useCustomCover ? null : sourceUrl,
@@ -553,7 +554,9 @@ class FavoriteShelfAdapter
                 )
               : ImageCacheKeys.novelCover(workId),
           ownerType: ImageCacheOwnerType.novel,
-          role: useCustomCover ? ImageCacheRole.customCover : ImageCacheRole.cover,
+          role: useCustomCover
+              ? ImageCacheRole.customCover
+              : ImageCacheRole.cover,
           writeBack: (sourceUrl, localPath) => writer.updateCoverCache(
             novelId: workId,
             coverImageUrl: useCustomCover ? null : sourceUrl,

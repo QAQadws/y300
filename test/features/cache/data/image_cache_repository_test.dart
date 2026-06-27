@@ -55,19 +55,23 @@ void main() {
       expect(
         usageGroups.map((group) => group.id),
         containsAll(<String>[
-          'comic:cover:protected',
-          'comic:comic_page:clearable',
+          'comic:cover:protected:protected',
+          'comic:comic_page:ephemeral:clearable',
         ]),
       );
       expect(
         usageGroups
-            .singleWhere((group) => group.id == 'comic:cover:protected')
+            .singleWhere(
+              (group) => group.id == 'comic:cover:protected:protected',
+            )
             .bytes,
         10,
       );
       expect(
         usageGroups
-            .singleWhere((group) => group.id == 'comic:comic_page:clearable')
+            .singleWhere(
+              (group) => group.id == 'comic:comic_page:ephemeral:clearable',
+            )
             .bytes,
         20,
       );
@@ -83,6 +87,7 @@ void main() {
       final cover = await repository.getByKey('cover/comic/yamibo:100');
       expect(cover, isNotNull);
       expect(cover!.protected, isTrue);
+      expect(cover.retentionClass, ImageRetentionClass.protected);
 
       await deleteDatabase(dbName);
     },

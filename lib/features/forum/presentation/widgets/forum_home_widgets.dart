@@ -2,7 +2,8 @@ import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
 import 'package:y300/app/theme/app_theme_tokens.dart';
 import 'package:y300/core/network/image_request_headers.dart';
-import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
+import 'package:y300/features/cache/domain/forum_image_cache_requests.dart';
+import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/forum/data/forum_home_carousel_image_probe.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 
@@ -87,8 +88,10 @@ class _ForumHomeCarouselBody extends StatelessWidget {
                     child: InkWell(
                       key: Key('forum-home-carousel-item-$index'),
                       onTap: () => onOpen(item),
-                      child: LibraryCachedImage(
-                        imageUrl: item.imageUrl,
+                      child: CachedLibraryImage(
+                        request: ForumImageCacheRequests.forumHeadImage(
+                          url: item.imageUrl,
+                        ),
                         fit: BoxFit.contain,
                         width: double.infinity,
                         height: double.infinity,
