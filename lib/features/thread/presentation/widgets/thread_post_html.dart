@@ -61,6 +61,30 @@ class ThreadPostBodyStyle {
   }
 }
 
+class ThreadPostResourceLayoutPolicy {
+  const ThreadPostResourceLayoutPolicy({
+    required this.lockImageAspectRatioForCurrentBuild,
+    required this.lockInlineImageSizeForCurrentBuild,
+  });
+
+  /// Allows existing shared HTML renderers to keep using cache/image hints for
+  /// precise layout, while the native thread reader can opt into stable heights.
+  static const ThreadPostResourceLayoutPolicy defaults =
+      ThreadPostResourceLayoutPolicy(
+        lockImageAspectRatioForCurrentBuild: false,
+        lockInlineImageSizeForCurrentBuild: false,
+      );
+
+  static const ThreadPostResourceLayoutPolicy lockedForReading =
+      ThreadPostResourceLayoutPolicy(
+        lockImageAspectRatioForCurrentBuild: true,
+        lockInlineImageSizeForCurrentBuild: true,
+      );
+
+  final bool lockImageAspectRatioForCurrentBuild;
+  final bool lockInlineImageSizeForCurrentBuild;
+}
+
 class ThreadPostImageOpenRequest {
   const ThreadPostImageOpenRequest({
     required this.document,
@@ -90,6 +114,7 @@ class ThreadPostHtml extends StatefulWidget {
     this.normalizer = const ThreadPostBodyDocumentNormalizer(),
     this.style = ThreadPostBodyStyle.defaults,
     this.renderSettings = ThreadPostBodyRenderSettings.defaults,
+    this.resourceLayoutPolicy = ThreadPostResourceLayoutPolicy.defaults,
     this.textTransformer,
     this.selectionEnabled = false,
     this.onOpenLink,
@@ -107,6 +132,7 @@ class ThreadPostHtml extends StatefulWidget {
   final ThreadPostBodyDocumentNormalizer normalizer;
   final ThreadPostBodyStyle style;
   final ThreadPostBodyRenderSettings renderSettings;
+  final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
   final ThreadPostTextTransformer? textTransformer;
   final bool selectionEnabled;
   final ThreadPostLinkTapHandler? onOpenLink;
@@ -166,6 +192,7 @@ class _ThreadPostHtmlState extends State<ThreadPostHtml> {
       blockImageCacheRequestBuilder: widget.blockImageCacheRequestBuilder,
       inlineImageCacheRequestBuilder: widget.inlineImageCacheRequestBuilder,
       style: effectiveStyle,
+      resourceLayoutPolicy: widget.resourceLayoutPolicy,
       textTransformer: widget.textTransformer,
       selectionEnabled: widget.selectionEnabled,
       onOpenLink: widget.onOpenLink,
@@ -237,6 +264,7 @@ class ThreadPostBodySegmentView extends StatelessWidget {
     this.blockImageCacheRequestBuilder,
     this.inlineImageCacheRequestBuilder,
     this.style = ThreadPostBodyStyle.defaults,
+    this.resourceLayoutPolicy = ThreadPostResourceLayoutPolicy.defaults,
     this.textTransformer,
     this.selectionEnabled = false,
     this.createSelectionArea = true,
@@ -254,6 +282,7 @@ class ThreadPostBodySegmentView extends StatelessWidget {
   final ThreadPostInlineImageCacheRequestBuilder?
   inlineImageCacheRequestBuilder;
   final ThreadPostBodyStyle style;
+  final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
   final ThreadPostTextTransformer? textTransformer;
   final bool selectionEnabled;
   final bool createSelectionArea;
@@ -273,6 +302,7 @@ class ThreadPostBodySegmentView extends StatelessWidget {
       blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
       inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
       style: style,
+      resourceLayoutPolicy: resourceLayoutPolicy,
       textTransformer: textTransformer,
       selectionEnabled: selectionEnabled,
       createSelectionArea: createSelectionArea,
@@ -294,6 +324,7 @@ class ThreadPostBodyView extends StatelessWidget {
     this.blockImageCacheRequestBuilder,
     this.inlineImageCacheRequestBuilder,
     this.style = ThreadPostBodyStyle.defaults,
+    this.resourceLayoutPolicy = ThreadPostResourceLayoutPolicy.defaults,
     this.textTransformer,
     this.selectionEnabled = false,
     this.createSelectionArea = true,
@@ -311,6 +342,7 @@ class ThreadPostBodyView extends StatelessWidget {
   final ThreadPostInlineImageCacheRequestBuilder?
   inlineImageCacheRequestBuilder;
   final ThreadPostBodyStyle style;
+  final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
   final ThreadPostTextTransformer? textTransformer;
   final bool selectionEnabled;
   final bool createSelectionArea;
@@ -336,6 +368,7 @@ class ThreadPostBodyView extends StatelessWidget {
             blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
             inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
             style: style,
+            resourceLayoutPolicy: resourceLayoutPolicy,
             textTransformer: textTransformer,
             selectionEnabled: selectionEnabled,
             onOpenLink: onOpenLink,
@@ -376,6 +409,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
     required this.blockImageCacheRequestBuilder,
     required this.inlineImageCacheRequestBuilder,
     required this.style,
+    required this.resourceLayoutPolicy,
     required this.textTransformer,
     this.selectionEnabled = false,
     required this.onOpenLink,
@@ -392,6 +426,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
   final ThreadPostInlineImageCacheRequestBuilder?
   inlineImageCacheRequestBuilder;
   final ThreadPostBodyStyle style;
+  final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
   final ThreadPostTextTransformer? textTransformer;
   final bool selectionEnabled;
   final ThreadPostLinkTapHandler? onOpenLink;
@@ -409,6 +444,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
         imageCacheOwnerId: imageCacheOwnerId,
         inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
         style: style,
+        resourceLayoutPolicy: resourceLayoutPolicy,
         textTransformer: textTransformer,
         selectionEnabled: selectionEnabled,
         onOpenLink: onOpenLink,
@@ -423,6 +459,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
         imageCacheOwnerId: imageCacheOwnerId,
         blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
         style: style,
+        resourceLayoutPolicy: resourceLayoutPolicy,
         onOpenImage: onOpenImage,
         onOpenImages: onOpenImages,
       );
@@ -437,6 +474,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
         blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
         inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
         style: style,
+        resourceLayoutPolicy: resourceLayoutPolicy,
         textTransformer: textTransformer,
         selectionEnabled: selectionEnabled,
         onOpenLink: onOpenLink,
@@ -459,6 +497,7 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
     required this.blockImageCacheRequestBuilder,
     required this.inlineImageCacheRequestBuilder,
     required this.style,
+    required this.resourceLayoutPolicy,
     required this.textTransformer,
     required this.selectionEnabled,
     required this.onOpenLink,
@@ -475,6 +514,7 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
   final ThreadPostInlineImageCacheRequestBuilder?
   inlineImageCacheRequestBuilder;
   final ThreadPostBodyStyle style;
+  final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
   final ThreadPostTextTransformer? textTransformer;
   final bool selectionEnabled;
   final ThreadPostLinkTapHandler? onOpenLink;
@@ -513,6 +553,7 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
               blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
               inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
               style: quoteStyle,
+              resourceLayoutPolicy: resourceLayoutPolicy,
               textTransformer: textTransformer,
               selectionEnabled: selectionEnabled,
               onOpenLink: onOpenLink,
@@ -534,6 +575,7 @@ class ThreadPostTextBlockView extends StatelessWidget {
     this.imageCacheOwnerId,
     this.inlineImageCacheRequestBuilder,
     this.style = ThreadPostBodyStyle.defaults,
+    this.resourceLayoutPolicy = ThreadPostResourceLayoutPolicy.defaults,
     this.textTransformer,
     this.selectionEnabled = false,
     this.onOpenLink,
@@ -545,6 +587,7 @@ class ThreadPostTextBlockView extends StatelessWidget {
   final ThreadPostInlineImageCacheRequestBuilder?
   inlineImageCacheRequestBuilder;
   final ThreadPostBodyStyle style;
+  final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
   final ThreadPostTextTransformer? textTransformer;
   final bool selectionEnabled;
   final ThreadPostLinkTapHandler? onOpenLink;
@@ -629,6 +672,7 @@ class ThreadPostTextBlockView extends StatelessWidget {
       image: image,
       request: request,
       imageHeaderBuilder: imageHeaderBuilder,
+      resourceLayoutPolicy: resourceLayoutPolicy,
     );
     return WidgetSpan(
       alignment: PlaceholderAlignment.bottom,
@@ -665,11 +709,13 @@ class _ThreadPostInlineImageView extends ConsumerStatefulWidget {
     required this.image,
     required this.request,
     required this.imageHeaderBuilder,
+    required this.resourceLayoutPolicy,
   });
 
   final ThreadPostInlineImage image;
   final ImageCacheRequest request;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
 
   @override
   ConsumerState<_ThreadPostInlineImageView> createState() =>
@@ -684,7 +730,9 @@ class _ThreadPostInlineImageViewState
   @override
   void initState() {
     super.initState();
-    _loadCachedSize();
+    if (!_locksInlineImageSize) {
+      _loadCachedSize();
+    }
   }
 
   @override
@@ -694,13 +742,16 @@ class _ThreadPostInlineImageViewState
         oldWidget.image.url != widget.image.url) {
       _cachedSize = null;
       _loadedCacheKey = null;
-      _loadCachedSize();
+      if (!_locksInlineImageSize) {
+        _loadCachedSize();
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final size = _inlineImageOriginalSize(widget.image) ?? _cachedSize;
+    final originalSize = _inlineImageOriginalSize(widget.image);
+    final size = originalSize ?? (_locksInlineImageSize ? null : _cachedSize);
     final child = CachedLibraryImage(
       request: widget.request,
       fit: BoxFit.contain,
@@ -721,6 +772,9 @@ class _ThreadPostInlineImageViewState
   }
 
   Future<void> _loadCachedSize() async {
+    if (_locksInlineImageSize) {
+      return;
+    }
     final cacheKey = widget.request.cacheKey.trim();
     if (cacheKey.isEmpty || _loadedCacheKey == cacheKey) {
       return;
@@ -741,10 +795,16 @@ class _ThreadPostInlineImageViewState
     if (_cachedSize == next || _inlineImageOriginalSize(widget.image) != null) {
       return;
     }
+    if (_locksInlineImageSize) {
+      return;
+    }
     setState(() {
       _cachedSize = next;
     });
   }
+
+  bool get _locksInlineImageSize =>
+      widget.resourceLayoutPolicy.lockInlineImageSizeForCurrentBuild;
 
   Size? _inlineImageOriginalSize(ThreadPostInlineImage image) {
     final width = image.originalWidth;
@@ -775,6 +835,7 @@ class ThreadPostImageBlockView extends ConsumerStatefulWidget {
     this.imageCacheOwnerId,
     this.blockImageCacheRequestBuilder,
     this.style = ThreadPostBodyStyle.defaults,
+    this.resourceLayoutPolicy = ThreadPostResourceLayoutPolicy.defaults,
     this.onOpenImage,
     this.onOpenImages,
     @visibleForTesting this.imageProviderOverride,
@@ -787,6 +848,7 @@ class ThreadPostImageBlockView extends ConsumerStatefulWidget {
   final String? imageCacheOwnerId;
   final ThreadPostBlockImageCacheRequestBuilder? blockImageCacheRequestBuilder;
   final ThreadPostBodyStyle style;
+  final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
   final ThreadPostImageOpenHandler? onOpenImage;
   final void Function(List<ThreadPostImageBlock> images, int initialIndex)?
   onOpenImages;
@@ -806,7 +868,9 @@ class _ThreadPostImageBlockViewState
   @override
   void initState() {
     super.initState();
-    _loadCachedAspectRatio();
+    if (!_locksImageAspectRatio) {
+      _loadCachedAspectRatio();
+    }
   }
 
   @override
@@ -816,18 +880,21 @@ class _ThreadPostImageBlockViewState
       _resolvedAspectRatio = null;
       _cachedAspectRatio = null;
       _loadedCacheKey = null;
-      _loadCachedAspectRatio();
+      if (!_locksImageAspectRatio) {
+        _loadCachedAspectRatio();
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final request = _cacheRequest();
-    final aspectRatio =
-        _resolvedAspectRatio ??
-        _htmlAspectRatio() ??
-        _cachedAspectRatio ??
-        _fallbackAspectRatio();
+    final aspectRatio = _locksImageAspectRatio
+        ? _htmlAspectRatio() ?? _fallbackAspectRatio()
+        : _resolvedAspectRatio ??
+              _htmlAspectRatio() ??
+              _cachedAspectRatio ??
+              _fallbackAspectRatio();
     return SelectionContainer.disabled(
       child: Material(
         color: Colors.transparent,
@@ -891,6 +958,9 @@ class _ThreadPostImageBlockViewState
   }
 
   void _handleImageResolved(Size size) {
+    if (_locksImageAspectRatio) {
+      return;
+    }
     if (_htmlAspectRatio() == null && _cachedAspectRatio == null) {
       return;
     }
@@ -909,6 +979,9 @@ class _ThreadPostImageBlockViewState
   }
 
   Future<void> _loadCachedAspectRatio() async {
+    if (_locksImageAspectRatio) {
+      return;
+    }
     final request = _cacheRequest();
     final cacheKey = request.cacheKey.trim();
     if (cacheKey.isEmpty || _loadedCacheKey == cacheKey) {
@@ -930,10 +1003,16 @@ class _ThreadPostImageBlockViewState
     if (next == _cachedAspectRatio) {
       return;
     }
+    if (_locksImageAspectRatio) {
+      return;
+    }
     setState(() {
       _cachedAspectRatio = next;
     });
   }
+
+  bool get _locksImageAspectRatio =>
+      widget.resourceLayoutPolicy.lockImageAspectRatioForCurrentBuild;
 
   double? _htmlAspectRatio() {
     final width = widget.image.originalWidth;

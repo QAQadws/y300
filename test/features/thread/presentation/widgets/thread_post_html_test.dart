@@ -348,6 +348,46 @@ void main() {
     expect(smileyBoxes, isNotEmpty);
   });
 
+  testWidgets(
+    'ThreadPostHtml ignores async cached smiley dimensions when layout is locked',
+    (tester) async {
+      final cacheService = _SizedImageCacheService(<String, CachedImageResult>{
+        'smiley-comcom-2': const CachedImageResult(
+          success: true,
+          cacheKey: 'smiley-comcom-2',
+          width: 40,
+          height: 22,
+        ),
+      });
+      await tester.pumpWidget(
+        _testAppWithCacheService(
+          imageCacheService: cacheService,
+          home: ThreadPostHtml(
+            data: '喜欢 <img src="static/image/smiley/comcom/2.gif">',
+            resourceLayoutPolicy:
+                ThreadPostResourceLayoutPolicy.lockedForReading,
+            inlineImageCacheRequestBuilder: (_) => const ImageCacheRequest(
+              cacheKey: 'smiley-comcom-2',
+              sourceUrl:
+                  'https://bbs.yamibo.com/static/image/smiley/comcom/2.gif',
+              ownerType: ImageCacheOwnerType.sticker,
+              ownerId: 'yamibo-smiley-v4',
+              role: ImageCacheRole.remoteSmiley,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump();
+
+      final smileyBoxes = tester
+          .widgetList<SizedBox>(find.byType(SizedBox))
+          .where((box) => box.width == 40 && box.height == 22);
+      expect(smileyBoxes, isEmpty);
+    },
+  );
+
   testWidgets('ThreadPostHtml caches parsed document across rebuilds', (
     tester,
   ) async {
@@ -839,6 +879,109 @@ void main() {
     expect(imageBlockSize.width, 350);
     expect(imageBlockSize.width / imageBlockSize.height, closeTo(2.0, 0.01));
   });
+
+  testWidgets('ThreadPostImageBlockView ignores cached ratio when locked', (
+    tester,
+  ) async {
+    final cacheService = _SizedImageCacheService(<String, CachedImageResult>{
+      'thread-inline-page': const CachedImageResult(
+        success: true,
+        cacheKey: 'thread-inline-page',
+        width: 1000,
+        height: 500,
+      ),
+    });
+    const imageBlock = ThreadPostImageBlock(
+      url: 'https://bbs.yamibo.com/data/attachment/forum/page-real.jpg',
+      rawUrl: 'data/attachment/forum/page-real.jpg',
+      index: 0,
+    );
+    const document = ThreadPostBodyDocument(
+      blocks: <ThreadPostBodyBlock>[imageBlock],
+    );
+
+    await tester.pumpWidget(
+      _testAppWithCacheService(
+        imageCacheService: cacheService,
+        home: Center(
+          child: SizedBox(
+            width: 350,
+            child: ThreadPostImageBlockView(
+              document: document,
+              image: imageBlock,
+              images: <ThreadPostImageBlock>[imageBlock],
+              resourceLayoutPolicy:
+                  ThreadPostResourceLayoutPolicy.lockedForReading,
+              blockImageCacheRequestBuilder: (_) => const ImageCacheRequest(
+                cacheKey: 'thread-inline-page',
+                sourceUrl:
+                    'https://bbs.yamibo.com/data/attachment/forum/page-real.jpg',
+                ownerType: ImageCacheOwnerType.thread,
+                ownerId: 'tid-1',
+                role: ImageCacheRole.threadInline,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump();
+
+    final imageBlockSize = tester.getSize(
+      find.byType(ThreadPostImageBlockView),
+    );
+    expect(imageBlockSize.width, 350);
+    expect(imageBlockSize.width / imageBlockSize.height, closeTo(0.7, 0.01));
+  });
+
+  testWidgets(
+    'ThreadPostImageBlockView ignores resolved ratio when layout is locked',
+    (tester) async {
+      final image = await tester.runAsync(
+        () => createTestImage(width: 1000, height: 500, cache: false),
+      );
+      final testImage = image!;
+      addTearDown(testImage.dispose);
+      final provider = _SynchronousImageProvider(testImage);
+      const imageBlock = ThreadPostImageBlock(
+        url: 'https://bbs.yamibo.com/data/attachment/forum/page-real.jpg',
+        rawUrl: 'data/attachment/forum/page-real.jpg',
+        index: 0,
+      );
+      const document = ThreadPostBodyDocument(
+        blocks: <ThreadPostBodyBlock>[imageBlock],
+      );
+
+      await tester.pumpWidget(
+        _testApp(
+          home: Center(
+            child: SizedBox(
+              width: 350,
+              child: ThreadPostImageBlockView(
+                document: document,
+                image: imageBlock,
+                images: <ThreadPostImageBlock>[imageBlock],
+                resourceLayoutPolicy:
+                    ThreadPostResourceLayoutPolicy.lockedForReading,
+                imageProviderOverride: provider,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump();
+
+      final imageBlockSize = tester.getSize(
+        find.byType(ThreadPostImageBlockView),
+      );
+      expect(imageBlockSize.width, 350);
+      expect(imageBlockSize.width / imageBlockSize.height, closeTo(0.7, 0.01));
+    },
+  );
 
   testWidgets('ThreadPostHtml exposes image group open request', (
     tester,
