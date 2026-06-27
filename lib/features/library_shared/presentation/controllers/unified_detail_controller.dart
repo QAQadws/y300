@@ -89,32 +89,6 @@ class UnifiedDetailController {
     await _load();
   }
 
-  Future<bool> refreshStaleSourceMetadata() async {
-    final freshness = _adapter is DetailSourceMetadataFreshness
-        ? _adapter as DetailSourceMetadataFreshness
-        : null;
-    if (freshness == null || _state.header == null) {
-      return false;
-    }
-    try {
-      final shouldCheck = await freshness.shouldCheckSourceMetadata(
-        workId: _workId,
-      );
-      if (!shouldCheck) {
-        return false;
-      }
-      final result = await freshness.refreshSourceMetadata(workId: _workId);
-      if (!result.shouldReload) {
-        return false;
-      }
-      await _load();
-      return true;
-    } catch (_) {
-      // Background freshness checks must never block opening local metadata.
-      return false;
-    }
-  }
-
   Future<DetailRefreshResult> refresh() async {
     _state = _state.copyWith(
       isRefreshing: true,

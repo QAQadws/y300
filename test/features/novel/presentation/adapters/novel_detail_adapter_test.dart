@@ -3,7 +3,6 @@ import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
-import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
@@ -200,24 +199,6 @@ void main() {
       expect(repository.lastCoverLocalPath, '/cache/novel-cover.jpg');
     },
   );
-
-  test('source freshness updates check and fetched timestamps', () async {
-    final repository = _FakeNovelRepository();
-    final stateRepository = _RecordingLibraryStateRepository();
-    final adapter = NovelDetailAdapter(
-      repository,
-      stateRepository: stateRepository,
-    );
-
-    expect(await adapter.shouldCheckSourceMetadata(workId: 'novel:1'), isTrue);
-
-    final result = await adapter.refreshSourceMetadata(workId: 'novel:1');
-
-    expect(result.status, DetailRefreshStatus.immediate);
-    expect(repository.lastRefreshMode, NovelEpisodeRefreshMode.incremental);
-    expect(stateRepository.lastCheckUpdatedAt, isNotNull);
-    expect(stateRepository.lastFetchedUpdatedAt, isNotNull);
-  });
 }
 
 class _FakeNovelRepository implements NovelRepository {
@@ -458,8 +439,6 @@ class _RecordingLibraryStateRepository implements LibraryStateRepository {
   final List<String> unreadEpisodeIds = <String>[];
   final Map<String, LibraryEpisodeState> episodeStates;
   LibraryWorkState? workState;
-  DateTime? lastCheckUpdatedAt;
-  DateTime? lastFetchedUpdatedAt;
 
   @override
   Future<void> bindTagToWork({
@@ -592,8 +571,6 @@ class _RecordingLibraryStateRepository implements LibraryStateRepository {
     DateTime? fetchedUpdatedAt,
     String? introText,
   }) async {
-    lastCheckUpdatedAt = checkUpdatedAt ?? lastCheckUpdatedAt;
-    lastFetchedUpdatedAt = fetchedUpdatedAt ?? lastFetchedUpdatedAt;
     final previous = workState;
     workState = LibraryWorkState(
       moduleKey: moduleKey,

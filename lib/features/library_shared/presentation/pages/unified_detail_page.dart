@@ -67,11 +67,6 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
         return;
       }
       setState(() {});
-      final changed = await _controller.refreshStaleSourceMetadata();
-      if (!mounted || !changed) {
-        return;
-      }
-      setState(() {});
     });
   }
 

@@ -9,6 +9,7 @@ import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
@@ -26,10 +27,16 @@ import 'package:y300/features/thread/data/thread_post_locator.dart';
 import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/data/thread_repository.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
+import 'package:y300/features/thread/presentation/thread_post_media_preload_queue.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
+
+// Temporary diagnostic switch: media preloading can parse/decode nearby heavy
+// posts on the UI isolate while scrolling. Keep it disabled until the thread
+// detail jank source is verified on device.
+const bool _enableThreadPostMediaPreload = false;
 
 class ThreadDetailPage extends ConsumerStatefulWidget {
   const ThreadDetailPage({
@@ -59,6 +66,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   Timer? _highlightClearTimer;
   String? _highlightPostPid;
   bool _suppressTargetScrollForPageAction = false;
+  ThreadPostMediaPreloadQueue? _mediaPreloadQueue;
 
   @override
   void initState() {
@@ -69,6 +77,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   @override
   void dispose() {
     _highlightClearTimer?.cancel();
+    _mediaPreloadQueue?.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -89,6 +98,11 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     final imageHeaderBuilder = ref.watch(
       imageRequestHeaderBuilderForRefererProvider(_imageRefererFor(state)),
     );
+    if (_enableThreadPostMediaPreload) {
+      _mediaPreloadQueue ??= ThreadPostMediaPreloadQueue(
+        imageCacheService: ref.read(imageCacheServiceProvider),
+      );
+    }
     ref.listen<AsyncValue<ThreadDetailPageState>>(
       threadDetailControllerProvider(args),
       (previous, next) {
@@ -112,9 +126,23 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       backgroundColor: palette.background,
       appBar: AppBar(
         centerTitle: false,
-        title: _ThreadDetailAppBarTitle(
-          state: state,
-          initialForumName: widget.initialForumName,
+        title: GestureDetector(
+          key: const Key('thread-detail-appbar-copy-link-area'),
+          behavior: HitTestBehavior.opaque,
+          onLongPress: () {
+            unawaited(_copyThreadUrl(state));
+          },
+          child: SizedBox(
+            width: double.infinity,
+            height: kToolbarHeight,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _ThreadDetailAppBarTitle(
+                state: state,
+                initialForumName: widget.initialForumName,
+              ),
+            ),
+          ),
         ),
         actions: [
           IconButton(
@@ -220,6 +248,15 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                     onCopyActionUrl: _copyActionUrl,
                     onOpenPostLink: _openForumLink,
                     onOpenPostImages: _openPostImages,
+                    onPostBuilt: _enableThreadPostMediaPreload
+                        ? (index) {
+                            _mediaPreloadQueue?.preloadNearbyPosts(
+                              tid: state.tid,
+                              posts: state.posts,
+                              centerIndex: index,
+                            );
+                          }
+                        : null,
                     onTogglePollOption: controller.togglePollOption,
                     onSubmitPollVote: controller.submitPollVote,
                   ),
@@ -430,6 +467,36 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
 
   Future<void> _copyActionUrl(String label, String url) {
     return _copyUrl('$label链接', url);
+  }
+
+  Future<void> _copyThreadUrl(ThreadDetailPageState state) {
+    return _copyUrl('帖子链接', _threadUrlForCopy(state));
+  }
+
+  String _threadUrlForCopy(ThreadDetailPageState state) {
+    final desktopUrl = state.desktopUrl?.trim();
+    if (desktopUrl != null && desktopUrl.isNotEmpty) {
+      return desktopUrl;
+    }
+    final tid = state.tid.trim().isNotEmpty
+        ? state.tid.trim()
+        : widget.tid.trim();
+    if (tid.isEmpty) {
+      return '';
+    }
+    final page = state.currentPage > 0
+        ? state.currentPage
+        : (widget.initialPage ?? 1);
+    return Uri.parse(AppConfig.siteBaseUrl)
+        .replace(
+          path: '/forum.php',
+          queryParameters: <String, String>{
+            'mod': 'viewthread',
+            'tid': tid,
+            if (page > 1) 'page': page.toString(),
+          },
+        )
+        .toString();
   }
 
   void _openPostImages(ThreadPost post, ThreadPostImageOpenRequest request) {

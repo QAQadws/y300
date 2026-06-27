@@ -3,6 +3,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
+import 'package:y300/features/thread/domain/services/thread_post_body_anchor.dart';
 
 class ThreadPostBodyParser {
   const ThreadPostBodyParser({
@@ -57,6 +58,7 @@ class ThreadPostBodyParser {
       return null;
     }
     return ThreadPostImageBlock(
+      anchorId: threadPostBodyAnchorId('image', '$index|$normalized|$rawUrl'),
       url: normalized,
       rawUrl: rawUrl,
       index: index,
@@ -175,6 +177,13 @@ class _ThreadPostBodyBuildContext {
       if (quoteContext.blocks.isNotEmpty) {
         blocks.add(
           ThreadPostQuoteBlock(
+            anchorId: threadPostBodyAnchorId(
+              'quote',
+              quoteContext.blocks
+                  .map((block) => block.anchorId)
+                  .where((value) => value.isNotEmpty)
+                  .join('|'),
+            ),
             blocks: List<ThreadPostBodyBlock>.unmodifiable(quoteContext.blocks),
           ),
         );
@@ -246,7 +255,13 @@ class _TextBlockBuffer {
     if (normalized.isEmpty) {
       return null;
     }
-    return ThreadPostTextBlock(runs: normalized);
+    return ThreadPostTextBlock(
+      anchorId: threadPostBodyAnchorId(
+        'text',
+        normalized.map(_anchorSeedForRun).join('|'),
+      ),
+      runs: normalized,
+    );
   }
 
   List<ThreadPostTextRun> _mergeAdjacentRuns(List<ThreadPostTextRun> runs) {
@@ -277,6 +292,13 @@ class _TextBlockBuffer {
         a.isBold == b.isBold &&
         a.isItalic == b.isItalic &&
         a.isUnderline == b.isUnderline;
+  }
+
+  String _anchorSeedForRun(ThreadPostTextRun run) {
+    final image = run.inlineImage;
+    return image == null
+        ? '${run.text}|${run.linkUrl}|${run.isBold}|${run.isItalic}|${run.isUnderline}'
+        : 'image:${image.url}|${run.linkUrl}|${run.isBold}|${run.isItalic}|${run.isUnderline}';
   }
 
   String _normalizeInlineText(String raw) {

@@ -16,6 +16,7 @@ class LibraryCachedImage extends StatefulWidget {
     this.localPath,
     this.imageUrl,
     this.imageProviderOverride,
+    this.remoteImageProviderOverride,
     required this.fit,
     this.width,
     this.height,
@@ -23,6 +24,7 @@ class LibraryCachedImage extends StatefulWidget {
     this.errorPlaceholder,
     this.headerBuilder,
     this.onImageResolved,
+    this.onRemoteImageResolved,
     this.onImageFailed,
   });
 
@@ -30,6 +32,8 @@ class LibraryCachedImage extends StatefulWidget {
   final String? imageUrl;
   @visibleForTesting
   final ImageProvider? imageProviderOverride;
+  @visibleForTesting
+  final ImageProvider? remoteImageProviderOverride;
   final BoxFit fit;
   final double? width;
   final double? height;
@@ -37,6 +41,7 @@ class LibraryCachedImage extends StatefulWidget {
   final Widget? errorPlaceholder;
   final ImageRequestHeaderBuilder? headerBuilder;
   final ValueChanged<Size>? onImageResolved;
+  final VoidCallback? onRemoteImageResolved;
   final VoidCallback? onImageFailed;
 
   @override
@@ -60,6 +65,8 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
     if (oldWidget.imageUrl != widget.imageUrl ||
         oldWidget.localPath != widget.localPath ||
         oldWidget.imageProviderOverride != widget.imageProviderOverride ||
+        oldWidget.remoteImageProviderOverride !=
+            widget.remoteImageProviderOverride ||
         oldWidget.headerBuilder != widget.headerBuilder) {
       _headersFuture = null;
       _headersUrl = null;
@@ -168,10 +175,9 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
   }
 
   Widget _buildNetworkImage(String remote, Map<String, String> headers) {
-    final provider = NetworkImage(
-      remote,
-      headers: headers.isEmpty ? null : headers,
-    );
+    final provider =
+        widget.remoteImageProviderOverride ??
+        NetworkImage(remote, headers: headers.isEmpty ? null : headers);
     return Image(
       image: provider,
       fit: widget.fit,
@@ -181,6 +187,7 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
       loadingBuilder: (context, child, loadingProgress) {
         if (loadingProgress == null) {
           _markRemoteResolved();
+          widget.onRemoteImageResolved?.call();
           _reportImageResolved(provider, 'remote:$remote');
           return child;
         }

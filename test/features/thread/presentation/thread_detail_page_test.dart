@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' as riverpod_misc;
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/theme/app_theme.dart';
@@ -44,7 +45,9 @@ import 'package:y300/features/thread/data/thread_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/services/thread_favorite_action_service.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
@@ -420,6 +423,70 @@ void main() {
       expect(callCount, 3);
     });
 
+    testWidgets('long pressing app bar copies thread link', (tester) async {
+      final copiedTexts = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            final data = Map<String, dynamic>.from(call.arguments as Map);
+            copiedTexts.add(data['text'] as String);
+          }
+          return null;
+        },
+      );
+      addTearDown(() {
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        );
+      });
+
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            forumName: '海域區',
+            subject: '测试主题',
+            author: 'alice',
+            replies: 0,
+            views: 1,
+            currentPage: 1,
+            lastPage: 1,
+            desktopUrl:
+                'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
+            perPage: 1,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>第一条回复</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      await tester.longPress(
+        find.byKey(const Key('thread-detail-appbar-copy-link-area')),
+      );
+      await tester.pump();
+
+      expect(copiedTexts, [
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
+      ]);
+      expect(find.text('帖子链接已复制'), findsOneWidget);
+    });
+
     testWidgets('default svg author avatar uses local noavatar asset', (
       tester,
     ) async {
@@ -501,6 +568,137 @@ void main() {
           'https://bbs.yamibo.com/uc_server/data/avatar/000/00/00/01_avatar_small.jpg',
         ),
       );
+    });
+
+    testWidgets(
+      'does not preload nearby post media while diagnostic switch is off',
+      (tester) async {
+        final imageCacheService = _RecordingImageCacheService();
+        final repository = _FakeThreadRepository((tid, page) async {
+          return ApiSuccess(
+            _threadDetailData(
+              tid: tid,
+              posts: [
+                ThreadPost(
+                  pid: 'p1',
+                  author: 'alice',
+                  authorId: '1',
+                  message:
+                      '<img file="data/attachment/forum/page-1.jpg" />'
+                      '<p>表情 <img src="static/image/smiley/comcom/2.gif" /></p>'
+                      '${List.filled(80, '<p>用于把第二楼推出初始 cacheExtent 的长正文。</p>').join()}',
+                  number: 1,
+                  isFirst: true,
+                  dateline: 'today',
+                ),
+                ThreadPost(
+                  pid: 'p2',
+                  author: 'bob',
+                  authorId: '2',
+                  message: '<img file="data/attachment/forum/page-2.jpg" />',
+                  number: 2,
+                  isFirst: false,
+                  dateline: 'today',
+                ),
+              ],
+            ),
+          );
+        });
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: _threadDetailOverrides(
+              repository,
+              imageCacheService: imageCacheService,
+            ),
+            child: const MaterialApp(
+              home: ThreadDetailPage(tid: '100', subject: '测试主题'),
+            ),
+          ),
+        );
+
+        await tester.pump();
+        await tester.pump();
+
+        expect(
+          imageCacheService.requests.any(
+            (request) => request.sourceUrl.contains('page-2.jpg'),
+          ),
+          isFalse,
+        );
+      },
+    );
+
+    testWidgets('collapsing comments reduces post card height', (tester) async {
+      final state = ThreadDetailPageState.initial(tid: '100', subject: '测试主题')
+          .copyWith(
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>短正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+                comments: const <ThreadPostCommentEntry>[
+                  ThreadPostCommentEntry(
+                    author: 'alice',
+                    message: '第一条点评内容',
+                    dateline: 'today',
+                  ),
+                  ThreadPostCommentEntry(
+                    author: 'bob',
+                    message: '第二条点评内容',
+                    dateline: 'today',
+                  ),
+                  ThreadPostCommentEntry(
+                    author: 'carol',
+                    message: '第三条点评内容',
+                    dateline: 'today',
+                  ),
+                ],
+              ),
+            ],
+          );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ThreadDetailContent(
+              state: state,
+              imageHeaderBuilder: null,
+              sourceTagLabel: '未标记',
+              onLoadPreviousPage: () {},
+              onLoadNextPage: () {},
+              onLoadPageNumber: (_) {},
+              onOpenPostReply: (_) {},
+              onOpenPostRate: (_) {},
+              onOpenPostComment: (_) {},
+              onOpenAuthorProfile: (_) {},
+              onCopyActionUrl: (_, _) {},
+              onOpenPostLink: (_) {},
+              onTogglePollOption: (_, _) {},
+              onSubmitPollVote: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      final expandedHeight = tester
+          .getSize(find.byKey(const Key('thread-post-card-p1')))
+          .height;
+
+      await tester.tap(find.byKey(const Key('thread-post-comment-header')));
+      await tester.pump();
+
+      final collapsedHeight = tester
+          .getSize(find.byKey(const Key('thread-post-card-p1')))
+          .height;
+      expect(collapsedHeight, lessThan(expandedHeight));
+      expect(find.text('第一条点评内容'), findsNothing);
     });
 
     testWidgets('uses initial forum name before parsed thread detail arrives', (
@@ -1918,6 +2116,7 @@ Widget _buildTestApp(
   YamiboTagThreadPageRepository? tagThreadPageRepository,
   ThreadPostLocator? threadPostLocator,
   NativePageCacheInvalidationService? pageCacheInvalidationService,
+  ImageCacheService? imageCacheService,
 }) {
   return ProviderScope(
     overrides: _threadDetailOverrides(
@@ -1931,6 +2130,7 @@ Widget _buildTestApp(
       tagThreadPageRepository: tagThreadPageRepository,
       threadPostLocator: threadPostLocator,
       pageCacheInvalidationService: pageCacheInvalidationService,
+      imageCacheService: imageCacheService,
     ),
     child: const MaterialApp(
       home: ThreadDetailPage(tid: '100', subject: '测试主题'),
@@ -1949,10 +2149,13 @@ List<riverpod_misc.Override> _threadDetailOverrides(
   YamiboTagThreadPageRepository? tagThreadPageRepository,
   ThreadPostLocator? threadPostLocator,
   NativePageCacheInvalidationService? pageCacheInvalidationService,
+  ImageCacheService? imageCacheService,
 }) {
   return [
     threadRepositoryProvider.overrideWithValue(repository),
-    imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
+    imageCacheServiceProvider.overrideWithValue(
+      imageCacheService ?? _NoopImageCacheService(),
+    ),
     nativePageCacheInvalidationServiceProvider.overrideWithValue(
       pageCacheInvalidationService ?? _FakeNativePageCacheInvalidationService(),
     ),
@@ -2051,6 +2254,16 @@ class _NoopImageCacheService implements ImageCacheService {
 
   @override
   Future<void> clearUnprotected() async {}
+}
+
+class _RecordingImageCacheService extends _NoopImageCacheService {
+  final requests = <ImageCacheRequest>[];
+
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    requests.add(request);
+    return CachedImageResult(success: true, cacheKey: request.cacheKey);
+  }
 }
 
 class _FakeNativePageCacheInvalidationService

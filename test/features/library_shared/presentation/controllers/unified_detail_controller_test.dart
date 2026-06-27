@@ -49,30 +49,6 @@ void main() {
   });
 
   test(
-    'refreshStaleSourceMetadata reloads only after optional freshness hook',
-    () async {
-      final adapter = _FreshnessDetailAdapter();
-      final controller = UnifiedDetailController(
-        adapter: adapter,
-        workId: 'work-1',
-      );
-
-      await controller.initialize();
-
-      expect(controller.state.header?.title, '本地作品');
-      expect(adapter.refreshSourceMetadataCount, 0);
-      expect(adapter.loadHeaderCount, 1);
-
-      final changed = await controller.refreshStaleSourceMetadata();
-
-      expect(changed, isTrue);
-      expect(controller.state.header?.title, '刷新后作品');
-      expect(adapter.refreshSourceMetadataCount, 1);
-      expect(adapter.loadHeaderCount, 2);
-    },
-  );
-
-  test(
     'refresh stores queued result without reloading local chapters',
     () async {
       final adapter = _FakeDetailAdapter()
@@ -341,34 +317,4 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
     required String workId,
     required String tagId,
   }) async {}
-}
-
-class _FreshnessDetailAdapter extends _FakeDetailAdapter
-    implements DetailSourceMetadataFreshness {
-  int refreshSourceMetadataCount = 0;
-  bool refreshed = false;
-
-  @override
-  Future<LibraryDetailHeader> loadHeader({required String workId}) async {
-    loadHeaderCount++;
-    return LibraryDetailHeader(
-      workId: workId,
-      title: refreshed ? '刷新后作品' : '本地作品',
-      inShelf: true,
-    );
-  }
-
-  @override
-  Future<bool> shouldCheckSourceMetadata({required String workId}) async {
-    return true;
-  }
-
-  @override
-  Future<DetailRefreshResult> refreshSourceMetadata({
-    required String workId,
-  }) async {
-    refreshSourceMetadataCount++;
-    refreshed = true;
-    return DetailRefreshResult.immediate;
-  }
 }

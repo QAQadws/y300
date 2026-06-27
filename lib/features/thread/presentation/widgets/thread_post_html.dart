@@ -8,6 +8,8 @@ import 'package:y300/features/cache/domain/forum_image_cache_requests.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
+import 'package:y300/features/thread/domain/services/thread_post_body_document_normalizer.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
 
 typedef ThreadPostTextTransformer = String Function(String text);
@@ -18,6 +20,10 @@ typedef ThreadPostBlockImageCacheRequestBuilder =
     ImageCacheRequest Function(ThreadPostImageBlock image);
 typedef ThreadPostInlineImageCacheRequestBuilder =
     ImageCacheRequest Function(ThreadPostInlineImage image);
+
+// Temporary diagnostic switch: SelectionArea can add measurable layout and hit
+// test cost for long posts with many RichText/WidgetSpan fragments.
+const bool _enableThreadPostBodySelection = false;
 
 class ThreadPostBodyStyle {
   const ThreadPostBodyStyle({
@@ -84,7 +90,9 @@ class ThreadPostHtml extends StatefulWidget {
     this.blockImageCacheRequestBuilder,
     this.inlineImageCacheRequestBuilder,
     this.parser = const ThreadPostBodyParser(),
+    this.normalizer = const ThreadPostBodyDocumentNormalizer(),
     this.style = ThreadPostBodyStyle.defaults,
+    this.renderSettings = ThreadPostBodyRenderSettings.defaults,
     this.textTransformer,
     this.onOpenLink,
     this.onOpenImage,
@@ -98,7 +106,9 @@ class ThreadPostHtml extends StatefulWidget {
   final ThreadPostInlineImageCacheRequestBuilder?
   inlineImageCacheRequestBuilder;
   final ThreadPostBodyParser parser;
+  final ThreadPostBodyDocumentNormalizer normalizer;
   final ThreadPostBodyStyle style;
+  final ThreadPostBodyRenderSettings renderSettings;
   final ThreadPostTextTransformer? textTransformer;
   final ThreadPostLinkTapHandler? onOpenLink;
   final ThreadPostImageOpenHandler? onOpenImage;
@@ -111,6 +121,7 @@ class ThreadPostHtml extends StatefulWidget {
 
 class _ThreadPostHtmlState extends State<ThreadPostHtml> {
   late ThreadPostBodyDocument _document;
+  late _ThreadPostDocumentCacheKey _documentCacheKey;
 
   @override
   void initState() {
@@ -121,13 +132,23 @@ class _ThreadPostHtmlState extends State<ThreadPostHtml> {
   @override
   void didUpdateWidget(covariant ThreadPostHtml oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.data != widget.data || oldWidget.parser != widget.parser) {
+    if (_documentCacheKey != _cacheKeyFor(widget)) {
       _parseDocument();
     }
   }
 
   void _parseDocument() {
-    _document = widget.parser.parse(widget.data);
+    _documentCacheKey = _cacheKeyFor(widget);
+    _document = widget.normalizer.normalize(widget.parser.parse(widget.data));
+  }
+
+  _ThreadPostDocumentCacheKey _cacheKeyFor(ThreadPostHtml widget) {
+    return _ThreadPostDocumentCacheKey(
+      data: widget.data,
+      parser: widget.parser,
+      normalizer: widget.normalizer,
+      renderSettingsSignature: widget.renderSettings.signature,
+    );
   }
 
   @override
@@ -136,19 +157,71 @@ class _ThreadPostHtmlState extends State<ThreadPostHtml> {
     if (document.blocks.isEmpty) {
       return const SizedBox.shrink();
     }
+    final effectiveStyle = _effectiveStyle(widget.style, widget.renderSettings);
     return ThreadPostBodyView(
       document: document,
       imageHeaderBuilder: widget.imageHeaderBuilder,
       imageCacheOwnerId: widget.imageCacheOwnerId,
       blockImageCacheRequestBuilder: widget.blockImageCacheRequestBuilder,
       inlineImageCacheRequestBuilder: widget.inlineImageCacheRequestBuilder,
-      style: widget.style,
+      style: effectiveStyle,
       textTransformer: widget.textTransformer,
       onOpenLink: widget.onOpenLink,
       onOpenImage: widget.onOpenImage,
       onOpenImages: widget.onOpenImages,
     );
   }
+
+  ThreadPostBodyStyle _effectiveStyle(
+    ThreadPostBodyStyle style,
+    ThreadPostBodyRenderSettings settings,
+  ) {
+    TextStyle? textStyle = style.textStyle;
+    if (settings.fontSize != null || settings.lineHeight != null) {
+      textStyle = (textStyle ?? const TextStyle()).copyWith(
+        fontSize: settings.fontSize,
+        height: settings.lineHeight,
+      );
+    }
+    return style.copyWith(
+      blockSpacing:
+          settings.paragraphSpacing ??
+          settings.blockSpacing ??
+          style.blockSpacing,
+      textStyle: textStyle,
+    );
+  }
+}
+
+class _ThreadPostDocumentCacheKey {
+  const _ThreadPostDocumentCacheKey({
+    required this.data,
+    required this.parser,
+    required this.normalizer,
+    required this.renderSettingsSignature,
+  });
+
+  final String data;
+  final ThreadPostBodyParser parser;
+  final ThreadPostBodyDocumentNormalizer normalizer;
+  final String renderSettingsSignature;
+
+  @override
+  bool operator ==(Object other) {
+    return other is _ThreadPostDocumentCacheKey &&
+        other.data == data &&
+        identical(other.parser, parser) &&
+        identical(other.normalizer, normalizer) &&
+        other.renderSettingsSignature == renderSettingsSignature;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    data,
+    identityHashCode(parser),
+    identityHashCode(normalizer),
+    renderSettingsSignature,
+  );
 }
 
 class ThreadPostBodyView extends StatelessWidget {
@@ -182,30 +255,31 @@ class ThreadPostBodyView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final blocks = document.blocks;
-    return SelectionArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (var index = 0; index < blocks.length; index++) ...[
-            if (index > 0) SizedBox(height: style.blockSpacing),
-            _ThreadPostBodyBlockView(
-              document: document,
-              block: blocks[index],
-              images: document.images,
-              imageHeaderBuilder: imageHeaderBuilder,
-              imageCacheOwnerId: imageCacheOwnerId,
-              blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
-              inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
-              style: style,
-              textTransformer: textTransformer,
-              onOpenLink: onOpenLink,
-              onOpenImage: onOpenImage,
-              onOpenImages: onOpenImages,
-            ),
-          ],
+    final images = document.images;
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var index = 0; index < blocks.length; index++) ...[
+          if (index > 0 && !blocks[index].continuesPrevious)
+            SizedBox(height: style.blockSpacing),
+          _ThreadPostBodyBlockView(
+            document: document,
+            block: blocks[index],
+            images: images,
+            imageHeaderBuilder: imageHeaderBuilder,
+            imageCacheOwnerId: imageCacheOwnerId,
+            blockImageCacheRequestBuilder: blockImageCacheRequestBuilder,
+            inlineImageCacheRequestBuilder: inlineImageCacheRequestBuilder,
+            style: style,
+            textTransformer: textTransformer,
+            onOpenLink: onOpenLink,
+            onOpenImage: onOpenImage,
+            onOpenImages: onOpenImages,
+          ),
         ],
-      ),
+      ],
     );
+    return _enableThreadPostBodySelection ? SelectionArea(child: body) : body;
   }
 }
 
@@ -322,6 +396,7 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final images = this.images;
     final quoteStyle = style.copyWith(
       blockSpacing: (style.blockSpacing * 0.72).clamp(4, 8).toDouble(),
       textStyle: DefaultTextStyle.of(
@@ -338,7 +413,8 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (var index = 0; index < quote.blocks.length; index++) ...[
-            if (index > 0) SizedBox(height: quoteStyle.blockSpacing),
+            if (index > 0 && !quote.blocks[index].continuesPrevious)
+              SizedBox(height: quoteStyle.blockSpacing),
             _ThreadPostBodyBlockView(
               document: document,
               block: quote.blocks[index],
@@ -393,8 +469,12 @@ class ThreadPostTextBlockView extends StatelessWidget {
                 : _inlineImageSpan(context, run.inlineImage!),
         ],
       ),
-      selectionRegistrar: SelectionContainer.maybeOf(context),
-      selectionColor: DefaultSelectionStyle.of(context).selectionColor,
+      selectionRegistrar: _enableThreadPostBodySelection
+          ? SelectionContainer.maybeOf(context)
+          : null,
+      selectionColor: _enableThreadPostBodySelection
+          ? DefaultSelectionStyle.of(context).selectionColor
+          : null,
     );
   }
 
@@ -450,21 +530,13 @@ class ThreadPostTextBlockView extends StatelessWidget {
     BuildContext context,
     ThreadPostInlineImage image,
   ) {
-    final size = _inlineImageOriginalSize(image);
-    final child = CachedLibraryImage(
-      request:
-          inlineImageCacheRequestBuilder?.call(image) ??
-          ForumImageCacheRequests.remoteSmiley(url: image.url),
-      fit: BoxFit.contain,
-      width: size?.width,
-      height: size?.height,
-      placeholder: const SizedBox.shrink(),
-      errorPlaceholder: Icon(
-        Icons.image_not_supported_outlined,
-        size: (size?.shortestSide ?? 14).clamp(12, 18).toDouble(),
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
-      headerBuilder: imageHeaderBuilder,
+    final request =
+        inlineImageCacheRequestBuilder?.call(image) ??
+        ForumImageCacheRequests.remoteSmiley(url: image.url);
+    final child = _ThreadPostInlineImageView(
+      image: image,
+      request: request,
+      imageHeaderBuilder: imageHeaderBuilder,
     );
     return WidgetSpan(
       alignment: PlaceholderAlignment.bottom,
@@ -472,26 +544,10 @@ class ThreadPostTextBlockView extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 1),
         child: KeyedSubtree(
           key: Key('thread-post-inline-image-${image.url}'),
-          child: size == null
-              ? child
-              : SizedBox(width: size.width, height: size.height, child: child),
+          child: child,
         ),
       ),
     );
-  }
-
-  Size? _inlineImageOriginalSize(ThreadPostInlineImage image) {
-    final width = image.originalWidth;
-    final height = image.originalHeight;
-    if (width != null &&
-        height != null &&
-        width.isFinite &&
-        height.isFinite &&
-        width > 0 &&
-        height > 0) {
-      return Size(width, height);
-    }
-    return null;
   }
 
   bool _isDiscuzEditStatus(ThreadPostTextRun run, String text) {
@@ -509,6 +565,107 @@ class ThreadPostTextBlockView extends StatelessWidget {
       fontSize: baseFontSize == null ? null : baseFontSize * 0.88,
       color: baseColor.withValues(alpha: 0.62),
     );
+  }
+}
+
+class _ThreadPostInlineImageView extends ConsumerStatefulWidget {
+  const _ThreadPostInlineImageView({
+    required this.image,
+    required this.request,
+    required this.imageHeaderBuilder,
+  });
+
+  final ThreadPostInlineImage image;
+  final ImageCacheRequest request;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+
+  @override
+  ConsumerState<_ThreadPostInlineImageView> createState() =>
+      _ThreadPostInlineImageViewState();
+}
+
+class _ThreadPostInlineImageViewState
+    extends ConsumerState<_ThreadPostInlineImageView> {
+  Size? _cachedSize;
+  String? _loadedCacheKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCachedSize();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ThreadPostInlineImageView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.request.cacheKey != widget.request.cacheKey ||
+        oldWidget.image.url != widget.image.url) {
+      _cachedSize = null;
+      _loadedCacheKey = null;
+      _loadCachedSize();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = _inlineImageOriginalSize(widget.image) ?? _cachedSize;
+    final child = CachedLibraryImage(
+      request: widget.request,
+      fit: BoxFit.contain,
+      width: size?.width,
+      height: size?.height,
+      placeholder: const SizedBox.shrink(),
+      errorPlaceholder: Icon(
+        Icons.image_not_supported_outlined,
+        size: (size?.shortestSide ?? 14).clamp(12, 18).toDouble(),
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+      headerBuilder: widget.imageHeaderBuilder,
+    );
+    if (size == null) {
+      return child;
+    }
+    return SizedBox(width: size.width, height: size.height, child: child);
+  }
+
+  Future<void> _loadCachedSize() async {
+    final cacheKey = widget.request.cacheKey.trim();
+    if (cacheKey.isEmpty || _loadedCacheKey == cacheKey) {
+      return;
+    }
+    _loadedCacheKey = cacheKey;
+    final result = await ref
+        .read(imageCacheServiceProvider)
+        .getCached(cacheKey);
+    if (!mounted || _loadedCacheKey != cacheKey || result == null) {
+      return;
+    }
+    final width = result.width;
+    final height = result.height;
+    if (width == null || height == null || width <= 0 || height <= 0) {
+      return;
+    }
+    final next = Size(width.toDouble(), height.toDouble());
+    if (_cachedSize == next || _inlineImageOriginalSize(widget.image) != null) {
+      return;
+    }
+    setState(() {
+      _cachedSize = next;
+    });
+  }
+
+  Size? _inlineImageOriginalSize(ThreadPostInlineImage image) {
+    final width = image.originalWidth;
+    final height = image.originalHeight;
+    if (width != null &&
+        height != null &&
+        width.isFinite &&
+        height.isFinite &&
+        width > 0 &&
+        height > 0) {
+      return Size(width, height);
+    }
+    return null;
   }
 }
 
@@ -642,6 +799,9 @@ class _ThreadPostImageBlockViewState
   }
 
   void _handleImageResolved(Size size) {
+    if (_htmlAspectRatio() == null && _cachedAspectRatio == null) {
+      return;
+    }
     final width = size.width;
     final height = size.height;
     if (width <= 0 || height <= 0) {

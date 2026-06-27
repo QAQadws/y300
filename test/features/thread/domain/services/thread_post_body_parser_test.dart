@@ -22,6 +22,7 @@ void main() {
       expect(document.blocks, hasLength(3));
       final firstText = document.blocks[0] as ThreadPostTextBlock;
       expect(firstText.plainText, '第一段重点');
+      expect(firstText.anchorId, startsWith('text-'));
       expect(firstText.runs.last.isBold, isTrue);
 
       final secondText = document.blocks[1] as ThreadPostTextBlock;
@@ -29,6 +30,7 @@ void main() {
       expect(secondText.runs.single.linkUrl, contains('thread-1-1-1.html'));
 
       final image = document.blocks[2] as ThreadPostImageBlock;
+      expect(image.anchorId, startsWith('image-'));
       expect(image.aid, '1597001');
       expect(image.originalWidth, 900);
       expect(

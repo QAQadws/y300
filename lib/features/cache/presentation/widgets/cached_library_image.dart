@@ -26,6 +26,7 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
     this.onImageResolved,
     this.onImageFailed,
     this.imageProviderOverride,
+    this.remoteImageProviderOverride,
   });
 
   final ImageCacheRequest? request;
@@ -39,6 +40,8 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
   final VoidCallback? onImageFailed;
   @visibleForTesting
   final ImageProvider? imageProviderOverride;
+  @visibleForTesting
+  final ImageProvider? remoteImageProviderOverride;
 
   @override
   ConsumerState<CachedLibraryImage> createState() => _CachedLibraryImageState();
@@ -46,6 +49,7 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
 
 class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
   String? _localPath;
+  bool _displayedRemoteImage = false;
   int _generation = 0;
 
   @override
@@ -61,6 +65,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.imageProviderOverride != widget.imageProviderOverride) {
       _localPath = null;
+      _displayedRemoteImage = false;
       if (widget.imageProviderOverride == null) {
         _ensureCached();
       }
@@ -69,6 +74,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     if (oldWidget.request?.cacheKey != widget.request?.cacheKey ||
         oldWidget.request?.sourceUrl != widget.request?.sourceUrl) {
       _localPath = null;
+      _displayedRemoteImage = false;
       if (widget.imageProviderOverride == null) {
         _ensureCached();
       }
@@ -82,6 +88,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
       localPath: _localPath,
       imageUrl: request?.sourceUrl,
       imageProviderOverride: widget.imageProviderOverride,
+      remoteImageProviderOverride: widget.remoteImageProviderOverride,
       fit: widget.fit,
       width: widget.width,
       height: widget.height,
@@ -89,6 +96,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
       errorPlaceholder: widget.errorPlaceholder,
       headerBuilder: widget.headerBuilder,
       onImageResolved: (size) => _handleImageResolved(request, size),
+      onRemoteImageResolved: _handleRemoteImageResolved,
       onImageFailed: widget.onImageFailed,
     );
   }
@@ -103,6 +111,10 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
       }
     }
     widget.onImageResolved?.call(size);
+  }
+
+  void _handleRemoteImageResolved() {
+    _displayedRemoteImage = true;
   }
 
   Future<void> _recordDimensions(
@@ -130,6 +142,9 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     unawaited(
       ref.read(imageCacheServiceProvider).ensureCached(request).then((result) {
         if (!mounted || generation != _generation || !result.success) {
+          return;
+        }
+        if (_displayedRemoteImage) {
           return;
         }
         setState(() {

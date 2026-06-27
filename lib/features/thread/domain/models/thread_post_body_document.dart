@@ -1,5 +1,11 @@
 sealed class ThreadPostBodyBlock {
-  const ThreadPostBodyBlock();
+  const ThreadPostBodyBlock({
+    this.anchorId = '',
+    this.continuesPrevious = false,
+  });
+
+  final String anchorId;
+  final bool continuesPrevious;
 }
 
 class ThreadPostBodyDocument {
@@ -25,7 +31,11 @@ class ThreadPostBodyDocument {
 }
 
 class ThreadPostTextBlock extends ThreadPostBodyBlock {
-  const ThreadPostTextBlock({required this.runs});
+  const ThreadPostTextBlock({
+    super.anchorId,
+    super.continuesPrevious,
+    required this.runs,
+  });
 
   final List<ThreadPostTextRun> runs;
 
@@ -33,7 +43,11 @@ class ThreadPostTextBlock extends ThreadPostBodyBlock {
 }
 
 class ThreadPostQuoteBlock extends ThreadPostBodyBlock {
-  const ThreadPostQuoteBlock({required this.blocks});
+  const ThreadPostQuoteBlock({
+    super.anchorId,
+    super.continuesPrevious,
+    required this.blocks,
+  });
 
   final List<ThreadPostBodyBlock> blocks;
 }
@@ -74,9 +88,11 @@ class ThreadPostInlineImage {
 
 class ThreadPostImageBlock extends ThreadPostBodyBlock {
   const ThreadPostImageBlock({
+    super.anchorId,
     required this.url,
     required this.rawUrl,
     required this.index,
+    super.continuesPrevious,
     this.aid,
     this.originalWidth,
     this.originalHeight,

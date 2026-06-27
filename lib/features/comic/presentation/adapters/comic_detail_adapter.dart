@@ -21,7 +21,6 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
-import 'package:y300/features/library_shared/domain/services/library_work_freshness_policy.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
 
@@ -31,11 +30,7 @@ import 'package:y300/features/library_shared/domain/services/reading_state_batch
 /// 刷新抓取通过 ComicEpisodeRefreshService 下沉到漫画域 services，
 /// 而“合并章节/提升封面/通知书架”则统一交给 ComicRefreshOutcomeApplier，
 /// 保证统一详情页只保留编排，不耦合漫画刷新策略细节。
-class ComicDetailAdapter
-    implements
-        DetailModuleAdapter,
-        DetailMetadataEditor,
-        DetailSourceMetadataFreshness {
+class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
   ComicDetailAdapter(
     this._repository, {
     ComicEpisodeRefreshService? refreshService,
@@ -50,8 +45,6 @@ class ComicDetailAdapter
     ComicEpisodeDiscoveryService? discoveryService,
     ComicReaderFeatureFlags featureFlags = ComicReaderFeatureFlags.defaults,
     ComicTitleAnalyzer titleAnalyzer = const PetitComicTitleAnalyzer(),
-    LibraryWorkFreshnessPolicy freshnessPolicy =
-        const LibraryWorkFreshnessPolicy.detailDefaults(),
     required LibraryStateRepository stateRepository,
   }) : _refreshService = refreshService,
        _searchQueue = searchQueue,
@@ -65,7 +58,6 @@ class ComicDetailAdapter
        _discoveryService = discoveryService,
        _featureFlags = featureFlags,
        _titleAnalyzer = titleAnalyzer,
-       _freshnessPolicy = freshnessPolicy,
        _stateRepository = stateRepository;
 
   final ComicRepository _repository;
@@ -81,7 +73,6 @@ class ComicDetailAdapter
   final ComicEpisodeDiscoveryService? _discoveryService;
   final ComicReaderFeatureFlags _featureFlags;
   final ComicTitleAnalyzer _titleAnalyzer;
-  final LibraryWorkFreshnessPolicy _freshnessPolicy;
   final LibraryStateRepository _stateRepository;
 
   @override
@@ -659,39 +650,6 @@ class ComicDetailAdapter
       status: DetailRefreshStatus.skipped,
       message: '未提取到新的章节链接',
     );
-  }
-
-  @override
-  Future<bool> shouldCheckSourceMetadata({required String workId}) async {
-    final state = await _stateRepository.getWorkState(
-      moduleKey: LibraryModuleKey.comic,
-      workId: workId,
-    );
-    return _freshnessPolicy.shouldCheck(
-      lastCheckedAt: state?.checkUpdatedAt,
-      now: DateTime.now(),
-    );
-  }
-
-  @override
-  Future<DetailRefreshResult> refreshSourceMetadata({
-    required String workId,
-  }) async {
-    final checkedAt = DateTime.now();
-    await _stateRepository.upsertWorkState(
-      moduleKey: LibraryModuleKey.comic,
-      workId: workId,
-      checkUpdatedAt: checkedAt,
-    );
-    final result = await refreshWork(workId: workId);
-    if (result.shouldReload) {
-      await _stateRepository.upsertWorkState(
-        moduleKey: LibraryModuleKey.comic,
-        workId: workId,
-        fetchedUpdatedAt: DateTime.now(),
-      );
-    }
-    return result;
   }
 
   Future<ParsedThreadResult?> _fetchAndParseCurrentThread(String tid) async {

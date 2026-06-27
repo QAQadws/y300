@@ -12,6 +12,8 @@ import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
+import 'package:y300/features/thread/domain/services/thread_post_body_document_normalizer.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 
@@ -83,26 +85,27 @@ void main() {
     },
   );
 
-  testWidgets('ThreadPostHtml renders text blocks without flutter_html', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _testApp(
-        home: const ThreadPostHtml(
-          data:
-              '<p>第一段 <strong>重点</strong></p><p><a href="thread-1-1-1.html">链接</a></p>',
+  testWidgets(
+    'ThreadPostHtml renders text blocks without selection diagnostics',
+    (tester) async {
+      await tester.pumpWidget(
+        _testApp(
+          home: const ThreadPostHtml(
+            data:
+                '<p>第一段 <strong>重点</strong></p><p><a href="thread-1-1-1.html">链接</a></p>',
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.pump();
+      await tester.pump();
 
-    expect(find.byType(SelectionArea), findsOneWidget);
-    expect(find.byType(SelectableText), findsNothing);
-    expect(_postRichTexts(), findsNWidgets(2));
-    expect(_postRichTextPlainTexts(tester), contains('第一段重点'));
-    expect(_postRichTextPlainTexts(tester), contains('链接'));
-  });
+      expect(find.byType(SelectionArea), findsNothing);
+      expect(find.byType(SelectableText), findsNothing);
+      expect(_postRichTexts(), findsNWidgets(2));
+      expect(_postRichTextPlainTexts(tester), contains('第一段重点'));
+      expect(_postRichTextPlainTexts(tester), contains('链接'));
+    },
+  );
 
   testWidgets('ThreadPostHtml renders reply quote as a quote block', (
     tester,
@@ -186,23 +189,130 @@ void main() {
     expect(fixedSmileyBoxes, isNotEmpty);
   });
 
+  testWidgets('ThreadPostHtml reuses cached smiley dimensions when available', (
+    tester,
+  ) async {
+    final cacheService = _SizedImageCacheService(<String, CachedImageResult>{
+      'smiley-comcom-2': const CachedImageResult(
+        success: true,
+        cacheKey: 'smiley-comcom-2',
+        width: 40,
+        height: 22,
+      ),
+    });
+    await tester.pumpWidget(
+      _testAppWithCacheService(
+        imageCacheService: cacheService,
+        home: ThreadPostHtml(
+          data: '喜欢 <img src="static/image/smiley/comcom/2.gif">',
+          inlineImageCacheRequestBuilder: (_) => const ImageCacheRequest(
+            cacheKey: 'smiley-comcom-2',
+            sourceUrl:
+                'https://bbs.yamibo.com/static/image/smiley/comcom/2.gif',
+            ownerType: ImageCacheOwnerType.sticker,
+            ownerId: 'yamibo-smiley-v4',
+            role: ImageCacheRole.remoteSmiley,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump();
+
+    final smileyBoxes = tester
+        .widgetList<SizedBox>(find.byType(SizedBox))
+        .where((box) => box.width == 40 && box.height == 22);
+    expect(smileyBoxes, isNotEmpty);
+  });
+
   testWidgets('ThreadPostHtml caches parsed document across rebuilds', (
     tester,
   ) async {
     final parser = _CountingThreadPostBodyParser();
+    final normalizer = _CountingThreadPostBodyDocumentNormalizer();
     await tester.pumpWidget(
       _testApp(
-        home: ThreadPostHtml(data: '<p>正文</p>', parser: parser),
+        home: ThreadPostHtml(
+          data: '<p>正文</p>',
+          parser: parser,
+          normalizer: normalizer,
+        ),
       ),
     );
     await tester.pumpWidget(
       _testApp(
-        home: ThreadPostHtml(data: '<p>正文</p>', parser: parser),
+        home: ThreadPostHtml(
+          data: '<p>正文</p>',
+          parser: parser,
+          normalizer: normalizer,
+        ),
       ),
     );
 
     expect(parser.parseCount, 1);
+    expect(normalizer.normalizeCount, 1);
     expect(_postRichTextPlainTexts(tester), contains('正文'));
+  });
+
+  testWidgets(
+    'ThreadPostHtml reparses when render settings signature changes',
+    (tester) async {
+      final parser = _CountingThreadPostBodyParser();
+      final normalizer = _CountingThreadPostBodyDocumentNormalizer();
+      await tester.pumpWidget(
+        _testApp(
+          home: ThreadPostHtml(
+            data: '<p>正文</p>',
+            parser: parser,
+            normalizer: normalizer,
+          ),
+        ),
+      );
+      await tester.pumpWidget(
+        _testApp(
+          home: ThreadPostHtml(
+            data: '<p>正文</p>',
+            parser: parser,
+            normalizer: normalizer,
+            renderSettings: ThreadPostBodyRenderSettings.defaults.copyWith(
+              fontSize: 20,
+            ),
+          ),
+        ),
+      );
+
+      expect(parser.parseCount, 2);
+      expect(normalizer.normalizeCount, 2);
+      final rootSpan =
+          tester.widget<RichText>(_postRichTexts()).text as TextSpan;
+      final bodySpan = rootSpan.children!.single as TextSpan;
+      expect(bodySpan.style?.fontSize, 20);
+    },
+  );
+
+  testWidgets('ThreadPostHtml splits long text without adding block spacing', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _testApp(
+        home: const ThreadPostHtml(
+          data: '<p>abcdefghijk</p>',
+          normalizer: ThreadPostBodyDocumentNormalizer(maxTextRunLength: 4),
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(_postRichTexts(), findsNWidgets(3));
+    expect(_postRichTextPlainTexts(tester).join(), 'abcdefghijk');
+    final spacers = tester
+        .widgetList<SizedBox>(find.byType(SizedBox))
+        .where(
+          (box) => box.height == ThreadPostBodyStyle.defaults.blockSpacing,
+        );
+    expect(spacers, isEmpty);
   });
 
   testWidgets('ThreadPostHtml treats bare blockquote as a quote block', (
@@ -246,7 +356,7 @@ void main() {
     );
 
     final firstText = tester.widgetList<RichText>(_postRichTexts()).first;
-    expect(firstText.selectionRegistrar, isNotNull);
+    expect(firstText.selectionRegistrar, isNull);
 
     final firstRootSpan = firstText.text as TextSpan;
     final firstSpan = firstRootSpan.children!.single as TextSpan;
@@ -459,53 +569,101 @@ void main() {
     },
   );
 
-  testWidgets('ThreadPostImageBlockView switches to resolved image ratio', (
-    tester,
-  ) async {
-    final image = await tester.runAsync(
-      () => createTestImage(width: 1000, height: 500, cache: false),
-    );
-    final testImage = image!;
-    addTearDown(testImage.dispose);
-    final provider = _SynchronousImageProvider(testImage);
-    const imageBlock = ThreadPostImageBlock(
-      url: 'https://bbs.yamibo.com/data/attachment/forum/page-real.jpg',
-      rawUrl: 'data/attachment/forum/page-real.jpg',
-      index: 0,
-    );
-    const document = ThreadPostBodyDocument(
-      blocks: <ThreadPostBodyBlock>[imageBlock],
-    );
+  testWidgets(
+    'ThreadPostImageBlockView keeps fallback ratio on first resolve',
+    (tester) async {
+      final image = await tester.runAsync(
+        () => createTestImage(width: 1000, height: 500, cache: false),
+      );
+      final testImage = image!;
+      addTearDown(testImage.dispose);
+      final provider = _SynchronousImageProvider(testImage);
+      const imageBlock = ThreadPostImageBlock(
+        url: 'https://bbs.yamibo.com/data/attachment/forum/page-real.jpg',
+        rawUrl: 'data/attachment/forum/page-real.jpg',
+        index: 0,
+      );
+      const document = ThreadPostBodyDocument(
+        blocks: <ThreadPostBodyBlock>[imageBlock],
+      );
 
-    await tester.pumpWidget(
-      _testApp(
-        home: Center(
-          child: SizedBox(
-            width: 350,
-            child: ThreadPostImageBlockView(
-              document: document,
-              image: imageBlock,
-              images: <ThreadPostImageBlock>[imageBlock],
-              imageProviderOverride: provider,
+      await tester.pumpWidget(
+        _testApp(
+          home: Center(
+            child: SizedBox(
+              width: 350,
+              child: ThreadPostImageBlockView(
+                document: document,
+                image: imageBlock,
+                images: <ThreadPostImageBlock>[imageBlock],
+                imageProviderOverride: provider,
+              ),
             ),
           ),
         ),
-      ),
-    );
+      );
 
-    await tester.pump();
-    await tester.pump();
+      await tester.pump();
+      await tester.pump();
 
-    final imageBlockSize = tester.getSize(
-      find.byType(ThreadPostImageBlockView),
-    );
-    expect(imageBlockSize.width, 350);
-    expect(imageBlockSize.width / imageBlockSize.height, closeTo(2.0, 0.01));
-    final cachedImage = tester.widget<LibraryCachedImage>(
-      find.byType(LibraryCachedImage),
-    );
-    expect(cachedImage.fit, BoxFit.fitWidth);
-  });
+      final imageBlockSize = tester.getSize(
+        find.byType(ThreadPostImageBlockView),
+      );
+      expect(imageBlockSize.width, 350);
+      expect(imageBlockSize.width / imageBlockSize.height, closeTo(0.7, 0.01));
+      final cachedImage = tester.widget<LibraryCachedImage>(
+        find.byType(LibraryCachedImage),
+      );
+      expect(cachedImage.fit, BoxFit.fitWidth);
+    },
+  );
+
+  testWidgets(
+    'ThreadPostImageBlockView can correct ratio when a prior hint exists',
+    (tester) async {
+      final image = await tester.runAsync(
+        () => createTestImage(width: 900, height: 450, cache: false),
+      );
+      final testImage = image!;
+      addTearDown(testImage.dispose);
+      final provider = _SynchronousImageProvider(testImage);
+      const imageBlock = ThreadPostImageBlock(
+        url: 'https://bbs.yamibo.com/data/attachment/forum/page-real.jpg',
+        rawUrl: 'data/attachment/forum/page-real.jpg',
+        index: 0,
+        originalWidth: 700,
+        originalHeight: 700,
+      );
+      const document = ThreadPostBodyDocument(
+        blocks: <ThreadPostBodyBlock>[imageBlock],
+      );
+
+      await tester.pumpWidget(
+        _testApp(
+          home: Center(
+            child: SizedBox(
+              width: 350,
+              child: ThreadPostImageBlockView(
+                document: document,
+                image: imageBlock,
+                images: <ThreadPostImageBlock>[imageBlock],
+                imageProviderOverride: provider,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump();
+
+      final imageBlockSize = tester.getSize(
+        find.byType(ThreadPostImageBlockView),
+      );
+      expect(imageBlockSize.width, 350);
+      expect(imageBlockSize.width / imageBlockSize.height, closeTo(2.0, 0.01));
+    },
+  );
 
   testWidgets('ThreadPostImageBlockView reuses cached image ratio hint', (
     tester,
@@ -626,6 +784,17 @@ class _CountingThreadPostBodyParser extends ThreadPostBodyParser {
   ThreadPostBodyDocument parse(String html) {
     parseCount += 1;
     return super.parse(html);
+  }
+}
+
+class _CountingThreadPostBodyDocumentNormalizer
+    extends ThreadPostBodyDocumentNormalizer {
+  var normalizeCount = 0;
+
+  @override
+  ThreadPostBodyDocument normalize(ThreadPostBodyDocument document) {
+    normalizeCount += 1;
+    return super.normalize(document);
   }
 }
 

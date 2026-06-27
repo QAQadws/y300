@@ -159,17 +159,6 @@ abstract class DetailMetadataEditor {
   });
 }
 
-/// Optional source metadata freshness hook.
-///
-/// Detail pages always load local metadata first. Adapters that implement this
-/// hook may then perform a throttled background source check and refresh their
-/// local source metadata without blocking first paint.
-abstract class DetailSourceMetadataFreshness {
-  Future<bool> shouldCheckSourceMetadata({required String workId});
-
-  Future<DetailRefreshResult> refreshSourceMetadata({required String workId});
-}
-
 /// 原帖跳转目标。
 class ThreadRouteTarget {
   const ThreadRouteTarget({required this.tid, this.subject});

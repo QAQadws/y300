@@ -8,34 +8,28 @@ import 'package:y300/features/cache/domain/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
-import 'package:y300/features/library_shared/domain/services/library_work_freshness_policy.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/novel_download_service.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 
 /// 小说详情适配器（Phase 6）。
-class NovelDetailAdapter
-    implements DetailModuleAdapter, DetailSourceMetadataFreshness {
+class NovelDetailAdapter implements DetailModuleAdapter {
   NovelDetailAdapter(
     this._repository, {
     NovelDownloadService? downloadService,
     ImageCacheService? imageCacheService,
     ReadingStateBatchWriter? readingStateBatchWriter,
-    LibraryWorkFreshnessPolicy freshnessPolicy =
-        const LibraryWorkFreshnessPolicy.detailDefaults(),
     required LibraryStateRepository stateRepository,
   }) : _downloadService = downloadService,
        _coverCacheService = LibraryCoverCacheService(imageCacheService),
        _readingStateBatchWriter = readingStateBatchWriter,
-       _freshnessPolicy = freshnessPolicy,
        _stateRepository = stateRepository;
 
   final NovelRepository _repository;
   final NovelDownloadService? _downloadService;
   final LibraryCoverCacheService _coverCacheService;
   final ReadingStateBatchWriter? _readingStateBatchWriter;
-  final LibraryWorkFreshnessPolicy _freshnessPolicy;
   final LibraryStateRepository _stateRepository;
 
   @override
@@ -362,39 +356,6 @@ class NovelDetailAdapter
       mode: NovelEpisodeRefreshMode.incremental,
     );
     return DetailRefreshResult.immediate;
-  }
-
-  @override
-  Future<bool> shouldCheckSourceMetadata({required String workId}) async {
-    final state = await _stateRepository.getWorkState(
-      moduleKey: LibraryModuleKey.novel,
-      workId: workId,
-    );
-    return _freshnessPolicy.shouldCheck(
-      lastCheckedAt: state?.checkUpdatedAt,
-      now: DateTime.now(),
-    );
-  }
-
-  @override
-  Future<DetailRefreshResult> refreshSourceMetadata({
-    required String workId,
-  }) async {
-    final checkedAt = DateTime.now();
-    await _stateRepository.upsertWorkState(
-      moduleKey: LibraryModuleKey.novel,
-      workId: workId,
-      checkUpdatedAt: checkedAt,
-    );
-    final result = await refreshWork(workId: workId);
-    if (result.shouldReload) {
-      await _stateRepository.upsertWorkState(
-        moduleKey: LibraryModuleKey.novel,
-        workId: workId,
-        fetchedUpdatedAt: DateTime.now(),
-      );
-    }
-    return result;
   }
 
   @override

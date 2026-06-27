@@ -31,6 +31,7 @@ class ThreadDetailContent extends StatelessWidget {
     required this.onCopyActionUrl,
     required this.onOpenPostLink,
     this.onOpenPostImages,
+    this.onPostBuilt,
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
   });
@@ -52,6 +53,7 @@ class ThreadDetailContent extends StatelessWidget {
   final ValueChanged<String> onOpenPostLink;
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
   onOpenPostImages;
+  final ValueChanged<int>? onPostBuilt;
   final void Function(ThreadPoll poll, ThreadPollOption option)
   onTogglePollOption;
   final ValueChanged<ThreadPoll> onSubmitPollVote;
@@ -105,9 +107,60 @@ class ThreadDetailContent extends StatelessWidget {
           onSubmitPollVote: onSubmitPollVote,
           palette: palette,
         );
-        return postCard;
+        return _PostBuildObserver(
+          index: index,
+          onPostBuilt: onPostBuilt,
+          child: postCard,
+        );
       },
     );
+  }
+}
+
+class _PostBuildObserver extends StatefulWidget {
+  const _PostBuildObserver({
+    required this.index,
+    required this.onPostBuilt,
+    required this.child,
+  });
+
+  final int index;
+  final ValueChanged<int>? onPostBuilt;
+  final Widget child;
+
+  @override
+  State<_PostBuildObserver> createState() => _PostBuildObserverState();
+}
+
+class _PostBuildObserverState extends State<_PostBuildObserver> {
+  @override
+  void initState() {
+    super.initState();
+    _scheduleNotify();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PostBuildObserver oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.index != widget.index ||
+        oldWidget.onPostBuilt != widget.onPostBuilt) {
+      _scheduleNotify();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+
+  void _scheduleNotify() {
+    final callback = widget.onPostBuilt;
+    if (callback == null) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        callback(widget.index);
+      }
+    });
   }
 }
 
@@ -386,8 +439,7 @@ class ThreadPostCommentSection extends StatefulWidget {
       _ThreadPostCommentSectionState();
 }
 
-class _ThreadPostCommentSectionState extends State<ThreadPostCommentSection>
-    with SingleTickerProviderStateMixin {
+class _ThreadPostCommentSectionState extends State<ThreadPostCommentSection> {
   var _expanded = true;
 
   @override
@@ -416,39 +468,33 @@ class _ThreadPostCommentSectionState extends State<ThreadPostCommentSection>
             ],
             onTap: () => setState(() => _expanded = !_expanded),
           ),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOutCubic,
-            alignment: Alignment.topCenter,
-            child: _expanded
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 9),
-                      for (
-                        var index = 0;
-                        index < widget.comments.length;
-                        index++
-                      ) ...[
-                        if (index > 0)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Divider(
-                              height: 1,
-                              thickness: 1,
-                              color: widget.palette.outlineSoft,
-                            ),
-                          ),
-                        ThreadPostCommentRow(
-                          comment: widget.comments[index],
-                          imageHeaderBuilder: widget.imageHeaderBuilder,
-                          palette: widget.palette,
-                        ),
-                      ],
-                    ],
-                  )
-                : const SizedBox(width: double.infinity),
-          ),
+          if (_expanded)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 9),
+                for (
+                  var index = 0;
+                  index < widget.comments.length;
+                  index++
+                ) ...[
+                  if (index > 0)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: widget.palette.outlineSoft,
+                      ),
+                    ),
+                  ThreadPostCommentRow(
+                    comment: widget.comments[index],
+                    imageHeaderBuilder: widget.imageHeaderBuilder,
+                    palette: widget.palette,
+                  ),
+                ],
+              ],
+            ),
         ],
       ),
     );
@@ -756,8 +802,7 @@ class ThreadPostRatingSection extends StatefulWidget {
       _ThreadPostRatingSectionState();
 }
 
-class _ThreadPostRatingSectionState extends State<ThreadPostRatingSection>
-    with SingleTickerProviderStateMixin {
+class _ThreadPostRatingSectionState extends State<ThreadPostRatingSection> {
   var _expanded = true;
 
   @override
@@ -795,79 +840,69 @@ class _ThreadPostRatingSectionState extends State<ThreadPostRatingSection>
             ],
             onTap: () => setState(() => _expanded = !_expanded),
           ),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOutCubic,
-            alignment: Alignment.topCenter,
-            child: _expanded
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            flex: 2,
-                            child: Text(
-                              widget.summary.participantText.isEmpty
-                                  ? '参与人数'
-                                  : widget.summary.participantText,
-                              style: textTheme.labelSmall?.copyWith(
-                                color: widget.palette.muted,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 2,
-                            child: Text(
-                              widget.summary.scoreText.isEmpty
-                                  ? '积分'
-                                  : widget.summary.scoreText,
-                              style: textTheme.labelSmall?.copyWith(
-                                color: widget.palette.muted,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 3,
-                            child: Text(
-                              '理由',
-                              style: textTheme.labelSmall?.copyWith(
-                                color: widget.palette.muted,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ],
+          if (_expanded)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        widget.summary.participantText.isEmpty
+                            ? '参与人数'
+                            : widget.summary.participantText,
+                        style: textTheme.labelSmall?.copyWith(
+                          color: widget.palette.muted,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                      for (final rating in widget.summary.ratings) ...[
-                        const SizedBox(height: 6),
-                        ThreadPostRatingRow(
-                          rating: rating,
-                          palette: widget.palette,
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        widget.summary.scoreText.isEmpty
+                            ? '积分'
+                            : widget.summary.scoreText,
+                        style: textTheme.labelSmall?.copyWith(
+                          color: widget.palette.muted,
+                          fontWeight: FontWeight.w800,
                         ),
-                      ],
-                      if (widget.summary.viewAllUrl?.trim().isNotEmpty ==
-                          true) ...[
-                        const SizedBox(height: 7),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: ThreadRatingLinkButton(
-                            label: '查看全部评分',
-                            palette: widget.palette,
-                            onPressed: () => widget.onCopyActionUrl(
-                              '查看全部评分',
-                              widget.summary.viewAllUrl!,
-                            ),
-                          ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        '理由',
+                        style: textTheme.labelSmall?.copyWith(
+                          color: widget.palette.muted,
+                          fontWeight: FontWeight.w800,
                         ),
-                      ],
-                    ],
-                  )
-                : const SizedBox(width: double.infinity),
-          ),
+                      ),
+                    ),
+                  ],
+                ),
+                for (final rating in widget.summary.ratings) ...[
+                  const SizedBox(height: 6),
+                  ThreadPostRatingRow(rating: rating, palette: widget.palette),
+                ],
+                if (widget.summary.viewAllUrl?.trim().isNotEmpty == true) ...[
+                  const SizedBox(height: 7),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: ThreadRatingLinkButton(
+                      label: '查看全部评分',
+                      palette: widget.palette,
+                      onPressed: () => widget.onCopyActionUrl(
+                        '查看全部评分',
+                        widget.summary.viewAllUrl!,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
         ],
       ),
     );
@@ -1400,8 +1435,7 @@ class ThreadPollCard extends StatefulWidget {
   State<ThreadPollCard> createState() => _ThreadPollCardState();
 }
 
-class _ThreadPollCardState extends State<ThreadPollCard>
-    with SingleTickerProviderStateMixin {
+class _ThreadPollCardState extends State<ThreadPollCard> {
   var _expanded = true;
 
   @override
@@ -1448,82 +1482,71 @@ class _ThreadPollCardState extends State<ThreadPollCard>
               ),
             ),
           ),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOutCubic,
-            alignment: Alignment.topCenter,
-            child: _expanded
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (widget.poll.deadlineText?.trim().isNotEmpty ==
-                          true) ...[
-                        const SizedBox(height: 5),
-                        Text(
-                          widget.poll.deadlineText!.trim(),
-                          style: textTheme.labelSmall?.copyWith(
-                            color: widget.palette.muted,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 9),
-                      for (final option in widget.poll.options) ...[
-                        ThreadPollOptionTile(
-                          option: option,
-                          palette: widget.palette,
-                          isMultipleChoice: widget.poll.isMultipleChoice,
-                          showSelector: widget.poll.canVote,
-                          selected: widget.selectedOptionIds.contains(
-                            option.id,
-                          ),
-                          enabled: widget.poll.canVote && !widget.isSubmitting,
-                          onTap: () => widget.onToggleOption(option),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      if (statusText != null && statusText.isNotEmpty) ...[
-                        Text(
-                          statusText,
-                          key: const Key('thread-poll-status-text'),
-                          style: textTheme.labelSmall?.copyWith(
-                            color: widget.palette.muted,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      if (widget.hint?.trim().isNotEmpty == true) ...[
-                        Text(
-                          widget.hint!.trim(),
-                          key: const Key('thread-poll-vote-hint'),
-                          style: textTheme.labelSmall?.copyWith(
-                            color: widget.palette.muted,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      if (widget.poll.canVote)
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton(
-                            key: const Key('thread-poll-submit-button'),
-                            onPressed: canSubmit ? widget.onSubmit : null,
-                            child: widget.isSubmitting
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Text('提交'),
-                          ),
-                        ),
-                    ],
-                  )
-                : const SizedBox(width: double.infinity),
-          ),
+          if (_expanded)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (widget.poll.deadlineText?.trim().isNotEmpty == true) ...[
+                  const SizedBox(height: 5),
+                  Text(
+                    widget.poll.deadlineText!.trim(),
+                    style: textTheme.labelSmall?.copyWith(
+                      color: widget.palette.muted,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 9),
+                for (final option in widget.poll.options) ...[
+                  ThreadPollOptionTile(
+                    option: option,
+                    palette: widget.palette,
+                    isMultipleChoice: widget.poll.isMultipleChoice,
+                    showSelector: widget.poll.canVote,
+                    selected: widget.selectedOptionIds.contains(option.id),
+                    enabled: widget.poll.canVote && !widget.isSubmitting,
+                    onTap: () => widget.onToggleOption(option),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                if (statusText != null && statusText.isNotEmpty) ...[
+                  Text(
+                    statusText,
+                    key: const Key('thread-poll-status-text'),
+                    style: textTheme.labelSmall?.copyWith(
+                      color: widget.palette.muted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                if (widget.hint?.trim().isNotEmpty == true) ...[
+                  Text(
+                    widget.hint!.trim(),
+                    key: const Key('thread-poll-vote-hint'),
+                    style: textTheme.labelSmall?.copyWith(
+                      color: widget.palette.muted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                if (widget.poll.canVote)
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      key: const Key('thread-poll-submit-button'),
+                      onPressed: canSubmit ? widget.onSubmit : null,
+                      child: widget.isSubmitting
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('提交'),
+                    ),
+                  ),
+              ],
+            ),
         ],
       ),
     );
