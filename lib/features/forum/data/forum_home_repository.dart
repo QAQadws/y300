@@ -3,10 +3,12 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/features/auth/data/auth_repository.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/cache_key_canonicalizer.dart';
+import 'package:y300/features/cache/domain/cache_load_policy.dart';
 import 'package:y300/features/cache/domain/document_cache_models.dart';
 import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/storage_usage_models.dart';
@@ -34,7 +36,9 @@ class ForumHomePayload {
 }
 
 abstract class ForumHomeRepository {
-  Future<ApiResult<ForumHomePayload>> getForumHomePayload();
+  Future<ApiResult<ForumHomePayload>> getForumHomePayload({
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  });
 }
 
 /// HTML-first 论坛首页仓库。
@@ -45,6 +49,7 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
   ForumHomeHtmlRepository({
     required YamiboHtmlClient htmlClient,
     required ForumHomeCarouselImageProbe imageProbe,
+    YamiboSessionStore? sessionStore,
     ForumHomeHtmlParser parser = const ForumHomeHtmlParser(),
     DocumentCacheService? documentCacheService,
     ParsedSnapshotCacheService? snapshotCacheService,
@@ -59,6 +64,7 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
     DateTime Function()? now,
   }) : _htmlClient = htmlClient,
        _imageProbe = imageProbe,
+       _sessionStore = sessionStore,
        _parser = parser,
        _documentCacheService = documentCacheService,
        _snapshotCacheService = snapshotCacheService,
@@ -70,6 +76,7 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
 
   final YamiboHtmlClient _htmlClient;
   final ForumHomeCarouselImageProbe _imageProbe;
+  final YamiboSessionStore? _sessionStore;
   final ForumHomeHtmlParser _parser;
   final DocumentCacheService? _documentCacheService;
   final ParsedSnapshotCacheService? _snapshotCacheService;
@@ -80,18 +87,29 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
   final DateTime Function() _now;
 
   @override
-  Future<ApiResult<ForumHomePayload>> getForumHomePayload() async {
-    final documentDescriptor = _cacheKeyCanonicalizer.forumHome();
-    final snapshotDescriptor = _cacheKeyCanonicalizer.forumHomeSnapshot();
-    final snapshot = await _getFreshSnapshot(snapshotDescriptor);
-    if (snapshot != null) {
-      return ApiSuccess(snapshot);
+  Future<ApiResult<ForumHomePayload>> getForumHomePayload({
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) async {
+    final requestProfile = _resolveRequestProfile();
+    final documentDescriptor = _cacheKeyCanonicalizer.forumHome(
+      requestProfile: requestProfile,
+    );
+    final snapshotDescriptor = _cacheKeyCanonicalizer.forumHomeSnapshot(
+      requestProfile: requestProfile,
+    );
+    if (cachePolicy == CacheLoadPolicy.cacheFirst) {
+      final snapshot = await _getFreshSnapshot(snapshotDescriptor);
+      if (snapshot != null) {
+        return ApiSuccess(snapshot);
+      }
     }
 
     _recordPageCacheEvent(
       event: 'refresh',
       descriptor: documentDescriptor,
-      reason: 'snapshot_not_fresh',
+      reason: cachePolicy == CacheLoadPolicy.networkFirst
+          ? 'network_first'
+          : 'snapshot_not_fresh',
     );
     final htmlResult = await _htmlClient.getMobilePage(
       path: '/index.php',
@@ -156,6 +174,13 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
         ),
       );
     }
+  }
+
+  DocumentRequestProfile _resolveRequestProfile() {
+    final session = _sessionStore?.readCurrent();
+    return session?.isLoggedIn == true
+        ? DocumentRequestProfile.loggedIn
+        : DocumentRequestProfile.anonymous;
   }
 
   Future<ForumHomePayload> _parsePayload(String html) async {
@@ -420,7 +445,9 @@ class DiscuzForumHomeRepository implements ForumHomeRepository {
   final Future<ApiResult<ForumHomeChromeData>> Function()? _loadChrome;
 
   @override
-  Future<ApiResult<ForumHomePayload>> getForumHomePayload() async {
+  Future<ApiResult<ForumHomePayload>> getForumHomePayload({
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) async {
     final forumResult = await _loadForumIndex();
     if (forumResult.isFailure) {
       return ApiFailure<ForumHomePayload>(forumResult.errorOrNull!);
@@ -480,6 +507,7 @@ final forumHomeRepositoryProvider = Provider<ForumHomeRepository>((ref) {
       resourceClient: ref.watch(yamiboResourceClientProvider),
       headerBuilder: ref.watch(imageRequestHeaderBuilderProvider),
     ),
+    sessionStore: ref.watch(yamiboSessionStoreProvider),
     documentCacheService: ref.watch(documentCacheServiceProvider),
     snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
     diagnosticRecorder: ref.watch(cacheDiagnosticRecorderProvider),

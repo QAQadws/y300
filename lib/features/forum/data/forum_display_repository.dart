@@ -4,9 +4,11 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/cache_key_canonicalizer.dart';
+import 'package:y300/features/cache/domain/cache_load_policy.dart';
 import 'package:y300/features/cache/domain/document_cache_models.dart';
 import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/storage_usage_models.dart';
@@ -18,16 +20,19 @@ abstract class ForumDisplayRepository {
   Future<ApiResult<ForumDisplayData>> getForumDisplay({
     required String fid,
     int page,
+    CacheLoadPolicy cachePolicy,
   });
 
   Future<ApiResult<ForumDisplayData>> getForumDisplayByQuery(
-    ForumDisplayQuery query,
-  );
+    ForumDisplayQuery query, {
+    CacheLoadPolicy cachePolicy,
+  });
 }
 
 class ForumDisplayHtmlRepository implements ForumDisplayRepository {
   ForumDisplayHtmlRepository({
     required YamiboHtmlClient htmlClient,
+    YamiboSessionStore? sessionStore,
     ForumDisplayHtmlParser parser = const ForumDisplayHtmlParser(),
     DocumentCacheService? documentCacheService,
     ParsedSnapshotCacheService? snapshotCacheService,
@@ -41,6 +46,7 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
         const NoopCacheDiagnosticRecorder(),
     DateTime Function()? now,
   }) : _htmlClient = htmlClient,
+       _sessionStore = sessionStore,
        _parser = parser,
        _documentCacheService = documentCacheService,
        _snapshotCacheService = snapshotCacheService,
@@ -51,6 +57,7 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
        _now = now ?? DateTime.now;
 
   final YamiboHtmlClient _htmlClient;
+  final YamiboSessionStore? _sessionStore;
   final ForumDisplayHtmlParser _parser;
   final DocumentCacheService? _documentCacheService;
   final ParsedSnapshotCacheService? _snapshotCacheService;
@@ -64,36 +71,46 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
   Future<ApiResult<ForumDisplayData>> getForumDisplay({
     required String fid,
     int page = 1,
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) {
     return getForumDisplayByQuery(
       ForumDisplayQuery.initial(fid: fid).copyWithPage(page),
+      cachePolicy: cachePolicy,
     );
   }
 
   @override
   Future<ApiResult<ForumDisplayData>> getForumDisplayByQuery(
-    ForumDisplayQuery query,
-  ) async {
+    ForumDisplayQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) async {
     final requestParameters = query.toRequestParameters();
+    final requestProfile = _resolveRequestProfile();
     final documentDescriptor = _cacheKeyCanonicalizer.forumDisplay(
       fid: query.fid,
       page: query.page,
       queryParameters: requestParameters,
+      requestProfile: requestProfile,
     );
     final snapshotDescriptor = _cacheKeyCanonicalizer.forumDisplaySnapshot(
       fid: query.fid,
       page: query.page,
       queryParameters: requestParameters,
+      requestProfile: requestProfile,
     );
-    final snapshot = await _getFreshSnapshot(snapshotDescriptor);
-    if (snapshot != null) {
-      return ApiSuccess(snapshot);
+    if (cachePolicy == CacheLoadPolicy.cacheFirst) {
+      final snapshot = await _getFreshSnapshot(snapshotDescriptor);
+      if (snapshot != null) {
+        return ApiSuccess(snapshot);
+      }
     }
 
     _recordPageCacheEvent(
       event: 'refresh',
       descriptor: documentDescriptor,
-      reason: 'snapshot_not_fresh',
+      reason: cachePolicy == CacheLoadPolicy.networkFirst
+          ? 'network_first'
+          : 'snapshot_not_fresh',
     );
     final htmlResult = await _htmlClient.getMobilePage(
       path: '/forum.php',
@@ -164,6 +181,13 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
         ),
       );
     }
+  }
+
+  DocumentRequestProfile _resolveRequestProfile() {
+    final session = _sessionStore?.readCurrent();
+    return session?.isLoggedIn == true
+        ? DocumentRequestProfile.loggedIn
+        : DocumentRequestProfile.anonymous;
   }
 
   Future<ForumDisplayData?> _parseCachedDocument({
@@ -320,6 +344,7 @@ class DiscuzForumDisplayRepository implements ForumDisplayRepository {
   Future<ApiResult<ForumDisplayData>> getForumDisplay({
     required String fid,
     int page = 1,
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) {
     return _apiClient.getParsed<ForumDisplayData>(
       module: 'forumdisplay',
@@ -331,8 +356,9 @@ class DiscuzForumDisplayRepository implements ForumDisplayRepository {
 
   @override
   Future<ApiResult<ForumDisplayData>> getForumDisplayByQuery(
-    ForumDisplayQuery query,
-  ) {
+    ForumDisplayQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) {
     return getForumDisplay(fid: query.fid, page: query.page);
   }
 }
@@ -340,6 +366,7 @@ class DiscuzForumDisplayRepository implements ForumDisplayRepository {
 final forumDisplayRepositoryProvider = Provider<ForumDisplayRepository>((ref) {
   return ForumDisplayHtmlRepository(
     htmlClient: ref.watch(yamiboHtmlClientProvider),
+    sessionStore: ref.watch(yamiboSessionStoreProvider),
     documentCacheService: ref.watch(documentCacheServiceProvider),
     snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
     diagnosticRecorder: ref.watch(cacheDiagnosticRecorderProvider),

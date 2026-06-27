@@ -85,11 +85,11 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
           : state.errorMessage != null && state.threads.isEmpty
           ? ForumDisplayErrorView(
               message: state.errorMessage!,
-              onRetry: controller.refresh,
+              onRetry: () => controller.refresh(forceNetwork: true),
             )
           : RefreshIndicator(
               color: theme.colorScheme.primary,
-              onRefresh: controller.refresh,
+              onRefresh: () => controller.refresh(forceNetwork: true),
               child: ForumDisplayContent(
                 state: state,
                 scrollController: _scrollController,

@@ -55,8 +55,11 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   final Set<String> _pendingTargetScrollKeys = <String>{};
   final Map<String, int> _targetScrollAttempts = <String, int>{};
   Timer? _highlightClearTimer;
+  Timer? _initialContentRevealTimer;
   String? _highlightPostPid;
   bool _suppressTargetScrollForPageAction = false;
+  bool _initialContentRevealScheduled = false;
+  bool _initialContentGateOpen = false;
 
   @override
   void initState() {
@@ -65,8 +68,15 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _scheduleInitialContentReveal();
+  }
+
+  @override
   void dispose() {
     _highlightClearTimer?.cancel();
+    _initialContentRevealTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -105,6 +115,10 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     );
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
     _scheduleTargetPostScroll(state);
+    final shouldDeferInitialContent =
+        !_initialContentGateOpen &&
+        asyncState.hasValue &&
+        state.posts.isNotEmpty;
 
     return Scaffold(
       backgroundColor: palette.background,
@@ -171,7 +185,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       body: Column(
         children: [
           Expanded(
-            child: (asyncState.isLoading && state.posts.isEmpty)
+            child:
+                shouldDeferInitialContent ||
+                    (asyncState.isLoading && state.posts.isEmpty)
                 ? const SizedBox.shrink()
                 : state.errorMessage != null && state.posts.isEmpty
                 ? _ThreadErrorView(
@@ -222,6 +238,43 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         ],
       ),
     );
+  }
+
+  void _scheduleInitialContentReveal() {
+    if (_initialContentGateOpen || _initialContentRevealScheduled) {
+      return;
+    }
+    _initialContentRevealScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _initialContentGateOpen) {
+        return;
+      }
+      final delay = _initialContentRevealDelayFor(ModalRoute.of(context));
+      if (delay <= Duration.zero) {
+        _openInitialContentGate();
+        return;
+      }
+      _initialContentRevealTimer?.cancel();
+      _initialContentRevealTimer = Timer(delay, () {
+        _openInitialContentGate();
+      });
+    });
+  }
+
+  Duration _initialContentRevealDelayFor(ModalRoute<Object?>? route) {
+    if (route == null || route.isFirst) {
+      return Duration.zero;
+    }
+    return route.transitionDuration;
+  }
+
+  void _openInitialContentGate() {
+    if (_initialContentGateOpen || !mounted) {
+      return;
+    }
+    setState(() {
+      _initialContentGateOpen = true;
+    });
   }
 
   String _sourceTagLabel(ThreadDetailPageState state) {

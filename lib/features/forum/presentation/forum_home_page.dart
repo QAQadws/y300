@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
@@ -18,6 +19,16 @@ class ForumHomePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen(authSessionControllerProvider, (previous, next) {
+      final wasLoggedIn = previous?.asData?.value.isLoggedIn ?? false;
+      final isLoggedIn = next.asData?.value.isLoggedIn ?? false;
+      if (!wasLoggedIn && isLoggedIn) {
+        ref
+            .read(forumHomeControllerProvider.notifier)
+            .refresh(forceNetwork: true);
+      }
+    });
+
     final state = ref.watch(forumHomeControllerProvider);
     final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
 
@@ -43,8 +54,9 @@ class ForumHomePage extends ConsumerWidget {
         loading: () => const SizedBox.shrink(),
         error: (error, _) => _ForumHomeErrorView(
           message: error.toString(),
-          onRetry: () =>
-              ref.read(forumHomeControllerProvider.notifier).refresh(),
+          onRetry: () => ref
+              .read(forumHomeControllerProvider.notifier)
+              .refresh(forceNetwork: true),
         ),
         data: (data) => _ForumHomeContent(
           data: data,
@@ -84,7 +96,9 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
   Widget build(BuildContext context) {
     final palette = ForumHomeNativePalette.resolve(Theme.of(context));
     return RefreshIndicator(
-      onRefresh: () => ref.read(forumHomeControllerProvider.notifier).refresh(),
+      onRefresh: () => ref
+          .read(forumHomeControllerProvider.notifier)
+          .refresh(forceNetwork: true),
       child: ColoredBox(
         color: palette.background,
         child: ListView(
@@ -136,10 +150,8 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => ForumDisplayPage(
-                  fid: forum.fid,
-                  title: forum.title,
-                ),
+                builder: (_) =>
+                    ForumDisplayPage(fid: forum.fid, title: forum.title),
               ),
             );
           },
@@ -153,10 +165,8 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => ForumDisplayPage(
-                  fid: forum.fid,
-                  title: forum.name,
-                ),
+                builder: (_) =>
+                    ForumDisplayPage(fid: forum.fid, title: forum.name),
               ),
             );
           },
@@ -186,9 +196,7 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
     final tid = normalized == null ? null : parser.extractTid(normalized);
     if (tid != null && tid.isNotEmpty) {
       await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => ThreadDetailPage(tid: tid),
-        ),
+        MaterialPageRoute<void>(builder: (_) => ThreadDetailPage(tid: tid)),
       );
       return;
     }

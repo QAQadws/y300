@@ -7,6 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
+import 'package:y300/features/cache/domain/cache_load_policy.dart';
 import 'package:y300/features/cache/domain/cache_key_canonicalizer.dart';
 import 'package:y300/features/cache/domain/document_cache_models.dart';
 import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
@@ -121,6 +124,7 @@ void main() {
       final document = documentCache.putDocuments.single;
       expect(document.body, _html);
       expect(document.ownerType, CacheOwnerType.forumDisplay);
+      expect(document.requestProfile, DocumentRequestProfile.anonymous);
       expect(document.ownerId, contains('fid=30'));
       expect(document.ownerId, contains('page=2'));
       expect(document.contentType, 'text/html');
@@ -149,6 +153,7 @@ void main() {
           'mobile': '2',
           'page': '2',
         },
+        requestProfile: DocumentRequestProfile.anonymous,
       );
       documentCache.seed(
         CachedDocument(
@@ -186,6 +191,7 @@ void main() {
           'mobile': '2',
           'page': '2',
         },
+        requestProfile: DocumentRequestProfile.anonymous,
       );
       snapshotCache.seed(
         descriptor,
@@ -210,12 +216,143 @@ void main() {
       expect(adapter.requestedUris, isEmpty);
     },
   );
+
+  test(
+    'ForumDisplayHtmlRepository networkFirst skips fresh snapshot and refreshes',
+    () async {
+      final adapter = _ForumDisplayHtmlTestAdapter();
+      final snapshotCache = _FakeParsedSnapshotCacheService<ForumDisplayData>();
+      final documentCache = _FakeDocumentCacheService();
+      final descriptor = const CacheKeyCanonicalizer().forumDisplaySnapshot(
+        fid: '30',
+        page: 2,
+        queryParameters: const <String, String>{
+          'mod': 'forumdisplay',
+          'fid': '30',
+          'mobile': '2',
+          'page': '2',
+        },
+        requestProfile: DocumentRequestProfile.anonymous,
+      );
+      snapshotCache.seed(
+        descriptor,
+        ForumDisplayData(
+          fid: '30',
+          forumName: '缓存版块',
+          currentPage: 2,
+          perPage: 20,
+          totalThreads: 0,
+          threads: const <ForumThreadSummary>[],
+        ),
+      );
+      final repository = _buildRepository(
+        adapter,
+        documentCacheService: documentCache,
+        snapshotCacheService: snapshotCache,
+      );
+
+      final result = await repository.getForumDisplay(
+        fid: '30',
+        page: 2,
+        cachePolicy: CacheLoadPolicy.networkFirst,
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(result.dataOrNull!.forumName, '中文百合漫画区');
+      expect(adapter.requestedUris, hasLength(1));
+      expect(documentCache.putDocuments, hasLength(1));
+      expect(snapshotCache.putValues, hasLength(1));
+    },
+  );
+
+  test(
+    'ForumDisplayHtmlRepository separates logged in forumdisplay cache',
+    () async {
+      final adapter = _ForumDisplayHtmlTestAdapter();
+      final documentCache = _FakeDocumentCacheService();
+      final snapshotCache = _FakeParsedSnapshotCacheService<ForumDisplayData>();
+      final sessionStore = YamiboSessionStore()
+        ..saveExtracted(
+          YamiboSessionSnapshot(
+            isLoggedIn: true,
+            uid: '597454',
+            username: 'tester',
+            formhash: '14502ecf',
+            updatedAt: DateTime(2026, 1, 1),
+            source: 'test',
+          ),
+        );
+      final repository = _buildRepository(
+        adapter,
+        sessionStore: sessionStore,
+        documentCacheService: documentCache,
+        snapshotCacheService: snapshotCache,
+      );
+
+      final result = await repository.getForumDisplay(fid: '30', page: 2);
+
+      expect(result.isSuccess, isTrue);
+      expect(
+        documentCache.putDocuments.single.requestProfile,
+        DocumentRequestProfile.loggedIn,
+      );
+      expect(
+        snapshotCache.putDescriptors.single.cacheKey,
+        contains(DocumentRequestProfile.loggedIn.id),
+      );
+    },
+  );
+
+  test(
+    'ForumDisplayHtmlRepository failure does not use other profile cache',
+    () async {
+      final adapter = _ForumDisplayHtmlTestAdapter(statusCode: 503);
+      final documentCache = _FakeDocumentCacheService();
+      final loggedInDescriptor = const CacheKeyCanonicalizer().forumDisplay(
+        fid: '30',
+        page: 2,
+        queryParameters: const <String, String>{
+          'mod': 'forumdisplay',
+          'fid': '30',
+          'mobile': '2',
+          'page': '2',
+        },
+        requestProfile: DocumentRequestProfile.loggedIn,
+      );
+      documentCache.seed(
+        CachedDocument(
+          cacheKey: loggedInDescriptor.cacheKey,
+          ownerType: loggedInDescriptor.ownerType,
+          ownerId: loggedInDescriptor.ownerId,
+          sourceUrl: loggedInDescriptor.sourceUrl,
+          requestProfile: loggedInDescriptor.requestProfile,
+          body: _html,
+          fetchedAt: DateTime(2026, 1, 1, 10),
+          updatedAt: DateTime(2026, 1, 1, 10),
+        ),
+      );
+      final repository = _buildRepository(
+        adapter,
+        documentCacheService: documentCache,
+      );
+
+      final result = await repository.getForumDisplay(
+        fid: '30',
+        page: 2,
+        cachePolicy: CacheLoadPolicy.networkFirst,
+      );
+
+      expect(result.isFailure, isTrue);
+      expect(documentCache.touchedKeys, isEmpty);
+    },
+  );
 }
 
 ForumDisplayHtmlRepository _buildRepository(
   _ForumDisplayHtmlTestAdapter adapter, {
   DocumentCacheService? documentCacheService,
   ParsedSnapshotCacheService? snapshotCacheService,
+  YamiboSessionStore? sessionStore,
   DateTime Function()? now,
 }) {
   final gateway = YamiboHttpGateway(
@@ -232,6 +369,7 @@ ForumDisplayHtmlRepository _buildRepository(
   );
   return ForumDisplayHtmlRepository(
     htmlClient: YamiboHtmlClient(gateway: gateway),
+    sessionStore: sessionStore,
     documentCacheService: documentCacheService,
     snapshotCacheService: snapshotCacheService,
     now: now,

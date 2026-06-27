@@ -8,6 +8,12 @@ import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/auth/data/auth_repository.dart';
+import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/cache_load_policy.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
@@ -275,6 +281,64 @@ void main() {
       expect(palette.sectionBodyBackground, isNot(Colors.white));
       expect(find.byKey(const Key('forum-favorite-card-2')), findsOneWidget);
     });
+
+    testWidgets('pull to refresh forces forum home network reload', (
+      tester,
+    ) async {
+      final repository = _FakeForumHomeRepository(
+        () async => ApiSuccess(_loggedOutPayload()),
+      );
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpAndSettle();
+
+      expect(repository.cachePolicies, <CacheLoadPolicy>[
+        CacheLoadPolicy.cacheFirst,
+      ]);
+
+      final refreshIndicator = tester.widget<RefreshIndicator>(
+        find.byType(RefreshIndicator),
+      );
+      await refreshIndicator.onRefresh();
+      await tester.pumpAndSettle();
+
+      expect(repository.cachePolicies, <CacheLoadPolicy>[
+        CacheLoadPolicy.cacheFirst,
+        CacheLoadPolicy.networkFirst,
+      ]);
+    });
+
+    testWidgets('login transition forces forum home network reload', (
+      tester,
+    ) async {
+      final repository = _FakeForumHomeRepository(
+        () async => ApiSuccess(_loggedOutPayload()),
+      );
+      final container = ProviderContainer(overrides: _overrides(repository));
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: ForumHomePage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(repository.cachePolicies, <CacheLoadPolicy>[
+        CacheLoadPolicy.cacheFirst,
+      ]);
+
+      container
+          .read(authSessionControllerProvider.notifier)
+          .acceptSession(_loggedInSession());
+      await tester.pumpAndSettle();
+
+      expect(repository.cachePolicies, <CacheLoadPolicy>[
+        CacheLoadPolicy.cacheFirst,
+        CacheLoadPolicy.networkFirst,
+      ]);
+    });
   });
 }
 
@@ -295,9 +359,14 @@ Widget _buildTestApp(
 List<riverpod_misc.Override> _overrides(
   ForumHomeRepository repository, {
   ForumWebViewExternalLauncher? launcher,
+  AuthRepository? authRepository,
 }) {
   return [
     forumHomeRepositoryProvider.overrideWithValue(repository),
+    authRepositoryProvider.overrideWithValue(
+      authRepository ?? _FakeAuthRepository(),
+    ),
+    imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
     imageRequestHeaderBuilderProvider.overrideWithValue(
       const _FakeImageRequestHeaderBuilder(),
     ),
@@ -455,10 +524,52 @@ class _FakeForumHomeRepository implements ForumHomeRepository {
   _FakeForumHomeRepository(this._loader);
 
   final Future<ApiResult<ForumHomePayload>> Function() _loader;
+  final cachePolicies = <CacheLoadPolicy>[];
 
   @override
-  Future<ApiResult<ForumHomePayload>> getForumHomePayload() {
+  Future<ApiResult<ForumHomePayload>> getForumHomePayload({
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) {
+    cachePolicies.add(cachePolicy);
     return _loader();
+  }
+}
+
+SessionInfo _loggedInSession() {
+  return SessionInfo(
+    uid: '597454',
+    username: 'tester',
+    formhash: '14502ecf',
+    isLoggedIn: true,
+  );
+}
+
+class _FakeAuthRepository implements AuthRepository {
+  @override
+  Future<ApiResult<SessionInfo>> refreshSession() async {
+    return ApiSuccess(
+      SessionInfo(uid: '0', username: '', formhash: '', isLoggedIn: false),
+    );
+  }
+
+  @override
+  Future<ApiResult<SessionInfo>> login({
+    required String username,
+    required String password,
+    String questionId = '0',
+    String answer = '',
+  }) async {
+    throw StateError('login is not part of this test');
+  }
+
+  @override
+  Future<void> logout() async {
+    throw StateError('logout is not part of this test');
+  }
+
+  @override
+  Future<ApiResult<bool>> verifyAuthByForumIndex() async {
+    throw StateError('verifyAuthByForumIndex is not part of this test');
   }
 }
 
@@ -469,6 +580,48 @@ class _FakeImageRequestHeaderBuilder implements ImageRequestHeaderBuilder {
   Future<Map<String, String>> buildHeaders(String imageUrl) async {
     return const <String, String>{};
   }
+}
+
+class _FakeImageCacheService implements ImageCacheService {
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    return CachedImageResult(
+      success: true,
+      cacheKey: request.cacheKey,
+      fromCache: true,
+    );
+  }
+
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async {
+    return null;
+  }
+
+  @override
+  Future<CachedImageResult> copyProtectedLocalFile(
+    ImageCacheLocalCopyRequest request,
+  ) async {
+    return CachedImageResult(success: true, cacheKey: request.cacheKey);
+  }
+
+  @override
+  Future<int> calculateUsageBytes({bool includeProtected = false}) async {
+    return 0;
+  }
+
+  @override
+  Future<void> clearUnprotected() async {}
+
+  @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<void> pruneToLimit({required int maxBytes}) async {}
 }
 
 class _FakeForumWebViewExternalLauncher

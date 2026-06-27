@@ -3,6 +3,7 @@ import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/site_url_resolver.dart';
+import 'package:y300/shared/widgets/forum_default_avatar.dart';
 
 /// Shared image widget for library surfaces.
 ///
@@ -82,7 +83,10 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
         gaplessPlayback: true,
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
           if (frame != null || wasSynchronouslyLoaded) {
-            _reportImageResolved(testProvider, 'override:${identityHashCode(testProvider)}');
+            _reportImageResolved(
+              testProvider,
+              'override:${identityHashCode(testProvider)}',
+            );
           }
           return child;
         },
@@ -119,6 +123,9 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
 
     final remote = _normalizeRemoteUrl(widget.imageUrl);
     if (remote != null && remote.isNotEmpty) {
+      if (isForumDefaultOrUnsupportedAvatarUrl(remote)) {
+        return _errorPlaceholder;
+      }
       final builder = widget.headerBuilder;
       if (builder == null) {
         return _buildRemoteImageShell(remote, const <String, String>{});
@@ -141,7 +148,9 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
     ImageRequestHeaderBuilder builder,
   ) {
     final cached = _headersFuture;
-    if (cached != null && _headersUrl == remote && identical(_headersBuilder, builder)) {
+    if (cached != null &&
+        _headersUrl == remote &&
+        identical(_headersBuilder, builder)) {
       return cached;
     }
     _headersUrl = remote;
@@ -150,18 +159,12 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
     return _headersFuture!;
   }
 
-  Widget _buildRemoteImageShell(
-    String remote,
-    Map<String, String>? headers,
-  ) {
+  Widget _buildRemoteImageShell(String remote, Map<String, String>? headers) {
     final children = <Widget>[
       if (!_remoteResolved) widget.placeholder,
       if (headers != null) _buildNetworkImage(remote, headers),
     ];
-    return Stack(
-      fit: StackFit.passthrough,
-      children: children,
-    );
+    return Stack(fit: StackFit.passthrough, children: children);
   }
 
   Widget _buildNetworkImage(String remote, Map<String, String> headers) {

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/cache/domain/cache_load_policy.dart';
 import 'package:y300/features/forum/data/forum_display_repository.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
 import 'package:y300/features/forum/presentation/forum_display_state.dart';
@@ -44,11 +45,18 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
     return _loadQuery(ForumDisplayQuery.initial(fid: _args.fid));
   }
 
-  Future<void> refresh() async {
+  Future<void> refresh({bool forceNetwork = false}) async {
     final query =
         state.value?.query ?? ForumDisplayQuery.initial(fid: _args.fid);
     state = const AsyncLoading();
-    state = await AsyncValue.guard(() => _loadQuery(query));
+    state = await AsyncValue.guard(
+      () => _loadQuery(
+        query,
+        cachePolicy: forceNetwork
+            ? CacheLoadPolicy.networkFirst
+            : CacheLoadPolicy.cacheFirst,
+      ),
+    );
   }
 
   Future<void> loadMore() async {
@@ -124,8 +132,14 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
     state = await AsyncValue.guard(() => _loadQuery(query));
   }
 
-  Future<ForumDisplayPageState> _loadQuery(ForumDisplayQuery query) async {
-    final result = await _readRepository().getForumDisplayByQuery(query);
+  Future<ForumDisplayPageState> _loadQuery(
+    ForumDisplayQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) async {
+    final result = await _readRepository().getForumDisplayByQuery(
+      query,
+      cachePolicy: cachePolicy,
+    );
     if (result case ApiSuccess<ForumDisplayData>(:final data)) {
       final mappedThreads = await _attachSourceTagNames(data);
       final effectiveQuery = query.copyWithPage(data.currentPage);

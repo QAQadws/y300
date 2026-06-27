@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' as riverpod_misc;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/theme/app_theme.dart';
@@ -45,6 +46,7 @@ import 'package:y300/features/thread/domain/services/thread_favorite_action_serv
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
+import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 
 void main() {
@@ -416,6 +418,99 @@ void main() {
       expect(repository.queryHistory.last['ordertype'], '1');
       expect(_richTextContaining('第一条回复'), findsOneWidget);
       expect(callCount, 3);
+    });
+
+    testWidgets('default svg author avatar uses local noavatar asset', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          _threadDetailData(
+            tid: tid,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                avatarUrl:
+                    'https://bbs.yamibo.com/uc_server/data/avatar/noavatar.svg',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Image &&
+              widget.image is AssetImage &&
+              (widget.image as AssetImage).assetName == forumDefaultAvatarAsset,
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('defers cached thread content during route entrance', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          _threadDetailData(
+            tid: tid,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>缓存正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _threadDetailOverrides(repository),
+          child: MaterialApp(
+            home: Builder(
+              builder: (context) => TextButton(
+                key: const Key('open-thread-detail'),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          const ThreadDetailPage(tid: '100', subject: '测试主题'),
+                    ),
+                  );
+                },
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('open-thread-detail')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 80));
+
+      expect(find.byKey(const Key('thread-post-card-p1')), findsNothing);
+
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('thread-post-card-p1')), findsOneWidget);
     });
 
     testWidgets('current page button opens quick jump dialog and returns top', (
@@ -972,7 +1067,7 @@ void main() {
         tester.getTopLeft(_richTextContaining('00')) + const Offset(4, 8),
       );
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
+      await tester.pumpAndSettle();
 
       expect(find.text('跳转后的帖子'), findsWidgets);
       expect(_richTextContaining('新帖子正文'), findsOneWidget);
@@ -1206,7 +1301,14 @@ void main() {
       await tester.pump();
 
       expect(find.byKey(const Key('thread-post-image-0')), findsOneWidget);
-      final image = tester.widget<Image>(find.byType(Image).first);
+      final image = tester.widget<Image>(
+        find
+            .descendant(
+              of: find.byKey(const Key('thread-post-image-0')),
+              matching: find.byType(Image),
+            )
+            .first,
+      );
       final provider = image.image as NetworkImage;
       expect(
         provider.url,
@@ -1782,55 +1884,98 @@ Widget _buildTestApp(
   NativePageCacheInvalidationService? pageCacheInvalidationService,
 }) {
   return ProviderScope(
-    overrides: [
-      threadRepositoryProvider.overrideWithValue(repository),
-      imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
-      nativePageCacheInvalidationServiceProvider.overrideWithValue(
-        pageCacheInvalidationService ??
-            _FakeNativePageCacheInvalidationService(),
-      ),
-      novelRepositoryProvider.overrideWithValue(
-        novelRepository ?? _FakeNovelRepository(),
-      ),
-      replyRepositoryProvider.overrideWithValue(
-        replyRepository ?? _FakeReplyRepository(),
-      ),
-      threadFavoriteActionServiceProvider.overrideWithValue(
-        favoriteActionService ?? _FakeThreadFavoriteActionService(),
-      ),
-      threadPostRateRepositoryProvider.overrideWithValue(
-        postRateRepository ?? _FakeThreadPostRateRepository(),
-      ),
-      threadPostCommentRepositoryProvider.overrideWithValue(
-        postCommentRepository ?? _FakeThreadPostCommentRepository(),
-      ),
-      threadPollVoteRepositoryProvider.overrideWithValue(
-        pollVoteRepository ?? _FakeThreadPollVoteRepository(),
-      ),
-      threadPostLocatorProvider.overrideWithValue(
-        threadPostLocator ?? _FakeThreadPostLocator(null),
-      ),
-      userProfileRepositoryProvider.overrideWithValue(
-        const _FakeUserProfileRepository(),
-      ),
-      forumTagRepositoryProvider.overrideWithValue(_FakeForumTagRepository()),
-      yamiboTagThreadPageRepositoryProvider.overrideWithValue(
-        tagThreadPageRepository ?? _FakeYamiboTagThreadPageRepository(),
-      ),
-      composerDraftRepositoryProvider.overrideWithValue(
-        _MemoryComposerDraftRepository(),
-      ),
-      composerImagePickerProvider.overrideWithValue(_NoopComposerImagePicker()),
-      composerImageUploadCoordinatorProvider.overrideWithValue(
-        _NoopComposerImageUploadCoordinator(),
-      ),
-      composerUploadNotificationServiceProvider.overrideWithValue(
-        _NoopComposerUploadNotificationService(),
-      ),
-    ],
+    overrides: _threadDetailOverrides(
+      repository,
+      replyRepository: replyRepository,
+      novelRepository: novelRepository,
+      favoriteActionService: favoriteActionService,
+      postRateRepository: postRateRepository,
+      postCommentRepository: postCommentRepository,
+      pollVoteRepository: pollVoteRepository,
+      tagThreadPageRepository: tagThreadPageRepository,
+      threadPostLocator: threadPostLocator,
+      pageCacheInvalidationService: pageCacheInvalidationService,
+    ),
     child: const MaterialApp(
       home: ThreadDetailPage(tid: '100', subject: '测试主题'),
     ),
+  );
+}
+
+List<riverpod_misc.Override> _threadDetailOverrides(
+  ThreadRepository repository, {
+  ReplyRepository? replyRepository,
+  NovelRepository? novelRepository,
+  ThreadFavoriteActionService? favoriteActionService,
+  ThreadPostRateRepository? postRateRepository,
+  ThreadPostCommentRepository? postCommentRepository,
+  ThreadPollVoteRepository? pollVoteRepository,
+  YamiboTagThreadPageRepository? tagThreadPageRepository,
+  ThreadPostLocator? threadPostLocator,
+  NativePageCacheInvalidationService? pageCacheInvalidationService,
+}) {
+  return [
+    threadRepositoryProvider.overrideWithValue(repository),
+    imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
+    nativePageCacheInvalidationServiceProvider.overrideWithValue(
+      pageCacheInvalidationService ?? _FakeNativePageCacheInvalidationService(),
+    ),
+    novelRepositoryProvider.overrideWithValue(
+      novelRepository ?? _FakeNovelRepository(),
+    ),
+    replyRepositoryProvider.overrideWithValue(
+      replyRepository ?? _FakeReplyRepository(),
+    ),
+    threadFavoriteActionServiceProvider.overrideWithValue(
+      favoriteActionService ?? _FakeThreadFavoriteActionService(),
+    ),
+    threadPostRateRepositoryProvider.overrideWithValue(
+      postRateRepository ?? _FakeThreadPostRateRepository(),
+    ),
+    threadPostCommentRepositoryProvider.overrideWithValue(
+      postCommentRepository ?? _FakeThreadPostCommentRepository(),
+    ),
+    threadPollVoteRepositoryProvider.overrideWithValue(
+      pollVoteRepository ?? _FakeThreadPollVoteRepository(),
+    ),
+    threadPostLocatorProvider.overrideWithValue(
+      threadPostLocator ?? _FakeThreadPostLocator(null),
+    ),
+    userProfileRepositoryProvider.overrideWithValue(
+      const _FakeUserProfileRepository(),
+    ),
+    forumTagRepositoryProvider.overrideWithValue(_FakeForumTagRepository()),
+    yamiboTagThreadPageRepositoryProvider.overrideWithValue(
+      tagThreadPageRepository ?? _FakeYamiboTagThreadPageRepository(),
+    ),
+    composerDraftRepositoryProvider.overrideWithValue(
+      _MemoryComposerDraftRepository(),
+    ),
+    composerImagePickerProvider.overrideWithValue(_NoopComposerImagePicker()),
+    composerImageUploadCoordinatorProvider.overrideWithValue(
+      _NoopComposerImageUploadCoordinator(),
+    ),
+    composerUploadNotificationServiceProvider.overrideWithValue(
+      _NoopComposerUploadNotificationService(),
+    ),
+  ];
+}
+
+ThreadDetailData _threadDetailData({
+  required String tid,
+  required List<ThreadPost> posts,
+}) {
+  return ThreadDetailData(
+    tid: tid,
+    fid: '2',
+    subject: '测试主题',
+    author: 'alice',
+    replies: posts.length,
+    views: 12,
+    currentPage: 1,
+    lastPage: 1,
+    perPage: posts.length,
+    posts: posts,
   );
 }
 

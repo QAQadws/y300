@@ -9,6 +9,7 @@ import 'package:y300/features/thread/data/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
+import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 
 class ThreadDetailContent extends StatelessWidget {
@@ -1669,6 +1670,7 @@ class ThreadAuthorAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final imageUrl = avatarUrl?.trim();
+    final useDefaultAvatar = isForumDefaultOrUnsupportedAvatarUrl(imageUrl);
     final placeholder = ColoredBox(
       color: palette.avatarBackground,
       child: Center(
@@ -1685,13 +1687,16 @@ class ThreadAuthorAvatar extends StatelessWidget {
       child: SizedBox(
         width: 34,
         height: 34,
-        child: imageUrl == null || imageUrl.isEmpty
-            ? placeholder
+        child: useDefaultAvatar
+            ? ColoredBox(
+                color: palette.avatarBackground,
+                child: forumDefaultAvatarImage(width: 34, height: 34),
+              )
             : CachedLibraryImage(
                 request: ForumImageCacheRequests.avatar(
                   ownerId: authorId,
                   ownerType: ImageCacheOwnerType.thread,
-                  url: imageUrl,
+                  url: imageUrl!,
                 ),
                 fit: BoxFit.cover,
                 width: 34,

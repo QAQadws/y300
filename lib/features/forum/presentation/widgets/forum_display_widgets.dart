@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
 import 'package:y300/features/forum/presentation/forum_display_state.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
+import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 
 class ForumDisplayContent extends StatefulWidget {
@@ -1516,20 +1517,24 @@ class _Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final imageUrl = url;
+    final imageUrl = url?.trim();
+    final useDefaultAvatar = isForumDefaultOrUnsupportedAvatarUrl(imageUrl);
     return CircleAvatar(
       radius: 18,
       backgroundColor: palette.avatarBackground,
       foregroundColor: palette.avatarForeground,
-      backgroundImage: imageUrl == null || imageUrl.isEmpty
-          ? null
-          : NetworkImage(imageUrl),
-      child: imageUrl == null || imageUrl.isEmpty
-          ? Text(
-              _authorInitial(author),
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            )
-          : null,
+      child: useDefaultAvatar
+          ? ClipOval(child: forumDefaultAvatarImage(width: 36, height: 36))
+          : ClipOval(
+              child: Image.network(
+                imageUrl!,
+                width: 36,
+                height: 36,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    forumDefaultAvatarImage(width: 36, height: 36),
+              ),
+            ),
     );
   }
 }
@@ -1988,14 +1993,6 @@ class _EmptyThreadList extends StatelessWidget {
       ),
     );
   }
-}
-
-String _authorInitial(String author) {
-  final trimmed = author.trim();
-  if (trimmed.isEmpty) {
-    return '?';
-  }
-  return String.fromCharCode(trimmed.runes.first).toUpperCase();
 }
 
 Color? _parseColor(String? source) {

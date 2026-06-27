@@ -34,32 +34,37 @@ void main() {
     });
   });
 
-  testWidgets('network image keeps one placeholder while waiting for headers and first frame', (tester) async {
-    final headerBuilder = _DeferredImageHeaderBuilder();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: LibraryCachedImage(
-          imageUrl: 'https://bbs.yamibo.com/data/attachment/test.jpg',
-          fit: BoxFit.cover,
-          placeholder: const SizedBox(key: Key('placeholder')),
-          headerBuilder: headerBuilder,
+  testWidgets(
+    'network image keeps one placeholder while waiting for headers and first frame',
+    (tester) async {
+      final headerBuilder = _DeferredImageHeaderBuilder();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LibraryCachedImage(
+            imageUrl: 'https://bbs.yamibo.com/data/attachment/test.jpg',
+            fit: BoxFit.cover,
+            placeholder: const SizedBox(key: Key('placeholder')),
+            headerBuilder: headerBuilder,
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(find.byKey(const Key('placeholder')), findsOneWidget);
-    expect(find.byType(Image), findsNothing);
+      expect(find.byKey(const Key('placeholder')), findsOneWidget);
+      expect(find.byType(Image), findsNothing);
 
-    headerBuilder.complete(const <String, String>{
-      'Referer': 'https://bbs.yamibo.com/',
-    });
-    await tester.pump();
+      headerBuilder.complete(const <String, String>{
+        'Referer': 'https://bbs.yamibo.com/',
+      });
+      await tester.pump();
 
-    expect(find.byKey(const Key('placeholder')), findsOneWidget);
-    expect(find.byType(Image), findsOneWidget);
-  });
+      expect(find.byKey(const Key('placeholder')), findsOneWidget);
+      expect(find.byType(Image), findsOneWidget);
+    },
+  );
 
-  testWidgets('network image normalizes relative Yamibo attachment urls', (tester) async {
+  testWidgets('network image normalizes relative Yamibo attachment urls', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: LibraryCachedImage(
@@ -79,6 +84,24 @@ void main() {
         'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
       ),
     );
+  });
+
+  testWidgets('svg remote url shows fallback instead of NetworkImage', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: LibraryCachedImage(
+          imageUrl: 'https://bbs.yamibo.com/uc_server/data/avatar/noavatar.svg',
+          fit: BoxFit.cover,
+          placeholder: SizedBox(key: Key('placeholder')),
+          errorPlaceholder: SizedBox(key: Key('svg-fallback')),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key('svg-fallback')), findsOneWidget);
+    expect(find.byType(Image), findsNothing);
   });
 
   testWidgets('local image reports decoded dimensions', (tester) async {
@@ -131,13 +154,16 @@ class _DeferredImageHeaderBuilder implements ImageRequestHeaderBuilder {
   }
 }
 
-class _SynchronousImageProvider extends ImageProvider<_SynchronousImageProvider> {
+class _SynchronousImageProvider
+    extends ImageProvider<_SynchronousImageProvider> {
   const _SynchronousImageProvider(this.image);
 
   final ui.Image image;
 
   @override
-  Future<_SynchronousImageProvider> obtainKey(ImageConfiguration configuration) {
+  Future<_SynchronousImageProvider> obtainKey(
+    ImageConfiguration configuration,
+  ) {
     return SynchronousFuture<_SynchronousImageProvider>(this);
   }
 

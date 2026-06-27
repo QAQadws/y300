@@ -13,8 +13,11 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_resource_client.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/cache_key_canonicalizer.dart';
+import 'package:y300/features/cache/domain/cache_load_policy.dart';
 import 'package:y300/features/cache/domain/document_cache_models.dart';
 import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/storage_usage_models.dart';
@@ -92,6 +95,7 @@ void main() {
       final document = documentCache.putDocuments.single;
       expect(document.ownerType, CacheOwnerType.forum);
       expect(document.ownerId, 'home');
+      expect(document.requestProfile, DocumentRequestProfile.anonymous);
       expect(document.body, _mobileHomeHtml);
       expect(document.contentType, 'text/html');
       expect(document.statusCode, 200);
@@ -104,12 +108,18 @@ void main() {
         <String>['16', '370'],
       );
       expect(snapshotCache.putDescriptors.single.snapshotType, 'forum.home');
+      expect(
+        snapshotCache.putDescriptors.single.cacheKey,
+        contains(DocumentRequestProfile.anonymous.id),
+      );
     });
 
     test('returns fresh home snapshot before network request', () async {
       final adapter = _ForumHomeHtmlTestAdapter(failMobileIndex: true);
       final snapshotCache = _FakeParsedSnapshotCacheService<ForumHomePayload>();
-      final descriptor = const CacheKeyCanonicalizer().forumHomeSnapshot();
+      final descriptor = const CacheKeyCanonicalizer().forumHomeSnapshot(
+        requestProfile: DocumentRequestProfile.anonymous,
+      );
       snapshotCache.seed(
         descriptor,
         ForumHomePayload(
@@ -147,11 +157,105 @@ void main() {
       expect(adapter.imageRequestedUris, isEmpty);
     });
 
+    test(
+      'writes logged in home cache under logged in request profile',
+      () async {
+        final adapter = _ForumHomeHtmlTestAdapter();
+        final documentCache = _FakeDocumentCacheService();
+        final snapshotCache =
+            _FakeParsedSnapshotCacheService<ForumHomePayload>();
+        final sessionStore = YamiboSessionStore()
+          ..saveExtracted(
+            YamiboSessionSnapshot(
+              isLoggedIn: true,
+              uid: '597454',
+              username: 'tester',
+              formhash: '14502ecf',
+              updatedAt: DateTime(2026, 1, 1),
+              source: 'test',
+            ),
+          );
+        final repository = _buildHtmlRepository(
+          adapter,
+          sessionStore: sessionStore,
+          documentCacheService: documentCache,
+          snapshotCacheService: snapshotCache,
+        );
+
+        final result = await repository.getForumHomePayload();
+
+        expect(result.isSuccess, isTrue);
+        expect(
+          documentCache.putDocuments.single.requestProfile,
+          DocumentRequestProfile.loggedIn,
+        );
+        expect(
+          snapshotCache.putDescriptors.single.cacheKey,
+          contains(DocumentRequestProfile.loggedIn.id),
+        );
+      },
+    );
+
+    test(
+      'network first skips fresh home snapshot and refreshes network',
+      () async {
+        final adapter = _ForumHomeHtmlTestAdapter();
+        final snapshotCache =
+            _FakeParsedSnapshotCacheService<ForumHomePayload>();
+        final descriptor = const CacheKeyCanonicalizer().forumHomeSnapshot(
+          requestProfile: DocumentRequestProfile.anonymous,
+        );
+        snapshotCache.seed(
+          descriptor,
+          ForumHomePayload(
+            forumIndex: ForumIndexData(
+              categories: <ForumCategory>[
+                ForumCategory(fid: 'cached-1', name: '缓存分类', forums: ['88']),
+              ],
+              forums: <ForumItem>[
+                ForumItem(
+                  fid: '88',
+                  name: '缓存版块',
+                  threads: 0,
+                  posts: 0,
+                  todayPosts: 0,
+                  description: '',
+                  icon: '',
+                  subForums: <ForumItem>[],
+                ),
+              ],
+            ),
+            isLoggedIn: false,
+            favoriteForums: const <FavoriteForum>[],
+          ),
+        );
+        final repository = _buildHtmlRepository(
+          adapter,
+          snapshotCacheService: snapshotCache,
+        );
+
+        final result = await repository.getForumHomePayload(
+          cachePolicy: CacheLoadPolicy.networkFirst,
+        );
+
+        expect(result.isSuccess, isTrue);
+        expect(result.dataOrNull!.forumIndex.forums.map((forum) => forum.fid), [
+          '16',
+          '370',
+        ]);
+        expect(adapter.htmlRequestedUris, <String>[
+          'https://bbs.yamibo.com/index.php?mobile=2',
+        ]);
+      },
+    );
+
     test('parses cached home HTML when network fails', () async {
       final adapter = _ForumHomeHtmlTestAdapter(failMobileIndex: true);
       final documentCache = _FakeDocumentCacheService();
       final now = DateTime(2026, 1, 1, 11);
-      final descriptor = const CacheKeyCanonicalizer().forumHome();
+      final descriptor = const CacheKeyCanonicalizer().forumHome(
+        requestProfile: DocumentRequestProfile.anonymous,
+      );
       documentCache.seed(
         CachedDocument(
           cacheKey: descriptor.cacheKey,
@@ -179,6 +283,40 @@ void main() {
       expect(documentCache.touchedKeys, <String>[descriptor.cacheKey]);
       expect(documentCache.touchedAt[descriptor.cacheKey], now);
     });
+
+    test(
+      'network failure does not fall back to other request profile cache',
+      () async {
+        final adapter = _ForumHomeHtmlTestAdapter(failMobileIndex: true);
+        final documentCache = _FakeDocumentCacheService();
+        final loggedInDescriptor = const CacheKeyCanonicalizer().forumHome(
+          requestProfile: DocumentRequestProfile.loggedIn,
+        );
+        documentCache.seed(
+          CachedDocument(
+            cacheKey: loggedInDescriptor.cacheKey,
+            ownerType: loggedInDescriptor.ownerType,
+            ownerId: loggedInDescriptor.ownerId,
+            sourceUrl: loggedInDescriptor.sourceUrl,
+            requestProfile: loggedInDescriptor.requestProfile,
+            body: _mobileHomeHtml,
+            fetchedAt: DateTime(2026, 1, 1, 10),
+            updatedAt: DateTime(2026, 1, 1, 10),
+          ),
+        );
+        final repository = _buildHtmlRepository(
+          adapter,
+          documentCacheService: documentCache,
+        );
+
+        final result = await repository.getForumHomePayload(
+          cachePolicy: CacheLoadPolicy.networkFirst,
+        );
+
+        expect(result.isFailure, isTrue);
+        expect(documentCache.touchedKeys, isEmpty);
+      },
+    );
 
     test(
       'returns failure when mobile HTML request fails without API fallback',
@@ -380,6 +518,7 @@ ForumHomeHtmlRepository _buildHtmlRepository(
   _ForumHomeHtmlTestAdapter adapter, {
   DocumentCacheService? documentCacheService,
   ParsedSnapshotCacheService? snapshotCacheService,
+  YamiboSessionStore? sessionStore,
   DateTime Function()? now,
 }) {
   final gateway = _buildGateway(adapter);
@@ -389,6 +528,7 @@ ForumHomeHtmlRepository _buildHtmlRepository(
       resourceClient: YamiboResourceClient(gateway: gateway),
       headerBuilder: const _StaticImageRequestHeaderBuilder(),
     ),
+    sessionStore: sessionStore,
     documentCacheService: documentCacheService,
     snapshotCacheService: snapshotCacheService,
     now: now,

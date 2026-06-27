@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/cache/domain/cache_load_policy.dart';
 import 'package:y300/features/auth/data/auth_repository.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
@@ -34,26 +35,29 @@ void main() {
     expect(container.read(forumWebViewDriverProvider), same(advancedDriver));
   });
 
-  test('forumWebViewDriverProvider uses legacy factory when preferred engine is overridden', () {
-    final legacyDriver = _FakeForumWebViewDriver();
-    final advancedDriver = _FakeForumWebViewDriver();
-    final container = ProviderContainer(
-      overrides: [
-        forumWebViewPreferredEngineProvider.overrideWithValue(
-          ForumWebViewEngine.legacy,
-        ),
-        forumWebViewLegacyDriverFactoryProvider.overrideWithValue(
-          () => legacyDriver,
-        ),
-        forumWebViewAdvancedDriverFactoryProvider.overrideWithValue(
-          () => advancedDriver,
-        ),
-      ],
-    );
-    addTearDown(container.dispose);
+  test(
+    'forumWebViewDriverProvider uses legacy factory when preferred engine is overridden',
+    () {
+      final legacyDriver = _FakeForumWebViewDriver();
+      final advancedDriver = _FakeForumWebViewDriver();
+      final container = ProviderContainer(
+        overrides: [
+          forumWebViewPreferredEngineProvider.overrideWithValue(
+            ForumWebViewEngine.legacy,
+          ),
+          forumWebViewLegacyDriverFactoryProvider.overrideWithValue(
+            () => legacyDriver,
+          ),
+          forumWebViewAdvancedDriverFactoryProvider.overrideWithValue(
+            () => advancedDriver,
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
 
-    expect(container.read(forumWebViewDriverProvider), same(legacyDriver));
-  });
+      expect(container.read(forumWebViewDriverProvider), same(legacyDriver));
+    },
+  );
 
   testWidgets('ForumShellPage shows webview home page by default', (
     tester,
@@ -195,58 +199,59 @@ void main() {
     expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
   });
 
-  testWidgets('ForumShellPage rebuilds advanced webview after login state changes', (
-    tester,
-  ) async {
-    final driverRegistry = _FakeForumWebViewDriverRegistry();
-    final authRepository = _FakeAuthRepository();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(authRepository),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(mode: ForumShellMode.webview),
-          ),
-          forumWebViewPreferredEngineProvider.overrideWithValue(
-            ForumWebViewEngine.advanced,
-          ),
-          forumWebViewAdvancedDriverFactoryProvider.overrideWithValue(
-            driverRegistry.create,
-          ),
-          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
-        ],
-        child: const MaterialApp(home: ForumShellPage()),
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'ForumShellPage rebuilds advanced webview after login state changes',
+    (tester) async {
+      final driverRegistry = _FakeForumWebViewDriverRegistry();
+      final authRepository = _FakeAuthRepository();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(authRepository),
+            forumModeSettingsRepositoryProvider.overrideWithValue(
+              _FakeForumModeSettingsRepository(mode: ForumShellMode.webview),
+            ),
+            forumWebViewPreferredEngineProvider.overrideWithValue(
+              ForumWebViewEngine.advanced,
+            ),
+            forumWebViewAdvancedDriverFactoryProvider.overrideWithValue(
+              driverRegistry.create,
+            ),
+            cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
+          ],
+          child: const MaterialApp(home: ForumShellPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(driverRegistry.instances.length, 1);
-    expect(driverRegistry.instances.single.initializeCallCount, 1);
-    expect(driverRegistry.instances.single.loadCallCount, 1);
+      expect(driverRegistry.instances.length, 1);
+      expect(driverRegistry.instances.single.initializeCallCount, 1);
+      expect(driverRegistry.instances.single.loadCallCount, 1);
 
-    authRepository.setSession(
-      SessionInfo(
-        uid: '1',
-        username: 'alice',
-        formhash: 'hash',
-        isLoggedIn: true,
-      ),
-    );
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(ForumShellPage)),
-    );
-    await container.read(authSessionControllerProvider.notifier).refresh();
-    await tester.pumpAndSettle();
+      authRepository.setSession(
+        SessionInfo(
+          uid: '1',
+          username: 'alice',
+          formhash: 'hash',
+          isLoggedIn: true,
+        ),
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ForumShellPage)),
+      );
+      await container.read(authSessionControllerProvider.notifier).refresh();
+      await tester.pumpAndSettle();
 
-    expect(driverRegistry.instances.length, 2);
-    expect(
-      driverRegistry.instances.last,
-      isNot(same(driverRegistry.instances.first)),
-    );
-    expect(driverRegistry.instances.last.initializeCallCount, 1);
-    expect(driverRegistry.instances.last.loadCallCount, 1);
-    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
-  });
+      expect(driverRegistry.instances.length, 2);
+      expect(
+        driverRegistry.instances.last,
+        isNot(same(driverRegistry.instances.first)),
+      );
+      expect(driverRegistry.instances.last.initializeCallCount, 1);
+      expect(driverRegistry.instances.last.loadCallCount, 1);
+      expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+    },
+  );
 
   testWidgets('ForumShellPage rebuilds webview after logout state changes', (
     tester,
@@ -297,103 +302,105 @@ void main() {
     expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
   });
 
-  testWidgets('ForumShellPage rebuilds advanced webview after logout state changes', (
-    tester,
-  ) async {
-    final driverRegistry = _FakeForumWebViewDriverRegistry();
-    final authRepository = _FakeAuthRepository(
-      session: SessionInfo(
-        uid: '1',
-        username: 'alice',
-        formhash: 'hash',
-        isLoggedIn: true,
-      ),
-    );
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(authRepository),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(mode: ForumShellMode.webview),
-          ),
-          forumWebViewPreferredEngineProvider.overrideWithValue(
-            ForumWebViewEngine.advanced,
-          ),
-          forumWebViewAdvancedDriverFactoryProvider.overrideWithValue(
-            driverRegistry.create,
-          ),
-          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
-        ],
-        child: const MaterialApp(home: ForumShellPage()),
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'ForumShellPage rebuilds advanced webview after logout state changes',
+    (tester) async {
+      final driverRegistry = _FakeForumWebViewDriverRegistry();
+      final authRepository = _FakeAuthRepository(
+        session: SessionInfo(
+          uid: '1',
+          username: 'alice',
+          formhash: 'hash',
+          isLoggedIn: true,
+        ),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(authRepository),
+            forumModeSettingsRepositoryProvider.overrideWithValue(
+              _FakeForumModeSettingsRepository(mode: ForumShellMode.webview),
+            ),
+            forumWebViewPreferredEngineProvider.overrideWithValue(
+              ForumWebViewEngine.advanced,
+            ),
+            forumWebViewAdvancedDriverFactoryProvider.overrideWithValue(
+              driverRegistry.create,
+            ),
+            cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
+          ],
+          child: const MaterialApp(home: ForumShellPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    final initialDriverCount = driverRegistry.instances.length;
-    final activeDriverBeforeLogout = driverRegistry.instances.last;
+      final initialDriverCount = driverRegistry.instances.length;
+      final activeDriverBeforeLogout = driverRegistry.instances.last;
 
-    authRepository.setSignedOut();
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(ForumShellPage)),
-    );
-    await container.read(authSessionControllerProvider.notifier).refresh();
-    await tester.pumpAndSettle();
+      authRepository.setSignedOut();
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ForumShellPage)),
+      );
+      await container.read(authSessionControllerProvider.notifier).refresh();
+      await tester.pumpAndSettle();
 
-    expect(driverRegistry.instances.length, initialDriverCount + 1);
-    expect(
-      driverRegistry.instances.last,
-      isNot(same(activeDriverBeforeLogout)),
-    );
-    expect(driverRegistry.instances.last.initializeCallCount, 1);
-    expect(driverRegistry.instances.last.loadCallCount, 1);
-    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
-  });
+      expect(driverRegistry.instances.length, initialDriverCount + 1);
+      expect(
+        driverRegistry.instances.last,
+        isNot(same(activeDriverBeforeLogout)),
+      );
+      expect(driverRegistry.instances.last.initializeCallCount, 1);
+      expect(driverRegistry.instances.last.loadCallCount, 1);
+      expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+    },
+  );
 
-  testWidgets('ForumShellPage native mode ignores auth changes for webview build', (
-    tester,
-  ) async {
-    final driverRegistry = _FakeForumWebViewDriverRegistry();
-    final authRepository = _FakeAuthRepository();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(authRepository),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(mode: ForumShellMode.native),
-          ),
-          forumHomeRepositoryProvider.overrideWithValue(
-            _FakeForumHomeRepository(),
-          ),
-          forumWebViewDriverFactoryProvider.overrideWithValue(
-            driverRegistry.create,
-          ),
-          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
-        ],
-        child: const MaterialApp(home: ForumShellPage()),
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'ForumShellPage native mode ignores auth changes for webview build',
+    (tester) async {
+      final driverRegistry = _FakeForumWebViewDriverRegistry();
+      final authRepository = _FakeAuthRepository();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(authRepository),
+            forumModeSettingsRepositoryProvider.overrideWithValue(
+              _FakeForumModeSettingsRepository(mode: ForumShellMode.native),
+            ),
+            forumHomeRepositoryProvider.overrideWithValue(
+              _FakeForumHomeRepository(),
+            ),
+            forumWebViewDriverFactoryProvider.overrideWithValue(
+              driverRegistry.create,
+            ),
+            cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
+          ],
+          child: const MaterialApp(home: ForumShellPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    final initialDriverCount = driverRegistry.instances.length;
+      final initialDriverCount = driverRegistry.instances.length;
 
-    authRepository.setSession(
-      SessionInfo(
-        uid: '1',
-        username: 'alice',
-        formhash: 'hash',
-        isLoggedIn: true,
-      ),
-    );
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(ForumShellPage)),
-    );
-    await container.read(authSessionControllerProvider.notifier).refresh();
-    await tester.pumpAndSettle();
+      authRepository.setSession(
+        SessionInfo(
+          uid: '1',
+          username: 'alice',
+          formhash: 'hash',
+          isLoggedIn: true,
+        ),
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ForumShellPage)),
+      );
+      await container.read(authSessionControllerProvider.notifier).refresh();
+      await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
-    expect(find.byKey(const Key('forum-webview-page')), findsNothing);
-    expect(driverRegistry.instances.length, initialDriverCount);
-  });
+      expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
+      expect(find.byKey(const Key('forum-webview-page')), findsNothing);
+      expect(driverRegistry.instances.length, initialDriverCount);
+    },
+  );
 }
 
 class _FakeForumModeSettingsRepository implements ForumModeSettingsRepository {
@@ -414,7 +421,9 @@ class _FakeForumModeSettingsRepository implements ForumModeSettingsRepository {
 
 class _FakeForumHomeRepository implements ForumHomeRepository {
   @override
-  Future<ApiResult<ForumHomePayload>> getForumHomePayload() async {
+  Future<ApiResult<ForumHomePayload>> getForumHomePayload({
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) async {
     return ApiSuccess(
       ForumHomePayload(
         forumIndex: ForumIndexData(
@@ -459,12 +468,7 @@ class _FakeAuthRepository implements AuthRepository {
     final session = _session;
     if (session == null) {
       return ApiSuccess<SessionInfo>(
-        SessionInfo(
-          uid: '0',
-          username: '',
-          formhash: '',
-          isLoggedIn: false,
-        ),
+        SessionInfo(uid: '0', username: '', formhash: '', isLoggedIn: false),
       );
     }
     return ApiSuccess<SessionInfo>(session);

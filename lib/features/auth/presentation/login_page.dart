@@ -1,9 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/auth/presentation/login_controller.dart';
 import 'package:y300/features/auth/presentation/login_state.dart';
-import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 
 class LoginPage extends ConsumerWidget {
   const LoginPage({super.key});
@@ -49,11 +48,9 @@ class LoginPage extends ConsumerWidget {
                       ref
                           .read(authSessionControllerProvider.notifier)
                           .acceptSession(session);
-                      // 登录成功后主动刷新论坛首页，确保首页登录态立即生效。
-                      ref.invalidate(forumHomeControllerProvider);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('登录成功')),
-                      );
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(const SnackBar(content: Text('登录成功')));
                       Navigator.of(context).pop(true);
                     }
                   },

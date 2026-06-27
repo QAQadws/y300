@@ -6,11 +6,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/cache/domain/cache_load_policy.dart';
 import 'package:y300/features/forum/data/forum_display_repository.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_home_widgets.dart';
+import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 
 void main() {
@@ -182,6 +184,92 @@ void main() {
         expect(pageButtonShape.side, BorderSide.none);
         expect(pageButtonShape.borderRadius, BorderRadius.circular(10));
       }
+    });
+
+    testWidgets('pull refresh uses network-first forum display load', (
+      tester,
+    ) async {
+      final repository = _FakeForumDisplayRepository((_, page, query) async {
+        return ApiSuccess(
+          _displayData(
+            page: page,
+            total: 1,
+            threads: [
+              ForumThreadSummary(
+                tid: '100',
+                subject: '帖子A',
+                author: 'alice',
+                replies: 1,
+                views: 5,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpAndSettle();
+
+      expect(repository.cachePolicies, <CacheLoadPolicy>[
+        CacheLoadPolicy.cacheFirst,
+      ]);
+
+      final indicator = tester.widget<RefreshIndicator>(
+        find.byType(RefreshIndicator),
+      );
+      await indicator.onRefresh();
+      await tester.pumpAndSettle();
+
+      expect(repository.cachePolicies, <CacheLoadPolicy>[
+        CacheLoadPolicy.cacheFirst,
+        CacheLoadPolicy.networkFirst,
+      ]);
+    });
+
+    testWidgets('default svg avatar uses local noavatar asset', (tester) async {
+      final repository = _FakeForumDisplayRepository((_, page, query) async {
+        return ApiSuccess(
+          _displayData(
+            page: 1,
+            total: 1,
+            threads: [
+              ForumThreadSummary(
+                tid: '100',
+                subject: '帖子A',
+                author: 'alice',
+                replies: 1,
+                views: 5,
+                dateline: 'today',
+                avatarUrl:
+                    'https://bbs.yamibo.com/uc_server/data/avatar/noavatar.svg',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Image &&
+              widget.image is AssetImage &&
+              (widget.image as AssetImage).assetName == forumDefaultAvatarAsset,
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Image &&
+              widget.image is NetworkImage &&
+              (widget.image as NetworkImage).url.contains('noavatar.svg'),
+        ),
+        findsNothing,
+      );
     });
 
     testWidgets('loads next page when tapping load more', (tester) async {
@@ -1130,20 +1218,25 @@ class _FakeForumDisplayRepository implements ForumDisplayRepository {
   )
   _loader;
   ForumDisplayQuery? lastQuery;
+  final cachePolicies = <CacheLoadPolicy>[];
 
   @override
   Future<ApiResult<ForumDisplayData>> getForumDisplay({
     required String fid,
     int page = 1,
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) {
+    cachePolicies.add(cachePolicy);
     return _loader(fid, page, null);
   }
 
   @override
   Future<ApiResult<ForumDisplayData>> getForumDisplayByQuery(
-    ForumDisplayQuery query,
-  ) {
+    ForumDisplayQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) {
     lastQuery = query;
+    cachePolicies.add(cachePolicy);
     return _loader(query.fid, query.page, query);
   }
 }

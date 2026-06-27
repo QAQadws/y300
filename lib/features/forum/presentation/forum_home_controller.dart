@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/cache/domain/cache_load_policy.dart';
 import 'package:y300/features/forum/data/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
@@ -15,14 +16,24 @@ class ForumHomeController extends AsyncNotifier<ForumHomeViewData> {
     return _fetchForumHome();
   }
 
-  Future<void> refresh() async {
+  Future<void> refresh({bool forceNetwork = false}) async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(_fetchForumHome);
+    state = await AsyncValue.guard(
+      () => _fetchForumHome(
+        cachePolicy: forceNetwork
+            ? CacheLoadPolicy.networkFirst
+            : CacheLoadPolicy.cacheFirst,
+      ),
+    );
   }
 
-  Future<ForumHomeViewData> _fetchForumHome() async {
+  Future<ForumHomeViewData> _fetchForumHome({
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) async {
     final repository = ref.read(forumHomeRepositoryProvider);
-    final result = await repository.getForumHomePayload();
+    final result = await repository.getForumHomePayload(
+      cachePolicy: cachePolicy,
+    );
 
     return result.when(
       success: (payload) => ForumHomeViewData(
@@ -139,7 +150,6 @@ class ForumHomeController extends AsyncNotifier<ForumHomeViewData> {
 
     return sections;
   }
-
 }
 
 class ForumHomeException implements Exception {

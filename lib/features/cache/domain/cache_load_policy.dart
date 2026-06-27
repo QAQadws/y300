@@ -1,0 +1,1 @@
+enum CacheLoadPolicy { cacheFirst, networkFirst }
