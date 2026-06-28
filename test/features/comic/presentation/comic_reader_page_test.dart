@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -51,7 +51,10 @@ void main() {
   Future<void> revealNextChapterTransition(WidgetTester tester) async {
     final listFinder = find.byKey(const Key('comic-reader-image-list'));
     for (var i = 0; i < 4; i++) {
-      if (find.byKey(const Key('comic-reader-next-chapter-transition')).evaluate().isNotEmpty) {
+      if (find
+          .byKey(const Key('comic-reader-next-chapter-transition'))
+          .evaluate()
+          .isNotEmpty) {
         return;
       }
       await tester.drag(listFinder, const Offset(0, -1000));
@@ -89,19 +92,30 @@ void main() {
     await tester.dragFrom(center, offset);
   }
 
-  testWidgets('ComicReaderPage renders images and cache actions', (tester) async {
+  testWidgets('ComicReaderPage renders images and cache actions', (
+    tester,
+  ) async {
     await prepareLargeViewport(tester);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
-          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
-          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
-          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+          comicReadingStateWriterProvider.overrideWithValue(
+            _NoopReadingStateWriter(),
+          ),
+          comicReaderServiceProvider.overrideWith(
+            (ref) async => _ReaderFakeService(),
+          ),
+          comicDownloadServiceProvider.overrideWithValue(
+            _NoopComicDownloadService(),
+          ),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
         ],
         child: const MaterialApp(
-          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
+          home: ComicReaderPage(
+            comicId: 'yamibo:100',
+            episodeId: 'yamibo:100:101',
+          ),
         ),
       ),
     );
@@ -109,172 +123,312 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('comic-reader-image-list')), findsOneWidget);
-    expect(find.byKey(const Key('shared-reader-center-tap-zone')), findsOneWidget);
+    final listView = tester.widget<ListView>(
+      find.byKey(const Key('comic-reader-image-list')),
+    );
+    expect(listView.cacheExtent, 2400);
+    expect(
+      find.byKey(const Key('shared-reader-center-tap-zone')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('shared-reader-top-overlay')), findsOneWidget);
-    expect(find.byKey(const Key('shared-reader-bottom-overlay')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-page-indicator-overlay')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-next-chapter-transition')), findsNothing);
+    expect(
+      find.byKey(const Key('shared-reader-bottom-overlay')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('comic-reader-page-indicator-overlay')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('comic-reader-next-chapter-transition')),
+      findsNothing,
+    );
 
     await openReaderMenu(tester);
 
     expect(find.byKey(const Key('shared-reader-top-title')), findsOneWidget);
-    expect(find.byKey(const Key('shared-reader-top-action-bookmark')), findsOneWidget);
-    expect(find.byKey(const Key('shared-reader-top-action-open-thread')), findsOneWidget);
+    expect(
+      find.byKey(const Key('shared-reader-top-action-bookmark')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('shared-reader-top-action-open-thread')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('shared-reader-prev-button')), findsOneWidget);
     expect(find.byKey(const Key('shared-reader-next-button')), findsOneWidget);
-    expect(find.byKey(const Key('shared-reader-bottom-action-mode')), findsOneWidget);
-    expect(find.byKey(const Key('shared-reader-bottom-action-catalog')), findsOneWidget);
-    expect(find.byKey(const Key('shared-reader-bottom-action-display')), findsOneWidget);
-    expect(find.byKey(const Key('shared-reader-bottom-action-cache')), findsOneWidget);
-    expect(find.byKey(const Key('shared-reader-progress-slider')), findsOneWidget);
-    expect(find.byKey(const Key('shared-reader-current-label')), findsOneWidget);
+    expect(
+      find.byKey(const Key('shared-reader-bottom-action-mode')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('shared-reader-bottom-action-catalog')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('shared-reader-bottom-action-display')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('shared-reader-bottom-action-cache')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('shared-reader-progress-slider')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('shared-reader-current-label')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('shared-reader-total-label')), findsOneWidget);
   });
 
-  testWidgets('ComicReaderPage shows next chapter transition for vertical mode', (tester) async {
-    await prepareLargeViewport(tester);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository(includeNextEpisode: true)),
-          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
-          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
-          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-        ],
-        child: const MaterialApp(
-          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
+  testWidgets(
+    'ComicReaderPage shows next chapter transition for vertical mode',
+    (tester) async {
+      await prepareLargeViewport(tester);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            comicRepositoryProvider.overrideWithValue(
+              _ReaderFakeRepository(includeNextEpisode: true),
+            ),
+            comicReadingStateWriterProvider.overrideWithValue(
+              _NoopReadingStateWriter(),
+            ),
+            comicReaderServiceProvider.overrideWith(
+              (ref) async => _ReaderFakeService(),
+            ),
+            comicDownloadServiceProvider.overrideWithValue(
+              _NoopComicDownloadService(),
+            ),
+            imageCacheServiceProvider.overrideWithValue(
+              _FakeImageCacheService(),
+            ),
+          ],
+          child: const MaterialApp(
+            home: ComicReaderPage(
+              comicId: 'yamibo:100',
+              episodeId: 'yamibo:100:101',
+            ),
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
 
-    await revealNextChapterTransition(tester);
+      await revealNextChapterTransition(tester);
 
-    expect(find.byKey(const Key('comic-reader-next-chapter-transition')), findsOneWidget);
-    expect(find.textContaining('下一章：第2话'), findsOneWidget);
-  });
+      expect(
+        find.byKey(const Key('comic-reader-next-chapter-transition')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('下一章：第2话'), findsOneWidget);
+    },
+  );
 
-  testWidgets('ComicReaderPage does not flash image loading copy while opening', (tester) async {
-    await prepareLargeViewport(tester);
-    final repository = _ReaderBlockingRepository();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(repository),
-          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
-          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
-          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-        ],
-        child: const MaterialApp(
-          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
+  testWidgets(
+    'ComicReaderPage does not flash image loading copy while opening',
+    (tester) async {
+      await prepareLargeViewport(tester);
+      final repository = _ReaderBlockingRepository();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            comicRepositoryProvider.overrideWithValue(repository),
+            comicReadingStateWriterProvider.overrideWithValue(
+              _NoopReadingStateWriter(),
+            ),
+            comicReaderServiceProvider.overrideWith(
+              (ref) async => _ReaderFakeService(),
+            ),
+            comicDownloadServiceProvider.overrideWithValue(
+              _NoopComicDownloadService(),
+            ),
+            imageCacheServiceProvider.overrideWithValue(
+              _FakeImageCacheService(),
+            ),
+          ],
+          child: const MaterialApp(
+            home: ComicReaderPage(
+              comicId: 'yamibo:100',
+              episodeId: 'yamibo:100:101',
+            ),
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.pump();
+      await tester.pump();
 
-    expect(find.byKey(const Key('comic-reader-page-opening')), findsOneWidget);
-    expect(find.text('图片加载中'), findsNothing);
+      expect(
+        find.byKey(const Key('comic-reader-page-opening')),
+        findsOneWidget,
+      );
+      expect(find.text('图片加载中'), findsNothing);
 
-    await tester.pump(const Duration(milliseconds: 161));
+      await tester.pump(const Duration(milliseconds: 161));
 
-    expect(find.text('正在打开章节'), findsOneWidget);
-  });
+      expect(find.text('正在打开章节'), findsOneWidget);
+    },
+  );
 
-  testWidgets('ComicReaderPage uses paged renderer when persisted mode is ltr', (tester) async {
-    await prepareLargeViewport(tester);
-    SharedPreferences.setMockInitialValues(const <String, Object>{
-      'reader_pref_mode': 'ltr',
-    });
+  testWidgets(
+    'ComicReaderPage uses paged renderer when persisted mode is ltr',
+    (tester) async {
+      await prepareLargeViewport(tester);
+      SharedPreferences.setMockInitialValues(const <String, Object>{
+        'reader_pref_mode': 'ltr',
+      });
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
-          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
-          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
-          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-        ],
-        child: const MaterialApp(
-          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+            comicReadingStateWriterProvider.overrideWithValue(
+              _NoopReadingStateWriter(),
+            ),
+            comicReaderServiceProvider.overrideWith(
+              (ref) async => _ReaderFakeService(),
+            ),
+            comicDownloadServiceProvider.overrideWithValue(
+              _NoopComicDownloadService(),
+            ),
+            imageCacheServiceProvider.overrideWithValue(
+              _FakeImageCacheService(),
+            ),
+          ],
+          child: const MaterialApp(
+            home: ComicReaderPage(
+              comicId: 'yamibo:100',
+              episodeId: 'yamibo:100:101',
+            ),
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('comic-reader-page-view')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-image-list')), findsNothing);
-  });
+      expect(find.byKey(const Key('comic-reader-page-view')), findsOneWidget);
+      expect(find.byKey(const Key('comic-reader-image-list')), findsNothing);
+    },
+  );
 
-  testWidgets('ComicReaderPage switches from vertical to rtl mode via mode sheet', (tester) async {
-    await prepareLargeViewport(tester);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
-          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
-          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
-          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-        ],
-        child: const MaterialApp(
-          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
+  testWidgets(
+    'ComicReaderPage switches from vertical to rtl mode via mode sheet',
+    (tester) async {
+      await prepareLargeViewport(tester);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+            comicReadingStateWriterProvider.overrideWithValue(
+              _NoopReadingStateWriter(),
+            ),
+            comicReaderServiceProvider.overrideWith(
+              (ref) async => _ReaderFakeService(),
+            ),
+            comicDownloadServiceProvider.overrideWithValue(
+              _NoopComicDownloadService(),
+            ),
+            imageCacheServiceProvider.overrideWithValue(
+              _FakeImageCacheService(),
+            ),
+          ],
+          child: const MaterialApp(
+            home: ComicReaderPage(
+              comicId: 'yamibo:100',
+              episodeId: 'yamibo:100:101',
+            ),
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('comic-reader-image-list')), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('comic-reader-image-list')), findsOneWidget);
 
-    await openReaderMenu(tester);
-    await tapVisibleByKey(tester, const Key('shared-reader-bottom-action-mode'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey<String>('comic-reader-mode-rtl')));
-    await tester.pumpAndSettle();
+      await openReaderMenu(tester);
+      await tapVisibleByKey(
+        tester,
+        const Key('shared-reader-bottom-action-mode'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('comic-reader-mode-rtl')),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('comic-reader-page-view')), findsOneWidget);
-  });
+      expect(find.byKey(const Key('comic-reader-page-view')), findsOneWidget);
+    },
+  );
 
-  testWidgets('ComicReaderPage opens chapter list and display settings sheets', (tester) async {
-    await prepareLargeViewport(tester);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
-          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
-          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
-          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-        ],
-        child: const MaterialApp(
-          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
+  testWidgets(
+    'ComicReaderPage opens chapter list and display settings sheets',
+    (tester) async {
+      await prepareLargeViewport(tester);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+            comicReadingStateWriterProvider.overrideWithValue(
+              _NoopReadingStateWriter(),
+            ),
+            comicReaderServiceProvider.overrideWith(
+              (ref) async => _ReaderFakeService(),
+            ),
+            comicDownloadServiceProvider.overrideWithValue(
+              _NoopComicDownloadService(),
+            ),
+            imageCacheServiceProvider.overrideWithValue(
+              _FakeImageCacheService(),
+            ),
+          ],
+          child: const MaterialApp(
+            home: ComicReaderPage(
+              comicId: 'yamibo:100',
+              episodeId: 'yamibo:100:101',
+            ),
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.pumpAndSettle();
-    await openReaderMenu(tester);
-    await tapVisibleByKey(tester, const Key('shared-reader-bottom-action-catalog'));
-    await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
+      await openReaderMenu(tester);
+      await tapVisibleByKey(
+        tester,
+        const Key('shared-reader-bottom-action-catalog'),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('章节列表'), findsOneWidget);
+      expect(find.text('章节列表'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey<String>('comic-reader-chapter-yamibo:100:101')));
-    await tester.pumpAndSettle();
-    await openReaderMenu(tester);
-    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-display')));
-    await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('comic-reader-chapter-yamibo:100:101'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openReaderMenu(tester);
+      await tester.tap(
+        find.byKey(const Key('shared-reader-bottom-action-display')),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('comic-reader-display-settings-sheet')), findsOneWidget);
-    expect(find.byKey(const Key('comic-reader-page-indicator-switch')), findsOneWidget);
-  });
+      expect(
+        find.byKey(const Key('comic-reader-display-settings-sheet')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('comic-reader-page-indicator-switch')),
+        findsOneWidget,
+      );
+    },
+  );
 
-  testWidgets('ComicReaderPage more menu can set current page as cover', (tester) async {
+  testWidgets('ComicReaderPage more menu can set current page as cover', (
+    tester,
+  ) async {
     await prepareLargeViewport(tester);
     final repository = _ReaderFakeRepository();
     final imageCache = _FakeImageCacheService();
@@ -282,13 +436,22 @@ void main() {
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(repository),
-          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
-          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
-          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+          comicReadingStateWriterProvider.overrideWithValue(
+            _NoopReadingStateWriter(),
+          ),
+          comicReaderServiceProvider.overrideWith(
+            (ref) async => _ReaderFakeService(),
+          ),
+          comicDownloadServiceProvider.overrideWithValue(
+            _NoopComicDownloadService(),
+          ),
           imageCacheServiceProvider.overrideWithValue(imageCache),
         ],
         child: const MaterialApp(
-          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
+          home: ComicReaderPage(
+            comicId: 'yamibo:100',
+            episodeId: 'yamibo:100:101',
+          ),
         ),
       ),
     );
@@ -304,146 +467,234 @@ void main() {
     expect(imageCache.lastLocalCopyRequest?.role, ImageCacheRole.customCover);
   });
 
-  testWidgets('ComicReaderPage updates progress labels after slider interaction', (tester) async {
+  testWidgets(
+    'ComicReaderPage updates progress labels after slider interaction',
+    (tester) async {
+      await prepareLargeViewport(tester);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+            comicReadingStateWriterProvider.overrideWithValue(
+              _NoopReadingStateWriter(),
+            ),
+            comicReaderServiceProvider.overrideWith(
+              (ref) async => _ReaderFakeService(),
+            ),
+            comicDownloadServiceProvider.overrideWithValue(
+              _NoopComicDownloadService(),
+            ),
+            imageCacheServiceProvider.overrideWithValue(
+              _FakeImageCacheService(),
+            ),
+          ],
+          child: const MaterialApp(
+            home: ComicReaderPage(
+              comicId: 'yamibo:100',
+              episodeId: 'yamibo:100:101',
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      await openReaderMenu(tester);
+
+      expect(
+        find.byKey(const Key('shared-reader-current-label')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('shared-reader-total-label')),
+        findsOneWidget,
+      );
+
+      await dragVisibleByKey(
+        tester,
+        const Key('shared-reader-progress-slider'),
+        const Offset(300, 0),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('shared-reader-current-label')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('shared-reader-total-label')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'ComicReaderPage renders zoomable image wrapper in reader content',
+    (tester) async {
+      await prepareLargeViewport(tester);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+            comicReadingStateWriterProvider.overrideWithValue(
+              _NoopReadingStateWriter(),
+            ),
+            comicReaderServiceProvider.overrideWith(
+              (ref) async => _ReaderFakeService(),
+            ),
+            comicDownloadServiceProvider.overrideWithValue(
+              _NoopComicDownloadService(),
+            ),
+            imageCacheServiceProvider.overrideWithValue(
+              _FakeImageCacheService(),
+            ),
+          ],
+          child: const MaterialApp(
+            home: ComicReaderPage(
+              comicId: 'yamibo:100',
+              episodeId: 'yamibo:100:101',
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ReaderZoomableImage), findsWidgets);
+    },
+  );
+
+  testWidgets('ComicReaderPage reserves stable slots for vertical images', (
+    tester,
+  ) async {
     await prepareLargeViewport(tester);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
-          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
-          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
-          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+          comicReadingStateWriterProvider.overrideWithValue(
+            _NoopReadingStateWriter(),
+          ),
+          comicReaderServiceProvider.overrideWith(
+            (ref) async => _ReaderFakeService(),
+          ),
+          comicDownloadServiceProvider.overrideWithValue(
+            _NoopComicDownloadService(),
+          ),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
         ],
         child: const MaterialApp(
-          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
-        ),
-      ),
-    );
-
-    await tester.pumpAndSettle();
-    await openReaderMenu(tester);
-
-    expect(find.byKey(const Key('shared-reader-current-label')), findsOneWidget);
-    expect(find.byKey(const Key('shared-reader-total-label')), findsOneWidget);
-
-    await dragVisibleByKey(
-      tester,
-      const Key('shared-reader-progress-slider'),
-      const Offset(300, 0),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('shared-reader-current-label')), findsOneWidget);
-    expect(find.byKey(const Key('shared-reader-total-label')), findsOneWidget);
-  });
-
-  testWidgets('ComicReaderPage renders zoomable image wrapper in reader content', (tester) async {
-    await prepareLargeViewport(tester);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
-          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
-          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
-          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-        ],
-        child: const MaterialApp(
-          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
+          home: ComicReaderPage(
+            comicId: 'yamibo:100',
+            episodeId: 'yamibo:100:101',
+          ),
         ),
       ),
     );
 
     await tester.pumpAndSettle();
 
-    expect(find.byType(ReaderZoomableImage), findsWidgets);
-  });
-
-  testWidgets('ComicReaderPage reserves stable slots for vertical images', (tester) async {
-    await prepareLargeViewport(tester);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
-          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
-          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
-          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-        ],
-        child: const MaterialApp(
-          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
-        ),
-      ),
+    expect(
+      find.byKey(const ValueKey<String>('comic-reader-image-slot-0')),
+      findsOneWidget,
     );
-
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const ValueKey<String>('comic-reader-image-slot-0')), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('comic-reader-image-slot-1')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('comic-reader-image-slot-1')),
+      findsOneWidget,
+    );
     final slot = tester.widget<ConstrainedBox>(
-      find.descendant(
-        of: find.byKey(const ValueKey<String>('comic-reader-image-slot-0')),
-        matching: find.byType(ConstrainedBox),
-      ).first,
+      find
+          .descendant(
+            of: find.byKey(const ValueKey<String>('comic-reader-image-slot-0')),
+            matching: find.byType(ConstrainedBox),
+          )
+          .first,
     );
     expect(slot.constraints.minHeight, greaterThan(0));
   });
 
-  testWidgets('ComicReaderPage uses decoded dimensions for vertical slot reservation', (tester) async {
-    await prepareLargeViewport(tester);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(
-            _ReaderFakeRepository(
-              images: const <ComicEpisodeImageItem>[
-                ComicEpisodeImageItem(
-                  episodeId: 'yamibo:100:101',
-                  imageUrl: 'https://img.test/tall.jpg',
-                  imageIndex: 0,
-                  cacheStatus: 'none',
-                  width: 600,
-                  height: 1800,
-                ),
-              ],
+  testWidgets(
+    'ComicReaderPage uses decoded dimensions for vertical slot reservation',
+    (tester) async {
+      await prepareLargeViewport(tester);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            comicRepositoryProvider.overrideWithValue(
+              _ReaderFakeRepository(
+                images: const <ComicEpisodeImageItem>[
+                  ComicEpisodeImageItem(
+                    episodeId: 'yamibo:100:101',
+                    imageUrl: 'https://img.test/tall.jpg',
+                    imageIndex: 0,
+                    cacheStatus: 'none',
+                    width: 600,
+                    height: 1800,
+                  ),
+                ],
+              ),
+            ),
+            comicReadingStateWriterProvider.overrideWithValue(
+              _NoopReadingStateWriter(),
+            ),
+            comicReaderServiceProvider.overrideWith(
+              (ref) async => _ReaderFakeService(),
+            ),
+            comicDownloadServiceProvider.overrideWithValue(
+              _NoopComicDownloadService(),
+            ),
+            imageCacheServiceProvider.overrideWithValue(
+              _FakeImageCacheService(),
+            ),
+          ],
+          child: const MaterialApp(
+            home: ComicReaderPage(
+              comicId: 'yamibo:100',
+              episodeId: 'yamibo:100:101',
             ),
           ),
-          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
-          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
-          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-        ],
-        child: const MaterialApp(
-          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
         ),
-      ),
-    );
+      );
 
-    await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
 
-    final slot = tester.widget<ConstrainedBox>(
-      find.descendant(
-        of: find.byKey(const ValueKey<String>('comic-reader-image-slot-0')),
-        matching: find.byType(ConstrainedBox),
-      ).first,
-    );
-    expect(slot.constraints.minHeight, 3600);
-  });
+      final slot = tester.widget<ConstrainedBox>(
+        find
+            .descendant(
+              of: find.byKey(
+                const ValueKey<String>('comic-reader-image-slot-0'),
+              ),
+              matching: find.byType(ConstrainedBox),
+            )
+            .first,
+      );
+      expect(slot.constraints.minHeight, 3600);
+    },
+  );
 
-  testWidgets('ComicReaderPage keeps slider stable during jump commit', (tester) async {
+  testWidgets('ComicReaderPage keeps slider stable during jump commit', (
+    tester,
+  ) async {
     await prepareLargeViewport(tester);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
-          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
-          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
-          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
+          comicReadingStateWriterProvider.overrideWithValue(
+            _NoopReadingStateWriter(),
+          ),
+          comicReaderServiceProvider.overrideWith(
+            (ref) async => _ReaderFakeService(),
+          ),
+          comicDownloadServiceProvider.overrideWithValue(
+            _NoopComicDownloadService(),
+          ),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
         ],
         child: const MaterialApp(
-          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
+          home: ComicReaderPage(
+            comicId: 'yamibo:100',
+            episodeId: 'yamibo:100:101',
+          ),
         ),
       ),
     );
@@ -462,54 +713,78 @@ void main() {
     await tester.pump();
 
     // During commit phase, slider and labels should remain stable and visible.
-    expect(find.byKey(const Key('shared-reader-progress-slider')), findsOneWidget);
-    expect(find.byKey(const Key('shared-reader-current-label')), findsOneWidget);
+    expect(
+      find.byKey(const Key('shared-reader-progress-slider')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('shared-reader-current-label')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('shared-reader-total-label')), findsOneWidget);
   });
 
-  testWidgets('ComicReaderPage reader chrome uses shared palette in dark theme', (
-    tester,
-  ) async {
-    await prepareLargeViewport(tester);
-    final theme = AppTheme.dark();
-    final palette = const ReaderChromePaletteResolver().resolve(theme);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
-          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
-          comicReaderServiceProvider.overrideWith((ref) async => _ReaderFakeService()),
-          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-        ],
-        child: MaterialApp(
-          theme: theme,
-          home: const ComicReaderPage(comicId: 'yamibo:100', episodeId: 'yamibo:100:101'),
+  testWidgets(
+    'ComicReaderPage reader chrome uses shared palette in dark theme',
+    (tester) async {
+      await prepareLargeViewport(tester);
+      final theme = AppTheme.dark();
+      final palette = const ReaderChromePaletteResolver().resolve(theme);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+            comicReadingStateWriterProvider.overrideWithValue(
+              _NoopReadingStateWriter(),
+            ),
+            comicReaderServiceProvider.overrideWith(
+              (ref) async => _ReaderFakeService(),
+            ),
+            comicDownloadServiceProvider.overrideWithValue(
+              _NoopComicDownloadService(),
+            ),
+            imageCacheServiceProvider.overrideWithValue(
+              _FakeImageCacheService(),
+            ),
+          ],
+          child: MaterialApp(
+            theme: theme,
+            home: const ComicReaderPage(
+              comicId: 'yamibo:100',
+              episodeId: 'yamibo:100:101',
+            ),
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.pumpAndSettle();
-    await openReaderMenu(tester);
+      await tester.pumpAndSettle();
+      await openReaderMenu(tester);
 
-    final topBar = tester.widget<Material>(
-      find.byKey(const Key('shared-reader-top-overlay-bar')),
-    );
-    final bottomPanel = tester.widget<Material>(
-      find.byKey(const Key('shared-reader-bottom-overlay-panel')),
-    );
+      final topBar = tester.widget<Material>(
+        find.byKey(const Key('shared-reader-top-overlay-bar')),
+      );
+      final bottomPanel = tester.widget<Material>(
+        find.byKey(const Key('shared-reader-bottom-overlay-panel')),
+      );
 
-    expect(topBar.color, palette.chromeBackground);
-    expect(bottomPanel.color, palette.chromeBackground);
-  });
+      expect(topBar.color, palette.chromeBackground);
+      expect(bottomPanel.color, palette.chromeBackground);
+    },
+  );
 }
 
 class _NoopComicDownloadService implements ComicDownloadService {
   @override
-  Future<void> deleteEpisodeDownload({required String comicId, required String episodeId}) async {}
+  Future<void> deleteEpisodeDownload({
+    required String comicId,
+    required String episodeId,
+  }) async {}
 
   @override
-  Future<DownloadedComicEpisode> downloadEpisode({required String comicId, required String episodeId}) {
+  Future<DownloadedComicEpisode> downloadEpisode({
+    required String comicId,
+    required String episodeId,
+  }) {
     throw UnimplementedError();
   }
 
@@ -534,7 +809,11 @@ class _ReaderFakeService implements ComicReaderService {
     int? imageIndex,
     bool protected = false,
   }) async {
-    return ComicImageCacheResult(success: true, localPath: '/cache/mock.jpg', cacheKey: cacheKey);
+    return ComicImageCacheResult(
+      success: true,
+      localPath: '/cache/mock.jpg',
+      cacheKey: cacheKey,
+    );
   }
 
   @override
@@ -714,16 +993,17 @@ class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
 
   @override
   Future<void> clearEpisodeImageCache({required String episodeId}) async {
-    _episodeImages[episodeId] = (_episodeImages[episodeId] ?? const <ComicEpisodeImageItem>[])
-        .map(
-          (item) => ComicEpisodeImageItem(
-            episodeId: item.episodeId,
-            imageUrl: item.imageUrl,
-            imageIndex: item.imageIndex,
-            cacheStatus: 'none',
-          ),
-        )
-        .toList(growable: false);
+    _episodeImages[episodeId] =
+        (_episodeImages[episodeId] ?? const <ComicEpisodeImageItem>[])
+            .map(
+              (item) => ComicEpisodeImageItem(
+                episodeId: item.episodeId,
+                imageUrl: item.imageUrl,
+                imageIndex: item.imageIndex,
+                cacheStatus: 'none',
+              ),
+            )
+            .toList(growable: false);
   }
 
   @override
@@ -766,7 +1046,10 @@ class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
   }
 
   @override
-  Future<List<ComicEpisodeItem>> getComicEpisodes({required String comicId, bool descending = true}) async {
+  Future<List<ComicEpisodeItem>> getComicEpisodes({
+    required String comicId,
+    bool descending = true,
+  }) async {
     final episodes = <ComicEpisodeItem>[
       ComicEpisodeItem(
         episodeId: 'yamibo:100:101',
@@ -800,12 +1083,15 @@ class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
   }
 
   @override
-  Future<List<ComicEpisodeImageItem>> getEpisodeImages({required String episodeId}) async {
+  Future<List<ComicEpisodeImageItem>> getEpisodeImages({
+    required String episodeId,
+  }) async {
     return _episodeImages[episodeId] ?? const <ComicEpisodeImageItem>[];
   }
 
   @override
-  Future<List<ComicShelfCategory>> getCategories() async => const <ComicShelfCategory>[];
+  Future<List<ComicShelfCategory>> getCategories() async =>
+      const <ComicShelfCategory>[];
 
   @override
   Future<ComicShelfDisplaySettings> getDisplaySettings() async {
@@ -813,10 +1099,14 @@ class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
   }
 
   @override
-  Future<ComicReadingProgress?> getLastReadProgress({required String comicId}) async => _progress;
+  Future<ComicReadingProgress?> getLastReadProgress({
+    required String comicId,
+  }) async => _progress;
 
   @override
-  Future<List<ComicShelfItem>> getShelfItems({String categoryId = 'default'}) async => const <ComicShelfItem>[];
+  Future<List<ComicShelfItem>> getShelfItems({
+    String categoryId = 'default',
+  }) async => const <ComicShelfItem>[];
 
   @override
   Future<bool> isInShelf({required String comicId}) async => false;
@@ -827,7 +1117,11 @@ class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
     required List<ComicEpisodeLink> episodeLinks,
     required String fallbackSourceTid,
   }) async {
-    return const ComicEpisodeRefreshResult(insertedCount: 0, updatedCount: 0, totalCount: 0);
+    return const ComicEpisodeRefreshResult(
+      insertedCount: 0,
+      updatedCount: 0,
+      totalCount: 0,
+    );
   }
 
   @override
@@ -838,10 +1132,16 @@ class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
   }) async {}
 
   @override
-  Future<void> renameCategory({required String categoryId, required String newName}) async {}
+  Future<void> renameCategory({
+    required String categoryId,
+    required String newName,
+  }) async {}
 
   @override
-  Future<void> saveEpisodeImages({required String episodeId, required List<String> imageUrls}) async {
+  Future<void> saveEpisodeImages({
+    required String episodeId,
+    required List<String> imageUrls,
+  }) async {
     _episodeImages[episodeId] = imageUrls
         .asMap()
         .entries
@@ -857,11 +1157,26 @@ class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
   }
 
   @override
-  Future<void> updateCustomCover({required String comicId, required String? customCoverImageUrl}) async {}
+  Future<void> updateCustomCover({
+    required String comicId,
+    required String? customCoverImageUrl,
+  }) async {}
   @override
-  Future<void> updateCustomMetadata({required String comicId, String? customTitle, String? customAuthor, String? customTranslationGroup, String? customSearchTitle}) async {}
+  Future<void> updateCustomMetadata({
+    required String comicId,
+    String? customTitle,
+    String? customAuthor,
+    String? customTranslationGroup,
+    String? customSearchTitle,
+  }) async {}
   @override
-  Future<void> clearCustomMetadata({required String comicId, bool title = false, bool author = false, bool translationGroup = false, bool searchTitle = false}) async {}
+  Future<void> clearCustomMetadata({
+    required String comicId,
+    bool title = false,
+    bool author = false,
+    bool translationGroup = false,
+    bool searchTitle = false,
+  }) async {}
 
   @override
   Future<void> updateEpisodeImageCacheStatus({
@@ -909,10 +1224,14 @@ class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
   }
 
   @override
-  Future<void> updateCatalogUrl({required String comicId, required String catalogUrl}) async {}
+  Future<void> updateCatalogUrl({
+    required String comicId,
+    required String catalogUrl,
+  }) async {}
 
   @override
-  Future<Set<String>> getKnownEpisodeTids({required String comicId}) async => <String>{};
+  Future<Set<String>> getKnownEpisodeTids({required String comicId}) async =>
+      <String>{};
 }
 
 class _ReaderBlockingRepository extends _ReaderFakeRepository {
