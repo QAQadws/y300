@@ -33,6 +33,7 @@ import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.
 import 'package:y300/features/thread/domain/services/thread_post_body_plain_text_extractor.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
+import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
@@ -491,7 +492,19 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   }
 
   void _openPostImages(ThreadPost post, ThreadPostImageOpenRequest request) {
-    _copyUrl('${post.number}# 图片链接', request.image.url);
+    final readerRequest = request.readerRequest;
+    if (readerRequest == null || readerRequest.continuousImages.isEmpty) {
+      _copyUrl('${post.number}# 图片链接', request.image.url);
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ThreadImageReaderPage(
+          request: readerRequest,
+          imageHeaderBuilder: _latestImageHeaderBuilder,
+        ),
+      ),
+    );
   }
 
   Future<void> _openPostCopyActions(

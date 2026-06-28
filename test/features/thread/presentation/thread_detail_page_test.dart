@@ -49,6 +49,7 @@ import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_even
 import 'package:y300/features/thread/domain/services/thread_detail_diagnostic_recorder.dart';
 import 'package:y300/features/thread/domain/services/thread_favorite_action_service.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
+import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
@@ -875,6 +876,40 @@ void main() {
         );
       },
     );
+
+    testWidgets('opens thread image reader page when tapping post image', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          _threadDetailData(
+            tid: tid,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message:
+                    '<img file="data/attachment/forum/page-1.jpg" width="200" height="120">'
+                    '<img file="data/attachment/forum/page-2.jpg" width="200" height="120">',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('thread-post-image-0')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ThreadImageReaderPage), findsOneWidget);
+      expect(find.byKey(const Key('thread-image-reader-list')), findsOneWidget);
+      expect(find.text('图片阅读'), findsOneWidget);
+    });
 
     testWidgets('uses initial forum name before parsed thread detail arrives', (
       tester,
