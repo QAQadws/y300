@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
-import 'package:y300/features/thread/data/thread_detail_snapshot_codec.dart';
+import 'package:y300/features/thread/data/services/thread_detail_snapshot_codec.dart';
 
 void main() {
   group('ThreadDetailData.fromVariables', () {

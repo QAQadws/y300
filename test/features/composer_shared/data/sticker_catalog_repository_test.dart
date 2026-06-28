@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/cache/domain/image_cache_keys.dart';
-import 'package:y300/features/composer_shared/data/sticker_catalog_repository.dart';
+import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
+import 'package:y300/features/composer_shared/data/repositories/sticker_catalog_repository.dart';
 import 'package:y300/features/composer_shared/domain/services/sticker_code_normalizer.dart';
 
 void main() {

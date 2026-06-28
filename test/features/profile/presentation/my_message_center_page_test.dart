@@ -5,7 +5,7 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/profile/data/models/my_message_models.dart';
-import 'package:y300/features/profile/data/my_message_repository.dart';
+import 'package:y300/features/profile/data/repositories/my_message_repository.dart';
 import 'package:y300/features/profile/presentation/my_message_center_page.dart';
 
 void main() {

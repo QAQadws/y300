@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/composer_shared/data/composer_draft_repository.dart';
-import 'package:y300/features/composer_shared/data/composer_image_picker.dart';
-import 'package:y300/features/composer_shared/data/composer_providers.dart';
-import 'package:y300/features/composer_shared/data/composer_upload_notification_service.dart';
+import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
+import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
+import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
+import 'package:y300/features/composer_shared/data/services/composer_upload_notification_service.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';

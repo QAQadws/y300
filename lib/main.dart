@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/y300_app.dart';
-import 'package:y300/features/library_shared/data/sync_diagnostic_providers.dart';
-import 'package:y300/features/library_shared/data/sync_diagnostic_settings_repository.dart';
+import 'package:y300/features/library_shared/data/providers/sync_diagnostic_providers.dart';
+import 'package:y300/features/library_shared/data/repositories/sync_diagnostic_settings_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

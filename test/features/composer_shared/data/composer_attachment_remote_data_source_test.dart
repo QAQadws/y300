@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo/yamibo_api_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
-import 'package:y300/features/composer_shared/data/composer_attachment_remote_data_source.dart';
+import 'package:y300/features/composer_shared/data/services/composer_attachment_remote_data_source.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 
 void main() {

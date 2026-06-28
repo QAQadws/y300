@@ -1,16 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/favorites/data/local_favorite_repository.dart';
+import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
-import 'package:y300/features/favorites/data/unfavorite_use_cases_impl.dart';
-import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
-import 'package:y300/features/favorites/domain/favorite_link_service.dart';
+import 'package:y300/features/favorites/data/use_cases/unfavorite_use_cases_impl.dart';
+import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
+import 'package:y300/features/favorites/domain/services/favorite_link_service.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/work_purge_service.dart';
-import 'package:y300/features/thread/data/thread_favorite_repository.dart';
+import 'package:y300/features/thread/data/repositories/thread_favorite_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 

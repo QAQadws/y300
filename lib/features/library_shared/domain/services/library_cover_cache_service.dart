@@ -1,5 +1,5 @@
-import 'package:y300/features/cache/domain/image_cache_models.dart';
-import 'package:y300/features/cache/domain/image_cache_service.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 
 typedef ImageCacheServiceResolver = ImageCacheService? Function();
 

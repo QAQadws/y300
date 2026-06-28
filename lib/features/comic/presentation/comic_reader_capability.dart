@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
-import 'package:y300/features/cache/domain/image_cache_keys.dart';
-import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_chapter_preload.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';

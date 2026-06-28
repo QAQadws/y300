@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:y300/features/composer_shared/data/sticker_picker_preferences_repository.dart';
+import 'package:y300/features/composer_shared/data/repositories/sticker_picker_preferences_repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

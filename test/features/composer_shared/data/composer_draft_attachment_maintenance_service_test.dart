@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:file/memory.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:y300/features/composer_shared/data/composer_draft_attachment_maintenance_service.dart';
-import 'package:y300/features/composer_shared/data/composer_upload_cache_storage.dart';
+import 'package:y300/features/composer_shared/data/services/composer_draft_attachment_maintenance_service.dart';
+import 'package:y300/features/composer_shared/data/services/composer_upload_cache_storage.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 

@@ -1,16 +1,16 @@
-import 'package:y300/features/library_shared/data/library_state_repository.dart';
+import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
-import 'package:y300/features/cache/domain/image_cache_keys.dart';
-import 'package:y300/features/cache/domain/image_cache_models.dart';
-import 'package:y300/features/cache/domain/image_cache_service.dart';
+import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
-import 'package:y300/features/novel/data/novel_download_service.dart';
-import 'package:y300/features/novel/data/novel_repository.dart';
+import 'package:y300/features/novel/data/services/novel_download_service.dart';
+import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 
 /// 小说详情适配器（Phase 6）。

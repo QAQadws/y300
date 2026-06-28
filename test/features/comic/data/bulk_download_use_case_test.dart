@@ -1,13 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/comic/data/bulk_download_use_case_impl.dart';
-import 'package:y300/features/comic/data/comic_download_service.dart';
-import 'package:y300/features/comic/data/comic_repository.dart';
+import 'package:y300/features/comic/data/use_cases/bulk_download_use_case_impl.dart';
+import 'package:y300/features/comic/data/services/comic_download_service.dart';
+import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
-import 'package:y300/features/library_shared/data/library_state_repository.dart';
+import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';

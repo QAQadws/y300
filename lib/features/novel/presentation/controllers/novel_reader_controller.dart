@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
-import 'package:y300/features/novel/data/novel_reader_cache_service.dart';
-import 'package:y300/features/novel/data/novel_providers.dart';
-import 'package:y300/features/novel/data/novel_repository.dart';
+import 'package:y300/features/novel/data/services/novel_reader_cache_service.dart';
+import 'package:y300/features/novel/data/providers/novel_providers.dart';
+import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';

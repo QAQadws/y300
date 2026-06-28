@@ -1,13 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:y300/features/comic/data/comic_search_refresh_queue_repository.dart';
+import 'package:y300/features/comic/data/repositories/comic_search_refresh_queue_repository.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/library_shared/domain/services/sync_diagnostic_recorder.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
-import 'package:y300/features/search/data/forum_search_scheduler.dart';
+import 'package:y300/features/search/data/services/forum_search_scheduler.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
 class ComicSearchRefreshRetryPolicy {

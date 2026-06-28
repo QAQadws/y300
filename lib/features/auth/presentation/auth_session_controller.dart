@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/auth/data/auth_repository.dart';
+import 'package:y300/features/auth/data/repositories/auth_repository.dart';
 
 final authSessionControllerProvider =
     AsyncNotifierProvider.autoDispose<

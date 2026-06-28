@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:y300/features/search/data/search_rate_limiter.dart';
+import 'package:y300/features/search/data/services/search_rate_limiter.dart';
 
 void main() {
   group('SearchRateLimiter', () {

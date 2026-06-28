@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/cache/domain/cache_load_policy.dart';
-import 'package:y300/features/forum/data/forum_home_repository.dart';
+import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
+import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
 

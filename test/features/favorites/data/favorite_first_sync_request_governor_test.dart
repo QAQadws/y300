@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 
 void main() {
   test('governor runs requests strictly serially across kinds', () async {

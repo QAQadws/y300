@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/config/app_storage_keys.dart';
-import 'package:y300/features/library_shared/data/sync_diagnostic_settings_repository.dart';
+import 'package:y300/features/library_shared/data/repositories/sync_diagnostic_settings_repository.dart';
 
 void main() {
   late SharedPrefsSyncDiagnosticSettingsRepository repository;

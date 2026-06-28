@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/cache/domain/image_cache_models.dart';
-import 'package:y300/features/cache/domain/image_cache_service.dart';
-import 'package:y300/features/favorites/domain/unfavorite_use_cases.dart';
-import 'package:y300/features/library_shared/data/library_state_repository.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/image_cache_service.dart';
+import 'package:y300/features/favorites/domain/use_cases/unfavorite_use_cases.dart';
+import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -13,7 +13,7 @@ import 'package:y300/features/library_shared/domain/services/library_task_progre
 import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
-import 'package:y300/features/novel/data/novel_repository.dart';
+import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/presentation/adapters/novel_shelf_adapter.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 

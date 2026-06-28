@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:io' as io;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/cache/data/cache_diagnostic_export_service.dart';
-import 'package:y300/features/cache/domain/storage_usage_models.dart';
+import 'package:y300/features/cache/data/services/cache_diagnostic_export_service.dart';
+import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 

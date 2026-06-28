@@ -4,11 +4,11 @@ import 'package:y300/app/theme/app_theme_tokens.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/cache/domain/forum_image_cache_requests.dart';
-import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/profile/data/models/profile_blog_models.dart';
-import 'package:y300/features/profile/data/profile_blog_repository.dart';
+import 'package:y300/features/profile/data/repositories/profile_blog_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 

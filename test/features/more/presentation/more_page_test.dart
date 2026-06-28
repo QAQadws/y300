@@ -6,16 +6,16 @@ import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/auth/data/auth_repository.dart';
-import 'package:y300/features/forum/data/forum_mode_settings_repository.dart';
+import 'package:y300/features/auth/data/repositories/auth_repository.dart';
+import 'package:y300/features/forum/data/repositories/forum_mode_settings_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/library_shared/presentation/controllers/sync_diagnostic_mode_controller.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/features/profile/data/models/my_message_models.dart';
 import 'package:y300/features/profile/data/models/user_profile_models.dart';
-import 'package:y300/features/profile/data/my_message_repository.dart';
-import 'package:y300/features/profile/data/user_profile_repository.dart';
+import 'package:y300/features/profile/data/repositories/my_message_repository.dart';
+import 'package:y300/features/profile/data/repositories/user_profile_repository.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
 
 void main() {

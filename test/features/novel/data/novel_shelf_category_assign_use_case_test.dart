@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/novel/data/novel_repository.dart';
-import 'package:y300/features/novel/data/novel_shelf_category_assign_use_case_impl.dart';
+import 'package:y300/features/novel/data/repositories/novel_repository.dart';
+import 'package:y300/features/novel/data/use_cases/novel_shelf_category_assign_use_case_impl.dart';
 
 void main() {
   test('DefaultNovelShelfCategoryAssignUseCase forwards source and target category ids', () async {

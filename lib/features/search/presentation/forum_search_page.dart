@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/comic/data/comic_search_refresh_queue_providers.dart';
+import 'package:y300/features/comic/data/providers/comic_search_refresh_queue_providers.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
-import 'package:y300/features/search/data/discuz_search_service.dart';
-import 'package:y300/features/search/data/forum_search_scheduler.dart';
+import 'package:y300/features/search/data/services/discuz_search_service.dart';
+import 'package:y300/features/search/data/services/forum_search_scheduler.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 

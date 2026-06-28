@@ -6,10 +6,10 @@ import 'package:file/file.dart' as file;
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/image_request_headers.dart';
-import 'package:y300/features/cache/data/default_image_cache_service.dart';
-import 'package:y300/features/cache/data/image_cache_directory_provider.dart';
-import 'package:y300/features/cache/data/image_cache_repository.dart';
-import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/data/services/default_image_cache_service.dart';
+import 'package:y300/features/cache/data/providers/image_cache_directory_provider.dart';
+import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 
 void main() {
   test('ensureCached passes anti-hotlink headers to downloader', () async {

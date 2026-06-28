@@ -9,10 +9,10 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/features/profile/data/models/profile_models.dart';
-import 'package:y300/features/profile/data/profile_repository.dart';
-import 'package:y300/features/search/data/discuz_search_service.dart';
+import 'package:y300/features/profile/data/repositories/profile_repository.dart';
+import 'package:y300/features/search/data/services/discuz_search_service.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
-import 'package:y300/features/search/data/search_rate_limiter.dart';
+import 'package:y300/features/search/data/services/search_rate_limiter.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

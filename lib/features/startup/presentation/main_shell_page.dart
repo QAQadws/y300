@@ -3,19 +3,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/comic/data/comic_refresh_workflow_providers.dart';
+import 'package:y300/features/comic/data/providers/comic_refresh_workflow_providers.dart';
 import 'package:y300/features/comic/presentation/comic_tab_page.dart';
-import 'package:y300/features/library_shared/data/library_task_workflow_providers.dart';
+import 'package:y300/features/library_shared/data/providers/library_task_workflow_providers.dart';
 import 'package:y300/features/favorites/presentation/favorite_shelf_page.dart';
 import 'package:y300/features/forum/presentation/forum_shell_page.dart';
-import 'package:y300/features/library_shared/data/library_task_notification_providers.dart';
+import 'package:y300/features/library_shared/data/providers/library_task_notification_providers.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
 import 'package:y300/features/library_shared/presentation/selection/selection_action_bar.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/features/novel/presentation/novel_tab_page.dart';
-import 'package:y300/features/composer_shared/data/composer_providers.dart';
+import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 
 final mainShellBackgroundTaskStarterProvider = Provider<Future<void> Function()>((ref) {
   return () => ref.read(comicSearchRefreshQueueServiceProvider).start();

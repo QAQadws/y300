@@ -1,5 +1,5 @@
 import 'package:y300/core/config/app_config.dart';
-import 'package:y300/features/cache/domain/image_cache_keys.dart';
+import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 
 class StickerImageSource {
   const StickerImageSource({

@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/forum/data/forum_home_html_parser.dart';
+import 'package:y300/features/forum/data/services/forum_home_html_parser.dart';
 
 void main() {
   group('ForumHomeHtmlParser', () {

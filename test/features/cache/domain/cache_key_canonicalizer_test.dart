@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/cache/domain/cache_key_canonicalizer.dart';
-import 'package:y300/features/cache/domain/storage_usage_models.dart';
+import 'package:y300/features/cache/domain/services/cache_key_canonicalizer.dart';
+import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 
 void main() {
   test('threadDetail canonical key is stable for sorted query parameters', () {

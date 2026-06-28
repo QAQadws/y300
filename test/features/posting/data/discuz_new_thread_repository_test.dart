@@ -1,8 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/posting/data/new_thread_remote_data_source.dart';
-import 'package:y300/features/posting/data/new_thread_repository.dart';
+import 'package:y300/features/posting/data/services/new_thread_remote_data_source.dart';
+import 'package:y300/features/posting/data/repositories/new_thread_repository.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
 
 void main() {

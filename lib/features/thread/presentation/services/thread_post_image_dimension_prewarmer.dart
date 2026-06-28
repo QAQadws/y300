@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:y300/features/cache/domain/image_cache_service.dart';
+import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';

@@ -1,13 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/comic/data/comic_favorite_ingest_service.dart';
-import 'package:y300/features/favorites/data/favorite_content_ingest_registry.dart';
-import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
-import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
-import 'package:y300/features/favorites/domain/favorite_content_ingest.dart';
-import 'package:y300/features/favorites/domain/favorite_detail_context.dart';
+import 'package:y300/features/comic/data/services/comic_favorite_ingest_service.dart';
+import 'package:y300/features/favorites/data/services/favorite_content_ingest_registry.dart';
+import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
+import 'package:y300/features/favorites/domain/models/favorite_content_ingest.dart';
+import 'package:y300/features/favorites/domain/models/favorite_detail_context.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
-import 'package:y300/features/novel/data/novel_favorite_ingest_service.dart';
+import 'package:y300/features/novel/data/services/novel_favorite_ingest_service.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 

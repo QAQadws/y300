@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/cache/data/cache_diagnostic_recorder.dart';
-import 'package:y300/features/cache/domain/cache_diagnostic_models.dart';
-import 'package:y300/features/cache/domain/storage_usage_models.dart';
+import 'package:y300/features/cache/data/services/cache_diagnostic_recorder.dart';
+import 'package:y300/features/cache/domain/models/cache_diagnostic_models.dart';
+import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/library_shared/domain/services/sync_diagnostic_recorder.dart';
 
 void main() {

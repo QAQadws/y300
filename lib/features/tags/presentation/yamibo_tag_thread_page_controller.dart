@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/tags/data/tag_providers.dart';
+import 'package:y300/features/tags/data/providers/tag_providers.dart';
 import 'package:y300/features/tags/domain/models/yamibo_tag_thread_page.dart';
 
 class YamiboTagThreadPageArgs {

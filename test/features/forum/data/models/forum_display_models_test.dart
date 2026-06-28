@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/forum/data/forum_display_snapshot_codec.dart';
+import 'package:y300/features/forum/data/services/forum_display_snapshot_codec.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
 
 void main() {

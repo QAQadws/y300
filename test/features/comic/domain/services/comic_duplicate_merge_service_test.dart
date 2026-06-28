@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/comic/data/comic_repository.dart';
+import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
 
 void main() {

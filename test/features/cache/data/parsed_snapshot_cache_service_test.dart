@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/cache/data/parsed_snapshot_cache_service.dart';
-import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
-import 'package:y300/features/cache/domain/storage_usage_models.dart';
+import 'package:y300/features/cache/data/services/parsed_snapshot_cache_service.dart';
+import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
+import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 
 void main() {

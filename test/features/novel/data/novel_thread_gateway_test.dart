@@ -7,7 +7,7 @@ import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/cookie_store.dart';
-import 'package:y300/features/novel/data/novel_thread_gateway.dart';
+import 'package:y300/features/novel/data/services/novel_thread_gateway.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

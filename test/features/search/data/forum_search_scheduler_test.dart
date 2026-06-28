@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/search/data/forum_search_scheduler.dart';
-import 'package:y300/features/search/data/forum_search_service.dart';
+import 'package:y300/features/search/data/services/forum_search_scheduler.dart';
+import 'package:y300/features/search/data/services/forum_search_service.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 
 void main() {

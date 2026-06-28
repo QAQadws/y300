@@ -9,8 +9,8 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/features/profile/data/models/profile_models.dart';
-import 'package:y300/features/profile/data/profile_repository.dart';
-import 'package:y300/features/thread/data/discuz_thread_favorite_api_repository.dart';
+import 'package:y300/features/profile/data/repositories/profile_repository.dart';
+import 'package:y300/features/thread/data/repositories/discuz_thread_favorite_api_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 
 void main() {

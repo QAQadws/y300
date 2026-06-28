@@ -1,13 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/cache/data/image_cache_providers.dart';
-import 'package:y300/features/cache/domain/image_cache_keys.dart';
-import 'package:y300/features/cache/domain/image_cache_models.dart';
-import 'package:y300/features/cache/domain/image_cache_service.dart';
-import 'package:y300/features/comic/data/comic_download_service.dart';
-import 'package:y300/features/comic/data/comic_providers.dart';
-import 'package:y300/features/comic/data/comic_repository.dart';
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/image_cache_service.dart';
+import 'package:y300/features/comic/data/services/comic_download_service.dart';
+import 'package:y300/features/comic/data/providers/comic_providers.dart';
+import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_unavailable.dart';

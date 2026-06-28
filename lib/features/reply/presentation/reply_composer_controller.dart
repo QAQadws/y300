@@ -5,12 +5,12 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_submission_error_presenter.dart';
-import 'package:y300/features/composer_shared/data/composer_providers.dart';
+import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_controller_base.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_patch.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_submission_outcome.dart';
-import 'package:y300/features/reply/data/reply_providers.dart';
-import 'package:y300/features/reply/data/reply_repository.dart';
+import 'package:y300/features/reply/data/providers/reply_providers.dart';
+import 'package:y300/features/reply/data/repositories/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 

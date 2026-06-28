@@ -2,7 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:y300/features/composer_shared/data/composer_image_picker.dart';
+import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 
 void main() {
   group('ImagePickerComposerImagePicker', () {

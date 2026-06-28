@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/profile/data/user_profile_html_parser.dart';
+import 'package:y300/features/profile/data/services/user_profile_html_parser.dart';
 
 void main() {
   test('UserProfileHtmlParser parses mobile profile page sample', () {

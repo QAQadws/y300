@@ -8,11 +8,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
-import 'package:y300/features/favorites/data/favorite_repository.dart';
+import 'package:y300/features/favorites/data/repositories/favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
-import 'package:y300/features/forum/data/forum_favorite_repository.dart';
+import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/profile/data/models/profile_models.dart';
-import 'package:y300/features/profile/data/profile_repository.dart';
+import 'package:y300/features/profile/data/repositories/profile_repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/image_request_headers.dart';
-import 'package:y300/features/cache/data/image_cache_providers.dart';
-import 'package:y300/features/cache/domain/image_cache_models.dart';
-import 'package:y300/features/cache/domain/image_cache_service.dart';
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 
 /// Binds an explicit cache request to [LibraryCachedImage].

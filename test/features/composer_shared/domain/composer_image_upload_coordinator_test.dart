@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/composer_shared/data/composer_attachment_repository.dart';
+import 'package:y300/features/composer_shared/data/repositories/composer_attachment_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
 

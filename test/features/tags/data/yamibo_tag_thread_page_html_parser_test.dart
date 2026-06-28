@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/tags/data/yamibo_tag_thread_page_html_parser.dart';
+import 'package:y300/features/tags/data/services/yamibo_tag_thread_page_html_parser.dart';
 
 void main() {
   group('YamiboTagThreadPageHtmlParser', () {

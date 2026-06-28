@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/search/data/discuz_search_html_parser.dart';
+import 'package:y300/features/search/data/services/discuz_search_html_parser.dart';
 
 void main() {
   test('DiscuzSearchHtmlParser parses list items and next page link', () {

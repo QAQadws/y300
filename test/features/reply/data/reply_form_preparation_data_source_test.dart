@@ -7,7 +7,7 @@ import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
-import 'package:y300/features/reply/data/reply_form_preparation_data_source.dart';
+import 'package:y300/features/reply/data/services/reply_form_preparation_data_source.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

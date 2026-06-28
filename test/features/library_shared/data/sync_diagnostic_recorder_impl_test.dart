@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:io' as io;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/library_shared/data/sync_diagnostic_recorder_impl.dart';
-import 'package:y300/features/library_shared/data/sync_diagnostic_settings_repository.dart';
+import 'package:y300/features/library_shared/data/services/sync_diagnostic_recorder_impl.dart';
+import 'package:y300/features/library_shared/data/repositories/sync_diagnostic_settings_repository.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 

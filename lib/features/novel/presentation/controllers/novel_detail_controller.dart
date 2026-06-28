@@ -2,7 +2,7 @@
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
-import 'package:y300/features/novel/data/novel_providers.dart';
+import 'package:y300/features/novel/data/providers/novel_providers.dart';
 
 class NovelDetailArgs {
   const NovelDetailArgs({required this.novelId});

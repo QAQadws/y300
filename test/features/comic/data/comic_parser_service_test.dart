@@ -1,9 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/comic/data/comic_parser_service.dart';
+import 'package:y300/features/comic/data/services/comic_parser_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
-import 'package:y300/features/thread/data/thread_detail_html_parser.dart';
+import 'package:y300/features/thread/data/services/thread_detail_html_parser.dart';
 
 void main() {
   group('HtmlComicParserService', () {

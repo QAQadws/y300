@@ -11,8 +11,8 @@ import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_extractor.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
-import 'package:y300/features/auth/data/auth_formhash_provider.dart';
-import 'package:y300/features/auth/data/auth_repository.dart';
+import 'package:y300/features/auth/data/providers/auth_formhash_provider.dart';
+import 'package:y300/features/auth/data/repositories/auth_repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

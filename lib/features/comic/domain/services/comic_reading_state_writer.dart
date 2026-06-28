@@ -1,5 +1,5 @@
-import 'package:y300/features/comic/data/comic_repository.dart';
-import 'package:y300/features/library_shared/data/library_state_repository.dart';
+import 'package:y300/features/comic/data/repositories/comic_repository.dart';
+import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 
 /// Reader-facing persistence boundary for comic reading state.

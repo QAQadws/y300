@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/favorites/data/favorite_shelf_bootstrapper.dart';
-import 'package:y300/features/favorites/data/favorite_sync_service.dart';
-import 'package:y300/features/favorites/data/local_favorite_repository.dart';
+import 'package:y300/features/favorites/data/services/favorite_shelf_bootstrapper.dart';
+import 'package:y300/features/favorites/data/services/favorite_sync_service.dart';
+import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
-import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
+import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';

@@ -10,8 +10,8 @@ import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_resource_client.dart';
-import 'package:y300/features/forum/data/forum_home_carousel_image_probe.dart';
-import 'package:y300/features/forum/data/forum_home_chrome_repository.dart';
+import 'package:y300/features/forum/data/services/forum_home_carousel_image_probe.dart';
+import 'package:y300/features/forum/data/repositories/forum_home_chrome_repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

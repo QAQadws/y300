@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:y300/features/novel/data/novel_repository.dart';
+import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 
 abstract interface class NovelReaderProgressCommitter {

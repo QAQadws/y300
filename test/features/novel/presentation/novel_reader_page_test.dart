@@ -7,17 +7,17 @@ import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
-import 'package:y300/features/library_shared/data/library_state_providers.dart';
-import 'package:y300/features/library_shared/data/library_state_repository.dart';
+import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
+import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
-import 'package:y300/features/novel/data/novel_download_service.dart';
+import 'package:y300/features/novel/data/services/novel_download_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
-import 'package:y300/features/novel/data/novel_providers.dart';
-import 'package:y300/features/novel/data/novel_repository.dart';
+import 'package:y300/features/novel/data/providers/novel_providers.dart';
+import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
@@ -31,7 +31,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_layout_se
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
-import 'package:y300/features/thread/data/thread_repository.dart';
+import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
 void main() {

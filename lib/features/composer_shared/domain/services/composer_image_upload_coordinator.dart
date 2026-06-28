@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/composer_shared/data/composer_attachment_repository.dart';
+import 'package:y300/features/composer_shared/data/repositories/composer_attachment_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 
 enum ComposerImageUploadEventType {

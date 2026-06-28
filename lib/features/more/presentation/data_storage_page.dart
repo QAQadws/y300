@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/cache/domain/storage_usage_models.dart';
+import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/more/presentation/data_storage_controller.dart';
 
 class DataStoragePage extends ConsumerWidget {

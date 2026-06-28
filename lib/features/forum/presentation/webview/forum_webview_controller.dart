@@ -2,13 +2,13 @@ import 'dart:async';
 
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
-import 'package:y300/features/forum/data/forum_favorite_repository.dart';
+import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_state.dart';
-import 'package:y300/features/tags/data/tag_providers.dart';
+import 'package:y300/features/tags/data/providers/tag_providers.dart';
 
 final forumWebViewControllerProvider =
     AsyncNotifierProvider.autoDispose<

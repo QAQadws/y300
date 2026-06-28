@@ -1,6 +1,6 @@
 import 'package:y300/features/novel/data/models/novel_models.dart';
-import 'package:y300/features/novel/data/novel_download_service.dart';
-import 'package:y300/features/novel/data/novel_repository.dart';
+import 'package:y300/features/novel/data/services/novel_download_service.dart';
+import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';

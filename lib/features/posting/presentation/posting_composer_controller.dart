@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/composer_shared/data/composer_providers.dart';
+import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
@@ -10,9 +10,9 @@ import 'package:y300/features/composer_shared/domain/services/composer_submissio
 import 'package:y300/features/composer_shared/presentation/controllers/composer_controller_base.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_patch.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_submission_outcome.dart';
-import 'package:y300/features/posting/data/new_thread_repository.dart';
-import 'package:y300/features/posting/data/posting_form_metadata_repository.dart';
-import 'package:y300/features/posting/data/posting_providers.dart';
+import 'package:y300/features/posting/data/repositories/new_thread_repository.dart';
+import 'package:y300/features/posting/data/repositories/posting_form_metadata_repository.dart';
+import 'package:y300/features/posting/data/providers/posting_providers.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
 import 'package:y300/features/posting/domain/services/new_thread_payload_builder.dart';
 import 'package:y300/features/posting/domain/services/new_thread_tags_normalizer.dart';

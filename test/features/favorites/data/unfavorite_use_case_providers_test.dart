@@ -1,19 +1,19 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/favorites/data/favorite_providers.dart';
-import 'package:y300/features/favorites/data/local_favorite_repository.dart';
+import 'package:y300/features/favorites/data/providers/favorite_providers.dart';
+import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
-import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
-import 'package:y300/features/favorites/domain/unfavorite_use_cases.dart';
-import 'package:y300/features/library_shared/data/work_purge_providers.dart';
+import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
+import 'package:y300/features/favorites/domain/use_cases/unfavorite_use_cases.dart';
+import 'package:y300/features/library_shared/data/providers/work_purge_providers.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/work_purge_service.dart';
-import 'package:y300/features/thread/data/thread_favorite_providers.dart';
-import 'package:y300/features/thread/data/thread_favorite_repository.dart';
+import 'package:y300/features/thread/data/providers/thread_favorite_providers.dart';
+import 'package:y300/features/thread/data/repositories/thread_favorite_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 

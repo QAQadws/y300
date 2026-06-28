@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/thread/data/thread_detail_diagnostic_settings_repository.dart';
+import 'package:y300/features/thread/data/repositories/thread_detail_diagnostic_settings_repository.dart';
 import 'package:y300/features/thread/domain/services/thread_detail_diagnostic_recorder.dart';
 
 final threadDetailDiagnosticSettingsRepositoryProvider =

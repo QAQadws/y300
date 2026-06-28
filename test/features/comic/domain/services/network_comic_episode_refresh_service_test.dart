@@ -10,10 +10,10 @@ import 'package:y300/features/comic/domain/services/comic_search_candidate_ranke
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
-import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/search/data/discuz_search_service.dart';
+import 'package:y300/features/search/data/services/discuz_search_service.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 
 void main() {

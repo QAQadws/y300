@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/comic/data/comic_task_progress.dart';
+import 'package:y300/features/comic/data/models/comic_task_progress.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_refresh_service.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';

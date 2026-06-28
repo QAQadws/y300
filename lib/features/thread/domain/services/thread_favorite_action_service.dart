@@ -1,5 +1,5 @@
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/thread/data/thread_favorite_repository.dart';
+import 'package:y300/features/thread/data/repositories/thread_favorite_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 
 typedef ThreadFavoriteModuleRefresh = Future<void> Function({

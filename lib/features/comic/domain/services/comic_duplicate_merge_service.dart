@@ -1,4 +1,4 @@
-import 'package:y300/features/comic/data/comic_repository.dart';
+import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 
 /// Coordinates duplicate comic merging without exposing SQLite details to UI or
 /// favorite sync. A duplicate is any connected group of comics whose episodes

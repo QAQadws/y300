@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/composer_shared/data/composer_draft_snapshot_codec.dart';
+import 'package:y300/features/composer_shared/data/services/composer_draft_snapshot_codec.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 

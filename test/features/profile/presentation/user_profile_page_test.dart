@@ -4,13 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/auth/data/auth_repository.dart';
+import 'package:y300/features/auth/data/repositories/auth_repository.dart';
 import 'package:y300/features/profile/data/models/profile_blog_models.dart';
 import 'package:y300/features/profile/data/models/user_profile_models.dart';
 import 'package:y300/features/profile/data/models/my_message_models.dart';
-import 'package:y300/features/profile/data/my_message_repository.dart';
-import 'package:y300/features/profile/data/profile_blog_repository.dart';
-import 'package:y300/features/profile/data/user_profile_repository.dart';
+import 'package:y300/features/profile/data/repositories/my_message_repository.dart';
+import 'package:y300/features/profile/data/repositories/profile_blog_repository.dart';
+import 'package:y300/features/profile/data/repositories/user_profile_repository.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 
 void main() {

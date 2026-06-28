@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/cache/domain/cache_load_policy.dart';
-import 'package:y300/features/forum/data/forum_display_repository.dart';
+import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
+import 'package:y300/features/forum/data/repositories/forum_display_repository.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
 import 'package:y300/features/forum/presentation/forum_display_state.dart';
-import 'package:y300/features/tags/data/tag_providers.dart';
+import 'package:y300/features/tags/data/providers/tag_providers.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 
 class ForumDisplayArgs {

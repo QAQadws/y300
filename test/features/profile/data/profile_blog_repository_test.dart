@@ -9,7 +9,7 @@ import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/features/profile/data/models/profile_blog_models.dart';
-import 'package:y300/features/profile/data/profile_blog_repository.dart';
+import 'package:y300/features/profile/data/repositories/profile_blog_repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

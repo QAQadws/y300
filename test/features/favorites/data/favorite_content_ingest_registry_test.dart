@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/favorites/data/favorite_content_ingest_registry.dart';
-import 'package:y300/features/favorites/domain/favorite_content_ingest.dart';
+import 'package:y300/features/favorites/data/services/favorite_content_ingest_registry.dart';
+import 'package:y300/features/favorites/domain/models/favorite_content_ingest.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {

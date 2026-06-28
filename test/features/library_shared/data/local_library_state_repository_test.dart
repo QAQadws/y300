@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite/sqflite.dart' show Database;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' hide Database;
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
-import 'package:y300/features/library_shared/data/local_library_state_repository.dart';
+import 'package:y300/features/library_shared/data/repositories/local_library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 
 void main() {

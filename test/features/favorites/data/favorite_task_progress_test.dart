@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/favorites/data/favorite_sync_service.dart';
-import 'package:y300/features/favorites/data/favorite_task_progress.dart';
+import 'package:y300/features/favorites/data/services/favorite_sync_service.dart';
+import 'package:y300/features/favorites/data/models/favorite_task_progress.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_notification_service.dart';
 

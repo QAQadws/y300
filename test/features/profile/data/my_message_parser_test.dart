@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/utils/parse_utils.dart';
-import 'package:y300/features/profile/data/my_message_parser.dart';
+import 'package:y300/features/profile/data/services/my_message_parser.dart';
 
 void main() {
   test('MyNotificationParser parses my notifications sample', () {

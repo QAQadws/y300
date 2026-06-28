@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/cache/data/cache_maintenance_service.dart';
-import 'package:y300/features/cache/domain/cache_maintenance_models.dart';
-import 'package:y300/features/cache/domain/document_cache_models.dart';
-import 'package:y300/features/cache/domain/image_cache_models.dart';
-import 'package:y300/features/cache/domain/image_cache_service.dart';
-import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
-import 'package:y300/features/cache/domain/storage_usage_models.dart';
+import 'package:y300/features/cache/data/services/cache_maintenance_service.dart';
+import 'package:y300/features/cache/domain/models/cache_maintenance_models.dart';
+import 'package:y300/features/cache/domain/models/document_cache_models.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/image_cache_service.dart';
+import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
+import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 
 void main() {
   test('clear default cache clears only ordinary cache domains', () async {

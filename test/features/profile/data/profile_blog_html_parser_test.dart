@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/profile/data/models/profile_blog_models.dart';
-import 'package:y300/features/profile/data/profile_blog_html_parser.dart';
+import 'package:y300/features/profile/data/services/profile_blog_html_parser.dart';
 
 void main() {
   const parser = ProfileBlogHtmlParser();

@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/favorites/data/favorite_detail_context_loader.dart';
-import 'package:y300/features/favorites/domain/favorite_cache_models.dart';
-import 'package:y300/features/favorites/domain/favorite_detail_context.dart';
+import 'package:y300/features/favorites/data/services/favorite_detail_context_loader.dart';
+import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
+import 'package:y300/features/favorites/domain/models/favorite_detail_context.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/tags/domain/forum_tag_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';

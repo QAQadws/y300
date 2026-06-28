@@ -5,7 +5,7 @@ import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/yamibo/yamibo.dart';
-import 'package:y300/features/library_shared/data/sync_diagnostic_providers.dart';
+import 'package:y300/features/library_shared/data/providers/sync_diagnostic_providers.dart';
 
 final loggerProvider = Provider<Logger>((ref) {
   return Logger();

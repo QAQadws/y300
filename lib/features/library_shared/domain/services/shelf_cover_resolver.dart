@@ -1,4 +1,4 @@
-import 'package:y300/features/cache/domain/image_cache_service.dart';
+import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
 

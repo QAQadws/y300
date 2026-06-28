@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/cache/domain/image_cache_models.dart';
-import 'package:y300/features/cache/domain/protected_cover_cache_maintenance.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/protected_cover_cache_maintenance.dart';
 
 void main() {
   test('ProtectedCoverCacheMaintenance deletes orphan and stale protected covers', () async {

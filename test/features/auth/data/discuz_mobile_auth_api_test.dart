@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
-import 'package:y300/features/auth/data/auth_remote_data_source.dart';
+import 'package:y300/features/auth/data/services/auth_remote_data_source.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

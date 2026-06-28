@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/forum/data/forum_mode_settings_repository.dart';
+import 'package:y300/features/forum/data/repositories/forum_mode_settings_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 
 final forumModeSettingsRepositoryProvider =

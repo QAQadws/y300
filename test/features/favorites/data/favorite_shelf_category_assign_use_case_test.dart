@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/favorites/data/favorite_shelf_category_assign_use_case_impl.dart';
-import 'package:y300/features/favorites/data/local_favorite_repository.dart';
+import 'package:y300/features/favorites/data/use_cases/favorite_shelf_category_assign_use_case_impl.dart';
+import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
 
 void main() {
   test('DefaultFavoriteShelfCategoryAssignUseCase parses favorite work ids and moves valid tids', () async {

@@ -7,12 +7,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
-import 'package:y300/features/cache/domain/cache_key_canonicalizer.dart';
-import 'package:y300/features/cache/domain/document_cache_models.dart';
-import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
-import 'package:y300/features/cache/domain/storage_usage_models.dart';
+import 'package:y300/features/cache/domain/services/cache_key_canonicalizer.dart';
+import 'package:y300/features/cache/domain/models/document_cache_models.dart';
+import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
+import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
-import 'package:y300/features/thread/data/thread_repository.dart';
+import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -1,5 +1,5 @@
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/cache/domain/image_cache_keys.dart';
+import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/comic/data/local/comic_cover_store.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/local/comic_local_models.dart';

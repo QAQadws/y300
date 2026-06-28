@@ -1,9 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
-import 'package:y300/features/comic/data/comic_refresh_outcome_providers.dart';
-import 'package:y300/features/comic/data/comic_providers.dart';
-import 'package:y300/features/comic/data/comic_repository.dart';
+import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/comic/data/providers/comic_refresh_outcome_providers.dart';
+import 'package:y300/features/comic/data/providers/comic_providers.dart';
+import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';

@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/cache/domain/document_cache_models.dart';
-import 'package:y300/features/cache/domain/native_page_cache_invalidation_service.dart';
-import 'package:y300/features/cache/domain/parsed_snapshot_cache_models.dart';
-import 'package:y300/features/cache/domain/storage_usage_models.dart';
+import 'package:y300/features/cache/domain/models/document_cache_models.dart';
+import 'package:y300/features/cache/domain/services/native_page_cache_invalidation_service.dart';
+import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
+import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 
 void main() {
   test(

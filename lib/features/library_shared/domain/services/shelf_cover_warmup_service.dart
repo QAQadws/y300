@@ -1,4 +1,4 @@
-import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 
 enum ShelfCoverWarmupPriority {

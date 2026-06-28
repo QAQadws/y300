@@ -6,11 +6,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
-import 'package:y300/features/reply/data/discuz_reply_remote_data_source.dart';
-import 'package:y300/features/reply/data/reply_form_preparation_data_source.dart';
+import 'package:y300/features/reply/data/services/discuz_reply_remote_data_source.dart';
+import 'package:y300/features/reply/data/services/reply_form_preparation_data_source.dart';
 import 'package:y300/features/profile/data/models/profile_models.dart';
-import 'package:y300/features/profile/data/profile_repository.dart';
-import 'package:y300/features/reply/data/discuz_reply_api_repository.dart';
+import 'package:y300/features/profile/data/repositories/profile_repository.dart';
+import 'package:y300/features/reply/data/repositories/discuz_reply_api_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 
 void main() {

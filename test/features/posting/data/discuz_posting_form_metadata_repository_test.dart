@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
-import 'package:y300/features/posting/data/posting_form_metadata_repository.dart';
+import 'package:y300/features/posting/data/repositories/posting_form_metadata_repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
