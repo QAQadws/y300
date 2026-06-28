@@ -2,6 +2,7 @@ import 'package:y300/features/novel/domain/models/novel_parsing_models.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/domain/services/novel_parsing_rule.dart';
 import 'package:y300/features/novel/domain/services/novel_same_thread_catalog_extractor.dart';
+import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
@@ -88,7 +89,7 @@ class NovelEpisodeDiscoveryService {
             episodeTitle: entry.title,
             orderIndex: builder.episodeCount,
             datelineText: sourcePost?.dateline ?? '',
-            rawHtml: sourcePost?.message ?? '',
+            rawHtml: sourcePost == null ? '' : _resolveAttachTags(sourcePost),
             plainText: plainText,
             paragraphs: paragraphs,
             imageUrls: imageUrls,
@@ -138,7 +139,7 @@ class NovelEpisodeDiscoveryService {
             episodeTitle: result.titleCandidate ?? '第${builder.episodeCount + 1}节（PID:${post.pid}）',
             orderIndex: builder.episodeCount,
             datelineText: post.dateline,
-            rawHtml: post.message,
+            rawHtml: _resolveAttachTags(post),
             plainText: context.plainText,
             paragraphs: result.paragraphs ?? context.paragraphs,
             imageUrls: result.imageUrls,
@@ -202,6 +203,26 @@ class NovelEpisodeDiscoveryService {
         .collectFromPost(post)
         .map((source) => source.normalizedUrl)
         .toList(growable: false);
+  }
+
+  String _resolveAttachTags(ThreadPost post) {
+    if (post.attachmentImages.isEmpty) return post.message;
+    final sources = DefaultForumImageSourcePipeline.extractAttachmentSources(
+      post,
+      urlResolver: const SiteUrlResolver(),
+    );
+    final aidToUrl = <String, String>{
+      for (final s in sources)
+        if (s.aid != null) s.aid!: s.normalizedUrl,
+    };
+    if (aidToUrl.isEmpty) return post.message;
+    return post.message.replaceAllMapped(
+      RegExp(r'\[attach\](\d+)\[/attach\]', caseSensitive: false),
+      (m) {
+        final url = aidToUrl[m.group(1)];
+        return url != null ? '<img src="$url">' : m[0]!;
+      },
+    );
   }
 
   NovelRuleResult _applyRules(NovelParsingContext context) {
