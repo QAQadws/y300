@@ -49,15 +49,21 @@ class ThreadPostBodyRenderPlanner {
     String html, {
     ThreadPostBodyRenderSettings renderSettings =
         ThreadPostBodyRenderSettings.defaults,
+    String converterId = 'conv:none',
   }) {
     final document = _normalizer.normalize(parser.parse(html));
-    return planDocument(document, renderSettings: renderSettings);
+    return planDocument(
+      document,
+      renderSettings: renderSettings,
+      converterId: converterId,
+    );
   }
 
   ThreadPostBodyRenderPlan planDocument(
     ThreadPostBodyDocument document, {
     ThreadPostBodyRenderSettings renderSettings =
         ThreadPostBodyRenderSettings.defaults,
+    String converterId = 'conv:none',
   }) {
     final displayDocument = displayTransformer.transform(document);
     final segments = <ThreadPostBodySegment>[];
@@ -115,6 +121,7 @@ class ThreadPostBodyRenderPlanner {
       displayTransformerSignature: displayTransformerSignature,
       resourceHintResolverSignature: resourceHintResolverSignature,
       segmentation: segmentation,
+      converterId: converterId,
     );
 
     return ThreadPostBodyRenderPlan(

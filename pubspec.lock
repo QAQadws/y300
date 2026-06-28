@@ -470,6 +470,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "3.0.0"
+  flutter_open_chinese_convert:
+    dependency: "direct main"
+    description:
+      name: flutter_open_chinese_convert
+      sha256: c2624f0e612d72b73df7336e1e75f20d2c54d19ce0b47a5b7f4f15c7b319f2a9
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.9.0"
   flutter_plugin_android_lifecycle:
     dependency: transitive
     description:
