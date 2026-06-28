@@ -16,6 +16,7 @@ import 'package:y300/features/comic/presentation/widgets/reader_page_indicator_o
 import 'package:y300/features/comic/presentation/widgets/reader_zoomable_image.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
+import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_presentation.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
 enum _ComicReaderMoreAction {
@@ -1331,11 +1332,15 @@ class _ReaderImageSlot extends StatelessWidget {
             ? constraints.maxWidth
             : MediaQuery.sizeOf(context).width;
         final expectedHeight = _expectedHeight(width);
-        return _ReaderImageExtentReporter(
-          imageItem: imageItem,
-          expectedAspectRatio: width > 0
-              ? width / expectedHeight
-              : imageItem.fallbackAspectRatio,
+        final aspectRatio = width > 0
+            ? width / expectedHeight
+            : imageItem.fallbackAspectRatio;
+        return ContinuousImageExtentObserver(
+          item: imageItem,
+          aspectRatio: aspectRatio,
+          dimensionSource: imageItem.knownDimensions == null
+              ? ContinuousImageDimensionSource.fallback
+              : imageItem.effectiveKnownDimensionSource,
           onExtentResolved: onExtentResolved,
           child: ConstrainedBox(
             // Prefer decoded image dimensions once known. This makes reopening
@@ -1352,85 +1357,6 @@ class _ReaderImageSlot extends StatelessWidget {
   double _expectedHeight(double width) {
     final hint = layoutResolver.resolveInitialHint(item: imageItem);
     return width / hint.aspectRatio;
-  }
-}
-
-class _ReaderImageExtentReporter extends StatefulWidget {
-  const _ReaderImageExtentReporter({
-    required this.imageItem,
-    required this.expectedAspectRatio,
-    required this.onExtentResolved,
-    required this.child,
-  });
-
-  final ContinuousImageItem imageItem;
-  final double expectedAspectRatio;
-  final ValueChanged<ContinuousImageExtent> onExtentResolved;
-  final Widget child;
-
-  @override
-  State<_ReaderImageExtentReporter> createState() =>
-      _ReaderImageExtentReporterState();
-}
-
-class _ReaderImageExtentReporterState
-    extends State<_ReaderImageExtentReporter> {
-  Size? _lastReportedSize;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _reportIfNeeded());
-  }
-
-  @override
-  void didUpdateWidget(covariant _ReaderImageExtentReporter oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.imageItem.id != widget.imageItem.id ||
-        oldWidget.expectedAspectRatio != widget.expectedAspectRatio) {
-      _lastReportedSize = null;
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) => _reportIfNeeded());
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return widget.child;
-  }
-
-  void _reportIfNeeded() {
-    if (!mounted) {
-      return;
-    }
-    final renderBox = context.findRenderObject() as RenderBox?;
-    if (renderBox == null || !renderBox.hasSize) {
-      return;
-    }
-    final size = renderBox.size;
-    if (size.width <= 0 || size.height <= 0) {
-      return;
-    }
-    final previous = _lastReportedSize;
-    if (previous != null &&
-        (previous.width - size.width).abs() < 0.5 &&
-        (previous.height - size.height).abs() < 0.5) {
-      return;
-    }
-    _lastReportedSize = size;
-    widget.onExtentResolved(
-      ContinuousImageExtent(
-        ownerId: widget.imageItem.ownerId,
-        itemId: widget.imageItem.id,
-        index: widget.imageItem.index,
-        crossAxisExtent: size.width,
-        mainAxisExtent: size.height,
-        aspectRatio: widget.expectedAspectRatio,
-        dimensionSource: widget.imageItem.knownDimensions == null
-            ? ContinuousImageDimensionSource.fallback
-            : widget.imageItem.effectiveKnownDimensionSource,
-        measuredAt: DateTime.now(),
-      ),
-    );
   }
 }
 

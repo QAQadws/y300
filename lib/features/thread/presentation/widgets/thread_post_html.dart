@@ -1,6 +1,5 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:y300/core/network/image_request_headers.dart';
@@ -9,6 +8,7 @@ import 'package:y300/features/cache/domain/forum_image_cache_requests.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
+import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_presentation.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
@@ -971,6 +971,8 @@ class _ThreadPostImageBlockViewState
     extends ConsumerState<ThreadPostImageBlockView> {
   static const ContinuousImageLayoutResolver _continuousImageLayoutResolver =
       ContinuousImageLayoutResolver();
+  static const ContinuousImageViewportResolver _viewportResolver =
+      ContinuousImageViewportResolver();
   static const ThreadPostContinuousImageAdapter _continuousImageAdapter =
       ThreadPostContinuousImageAdapter();
 
@@ -1162,20 +1164,7 @@ class _ThreadPostImageBlockViewState
         .deferImageAspectRatioUpdateWhenAboveViewport) {
       return false;
     }
-    final renderObject = context.findRenderObject();
-    if (renderObject == null) {
-      return false;
-    }
-    final viewport = RenderAbstractViewport.maybeOf(renderObject);
-    if (viewport == null) {
-      return false;
-    }
-    final scrollable = Scrollable.maybeOf(context);
-    if (scrollable == null || !scrollable.position.hasPixels) {
-      return false;
-    }
-    final bottomOffset = viewport.getOffsetToReveal(renderObject, 1).offset;
-    return bottomOffset < scrollable.position.pixels;
+    return _viewportResolver.isAboveViewport(context);
   }
 
   double _resolveAspectRatio(ContinuousImageItem item) {
