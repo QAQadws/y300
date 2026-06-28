@@ -72,8 +72,21 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
       ComicReaderContinuousImageAdapter();
   static const ContinuousImageLayoutResolver _continuousImageLayoutResolver =
       ContinuousImageLayoutResolver();
+  static const ContinuousImageViewportTracker _continuousImageViewportTracker =
+      ContinuousImageViewportTracker(
+        layoutResolver: _continuousImageLayoutResolver,
+      );
+  static const ContinuousImageScrollAnchorCoordinator
+  _continuousImageScrollAnchorCoordinator =
+      ContinuousImageScrollAnchorCoordinator(
+        layoutResolver: _continuousImageLayoutResolver,
+      );
   final InMemoryContinuousImageExtentRegistry _imageExtentRegistry =
       InMemoryContinuousImageExtentRegistry();
+  List<ContinuousImageItem> _latestContinuousItems =
+      const <ContinuousImageItem>[];
+  double _pendingScrollCompensationDelta = 0;
+  ScrollPosition? _observedScrollPosition;
 
   ComicReaderArgs get _readerArgs =>
       ComicReaderArgs(comicId: widget.comicId, episodeId: widget.episodeId);
@@ -92,6 +105,9 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     if (!_exitFlushed && controller != null) {
       unawaited(controller.onExitReader());
     }
+    _observedScrollPosition?.isScrollingNotifier.removeListener(
+      _onScrollActivityChanged,
+    );
     _scrollController
       ..removeListener(_onVerticalScroll)
       ..dispose();
@@ -475,10 +491,95 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
       _imageExtentRegistry.clearForOwner(previous);
     }
     _lastContinuousImageOwnerId = ownerId;
+    _latestContinuousItems = const <ContinuousImageItem>[];
+    _pendingScrollCompensationDelta = 0;
   }
 
   void _recordContinuousImageExtent(ContinuousImageExtent extent) {
+    final previous = _imageExtentRegistry.extentOf(extent.itemId);
+    final plan = _planScrollCompensation(previous, extent);
     _imageExtentRegistry.record(extent);
+    _applyScrollCompensationPlan(plan);
+  }
+
+  ContinuousImageScrollCompensationPlan _planScrollCompensation(
+    ContinuousImageExtent? previous,
+    ContinuousImageExtent next,
+  ) {
+    if (!_scrollController.hasClients || _latestContinuousItems.isEmpty) {
+      return ContinuousImageScrollCompensationPlan.none('noScrollContext');
+    }
+    _syncScrollPositionActivityListener();
+    final position = _scrollController.position;
+    return _continuousImageScrollAnchorCoordinator.planForExtentChange(
+      previousExtent: previous,
+      nextExtent: next,
+      items: _latestContinuousItems,
+      extentRegistry: _imageExtentRegistry,
+      policy: ContinuousImageFlowPolicy.comicVerticalReading,
+      metrics: ContinuousImageScrollAnchorMetrics(
+        scrollOffset: position.pixels,
+        minScrollExtent: position.minScrollExtent,
+        maxScrollExtent: position.maxScrollExtent,
+        viewportExtent: position.viewportDimension,
+        userScrollDirection: _continuousImageViewportTracker
+            .directionFromPosition(position),
+        isScrollActivityInProgress: position.isScrollingNotifier.value,
+      ),
+    );
+  }
+
+  void _applyScrollCompensationPlan(
+    ContinuousImageScrollCompensationPlan plan,
+  ) {
+    if (!plan.shouldCompensate || !_scrollController.hasClients) {
+      return;
+    }
+    if (plan.shouldApplyImmediately) {
+      _scrollController.jumpTo(plan.targetOffset);
+      return;
+    }
+    _pendingScrollCompensationDelta += plan.delta;
+    _syncScrollPositionActivityListener();
+  }
+
+  void _syncScrollPositionActivityListener() {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+    final position = _scrollController.position;
+    if (identical(_observedScrollPosition, position)) {
+      return;
+    }
+    _observedScrollPosition?.isScrollingNotifier.removeListener(
+      _onScrollActivityChanged,
+    );
+    _observedScrollPosition = position
+      ..isScrollingNotifier.addListener(_onScrollActivityChanged);
+  }
+
+  void _onScrollActivityChanged() {
+    _applyPendingScrollCompensationIfIdle();
+  }
+
+  void _applyPendingScrollCompensationIfIdle() {
+    if (_pendingScrollCompensationDelta == 0 || !_scrollController.hasClients) {
+      return;
+    }
+    final position = _scrollController.position;
+    if (position.isScrollingNotifier.value ||
+        _continuousImageViewportTracker.directionFromPosition(position) !=
+            ContinuousImageScrollDirection.idle) {
+      return;
+    }
+    final delta = _pendingScrollCompensationDelta;
+    _pendingScrollCompensationDelta = 0;
+    final targetOffset = (position.pixels + delta)
+        .clamp(position.minScrollExtent, position.maxScrollExtent)
+        .toDouble();
+    if ((targetOffset - position.pixels).abs() > 0.5) {
+      _scrollController.jumpTo(targetOffset);
+    }
   }
 
   IconData _modeIcon(ReaderModePreference mode) {
@@ -542,6 +643,8 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     if (!_scrollController.hasClients || _isSliderCommitInFlight) {
       return;
     }
+    _syncScrollPositionActivityListener();
+    _applyPendingScrollCompensationIfIdle();
     _hideReaderMenuForContentMotion();
     _pulsePageIndicator();
     final position = _scrollController.position;
@@ -564,12 +667,19 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
       images: state.value!.images,
       pageSpacing: preferences.pageSpacing,
     );
+    final viewport = _continuousImageViewportTracker.resolve(
+      items: items,
+      extentRegistry: _imageExtentRegistry,
+      scrollOffset: position.pixels,
+      viewportExtent: position.viewportDimension,
+      crossAxisExtent: MediaQuery.sizeOf(context).width,
+      userScrollDirection: _continuousImageViewportTracker
+          .directionFromPosition(position),
+    );
     final index =
-        _resolveVerticalActiveIndex(
-          items,
-          position.pixels,
-          position.viewportDimension,
-        ) ??
+        viewport.lastEndVisibleIndex ??
+        viewport.lastVisibleIndex ??
+        viewport.firstVisibleIndex ??
         ((total - 1) * ratio).round();
     if (index != _lastKnownIndex) {
       _lastKnownIndex = index;
@@ -703,30 +813,6 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     });
   }
 
-  int? _resolveVerticalActiveIndex(
-    List<ContinuousImageItem> items,
-    double scrollOffset,
-    double viewportExtent,
-  ) {
-    if (items.isEmpty || viewportExtent <= 0) {
-      return null;
-    }
-    final endOffset = scrollOffset + viewportExtent;
-    var cursor = 0.0;
-    for (final item in items) {
-      final extent = _imageExtentRegistry.extentOf(item.id);
-      if (extent == null) {
-        return null;
-      }
-      cursor += extent.mainAxisExtent;
-      if (cursor >= endOffset) {
-        return item.index;
-      }
-      cursor += item.spacingAfter;
-    }
-    return items.last.index;
-  }
-
   Future<void> _jumpVerticalToIndex(
     int targetIndex,
     List<ContinuousImageItem> items,
@@ -833,6 +919,12 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
       images: viewState.images,
       pageSpacing: preferences.pageSpacing,
     );
+    _latestContinuousItems = continuousItems;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _syncScrollPositionActivityListener();
+      }
+    });
     return ListView.builder(
       key: const Key('comic-reader-image-list'),
       controller: _scrollController,
