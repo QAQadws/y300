@@ -316,6 +316,78 @@ void main() {
   );
 
   testWidgets(
+    'ComicReaderPage restores vertical progress only once so top can be reached',
+    (tester) async {
+      await prepareLargeViewport(tester);
+      final repository = _ReaderFakeRepository(
+        progress: ComicReadingProgress(
+          comicId: 'yamibo:100',
+          episodeId: 'yamibo:100:101',
+          imageIndex: 1,
+          scrollOffset: 500,
+          updatedAt: DateTime(2026, 1, 1),
+        ),
+        images: const <ComicEpisodeImageItem>[
+          ComicEpisodeImageItem(
+            episodeId: 'yamibo:100:101',
+            imageUrl: 'https://img.test/101-1.jpg',
+            imageIndex: 0,
+            cacheStatus: 'none',
+            width: 600,
+            height: 1200,
+          ),
+          ComicEpisodeImageItem(
+            episodeId: 'yamibo:100:101',
+            imageUrl: 'https://img.test/101-2.jpg',
+            imageIndex: 1,
+            cacheStatus: 'none',
+            width: 600,
+            height: 1200,
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            comicRepositoryProvider.overrideWithValue(repository),
+            comicReadingStateWriterProvider.overrideWithValue(
+              _NoopReadingStateWriter(),
+            ),
+            comicReaderServiceProvider.overrideWith(
+              (ref) async => _ReaderFakeService(),
+            ),
+            comicDownloadServiceProvider.overrideWithValue(
+              _NoopComicDownloadService(),
+            ),
+            imageCacheServiceProvider.overrideWithValue(
+              _FakeImageCacheService(),
+            ),
+          ],
+          child: const MaterialApp(
+            home: ComicReaderPage(
+              comicId: 'yamibo:100',
+              episodeId: 'yamibo:100:101',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final list = tester.widget<ListView>(
+        find.byKey(const Key('comic-reader-image-list')),
+      );
+      final controller = list.controller!;
+      expect(controller.offset, greaterThan(0));
+
+      controller.jumpTo(0);
+      await tester.pump();
+      await tester.pump();
+
+      expect(controller.offset, 0);
+    },
+  );
+
+  testWidgets(
     'ComicReaderPage switches from vertical to rtl mode via mode sheet',
     (tester) async {
       await prepareLargeViewport(tester);
@@ -929,8 +1001,9 @@ class _NoopReadingStateWriter implements ComicReadingStateWriter {
 class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
   _ReaderFakeRepository({
     this.includeNextEpisode = false,
+    ComicReadingProgress? progress,
     List<ComicEpisodeImageItem>? images,
-  }) {
+  }) : _progress = progress {
     if (images != null) {
       _episodeImages['yamibo:100:101'] = images;
     }

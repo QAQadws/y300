@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/image_request_headers.dart';
@@ -66,6 +65,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
   bool _exitFlushed = false;
   Timer? _pageIndicatorDimTimer;
   String? _lastPagedRestoreKey;
+  String? _lastVerticalRestoreKey;
   String? _lastContinuousImageOwnerId;
 
   static const ComicReaderContinuousImageAdapter _continuousImageAdapter =
@@ -81,12 +81,16 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
       ContinuousImageScrollAnchorCoordinator(
         layoutResolver: _continuousImageLayoutResolver,
       );
+  static const ContinuousImageDecodePreheater _continuousImageDecodePreheater =
+      ContinuousImageDecodePreheater();
   final InMemoryContinuousImageExtentRegistry _imageExtentRegistry =
       InMemoryContinuousImageExtentRegistry();
   List<ContinuousImageItem> _latestContinuousItems =
       const <ContinuousImageItem>[];
   double _pendingScrollCompensationDelta = 0;
   ScrollPosition? _observedScrollPosition;
+  ImageRequestHeaderBuilder? _latestImageHeaderBuilder;
+  final Set<String> _precacheWindowKeys = <String>{};
 
   ComicReaderArgs get _readerArgs =>
       ComicReaderArgs(comicId: widget.comicId, episodeId: widget.episodeId);
@@ -130,6 +134,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
       comicReaderControllerProvider(_readerArgs).notifier,
     );
     final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
+    _latestImageHeaderBuilder = imageHeaderBuilder;
 
     return Scaffold(
       body: state.when(
@@ -380,6 +385,8 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     }
 
     await _controller().jumpToImageIndex(targetIndex);
+    _lastVerticalRestoreKey = null;
+    _lastPagedRestoreKey = null;
 
     if (nextMode == ReaderModePreference.vertical) {
       _pageController?.dispose();
@@ -438,11 +445,24 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
         return;
       }
       if (mode == ReaderModePreference.vertical) {
+        final restoreKey = _verticalRestoreKey(mode, viewState);
+        if (_lastVerticalRestoreKey == restoreKey) {
+          return;
+        }
         if (_scrollController.hasClients &&
             _scrollController.offset == 0 &&
             viewState.lastScrollOffset > 0) {
-          _scrollController.jumpTo(viewState.lastScrollOffset);
+          final maxScroll = _scrollController.position.maxScrollExtent;
+          if (maxScroll > 0) {
+            final offset = viewState.lastScrollOffset
+                .clamp(0.0, maxScroll)
+                .toDouble();
+            if (offset > 0) {
+              _scrollController.jumpTo(offset);
+            }
+          }
         }
+        _lastVerticalRestoreKey = restoreKey;
         return;
       }
 
@@ -482,6 +502,13 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     return '${viewState.episodeId}:${mode.name}:${viewState.currentImageIndex}';
   }
 
+  String _verticalRestoreKey(
+    ReaderModePreference mode,
+    ComicReaderViewState viewState,
+  ) {
+    return '${viewState.episodeId}:${mode.name}';
+  }
+
   void _resetContinuousImageStateIfNeeded(String ownerId) {
     if (_lastContinuousImageOwnerId == ownerId) {
       return;
@@ -493,6 +520,9 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     _lastContinuousImageOwnerId = ownerId;
     _latestContinuousItems = const <ContinuousImageItem>[];
     _pendingScrollCompensationDelta = 0;
+    _lastVerticalRestoreKey = null;
+    _lastPagedRestoreKey = null;
+    _precacheWindowKeys.clear();
   }
 
   void _recordContinuousImageExtent(ContinuousImageExtent extent) {
@@ -536,7 +566,23 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
       return;
     }
     if (plan.shouldApplyImmediately) {
-      _scrollController.jumpTo(plan.targetOffset);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scrollController.hasClients) {
+          return;
+        }
+        final position = _scrollController.position;
+        if (position.isScrollingNotifier.value ||
+            _continuousImageViewportTracker.directionFromPosition(position) !=
+                ContinuousImageScrollDirection.idle) {
+          _pendingScrollCompensationDelta += plan.delta;
+          _syncScrollPositionActivityListener();
+          return;
+        }
+        final targetOffset = plan.targetOffset
+            .clamp(position.minScrollExtent, position.maxScrollExtent)
+            .toDouble();
+        _scrollController.jumpTo(targetOffset);
+      });
       return;
     }
     _pendingScrollCompensationDelta += plan.delta;
@@ -727,6 +773,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     if (target == current) {
       return;
     }
+    _precachePagedWindow(viewState, target);
     pageController.animateToPage(
       target,
       duration: const Duration(milliseconds: 180),
@@ -774,6 +821,8 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
       _sliderPreviewIndex = targetIndex;
       _lastKnownIndex = targetIndex;
     });
+    _lastVerticalRestoreKey = null;
+    _lastPagedRestoreKey = null;
 
     if (mode == ReaderModePreference.vertical) {
       final continuousItems = _continuousImageAdapter.mapImages(
@@ -794,6 +843,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
 
     final pageController = _pageController;
     if (pageController != null && pageController.hasClients) {
+      _precachePagedWindow(viewState, targetIndex);
       pageController.jumpToPage(targetIndex);
     }
     await _controller().jumpToImageIndex(targetIndex, scrollOffset: 0);
@@ -864,6 +914,29 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     }
   }
 
+  void _precachePagedWindow(ComicReaderViewState viewState, int centerIndex) {
+    final items = _latestContinuousItems;
+    if (!mounted || viewState.images.isEmpty || items.isEmpty) {
+      return;
+    }
+    _continuousImageDecodePreheater.precacheWindow(
+      context: context,
+      items: items,
+      centerIndex: centerIndex,
+      warmedKeys: _precacheWindowKeys,
+      imageHeaderBuilder: _latestImageHeaderBuilder,
+      localPathResolver: (item) {
+        final index = item.index;
+        if (index < 0 || index >= viewState.images.length) {
+          return null;
+        }
+        return viewState.images[index].effectiveLocalPath;
+      },
+      radius: 1,
+      isMounted: () => mounted,
+    );
+  }
+
   Widget _buildReaderContentLayer({
     required ComicReaderViewState viewState,
     required ReaderModePreference mode,
@@ -925,30 +998,29 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
         _syncScrollPositionActivityListener();
       }
     });
-    return ListView.builder(
-      key: const Key('comic-reader-image-list'),
-      controller: _scrollController,
+    return ContinuousImageReaderView(
+      items: continuousItems,
+      mode: ContinuousImageReaderMode.vertical,
+      scrollController: _scrollController,
       cacheExtent:
           MediaQuery.sizeOf(context).height *
           ContinuousImageFlowPolicy
               .comicVerticalReading
               .viewportCacheExtentFactor,
-      padding: EdgeInsets.zero,
-      itemCount: viewState.images.length + 1,
-      itemBuilder: (context, index) {
-        if (index == viewState.images.length) {
-          return _ReaderNextChapterTransition(
-            preload: viewState.nextChapterPreload,
-            hasNextEpisode: viewState.hasNextEpisode,
-            isSwitchingEpisode: viewState.isSwitchingEpisode,
-            onOpenNext: () => _openAdjacentEpisode(viewState, previous: false),
-          );
-        }
-        final image = viewState.images[index];
+      layoutResolver: _continuousImageLayoutResolver,
+      onExtentResolved: _recordContinuousImageExtent,
+      verticalListKey: const Key('comic-reader-image-list'),
+      slotKeyPrefix: 'comic-reader-image-slot',
+      verticalTrailingBuilder: (context) => _ReaderNextChapterTransition(
+        preload: viewState.nextChapterPreload,
+        hasNextEpisode: viewState.hasNextEpisode,
+        isSwitchingEpisode: viewState.isSwitchingEpisode,
+        onOpenNext: () => _openAdjacentEpisode(viewState, previous: false),
+      ),
+      itemBuilder: (context, item, index, {required paged}) {
         return _buildReaderImage(
           viewState: viewState,
-          image: image,
-          continuousImageItem: continuousItems[index],
+          image: viewState.images[index],
           index: index,
           preferences: preferences,
           imageHeaderBuilder: imageHeaderBuilder,
@@ -963,21 +1035,36 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     required ReaderPreferences preferences,
     required ImageRequestHeaderBuilder imageHeaderBuilder,
   }) {
-    return PageView.builder(
-      key: const Key('comic-reader-page-view'),
-      controller: _pageController,
-      physics: _isAnyImageZoomed
+    final continuousItems = _continuousImageAdapter.mapImages(
+      episodeId: viewState.episodeId,
+      images: viewState.images,
+      pageSpacing: preferences.pageSpacing,
+    );
+    _latestContinuousItems = continuousItems;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _precachePagedWindow(viewState, viewState.currentImageIndex);
+      }
+    });
+    return ContinuousImageReaderView(
+      items: continuousItems,
+      mode: ContinuousImageReaderMode.horizontal,
+      pageController: _pageController,
+      horizontalPhysics: _isAnyImageZoomed
           ? const NeverScrollableScrollPhysics()
           : const PageScrollPhysics(),
       reverse: mode == ReaderModePreference.rtl,
       onPageChanged: _onPageChanged,
-      itemCount: viewState.images.length,
-      itemBuilder: (context, index) {
-        final image = viewState.images[index];
+      horizontalPageKey: const Key('comic-reader-page-view'),
+      horizontalPagePadding: EdgeInsets.all(
+        preferences.pageSpacing.clamp(0.0, 48.0).toDouble(),
+      ),
+      layoutResolver: _continuousImageLayoutResolver,
+      onExtentResolved: _recordContinuousImageExtent,
+      itemBuilder: (context, item, index, {required paged}) {
         return _buildReaderImage(
           viewState: viewState,
-          image: image,
-          continuousImageItem: null,
+          image: viewState.images[index],
           index: index,
           preferences: preferences,
           imageHeaderBuilder: imageHeaderBuilder,
@@ -990,7 +1077,6 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
   Widget _buildReaderImage({
     required ComicReaderViewState viewState,
     required ComicReaderImageState image,
-    required ContinuousImageItem? continuousImageItem,
     required int index,
     required ReaderPreferences preferences,
     required ImageRequestHeaderBuilder imageHeaderBuilder,
@@ -1030,32 +1116,10 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     );
 
     if (paged) {
-      return Padding(
-        padding: EdgeInsets.all(
-          preferences.pageSpacing.clamp(0.0, 48.0).toDouble(),
-        ),
-        child: SizedBox.expand(child: imageWidget),
-      );
+      return imageWidget;
     }
 
-    return Column(
-      children: [
-        _ReaderImageSlot(
-          imageIndex: index,
-          imageItem:
-              continuousImageItem ??
-              _continuousImageAdapter.mapImage(
-                episodeId: viewState.episodeId,
-                image: image,
-                pageSpacing: preferences.pageSpacing,
-              ),
-          layoutResolver: _continuousImageLayoutResolver,
-          onExtentResolved: _recordContinuousImageExtent,
-          child: imageWidget,
-        ),
-        SizedBox(height: preferences.pageSpacing.clamp(0.0, 48.0).toDouble()),
-      ],
-    );
+    return imageWidget;
   }
 
   bool get _isAnyImageZoomed =>
@@ -1397,58 +1461,6 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
         _isPageIndicatorHighlighted = false;
       });
     });
-  }
-}
-
-class _ReaderImageSlot extends StatelessWidget {
-  const _ReaderImageSlot({
-    required this.imageIndex,
-    required this.imageItem,
-    required this.layoutResolver,
-    required this.onExtentResolved,
-    required this.child,
-  });
-
-  final int imageIndex;
-  final ContinuousImageItem imageItem;
-  final ContinuousImageLayoutResolver layoutResolver;
-  final ValueChanged<ContinuousImageExtent> onExtentResolved;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      key: ValueKey<String>('comic-reader-image-slot-$imageIndex'),
-      builder: (context, constraints) {
-        final width = constraints.maxWidth.isFinite
-            ? constraints.maxWidth
-            : MediaQuery.sizeOf(context).width;
-        final expectedHeight = _expectedHeight(width);
-        final aspectRatio = width > 0
-            ? width / expectedHeight
-            : imageItem.fallbackAspectRatio;
-        return ContinuousImageExtentObserver(
-          item: imageItem,
-          aspectRatio: aspectRatio,
-          dimensionSource: imageItem.knownDimensions == null
-              ? ContinuousImageDimensionSource.fallback
-              : imageItem.effectiveKnownDimensionSource,
-          onExtentResolved: onExtentResolved,
-          child: ConstrainedBox(
-            // Prefer decoded image dimensions once known. This makes reopening
-            // long chapters steadier while still letting first-open pages grow
-            // naturally after the image is resolved.
-            constraints: BoxConstraints(minHeight: expectedHeight),
-            child: ClipRect(child: child),
-          ),
-        );
-      },
-    );
-  }
-
-  double _expectedHeight(double width) {
-    final hint = layoutResolver.resolveInitialHint(item: imageItem);
-    return width / hint.aspectRatio;
   }
 }
 

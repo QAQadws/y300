@@ -11,6 +11,42 @@ import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 
 void main() {
+  testWidgets('uses cached local result before starting a new cache request', (
+    tester,
+  ) async {
+    final cacheService = _ImmediateCachedImageService(
+      result: const CachedImageResult(
+        success: true,
+        cacheKey: 'thread-image',
+        localPath: 'C:/cache/thread-image.jpg',
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
+        child: const MaterialApp(
+          home: CachedLibraryImage(
+            request: ImageCacheRequest(
+              cacheKey: 'thread-image',
+              sourceUrl:
+                  'https://bbs.yamibo.com/data/attachment/forum/page.jpg',
+              ownerType: ImageCacheOwnerType.thread,
+              ownerId: '100',
+              role: ImageCacheRole.threadInline,
+            ),
+            fit: BoxFit.cover,
+            placeholder: SizedBox(key: Key('placeholder')),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(cacheService.getCachedCount, 1);
+    expect(cacheService.ensureStarted, isFalse);
+  });
+
   testWidgets(
     'keeps displayed remote image instead of switching to local file mid-frame',
     (tester) async {
@@ -72,6 +108,19 @@ void main() {
       );
     },
   );
+}
+
+class _ImmediateCachedImageService extends _DeferredImageCacheService {
+  _ImmediateCachedImageService({required this.result});
+
+  final CachedImageResult result;
+  int getCachedCount = 0;
+
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async {
+    getCachedCount++;
+    return result;
+  }
 }
 
 class _DeferredImageCacheService implements ImageCacheService {

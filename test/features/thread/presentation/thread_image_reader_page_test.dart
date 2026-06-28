@@ -6,6 +6,7 @@ import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
+import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_presentation.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 
@@ -23,6 +24,7 @@ void main() {
     await tester.pump();
 
     expect(find.byType(ThreadImageReaderPage), findsOneWidget);
+    expect(find.byType(ContinuousImageReaderRoute), findsOneWidget);
     expect(find.byKey(const Key('thread-image-reader-list')), findsOneWidget);
     expect(find.byType(CachedLibraryImage), findsNWidgets(2));
 
@@ -37,6 +39,35 @@ void main() {
     expect(
       cacheService.requests.map((request) => request.retentionClass).toSet(),
       <ImageRetentionClass>{ImageRetentionClass.recentReader},
+    );
+  });
+
+  testWidgets('ThreadImageReaderPage supports shared horizontal reader route', (
+    tester,
+  ) async {
+    final cacheService = _RecordingImageCacheService();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
+        child: MaterialApp(
+          home: ThreadImageReaderPage(
+            request: _request(),
+            mode: ContinuousImageReaderMode.horizontal,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('thread-image-reader-page-view')),
+      findsOneWidget,
+    );
+    expect(find.byType(ContinuousImageReaderRoute), findsOneWidget);
+    expect(
+      cacheService.getCachedKeys.toSet(),
+      containsAll(<String>['thread/inline/page-1', 'thread/inline/page-2']),
     );
   });
 }
@@ -88,6 +119,7 @@ ThreadImageOpenRequest _request() {
 
 class _RecordingImageCacheService implements ImageCacheService {
   final requests = <ImageCacheRequest>[];
+  final getCachedKeys = <String>[];
 
   @override
   Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
@@ -96,7 +128,10 @@ class _RecordingImageCacheService implements ImageCacheService {
   }
 
   @override
-  Future<CachedImageResult?> getCached(String cacheKey) async => null;
+  Future<CachedImageResult?> getCached(String cacheKey) async {
+    getCachedKeys.add(cacheKey);
+    return null;
+  }
 
   @override
   Future<CachedImageResult> copyProtectedLocalFile(

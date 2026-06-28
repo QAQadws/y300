@@ -140,7 +140,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     }
     final generation = ++_generation;
     unawaited(
-      ref.read(imageCacheServiceProvider).ensureCached(request).then((result) {
+      _resolveCachedImage(request).then((result) {
         if (!mounted || generation != _generation || !result.success) {
           return;
         }
@@ -152,5 +152,16 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
         });
       }),
     );
+  }
+
+  Future<CachedImageResult> _resolveCachedImage(
+    ImageCacheRequest request,
+  ) async {
+    final service = ref.read(imageCacheServiceProvider);
+    final cached = await service.getCached(request.cacheKey);
+    if (cached != null && cached.success) {
+      return cached;
+    }
+    return service.ensureCached(request);
   }
 }
