@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/models/thread_post_segmentation_config.dart';
 
@@ -15,6 +16,7 @@ class ThreadPostRenderCacheKey {
     required this.resourceHintResolverSignature,
     required this.segmentation,
     this.converterId = 'conv:none',
+    this.typography = RichTextTypography.standard,
   });
 
   final ThreadPostBodyRenderSettings renderSettings;
@@ -27,6 +29,10 @@ class ThreadPostRenderCacheKey {
   /// is active. Changing this value invalidates the render plan cache.
   final String converterId;
 
+  /// Typography triple (font scale / line-height / paragraph spacing).
+  /// Changing any value invalidates the render plan cache.
+  final RichTextTypography typography;
+
   @override
   bool operator ==(Object other) {
     if (other is! ThreadPostRenderCacheKey) return false;
@@ -34,7 +40,8 @@ class ThreadPostRenderCacheKey {
         displayTransformerSignature == other.displayTransformerSignature &&
         resourceHintResolverSignature == other.resourceHintResolverSignature &&
         segmentation == other.segmentation &&
-        converterId == other.converterId;
+        converterId == other.converterId &&
+        typography == other.typography;
   }
 
   @override
@@ -44,5 +51,6 @@ class ThreadPostRenderCacheKey {
     resourceHintResolverSignature,
     segmentation,
     converterId,
+    typography,
   );
 }

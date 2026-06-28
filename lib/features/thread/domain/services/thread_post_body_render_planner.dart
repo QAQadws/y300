@@ -1,3 +1,4 @@
+import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
@@ -50,12 +51,14 @@ class ThreadPostBodyRenderPlanner {
     ThreadPostBodyRenderSettings renderSettings =
         ThreadPostBodyRenderSettings.defaults,
     String converterId = 'conv:none',
+    RichTextTypography typography = RichTextTypography.standard,
   }) {
     final document = _normalizer.normalize(parser.parse(html));
     return planDocument(
       document,
       renderSettings: renderSettings,
       converterId: converterId,
+      typography: typography,
     );
   }
 
@@ -64,6 +67,7 @@ class ThreadPostBodyRenderPlanner {
     ThreadPostBodyRenderSettings renderSettings =
         ThreadPostBodyRenderSettings.defaults,
     String converterId = 'conv:none',
+    RichTextTypography typography = RichTextTypography.standard,
   }) {
     final displayDocument = displayTransformer.transform(document);
     final segments = <ThreadPostBodySegment>[];
@@ -122,6 +126,7 @@ class ThreadPostBodyRenderPlanner {
       resourceHintResolverSignature: resourceHintResolverSignature,
       segmentation: segmentation,
       converterId: converterId,
+      typography: typography,
     );
 
     return ThreadPostBodyRenderPlan(
