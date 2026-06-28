@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
@@ -17,12 +17,10 @@ import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.d
 import 'package:y300/features/comic/domain/services/comic_reader_preload_queue.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 
 class ComicReaderArgs {
-  const ComicReaderArgs({
-    required this.comicId,
-    required this.episodeId,
-  });
+  const ComicReaderArgs({required this.comicId, required this.episodeId});
 
   final String comicId;
   final String episodeId;
@@ -94,7 +92,9 @@ class ComicReaderImageState {
       cacheStatus: cacheStatus ?? this.cacheStatus,
       cacheKey: cacheKey ?? this.cacheKey,
       localPath: clearLocalPath ? null : (localPath ?? this.localPath),
-      cacheLocalPath: clearCacheLocalPath ? null : (cacheLocalPath ?? this.cacheLocalPath),
+      cacheLocalPath: clearCacheLocalPath
+          ? null
+          : (cacheLocalPath ?? this.cacheLocalPath),
       width: width ?? this.width,
       height: height ?? this.height,
       failed: failed ?? this.failed,
@@ -241,6 +241,8 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   final ComicReaderArgs _args;
   static const ComicReaderChapterPreloadPolicy _chapterPreloadPolicy =
       ComicReaderChapterPreloadPolicy();
+  static const ContinuousImagePrefetchCoordinator _prefetchCoordinator =
+      ContinuousImagePrefetchCoordinator();
   late ComicRepository _repository;
   late ComicReaderService _readerService;
   late ComicDownloadService _downloadService;
@@ -301,7 +303,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (current == null) {
       return;
     }
-    final idx = current.images.indexWhere((element) => element.imageUrl == imageUrl);
+    final idx = current.images.indexWhere(
+      (element) => element.imageUrl == imageUrl,
+    );
     if (idx < 0) {
       return;
     }
@@ -384,8 +388,13 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
 
   Future<void> cacheAllUnread() async {
     _preloadQueue.cancelExcept(const <String>{});
-    final episodes = await _repository.getComicEpisodes(comicId: _args.comicId, descending: false);
-    final currentIndex = episodes.indexWhere((e) => e.episodeId == _activeEpisodeId);
+    final episodes = await _repository.getComicEpisodes(
+      comicId: _args.comicId,
+      descending: false,
+    );
+    final currentIndex = episodes.indexWhere(
+      (e) => e.episodeId == _activeEpisodeId,
+    );
     if (currentIndex < 0) {
       return;
     }
@@ -517,10 +526,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       return;
     }
     state = AsyncData(
-      current.copyWith(
-        isBookmarked: next,
-        hint: next ? '已添加书签' : '已取消书签',
-      ),
+      current.copyWith(isBookmarked: next, hint: next ? '已添加书签' : '已取消书签'),
     );
   }
 
@@ -684,7 +690,8 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     state = AsyncData(
       current.copyWith(
         isSwitchingEpisode: true,
-        hint: current.nextChapterPreload.episodeId == targetEpisodeId &&
+        hint:
+            current.nextChapterPreload.episodeId == targetEpisodeId &&
                 current.nextChapterPreload.hasLoadedImageList
             ? '正在切换章节'
             : '正在加载章节',
@@ -736,10 +743,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         return false;
       }
       state = AsyncData(
-        current.copyWith(
-          isSwitchingEpisode: false,
-          hint: '章节切换失败，请稍后重试',
-        ),
+        current.copyWith(isSwitchingEpisode: false, hint: '章节切换失败，请稍后重试'),
       );
       _logReaderEvent(
         'episode_switch_failed',
@@ -784,7 +788,10 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     required int height,
   }) async {
     final current = state.value;
-    if (current == null || current.images.isEmpty || width <= 0 || height <= 0) {
+    if (current == null ||
+        current.images.isEmpty ||
+        width <= 0 ||
+        height <= 0) {
       return;
     }
     final clampedIndex = imageIndex.clamp(0, current.images.length - 1).toInt();
@@ -799,10 +806,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         'first_image_visible',
         pageIndex: clampedIndex,
         totalPages: current.images.length,
-        extra: <String, Object?>{
-          'width': width,
-          'height': height,
-        },
+        extra: <String, Object?>{'width': width, 'height': height},
       );
     }
 
@@ -845,7 +849,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         .map(
           (item) => item.imageIndex == clampedIndex
               ? item.copyWith(
-                  cacheStatus: item.cacheStatus == 'failed' ? 'none' : item.cacheStatus,
+                  cacheStatus: item.cacheStatus == 'failed'
+                      ? 'none'
+                      : item.cacheStatus,
                   width: width,
                   height: height,
                   failed: false,
@@ -1103,20 +1109,17 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (images.isEmpty) {
       return;
     }
-    final end = (centerIndex + 4).clamp(0, images.length - 1).toInt();
-    final tasks = <ComicReaderPreloadTask>[];
-    _addReaderTask(
-      tasks,
-      images[centerIndex.clamp(0, images.length - 1).toInt()],
-      priority: ComicReaderPreloadPriority.visible,
+    final plan = _prefetchCoordinator.windowForIndex(
+      focusIndex: centerIndex,
+      itemCount: images.length,
+      policy: ContinuousImageFlowPolicy.comicVerticalReading,
     );
-    for (var i = centerIndex + 1; i <= end; i++) {
-      _addReaderTask(
-        tasks,
-        images[i],
-        priority: ComicReaderPreloadPriority.adjacentForward,
-      );
-    }
+    final tasks = _buildWindowTasks(
+      images,
+      plan: plan,
+      visiblePriority: ComicReaderPreloadPriority.visible,
+      preferredDirection: ContinuousImageScrollDirection.forward,
+    );
     unawaited(_enqueuePreloadTasks(tasks, cancelOldWindow: false));
   }
 
@@ -1132,19 +1135,21 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         _preloadQueue.snapshot.pendingCount > 0) {
       return;
     }
-    final movingForward = centerIndex >= _lastPreloadCenterIndex;
+    final scrollDirection = centerIndex < _lastPreloadCenterIndex
+        ? ContinuousImageScrollDirection.reverse
+        : ContinuousImageScrollDirection.forward;
     _lastPreloadCenterIndex = centerIndex;
     final tasks = _buildDirectionalWindowTasks(
       current.images,
       centerIndex: centerIndex,
-      movingForward: movingForward,
+      scrollDirection: scrollDirection,
     );
     await _enqueuePreloadTasks(tasks, cancelOldWindow: false);
     if (_featureFlags.readerNextChapterPreloadEnabled &&
         _chapterPreloadPolicy.shouldPreloadNextChapter(
-      currentImageIndex: centerIndex,
-      totalImages: current.images.length,
-    )) {
+          currentImageIndex: centerIndex,
+          totalImages: current.images.length,
+        )) {
       unawaited(ensureNextChapterPreloaded());
     }
   }
@@ -1158,77 +1163,86 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       return;
     }
     _lastPreloadCenterIndex = centerIndex;
-    final start = (centerIndex - 2).clamp(0, current.images.length - 1).toInt();
-    final end = (centerIndex + 2).clamp(0, current.images.length - 1).toInt();
-    final tasks = <ComicReaderPreloadTask>[];
-    _addReaderTask(
-      tasks,
-      current.images[centerIndex],
-      priority: ComicReaderPreloadPriority.jumpTarget,
+    final plan = _prefetchCoordinator.windowForIndex(
+      focusIndex: centerIndex,
+      itemCount: current.images.length,
+      policy: ContinuousImageFlowPolicy.comicVerticalReading,
     );
-    for (var i = centerIndex + 1; i <= end; i++) {
-      _addReaderTask(
-        tasks,
-        current.images[i],
-        priority: ComicReaderPreloadPriority.adjacentForward,
-      );
-    }
-    for (var i = centerIndex - 1; i >= start; i--) {
-      _addReaderTask(
-        tasks,
-        current.images[i],
-        priority: ComicReaderPreloadPriority.adjacentBackward,
-      );
-    }
+    final tasks = _buildWindowTasks(
+      current.images,
+      plan: plan,
+      visiblePriority: ComicReaderPreloadPriority.jumpTarget,
+      preferredDirection: ContinuousImageScrollDirection.forward,
+    );
     await _enqueuePreloadTasks(tasks, cancelOldWindow: true);
   }
 
   List<ComicReaderPreloadTask> _buildDirectionalWindowTasks(
     List<ComicReaderImageState> images, {
     required int centerIndex,
-    required bool movingForward,
+    required ContinuousImageScrollDirection scrollDirection,
   }) {
-    final clampedCenter = centerIndex.clamp(0, images.length - 1).toInt();
-    final tasks = <ComicReaderPreloadTask>[];
-    _addReaderTask(
-      tasks,
-      images[clampedCenter],
-      priority: ComicReaderPreloadPriority.visible,
+    final plan = _prefetchCoordinator.windowForIndex(
+      focusIndex: centerIndex,
+      itemCount: images.length,
+      policy: ContinuousImageFlowPolicy.comicVerticalReading,
+      scrollDirection: scrollDirection,
     );
-    final forwardEnd = (clampedCenter + 4).clamp(0, images.length - 1).toInt();
-    final backwardStart = (clampedCenter - 2).clamp(0, images.length - 1).toInt();
-    if (movingForward) {
-      for (var i = clampedCenter + 1; i <= forwardEnd; i++) {
-        _addReaderTask(
-          tasks,
-          images[i],
-          priority: ComicReaderPreloadPriority.adjacentForward,
-        );
-      }
-      for (var i = clampedCenter - 1; i >= backwardStart; i--) {
-        _addReaderTask(
-          tasks,
-          images[i],
-          priority: ComicReaderPreloadPriority.adjacentBackward,
-        );
-      }
-      return tasks;
+    return _buildWindowTasks(
+      images,
+      plan: plan,
+      visiblePriority: ComicReaderPreloadPriority.visible,
+      preferredDirection: scrollDirection,
+    );
+  }
+
+  List<ComicReaderPreloadTask> _buildWindowTasks(
+    List<ComicReaderImageState> images, {
+    required ContinuousImagePrefetchPlan plan,
+    required ComicReaderPreloadPriority visiblePriority,
+    required ContinuousImageScrollDirection preferredDirection,
+  }) {
+    final focusIndex = plan.focusIndex;
+    if (focusIndex == null || images.isEmpty) {
+      return const <ComicReaderPreloadTask>[];
     }
-    for (var i = clampedCenter - 1; i >= backwardStart; i--) {
+    final tasks = <ComicReaderPreloadTask>[];
+    for (final index in plan.indices) {
+      if (index < 0 || index >= images.length) {
+        continue;
+      }
       _addReaderTask(
         tasks,
-        images[i],
-        priority: ComicReaderPreloadPriority.adjacentForward,
-      );
-    }
-    for (var i = clampedCenter + 1; i <= forwardEnd; i++) {
-      _addReaderTask(
-        tasks,
-        images[i],
-        priority: ComicReaderPreloadPriority.adjacentBackward,
+        images[index],
+        priority: _priorityForWindowIndex(
+          index: index,
+          focusIndex: focusIndex,
+          visiblePriority: visiblePriority,
+          preferredDirection: preferredDirection,
+        ),
       );
     }
     return tasks;
+  }
+
+  ComicReaderPreloadPriority _priorityForWindowIndex({
+    required int index,
+    required int focusIndex,
+    required ComicReaderPreloadPriority visiblePriority,
+    required ContinuousImageScrollDirection preferredDirection,
+  }) {
+    if (index == focusIndex) {
+      return visiblePriority;
+    }
+    if (preferredDirection == ContinuousImageScrollDirection.reverse) {
+      return index < focusIndex
+          ? ComicReaderPreloadPriority.adjacentForward
+          : ComicReaderPreloadPriority.adjacentBackward;
+    }
+    if (index > focusIndex) {
+      return ComicReaderPreloadPriority.adjacentForward;
+    }
+    return ComicReaderPreloadPriority.adjacentBackward;
   }
 
   Future<void> ensureNextChapterPreloaded({bool force = false}) {
@@ -1244,7 +1258,8 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       return Future<void>.value();
     }
     if (!force &&
-        current.nextChapterPreload.status == ComicReaderChapterPreloadStatus.ready) {
+        current.nextChapterPreload.status ==
+            ComicReaderChapterPreloadStatus.ready) {
       return Future<void>.value();
     }
     final existing = _nextChapterPreloadFuture;
@@ -1276,7 +1291,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       comicId: _args.comicId,
       descending: false,
     );
-    final currentIndex = episodes.indexWhere((e) => e.episodeId == baseState.episodeId);
+    final currentIndex = episodes.indexWhere(
+      (e) => e.episodeId == baseState.episodeId,
+    );
     if (currentIndex < 0 || currentIndex + 1 >= episodes.length) {
       _patchNextChapterPreload(ComicReaderChapterPreloadState.unavailable());
       _logReaderEvent('next_chapter_unavailable');
@@ -1406,15 +1423,10 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       return;
     }
     if (cancelOldWindow) {
-      _preloadQueue.cancelExcept(
-        tasks.map((task) => task.dedupeKey).toSet(),
-      );
+      _preloadQueue.cancelExcept(tasks.map((task) => task.dedupeKey).toSet());
       _logReaderEvent(
         'preload_window_cancelled',
-        extra: <String, Object?>{
-          'keep': tasks.length,
-          'reason': 'jump_window',
-        },
+        extra: <String, Object?>{'keep': tasks.length, 'reason': 'jump_window'},
       );
     }
     final accepted = _preloadQueue.enqueueAll(tasks, schedule: false);
@@ -1475,7 +1487,8 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (!force && (image.failed || image.cacheStatus == 'failed')) {
       return null;
     }
-    if (!force && (_isDownloadedReaderImage(image) || image.hasCachedLocalFile)) {
+    if (!force &&
+        (_isDownloadedReaderImage(image) || image.hasCachedLocalFile)) {
       return null;
     }
     final current = state.value;
@@ -1512,9 +1525,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     );
   }
 
-  Future<ComicImageCacheResult> _runPreloadTask(
-    ComicReaderPreloadTask task,
-  ) {
+  Future<ComicImageCacheResult> _runPreloadTask(ComicReaderPreloadTask task) {
     return _readerService.cacheImage(
       imageUrl: task.imageUrl,
       cacheKey: task.cacheKey,
@@ -1545,7 +1556,8 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       clearHint: true,
     );
     final current = state.value;
-    if (current != null && current.nextChapterPreload.episodeId == task.episodeId) {
+    if (current != null &&
+        current.nextChapterPreload.episodeId == task.episodeId) {
       state = AsyncData(
         current.copyWith(
           nextChapterPreload: current.nextChapterPreload.copyWith(
@@ -1634,32 +1646,36 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       return;
     }
     final byIndex = {
-      for (final task in tasks.where((task) => task.episodeId == current.episodeId))
+      for (final task in tasks.where(
+        (task) => task.episodeId == current.episodeId,
+      ))
         task.imageIndex: task,
     };
     if (byIndex.isEmpty) {
       return;
     }
-    final patched = current.images.map((image) {
-      final task = byIndex[image.imageIndex];
-      if (task == null) {
-        return image;
-      }
-      if (image.cacheStatus == 'downloaded') {
-        return image;
-      }
-      if ((image.failed || image.cacheStatus == 'failed') &&
-          task.priority != ComicReaderPreloadPriority.retry &&
-          cacheStatus != 'failed') {
-        return image;
-      }
-      return image.copyWith(
-        cacheStatus: cacheStatus,
-        localPath: localPath,
-        cacheLocalPath: cacheLocalPath,
-        failed: failed,
-      );
-    }).toList(growable: false);
+    final patched = current.images
+        .map((image) {
+          final task = byIndex[image.imageIndex];
+          if (task == null) {
+            return image;
+          }
+          if (image.cacheStatus == 'downloaded') {
+            return image;
+          }
+          if ((image.failed || image.cacheStatus == 'failed') &&
+              task.priority != ComicReaderPreloadPriority.retry &&
+              cacheStatus != 'failed') {
+            return image;
+          }
+          return image.copyWith(
+            cacheStatus: cacheStatus,
+            localPath: localPath,
+            cacheLocalPath: cacheLocalPath,
+            failed: failed,
+          );
+        })
+        .toList(growable: false);
     state = AsyncData(
       current.copyWith(
         images: patched,
@@ -1681,7 +1697,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (nextEpisodeId == null) {
       return;
     }
-    final queued = tasks.where((task) => task.episodeId == nextEpisodeId).length;
+    final queued = tasks
+        .where((task) => task.episodeId == nextEpisodeId)
+        .length;
     if (queued == 0) {
       return;
     }
@@ -1714,8 +1732,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (preload.status == ComicReaderChapterPreloadStatus.ready) {
       return;
     }
-    final targetCachedCount =
-        _chapterPreloadPolicy.firstPageWindowLength(preload.imageCount);
+    final targetCachedCount = _chapterPreloadPolicy.firstPageWindowLength(
+      preload.imageCount,
+    );
     final cachedPageCount = done
         ? (preload.cachedPageCount + 1).clamp(0, targetCachedCount).toInt()
         : preload.cachedPageCount;
@@ -1727,15 +1746,13 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
           status: ready
               ? ComicReaderChapterPreloadStatus.ready
               : (firstPageFailed
-                  ? ComicReaderChapterPreloadStatus.failed
-                  : ComicReaderChapterPreloadStatus.preloadingPages),
+                    ? ComicReaderChapterPreloadStatus.failed
+                    : ComicReaderChapterPreloadStatus.preloadingPages),
           cachedPageCount: cachedPageCount,
           firstPageCacheStatus: task.imageIndex == 0
               ? (done ? 'done' : 'failed')
               : preload.firstPageCacheStatus,
-          message: ready
-              ? '下一章已准备好'
-              : (firstPageFailed ? '下一章首图预加载失败' : null),
+          message: ready ? '下一章已准备好' : (firstPageFailed ? '下一章首图预加载失败' : null),
           clearMessage: !ready && !firstPageFailed,
         ),
       ),
@@ -1764,7 +1781,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     );
   }
 
-  Future<String?> _ensureCurrentImageLocalFile(ComicReaderImageState image) async {
+  Future<String?> _ensureCurrentImageLocalFile(
+    ComicReaderImageState image,
+  ) async {
     final episodeId = state.value?.episodeId ?? _activeEpisodeId;
     final existing = image.effectiveLocalPath?.trim();
     if (existing != null && existing.isNotEmpty) {
@@ -1801,7 +1820,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       return localPath;
     }
     final images = [...current.images];
-    final idx = images.indexWhere((item) => item.imageIndex == image.imageIndex);
+    final idx = images.indexWhere(
+      (item) => item.imageIndex == image.imageIndex,
+    );
     if (idx >= 0) {
       images[idx] = images[idx].copyWith(
         cacheStatus: 'done',
@@ -1826,7 +1847,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       comicId: _args.comicId,
       descending: false,
     );
-    final currentIndex = episodes.indexWhere((e) => e.episodeId == _activeEpisodeId);
+    final currentIndex = episodes.indexWhere(
+      (e) => e.episodeId == _activeEpisodeId,
+    );
     if (currentIndex <= 0) {
       return null;
     }
@@ -1839,7 +1862,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       comicId: _args.comicId,
       descending: false,
     );
-    final currentIndex = episodes.indexWhere((e) => e.episodeId == _activeEpisodeId);
+    final currentIndex = episodes.indexWhere(
+      (e) => e.episodeId == _activeEpisodeId,
+    );
     if (currentIndex < 0 || currentIndex + 1 >= episodes.length) {
       return null;
     }
@@ -1848,7 +1873,10 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
 
   Future<ComicReaderViewState> _loadState({required String episodeId}) async {
     final startedAt = DateTime.now();
-    final episodes = await _repository.getComicEpisodes(comicId: _args.comicId, descending: false);
+    final episodes = await _repository.getComicEpisodes(
+      comicId: _args.comicId,
+      descending: false,
+    );
     final episodeIndex = episodes.indexWhere((e) => e.episodeId == episodeId);
     if (episodeIndex < 0) {
       throw StateError('章节不存在');
@@ -1858,11 +1886,14 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (!ref.mounted) {
       throw StateError('阅读器已销毁');
     }
-    final progress = await _repository.getLastReadProgress(comicId: _args.comicId);
-    final currentImageIndex = progress != null && progress.episodeId == episodeId
+    final progress = await _repository.getLastReadProgress(
+      comicId: _args.comicId,
+    );
+    final currentImageIndex =
+        progress != null && progress.episodeId == episodeId
         ? progress.imageIndex
-            .clamp(0, images.isEmpty ? 0 : images.length - 1)
-            .toInt()
+              .clamp(0, images.isEmpty ? 0 : images.length - 1)
+              .toInt()
         : 0;
     final scrollOffset = progress != null && progress.episodeId == episodeId
         ? progress.scrollOffset
@@ -1942,7 +1973,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     return viewState;
   }
 
-  Future<List<ComicEpisodeImageItem>> _ensureEpisodeImages(ComicEpisodeItem episode) async {
+  Future<List<ComicEpisodeImageItem>> _ensureEpisodeImages(
+    ComicEpisodeItem episode,
+  ) async {
     final downloaded = await _downloadService.getDownloadedEpisodeImages(
       comicId: _args.comicId,
       episodeId: episode.episodeId,
@@ -1951,11 +1984,15 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       return downloaded;
     }
 
-    var images = await _repository.getEpisodeImages(episodeId: episode.episodeId);
+    var images = await _repository.getEpisodeImages(
+      episodeId: episode.episodeId,
+    );
     if (images.isNotEmpty) {
       return images;
     }
-    final fetchResult = await _readerService.fetchEpisodeImages(episode.sourceTid);
+    final fetchResult = await _readerService.fetchEpisodeImages(
+      episode.sourceTid,
+    );
     switch (fetchResult) {
       case ComicEpisodeImagesFetchFailed(:final reason, :final message):
         // 让 AsyncValue 进入 error 态，UI 渲染重试入口；不再把瞬时网络错
@@ -2002,7 +2039,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     );
   }
 
-  Future<ComicImageCacheResult> _cacheEpisodeImage(ComicEpisodeImageItem image) {
+  Future<ComicImageCacheResult> _cacheEpisodeImage(
+    ComicEpisodeImageItem image,
+  ) {
     if (_isDownloadedEpisodeImage(image)) {
       return Future<ComicImageCacheResult>.value(
         ComicImageCacheResult(
@@ -2038,11 +2077,13 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   }
 
   bool _isDownloadedReaderImage(ComicReaderImageState image) {
-    return image.cacheStatus == 'downloaded' && image.effectiveLocalPath != null;
+    return image.cacheStatus == 'downloaded' &&
+        image.effectiveLocalPath != null;
   }
 
   bool _isDownloadedEpisodeImage(ComicEpisodeImageItem image) {
-    return image.cacheStatus == 'downloaded' && image.effectiveLocalPath != null;
+    return image.cacheStatus == 'downloaded' &&
+        image.effectiveLocalPath != null;
   }
 
   bool _isImageResolvedInCurrentSession(int imageIndex) {
@@ -2071,7 +2112,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         .length;
   }
 
-  ComicReaderCacheSummary _buildCacheSummary(List<ComicReaderImageState> images) {
+  ComicReaderCacheSummary _buildCacheSummary(
+    List<ComicReaderImageState> images,
+  ) {
     var done = 0;
     var downloaded = 0;
     var failed = 0;
