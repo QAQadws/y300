@@ -95,16 +95,80 @@ void main() {
       final probeTopAfter = tester.getTopLeft(find.byKey(probeKey)).dy;
 
       // 期望：视口上方图片高度不应因异步缓存比例变化而改变，探针不位移。
-      // 当前（修复前）该断言会失败：探针随上方图片收缩而上移约 (500-175)=325。
+      // 阶段 1 修复后：_loadCachedAspectRatio 补齐了 above-viewport 保护。
       expect(
         probeTopAfter,
         closeTo(probeTopBefore, 1.0),
         reason: '视口上方图片缓存比例异步到达时不应改变已布局高度（防止上滑回溯）',
       );
     },
-    // 阶段 0 基线：当前实现下该断言失败，用于记录"上滑回溯"根因。
-    // 阶段 1 修复（plan 阶段 hydrate + above-viewport 保护）后移除 skip 转绿。
-    skip: true,
+  );
+
+  testWidgets(
+    'within-viewport block image still applies cached ratio (no over-correction)',
+    (tester) async {
+      // 同样的缓存比例 2.0，但图片就在视口内：此时应当应用真实比例（稳定优先不等于
+      // 永不修正），验证 above-viewport 保护没有误伤视口内图片。
+      final cacheService = _SizedImageCacheService(<String, CachedImageResult>{
+        'thread-inline-top': const CachedImageResult(
+          success: true,
+          cacheKey: 'thread-inline-top',
+          width: 1000,
+          height: 500,
+        ),
+      });
+      const topImage = ThreadPostImageBlock(
+        url: 'https://bbs.yamibo.com/data/attachment/forum/top.jpg',
+        rawUrl: 'data/attachment/forum/top.jpg',
+        index: 0,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            imageCacheServiceProvider.overrideWithValue(cacheService),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 350,
+                  // 视口比图片矮：图片(高度 500 @0.7)横跨视口，明确属于"视口内"。
+                  height: 300,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: const [
+                        ThreadPostImageBlockView(
+                          document: ThreadPostBodyDocument(
+                            blocks: <ThreadPostBodyBlock>[topImage],
+                          ),
+                          image: topImage,
+                          images: <ThreadPostImageBlock>[topImage],
+                          resourceLayoutPolicy: ThreadPostResourceLayoutPolicy
+                              .adaptiveBlockImagesForReading,
+                          blockImageCacheRequestBuilder: _topImageRequest,
+                        ),
+                        SizedBox(height: 1200),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      cacheService.release();
+      await tester.pump();
+      await tester.pump();
+
+      final size = tester.getSize(find.byType(ThreadPostImageBlockView));
+      expect(size.width, 350);
+      expect(size.width / size.height, closeTo(2.0, 0.01));
+    },
   );
 }
 

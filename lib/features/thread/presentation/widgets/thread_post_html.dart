@@ -1221,13 +1221,34 @@ class _ThreadPostImageBlockViewState
     if (_locksImageAspectRatio) {
       return;
     }
+    // 与 decode 回填保持一致：视口上方的高度变化会把"已读楼层"顶走，造成上滑
+    // 回溯。此处补齐 above-viewport 保护，缓存比例只在图片仍处于/低于视口时应用。
+    if (_shouldDeferAspectRatioUpdate()) {
+      _recordContinuousImage(
+        ContinuousImageDiagnosticEventType
+            .imageAspectRatioDeferredAboveViewport,
+        item: _continuousImageItem(request),
+        width: width,
+        height: height,
+        aspectRatio: next,
+        message: 'defer cached ratio because image is above viewport',
+      );
+      return;
+    }
     setState(() {
       _cachedAspectRatio = next;
     });
   }
 
-  bool get _locksImageAspectRatio =>
-      widget.resourceLayoutPolicy.lockImageAspectRatioForCurrentBuild;
+  bool get _locksImageAspectRatio {
+    if (widget.resourceLayoutPolicy.lockImageAspectRatioForCurrentBuild) {
+      return true;
+    }
+    // 当 plan 阶段已把可信尺寸（HTML/缓存）hydrate 进 hint 并标记锁定时，逐图锁定
+    // 首帧高度，无需依赖全局策略——这样无尺寸图片仍可走受保护的 decode 回填。
+    final hint = widget.resourceLayoutHints.blockImage(widget.image);
+    return hint?.lockForCurrentBuild ?? false;
+  }
 
   bool _shouldDeferAspectRatioUpdate() {
     if (!widget

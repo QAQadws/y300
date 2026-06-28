@@ -12,6 +12,9 @@ import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.
 import 'package:y300/features/thread/domain/services/thread_detail_diagnostic_recorder.dart';
 import 'package:y300/features/thread/presentation/thread_detail_render_entries.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
+import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
+import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
@@ -39,6 +42,7 @@ class ThreadDetailContent extends StatefulWidget {
     required this.onOpenPostCopyActions,
     this.diagnosticRecorder = const NoopThreadDetailDiagnosticRecorder(),
     this.onPostBuilt,
+    this.imageDimensionStore,
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
   });
@@ -64,6 +68,10 @@ class ThreadDetailContent extends StatefulWidget {
   onOpenPostCopyActions;
   final ThreadDetailDiagnosticRecorder diagnosticRecorder;
   final ValueChanged<int>? onPostBuilt;
+
+  /// 持久化图片尺寸快照（来自缓存预热）。提供时 render plan 会用可信尺寸锁定
+  /// 首帧高度，避免滚动中异步改高。为空则退化为既有行为。
+  final ThreadPostImageDimensionStore? imageDimensionStore;
   final void Function(ThreadPoll poll, ThreadPollOption option)
   onTogglePollOption;
   final ValueChanged<ThreadPoll> onSubmitPollVote;
@@ -78,22 +86,57 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   @override
   void initState() {
     super.initState();
-    _entryPlanner = ThreadDetailRenderEntryPlanner(
-      diagnosticRecorder: widget.diagnosticRecorder,
-    );
+    _entryPlanner = _createEntryPlanner();
+    widget.imageDimensionStore?.addListener(_onImageDimensionsChanged);
   }
 
   @override
   void didUpdateWidget(covariant ThreadDetailContent oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.diagnosticRecorder, widget.diagnosticRecorder)) {
-      _entryPlanner = ThreadDetailRenderEntryPlanner(
-        diagnosticRecorder: widget.diagnosticRecorder,
-      );
+    if (!identical(oldWidget.imageDimensionStore, widget.imageDimensionStore)) {
+      oldWidget.imageDimensionStore?.removeListener(_onImageDimensionsChanged);
+      widget.imageDimensionStore?.addListener(_onImageDimensionsChanged);
+    }
+    if (!identical(oldWidget.diagnosticRecorder, widget.diagnosticRecorder) ||
+        !identical(
+          oldWidget.imageDimensionStore,
+          widget.imageDimensionStore,
+        )) {
+      _entryPlanner = _createEntryPlanner();
     }
     if (!identical(oldWidget.state.posts, widget.state.posts) ||
         oldWidget.state.currentPage != widget.state.currentPage) {
       _entryPlanner.prune(widget.state.posts);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.imageDimensionStore?.removeListener(_onImageDimensionsChanged);
+    super.dispose();
+  }
+
+  /// 构造接入持久化尺寸的 render plan 装配器。
+  ///
+  /// resolver 开启 [ThreadPostResourceLayoutHintResolver.lockTrustedDimensions]：
+  /// 只要 hint 来自 HTML 或缓存即锁定首帧高度；无尺寸图片仍走受 above-viewport
+  /// 保护的 decode 回填。store 的 signature 已并入 resolver 签名，缓存预热到达后
+  /// render plan 缓存自然失效并以可信尺寸重建。
+  ThreadDetailRenderEntryPlanner _createEntryPlanner() {
+    return ThreadDetailRenderEntryPlanner(
+      diagnosticRecorder: widget.diagnosticRecorder,
+      bodyRenderPlanner: ThreadPostBodyRenderPlanner(
+        resourceLayoutHintResolver: ThreadPostResourceLayoutHintResolver(
+          lockTrustedDimensions: true,
+          dimensionLookup: widget.imageDimensionStore,
+        ),
+      ),
+    );
+  }
+
+  void _onImageDimensionsChanged() {
+    if (mounted) {
+      setState(() {});
     }
   }
 
