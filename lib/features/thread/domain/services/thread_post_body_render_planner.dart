@@ -1,6 +1,8 @@
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
+import 'package:y300/features/thread/domain/models/thread_post_render_cache_key.dart';
+import 'package:y300/features/thread/domain/models/thread_post_segmentation_config.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_anchor.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_display_transformer.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_document_normalizer.dart';
@@ -10,20 +12,33 @@ import 'package:y300/features/thread/domain/services/thread_post_resource_layout
 class ThreadPostBodyRenderPlanner {
   const ThreadPostBodyRenderPlanner({
     this.parser = const ThreadPostBodyParser(),
-    this.normalizer = const ThreadPostBodyDocumentNormalizer(
-      maxTextRunLength: 600,
-    ),
+    this.normalizer,
     this.resourceLayoutHintResolver =
         const ThreadPostResourceLayoutHintResolver(),
     this.displayTransformer = const ThreadPostBodyDisplayTransformer(),
-    this.maxSegmentTextLength = 600,
-  }) : assert(maxSegmentTextLength > 0);
+    this.segmentation = ThreadPostSegmentationConfig.standard,
+    // Kept for explicit overrides in tests; prefer [segmentation].
+    int? maxSegmentTextLength,
+  }) : _maxSegmentTextLength = maxSegmentTextLength,
+       assert(maxSegmentTextLength == null || maxSegmentTextLength > 0);
 
   final ThreadPostBodyParser parser;
-  final ThreadPostBodyDocumentNormalizer normalizer;
+  final ThreadPostBodyDocumentNormalizer? normalizer;
   final ThreadPostResourceLayoutHintResolver resourceLayoutHintResolver;
   final ThreadPostBodyDisplayTransformer displayTransformer;
-  final int maxSegmentTextLength;
+  final ThreadPostSegmentationConfig segmentation;
+  final int? _maxSegmentTextLength;
+
+  /// Effective segment text length — explicit override wins over [segmentation].
+  int get maxSegmentTextLength =>
+      _maxSegmentTextLength ?? segmentation.maxSegmentTextLength;
+
+  /// The normalizer to use; defaults to a normalizer aligned with [segmentation].
+  ThreadPostBodyDocumentNormalizer get _normalizer =>
+      normalizer ??
+      ThreadPostBodyDocumentNormalizer(
+        maxTextRunLength: maxSegmentTextLength,
+      );
 
   String get resourceHintResolverSignature =>
       resourceLayoutHintResolver.signature;
@@ -35,7 +50,7 @@ class ThreadPostBodyRenderPlanner {
     ThreadPostBodyRenderSettings renderSettings =
         ThreadPostBodyRenderSettings.defaults,
   }) {
-    final document = normalizer.normalize(parser.parse(html));
+    final document = _normalizer.normalize(parser.parse(html));
     return planDocument(document, renderSettings: renderSettings);
   }
 
@@ -95,15 +110,20 @@ class ThreadPostBodyRenderPlanner {
     }
     flushPending();
 
+    final renderKey = ThreadPostRenderCacheKey(
+      renderSettings: renderSettings,
+      displayTransformerSignature: displayTransformerSignature,
+      resourceHintResolverSignature: resourceHintResolverSignature,
+      segmentation: segmentation,
+    );
+
     return ThreadPostBodyRenderPlan(
       document: document,
       displayDocument: displayDocument,
       images: displayDocument.images,
       segments: List<ThreadPostBodySegment>.unmodifiable(segments),
       usesListSegments: segments.length > 1,
-      renderSettingsSignature: renderSettings.signature,
-      displayTransformerSignature: displayTransformerSignature,
-      resourceHintResolverSignature: resourceHintResolverSignature,
+      renderKey: renderKey,
       resourceLayoutHints: resourceLayoutHintResolver.resolve(document),
     );
   }
@@ -218,3 +238,4 @@ class ThreadPostBodyRenderPlanner {
     return threadPostBodyAnchorId('segment', '$index|$seed');
   }
 }
+

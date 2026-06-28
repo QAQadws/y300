@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart';
+
 enum ThreadPostTextConversionMode { none, simplified, traditional }
 
+@immutable
 class ThreadPostBodyRenderSettings {
   const ThreadPostBodyRenderSettings({
     this.conversionMode = ThreadPostTextConversionMode.none,
@@ -20,6 +23,8 @@ class ThreadPostBodyRenderSettings {
   final double? blockSpacing;
   final String textTransformerKey;
 
+  /// Stable string fingerprint — kept for legacy comparisons during migration.
+  /// Prefer value equality (==) for new code.
   String get signature {
     return [
       conversionMode.name,
@@ -30,6 +35,27 @@ class ThreadPostBodyRenderSettings {
       textTransformerKey,
     ].join('|');
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (other is! ThreadPostBodyRenderSettings) return false;
+    return conversionMode == other.conversionMode &&
+        fontSize == other.fontSize &&
+        lineHeight == other.lineHeight &&
+        paragraphSpacing == other.paragraphSpacing &&
+        blockSpacing == other.blockSpacing &&
+        textTransformerKey == other.textTransformerKey;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    conversionMode,
+    fontSize,
+    lineHeight,
+    paragraphSpacing,
+    blockSpacing,
+    textTransformerKey,
+  );
 
   ThreadPostBodyRenderSettings copyWith({
     ThreadPostTextConversionMode? conversionMode,

@@ -39,6 +39,7 @@ class ThreadPostResourceLayoutHintResolver {
   /// 可选的持久化尺寸来源；为空时退化为"仅用 HTML 宽高"的既有行为。
   final ThreadPostImageDimensionLookup? dimensionLookup;
 
+  /// Legacy string fingerprint — kept for backward compatibility.
   String get signature {
     return [
       defaultBlockImageAspectRatio.toStringAsFixed(6),
@@ -47,6 +48,24 @@ class ThreadPostResourceLayoutHintResolver {
       dimensionLookup?.signature ?? 'noLookup',
     ].join('|');
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (other is! ThreadPostResourceLayoutHintResolver) return false;
+    return defaultBlockImageAspectRatio == other.defaultBlockImageAspectRatio &&
+        lockForCurrentBuild == other.lockForCurrentBuild &&
+        lockTrustedDimensions == other.lockTrustedDimensions &&
+        (dimensionLookup?.signature ?? 'noLookup') ==
+            (other.dimensionLookup?.signature ?? 'noLookup');
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    defaultBlockImageAspectRatio,
+    lockForCurrentBuild,
+    lockTrustedDimensions,
+    dimensionLookup?.signature ?? 'noLookup',
+  );
 
   ThreadPostResourceLayoutHints resolve(ThreadPostBodyDocument document) {
     final blockImages = <String, ThreadPostBlockImageLayoutHint>{};

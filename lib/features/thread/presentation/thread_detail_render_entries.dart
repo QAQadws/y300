@@ -5,6 +5,7 @@ import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
+import 'package:y300/features/thread/domain/models/thread_post_render_cache_key.dart';
 import 'package:y300/features/thread/domain/services/thread_detail_diagnostic_recorder.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 
@@ -106,11 +107,14 @@ class ThreadDetailRenderEntryPlanner {
     return ThreadDetailPostBodyRenderPlanCacheKey(
       pid: post.pid,
       messageHash: _hashMessage(post.message),
-      renderSettingsSignature: _renderSettings.signature,
-      displayTransformerSignature:
-          _bodyRenderPlanner.displayTransformerSignature,
-      resourceHintResolverSignature:
-          _bodyRenderPlanner.resourceHintResolverSignature,
+      renderKey: ThreadPostRenderCacheKey(
+        renderSettings: _renderSettings,
+        displayTransformerSignature:
+            _bodyRenderPlanner.displayTransformerSignature,
+        resourceHintResolverSignature:
+            _bodyRenderPlanner.resourceHintResolverSignature,
+        segmentation: _bodyRenderPlanner.segmentation,
+      ),
     );
   }
 
@@ -238,33 +242,28 @@ class ThreadDetailPostBodyRenderPlanCacheKey {
   const ThreadDetailPostBodyRenderPlanCacheKey({
     required this.pid,
     required this.messageHash,
-    required this.renderSettingsSignature,
-    required this.displayTransformerSignature,
-    required this.resourceHintResolverSignature,
+    required this.renderKey,
   });
 
   final String pid;
   final String messageHash;
-  final String renderSettingsSignature;
-  final String displayTransformerSignature;
-  final String resourceHintResolverSignature;
+  final ThreadPostRenderCacheKey renderKey;
+
+  // ── Backward-compat accessors (kept while tests migrate) ──────────────────
+  String get renderSettingsSignature => renderKey.renderSettings.signature;
+  String get displayTransformerSignature =>
+      renderKey.displayTransformerSignature;
+  String get resourceHintResolverSignature =>
+      renderKey.resourceHintResolverSignature;
 
   @override
   bool operator ==(Object other) {
     return other is ThreadDetailPostBodyRenderPlanCacheKey &&
         other.pid == pid &&
         other.messageHash == messageHash &&
-        other.renderSettingsSignature == renderSettingsSignature &&
-        other.displayTransformerSignature == displayTransformerSignature &&
-        other.resourceHintResolverSignature == resourceHintResolverSignature;
+        other.renderKey == renderKey;
   }
 
   @override
-  int get hashCode => Object.hash(
-    pid,
-    messageHash,
-    renderSettingsSignature,
-    displayTransformerSignature,
-    resourceHintResolverSignature,
-  );
+  int get hashCode => Object.hash(pid, messageHash, renderKey);
 }

@@ -2,6 +2,10 @@ import 'package:y300/features/thread/domain/models/thread_post_body_document.dar
 
 typedef ThreadPostTextTransformer = String Function(String text);
 
+/// Text-transformation strategy applied to post body blocks before rendering.
+///
+/// Identity is encoded in [signature]; two transformers with the same
+/// [signature] are treated as equivalent for render-plan caching purposes.
 class ThreadPostBodyDisplayTransformer {
   const ThreadPostBodyDisplayTransformer({
     this.textTransformer,
@@ -22,6 +26,13 @@ class ThreadPostBodyDisplayTransformer {
       ),
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      other is ThreadPostBodyDisplayTransformer && other.signature == signature;
+
+  @override
+  int get hashCode => signature.hashCode;
 
   List<ThreadPostBodyBlock> _transformBlocks(
     List<ThreadPostBodyBlock> blocks,

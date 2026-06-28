@@ -1,4 +1,5 @@
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/thread/domain/models/thread_post_render_cache_key.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 
 class ThreadPostBodyRenderPlan {
@@ -8,9 +9,7 @@ class ThreadPostBodyRenderPlan {
     required this.images,
     required this.segments,
     required this.usesListSegments,
-    required this.renderSettingsSignature,
-    required this.displayTransformerSignature,
-    required this.resourceHintResolverSignature,
+    required this.renderKey,
     this.resourceLayoutHints = ThreadPostResourceLayoutHints.empty,
   });
 
@@ -26,11 +25,19 @@ class ThreadPostBodyRenderPlan {
   /// is needed.
   final bool usesListSegments;
 
-  final String renderSettingsSignature;
-  final String displayTransformerSignature;
-  final String resourceHintResolverSignature;
+  /// Value-object key that captures all render-affecting configuration.
+  /// Use for cache invalidation instead of individual signature strings.
+  final ThreadPostRenderCacheKey renderKey;
+
   final ThreadPostResourceLayoutHints resourceLayoutHints;
 
+  // ── Backward-compat accessors (kept while tests migrate) ──────────────────
+
+  String get renderSettingsSignature => renderKey.renderSettings.signature;
+  String get displayTransformerSignature =>
+      renderKey.displayTransformerSignature;
+  String get resourceHintResolverSignature =>
+      renderKey.resourceHintResolverSignature;
   String get resourceHintSignature => resourceLayoutHints.signature;
 }
 
