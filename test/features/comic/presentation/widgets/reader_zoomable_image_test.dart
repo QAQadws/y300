@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/comic/presentation/widgets/reader_zoomable_image.dart';
+import 'package:y300/features/reader_shared/presentation/engine/reader_zoomable_image.dart';
 
 void main() {
   testWidgets('double tap toggles zoom state callback', (tester) async {

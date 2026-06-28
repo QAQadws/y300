@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
-import 'package:y300/features/comic/presentation/widgets/reader_page_indicator_overlay.dart';
+import 'package:y300/features/reader_shared/presentation/engine/reader_page_indicator_overlay.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 
 void main() {

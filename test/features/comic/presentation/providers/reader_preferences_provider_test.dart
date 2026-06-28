@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:y300/features/comic/presentation/models/reader_preferences.dart';
-import 'package:y300/features/comic/presentation/providers/reader_preferences_provider.dart';
+import 'package:y300/features/reader_shared/domain/reader_preferences/reader_preferences.dart';
+import 'package:y300/features/reader_shared/presentation/reader_preferences/reader_preferences_provider.dart';
 
 void main() {
   setUp(() {

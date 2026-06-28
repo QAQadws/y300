@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/comic/presentation/models/reader_preferences.dart';
+import 'package:y300/features/reader_shared/domain/reader_preferences/reader_preferences.dart';
 
 void main() {
   test('ReaderPreferences.defaults uses stable phase-0 defaults', () {
