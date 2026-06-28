@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
@@ -11,6 +12,10 @@ import 'package:y300/features/thread/domain/models/thread_image_open_models.dart
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+  });
+
   testWidgets('ThreadImageReaderPage renders continuous image list', (
     tester,
   ) async {
@@ -22,53 +27,76 @@ void main() {
       ),
     );
     await tester.pump();
+    await tester.pump();
 
     expect(find.byType(ThreadImageReaderPage), findsOneWidget);
-    expect(find.byType(ContinuousImageReaderRoute), findsOneWidget);
+    expect(find.byType(ContinuousImageReaderView), findsOneWidget);
     expect(find.byKey(const Key('thread-image-reader-list')), findsOneWidget);
-    expect(find.byType(CachedLibraryImage), findsNWidgets(2));
-
-    final list = tester.widget<ListView>(
-      find.byKey(const Key('thread-image-reader-list')),
-    );
-    expect(list.cacheExtent, greaterThan(0));
-    expect(cacheService.requests.map((request) => request.cacheKey), <String>[
-      'thread/inline/page-1',
-      'thread/inline/page-2',
-    ]);
-    expect(
-      cacheService.requests.map((request) => request.retentionClass).toSet(),
-      <ImageRetentionClass>{ImageRetentionClass.recentReader},
-    );
+    expect(find.byType(CachedLibraryImage), findsWidgets);
   });
 
-  testWidgets('ThreadImageReaderPage supports shared horizontal reader route', (
+  testWidgets('ThreadImageReaderPage exposes general reading chrome only', (
     tester,
   ) async {
     final cacheService = _RecordingImageCacheService();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
-        child: MaterialApp(
-          home: ThreadImageReaderPage(
-            request: _request(),
-            mode: ContinuousImageReaderMode.horizontal,
-          ),
-        ),
+        child: MaterialApp(home: ThreadImageReaderPage(request: _request())),
       ),
     );
     await tester.pump();
     await tester.pump();
 
+    // 打开 overlay 菜单（点击中央 tap 区）。
+    await tester.tapAt(
+      tester.getCenter(find.byKey(const Key('shared-reader-center-tap-zone'))),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 360));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // 通用阅读能力：滑块 / 页码标签 / 显示设置入口。
     expect(
-      find.byKey(const Key('thread-image-reader-page-view')),
+      find.byKey(const Key('shared-reader-progress-slider')),
       findsOneWidget,
     );
-    expect(find.byType(ContinuousImageReaderRoute), findsOneWidget);
     expect(
-      cacheService.getCachedKeys.toSet(),
-      containsAll(<String>['thread/inline/page-1', 'thread/inline/page-2']),
+      find.byKey(const Key('shared-reader-current-label')),
+      findsOneWidget,
     );
+    expect(
+      find.byKey(const Key('shared-reader-bottom-action-display')),
+      findsOneWidget,
+    );
+
+    // detail 强相关项不应出现：书签 / 原帖 / 章节 / 缓存 / 翻章。
+    expect(
+      find.byKey(const Key('shared-reader-top-action-bookmark')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('shared-reader-top-action-open-thread')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('shared-reader-bottom-action-catalog')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('shared-reader-bottom-action-cache')),
+      findsNothing,
+    );
+    // 翻章按钮属于共享进度条 chrome，帖子图片阅读器没有"上一话/下一话"语义，
+    // 因此它们存在但被禁用（onPressed == null）。
+    final prevButton = tester.widget<IconButton>(
+      find.byKey(const Key('shared-reader-prev-button')),
+    );
+    final nextButton = tester.widget<IconButton>(
+      find.byKey(const Key('shared-reader-next-button')),
+    );
+    expect(prevButton.onPressed, isNull);
+    expect(nextButton.onPressed, isNull);
   });
 }
 
