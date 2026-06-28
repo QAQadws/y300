@@ -204,6 +204,16 @@ class _NovelReaderDisplaySettingsSheetState
                       _draft.copyWith(flowMode: value),
                     ),
                   ),
+                  ReaderSegmentControl<NovelReaderConversionMode>(
+                    key: const Key('novel-reader-conversion-mode-control'),
+                    label: '简繁',
+                    value: _draft.conversionMode,
+                    values: NovelReaderConversionMode.values,
+                    labelBuilder: _conversionModeLabel,
+                    onChanged: (value) => _applyPreferences(
+                      _draft.copyWith(conversionMode: value),
+                    ),
+                  ),
                   SwitchListTile(
                     key: const Key('novel-reader-show-progress-switch'),
                     title: const Text('显示进度控件'),
@@ -285,6 +295,17 @@ class _NovelReaderDisplaySettingsSheetState
         return '右翻';
       case NovelReaderFlowMode.vertical:
         return '滚动';
+    }
+  }
+
+  String _conversionModeLabel(NovelReaderConversionMode value) {
+    switch (value) {
+      case NovelReaderConversionMode.none:
+        return '原文';
+      case NovelReaderConversionMode.toSimplified:
+        return '简体';
+      case NovelReaderConversionMode.toTraditional:
+        return '繁体';
     }
   }
 }

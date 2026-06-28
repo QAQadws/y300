@@ -490,6 +490,7 @@ class LocalNovelRepository
         'text_align': preferences.textAlign.storageValue,
         'show_progress_indicator': preferences.showProgressIndicator ? 1 : 0,
         'show_chapter_title': preferences.showChapterTitle ? 1 : 0,
+        'conversion_mode': preferences.conversionMode.storageValue,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -532,6 +533,9 @@ class LocalNovelRepository
       showChapterTitle: _intToBool(
         row['show_chapter_title'] as int?,
         defaults.showChapterTitle,
+      ),
+      conversionMode: NovelReaderConversionModeCodec.fromStorage(
+        row['conversion_mode'] as String?,
       ),
     );
   }

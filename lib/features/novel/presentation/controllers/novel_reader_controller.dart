@@ -282,6 +282,41 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
         ),
       ),
     );
+
+    // A traditional/simplified conversion change requires re-building the
+    // source document; reload the current episode through the bootstrap path
+    // so conversion is re-applied. Other impacts are pure relayout/repaint
+    // handled by the render layer reading the updated preferences.
+    if (persistedDiff.impacts.contains(
+      NovelReaderPreferenceImpact.contentRebuild,
+    )) {
+      await _rebuildCurrentEpisodeDocument(commitSerial);
+    }
+  }
+
+  /// Reloads the current episode document so preference-driven content
+  /// transforms (e.g. text conversion) take effect without leaving the page.
+  Future<void> _rebuildCurrentEpisodeDocument(int commitSerial) async {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    final context = NovelReaderLoadContext(
+      novelId: _args.novelId,
+      requestedEpisodeId: current.currentEpisode.episodeId,
+      preservedProgress: current.readingProgress,
+    );
+    final critical = await _loadCriticalBootstrap(context);
+    if (!ref.mounted || commitSerial != _preferenceCommitSerial) {
+      return;
+    }
+    final latest = state.value ?? current;
+    state = AsyncData(
+      latest.copyWith(
+        currentContent: critical.currentContent,
+        document: critical.document,
+      ),
+    );
   }
 
   void revertPreferencePreview() {

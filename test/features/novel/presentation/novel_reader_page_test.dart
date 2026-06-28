@@ -27,6 +27,8 @@ import 'package:y300/features/novel/presentation/novel_reader_page.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_layout_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_layout_request.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_layout_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
@@ -2495,8 +2497,9 @@ class _DelayedNovelReaderDocumentBuildService
 
   @override
   Future<NovelReaderDocument> build(
-    NovelReaderDocumentBuildRequest request,
-  ) async {
+    NovelReaderDocumentBuildRequest request, {
+    TextConverter converter = const IdentityTextConverter(),
+  }) async {
     await Future<void>.delayed(delay);
     return const DiscuzNovelReaderDocumentParser().parse(
       episodeId: request.episodeId,

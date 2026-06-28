@@ -81,6 +81,36 @@ enum NovelReaderFlowMode { vertical, pagedLtr, pagedRtl }
 
 enum NovelReaderTextAlignMode { start, justify, center }
 
+/// Traditional/simplified conversion direction for the novel reader.
+/// Stored alongside other reader preferences; maps to the shared
+/// [TextConversionMode] via [NovelReaderConversionModeCodec].
+enum NovelReaderConversionMode { none, toSimplified, toTraditional }
+
+extension NovelReaderConversionModeCodec on NovelReaderConversionMode {
+  String get storageValue {
+    switch (this) {
+      case NovelReaderConversionMode.none:
+        return 'none';
+      case NovelReaderConversionMode.toSimplified:
+        return 'toSimplified';
+      case NovelReaderConversionMode.toTraditional:
+        return 'toTraditional';
+    }
+  }
+
+  static NovelReaderConversionMode fromStorage(String? value) {
+    switch (value) {
+      case 'toSimplified':
+        return NovelReaderConversionMode.toSimplified;
+      case 'toTraditional':
+        return NovelReaderConversionMode.toTraditional;
+      case 'none':
+      default:
+        return NovelReaderConversionMode.none;
+    }
+  }
+}
+
 extension NovelReaderThemePresetCodec on NovelReaderThemePreset {
   String get storageValue {
     switch (this) {
@@ -179,6 +209,7 @@ class NovelReaderPreferences {
     this.textAlign = NovelReaderTextAlignMode.start,
     this.showProgressIndicator = true,
     this.showChapterTitle = true,
+    this.conversionMode = NovelReaderConversionMode.none,
     String? themeMode,
   }) : themePreset = themeMode == null
            ? themePreset
@@ -198,6 +229,7 @@ class NovelReaderPreferences {
     required this.textAlign,
     required this.showProgressIndicator,
     required this.showChapterTitle,
+    required this.conversionMode,
   });
 
   factory NovelReaderPreferences.defaults() {
@@ -215,6 +247,7 @@ class NovelReaderPreferences {
       textAlign: NovelReaderTextAlignMode.start,
       showProgressIndicator: true,
       showChapterTitle: true,
+      conversionMode: NovelReaderConversionMode.none,
     );
   }
 
@@ -231,6 +264,7 @@ class NovelReaderPreferences {
   final NovelReaderTextAlignMode textAlign;
   final bool showProgressIndicator;
   final bool showChapterTitle;
+  final NovelReaderConversionMode conversionMode;
 
   String get themeMode => themePreset.storageValue;
 
@@ -252,7 +286,8 @@ class NovelReaderPreferences {
         other.fontWeight == fontWeight &&
         other.textAlign == textAlign &&
         other.showProgressIndicator == showProgressIndicator &&
-        other.showChapterTitle == showChapterTitle;
+        other.showChapterTitle == showChapterTitle &&
+        other.conversionMode == conversionMode;
   }
 
   @override
@@ -270,6 +305,7 @@ class NovelReaderPreferences {
     textAlign,
     showProgressIndicator,
     showChapterTitle,
+    conversionMode,
   );
 
   NovelReaderPreferences copyWith({
@@ -287,6 +323,7 @@ class NovelReaderPreferences {
     NovelReaderTextAlignMode? textAlign,
     bool? showProgressIndicator,
     bool? showChapterTitle,
+    NovelReaderConversionMode? conversionMode,
   }) {
     return NovelReaderPreferences._(
       fontSize: fontSize ?? this.fontSize,
@@ -305,6 +342,7 @@ class NovelReaderPreferences {
       showProgressIndicator:
           showProgressIndicator ?? this.showProgressIndicator,
       showChapterTitle: showChapterTitle ?? this.showChapterTitle,
+      conversionMode: conversionMode ?? this.conversionMode,
     );
   }
 }

@@ -4,6 +4,8 @@ import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_shared_preferences_bridge.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 
 class NovelReaderLoadContext {
   const NovelReaderLoadContext({
@@ -88,14 +90,21 @@ class DefaultNovelReaderBootstrapService implements NovelReaderBootstrapService 
       throw StateError('章节内容不存在');
     }
 
+    // Load preferences before building so traditional/simplified conversion is
+    // applied to the document at build time (and re-applied on episode change).
+    final persistedPreferences = await _repository.getReaderPreferences();
+    final converter = resolveTextConverter(
+      persistedPreferences.sharedConversionMode,
+    );
+
     final document = await _documentBuildService.build(
       NovelReaderDocumentBuildRequest(
         episodeId: content.episodeId,
         rawHtml: content.rawHtml,
         fallbackParagraphs: content.paragraphs,
       ),
+      converter: converter,
     );
-    final persistedPreferences = await _repository.getReaderPreferences();
     final readingProgress = await _repository.getReadingProgress(
       novelId: context.novelId,
     );

@@ -3,6 +3,9 @@ import 'dart:isolate';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_document_dto.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 
 class NovelReaderDocumentBuildRequest {
   const NovelReaderDocumentBuildRequest({
@@ -62,9 +65,13 @@ class IsolateNovelReaderDocumentBuildExecutor
 }
 
 abstract interface class NovelReaderDocumentBuildService {
+  /// Builds a reader document. When [converter] performs real conversion its
+  /// async [TextConverter.convertHtml] runs on the current isolate before
+  /// parsing (OpenCC relies on a MethodChannel and cannot run in Isolate.run).
   Future<NovelReaderDocument> build(
-    NovelReaderDocumentBuildRequest request,
-  );
+    NovelReaderDocumentBuildRequest request, {
+    TextConverter converter,
+  });
 }
 
 class AdaptiveNovelReaderDocumentBuildService
@@ -84,17 +91,38 @@ class AdaptiveNovelReaderDocumentBuildService
 
   @override
   Future<NovelReaderDocument> build(
-    NovelReaderDocumentBuildRequest request,
-  ) {
-    if (_shouldBuildInBackground(request)) {
-      return _executor.buildInBackground(request);
+    NovelReaderDocumentBuildRequest request, {
+    TextConverter converter = const IdentityTextConverter(),
+  }) async {
+    // Convert on the current isolate first: OpenCC uses a MethodChannel and
+    // cannot run inside Isolate.run. IdentityTextConverter is a cheap no-op.
+    final converted = await _convert(request, converter);
+    if (_shouldBuildInBackground(converted)) {
+      return _executor.buildInBackground(converted);
     }
-    return Future<NovelReaderDocument>.value(
-      _parser.parse(
-        episodeId: request.episodeId,
-        rawHtml: request.rawHtml,
-        fallbackParagraphs: request.fallbackParagraphs,
-      ),
+    return _parser.parse(
+      episodeId: converted.episodeId,
+      rawHtml: converted.rawHtml,
+      fallbackParagraphs: converted.fallbackParagraphs,
+    );
+  }
+
+  Future<NovelReaderDocumentBuildRequest> _convert(
+    NovelReaderDocumentBuildRequest request,
+    TextConverter converter,
+  ) async {
+    if (converter.mode == TextConversionMode.none) {
+      return request;
+    }
+    final convertedHtml = await converter.convertHtml(request.rawHtml);
+    final convertedParagraphs = <String>[
+      for (final paragraph in request.fallbackParagraphs)
+        await converter.convertHtml(paragraph),
+    ];
+    return NovelReaderDocumentBuildRequest(
+      episodeId: request.episodeId,
+      rawHtml: convertedHtml,
+      fallbackParagraphs: convertedParagraphs,
     );
   }
 

@@ -5,6 +5,10 @@ enum NovelReaderPreferenceImpact {
   repaintOnly,
   relayout,
   flowModeSwitch,
+
+  /// The source document must be re-parsed/re-built (e.g. traditional/
+  /// simplified conversion changed). Most expensive impact.
+  contentRebuild,
 }
 
 class NovelReaderPreferenceDiff {
@@ -46,6 +50,9 @@ class DefaultNovelReaderPreferenceImpactAnalyzer
     }
 
     final impacts = <NovelReaderPreferenceImpact>{};
+    if (previous.conversionMode != next.conversionMode) {
+      impacts.add(NovelReaderPreferenceImpact.contentRebuild);
+    }
     if (previous.flowMode != next.flowMode) {
       impacts.add(NovelReaderPreferenceImpact.flowModeSwitch);
     }
