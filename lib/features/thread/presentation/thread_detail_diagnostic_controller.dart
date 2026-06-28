@@ -8,8 +8,9 @@ final threadDetailDiagnosticSettingsRepositoryProvider =
     });
 
 final threadDetailDiagnosticRecorderProvider =
-    Provider<InMemoryThreadDetailDiagnosticRecorder>((ref) {
-      return InMemoryThreadDetailDiagnosticRecorder();
+    Provider<ThreadDetailDiagnosticRecorder>((ref) {
+      // release → const no-op (tree-shaken hot path); debug → in-memory.
+      return ThreadDetailDiagnosticRecorder.forCurrentBuild();
     });
 
 final threadDetailDiagnosticControllerProvider =
@@ -21,19 +22,19 @@ class ThreadDetailDiagnosticController extends AsyncNotifier<bool> {
   ThreadDetailDiagnosticSettingsRepository get _repository =>
       ref.read(threadDetailDiagnosticSettingsRepositoryProvider);
 
-  InMemoryThreadDetailDiagnosticRecorder get _recorder =>
+  ThreadDetailDiagnosticRecorder get _recorder =>
       ref.read(threadDetailDiagnosticRecorderProvider);
 
   @override
   Future<bool> build() async {
     final enabled = await _repository.loadScrollDiagnosticEnabled();
-    _recorder.enabledState = enabled;
+    _recorder.setEnabled(enabled);
     return enabled;
   }
 
   Future<void> setEnabled(bool enabled) async {
     state = AsyncData(enabled);
-    _recorder.enabledState = enabled;
+    _recorder.setEnabled(enabled);
     try {
       await _repository.setScrollDiagnosticEnabled(enabled);
       if (!enabled) {
@@ -41,7 +42,7 @@ class ThreadDetailDiagnosticController extends AsyncNotifier<bool> {
       }
     } catch (error, stackTrace) {
       final previous = !enabled;
-      _recorder.enabledState = previous;
+      _recorder.setEnabled(previous);
       state = AsyncData(previous);
       Error.throwWithStackTrace(error, stackTrace);
     }

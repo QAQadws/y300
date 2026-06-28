@@ -776,14 +776,16 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     double? scrollOffset,
     required String message,
   }) {
-    ref
-        .read(threadDetailDiagnosticRecorderProvider)
-        .record(
-          type: type,
-          pid: pid,
-          scrollOffset: scrollOffset,
-          message: message,
-        );
+    final recorder = ref.read(threadDetailDiagnosticRecorderProvider);
+    if (!recorder.enabled) {
+      return;
+    }
+    recorder.record(
+      type: type,
+      pid: pid,
+      scrollOffset: scrollOffset,
+      message: message,
+    );
   }
 
   ({int min, int max})? _builtPostIndexRange(ThreadDetailPageState state) {

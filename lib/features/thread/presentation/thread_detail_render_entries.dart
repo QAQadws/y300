@@ -83,12 +83,14 @@ class ThreadDetailRenderEntryPlanner {
   ThreadPostBodyRenderPlan planFor(ThreadPost post) {
     final key = _cacheKeyFor(post);
     return _bodyRenderPlanCache.putIfAbsent(key, () {
-      _diagnosticRecorder.record(
-        type: ThreadDetailDiagnosticEventType.renderPlanCreate,
-        pid: post.pid,
-        message:
-            'create render plan page post=${post.number} hash=${key.messageHash}',
-      );
+      if (_diagnosticRecorder.enabled) {
+        _diagnosticRecorder.record(
+          type: ThreadDetailDiagnosticEventType.renderPlanCreate,
+          pid: post.pid,
+          message:
+              'create render plan page post=${post.number} hash=${key.messageHash}',
+        );
+      }
       return _bodyRenderPlanner.plan(
         post.message,
         renderSettings: _renderSettings,

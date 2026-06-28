@@ -162,6 +162,12 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   }
 
   void _recordEntryBuild(ThreadDetailRenderEntry entry) {
+    // Hot path: runs for every item build. Bail out before computing scroll
+    // position or building the message string when diagnostics are disabled
+    // (always the case in release, where the recorder is a const no-op).
+    if (!widget.diagnosticRecorder.enabled) {
+      return;
+    }
     final position = widget.scrollController?.hasClients == true
         ? widget.scrollController!.position.pixels
         : null;

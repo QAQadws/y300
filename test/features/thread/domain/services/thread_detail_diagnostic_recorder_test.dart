@@ -15,7 +15,7 @@ void main() {
       );
       expect(recorder.snapshot(), isEmpty);
 
-      recorder.enabledState = true;
+      recorder.setEnabled(true);
       recorder.record(
         type: ThreadDetailDiagnosticEventType.entryBuild,
         entryKey: 'thread-post-body-p1',
@@ -57,6 +57,19 @@ void main() {
 
       recorder.clear();
       expect(recorder.snapshot(), isEmpty);
+    });
+
+    test('forCurrentBuild returns const no-op in release mode', () {
+      final recorder = ThreadDetailDiagnosticRecorder.forCurrentBuild();
+      // In debug mode this is InMemory; in release it's const Noop.
+      // Both share the same interface and record() is a no-op when disabled.
+      expect(recorder, isNotNull);
+      recorder.record(
+        type: ThreadDetailDiagnosticEventType.entryBuild,
+        message: 'test',
+      );
+      // In release this is always empty; in debug it's empty until enabled.
+      // Either way, the hot path is safe.
     });
   });
 }

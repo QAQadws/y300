@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 
@@ -5,6 +6,9 @@ abstract class ThreadDetailDiagnosticRecorder
     implements ContinuousImageDiagnosticRecorder {
   @override
   bool get enabled;
+
+  /// Toggles recording. No-op implementations ignore this.
+  void setEnabled(bool value);
 
   List<ThreadDetailDiagnosticEvent> snapshot();
 
@@ -19,6 +23,15 @@ abstract class ThreadDetailDiagnosticRecorder
     double? scrollOffset,
     required String message,
   });
+
+  /// Compile-time-trimmable factory: release builds get a const no-op so the
+  /// in-memory event path (and its allocations) are tree-shaken away; debug
+  /// builds get a real in-memory recorder.
+  static ThreadDetailDiagnosticRecorder forCurrentBuild() {
+    return kReleaseMode
+        ? const NoopThreadDetailDiagnosticRecorder()
+        : InMemoryThreadDetailDiagnosticRecorder();
+  }
 }
 
 class InMemoryThreadDetailDiagnosticRecorder
@@ -36,6 +49,11 @@ class InMemoryThreadDetailDiagnosticRecorder
   bool enabled;
 
   set enabledState(bool value) {
+    enabled = value;
+  }
+
+  @override
+  void setEnabled(bool value) {
     enabled = value;
   }
 
@@ -97,6 +115,9 @@ class NoopThreadDetailDiagnosticRecorder
 
   @override
   bool get enabled => false;
+
+  @override
+  void setEnabled(bool value) {}
 
   @override
   void clear() {}
