@@ -1,6 +1,9 @@
 import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
+import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 
-abstract class ThreadDetailDiagnosticRecorder {
+abstract class ThreadDetailDiagnosticRecorder
+    implements ContinuousImageDiagnosticRecorder {
+  @override
   bool get enabled;
 
   List<ThreadDetailDiagnosticEvent> snapshot();
@@ -76,6 +79,16 @@ class InMemoryThreadDetailDiagnosticRecorder
       _events.removeRange(0, _events.length - _capacity);
     }
   }
+
+  @override
+  void recordContinuousImage(ContinuousImageDiagnosticEvent event) {
+    record(
+      type: ThreadDetailDiagnosticEventType.continuousImage,
+      entryKey: event.itemId,
+      scrollOffset: null,
+      message: event.toLogFields(),
+    );
+  }
 }
 
 class NoopThreadDetailDiagnosticRecorder
@@ -103,4 +116,7 @@ class NoopThreadDetailDiagnosticRecorder
   @override
   List<ThreadDetailDiagnosticEvent> snapshot() =>
       const <ThreadDetailDiagnosticEvent>[];
+
+  @override
+  void recordContinuousImage(ContinuousImageDiagnosticEvent event) {}
 }

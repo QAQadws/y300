@@ -14,6 +14,7 @@ import 'package:y300/features/thread/domain/models/thread_post_body_document.dar
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
+import 'package:y300/features/thread/domain/services/thread_detail_diagnostic_recorder.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_display_transformer.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_document_normalizer.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
@@ -155,6 +156,7 @@ class ThreadPostHtml extends StatefulWidget {
     this.resourceLayoutPolicy = ThreadPostResourceLayoutPolicy.defaults,
     this.textTransformer,
     this.selectionEnabled = false,
+    this.diagnosticRecorder = const NoopThreadDetailDiagnosticRecorder(),
     this.onOpenLink,
     this.onOpenImage,
     this.onOpenImages,
@@ -174,6 +176,7 @@ class ThreadPostHtml extends StatefulWidget {
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
   final ThreadPostTextTransformer? textTransformer;
   final bool selectionEnabled;
+  final ThreadDetailDiagnosticRecorder diagnosticRecorder;
   final ThreadPostLinkTapHandler? onOpenLink;
   final ThreadPostImageOpenHandler? onOpenImage;
   final void Function(List<ThreadPostImageBlock> images, int initialIndex)?
@@ -253,6 +256,7 @@ class _ThreadPostHtmlState extends State<ThreadPostHtml> {
       style: effectiveStyle,
       resourceLayoutPolicy: widget.resourceLayoutPolicy,
       selectionEnabled: widget.selectionEnabled,
+      diagnosticRecorder: widget.diagnosticRecorder,
       onOpenLink: widget.onOpenLink,
       onOpenImage: widget.onOpenImage,
       onOpenImages: widget.onOpenImages,
@@ -339,6 +343,7 @@ class ThreadPostBodySegmentView extends StatelessWidget {
     this.resourceLayoutPolicy = ThreadPostResourceLayoutPolicy.defaults,
     this.selectionEnabled = false,
     this.createSelectionArea = true,
+    this.diagnosticRecorder = const NoopThreadDetailDiagnosticRecorder(),
     this.onOpenLink,
     this.onOpenImage,
     this.onOpenImages,
@@ -358,6 +363,7 @@ class ThreadPostBodySegmentView extends StatelessWidget {
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
   final bool selectionEnabled;
   final bool createSelectionArea;
+  final ThreadDetailDiagnosticRecorder diagnosticRecorder;
   final ThreadPostLinkTapHandler? onOpenLink;
   final ThreadPostImageOpenHandler? onOpenImage;
   final void Function(List<ThreadPostImageBlock> images, int initialIndex)?
@@ -379,6 +385,7 @@ class ThreadPostBodySegmentView extends StatelessWidget {
       resourceLayoutPolicy: resourceLayoutPolicy,
       selectionEnabled: selectionEnabled,
       createSelectionArea: createSelectionArea,
+      diagnosticRecorder: diagnosticRecorder,
       onOpenLink: onOpenLink,
       onOpenImage: onOpenImage,
       onOpenImages: onOpenImages,
@@ -402,6 +409,7 @@ class ThreadPostBodyView extends StatelessWidget {
     this.resourceLayoutPolicy = ThreadPostResourceLayoutPolicy.defaults,
     this.selectionEnabled = false,
     this.createSelectionArea = true,
+    this.diagnosticRecorder = const NoopThreadDetailDiagnosticRecorder(),
     this.onOpenLink,
     this.onOpenImage,
     this.onOpenImages,
@@ -421,6 +429,7 @@ class ThreadPostBodyView extends StatelessWidget {
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
   final bool selectionEnabled;
   final bool createSelectionArea;
+  final ThreadDetailDiagnosticRecorder diagnosticRecorder;
   final ThreadPostLinkTapHandler? onOpenLink;
   final ThreadPostImageOpenHandler? onOpenImage;
   final void Function(List<ThreadPostImageBlock> images, int initialIndex)?
@@ -447,6 +456,7 @@ class ThreadPostBodyView extends StatelessWidget {
             style: style,
             resourceLayoutPolicy: resourceLayoutPolicy,
             selectionEnabled: selectionEnabled,
+            diagnosticRecorder: diagnosticRecorder,
             onOpenLink: onOpenLink,
             onOpenImage: onOpenImage,
             onOpenImages: onOpenImages,
@@ -489,6 +499,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
     required this.style,
     required this.resourceLayoutPolicy,
     this.selectionEnabled = false,
+    required this.diagnosticRecorder,
     required this.onOpenLink,
     required this.onOpenImage,
     required this.onOpenImages,
@@ -507,6 +518,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
   final ThreadPostBodyStyle style;
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
   final bool selectionEnabled;
+  final ThreadDetailDiagnosticRecorder diagnosticRecorder;
   final ThreadPostLinkTapHandler? onOpenLink;
   final ThreadPostImageOpenHandler? onOpenImage;
   final void Function(List<ThreadPostImageBlock> images, int initialIndex)?
@@ -542,6 +554,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
         resourceLayoutPolicy: resourceLayoutPolicy,
         onOpenImage: onOpenImage,
         onOpenImages: onOpenImages,
+        diagnosticRecorder: diagnosticRecorder,
       );
     }
     if (block is ThreadPostQuoteBlock) {
@@ -558,6 +571,7 @@ class _ThreadPostBodyBlockView extends StatelessWidget {
         style: style,
         resourceLayoutPolicy: resourceLayoutPolicy,
         selectionEnabled: selectionEnabled,
+        diagnosticRecorder: diagnosticRecorder,
         onOpenLink: onOpenLink,
         onOpenImage: onOpenImage,
         onOpenImages: onOpenImages,
@@ -582,6 +596,7 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
     required this.style,
     required this.resourceLayoutPolicy,
     required this.selectionEnabled,
+    required this.diagnosticRecorder,
     required this.onOpenLink,
     required this.onOpenImage,
     required this.onOpenImages,
@@ -600,6 +615,7 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
   final ThreadPostBodyStyle style;
   final ThreadPostResourceLayoutPolicy resourceLayoutPolicy;
   final bool selectionEnabled;
+  final ThreadDetailDiagnosticRecorder diagnosticRecorder;
   final ThreadPostLinkTapHandler? onOpenLink;
   final ThreadPostImageOpenHandler? onOpenImage;
   final void Function(List<ThreadPostImageBlock> images, int initialIndex)?
@@ -640,6 +656,7 @@ class ThreadPostQuoteBlockView extends StatelessWidget {
               style: quoteStyle,
               resourceLayoutPolicy: resourceLayoutPolicy,
               selectionEnabled: selectionEnabled,
+              diagnosticRecorder: diagnosticRecorder,
               onOpenLink: onOpenLink,
               onOpenImage: onOpenImage,
               onOpenImages: onOpenImages,
@@ -945,6 +962,7 @@ class ThreadPostImageBlockView extends ConsumerStatefulWidget {
     this.resourceLayoutPolicy = ThreadPostResourceLayoutPolicy.defaults,
     this.onOpenImage,
     this.onOpenImages,
+    this.diagnosticRecorder = const NoopThreadDetailDiagnosticRecorder(),
     @visibleForTesting this.imageProviderOverride,
   });
 
@@ -961,6 +979,7 @@ class ThreadPostImageBlockView extends ConsumerStatefulWidget {
   final ThreadPostImageOpenHandler? onOpenImage;
   final void Function(List<ThreadPostImageBlock> images, int initialIndex)?
   onOpenImages;
+  final ThreadDetailDiagnosticRecorder diagnosticRecorder;
   final ImageProvider? imageProviderOverride;
 
   @override
@@ -982,6 +1001,8 @@ class _ThreadPostImageBlockViewState
   double? _resolvedAspectRatio;
   double? _cachedAspectRatio;
   String? _loadedCacheKey;
+  String? _lastBuiltDiagnosticItemId;
+  String? _lastPlaceholderDiagnosticKey;
 
   @override
   void initState() {
@@ -1009,6 +1030,8 @@ class _ThreadPostImageBlockViewState
     final request = _cacheRequest();
     final continuousItem = _continuousImageItem(request);
     final aspectRatio = _resolveAspectRatio(continuousItem);
+    _recordBuiltIfNeeded(continuousItem);
+    _recordPlaceholderIfNeeded(continuousItem, aspectRatio);
     return SelectionContainer.disabled(
       child: Material(
         color: Colors.transparent,
@@ -1048,6 +1071,11 @@ class _ThreadPostImageBlockViewState
       (item) => item.url == widget.image.url,
     );
     final resolvedIndex = initialIndex < 0 ? widget.image.index : initialIndex;
+    _recordContinuousImage(
+      ContinuousImageDiagnosticEventType.imageOpened,
+      item: _continuousImageItem(_cacheRequest()),
+      message: 'open initialIndex=$resolvedIndex',
+    );
     final imageHandler = widget.onOpenImage;
     if (imageHandler != null) {
       imageHandler(
@@ -1128,15 +1156,41 @@ class _ThreadPostImageBlockViewState
       return;
     }
     final next = width / height;
+    final item = _continuousImageItem(_cacheRequest());
+    _recordContinuousImage(
+      ContinuousImageDiagnosticEventType.imageDecodeResolved,
+      item: item,
+      width: width.round(),
+      height: height.round(),
+      aspectRatio: next,
+      message: 'decoded block image',
+    );
     if (_resolvedAspectRatio == next) {
       return;
     }
     if (_shouldDeferAspectRatioUpdate()) {
+      _recordContinuousImage(
+        ContinuousImageDiagnosticEventType
+            .imageAspectRatioDeferredAboveViewport,
+        item: item,
+        width: width.round(),
+        height: height.round(),
+        aspectRatio: next,
+        message: 'defer because image is above viewport',
+      );
       return;
     }
     setState(() {
       _resolvedAspectRatio = next;
     });
+    _recordContinuousImage(
+      ContinuousImageDiagnosticEventType.imageAspectRatioApplied,
+      item: item,
+      width: width.round(),
+      height: height.round(),
+      aspectRatio: next,
+      message: 'apply decoded aspect ratio',
+    );
   }
 
   Future<void> _loadCachedAspectRatio() async {
@@ -1226,6 +1280,63 @@ class _ThreadPostImageBlockViewState
       spacingAfter: widget.style.blockSpacing,
       layoutHint: widget.resourceLayoutHints.blockImage(widget.image),
       includeContentDefaultHint: _locksImageAspectRatio,
+    );
+  }
+
+  void _recordBuiltIfNeeded(ContinuousImageItem item) {
+    if (_lastBuiltDiagnosticItemId == item.id) {
+      return;
+    }
+    _lastBuiltDiagnosticItemId = item.id;
+    _recordContinuousImage(
+      ContinuousImageDiagnosticEventType.imageItemBuilt,
+      item: item,
+      message: 'build thread block image',
+    );
+  }
+
+  void _recordPlaceholderIfNeeded(
+    ContinuousImageItem item,
+    double aspectRatio,
+  ) {
+    final key = '${item.id}:${aspectRatio.toStringAsFixed(4)}';
+    if (_lastPlaceholderDiagnosticKey == key) {
+      return;
+    }
+    _lastPlaceholderDiagnosticKey = key;
+    _recordContinuousImage(
+      ContinuousImageDiagnosticEventType.imagePlaceholderLaidOut,
+      item: item,
+      aspectRatio: aspectRatio,
+      message: 'layout block image placeholder',
+    );
+  }
+
+  void _recordContinuousImage(
+    ContinuousImageDiagnosticEventType type, {
+    required ContinuousImageItem item,
+    double? aspectRatio,
+    int? width,
+    int? height,
+    String message = '',
+  }) {
+    final recorder = widget.diagnosticRecorder;
+    if (!recorder.enabled) {
+      return;
+    }
+    recorder.recordContinuousImage(
+      ContinuousImageDiagnosticEvent(
+        time: DateTime.now(),
+        type: type,
+        itemId: item.id,
+        ownerId: item.ownerId,
+        index: item.index,
+        source: item.sourceKind.name,
+        aspectRatio: aspectRatio,
+        width: width,
+        height: height,
+        message: message,
+      ),
     );
   }
 

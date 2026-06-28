@@ -648,7 +648,9 @@ void main() {
                 pid: 'p1',
                 author: 'alice',
                 authorId: '1',
-                message: '<p>正文</p>',
+                message:
+                    '<p>正文</p>'
+                    '<img file="data/attachment/forum/page-1.jpg" />',
                 number: 1,
                 isFirst: true,
                 dateline: 'today',
@@ -692,6 +694,15 @@ void main() {
         ),
         isTrue,
       );
+      expect(
+        events.any(
+          (event) =>
+              event.type == ThreadDetailDiagnosticEventType.continuousImage &&
+              event.message.contains('imageItemBuilt'),
+        ),
+        isTrue,
+      );
+      expect(recorder.exportText(), contains('continuous=imageItemBuilt'));
     });
 
     testWidgets('collapsing comments reduces post card height', (tester) async {

@@ -165,6 +165,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           onOpenPostLink: widget.onOpenPostLink,
           onOpenPostImages: widget.onOpenPostImages,
           onOpenPostCopyActions: widget.onOpenPostCopyActions,
+          diagnosticRecorder: widget.diagnosticRecorder,
         );
       case ThreadDetailRenderEntryKind.postBodySegment:
         final segmentEntry = _ThreadPostCardBodySegmentEntry(
@@ -180,6 +181,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           onOpenPostLink: widget.onOpenPostLink,
           onOpenPostImages: widget.onOpenPostImages,
           onOpenPostCopyActions: widget.onOpenPostCopyActions,
+          diagnosticRecorder: widget.diagnosticRecorder,
         );
         if (entry.segment!.index == 0) {
           return KeyedSubtree(
@@ -323,6 +325,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
     required this.onOpenPostLink,
     required this.onOpenPostImages,
     required this.onOpenPostCopyActions,
+    required this.diagnosticRecorder,
   });
 
   final ThreadPost post;
@@ -337,6 +340,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
   onOpenPostImages;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
   onOpenPostCopyActions;
+  final ThreadDetailDiagnosticRecorder diagnosticRecorder;
 
   @override
   Widget build(BuildContext context) {
@@ -367,6 +371,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
             resourceLayoutPolicy:
                 ThreadPostResourceLayoutPolicy.adaptiveBlockImagesForReading,
             selectionEnabled: false,
+            diagnosticRecorder: diagnosticRecorder,
             onOpenLink: onOpenPostLink,
             onOpenImage: (request) => onOpenPostImages?.call(post, request),
           ),
@@ -390,6 +395,7 @@ class _ThreadPostCardBodySegmentEntry extends StatelessWidget {
     required this.onOpenPostLink,
     required this.onOpenPostImages,
     required this.onOpenPostCopyActions,
+    required this.diagnosticRecorder,
   });
 
   final ThreadPost post;
@@ -405,6 +411,7 @@ class _ThreadPostCardBodySegmentEntry extends StatelessWidget {
   onOpenPostImages;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
   onOpenPostCopyActions;
+  final ThreadDetailDiagnosticRecorder diagnosticRecorder;
 
   @override
   Widget build(BuildContext context) {
@@ -434,6 +441,7 @@ class _ThreadPostCardBodySegmentEntry extends StatelessWidget {
             resourceLayoutPolicy:
                 ThreadPostResourceLayoutPolicy.adaptiveBlockImagesForReading,
             selectionEnabled: false,
+            diagnosticRecorder: diagnosticRecorder,
             onOpenLink: onOpenPostLink,
             onOpenImage: (request) => onOpenPostImages?.call(post, request),
           ),
