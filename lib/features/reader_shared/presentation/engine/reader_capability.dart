@@ -55,6 +55,16 @@ class ReaderChapterNavSpec {
   final IconData nextIcon;
 }
 
+/// 引擎暴露给能力的可调用动作（打开内置抽屉）。
+///
+/// 让能力在构造工具栏动作时复用引擎内置的"显示设置 / 阅读模式"抽屉，而由能力
+/// 自己决定把它们放在工具栏的哪个位置、配什么图标——漫画与帖子的工具栏布局因此
+/// 可以不同，引擎不必硬编码任何一栏。
+abstract interface class ReaderEngineActions {
+  void openDisplaySettings();
+  void openModeSheet();
+}
+
 /// 引擎向能力提供方暴露的只读上下文快照。
 ///
 /// 让能力实现据此构造标题/动作，而无需反向依赖引擎内部状态。
@@ -63,11 +73,36 @@ class ReaderEngineContext {
     required this.currentIndex,
     required this.totalCount,
     required this.mode,
+    required this.actions,
   });
 
   final int currentIndex;
   final int totalCount;
   final ContinuousImageReaderMode mode;
+
+  /// 引擎内置动作句柄（打开显示设置 / 阅读模式抽屉）。
+  final ReaderEngineActions actions;
+}
+
+/// 引擎构造单张图片时透传给能力的参数。
+///
+/// 缩放包装与高度槽由引擎统一负责，能力只产出"图片内容本体"（缓存图片 +
+/// 占位/错误态），从而漫画可保留 [LibraryCachedImage] + 重试回调，帖子图片可用
+/// [CachedLibraryImage] + request，互不干扰。
+class ReaderImageBuildSpec {
+  const ReaderImageBuildSpec({
+    required this.item,
+    required this.index,
+    required this.paged,
+    required this.fit,
+  });
+
+  final ContinuousImageItem item;
+  final int index;
+
+  /// 横向单页模式为 true，垂直连续模式为 false。
+  final bool paged;
+  final BoxFit fit;
 }
 
 /// 一台具体阅读器的"专属能力"。[ImageReaderEngine] 只认这个抽象。
@@ -86,6 +121,9 @@ abstract class ReaderCapability {
   /// 顶部标题/副标题。
   ReaderTitleSpec titleFor(ReaderEngineContext context);
 
+  /// 构造单张图片的内容本体（不含缩放包装/高度槽，由引擎统一负责）。
+  Widget buildImageContent(BuildContext context, ReaderImageBuildSpec spec);
+
   /// 顶部额外动作（漫画：书签/原帖/更多；帖子图片：通常为空或仅"复制链接"）。
   List<ReaderToolbarAction> topActions(ReaderEngineContext context) {
     return const <ReaderToolbarAction>[];
@@ -102,11 +140,28 @@ abstract class ReaderCapability {
   /// 垂直模式列表尾部过场组件（漫画：下一章过场卡；帖子图片：null）。
   WidgetBuilder? verticalTrailingBuilder(ReaderEngineContext context) => null;
 
+  /// 内容区顶部提示条（漫画：离线/错误提示；帖子图片：null）。
+  String? topHint(ReaderEngineContext context) => null;
+
+  /// 退出阅读器时回传给上一页的结果（漫画：阅读进度/已读集合；帖子图片：null）。
+  Object? get exitResult => null;
+
+  /// 进入垂直模式时的初始滚动偏移（漫画用于恢复阅读进度）；null 表示从顶部开始。
+  double? get initialVerticalScrollOffset => null;
+
   /// 某张图片进入可见区域时回调（漫画用于落地阅读进度；帖子图片可空实现）。
   void onImageVisible(int index) {}
 
   /// 滚动进度变化回调（同上）。
   void onScrollProgress({required int index, required double offset}) {}
+
+  /// 用户通过滑块/翻章主动跳转到某索引后的回调（已落到目标位置）。
+  ///
+  /// 默认转交 [onScrollProgress]；漫画覆写以调用其 `jumpToImageIndex`，把"主动
+  /// seek"与"滚动中进度上报"区分开（前者需要立即持久化目标页）。
+  Future<void> onSeek({required int index, required double offset}) async {
+    onScrollProgress(index: index, offset: offset);
+  }
 
   /// 退出阅读器时回调（漫画用于 flush 阅读进度；帖子图片可空实现）。
   Future<void> onExit() async {}

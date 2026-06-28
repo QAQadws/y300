@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
@@ -7,10 +8,11 @@ import 'package:y300/features/reader_shared/presentation/engine/reader_capabilit
 
 void main() {
   group('ReaderCapability defaults', () {
-    const context = ReaderEngineContext(
+    final context = ReaderEngineContext(
       currentIndex: 0,
       totalCount: 1,
       mode: ContinuousImageReaderMode.vertical,
+      actions: _NoopEngineActions(),
     );
 
     test('minimal capability exposes no extra chrome', () {
@@ -57,6 +59,11 @@ class _MinimalCapability extends ReaderCapability {
   }
 
   @override
+  Widget buildImageContent(BuildContext context, ReaderImageBuildSpec spec) {
+    return const SizedBox.shrink();
+  }
+
+  @override
   ImageCacheRequest cacheRequestFor(ContinuousImageItem item) {
     return ImageCacheRequest(
       cacheKey: item.cacheKey,
@@ -66,4 +73,12 @@ class _MinimalCapability extends ReaderCapability {
       role: ImageCacheRole.threadInline,
     );
   }
+}
+
+class _NoopEngineActions implements ReaderEngineActions {
+  @override
+  void openDisplaySettings() {}
+
+  @override
+  void openModeSheet() {}
 }
