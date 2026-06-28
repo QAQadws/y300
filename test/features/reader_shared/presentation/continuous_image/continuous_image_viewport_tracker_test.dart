@@ -56,6 +56,53 @@ void main() {
       expect(viewport.lastEndVisibleIndex, 0);
     });
 
+    test('resolves individual item placement relative to viewport', () {
+      final registry = InMemoryContinuousImageExtentRegistry();
+      final items = <ContinuousImageItem>[
+        _item(0, spacingAfter: 10),
+        _item(1, spacingAfter: 10),
+        _item(2, spacingAfter: 10),
+      ];
+      registry
+        ..record(_extent(index: 0, height: 300))
+        ..record(_extent(index: 1, height: 400))
+        ..record(_extent(index: 2, height: 200));
+
+      expect(
+        tracker.placementOf(
+          itemId: 'page-0',
+          items: items,
+          extentRegistry: registry,
+          scrollOffset: 320,
+          viewportExtent: 300,
+          crossAxisExtent: 300,
+        ),
+        ContinuousImageViewportPlacement.above,
+      );
+      expect(
+        tracker.isWithinViewport(
+          itemId: 'page-1',
+          items: items,
+          extentRegistry: registry,
+          scrollOffset: 320,
+          viewportExtent: 300,
+          crossAxisExtent: 300,
+        ),
+        isTrue,
+      );
+      expect(
+        tracker.isBelowViewport(
+          itemId: 'page-2',
+          items: items,
+          extentRegistry: registry,
+          scrollOffset: 320,
+          viewportExtent: 300,
+          crossAxisExtent: 300,
+        ),
+        isTrue,
+      );
+    });
+
     test('maps Flutter scroll directions to reading directions', () {
       expect(
         tracker.directionFromFlutter(ScrollDirection.reverse),
