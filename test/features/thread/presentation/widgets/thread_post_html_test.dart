@@ -11,6 +11,7 @@ import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
+import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
@@ -1260,6 +1261,13 @@ void main() {
     expect(readerRequest.initialIndex, 1);
     expect(readerRequest.initialEntry?.cacheKey, 'cache-1');
     expect(readerRequest.group.urls, opened!.imageUrls);
+    expect(readerRequest.continuousImages, hasLength(2));
+    expect(
+      readerRequest.continuousImages.map((item) => item.sourceKind).toSet(),
+      <ContinuousImageSourceKind>{ContinuousImageSourceKind.threadImageReader},
+    );
+    expect(readerRequest.continuousImages[1].cacheKey, 'cache-1');
+    expect(readerRequest.continuousImages[1].spacingAfter, 10);
   });
 
   testWidgets(
@@ -1322,6 +1330,11 @@ void main() {
       expect(opened!.readerRequest?.group.entries, hasLength(2));
       expect(opened!.readerRequest?.initialEntry?.url, secondImage.url);
       expect(opened!.readerRequest?.initialEntry?.cacheKey, 'cache-1');
+      expect(opened!.readerRequest?.continuousImages, hasLength(2));
+      expect(
+        opened!.readerRequest?.continuousImages[1].sourceKind,
+        ContinuousImageSourceKind.threadImageReader,
+      );
     },
   );
 }

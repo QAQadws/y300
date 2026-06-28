@@ -19,6 +19,7 @@ import 'package:y300/features/thread/domain/services/thread_post_body_document_n
 import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
 import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_continuous_image_adapter.dart';
+import 'package:y300/features/thread/presentation/services/thread_image_reader_continuous_image_adapter.dart';
 
 typedef ThreadPostLinkTapHandler = void Function(String url);
 typedef ThreadPostImageOpenHandler =
@@ -975,6 +976,8 @@ class _ThreadPostImageBlockViewState
       ContinuousImageViewportResolver();
   static const ThreadPostContinuousImageAdapter _continuousImageAdapter =
       ThreadPostContinuousImageAdapter();
+  static const ThreadImageReaderContinuousImageAdapter
+  _threadImageReaderAdapter = ThreadImageReaderContinuousImageAdapter();
 
   double? _resolvedAspectRatio;
   double? _cachedAspectRatio;
@@ -1086,18 +1089,32 @@ class _ThreadPostImageBlockViewState
           );
         })
         .toList(growable: false);
-    return ThreadImageOpenRequest(
+    final group = ThreadPostImageGroup(
+      tid: context.tid,
+      pid: context.pid,
+      postNumber: context.postNumber,
+      entries: entries,
+    );
+    final request = ThreadImageOpenRequest(
       tid: context.tid,
       pid: context.pid,
       postNumber: context.postNumber,
       referer: context.referer,
-      group: ThreadPostImageGroup(
-        tid: context.tid,
-        pid: context.pid,
-        postNumber: context.postNumber,
-        entries: entries,
-      ),
+      group: group,
       initialIndex: initialIndex,
+    );
+    return ThreadImageOpenRequest(
+      tid: request.tid,
+      pid: request.pid,
+      postNumber: request.postNumber,
+      referer: request.referer,
+      group: request.group,
+      initialIndex: request.initialIndex,
+      continuousImages: _threadImageReaderAdapter.mapRequest(
+        request,
+        fallbackAspectRatio: widget.style.imageFallbackAspectRatio,
+        spacingAfter: widget.style.blockSpacing,
+      ),
     );
   }
 

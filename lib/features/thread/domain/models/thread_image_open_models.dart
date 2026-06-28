@@ -1,5 +1,6 @@
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
+import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 
 class ThreadPostImageGroup {
   const ThreadPostImageGroup({
@@ -44,6 +45,7 @@ class ThreadImageOpenRequest {
     required this.referer,
     required this.group,
     required this.initialIndex,
+    this.continuousImages = const <ContinuousImageItem>[],
   });
 
   final String tid;
@@ -52,6 +54,7 @@ class ThreadImageOpenRequest {
   final String referer;
   final ThreadPostImageGroup group;
   final int initialIndex;
+  final List<ContinuousImageItem> continuousImages;
 
   ThreadPostImageEntry? get initialEntry {
     if (initialIndex < 0 || initialIndex >= group.entries.length) {

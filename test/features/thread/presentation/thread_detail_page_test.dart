@@ -23,6 +23,7 @@ import 'package:y300/features/novel/data/novel_providers.dart';
 import 'package:y300/features/novel/data/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
+import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reply/data/reply_providers.dart';
 import 'package:y300/features/reply/data/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
@@ -851,6 +852,15 @@ void main() {
         expect(
           readerRequest.initialEntry?.url,
           'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
+        );
+        expect(readerRequest.continuousImages, hasLength(2));
+        expect(
+          readerRequest.continuousImages.first.sourceKind,
+          ContinuousImageSourceKind.threadImageReader,
+        );
+        expect(
+          readerRequest.continuousImages.first.cacheKey,
+          readerRequest.initialEntry?.cacheKey,
         );
       },
     );
