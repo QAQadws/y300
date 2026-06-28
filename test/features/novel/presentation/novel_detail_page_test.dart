@@ -1,6 +1,9 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/cache/data/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/image_cache_models.dart';
+import 'package:y300/features/cache/domain/image_cache_service.dart';
 import 'package:y300/features/favorites/data/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/library_shared/data/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/library_state_repository.dart';
@@ -23,6 +26,7 @@ void main() {
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
           novelDownloadServiceProvider.overrideWithValue(_NoopNovelDownloadService()),
           libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+          imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
         ],
         child: const MaterialApp(home: NovelDetailPage(novelId: 'novel:1')),
       ),
@@ -48,6 +52,7 @@ void main() {
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
           novelDownloadServiceProvider.overrideWithValue(_NoopNovelDownloadService()),
           libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+          imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
         ],
         child: const MaterialApp(home: NovelDetailPage(novelId: 'novel:1')),
       ),
@@ -62,6 +67,48 @@ void main() {
     expect(find.byKey(const Key('unified-detail-author-row')), findsOneWidget);
     expect(find.byIcon(Icons.person_outlined), findsOneWidget);
   });
+}
+
+class _NoopImageCacheService implements ImageCacheService {
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    return CachedImageResult(
+      success: true,
+      cacheKey: request.cacheKey,
+      localPath: 'memory://${request.cacheKey}',
+      fromCache: true,
+    );
+  }
+
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async => null;
+
+  @override
+  Future<CachedImageResult> copyProtectedLocalFile(
+    ImageCacheLocalCopyRequest request,
+  ) async {
+    return CachedImageResult(
+      success: true,
+      cacheKey: request.cacheKey,
+      localPath: request.sourcePath,
+      fromCache: true,
+    );
+  }
+
+  @override
+  Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
+
+  @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async => 0;
+
+  @override
+  Future<void> pruneToLimit({required int maxBytes}) async {}
+
+  @override
+  Future<void> clearUnprotected() async {}
 }
 
 class _NoopNovelDownloadService implements NovelDownloadService {
