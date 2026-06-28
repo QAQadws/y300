@@ -576,64 +576,63 @@ void main() {
       );
     });
 
-    testWidgets(
-      'does not preload nearby post media while diagnostic switch is off',
-      (tester) async {
-        final imageCacheService = _RecordingImageCacheService();
-        final repository = _FakeThreadRepository((tid, page) async {
-          return ApiSuccess(
-            _threadDetailData(
-              tid: tid,
-              posts: [
-                ThreadPost(
-                  pid: 'p1',
-                  author: 'alice',
-                  authorId: '1',
-                  message:
-                      '<img file="data/attachment/forum/page-1.jpg" />'
-                      '<p>表情 <img src="static/image/smiley/comcom/2.gif" /></p>'
-                      '${List.filled(80, '<p>用于把第二楼推出初始 cacheExtent 的长正文。</p>').join()}',
-                  number: 1,
-                  isFirst: true,
-                  dateline: 'today',
-                ),
-                ThreadPost(
-                  pid: 'p2',
-                  author: 'bob',
-                  authorId: '2',
-                  message: '<img file="data/attachment/forum/page-2.jpg" />',
-                  number: 2,
-                  isFirst: false,
-                  dateline: 'today',
-                ),
-              ],
-            ),
-          );
-        });
-
-        await tester.pumpWidget(
-          ProviderScope(
-            overrides: _threadDetailOverrides(
-              repository,
-              imageCacheService: imageCacheService,
-            ),
-            child: const MaterialApp(
-              home: ThreadDetailPage(tid: '100', subject: '测试主题'),
-            ),
+    testWidgets('does not schedule nearby post media preload in reader', (
+      tester,
+    ) async {
+      final imageCacheService = _RecordingImageCacheService();
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          _threadDetailData(
+            tid: tid,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message:
+                    '<img file="data/attachment/forum/page-1.jpg" />'
+                    '<p>表情 <img src="static/image/smiley/comcom/2.gif" /></p>'
+                    '${List.filled(80, '<p>用于把第二楼推出初始 cacheExtent 的长正文。</p>').join()}',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+              ThreadPost(
+                pid: 'p2',
+                author: 'bob',
+                authorId: '2',
+                message: '<img file="data/attachment/forum/page-2.jpg" />',
+                number: 2,
+                isFirst: false,
+                dateline: 'today',
+              ),
+            ],
           ),
         );
+      });
 
-        await tester.pump();
-        await tester.pump();
-
-        expect(
-          imageCacheService.requests.any(
-            (request) => request.sourceUrl.contains('page-2.jpg'),
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _threadDetailOverrides(
+            repository,
+            imageCacheService: imageCacheService,
           ),
-          isFalse,
-        );
-      },
-    );
+          child: const MaterialApp(
+            home: ThreadDetailPage(tid: '100', subject: '测试主题'),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        imageCacheService.requests.any(
+          (request) => request.sourceUrl.contains('page-2.jpg'),
+        ),
+        isFalse,
+      );
+    });
 
     testWidgets('records thread detail diagnostic events when enabled', (
       tester,
@@ -827,6 +826,13 @@ void main() {
         await tester.tap(find.byKey(const Key('thread-post-image-0')));
         await tester.pump();
 
+        final bodySegment = tester.widget<ThreadPostBodySegmentView>(
+          find.byType(ThreadPostBodySegmentView).first,
+        );
+        expect(
+          bodySegment.resourceLayoutPolicy,
+          ThreadPostResourceLayoutPolicy.adaptiveBlockImagesForReading,
+        );
         final readerRequest = opened?.readerRequest;
         expect(readerRequest, isNotNull);
         expect(readerRequest!.tid, '100');

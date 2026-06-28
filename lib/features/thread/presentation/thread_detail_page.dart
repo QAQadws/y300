@@ -10,7 +10,6 @@ import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/forum_image_cache_requests.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
@@ -34,17 +33,11 @@ import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.
 import 'package:y300/features/thread/domain/services/thread_post_body_plain_text_extractor.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
-import 'package:y300/features/thread/presentation/thread_post_media_preload_queue.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
-
-// Temporary diagnostic switch: media preloading can parse/decode nearby heavy
-// posts on the UI isolate while scrolling. Keep it disabled until the thread
-// detail jank source is verified on device.
-const bool _enableThreadPostMediaPreload = false;
 
 class ThreadDetailPage extends ConsumerStatefulWidget {
   const ThreadDetailPage({
@@ -74,7 +67,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   Timer? _highlightClearTimer;
   String? _highlightPostPid;
   bool _suppressTargetScrollForPageAction = false;
-  ThreadPostMediaPreloadQueue? _mediaPreloadQueue;
   ImageRequestHeaderBuilder? _latestImageHeaderBuilder;
 
   @override
@@ -86,7 +78,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   @override
   void dispose() {
     _highlightClearTimer?.cancel();
-    _mediaPreloadQueue?.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -112,11 +103,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       threadDetailDiagnosticRecorderProvider,
     );
     _latestImageHeaderBuilder = imageHeaderBuilder;
-    if (_enableThreadPostMediaPreload) {
-      _mediaPreloadQueue ??= ThreadPostMediaPreloadQueue(
-        imageCacheService: ref.read(imageCacheServiceProvider),
-      );
-    }
     ref.listen<AsyncValue<ThreadDetailPageState>>(
       threadDetailControllerProvider(args),
       (previous, next) {
@@ -266,17 +252,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                       _openPostCopyActions(state, post, plan);
                     },
                     diagnosticRecorder: diagnosticRecorder,
-                    onBodySegmentBuilt: _enableThreadPostMediaPreload
-                        ? (plan, segmentIndex) {
-                            _mediaPreloadQueue?.schedule(
-                              ThreadResourcePrewarmTask(
-                                tid: state.tid,
-                                plan: plan,
-                                segmentIndex: segmentIndex,
-                              ),
-                            );
-                          }
-                        : null,
                     onTogglePollOption: controller.togglePollOption,
                     onSubmitPollVote: controller.submitPollVote,
                   ),

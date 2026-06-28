@@ -734,7 +734,7 @@ void main() {
   );
 
   testWidgets(
-    'ThreadPostImageBlockView keeps fallback ratio on first resolve',
+    'ThreadPostImageBlockView updates unknown fallback ratio after image resolves',
     (tester) async {
       final image = await tester.runAsync(
         () => createTestImage(width: 1000, height: 500, cache: false),
@@ -774,11 +774,117 @@ void main() {
         find.byType(ThreadPostImageBlockView),
       );
       expect(imageBlockSize.width, 350);
-      expect(imageBlockSize.width / imageBlockSize.height, closeTo(0.7, 0.01));
+      expect(imageBlockSize.width / imageBlockSize.height, closeTo(2.0, 0.01));
       final cachedImage = tester.widget<LibraryCachedImage>(
         find.byType(LibraryCachedImage),
       );
       expect(cachedImage.fit, BoxFit.fitWidth);
+    },
+  );
+
+  testWidgets(
+    'ThreadPostImageBlockView starts unknown images with fallback ratio before resolve',
+    (tester) async {
+      const imageBlock = ThreadPostImageBlock(
+        url: 'https://bbs.yamibo.com/data/attachment/forum/page-real.jpg',
+        rawUrl: 'data/attachment/forum/page-real.jpg',
+        index: 0,
+      );
+      const document = ThreadPostBodyDocument(
+        blocks: <ThreadPostBodyBlock>[imageBlock],
+      );
+
+      await tester.pumpWidget(
+        _testApp(
+          home: const Center(
+            child: SizedBox(
+              width: 350,
+              child: ThreadPostImageBlockView(
+                document: document,
+                image: imageBlock,
+                images: <ThreadPostImageBlock>[imageBlock],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final imageBlockSize = tester.getSize(
+        find.byType(ThreadPostImageBlockView),
+      );
+      expect(imageBlockSize.width, 350);
+      expect(imageBlockSize.width / imageBlockSize.height, closeTo(0.7, 0.01));
+    },
+  );
+
+  test(
+    'adaptive reading policy defers only above-viewport block image updates',
+    () {
+      const policy =
+          ThreadPostResourceLayoutPolicy.adaptiveBlockImagesForReading;
+
+      expect(policy.lockImageAspectRatioForCurrentBuild, isFalse);
+      expect(policy.lockInlineImageSizeForCurrentBuild, isTrue);
+      expect(policy.deferImageAspectRatioUpdateWhenAboveViewport, isTrue);
+    },
+  );
+
+  testWidgets(
+    'ThreadPostImageBlockView defers resolved ratio when above viewport',
+    (tester) async {
+      final image = await tester.runAsync(
+        () => createTestImage(width: 1000, height: 500, cache: false),
+      );
+      final testImage = image!;
+      addTearDown(testImage.dispose);
+      final provider = _SynchronousImageProvider(testImage);
+      const imageBlock = ThreadPostImageBlock(
+        url: 'https://bbs.yamibo.com/data/attachment/forum/page-real.jpg',
+        rawUrl: 'data/attachment/forum/page-real.jpg',
+        index: 0,
+      );
+      const document = ThreadPostBodyDocument(
+        blocks: <ThreadPostBodyBlock>[imageBlock],
+      );
+      final controller = ScrollController(initialScrollOffset: 520);
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        _testApp(
+          home: Center(
+            child: SizedBox(
+              width: 350,
+              height: 400,
+              child: SingleChildScrollView(
+                controller: controller,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ThreadPostImageBlockView(
+                      document: document,
+                      image: imageBlock,
+                      images: const <ThreadPostImageBlock>[imageBlock],
+                      resourceLayoutPolicy: ThreadPostResourceLayoutPolicy
+                          .adaptiveBlockImagesForReading,
+                      imageProviderOverride: provider,
+                    ),
+                    const SizedBox(height: 900),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump();
+
+      final imageBlockSize = tester.getSize(
+        find.byType(ThreadPostImageBlockView),
+      );
+      expect(imageBlockSize.width, 350);
+      expect(imageBlockSize.width / imageBlockSize.height, closeTo(0.7, 0.01));
     },
   );
 

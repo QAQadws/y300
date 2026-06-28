@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:y300/core/network/image_request_headers.dart';
@@ -68,6 +69,7 @@ class ThreadPostResourceLayoutPolicy {
   const ThreadPostResourceLayoutPolicy({
     required this.lockImageAspectRatioForCurrentBuild,
     required this.lockInlineImageSizeForCurrentBuild,
+    this.deferImageAspectRatioUpdateWhenAboveViewport = false,
   });
 
   /// Allows existing shared HTML renderers to keep using cache/image hints for
@@ -82,10 +84,19 @@ class ThreadPostResourceLayoutPolicy {
       ThreadPostResourceLayoutPolicy(
         lockImageAspectRatioForCurrentBuild: true,
         lockInlineImageSizeForCurrentBuild: true,
+        deferImageAspectRatioUpdateWhenAboveViewport: true,
+      );
+
+  static const ThreadPostResourceLayoutPolicy adaptiveBlockImagesForReading =
+      ThreadPostResourceLayoutPolicy(
+        lockImageAspectRatioForCurrentBuild: false,
+        lockInlineImageSizeForCurrentBuild: true,
+        deferImageAspectRatioUpdateWhenAboveViewport: true,
       );
 
   final bool lockImageAspectRatioForCurrentBuild;
   final bool lockInlineImageSizeForCurrentBuild;
+  final bool deferImageAspectRatioUpdateWhenAboveViewport;
 
   @override
   bool operator ==(Object other) {
@@ -93,13 +104,16 @@ class ThreadPostResourceLayoutPolicy {
         other.lockImageAspectRatioForCurrentBuild ==
             lockImageAspectRatioForCurrentBuild &&
         other.lockInlineImageSizeForCurrentBuild ==
-            lockInlineImageSizeForCurrentBuild;
+            lockInlineImageSizeForCurrentBuild &&
+        other.deferImageAspectRatioUpdateWhenAboveViewport ==
+            deferImageAspectRatioUpdateWhenAboveViewport;
   }
 
   @override
   int get hashCode => Object.hash(
     lockImageAspectRatioForCurrentBuild,
     lockInlineImageSizeForCurrentBuild,
+    deferImageAspectRatioUpdateWhenAboveViewport,
   );
 }
 
@@ -1089,9 +1103,6 @@ class _ThreadPostImageBlockViewState
     if (_locksImageAspectRatio) {
       return;
     }
-    if (_htmlAspectRatio() == null && _cachedAspectRatio == null) {
-      return;
-    }
     final width = size.width;
     final height = size.height;
     if (width <= 0 || height <= 0) {
@@ -1099,6 +1110,9 @@ class _ThreadPostImageBlockViewState
     }
     final next = width / height;
     if (_resolvedAspectRatio == next) {
+      return;
+    }
+    if (_shouldDeferAspectRatioUpdate()) {
       return;
     }
     setState(() {
@@ -1141,6 +1155,28 @@ class _ThreadPostImageBlockViewState
 
   bool get _locksImageAspectRatio =>
       widget.resourceLayoutPolicy.lockImageAspectRatioForCurrentBuild;
+
+  bool _shouldDeferAspectRatioUpdate() {
+    if (!widget
+        .resourceLayoutPolicy
+        .deferImageAspectRatioUpdateWhenAboveViewport) {
+      return false;
+    }
+    final renderObject = context.findRenderObject();
+    if (renderObject == null) {
+      return false;
+    }
+    final viewport = RenderAbstractViewport.maybeOf(renderObject);
+    if (viewport == null) {
+      return false;
+    }
+    final scrollable = Scrollable.maybeOf(context);
+    if (scrollable == null || !scrollable.position.hasPixels) {
+      return false;
+    }
+    final bottomOffset = viewport.getOffsetToReveal(renderObject, 1).offset;
+    return bottomOffset < scrollable.position.pixels;
+  }
 
   double? _htmlAspectRatio() {
     final width = widget.image.originalWidth;
