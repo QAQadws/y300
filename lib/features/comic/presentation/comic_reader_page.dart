@@ -9,9 +9,9 @@ import 'package:y300/features/comic/domain/models/comic_reader_exit_result.dart'
 import 'package:y300/features/comic/domain/services/comic_episode_images_unavailable.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_chapter_preload.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
-import 'package:y300/features/comic/presentation/models/comic_reader_continuous_image_adapter.dart';
 import 'package:y300/features/comic/presentation/models/reader_preferences.dart';
 import 'package:y300/features/comic/presentation/providers/reader_preferences_provider.dart';
+import 'package:y300/features/comic/presentation/services/comic_reader_continuous_image_adapter.dart';
 import 'package:y300/features/comic/presentation/widgets/reader_page_indicator_overlay.dart';
 import 'package:y300/features/comic/presentation/widgets/reader_zoomable_image.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';

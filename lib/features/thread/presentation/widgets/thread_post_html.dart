@@ -8,6 +8,7 @@ import 'package:y300/features/cache/data/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/forum_image_cache_requests.dart';
 import 'package:y300/features/cache/domain/image_cache_models.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
+import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
@@ -17,6 +18,7 @@ import 'package:y300/features/thread/domain/services/thread_post_body_display_tr
 import 'package:y300/features/thread/domain/services/thread_post_body_document_normalizer.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
 import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_continuous_image_adapter.dart';
 
 typedef ThreadPostLinkTapHandler = void Function(String url);
 typedef ThreadPostImageOpenHandler =
@@ -967,6 +969,11 @@ class ThreadPostImageBlockView extends ConsumerStatefulWidget {
 
 class _ThreadPostImageBlockViewState
     extends ConsumerState<ThreadPostImageBlockView> {
+  static const ContinuousImageLayoutResolver _continuousImageLayoutResolver =
+      ContinuousImageLayoutResolver();
+  static const ThreadPostContinuousImageAdapter _continuousImageAdapter =
+      ThreadPostContinuousImageAdapter();
+
   double? _resolvedAspectRatio;
   double? _cachedAspectRatio;
   String? _loadedCacheKey;
@@ -995,15 +1002,8 @@ class _ThreadPostImageBlockViewState
   @override
   Widget build(BuildContext context) {
     final request = _cacheRequest();
-    final aspectRatio = _locksImageAspectRatio
-        ? _hintAspectRatio(includeContentDefault: true) ??
-              _htmlAspectRatio() ??
-              _fallbackAspectRatio()
-        : _resolvedAspectRatio ??
-              _htmlAspectRatio() ??
-              _cachedAspectRatio ??
-              _hintAspectRatio(includeContentDefault: false) ??
-              _fallbackAspectRatio();
+    final continuousItem = _continuousImageItem(request);
+    final aspectRatio = _resolveAspectRatio(continuousItem);
     return SelectionContainer.disabled(
       child: Material(
         color: Colors.transparent,
@@ -1178,35 +1178,49 @@ class _ThreadPostImageBlockViewState
     return bottomOffset < scrollable.position.pixels;
   }
 
-  double? _htmlAspectRatio() {
-    final width = widget.image.originalWidth;
-    final height = widget.image.originalHeight;
-    if (width == null ||
-        height == null ||
-        !width.isFinite ||
-        !height.isFinite ||
-        width <= 0 ||
-        height <= 0) {
-      return null;
+  double _resolveAspectRatio(ContinuousImageItem item) {
+    if (_locksImageAspectRatio) {
+      return _continuousImageLayoutResolver
+          .resolveInitialHint(item: item)
+          .aspectRatio;
     }
-    return width / height;
+    final decoded = _resolvedAspectRatio;
+    if (decoded != null && decoded.isFinite && decoded > 0) {
+      return _continuousImageLayoutResolver
+          .resolveDecodedHint(width: (decoded * 1000).round(), height: 1000)!
+          .aspectRatio;
+    }
+    final cached = _cachedAspectRatio;
+    if (cached != null && cached.isFinite && cached > 0) {
+      final hint = _continuousImageLayoutResolver.resolveFromDimensions(
+        ContinuousImageDimensionCandidate(
+          width: (cached * 1000).round(),
+          height: 1000,
+          source: ContinuousImageDimensionSource.persistedCache,
+        ),
+      );
+      if (hint != null) {
+        return hint.aspectRatio;
+      }
+    }
+    return _continuousImageLayoutResolver
+        .resolveInitialHint(item: item)
+        .aspectRatio;
   }
 
-  double? _hintAspectRatio({required bool includeContentDefault}) {
-    final hint = widget.resourceLayoutHints.blockImage(widget.image);
-    if (!includeContentDefault &&
-        hint?.source == ThreadPostResourceLayoutHintSource.contentDefault) {
-      return null;
-    }
-    final ratio = hint?.aspectRatio;
-    if (ratio == null || !ratio.isFinite || ratio <= 0) {
-      return null;
-    }
-    return ratio;
-  }
-
-  double _fallbackAspectRatio() {
-    return _validAspectRatio(widget.style.imageFallbackAspectRatio);
+  ContinuousImageItem _continuousImageItem(ImageCacheRequest request) {
+    final ownerId = widget.imageCacheOwnerId?.trim();
+    return _continuousImageAdapter.mapBlockImage(
+      ownerId: ownerId == null || ownerId.isEmpty ? 'unknown' : ownerId,
+      image: widget.image,
+      cacheKey: request.cacheKey,
+      fallbackAspectRatio: _validAspectRatio(
+        widget.style.imageFallbackAspectRatio,
+      ),
+      spacingAfter: widget.style.blockSpacing,
+      layoutHint: widget.resourceLayoutHints.blockImage(widget.image),
+      includeContentDefaultHint: _locksImageAspectRatio,
+    );
   }
 
   double _validAspectRatio(double value) {

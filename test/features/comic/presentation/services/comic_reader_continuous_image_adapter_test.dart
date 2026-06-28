@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
-import 'package:y300/features/comic/presentation/models/comic_reader_continuous_image_adapter.dart';
+import 'package:y300/features/comic/presentation/services/comic_reader_continuous_image_adapter.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 
 void main() {
