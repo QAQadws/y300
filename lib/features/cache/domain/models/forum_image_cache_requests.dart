@@ -1,6 +1,11 @@
 import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/image_retention_classifier.dart';
 
+/// 论坛/帖子/头像/表情等原生图片的缓存请求构造器。
+///
+/// 保留等级统一交由 [ImageRetentionClassifier] 按 role 推断（单一来源），
+/// 避免各处手写导致同类图片分类不一致。
 abstract final class ForumImageCacheRequests {
   static ImageCacheRequest forumHeadImage({
     required String url,
@@ -12,7 +17,9 @@ abstract final class ForumImageCacheRequests {
       ownerType: ImageCacheOwnerType.forum,
       ownerId: ownerId,
       role: ImageCacheRole.forumHeadImage,
-      retentionClass: ImageRetentionClass.ephemeral,
+      retentionClass: ImageRetentionClassifier.defaultFor(
+        ImageCacheRole.forumHeadImage,
+      ),
     );
   }
 
@@ -28,7 +35,9 @@ abstract final class ForumImageCacheRequests {
       ownerId: tid.trim().isEmpty ? 'unknown' : tid.trim(),
       role: ImageCacheRole.threadInline,
       imageIndex: imageIndex,
-      retentionClass: ImageRetentionClass.ephemeral,
+      retentionClass: ImageRetentionClassifier.defaultFor(
+        ImageCacheRole.threadInline,
+      ),
     );
   }
 
@@ -44,7 +53,9 @@ abstract final class ForumImageCacheRequests {
       ownerId: tid.trim().isEmpty ? 'unknown' : tid.trim(),
       role: ImageCacheRole.threadAttachment,
       imageIndex: imageIndex,
-      retentionClass: ImageRetentionClass.ephemeral,
+      retentionClass: ImageRetentionClassifier.defaultFor(
+        ImageCacheRole.threadAttachment,
+      ),
     );
   }
 
@@ -59,7 +70,9 @@ abstract final class ForumImageCacheRequests {
       ownerType: ownerType,
       ownerId: ownerId.trim().isEmpty ? 'unknown' : ownerId.trim(),
       role: ImageCacheRole.avatar,
-      retentionClass: ImageRetentionClass.ephemeral,
+      retentionClass: ImageRetentionClassifier.defaultFor(
+        ImageCacheRole.avatar,
+      ),
     );
   }
 
@@ -73,7 +86,9 @@ abstract final class ForumImageCacheRequests {
       ownerType: ImageCacheOwnerType.sticker,
       ownerId: ownerId,
       role: ImageCacheRole.remoteSmiley,
-      retentionClass: ImageRetentionClass.sticky,
+      retentionClass: ImageRetentionClassifier.defaultFor(
+        ImageCacheRole.remoteSmiley,
+      ),
     );
   }
 
@@ -89,7 +104,9 @@ abstract final class ForumImageCacheRequests {
       ownerId: blogId.trim().isEmpty ? 'unknown' : blogId.trim(),
       role: ImageCacheRole.blogInline,
       imageIndex: imageIndex,
-      retentionClass: ImageRetentionClass.ephemeral,
+      retentionClass: ImageRetentionClassifier.defaultFor(
+        ImageCacheRole.blogInline,
+      ),
     );
   }
 }

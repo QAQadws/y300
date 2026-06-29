@@ -425,9 +425,12 @@ class DefaultImageCacheService
     if (usage <= maxBytes) {
       return;
     }
+    // 容量压力下先淘汰 ephemeral，再在仍超限时才动 sticky（轮播图/表情/版块顶部
+    // 图等长期缓存）。protected（封面/已下载）始终不参与（仓储已按 protected=0 过滤）。
     final records = await _repository.listUnprotectedByAccessTime();
+    final ordered = _ephemeralFirst(records);
     var deleted = 0;
-    for (final record in records) {
+    for (final record in ordered) {
       await _deleteRecord(record);
       deleted += 1;
       usage -= record.bytes;
@@ -452,8 +455,13 @@ class DefaultImageCacheService
 
   @override
   Future<void> clearUnprotected() async {
+    // “一键清理”只清可清缓存（ephemeral），保留 sticky 长期缓存，使发帖预览/
+    // 论坛首屏不因普通清理立即退化（对齐缓存方案 §11.1）。
     final records = await _repository.listUnprotectedByAccessTime();
-    for (final record in records) {
+    final clearable = records
+        .where((record) => record.retentionClass == ImageRetentionClass.ephemeral)
+        .toList(growable: false);
+    for (final record in clearable) {
       await _deleteRecord(record);
     }
     _diagnosticRecorder.record(
@@ -462,9 +470,23 @@ class DefaultImageCacheService
         namespace: CacheNamespace.image,
         bucket: StorageBucket.imageCache,
         reason: 'clear_unprotected',
-        fields: <String, Object?>{'deleted': records.length},
+        fields: <String, Object?>{'deleted': clearable.length},
       ),
     );
+  }
+
+  /// 按“ephemeral 优先、sticky 其次”排序（各自仍保持调用方传入的 LRU 顺序）。
+  List<CachedImageRecord> _ephemeralFirst(List<CachedImageRecord> records) {
+    final ephemeral = <CachedImageRecord>[];
+    final sticky = <CachedImageRecord>[];
+    for (final record in records) {
+      if (record.retentionClass == ImageRetentionClass.sticky) {
+        sticky.add(record);
+      } else {
+        ephemeral.add(record);
+      }
+    }
+    return <CachedImageRecord>[...ephemeral, ...sticky];
   }
 
   @override

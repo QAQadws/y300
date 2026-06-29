@@ -399,6 +399,83 @@ void main() {
       expect(repository.records['page-1']?.height, 1200);
     },
   );
+
+  test('clearUnprotected spares sticky long-term cache', () async {
+    final repository = _MemoryImageCacheRepository()
+      ..records['thread-1'] = CachedImageRecord(
+        cacheKey: 'thread-1',
+        ownerType: ImageCacheOwnerType.thread.dbValue,
+        ownerId: 'tid-1',
+        role: ImageCacheRole.threadInline.dbValue,
+        bytes: 3,
+        protected: false,
+        retentionClass: ImageRetentionClass.ephemeral,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      )
+      ..records['smiley-1'] = CachedImageRecord(
+        cacheKey: 'smiley-1',
+        ownerType: ImageCacheOwnerType.sticker.dbValue,
+        ownerId: 'yamibo-smiley-v4',
+        role: ImageCacheRole.remoteSmiley.dbValue,
+        bytes: 3,
+        protected: false,
+        retentionClass: ImageRetentionClass.sticky,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      );
+    final service = DefaultImageCacheService(
+      repository: repository,
+      cacheManagerFuture: Future<BaseCacheManager>.value(_UnusedCacheManager()),
+      directoryResolver: const ImageCacheDirectoryResolver(),
+    );
+
+    await service.clearUnprotected();
+
+    // ephemeral 被清，sticky 保留。
+    expect(repository.records.containsKey('thread-1'), isFalse);
+    expect(repository.records.containsKey('smiley-1'), isTrue);
+  });
+
+  test('pruneToLimit evicts ephemeral before sticky', () async {
+    final repository = _MemoryImageCacheRepository()
+      ..records['smiley-1'] = CachedImageRecord(
+        cacheKey: 'smiley-1',
+        ownerType: ImageCacheOwnerType.sticker.dbValue,
+        ownerId: 'yamibo-smiley-v4',
+        role: ImageCacheRole.remoteSmiley.dbValue,
+        bytes: 100,
+        protected: false,
+        retentionClass: ImageRetentionClass.sticky,
+        // 更久未访问：若仅按 LRU 会先删它，但 sticky 应后于 ephemeral。
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+        lastAccessedAt: DateTime(2026, 1, 1),
+      )
+      ..records['thread-1'] = CachedImageRecord(
+        cacheKey: 'thread-1',
+        ownerType: ImageCacheOwnerType.thread.dbValue,
+        ownerId: 'tid-1',
+        role: ImageCacheRole.threadInline.dbValue,
+        bytes: 100,
+        protected: false,
+        retentionClass: ImageRetentionClass.ephemeral,
+        createdAt: DateTime(2026, 2, 1),
+        updatedAt: DateTime(2026, 2, 1),
+        lastAccessedAt: DateTime(2026, 2, 1),
+      );
+    final service = DefaultImageCacheService(
+      repository: repository,
+      cacheManagerFuture: Future<BaseCacheManager>.value(_UnusedCacheManager()),
+      directoryResolver: const ImageCacheDirectoryResolver(),
+    );
+
+    // 总 200，限 150 -> 需删 1 个。应删 ephemeral 的 thread-1，保留 sticky。
+    await service.pruneToLimit(maxBytes: 150);
+
+    expect(repository.records.containsKey('thread-1'), isFalse);
+    expect(repository.records.containsKey('smiley-1'), isTrue);
+  });
 }
 
 class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
@@ -447,7 +524,11 @@ class _MemoryImageCacheRepository implements ImageCacheRepository {
   final Map<String, CachedImageRecord> records = <String, CachedImageRecord>{};
 
   @override
-  Future<int> calculateUsageBytes({required bool includeProtected}) async => 0;
+  Future<int> calculateUsageBytes({required bool includeProtected}) async {
+    return records.values
+        .where((record) => includeProtected || !record.protected)
+        .fold<int>(0, (sum, record) => sum + record.bytes);
+  }
 
   @override
   Future<List<ImageCacheUsageGroup>> calculateUsageGroups() async {
@@ -477,8 +558,17 @@ class _MemoryImageCacheRepository implements ImageCacheRepository {
   }
 
   @override
-  Future<List<CachedImageRecord>> listUnprotectedByAccessTime() async =>
-      const <CachedImageRecord>[];
+  Future<List<CachedImageRecord>> listUnprotectedByAccessTime() async {
+    final unprotected = records.values
+        .where((record) => !record.protected)
+        .toList()
+      ..sort((a, b) {
+        final aTime = a.lastAccessedAt ?? a.updatedAt;
+        final bTime = b.lastAccessedAt ?? b.updatedAt;
+        return aTime.compareTo(bTime);
+      });
+    return unprotected;
+  }
 
   @override
   Future<List<CachedImageRecord>> listUnprotectedByRoles({
