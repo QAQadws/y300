@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -989,6 +991,7 @@ class ThreadPostImageBlockView extends ConsumerStatefulWidget {
 
 class _ThreadPostImageBlockViewState
     extends ConsumerState<ThreadPostImageBlockView> {
+  static const Duration _loadingIndicatorDelay = Duration(milliseconds: 350);
   static const ContinuousImageLayoutResolver _continuousImageLayoutResolver =
       ContinuousImageLayoutResolver();
   static const ContinuousImageViewportResolver _viewportResolver =
@@ -1048,12 +1051,10 @@ class _ThreadPostImageBlockViewState
                 request: request,
                 imageProviderOverride: widget.imageProviderOverride,
                 fit: widget.style.imageFit,
-                placeholder: const _ThreadPostImagePlaceholder(
-                  label: '图片加载中',
-                  icon: Icons.image_outlined,
+                placeholder: const _ThreadPostDelayedLoadingPlaceholder(
+                  delay: _loadingIndicatorDelay,
                 ),
-                errorPlaceholder: const _ThreadPostImagePlaceholder(
-                  label: '图片加载失败',
+                errorPlaceholder: const _ThreadPostImageErrorPlaceholder(
                   icon: Icons.broken_image_outlined,
                 ),
                 headerBuilder: widget.imageHeaderBuilder,
@@ -1381,11 +1382,10 @@ class _ThreadPostImageBlockViewState
   }
 }
 
-class _ThreadPostImagePlaceholder extends StatelessWidget {
-  const _ThreadPostImagePlaceholder({required this.label, required this.icon});
+class _ThreadPostImageSurface extends StatelessWidget {
+  const _ThreadPostImageSurface({this.child});
 
-  final String label;
-  final IconData icon;
+  final Widget? child;
 
   @override
   Widget build(BuildContext context) {
@@ -1393,19 +1393,85 @@ class _ThreadPostImagePlaceholder extends StatelessWidget {
     return Container(
       color: scheme.surfaceContainerHighest.withValues(alpha: 0.38),
       alignment: Alignment.center,
+      child: child,
+    );
+  }
+}
+
+class _ThreadPostDelayedLoadingPlaceholder extends StatefulWidget {
+  const _ThreadPostDelayedLoadingPlaceholder({required this.delay});
+
+  final Duration delay;
+
+  @override
+  State<_ThreadPostDelayedLoadingPlaceholder> createState() =>
+      _ThreadPostDelayedLoadingPlaceholderState();
+}
+
+class _ThreadPostDelayedLoadingPlaceholderState
+    extends State<_ThreadPostDelayedLoadingPlaceholder> {
+  Timer? _timer;
+  bool _showSpinner = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer(widget.delay, () {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _showSpinner = true;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _ThreadPostImageSurface(
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 160),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        child: _showSpinner
+            ? IgnorePointer(
+                key: const Key('thread-post-image-loading-spinner'),
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.2,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              )
+            : const SizedBox.shrink(key: ValueKey('thread-post-image-idle')),
+      ),
+    );
+  }
+}
+
+class _ThreadPostImageErrorPlaceholder extends StatelessWidget {
+  const _ThreadPostImageErrorPlaceholder({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return _ThreadPostImageSurface(
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 20, color: scheme.onSurfaceVariant),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
+        children: [Icon(icon, size: 20, color: scheme.onSurfaceVariant)],
       ),
     );
   }

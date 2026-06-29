@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -818,6 +819,101 @@ void main() {
     },
   );
 
+  testWidgets(
+    'ThreadPostImageBlockView delays loading spinner until threshold',
+    (tester) async {
+      const imageBlock = ThreadPostImageBlock(
+        url: 'https://bbs.yamibo.com/data/attachment/forum/page-real.jpg',
+        rawUrl: 'data/attachment/forum/page-real.jpg',
+        index: 0,
+      );
+      const document = ThreadPostBodyDocument(
+        blocks: <ThreadPostBodyBlock>[imageBlock],
+      );
+
+      await tester.pumpWidget(
+        _testApp(
+          home: Center(
+            child: SizedBox(
+              width: 350,
+              child: ThreadPostImageBlockView(
+                document: document,
+                image: imageBlock,
+                images: <ThreadPostImageBlock>[imageBlock],
+                imageHeaderBuilder: const _DelayedImageHeaderBuilder(),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      expect(find.text('图片加载中'), findsNothing);
+      expect(
+        find.byKey(const Key('thread-post-image-loading-spinner')),
+        findsNothing,
+      );
+      await tester.pump(const Duration(milliseconds: 349));
+      expect(
+        find.byKey(const Key('thread-post-image-loading-spinner')),
+        findsNothing,
+      );
+
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(
+        find.byKey(const Key('thread-post-image-loading-spinner')),
+        findsOneWidget,
+      );
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+      _DelayedImageHeaderBuilder.completePending();
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'ThreadPostImageBlockView does not show delayed spinner when image resolves quickly',
+    (tester) async {
+      final image = await tester.runAsync(
+        () => createTestImage(width: 1000, height: 500, cache: false),
+      );
+      final testImage = image!;
+      addTearDown(testImage.dispose);
+      final provider = _SynchronousImageProvider(testImage);
+      const imageBlock = ThreadPostImageBlock(
+        url: 'https://bbs.yamibo.com/data/attachment/forum/page-real.jpg',
+        rawUrl: 'data/attachment/forum/page-real.jpg',
+        index: 0,
+      );
+      const document = ThreadPostBodyDocument(
+        blocks: <ThreadPostBodyBlock>[imageBlock],
+      );
+
+      await tester.pumpWidget(
+        _testApp(
+          home: Center(
+            child: SizedBox(
+              width: 350,
+              child: ThreadPostImageBlockView(
+                document: document,
+                image: imageBlock,
+                images: <ThreadPostImageBlock>[imageBlock],
+                imageProviderOverride: provider,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('图片加载中'), findsNothing);
+    },
+  );
+
   test(
     'adaptive reading policy defers only above-viewport block image updates',
     () {
@@ -1404,6 +1500,29 @@ class _SynchronousImageProvider
     return OneFrameImageStreamCompleter(
       SynchronousFuture<ImageInfo>(ImageInfo(image: image)),
     );
+  }
+}
+
+class _DelayedImageHeaderBuilder implements ImageRequestHeaderBuilder {
+  const _DelayedImageHeaderBuilder();
+
+  static final List<Completer<Map<String, String>>> _pending =
+      <Completer<Map<String, String>>>[];
+
+  @override
+  Future<Map<String, String>> buildHeaders(String url) async {
+    final completer = Completer<Map<String, String>>();
+    _pending.add(completer);
+    return completer.future;
+  }
+
+  static void completePending() {
+    for (final completer in _pending) {
+      if (!completer.isCompleted) {
+        completer.complete(const <String, String>{});
+      }
+    }
+    _pending.clear();
   }
 }
 
