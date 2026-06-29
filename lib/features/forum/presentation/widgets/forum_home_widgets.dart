@@ -185,9 +185,7 @@ class _ForumHomeCarouselState extends ConsumerState<ForumHomeCarousel> {
     if (items.isEmpty) {
       return 'empty';
     }
-    return items
-        .map((item) => '${item.imageUrl}|${item.targetUrl}')
-        .join('||');
+    return items.map((item) => '${item.imageUrl}|${item.targetUrl}').join('||');
   }
 }
 
@@ -208,7 +206,8 @@ class _ForumHomeCarouselBody extends StatelessWidget {
   final List<ForumHomeCarouselItem> items;
   final ValueChanged<ForumHomeCarouselItem> onOpen;
   final ForumHomeNativePalette palette;
-  final void Function(int index, CarouselPageChangedReason reason) onPageChanged;
+  final void Function(int index, CarouselPageChangedReason reason)
+  onPageChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -535,18 +534,16 @@ class _TodayBadge extends StatelessWidget {
               opacity: animation,
               child: SizeTransition(
                 sizeFactor: animation,
-                axis: Axis.horizontal,
+                axis: Axis.vertical,
                 axisAlignment: -1,
                 child: child,
               ),
             );
           },
           child: todayPosts == null
-              ? const SizedBox(
-                  key: ValueKey('forum-home-today-badge-empty'),
-                )
+              ? const SizedBox(key: ValueKey('forum-home-today-badge-empty'))
               : Row(
-                  key: ValueKey('forum-home-today-badge-$todayPosts'),
+                  key: const ValueKey('forum-home-today-badge-filled'),
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(

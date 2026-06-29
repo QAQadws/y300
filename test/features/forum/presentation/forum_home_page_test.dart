@@ -118,7 +118,41 @@ void main() {
       expect(find.text('2'), findsOneWidget);
     });
 
-    testWidgets('today badge disappears when refreshed data removes today count', (
+    testWidgets(
+      'today badge disappears when refreshed data removes today count',
+      (tester) async {
+        var requestCount = 0;
+        final refreshCompleter = Completer<ApiResult<ForumHomePayload>>();
+        final repository = _FakeForumHomeRepository(() {
+          requestCount += 1;
+          if (requestCount == 1) {
+            return Future<ApiResult<ForumHomePayload>>.value(
+              ApiSuccess(_loggedOutPayload()),
+            );
+          }
+          return refreshCompleter.future;
+        });
+
+        await tester.pumpWidget(_buildTestApp(repository));
+        await tester.pumpAndSettle();
+
+        expect(find.text('今日'), findsOneWidget);
+
+        final refreshIndicator = tester.widget<RefreshIndicator>(
+          find.byType(RefreshIndicator),
+        );
+        final refreshFuture = refreshIndicator.onRefresh();
+        await tester.pump();
+
+        refreshCompleter.complete(ApiSuccess(_loggedOutPayloadNoToday()));
+        await refreshFuture;
+        await tester.pumpAndSettle();
+
+        expect(find.text('今日'), findsNothing);
+      },
+    );
+
+    testWidgets('today badge keeps stable subtree when count changes', (
       tester,
     ) async {
       var requestCount = 0;
@@ -136,7 +170,11 @@ void main() {
       await tester.pumpWidget(_buildTestApp(repository));
       await tester.pumpAndSettle();
 
+      final beforeElement = tester.element(
+        find.byKey(const ValueKey('forum-home-today-badge-filled')),
+      );
       expect(find.text('今日'), findsOneWidget);
+      expect(find.text('2'), findsOneWidget);
 
       final refreshIndicator = tester.widget<RefreshIndicator>(
         find.byType(RefreshIndicator),
@@ -144,48 +182,45 @@ void main() {
       final refreshFuture = refreshIndicator.onRefresh();
       await tester.pump();
 
-      refreshCompleter.complete(ApiSuccess(_loggedOutPayloadNoToday()));
+      refreshCompleter.complete(ApiSuccess(_loggedOutPayloadWithTodayCount(8)));
       await refreshFuture;
-      await tester.pumpAndSettle();
-
-      expect(find.text('今日'), findsNothing);
-    });
-
-    testWidgets('silent refresh triggers when page becomes active after threshold', (
-      tester,
-    ) async {
-      final repository = _FakeForumHomeRepository(
-        () async => ApiSuccess(_loggedOutPayload()),
-      );
-      final fakeNow = _MutableNow(DateTime(2026, 6, 29, 12, 0, 0));
-
-      await tester.pumpWidget(
-        _buildTestApp(
-          repository,
-          isActive: false,
-          nowProvider: fakeNow.call,
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      fakeNow.value = fakeNow.value.add(const Duration(seconds: 61));
-
-      await tester.pumpWidget(
-        _buildTestApp(
-          repository,
-          isActive: true,
-          nowProvider: fakeNow.call,
-        ),
-      );
       await tester.pump();
-      await tester.pumpAndSettle();
 
-      expect(repository.cachePolicies, <CacheLoadPolicy>[
-        CacheLoadPolicy.cacheFirst,
-        CacheLoadPolicy.networkFirst,
-      ]);
-      expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
+      final afterElement = tester.element(
+        find.byKey(const ValueKey('forum-home-today-badge-filled')),
+      );
+      expect(identical(beforeElement, afterElement), isTrue);
+      expect(find.text('今日'), findsOneWidget);
     });
+
+    testWidgets(
+      'silent refresh triggers when page becomes active after threshold',
+      (tester) async {
+        final repository = _FakeForumHomeRepository(
+          () async => ApiSuccess(_loggedOutPayload()),
+        );
+        final fakeNow = _MutableNow(DateTime(2026, 6, 29, 12, 0, 0));
+
+        await tester.pumpWidget(
+          _buildTestApp(repository, isActive: false, nowProvider: fakeNow.call),
+        );
+        await tester.pumpAndSettle();
+
+        fakeNow.value = fakeNow.value.add(const Duration(seconds: 61));
+
+        await tester.pumpWidget(
+          _buildTestApp(repository, isActive: true, nowProvider: fakeNow.call),
+        );
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        expect(repository.cachePolicies, <CacheLoadPolicy>[
+          CacheLoadPolicy.cacheFirst,
+          CacheLoadPolicy.networkFirst,
+        ]);
+        expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
+      },
+    );
 
     testWidgets(
       'renders favorite forum section when logged in payload has favorites',
@@ -420,7 +455,10 @@ void main() {
       await tester.pump();
 
       expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
-      expect(find.byKey(const Key('forum-home-refresh-progress')), findsOneWidget);
+      expect(
+        find.byKey(const Key('forum-home-refresh-progress')),
+        findsOneWidget,
+      );
 
       refreshCompleter.complete(ApiSuccess(_loggedOutPayload()));
       await refreshFuture;
@@ -440,7 +478,12 @@ void main() {
       tester,
     ) async {
       final authRepository = _DeferredAuthRepository(
-        session: SessionInfo(uid: '0', username: '', formhash: '', isLoggedIn: false),
+        session: SessionInfo(
+          uid: '0',
+          username: '',
+          formhash: '',
+          isLoggedIn: false,
+        ),
       );
       final repository = _FakeForumHomeRepository(
         () async => ApiSuccess(_loggedOutPayload()),
@@ -463,127 +506,141 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(repository.cachePolicies, <CacheLoadPolicy>[CacheLoadPolicy.cacheFirst]);
-      expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
-    });
-
-    testWidgets('login transition invalidates cached home and rebuilds with loading placeholder', (
-      tester,
-    ) async {
-      final authRepository = _FakeAuthRepository();
-      var requestCount = 0;
-      final reloadCompleter = Completer<ApiResult<ForumHomePayload>>();
-      final repository = _FakeForumHomeRepository(() {
-        requestCount += 1;
-        if (requestCount == 1) {
-          return Future<ApiResult<ForumHomePayload>>.value(
-            ApiSuccess(_loggedOutPayload()),
-          );
-        }
-        return reloadCompleter.future;
-      });
-      final invalidationService = _RecordingNativePageCacheInvalidationService();
-      final container = ProviderContainer(
-        overrides: [
-          ..._overrides(repository, authRepository: authRepository),
-          nativePageCacheInvalidationServiceProvider.overrideWithValue(
-            invalidationService,
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
-
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: const MaterialApp(home: ForumHomePage()),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
-
-      authRepository.setSession(_loggedInSession());
-      await container.read(authSessionControllerProvider.notifier).refresh();
-      await tester.pump();
-
-      expect(find.byKey(const Key('forum-home-loading-body')), findsOneWidget);
-      expect(find.byKey(const Key('forum-home-list')), findsNothing);
-
-      reloadCompleter.complete(ApiSuccess(_loggedInPayloadWithFavorites()));
-      await tester.pumpAndSettle();
-
       expect(repository.cachePolicies, <CacheLoadPolicy>[
         CacheLoadPolicy.cacheFirst,
-        CacheLoadPolicy.cacheFirst,
       ]);
-      expect(repository.requestProfiles, <DocumentRequestProfile?>[
-        DocumentRequestProfile.anonymous,
-        DocumentRequestProfile.loggedIn,
-      ]);
-      expect(invalidationService.invalidateForumHomeCalls, 1);
       expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
     });
 
-    testWidgets('account switch invalidates cached home and rebuilds with loading placeholder', (
-      tester,
-    ) async {
-      final authRepository = _FakeAuthRepository(
-        session: _loggedInSession(uid: '10001', username: 'alice'),
-      );
-      var requestCount = 0;
-      final reloadCompleter = Completer<ApiResult<ForumHomePayload>>();
-      final repository = _FakeForumHomeRepository(() {
-        requestCount += 1;
-        if (requestCount == 1) {
-          return Future<ApiResult<ForumHomePayload>>.value(
-            ApiSuccess(_loggedInPayloadWithFavorites()),
-          );
-        }
-        return reloadCompleter.future;
-      });
-      final invalidationService = _RecordingNativePageCacheInvalidationService();
-      final container = ProviderContainer(
-        overrides: [
-          ..._overrides(repository, authRepository: authRepository),
-          nativePageCacheInvalidationServiceProvider.overrideWithValue(
-            invalidationService,
+    testWidgets(
+      'login transition invalidates cached home and rebuilds with loading placeholder',
+      (tester) async {
+        final authRepository = _FakeAuthRepository();
+        var requestCount = 0;
+        final reloadCompleter = Completer<ApiResult<ForumHomePayload>>();
+        final repository = _FakeForumHomeRepository(() {
+          requestCount += 1;
+          if (requestCount == 1) {
+            return Future<ApiResult<ForumHomePayload>>.value(
+              ApiSuccess(_loggedOutPayload()),
+            );
+          }
+          return reloadCompleter.future;
+        });
+        final invalidationService =
+            _RecordingNativePageCacheInvalidationService();
+        final container = ProviderContainer(
+          overrides: [
+            ..._overrides(repository, authRepository: authRepository),
+            nativePageCacheInvalidationServiceProvider.overrideWithValue(
+              invalidationService,
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(home: ForumHomePage()),
           ),
-        ],
-      );
-      addTearDown(container.dispose);
+        );
+        await tester.pumpAndSettle();
 
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: const MaterialApp(home: ForumHomePage()),
-        ),
-      );
-      await tester.pumpAndSettle();
+        expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
 
-      expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
+        authRepository.setSession(_loggedInSession());
+        await container.read(authSessionControllerProvider.notifier).refresh();
+        await tester.pump();
 
-      authRepository.setSession(_loggedInSession(uid: '20002', username: 'bob'));
-      await container.read(authSessionControllerProvider.notifier).refresh();
-      await tester.pump();
+        expect(
+          find.byKey(const Key('forum-home-loading-body')),
+          findsOneWidget,
+        );
+        expect(find.byKey(const Key('forum-home-list')), findsNothing);
 
-      expect(find.byKey(const Key('forum-home-loading-body')), findsOneWidget);
-      expect(find.byKey(const Key('forum-home-list')), findsNothing);
+        reloadCompleter.complete(ApiSuccess(_loggedInPayloadWithFavorites()));
+        await tester.pumpAndSettle();
 
-      reloadCompleter.complete(ApiSuccess(_loggedInPayloadWithFavorites()));
-      await tester.pumpAndSettle();
+        expect(repository.cachePolicies, <CacheLoadPolicy>[
+          CacheLoadPolicy.cacheFirst,
+          CacheLoadPolicy.cacheFirst,
+        ]);
+        expect(repository.requestProfiles, <DocumentRequestProfile?>[
+          DocumentRequestProfile.anonymous,
+          DocumentRequestProfile.loggedIn,
+        ]);
+        expect(invalidationService.invalidateForumHomeCalls, 1);
+        expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
+      },
+    );
 
-      expect(repository.cachePolicies, <CacheLoadPolicy>[
-        CacheLoadPolicy.cacheFirst,
-        CacheLoadPolicy.cacheFirst,
-      ]);
-      expect(repository.requestProfiles, <DocumentRequestProfile?>[
-        DocumentRequestProfile.loggedIn,
-        DocumentRequestProfile.loggedIn,
-      ]);
-      expect(invalidationService.invalidateForumHomeCalls, 1);
-      expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
-    });
+    testWidgets(
+      'account switch invalidates cached home and rebuilds with loading placeholder',
+      (tester) async {
+        final authRepository = _FakeAuthRepository(
+          session: _loggedInSession(uid: '10001', username: 'alice'),
+        );
+        var requestCount = 0;
+        final reloadCompleter = Completer<ApiResult<ForumHomePayload>>();
+        final repository = _FakeForumHomeRepository(() {
+          requestCount += 1;
+          if (requestCount == 1) {
+            return Future<ApiResult<ForumHomePayload>>.value(
+              ApiSuccess(_loggedInPayloadWithFavorites()),
+            );
+          }
+          return reloadCompleter.future;
+        });
+        final invalidationService =
+            _RecordingNativePageCacheInvalidationService();
+        final container = ProviderContainer(
+          overrides: [
+            ..._overrides(repository, authRepository: authRepository),
+            nativePageCacheInvalidationServiceProvider.overrideWithValue(
+              invalidationService,
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(home: ForumHomePage()),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
+
+        authRepository.setSession(
+          _loggedInSession(uid: '20002', username: 'bob'),
+        );
+        await container.read(authSessionControllerProvider.notifier).refresh();
+        await tester.pump();
+
+        expect(
+          find.byKey(const Key('forum-home-loading-body')),
+          findsOneWidget,
+        );
+        expect(find.byKey(const Key('forum-home-list')), findsNothing);
+
+        reloadCompleter.complete(ApiSuccess(_loggedInPayloadWithFavorites()));
+        await tester.pumpAndSettle();
+
+        expect(repository.cachePolicies, <CacheLoadPolicy>[
+          CacheLoadPolicy.cacheFirst,
+          CacheLoadPolicy.cacheFirst,
+        ]);
+        expect(repository.requestProfiles, <DocumentRequestProfile?>[
+          DocumentRequestProfile.loggedIn,
+          DocumentRequestProfile.loggedIn,
+        ]);
+        expect(invalidationService.invalidateForumHomeCalls, 1);
+        expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
+      },
+    );
   });
 }
 
@@ -691,6 +748,64 @@ ForumHomePayload _loggedOutPayloadNoToday() {
             title: '公告区',
             description: '站点公告与维护信息',
             todayPosts: null,
+          ),
+        ],
+      ),
+    ],
+  );
+}
+
+ForumHomePayload _loggedOutPayloadWithTodayCount(int todayPosts) {
+  return ForumHomePayload(
+    forumIndex: ForumIndexData(
+      categories: [
+        ForumCategory(fid: '1', name: '综合区', forums: ['2']),
+      ],
+      forums: [
+        ForumItem(
+          fid: '2',
+          name: '公告区',
+          threads: 10,
+          posts: 20,
+          todayPosts: todayPosts,
+          description: '站务公告',
+          icon: '',
+          subForums: const [],
+        ),
+      ],
+    ),
+    isLoggedIn: false,
+    favoriteForums: [
+      FavoriteForum(
+        favid: '10',
+        fid: '2',
+        title: '公告区',
+        description: '站务公告',
+        threads: 10,
+        posts: 20,
+        todayPosts: todayPosts,
+      ),
+    ],
+    chromeData: ForumHomeChromeData(
+      favoriteForums: [
+        ForumHomeChromeForumItem(
+          fid: '2',
+          title: '公告区',
+          description: '站务公告',
+          todayPosts: todayPosts,
+        ),
+      ],
+    ),
+    homeSections: [
+      ForumHomeSectionData(
+        title: '综合区',
+        kind: ForumHomeSectionKind.regular,
+        items: [
+          ForumHomeForumData(
+            fid: '2',
+            title: '公告区',
+            description: '站务公告',
+            todayPosts: todayPosts,
           ),
         ],
       ),
@@ -851,9 +966,7 @@ SessionInfo _loggedInSession({
 }
 
 class _FakeAuthRepository implements AuthRepository {
-  _FakeAuthRepository({
-    SessionInfo? session,
-  }) : _session = session;
+  _FakeAuthRepository({SessionInfo? session}) : _session = session;
 
   SessionInfo? _session;
 
