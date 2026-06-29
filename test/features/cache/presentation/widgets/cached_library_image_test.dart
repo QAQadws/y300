@@ -84,7 +84,7 @@ void main() {
       expect(cacheService.ensureStarted, isTrue);
       expect(find.byType(Image), findsOneWidget);
       expect(
-        tester.widget<Image>(find.byType(Image)).image,
+        _underlyingProvider(tester.widget<Image>(find.byType(Image)).image),
         isA<_SynchronousImageProvider>(),
       );
 
@@ -99,7 +99,7 @@ void main() {
 
       expect(find.byType(Image), findsOneWidget);
       expect(
-        tester.widget<Image>(find.byType(Image)).image,
+        _underlyingProvider(tester.widget<Image>(find.byType(Image)).image),
         isA<_SynchronousImageProvider>(),
       );
       expect(
@@ -108,6 +108,11 @@ void main() {
       );
     },
   );
+}
+
+/// 解开降采样包裹，取底层真实 provider（Phase 0 起 provider 可能被 ResizeImage 包裹）。
+ImageProvider _underlyingProvider(ImageProvider provider) {
+  return provider is ResizeImage ? provider.imageProvider : provider;
 }
 
 class _ImmediateCachedImageService extends _DeferredImageCacheService {

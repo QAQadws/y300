@@ -75,14 +75,14 @@ void main() {
 
       final image = tester.widget<Image>(find.byType(Image));
       expect(
-        image.image,
+        _underlyingProvider(image.image),
         isA<NetworkImage>().having(
           (provider) => provider.url,
           'url',
           'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
         ),
       );
-      final provider = image.image as NetworkImage;
+      final provider = _underlyingProvider(image.image) as NetworkImage;
       expect(provider.headers, <String, String>{
         'Referer': 'https://bbs.yamibo.com/',
         'Cookie': 'auth=token123',
@@ -287,7 +287,7 @@ void main() {
         .where((box) => box.width == 24 && box.height == 24);
     expect(fixedSmileyBoxes, isEmpty);
     final image = tester.widget<Image>(find.byType(Image));
-    final provider = image.image as NetworkImage;
+    final provider = _underlyingProvider(image.image) as NetworkImage;
     expect(provider.headers?['Referer'], 'https://bbs.yamibo.com/');
     expect(
       _postRichTextPlainTexts(tester).any((text) => text.contains('那篇很好啊我很喜欢')),
@@ -607,7 +607,7 @@ void main() {
 
       final image = tester.widget<Image>(find.byType(Image));
       expect(
-        image.image,
+        _underlyingProvider(image.image),
         isA<NetworkImage>().having(
           (provider) => provider.url,
           'url',
@@ -638,7 +638,7 @@ void main() {
 
       final image = tester.widget<Image>(find.byType(Image));
       expect(
-        image.image,
+        _underlyingProvider(image.image),
         isA<NetworkImage>().having(
           (provider) => provider.url,
           'url',
@@ -687,14 +687,14 @@ void main() {
       expect(find.byKey(const Key('thread-post-image-0')), findsOneWidget);
       final image = tester.widget<Image>(find.byType(Image));
       expect(
-        image.image,
+        _underlyingProvider(image.image),
         isA<NetworkImage>().having(
           (provider) => provider.url,
           'url',
           'https://bbs.yamibo.com/data/attachment/forum/202606/03/070117ka05z5dcpjl0prsp.jpg',
         ),
       );
-      final provider = image.image as NetworkImage;
+      final provider = _underlyingProvider(image.image) as NetworkImage;
       expect(provider.headers?['Cookie'], 'auth=token123');
     },
   );
@@ -1447,6 +1447,14 @@ List<String> _postRichTextPlainTexts(WidgetTester tester) {
       .widgetList<RichText>(_postRichTexts())
       .map((text) => text.text.toPlainText())
       .toList(growable: false);
+}
+
+/// 解开降采样包裹，取底层真实 provider。
+///
+/// Phase 0 起图片按显示尺寸降采样，provider 可能被 ResizeImage 包裹，
+/// 断言关心的是底层来源类型，与是否降采样无关。
+ImageProvider _underlyingProvider(ImageProvider provider) {
+  return provider is ResizeImage ? provider.imageProvider : provider;
 }
 
 class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {

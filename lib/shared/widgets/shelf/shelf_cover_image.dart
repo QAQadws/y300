@@ -1,29 +1,26 @@
-import 'dart:io' as io;
-
 import 'package:flutter/material.dart';
 import 'package:y300/core/media/image_downscale_policy.dart';
+import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/features/image_loading/domain/app_image_source.dart';
+import 'package:y300/features/image_loading/presentation/app_image.dart';
 
-/// Shelf-only cover image widget.
+/// Shelf cover image widget.
 ///
-/// The shelf surface already has a background cover warmup pipeline, so this
-/// widget deliberately avoids synchronous file checks and direct network
-/// fallback. Missing local files fall back through Image.errorBuilder instead
-/// of blocking build with `existsSync`.
+/// Phase 1 起，本控件改为委托统一的 [AppImage]，从而**自食其力**：本地封面
+/// （预热/资产已落地）优先展示，缺失时直接用网络 URL 兜底加载并缓存，不再
+/// 依赖书架预热队列“先喂路径”。这修复了“快滑看不到封面、停下才加载”。
 ///
-/// 解码降采样：默认通过 [downscalePolicy] 按实际显示尺寸把封面解码到合适像素，
-/// 避免按原图解码出超大 bitmap 撑爆运行时图片缓存。调用方仍可显式传
-/// [cacheWidth]/[cacheHeight] 覆盖策略结果。
+/// 解码降采样由 [AppImage] + [downscalePolicy] 统一处理。
 class ShelfCoverImage extends StatelessWidget {
   const ShelfCoverImage({
     super.key,
     required this.coverKey,
     this.localPath,
     this.remoteUrl,
+    this.imageHeaderBuilder,
     required this.fit,
     this.width,
     this.height,
-    this.cacheWidth,
-    this.cacheHeight,
     this.downscalePolicy = const WidthBoundImageDownscalePolicy(),
     required this.placeholder,
     this.errorPlaceholder,
@@ -32,61 +29,30 @@ class ShelfCoverImage extends StatelessWidget {
   final String coverKey;
   final String? localPath;
   final String? remoteUrl;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final BoxFit fit;
   final double? width;
   final double? height;
-  final int? cacheWidth;
-  final int? cacheHeight;
   final ImageDownscalePolicy downscalePolicy;
   final Widget placeholder;
   final Widget? errorPlaceholder;
 
   @override
   Widget build(BuildContext context) {
-    final local = localPath?.trim();
-    if (local == null || local.isEmpty) {
-      return placeholder;
-    }
-
-    final file = io.File(local);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final target = _resolveDecodeTarget(context, constraints);
-        return Image.file(
-          file,
-          key: ValueKey<String>('shelf-cover-image-$coverKey-$local'),
-          fit: fit,
-          width: width,
-          height: height,
-          cacheWidth: cacheWidth ?? target.cacheWidth,
-          cacheHeight: cacheHeight ?? target.cacheHeight,
-          gaplessPlayback: true,
-          errorBuilder: (context, error, stackTrace) =>
-              errorPlaceholder ?? placeholder,
-        );
-      },
+    final remote = remoteUrl?.trim();
+    final networkSource = (remote != null && remote.isNotEmpty)
+        ? NetworkAppImageSource(url: remote, headerBuilder: imageHeaderBuilder)
+        : null;
+    return AppImage(
+      key: ValueKey<String>('shelf-cover-$coverKey'),
+      localPath: localPath,
+      networkSource: networkSource,
+      fit: fit,
+      width: width,
+      height: height,
+      downscalePolicy: downscalePolicy,
+      placeholder: placeholder,
+      errorPlaceholder: errorPlaceholder,
     );
-  }
-
-  ImageDecodeTarget _resolveDecodeTarget(
-    BuildContext context,
-    BoxConstraints constraints,
-  ) {
-    return downscalePolicy.resolve(
-      displaySize: Size(
-        _finiteOr(width, constraints.maxWidth),
-        _finiteOr(height, constraints.maxHeight),
-      ),
-      devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
-    );
-  }
-
-  /// 取 [preferred]（若为有限正值），否则回退到布局约束 [fallback]，
-  /// 都不可用时返回 NaN，交由策略判定为“无界、不降采样”。
-  double _finiteOr(double? preferred, double fallback) {
-    if (preferred != null && preferred.isFinite) {
-      return preferred;
-    }
-    return fallback.isFinite ? fallback : double.nan;
   }
 }

@@ -1236,6 +1236,7 @@ class _WorkList extends StatelessWidget {
       coverKey: item.workId,
       localPath: _preferredLocalPath(item),
       remoteUrl: _preferredRemoteUrl(item),
+      imageHeaderBuilder: imageHeaderBuilder,
       fit: BoxFit.cover,
       placeholder: placeholder,
     );

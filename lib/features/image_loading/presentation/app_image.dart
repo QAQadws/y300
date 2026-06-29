@@ -1,0 +1,267 @@
+import 'dart:io' as io;
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/media/image_downscale_policy.dart';
+import 'package:y300/features/image_loading/data/app_image_providers.dart';
+import 'package:y300/features/image_loading/domain/app_image_source.dart';
+import 'package:y300/shared/widgets/forum_default_avatar.dart';
+
+/// 统一图片显示控件——缓存层对外的唯一入口。
+///
+/// 核心特性：**自食其力**。加载顺序为
+///   本地文件（资产/已预热） → 网络（URL-keyed 磁盘+内存缓存）。
+/// 它**不依赖任何后台预热队列**：即使队列没把封面下好，只要有网络 URL，控件
+/// 自己就会去取并缓存。这正是修复“快滑看不到封面、停下才加载”的关键。
+///
+/// 网络分支用 `CachedNetworkImageProvider` + 共享的 `flutter_cache_manager`
+/// 实例，按规范化 URL 做 key（同一张图同一份缓存），并通过 provider 的
+/// `maxWidth` 在解码阶段降采样。
+class AppImage extends ConsumerStatefulWidget {
+  const AppImage({
+    super.key,
+    this.localPath,
+    this.networkSource,
+    required this.fit,
+    this.width,
+    this.height,
+    this.downscalePolicy = const WidthBoundImageDownscalePolicy(),
+    required this.placeholder,
+    this.errorPlaceholder,
+    this.onImageResolved,
+    this.onImageFailed,
+  });
+
+  /// 本地文件路径（资产层提供或预热已落地）。存在则优先展示，不再走网络。
+  final String? localPath;
+
+  /// 网络兜底来源。本地缺失时由它自食其力地加载并缓存。
+  final NetworkAppImageSource? networkSource;
+
+  final BoxFit fit;
+  final double? width;
+  final double? height;
+  final ImageDownscalePolicy downscalePolicy;
+  final Widget placeholder;
+  final Widget? errorPlaceholder;
+
+  /// 解析出原始像素尺寸时回调（用于帖子图布局占位等）。
+  final ValueChanged<Size>? onImageResolved;
+  final VoidCallback? onImageFailed;
+
+  @override
+  ConsumerState<AppImage> createState() => _AppImageState();
+}
+
+class _AppImageState extends ConsumerState<AppImage> {
+  /// 本帧解码目标，由 build 时的 LayoutBuilder 写入，供各分支读取。
+  ImageDecodeTarget _decodeTarget = ImageDecodeTarget.none;
+  bool _networkResolved = false;
+  String? _reportedImageIdentity;
+  String? _reportedFailureIdentity;
+
+  @override
+  void didUpdateWidget(covariant AppImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.localPath != widget.localPath ||
+        oldWidget.networkSource?.cacheKey != widget.networkSource?.cacheKey) {
+      _networkResolved = false;
+      _reportedImageIdentity = null;
+      _reportedFailureIdentity = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _decodeTarget = _resolveDecodeTarget(context, constraints);
+        return _buildContent(context);
+      },
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
+    // 1) 本地文件优先（资产层 / 预热已落地）：直接读文件，不触发网络。
+    final local = widget.localPath?.trim();
+    if (local != null && local.isNotEmpty) {
+      final file = io.File(local);
+      if (file.existsSync()) {
+        return Image.file(
+          file,
+          fit: widget.fit,
+          width: widget.width,
+          height: widget.height,
+          cacheWidth: _decodeTarget.cacheWidth,
+          cacheHeight: _decodeTarget.cacheHeight,
+          gaplessPlayback: true,
+          frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+            if (frame != null || wasSynchronouslyLoaded) {
+              _reportImageResolved(FileImage(file), 'file:${file.path}');
+            }
+            return child;
+          },
+          errorBuilder: (context, error, stackTrace) {
+            _markImageFailed('file:${file.path}');
+            return _effectiveErrorPlaceholder;
+          },
+        );
+      }
+    }
+
+    // 2) 网络兜底：自食其力地下载并缓存（URL-keyed，共享 cacheManager）。
+    final source = widget.networkSource;
+    if (source != null && source.resolvedUrl.isNotEmpty) {
+      if (isForumDefaultOrUnsupportedAvatarUrl(source.resolvedUrl)) {
+        return _effectiveErrorPlaceholder;
+      }
+      return _buildNetworkImage(source);
+    }
+
+    return widget.placeholder;
+  }
+
+  Widget _buildNetworkImage(NetworkAppImageSource source) {
+    // cacheManager 异步解析（依赖缓存目录）。未就绪时用包内默认实例，文件仍会
+    // 缓存，仅落点不同；就绪后切换到共享实例，与资产层读写同一批磁盘文件。
+    final cacheManagerAsync = ref.watch(appImageCacheManagerProvider);
+    final cacheManager = cacheManagerAsync.maybeWhen(
+      data: (manager) => manager.rawCacheManager,
+      orElse: () => null,
+    );
+
+    return FutureBuilder<Map<String, String>>(
+      future: _headersFor(source),
+      builder: (context, snapshot) {
+        if (source.headerBuilder != null &&
+            snapshot.connectionState != ConnectionState.done) {
+          // 头部未就绪前先占位，避免不带 Cookie 的请求拿到 403。
+          return widget.placeholder;
+        }
+        final headers = snapshot.data;
+        final provider = CachedNetworkImageProvider(
+          source.resolvedUrl,
+          cacheKey: source.cacheKey,
+          cacheManager: cacheManager,
+          headers: headers == null || headers.isEmpty ? null : headers,
+          maxWidth: _decodeTarget.cacheWidth,
+          maxHeight: _decodeTarget.cacheHeight,
+        );
+        return Stack(
+          fit: StackFit.passthrough,
+          children: <Widget>[
+            if (!_networkResolved) widget.placeholder,
+            Image(
+              image: provider,
+              fit: widget.fit,
+              width: widget.width,
+              height: widget.height,
+              gaplessPlayback: true,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) {
+                  _markNetworkResolved();
+                  _reportImageResolved(provider, 'net:${source.cacheKey}');
+                  return child;
+                }
+                return const SizedBox.shrink();
+              },
+              errorBuilder: (context, error, stackTrace) {
+                _markNetworkResolved();
+                _markImageFailed('net:${source.cacheKey}');
+                return _effectiveErrorPlaceholder;
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<Map<String, String>> _headersFor(NetworkAppImageSource source) async {
+    final builder = source.headerBuilder;
+    if (builder == null) {
+      return const <String, String>{};
+    }
+    return builder.buildHeaders(source.resolvedUrl);
+  }
+
+  ImageDecodeTarget _resolveDecodeTarget(
+    BuildContext context,
+    BoxConstraints constraints,
+  ) {
+    final displaySize = Size(
+      _finiteOr(widget.width, constraints.maxWidth),
+      _finiteOr(widget.height, constraints.maxHeight),
+    );
+    return widget.downscalePolicy.resolve(
+      displaySize: displaySize,
+      devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+    );
+  }
+
+  double _finiteOr(double? preferred, double fallback) {
+    if (preferred != null && preferred.isFinite) {
+      return preferred;
+    }
+    return fallback.isFinite ? fallback : double.nan;
+  }
+
+  void _markNetworkResolved() {
+    if (_networkResolved) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_networkResolved) {
+        setState(() => _networkResolved = true);
+      }
+    });
+  }
+
+  /// 上报原始像素尺寸。用未降采样的逻辑 provider 解析尺寸，保证布局提示用原图尺寸。
+  void _reportImageResolved(ImageProvider provider, String identity) {
+    final callback = widget.onImageResolved;
+    if (callback == null || _reportedImageIdentity == identity) {
+      return;
+    }
+    _reportedImageIdentity = identity;
+    final stream = provider.resolve(const ImageConfiguration());
+    late final ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (imageInfo, _) {
+        stream.removeListener(listener);
+        final image = imageInfo.image;
+        final size = Size(image.width.toDouble(), image.height.toDouble());
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            callback(size);
+          }
+        });
+      },
+      onError: (error, stackTrace) {
+        stream.removeListener(listener);
+        if (_reportedImageIdentity == identity) {
+          _reportedImageIdentity = null;
+        }
+        _markImageFailed(identity);
+      },
+    );
+    stream.addListener(listener);
+  }
+
+  void _markImageFailed(String identity) {
+    final callback = widget.onImageFailed;
+    if (callback == null || _reportedFailureIdentity == identity) {
+      return;
+    }
+    _reportedFailureIdentity = identity;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        callback();
+      }
+    });
+  }
+
+  Widget get _effectiveErrorPlaceholder =>
+      widget.errorPlaceholder ?? widget.placeholder;
+}

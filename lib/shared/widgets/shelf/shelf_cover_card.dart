@@ -124,6 +124,7 @@ class ShelfCoverCard extends StatelessWidget {
       coverKey: coverKey ?? title,
       localPath: _preferredLocalPath,
       remoteUrl: coverImageUrl,
+      imageHeaderBuilder: imageHeaderBuilder,
       fit: BoxFit.cover,
       placeholder: placeholder,
     );
