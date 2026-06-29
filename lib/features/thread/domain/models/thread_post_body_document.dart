@@ -1,109 +1,18 @@
-sealed class ThreadPostBodyBlock {
-  const ThreadPostBodyBlock({
-    this.anchorId = '',
-    this.continuesPrevious = false,
-  });
+// Phase 6: the thread post body model is now the shared canonical RichDocument
+// (see reader_shared/domain/rich_text/document/rich_document.dart). These
+// aliases keep the historical thread-specific names at every existing call
+// site while the single model lives in reader_shared. No behavioural change:
+// the canonical types are a field superset of the former thread model, and
+// thread code dispatches on block subtype via `is` checks (no exhaustive
+// switch), so promotion is transparent.
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 
-  final String anchorId;
-  final bool continuesPrevious;
-}
+export 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 
-class ThreadPostBodyDocument {
-  const ThreadPostBodyDocument({required this.blocks});
-
-  final List<ThreadPostBodyBlock> blocks;
-
-  List<ThreadPostImageBlock> get images {
-    final images = <ThreadPostImageBlock>[];
-    void collect(List<ThreadPostBodyBlock> source) {
-      for (final block in source) {
-        if (block is ThreadPostImageBlock) {
-          images.add(block);
-        } else if (block is ThreadPostQuoteBlock) {
-          collect(block.blocks);
-        }
-      }
-    }
-
-    collect(blocks);
-    return List<ThreadPostImageBlock>.unmodifiable(images);
-  }
-}
-
-class ThreadPostTextBlock extends ThreadPostBodyBlock {
-  const ThreadPostTextBlock({
-    super.anchorId,
-    super.continuesPrevious,
-    required this.runs,
-  });
-
-  final List<ThreadPostTextRun> runs;
-
-  String get plainText => runs.map((run) => run.text).join();
-}
-
-class ThreadPostQuoteBlock extends ThreadPostBodyBlock {
-  const ThreadPostQuoteBlock({
-    super.anchorId,
-    super.continuesPrevious,
-    required this.blocks,
-  });
-
-  final List<ThreadPostBodyBlock> blocks;
-}
-
-class ThreadPostTextRun {
-  const ThreadPostTextRun({
-    required this.text,
-    this.linkUrl,
-    this.isBold = false,
-    this.isItalic = false,
-    this.isUnderline = false,
-    this.inlineImage,
-  });
-
-  final String text;
-  final String? linkUrl;
-  final bool isBold;
-  final bool isItalic;
-  final bool isUnderline;
-  final ThreadPostInlineImage? inlineImage;
-}
-
-class ThreadPostInlineImage {
-  const ThreadPostInlineImage({
-    required this.url,
-    required this.rawUrl,
-    this.altText,
-    this.titleText,
-    this.originalWidth,
-    this.originalHeight,
-  });
-
-  final String url;
-  final String rawUrl;
-  final String? altText;
-  final String? titleText;
-  final double? originalWidth;
-  final double? originalHeight;
-}
-
-class ThreadPostImageBlock extends ThreadPostBodyBlock {
-  const ThreadPostImageBlock({
-    super.anchorId,
-    required this.url,
-    required this.rawUrl,
-    required this.index,
-    super.continuesPrevious,
-    this.aid,
-    this.originalWidth,
-    this.originalHeight,
-  });
-
-  final String url;
-  final String rawUrl;
-  final int index;
-  final String? aid;
-  final double? originalWidth;
-  final double? originalHeight;
-}
+typedef ThreadPostBodyBlock = RichBlock;
+typedef ThreadPostBodyDocument = RichDocument;
+typedef ThreadPostTextBlock = RichTextBlock;
+typedef ThreadPostQuoteBlock = RichQuoteBlock;
+typedef ThreadPostImageBlock = RichImageBlock;
+typedef ThreadPostTextRun = RichRun;
+typedef ThreadPostInlineImage = RichInlineImage;
