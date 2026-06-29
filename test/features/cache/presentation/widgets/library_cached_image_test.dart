@@ -27,7 +27,7 @@ void main() {
     await tester.pump();
 
     final image = tester.widget<Image>(find.byType(Image));
-    final provider = image.image as NetworkImage;
+    final provider = _underlyingProvider(image.image) as NetworkImage;
     expect(provider.headers, <String, String>{
       'Referer': 'https://bbs.yamibo.com/',
       'Cookie': 'auth=token123',
@@ -77,7 +77,7 @@ void main() {
 
     final image = tester.widget<Image>(find.byType(Image));
     expect(
-      image.image,
+      _underlyingProvider(image.image),
       isA<NetworkImage>().having(
         (provider) => provider.url,
         'url',
@@ -129,6 +129,14 @@ void main() {
 
     expect(resolvedSize, const Size(3, 5));
   });
+}
+
+/// 解开降采样包裹，取底层真实 provider。
+///
+/// 降采样后 Image 的 provider 可能是 ResizeImage 包裹的 FileImage/NetworkImage，
+/// 测试断言关心的是底层来源类型，与是否降采样无关。
+ImageProvider _underlyingProvider(ImageProvider provider) {
+  return provider is ResizeImage ? provider.imageProvider : provider;
 }
 
 class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {

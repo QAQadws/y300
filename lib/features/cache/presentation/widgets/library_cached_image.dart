@@ -1,6 +1,7 @@
 import 'dart:io' as io;
 
 import 'package:flutter/material.dart';
+import 'package:y300/core/media/image_downscale_policy.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
@@ -10,6 +11,10 @@ import 'package:y300/shared/widgets/forum_default_avatar.dart';
 /// It always prefers an existing local file.  Network URLs are treated as a
 /// fallback display source only; persistence into the stage-04 cache is handled
 /// by repositories/services so UI widgets do not own cache policy.
+///
+/// 解码降采样：默认通过 [downscalePolicy] 按实际显示尺寸解码，避免大图按原图
+/// 解码出超大 bitmap 反复驱逐运行时图片缓存。该控件被书架、详情头、阅读器、
+/// 头像等多处复用，内置降采样可一次惠及全部调用点。
 class LibraryCachedImage extends StatefulWidget {
   const LibraryCachedImage({
     super.key,
@@ -20,6 +25,7 @@ class LibraryCachedImage extends StatefulWidget {
     required this.fit,
     this.width,
     this.height,
+    this.downscalePolicy = const WidthBoundImageDownscalePolicy(),
     required this.placeholder,
     this.errorPlaceholder,
     this.headerBuilder,
@@ -37,6 +43,7 @@ class LibraryCachedImage extends StatefulWidget {
   final BoxFit fit;
   final double? width;
   final double? height;
+  final ImageDownscalePolicy downscalePolicy;
   final Widget placeholder;
   final Widget? errorPlaceholder;
   final ImageRequestHeaderBuilder? headerBuilder;
@@ -59,6 +66,9 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
   String? _reportedImageIdentity;
   String? _reportedFailureIdentity;
 
+  /// 本帧解码目标，由 build 时的 LayoutBuilder 写入，供各图片分支读取。
+  ImageDecodeTarget _decodeTarget = ImageDecodeTarget.none;
+
   @override
   void didUpdateWidget(covariant LibraryCachedImage oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -80,6 +90,42 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
 
   @override
   Widget build(BuildContext context) {
+    // 在布局阶段确定解码目标像素：优先用显式 width/height，否则取布局约束，
+    // 由 downscalePolicy 统一翻译为 cacheWidth/cacheHeight，供下方各分支复用。
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _decodeTarget = _resolveDecodeTarget(context, constraints);
+        return _buildContent(context);
+      },
+    );
+  }
+
+  ImageDecodeTarget _resolveDecodeTarget(
+    BuildContext context,
+    BoxConstraints constraints,
+  ) {
+    // 显式 width/height 可能是 double.infinity（如竖向阅读 width: infinity 表示
+    // 撑满列宽），此时退回布局约束取真实宽度，否则会被当成无界而跳过降采样。
+    final displaySize = Size(
+      _finiteOr(widget.width, constraints.maxWidth),
+      _finiteOr(widget.height, constraints.maxHeight),
+    );
+    return widget.downscalePolicy.resolve(
+      displaySize: displaySize,
+      devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+    );
+  }
+
+  /// 取 [preferred]（若为有限正值），否则回退到 [fallback]（仍要求有限），
+  /// 都不可用时返回 NaN，交由策略判定为“无界、不降采样”。
+  double _finiteOr(double? preferred, double fallback) {
+    if (preferred != null && preferred.isFinite) {
+      return preferred;
+    }
+    return fallback.isFinite ? fallback : double.nan;
+  }
+
+  Widget _buildContent(BuildContext context) {
     final testProvider = widget.imageProviderOverride;
     if (testProvider != null) {
       return Image(
@@ -113,6 +159,8 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
           fit: widget.fit,
           width: widget.width,
           height: widget.height,
+          cacheWidth: _decodeTarget.cacheWidth,
+          cacheHeight: _decodeTarget.cacheHeight,
           gaplessPlayback: true,
           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
             if (frame != null || wasSynchronouslyLoaded) {
@@ -178,8 +226,15 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
     final provider =
         widget.remoteImageProviderOverride ??
         NetworkImage(remote, headers: headers.isEmpty ? null : headers);
+    // 默认 Image 构造器不支持 cacheWidth/cacheHeight，网络分支改用 ResizeImage
+    // 在解码阶段降采样。尺寸上报仍用未包裹的 provider，保持原始分辨率用于布局提示。
+    final displayProvider = ResizeImage.resizeIfNeeded(
+      _decodeTarget.cacheWidth,
+      _decodeTarget.cacheHeight,
+      provider,
+    );
     return Image(
-      image: provider,
+      image: displayProvider,
       fit: widget.fit,
       width: widget.width,
       height: widget.height,
