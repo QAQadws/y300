@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reader_shared/domain/reader_preferences/reader_preferences.dart';
@@ -724,10 +725,24 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       centerIndex: centerIndex,
       warmedKeys: _precacheWindowKeys,
       imageHeaderBuilder: _capability.imageHeaderBuilder,
-      localPathResolver: (item) => null,
+      // 预热已缓存的本地文件而非重新拉网络（修复此前 (item) => null 导致的重复下载）。
+      localPathResolver: _cachedLocalPathFor,
       radius: 1,
       isMounted: () => mounted,
     );
+  }
+
+  /// 解析某图片项已缓存的本地文件路径；未命中返回 null（交由预热器回退到网络）。
+  Future<String?> _cachedLocalPathFor(ContinuousImageItem item) async {
+    final request = _capability.cacheRequestFor(item);
+    try {
+      final result = await ref
+          .read(imageCacheServiceProvider)
+          .getCached(request.cacheKey);
+      return result != null && result.success ? result.localPath : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   // --- mode + display settings sheets ---

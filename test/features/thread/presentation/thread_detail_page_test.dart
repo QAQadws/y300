@@ -2060,7 +2060,7 @@ void main() {
             )
             .first,
       );
-      final provider = image.image as NetworkImage;
+      final provider = _underlyingProvider(image.image) as NetworkImage;
       expect(
         provider.url,
         'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
@@ -3421,4 +3421,9 @@ class _FakeNovelRepository implements NovelRepository {
     required String episodeId,
     required bool isBookmarked,
   }) async {}
+}
+
+/// 解开降采样包裹，取底层真实 provider（Phase 0 起 provider 可能被 ResizeImage 包裹）。
+ImageProvider _underlyingProvider(ImageProvider provider) {
+  return provider is ResizeImage ? provider.imageProvider : provider;
 }

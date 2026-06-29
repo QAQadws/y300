@@ -144,7 +144,9 @@ class ContinuousImageFlowPolicy {
     updateVisibleItemAspectRatio: true,
     deferAboveViewportAspectRatioUpdate: true,
     allowScrollOffsetCompensation: true,
-    viewportCacheExtentFactor: 0.75,
+    // 配合全局解码预算（Phase 0）与降采样，扩大上下缓冲到约 1.5 屏，使来回滚动
+    // 时缓冲区内的已解码图片常驻、不重解码。单图已降采样，内存代价可控。
+    viewportCacheExtentFactor: 1.5,
     prefetchWindowBefore: 1,
     prefetchWindowAfter: 3,
     tallImagePolicy: TallImagePolicy.mihonLike,

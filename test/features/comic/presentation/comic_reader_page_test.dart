@@ -126,7 +126,8 @@ void main() {
     final listView = tester.widget<ListView>(
       find.byKey(const Key('comic-reader-image-list')),
     );
-    expect(listView.cacheExtent, 2400);
+    // viewportCacheExtentFactor 1.5 × 测试视口高度。
+    expect(listView.cacheExtent, 4800);
     expect(
       find.byKey(const Key('shared-reader-center-tap-zone')),
       findsOneWidget,
