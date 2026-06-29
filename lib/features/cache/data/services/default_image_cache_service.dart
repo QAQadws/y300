@@ -467,6 +467,34 @@ class DefaultImageCacheService
     );
   }
 
+  @override
+  Future<int> clearUnprotectedByRoles({
+    required List<ImageCacheRole> roles,
+  }) async {
+    if (roles.isEmpty) {
+      return 0;
+    }
+    final records = await _repository.listUnprotectedByRoles(
+      roles: roles.map((r) => r.dbValue).toList(growable: false),
+    );
+    for (final record in records) {
+      await _deleteRecord(record);
+    }
+    _diagnosticRecorder.record(
+      CacheDiagnosticEvent(
+        event: 'prune',
+        namespace: CacheNamespace.image,
+        bucket: StorageBucket.imageCache,
+        reason: 'clear_unprotected_by_roles',
+        fields: <String, Object?>{
+          'deleted': records.length,
+          'roles': roles.map((r) => r.dbValue).join(','),
+        },
+      ),
+    );
+    return records.length;
+  }
+
   CachedImageRecord _recordFromRequest(
     ImageCacheRequest request, {
     required String sourceUrl,

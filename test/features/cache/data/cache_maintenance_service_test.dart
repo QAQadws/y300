@@ -30,6 +30,47 @@ void main() {
   });
 
   test(
+    'clear userCleanup clears documents+snapshots and only default image roles',
+    () async {
+      final imageCache = _FakeImageCacheService()
+        ..clearUnprotectedByRolesResult = 7;
+      final documentCache = _FakeDocumentCacheService(deleteOlderThanResult: 4);
+      final snapshotCache = _FakeSnapshotCacheService(deleteExpiredResult: 5);
+      final service = DefaultCacheMaintenanceService(
+        imageCacheService: imageCache,
+        documentCacheService: documentCache,
+        snapshotCacheService: snapshotCache,
+        storageAccountingService: const _FakeStorageAccountingService(),
+        now: () => DateTime(2026, 6, 27),
+      );
+
+      final result = await service.clear(
+        const CacheClearRequest(scope: CacheClearScope.userCleanup),
+      );
+
+      // 页面缓存被清。
+      expect(documentCache.lastDeleteOlderThan, DateTime(9999, 12, 31));
+      expect(snapshotCache.lastDeleteExpiredAt, DateTime(9999, 12, 31));
+      expect(result.deletedDocuments, 4);
+      expect(result.deletedSnapshots, 5);
+
+      // 图片缓存按默认 role 清，且不走全集清理。
+      expect(imageCache.clearUnprotectedCalls, 0);
+      expect(imageCache.clearUnprotectedByRolesCalls, 1);
+      expect(
+        imageCache.lastClearedRoles,
+        [
+          ImageCacheRole.comicPage,
+          ImageCacheRole.threadInline,
+          ImageCacheRole.threadAttachment,
+        ],
+      );
+      expect(result.imageCacheCleared, isTrue);
+      expect(result.deletedImagesByRole, 7);
+    },
+  );
+
+  test(
     'prune applies image limit, document age and expired snapshot cleanup',
     () async {
       final imageCache = _FakeImageCacheService();
@@ -65,6 +106,9 @@ void main() {
 
 class _FakeImageCacheService implements ImageCacheService {
   int clearUnprotectedCalls = 0;
+  int clearUnprotectedByRolesCalls = 0;
+  List<ImageCacheRole>? lastClearedRoles;
+  int clearUnprotectedByRolesResult = 0;
   int? lastPruneMaxBytes;
 
   @override
@@ -73,6 +117,15 @@ class _FakeImageCacheService implements ImageCacheService {
   @override
   Future<void> clearUnprotected() async {
     clearUnprotectedCalls += 1;
+  }
+
+  @override
+  Future<int> clearUnprotectedByRoles({
+    required List<ImageCacheRole> roles,
+  }) async {
+    clearUnprotectedByRolesCalls += 1;
+    lastClearedRoles = List<ImageCacheRole>.of(roles);
+    return clearUnprotectedByRolesResult;
   }
 
   @override

@@ -30,6 +30,10 @@ abstract class ImageCacheRepository implements ProtectedCoverCacheStore {
 
   Future<List<CachedImageRecord>> listUnprotectedByAccessTime();
 
+  Future<List<CachedImageRecord>> listUnprotectedByRoles({
+    required List<String> roles,
+  });
+
   @override
   Future<List<CachedImageRecord>> listProtectedCovers();
 
@@ -176,6 +180,24 @@ class LocalImageCacheRepository implements ImageCacheRepository {
     final rows = await db.query(
       ComicLocalDb.cachedImagesTable,
       where: 'protected = 0',
+      orderBy: 'COALESCE(last_accessed_at, updated_at, created_at) ASC',
+    );
+    return rows.map(_fromRow).toList(growable: false);
+  }
+
+  @override
+  Future<List<CachedImageRecord>> listUnprotectedByRoles({
+    required List<String> roles,
+  }) async {
+    if (roles.isEmpty) {
+      return const <CachedImageRecord>[];
+    }
+    final db = await _dbFuture;
+    final placeholders = List<String>.filled(roles.length, '?').join(', ');
+    final rows = await db.query(
+      ComicLocalDb.cachedImagesTable,
+      where: 'protected = 0 AND role IN ($placeholders)',
+      whereArgs: <Object>[...roles],
       orderBy: 'COALESCE(last_accessed_at, updated_at, created_at) ASC',
     );
     return rows.map(_fromRow).toList(growable: false);

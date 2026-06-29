@@ -184,7 +184,7 @@ void main() {
     },
   );
 
-  test('clear image cache calls clearUnprotected and reloads usage', () async {
+  test('clearCache calls userCleanup clear and reloads usage', () async {
     final maintenance = _FakeCacheMaintenanceService(
       imageUsageBytes: 128 * 1024,
     );
@@ -211,10 +211,11 @@ void main() {
     await container.read(dataStorageControllerProvider.future);
     await container
         .read(dataStorageControllerProvider.notifier)
-        .clearImageCache();
+        .clearCache();
 
     final value = container.read(dataStorageControllerProvider).value!;
     expect(maintenance.clearImageCacheCalls, 1);
+    expect(maintenance.lastClearScope, CacheClearScope.userCleanup);
     expect(value.imageCacheUsageBytes, 0);
   });
 
@@ -557,6 +558,13 @@ class _FakeImageCacheService implements ImageCacheService {
   }
 
   @override
+  Future<int> clearUnprotectedByRoles({
+    required List<ImageCacheRole> roles,
+  }) async {
+    return 0;
+  }
+
+  @override
   Future<void> clearUnprotected() async {
     clearUnprotectedCalls += 1;
   }
@@ -608,12 +616,15 @@ class _FakeCacheMaintenanceService implements CacheMaintenanceService {
 
   int imageUsageBytes;
   int clearImageCacheCalls = 0;
+  CacheClearScope? lastClearScope;
   int? lastPruneMaxBytes;
 
   @override
   Future<CacheClearResult> clear(CacheClearRequest request) async {
+    lastClearScope = request.scope;
     if (request.scope == CacheClearScope.imageCache ||
-        request.scope == CacheClearScope.defaultCache) {
+        request.scope == CacheClearScope.defaultCache ||
+        request.scope == CacheClearScope.userCleanup) {
       clearImageCacheCalls += 1;
       imageUsageBytes = 0;
     }

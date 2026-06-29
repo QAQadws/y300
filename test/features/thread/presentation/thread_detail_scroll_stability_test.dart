@@ -229,5 +229,12 @@ class _SizedImageCacheService implements ImageCacheService {
   Future<void> pruneToLimit({required int maxBytes}) async {}
 
   @override
+  Future<int> clearUnprotectedByRoles({
+    required List<ImageCacheRole> roles,
+  }) async {
+    return 0;
+  }
+
+  @override
   Future<void> clearUnprotected() async {}
 }

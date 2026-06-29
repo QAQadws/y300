@@ -42,6 +42,7 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
     var deletedDocuments = 0;
     var deletedSnapshots = 0;
     var deletedProtectedCoverRecords = 0;
+    var deletedImagesByRole = 0;
 
     switch (request.scope) {
       case CacheClearScope.defaultCache:
@@ -66,6 +67,21 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
           _clearAllCutoff,
         );
         break;
+      case CacheClearScope.userCleanup:
+        deletedDocuments = await _documentCacheService.deleteOlderThan(
+          _clearAllCutoff,
+        );
+        deletedSnapshots = await _snapshotCacheService.deleteExpired(
+          _clearAllCutoff,
+        );
+        final roles = request.imageCacheRoles.isEmpty
+            ? _defaultUserCleanupRoles
+            : request.imageCacheRoles;
+        deletedImagesByRole = await _imageCacheService.clearUnprotectedByRoles(
+          roles: roles,
+        );
+        imageCacheCleared = true;
+        break;
     }
 
     final result = CacheClearResult(
@@ -73,6 +89,7 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
       deletedDocuments: deletedDocuments,
       deletedSnapshots: deletedSnapshots,
       deletedProtectedCoverRecords: deletedProtectedCoverRecords,
+      deletedImagesByRole: deletedImagesByRole,
     );
     _diagnosticRecorder.record(
       CacheDiagnosticEvent(
@@ -85,6 +102,7 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
           'deletedDocuments': result.deletedDocuments,
           'deletedSnapshots': result.deletedSnapshots,
           'deletedProtectedCoverRecords': result.deletedProtectedCoverRecords,
+          'deletedImagesByRole': result.deletedImagesByRole,
           'deletedEntries': result.deletedEntries,
         },
       ),
@@ -146,3 +164,11 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
 
   DateTime get _clearAllCutoff => DateTime(9999, 12, 31);
 }
+
+/// [CacheClearScope.userCleanup] 默认清理的非保护图片 role：
+/// 漫画页、帖子内联图、帖子附件图。封面/头像/表情/已下载等不在内。
+const List<ImageCacheRole> _defaultUserCleanupRoles = <ImageCacheRole>[
+  ImageCacheRole.comicPage,
+  ImageCacheRole.threadInline,
+  ImageCacheRole.threadAttachment,
+];

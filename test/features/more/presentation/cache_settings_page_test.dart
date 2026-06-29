@@ -177,6 +177,17 @@ void main() {
     expect(find.byKey(const Key('data-storage-usage-total')), findsOneWidget);
     expect(find.text('缓存与数据总览'), findsOneWidget);
     expect(find.text('总计：6.0 KB'), findsOneWidget);
+
+    // 总览默认收起：section/slice 尚未构建。
+    expect(
+      find.byKey(const Key('data-storage-usage-section-image_cache')),
+      findsNothing,
+    );
+
+    // 展开后 section/slice 可见。
+    await tester.tap(find.byKey(const Key('data-storage-usage-overview')));
+    await tester.pumpAndSettle();
+
     expect(
       find.byKey(const Key('data-storage-usage-section-image_cache')),
       findsOneWidget,
@@ -641,6 +652,14 @@ class _FakeImageCacheService implements ImageCacheService {
   @override
   Future<void> clearUnprotected() async {
     usageBytes = 0;
+  }
+
+  @override
+  Future<int> clearUnprotectedByRoles({
+    required List<ImageCacheRole> roles,
+  }) async {
+    usageBytes = 0;
+    return 0;
   }
 }
 

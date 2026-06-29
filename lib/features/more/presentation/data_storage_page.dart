@@ -58,23 +58,20 @@ class DataStoragePage extends ConsumerWidget {
               ),
               const Divider(height: 32),
               ListTile(
-                key: const Key('data-storage-image-cache-usage'),
+                key: const Key('data-storage-cache-usage'),
                 contentPadding: EdgeInsets.zero,
                 title: const Text(
-                  '清除图片缓存',
+                  '清理缓存',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                 ),
-                subtitle: Text(
-                  '已使用：${formatDataStorageBytes(viewState.imageCacheUsageBytes)}',
-                ),
                 trailing: FilledButton(
-                  key: const Key('data-storage-clear-image-cache-button'),
+                  key: const Key('data-storage-clear-cache-button'),
                   onPressed: viewState.isUpdating
                       ? null
                       : () => ref
                             .read(dataStorageControllerProvider.notifier)
-                            .clearImageCache(),
-                  child: const Text('清除'),
+                            .clearCache(),
+                  child: const Text('清理'),
                 ),
               ),
               const SizedBox(height: 8),
@@ -98,8 +95,8 @@ class DataStoragePage extends ConsumerWidget {
                           ),
               ),
               Text(
-                '封面、作品信息、标签和阅读状态不会被清除；建议不要频繁清理缓存。',
-                key: const Key('data-storage-image-cache-hint'),
+                '清理页面缓存（帖子列表/详情）与漫画页、帖子图片缓存；封面、头像、表情、已下载内容不会被清除。',
+                key: const Key('data-storage-cache-hint'),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const Divider(height: 32),
@@ -174,23 +171,20 @@ class _StorageUsageOverview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return ExpansionTile(
       key: const Key('data-storage-usage-overview'),
-      crossAxisAlignment: CrossAxisAlignment.start,
+      initiallyExpanded: false,
+      tilePadding: EdgeInsets.zero,
+      title: const Text(
+        '缓存与数据总览',
+        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+      ),
+      subtitle: Text(
+        '总计：${formatDataStorageBytes(report.totalBytes)}',
+        key: const Key('data-storage-usage-total'),
+      ),
       children: [
-        Text(
-          '缓存与数据总览',
-          style: Theme.of(
-            context,
-          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-        ),
         const SizedBox(height: 4),
-        Text(
-          '总计：${formatDataStorageBytes(report.totalBytes)}',
-          key: const Key('data-storage-usage-total'),
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
-        const SizedBox(height: 12),
         for (final section in report.sections) ...[
           _StorageUsageSectionTile(section: section),
           const SizedBox(height: 8),

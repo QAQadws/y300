@@ -24,6 +24,13 @@ abstract class ImageCacheService {
   Future<void> pruneToLimit({required int maxBytes});
 
   Future<void> clearUnprotected();
+
+  /// 删除指定 role 下的非保护缓存记录，受保护资源（封面/已下载等）不会被删除。
+  Future<int> clearUnprotectedByRoles({
+    required List<ImageCacheRole> roles,
+  }) {
+    throw UnimplementedError('clearUnprotectedByRoles($roles)');
+  }
 }
 
 abstract class ImageCacheDimensionRecorder {

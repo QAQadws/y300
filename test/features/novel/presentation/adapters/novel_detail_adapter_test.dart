@@ -395,6 +395,13 @@ class _FakeImageCacheService implements ImageCacheService {
   Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
 
   @override
+  Future<int> clearUnprotectedByRoles({
+    required List<ImageCacheRole> roles,
+  }) async {
+    return 0;
+  }
+
+  @override
   Future<void> clearUnprotected() async {}
 
   @override

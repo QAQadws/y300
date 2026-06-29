@@ -108,14 +108,14 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
     );
   }
 
-  Future<void> clearImageCache() async {
+  Future<void> clearCache() async {
     final current = state.value;
     if (current == null || current.isUpdating) {
       return;
     }
     state = AsyncData(current.copyWith(isUpdating: true, clearHint: true));
     await _cacheMaintenanceService.clear(
-      const CacheClearRequest(scope: CacheClearScope.imageCache),
+      const CacheClearRequest(scope: CacheClearScope.userCleanup),
     );
     final usageReport = await _cacheMaintenanceService.usageAfterMaintenance();
     if (!ref.mounted) {
@@ -126,10 +126,13 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
         imageCacheUsageBytes: _imageCacheUsageBytes(usageReport),
         usageReport: usageReport,
         isUpdating: false,
-        hint: '已清除非封面图片缓存',
+        hint: '已清理页面缓存与漫画/帖子图片缓存',
       ),
     );
   }
+
+  @Deprecated('Use clearCache instead.')
+  Future<void> clearImageCache() => clearCache();
 
   Future<void> updateImageCacheMaxBytes(int bytes) async {
     final current = state.value;
