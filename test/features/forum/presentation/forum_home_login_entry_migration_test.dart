@@ -59,6 +59,20 @@ class _FakeForumHomeRepository implements ForumHomeRepository {
         ),
         isLoggedIn: false,
         favoriteForums: const [],
+        homeSections: const [
+          ForumHomeSectionData(
+            title: '综合区',
+            kind: ForumHomeSectionKind.regular,
+            items: [
+              ForumHomeForumData(
+                fid: '2',
+                title: '公告区',
+                description: '',
+                todayPosts: null,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

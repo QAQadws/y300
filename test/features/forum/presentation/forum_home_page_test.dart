@@ -21,6 +21,7 @@ import 'package:y300/features/forum/data/repositories/forum_home_repository.dart
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_page.dart';
+import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_home_widgets.dart';
 
@@ -64,7 +65,8 @@ void main() {
         );
         expect(find.text('综合区'), findsOneWidget);
         expect(find.text('公告区'), findsOneWidget);
-        expect(find.text('今日 2'), findsOneWidget);
+        expect(find.text('今日'), findsOneWidget);
+        expect(find.text('2'), findsOneWidget);
         expect(find.byKey(const Key('forum-card-2')), findsOneWidget);
         expect(find.textContaining('共1 个分组'), findsNothing);
       },
@@ -80,6 +82,109 @@ void main() {
 
       expect(find.byKey(const Key('forum-home-carousel')), findsNothing);
       expect(find.byKey(const Key('forum-card-2')), findsOneWidget);
+    });
+
+    testWidgets('today badge appears when refreshed data adds today count', (
+      tester,
+    ) async {
+      var requestCount = 0;
+      final refreshCompleter = Completer<ApiResult<ForumHomePayload>>();
+      final repository = _FakeForumHomeRepository(() {
+        requestCount += 1;
+        if (requestCount == 1) {
+          return Future<ApiResult<ForumHomePayload>>.value(
+            ApiSuccess(_loggedOutPayloadNoToday()),
+          );
+        }
+        return refreshCompleter.future;
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpAndSettle();
+
+      expect(find.text('今日'), findsNothing);
+
+      final refreshIndicator = tester.widget<RefreshIndicator>(
+        find.byType(RefreshIndicator),
+      );
+      final refreshFuture = refreshIndicator.onRefresh();
+      await tester.pump();
+
+      refreshCompleter.complete(ApiSuccess(_loggedOutPayload()));
+      await refreshFuture;
+      await tester.pumpAndSettle();
+
+      expect(find.text('今日'), findsOneWidget);
+      expect(find.text('2'), findsOneWidget);
+    });
+
+    testWidgets('today badge disappears when refreshed data removes today count', (
+      tester,
+    ) async {
+      var requestCount = 0;
+      final refreshCompleter = Completer<ApiResult<ForumHomePayload>>();
+      final repository = _FakeForumHomeRepository(() {
+        requestCount += 1;
+        if (requestCount == 1) {
+          return Future<ApiResult<ForumHomePayload>>.value(
+            ApiSuccess(_loggedOutPayload()),
+          );
+        }
+        return refreshCompleter.future;
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpAndSettle();
+
+      expect(find.text('今日'), findsOneWidget);
+
+      final refreshIndicator = tester.widget<RefreshIndicator>(
+        find.byType(RefreshIndicator),
+      );
+      final refreshFuture = refreshIndicator.onRefresh();
+      await tester.pump();
+
+      refreshCompleter.complete(ApiSuccess(_loggedOutPayloadNoToday()));
+      await refreshFuture;
+      await tester.pumpAndSettle();
+
+      expect(find.text('今日'), findsNothing);
+    });
+
+    testWidgets('silent refresh triggers when page becomes active after threshold', (
+      tester,
+    ) async {
+      final repository = _FakeForumHomeRepository(
+        () async => ApiSuccess(_loggedOutPayload()),
+      );
+      final fakeNow = _MutableNow(DateTime(2026, 6, 29, 12, 0, 0));
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          isActive: false,
+          nowProvider: fakeNow.call,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      fakeNow.value = fakeNow.value.add(const Duration(seconds: 61));
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          isActive: true,
+          nowProvider: fakeNow.call,
+        ),
+      );
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(repository.cachePolicies, <CacheLoadPolicy>[
+        CacheLoadPolicy.cacheFirst,
+        CacheLoadPolicy.networkFirst,
+      ]);
+      expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
     });
 
     testWidgets(
@@ -486,12 +591,18 @@ Widget _buildTestApp(
   ForumHomeRepository repository, {
   ForumWebViewExternalLauncher? launcher,
   List<NavigatorObserver> navigatorObservers = const <NavigatorObserver>[],
+  bool isActive = true,
+  DateTime Function()? nowProvider,
 }) {
   return ProviderScope(
-    overrides: _overrides(repository, launcher: launcher),
+    overrides: _overrides(
+      repository,
+      launcher: launcher,
+      nowProvider: nowProvider,
+    ),
     child: MaterialApp(
       navigatorObservers: navigatorObservers,
-      home: const ForumHomePage(),
+      home: ForumHomePage(isActive: isActive),
     ),
   );
 }
@@ -500,6 +611,7 @@ List<riverpod_misc.Override> _overrides(
   ForumHomeRepository repository, {
   ForumWebViewExternalLauncher? launcher,
   AuthRepository? authRepository,
+  DateTime Function()? nowProvider,
 }) {
   return [
     forumHomeRepositoryProvider.overrideWithValue(repository),
@@ -510,6 +622,8 @@ List<riverpod_misc.Override> _overrides(
     imageRequestHeaderBuilderProvider.overrideWithValue(
       const _FakeImageRequestHeaderBuilder(),
     ),
+    if (nowProvider != null)
+      forumHomeNowProvider.overrideWithValue(nowProvider),
     if (launcher != null)
       forumWebViewExternalLauncherProvider.overrideWithValue(launcher),
   ];
@@ -543,6 +657,44 @@ ForumHomePayload _loggedOutPayload({
     isLoggedIn: false,
     favoriteForums: const [],
     chromeData: ForumHomeChromeData(carouselItems: carouselItems),
+  );
+}
+
+ForumHomePayload _loggedOutPayloadNoToday() {
+  return ForumHomePayload(
+    forumIndex: ForumIndexData(
+      categories: [
+        ForumCategory(fid: '1', name: '综合区', forums: ['2']),
+      ],
+      forums: [
+        ForumItem(
+          fid: '2',
+          name: '公告区',
+          threads: 12,
+          posts: 34,
+          todayPosts: 0,
+          description: '站点公告与维护信息',
+          icon: '',
+          subForums: const [],
+        ),
+      ],
+    ),
+    isLoggedIn: false,
+    favoriteForums: const [],
+    homeSections: const [
+      ForumHomeSectionData(
+        title: '综合区',
+        kind: ForumHomeSectionKind.regular,
+        items: [
+          ForumHomeForumData(
+            fid: '2',
+            title: '公告区',
+            description: '站点公告与维护信息',
+            todayPosts: null,
+          ),
+        ],
+      ),
+    ],
   );
 }
 
@@ -676,6 +828,14 @@ class _FakeForumHomeRepository implements ForumHomeRepository {
     requestProfiles.add(requestProfileOverride);
     return _loader();
   }
+}
+
+class _MutableNow {
+  _MutableNow(this.value);
+
+  DateTime value;
+
+  DateTime call() => value;
 }
 
 SessionInfo _loggedInSession({

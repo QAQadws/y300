@@ -84,7 +84,7 @@ void main() {
       expect(result.sections.last.title, '庙堂');
       expect(result.sections.last.isFavoriteSection, isFalse);
       expect(result.sections.last.items.map((item) => item.fid), ['16', '370']);
-      expect(result.sections.last.items.last.todayPosts, 0);
+      expect(result.sections.last.items.last.todayPosts, isNull);
     });
 
     test('parses captured forum home sample', () {

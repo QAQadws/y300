@@ -1,25 +1,18 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/forum/data/models/forum_index_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
 
 void main() {
   test('ForumHomeViewData should count sections and forums', () {
-    // 测试说明：检查 ForumHomeViewData 对 sections 和 forum item 的计数是否正确
-    // 场景：一个分组包含一个版块，期望 sectionCount=1, forumCount=1
     final viewData = ForumHomeViewData(
-      sections: [
+      sections: const [
         ForumSection(
           title: '综合区',
           items: [
-            ForumItem(
+            ForumHomeForumDisplayItem(
               fid: '2',
-              name: '公告区',
-              threads: 1,
-              posts: 2,
-              todayPosts: 0,
+              title: '公告区',
               description: '',
-              icon: '',
-              subForums: const [],
+              todayPosts: null,
             ),
           ],
         ),
@@ -34,15 +27,15 @@ void main() {
 
   test('ForumHomeViewData counts favorite and regular forums without double count', () {
     final viewData = ForumHomeViewData(
-      sections: [
+      sections: const [
         ForumSection(
           title: '我收藏的版块',
-          favoriteItems: [
-            FavoriteForumDisplayItem(
+          items: [
+            ForumHomeForumDisplayItem(
               fid: '2',
               title: '公告区',
               description: '',
-              todayPosts: 0,
+              todayPosts: null,
             ),
           ],
           type: ForumSectionType.favorite,
@@ -50,15 +43,11 @@ void main() {
         ForumSection(
           title: '综合区',
           items: [
-            ForumItem(
+            ForumHomeForumDisplayItem(
               fid: '2',
-              name: '公告区',
-              threads: 1,
-              posts: 2,
-              todayPosts: 0,
+              title: '公告区',
               description: '',
-              icon: '',
-              subForums: const [],
+              todayPosts: 2,
             ),
           ],
         ),

@@ -17,14 +17,22 @@ import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
+const Duration _forumHomeSilentRefreshThreshold = Duration(seconds: 60);
+
 class ForumHomePage extends ConsumerStatefulWidget {
-  const ForumHomePage({super.key});
+  const ForumHomePage({
+    super.key,
+    this.isActive = true,
+  });
+
+  final bool isActive;
 
   @override
   ConsumerState<ForumHomePage> createState() => _ForumHomePageState();
 }
 
-class _ForumHomePageState extends ConsumerState<ForumHomePage> {
+class _ForumHomePageState extends ConsumerState<ForumHomePage>
+    with WidgetsBindingObserver {
   ProviderSubscription<AsyncValue<AuthSessionViewState>>? _authSubscription;
   String? _lastResolvedAuthContextKey;
   bool _isHandlingAuthContextChange = false;
@@ -33,6 +41,7 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _authSubscription =
         ref.listenManual<AsyncValue<AuthSessionViewState>>(
       authSessionControllerProvider,
@@ -66,7 +75,28 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage> {
   }
 
   @override
+  void didUpdateWidget(covariant ForumHomePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isActive && widget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        unawaited(_triggerSilentRefreshIfNeeded());
+      });
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && widget.isActive) {
+      unawaited(_triggerSilentRefreshIfNeeded());
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _authSubscription?.close();
     _authSubscription = null;
     super.dispose();
@@ -102,7 +132,10 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage> {
       ),
       body: !isAuthResolved || _isSwitchingAuthContext
           ? const _ForumHomeLoadingBody()
-          : _ResolvedForumHomeBody(imageHeaderBuilder: imageHeaderBuilder),
+          : _ResolvedForumHomeBody(
+              imageHeaderBuilder: imageHeaderBuilder,
+              isActive: widget.isActive,
+            ),
     );
   }
 
@@ -122,6 +155,25 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage> {
     }
   }
 
+  Future<void> _triggerSilentRefreshIfNeeded() async {
+    if (!mounted) {
+      return;
+    }
+    final state = ref.read(forumHomeControllerProvider);
+    final current = state.asData?.value;
+    if (current == null || current.isRefreshing) {
+      return;
+    }
+    final now = ref.read(forumHomeNowProvider).call();
+    final elapsed = now.difference(current.lastUpdatedAt);
+    if (elapsed < _forumHomeSilentRefreshThreshold) {
+      return;
+    }
+    await ref
+        .read(forumHomeControllerProvider.notifier)
+        .refresh(forceNetwork: true);
+  }
+
   String _authContextKey(AuthSessionViewState state) {
     if (!state.isLoggedIn) {
       return 'anonymous';
@@ -131,9 +183,13 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage> {
 }
 
 class _ResolvedForumHomeBody extends ConsumerWidget {
-  const _ResolvedForumHomeBody({required this.imageHeaderBuilder});
+  const _ResolvedForumHomeBody({
+    required this.imageHeaderBuilder,
+    required this.isActive,
+  });
 
   final ImageRequestHeaderBuilder imageHeaderBuilder;
+  final bool isActive;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -163,6 +219,7 @@ class _ResolvedForumHomeBody extends ConsumerWidget {
       data: (data) => _ForumHomeContent(
         state: data,
         imageHeaderBuilder: imageHeaderBuilder,
+        isActive: isActive,
       ),
     );
   }
@@ -172,10 +229,12 @@ class _ForumHomeContent extends ConsumerStatefulWidget {
   const _ForumHomeContent({
     required this.state,
     required this.imageHeaderBuilder,
+    required this.isActive,
   });
 
   final ForumHomePageState state;
   final ImageRequestHeaderBuilder imageHeaderBuilder;
+  final bool isActive;
 
   @override
   ConsumerState<_ForumHomeContent> createState() => _ForumHomeContentState();
@@ -213,6 +272,7 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
                   items: widget.state.viewData.carouselItems,
                   headerBuilder: widget.imageHeaderBuilder,
                   onOpen: (item) => _openCarouselTarget(context, ref, item),
+                  isActive: widget.isActive,
                 ),
                 for (final section in widget.state.viewData.sections)
                   ForumHomeSectionCard(
@@ -258,9 +318,13 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
 
   List<Widget> _buildRows(BuildContext context, ForumSection section) {
     final rows = <_ForumHomeRowData>[
-      for (final forum in section.favoriteItems)
+      for (final forum in section.items)
         _ForumHomeRowData(
-          key: Key('forum-favorite-card-${forum.fid}'),
+          key: Key(
+            section.type == ForumSectionType.favorite
+                ? 'forum-favorite-card-${forum.fid}'
+                : 'forum-card-${forum.fid}',
+          ),
           title: forum.title,
           description: forum.description,
           todayPosts: forum.todayPosts,
@@ -269,21 +333,6 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
               MaterialPageRoute<void>(
                 builder: (_) =>
                     ForumDisplayPage(fid: forum.fid, title: forum.title),
-              ),
-            );
-          },
-        ),
-      for (final forum in section.items)
-        _ForumHomeRowData(
-          key: Key('forum-card-${forum.fid}'),
-          title: forum.name,
-          description: forum.description,
-          todayPosts: forum.todayPosts,
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) =>
-                    ForumDisplayPage(fid: forum.fid, title: forum.name),
               ),
             );
           },
@@ -346,7 +395,7 @@ class _ForumHomeRowData {
   final Key key;
   final String title;
   final String description;
-  final int todayPosts;
+  final int? todayPosts;
   final VoidCallback onTap;
 }
 

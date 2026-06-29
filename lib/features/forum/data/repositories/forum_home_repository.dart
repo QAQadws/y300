@@ -20,18 +20,48 @@ import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 import 'package:y300/features/forum/data/models/forum_home_html_models.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
 
+enum ForumHomeSectionKind { regular, favorite }
+
+class ForumHomeForumData {
+  const ForumHomeForumData({
+    required this.fid,
+    required this.title,
+    required this.description,
+    required this.todayPosts,
+  });
+
+  final String fid;
+  final String title;
+  final String description;
+  final int? todayPosts;
+}
+
+class ForumHomeSectionData {
+  const ForumHomeSectionData({
+    required this.title,
+    required this.kind,
+    required this.items,
+  });
+
+  final String title;
+  final ForumHomeSectionKind kind;
+  final List<ForumHomeForumData> items;
+}
+
 /// 论坛首页聚合结果：把论坛首页基础数据与登录态相关扩展信息统一返回。
 class ForumHomePayload {
   ForumHomePayload({
     required this.forumIndex,
     required this.isLoggedIn,
     required this.favoriteForums,
+    this.homeSections = const <ForumHomeSectionData>[],
     this.chromeData = ForumHomeChromeData.empty,
   });
 
   final ForumIndexData forumIndex;
   final bool isLoggedIn;
   final List<FavoriteForum> favoriteForums;
+  final List<ForumHomeSectionData> homeSections;
   final ForumHomeChromeData chromeData;
 }
 
@@ -387,6 +417,24 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
       favoriteForums: [
         for (final item in favoriteItems) _toFavoriteForum(item),
       ],
+      homeSections: [
+        if (favoriteItems.isNotEmpty)
+          ForumHomeSectionData(
+            title: '我收藏的版块',
+            kind: ForumHomeSectionKind.favorite,
+            items: [
+              for (final item in favoriteItems) _toHomeForumData(item),
+            ],
+          ),
+        for (final section in regularSections)
+          ForumHomeSectionData(
+            title: section.title,
+            kind: ForumHomeSectionKind.regular,
+            items: [
+              for (final item in section.items) _toHomeForumData(item),
+            ],
+          ),
+      ],
       chromeData: ForumHomeChromeData(
         carouselItems: data.carouselItems,
         favoriteForums: [
@@ -402,7 +450,7 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
       name: item.title,
       threads: 0,
       posts: 0,
-      todayPosts: item.todayPosts,
+      todayPosts: item.todayPosts ?? 0,
       description: item.description,
       icon: item.iconUrl ?? '',
       subForums: const <ForumItem>[],
@@ -417,12 +465,21 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
       description: item.description,
       threads: 0,
       posts: 0,
-      todayPosts: item.todayPosts,
+      todayPosts: item.todayPosts ?? 0,
     );
   }
 
   ForumHomeChromeForumItem _toChromeForumItem(ForumHomeHtmlForumItem item) {
     return ForumHomeChromeForumItem(
+      fid: item.fid,
+      title: item.title,
+      description: item.description,
+      todayPosts: item.todayPosts,
+    );
+  }
+
+  ForumHomeForumData _toHomeForumData(ForumHomeHtmlForumItem item) {
+    return ForumHomeForumData(
       fid: item.fid,
       title: item.title,
       description: item.description,
@@ -480,6 +537,11 @@ class DiscuzForumHomeRepository implements ForumHomeRepository {
         forumIndex: forumIndex,
         isLoggedIn: isLoggedIn,
         favoriteForums: favoriteForums,
+        homeSections: _buildLegacyHomeSections(
+          forumIndex: forumIndex,
+          favoriteForums: favoriteForums,
+          chromeData: chromeData,
+        ),
         chromeData: chromeData,
       ),
     );
@@ -507,6 +569,93 @@ class DiscuzForumHomeRepository implements ForumHomeRepository {
       success: (chrome) => chrome,
       failure: (_) => ForumHomeChromeData.empty,
     );
+  }
+
+  List<ForumHomeSectionData> _buildLegacyHomeSections({
+    required ForumIndexData forumIndex,
+    required List<FavoriteForum> favoriteForums,
+    required ForumHomeChromeData chromeData,
+  }) {
+    final sections = <ForumHomeSectionData>[];
+    if (favoriteForums.isNotEmpty) {
+      final chromeForumByFid = {
+        for (final item in chromeData.favoriteForums) item.fid: item,
+      };
+      sections.add(
+        ForumHomeSectionData(
+          title: '我收藏的版块',
+          kind: ForumHomeSectionKind.favorite,
+          items: [
+            for (final forum in favoriteForums)
+              ForumHomeForumData(
+                fid: forum.fid,
+                title: forum.title,
+                description: forum.description,
+                todayPosts: forum.todayPosts > 0
+                    ? forum.todayPosts
+                    : chromeForumByFid[forum.fid]?.todayPosts,
+              ),
+          ],
+        ),
+      );
+    }
+
+    final forumByFid = <String, ForumItem>{
+      for (final item in forumIndex.forums) item.fid: item,
+    };
+    for (final category in forumIndex.categories) {
+      final items = <ForumHomeForumData>[];
+      for (final fid in category.forums) {
+        final forum = forumByFid[fid];
+        if (forum == null) {
+          continue;
+        }
+        items.add(
+          ForumHomeForumData(
+            fid: forum.fid,
+            title: forum.name,
+            description: forum.description,
+            todayPosts: forum.todayPosts > 0 ? forum.todayPosts : null,
+          ),
+        );
+      }
+      if (items.isEmpty) {
+        continue;
+      }
+      sections.add(
+        ForumHomeSectionData(
+          title: category.name,
+          kind: ForumHomeSectionKind.regular,
+          items: items,
+        ),
+      );
+    }
+
+    final categorizedFids = {
+      for (final category in forumIndex.categories) ...category.forums,
+    };
+    final uncategorized = forumIndex.forums
+        .where((forum) => !categorizedFids.contains(forum.fid))
+        .map(
+          (forum) => ForumHomeForumData(
+            fid: forum.fid,
+            title: forum.name,
+            description: forum.description,
+            todayPosts: forum.todayPosts > 0 ? forum.todayPosts : null,
+          ),
+        )
+        .toList(growable: false);
+    if (uncategorized.isNotEmpty) {
+      sections.add(
+        ForumHomeSectionData(
+          title: '未分类',
+          kind: ForumHomeSectionKind.regular,
+          items: uncategorized,
+        ),
+      );
+    }
+
+    return sections;
   }
 }
 

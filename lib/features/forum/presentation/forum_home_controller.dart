@@ -2,9 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
+
+final forumHomeNowProvider = Provider<DateTime Function()>((ref) => DateTime.now);
 
 final forumHomeControllerProvider =
     AsyncNotifierProvider.autoDispose<ForumHomeController, ForumHomePageState>(
@@ -58,6 +61,7 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
   }) async {
     final repository = ref.read(forumHomeRepositoryProvider);
     final requestProfile = _resolveRequestProfile();
+    final now = ref.read(forumHomeNowProvider).call();
     final result = await repository.getForumHomePayload(
       cachePolicy: cachePolicy,
       requestProfileOverride: requestProfile,
@@ -72,6 +76,7 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
         ),
         requestProfile: requestProfile,
         isRefreshing: false,
+        lastUpdatedAt: now,
       ),
       failure: (error) => throw ForumHomeException(error.message),
     );
@@ -85,22 +90,48 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
   }
 
   List<ForumSection> _mapSections(ForumHomePayload payload) {
+    if (payload.homeSections.isEmpty) {
+      return _mapLegacySections(payload);
+    }
+    return [
+      for (final section in payload.homeSections)
+        ForumSection(
+          title: section.title,
+          type: section.kind == ForumHomeSectionKind.favorite
+              ? ForumSectionType.favorite
+              : ForumSectionType.regular,
+          items: [
+            for (final item in section.items)
+              ForumHomeForumDisplayItem(
+                fid: item.fid,
+                title: item.title,
+                description: item.description,
+                todayPosts: item.todayPosts,
+              ),
+          ],
+        ),
+    ];
+  }
+
+  List<ForumSection> _mapLegacySections(ForumHomePayload payload) {
     final sections = <ForumSection>[];
-    final favoriteForums = _mapFavoriteForums(payload);
-    if (favoriteForums.isNotEmpty) {
+    final favoriteItems = _mapLegacyFavoriteItems(payload);
+    if (favoriteItems.isNotEmpty) {
       sections.add(
         ForumSection(
           title: '我收藏的版块',
-          favoriteItems: favoriteForums,
           type: ForumSectionType.favorite,
+          items: favoriteItems,
         ),
       );
     }
-    sections.addAll(_mapRegularSections(payload.forumIndex));
+    sections.addAll(_mapLegacyRegularSections(payload.forumIndex));
     return sections;
   }
 
-  List<FavoriteForumDisplayItem> _mapFavoriteForums(ForumHomePayload payload) {
+  List<ForumHomeForumDisplayItem> _mapLegacyFavoriteItems(
+    ForumHomePayload payload,
+  ) {
     final forumByFid = <String, ForumItem>{
       for (final forum in payload.forumIndex.forums) forum.fid: forum,
     };
@@ -108,15 +139,15 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
       for (final forum in payload.chromeData.favoriteForums) forum.fid: forum,
     };
     final seen = <String>{};
-    final output = <FavoriteForumDisplayItem>[];
+    final output = <ForumHomeForumDisplayItem>[];
     for (final forum in payload.favoriteForums) {
-      if (forum.fid.trim().isEmpty || !seen.add(forum.fid)) {
+      if (!_shouldKeepFavoriteForum(forum, seen)) {
         continue;
       }
       final chromeForum = chromeForumByFid[forum.fid];
       final homeForum = forumByFid[forum.fid];
       output.add(
-        FavoriteForumDisplayItem(
+        ForumHomeForumDisplayItem(
           fid: forum.fid,
           title: forum.title.trim().isNotEmpty
               ? forum.title
@@ -130,29 +161,36 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
               : homeForum?.description ?? '',
           todayPosts: forum.todayPosts > 0
               ? forum.todayPosts
-              : chromeForum?.todayPosts != null && chromeForum!.todayPosts > 0
-              ? chromeForum.todayPosts
-              : homeForum?.todayPosts ?? 0,
+              : chromeForum?.todayPosts ?? _legacyTodayPosts(homeForum),
         ),
       );
     }
     return output;
   }
 
-  List<ForumSection> _mapRegularSections(ForumIndexData data) {
+  bool _shouldKeepFavoriteForum(FavoriteForum forum, Set<String> seen) {
+    return forum.fid.trim().isNotEmpty && seen.add(forum.fid);
+  }
+
+  List<ForumSection> _mapLegacyRegularSections(ForumIndexData data) {
     final forumByFid = <String, ForumItem>{
       for (final item in data.forums) item.fid: item,
     };
 
     final sections = <ForumSection>[];
-
-    // Discuz 的 catlist 中 forums 字段是 fid 列表，这里做一次稳定映射
     for (final category in data.categories) {
-      final items = <ForumItem>[];
+      final items = <ForumHomeForumDisplayItem>[];
       for (final fid in category.forums) {
         final mapped = forumByFid[fid];
         if (mapped != null) {
-          items.add(mapped);
+          items.add(
+            ForumHomeForumDisplayItem(
+              fid: mapped.fid,
+              title: mapped.name,
+              description: mapped.description,
+              todayPosts: _legacyTodayPosts(mapped),
+            ),
+          );
         }
       }
 
@@ -167,7 +205,6 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
       }
     }
 
-    // 后端若给出未分组 forum，这里归并到“未分类”防止数据丢失
     final categorizedFids = sections
         .expand((section) => section.items)
         .map((item) => item.fid)
@@ -181,13 +218,26 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
       sections.add(
         ForumSection(
           title: '未分类',
-          items: uncategorized,
+          items: [
+            for (final forum in uncategorized)
+              ForumHomeForumDisplayItem(
+                fid: forum.fid,
+                title: forum.name,
+                description: forum.description,
+                todayPosts: _legacyTodayPosts(forum),
+              ),
+          ],
           type: ForumSectionType.regular,
         ),
       );
     }
 
     return sections;
+  }
+
+  int? _legacyTodayPosts(ForumItem? forum) {
+    final todayPosts = forum?.todayPosts ?? 0;
+    return todayPosts > 0 ? todayPosts : null;
   }
 }
 

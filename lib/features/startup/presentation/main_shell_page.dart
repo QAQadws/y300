@@ -368,7 +368,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
 
   Widget _buildPage(int index, {required bool isActive}) {
     return switch (index) {
-      0 => const ForumShellPage(),
+      0 => ForumShellPage(isActive: isActive),
       1 => FavoriteShelfPage(isActive: isActive),
       2 => ComicTabPage(isActive: isActive),
       3 => NovelTabPage(isActive: isActive),

@@ -123,6 +123,35 @@ void main() {
     expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
   });
 
+  testWidgets('ForumShellPage forwards isActive to native forum home', (
+    tester,
+  ) async {
+    final driverRegistry = _FakeForumWebViewDriverRegistry();
+    final repository = _FakeForumHomeRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(mode: ForumShellMode.native),
+          ),
+          forumHomeRepositoryProvider.overrideWithValue(repository),
+          nativePageCacheInvalidationServiceProvider.overrideWithValue(
+            _RecordingNativePageCacheInvalidationService(),
+          ),
+          forumWebViewDriverFactoryProvider.overrideWithValue(
+            driverRegistry.create,
+          ),
+          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
+        ],
+        child: const MaterialApp(home: ForumShellPage(isActive: false)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
+  });
+
   testWidgets('ForumShellPage shows native forum home when mode is native', (
     tester,
   ) async {
@@ -494,6 +523,20 @@ class _FakeForumHomeRepository implements ForumHomeRepository {
         ),
         isLoggedIn: true,
         favoriteForums: const <FavoriteForum>[],
+        homeSections: const [
+          ForumHomeSectionData(
+            title: '综合区',
+            kind: ForumHomeSectionKind.regular,
+            items: [
+              ForumHomeForumData(
+                fid: '2',
+                title: '公告区',
+                description: '站点公告与维护信息',
+                todayPosts: 2,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

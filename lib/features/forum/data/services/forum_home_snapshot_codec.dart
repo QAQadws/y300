@@ -13,10 +13,10 @@ class ForumHomeSnapshotCodec implements SnapshotCodec<ForumHomePayload> {
   String get snapshotType => CacheKeyCanonicalizer.forumHomeSnapshotType;
 
   @override
-  int get codecVersion => 1;
+  int get codecVersion => 2;
 
   @override
-  int get parserVersion => 1;
+  int get parserVersion => 2;
 
   @override
   Object? encode(ForumHomePayload value) {
@@ -25,6 +25,9 @@ class ForumHomeSnapshotCodec implements SnapshotCodec<ForumHomePayload> {
       'forumIndex': _encodeForumIndex(value.forumIndex),
       'favoriteForums': value.favoriteForums
           .map(_encodeFavoriteForum)
+          .toList(growable: false),
+      'homeSections': value.homeSections
+          .map(_encodeHomeSection)
           .toList(growable: false),
       'chromeData': _encodeChromeData(value.chromeData),
     };
@@ -38,6 +41,9 @@ class ForumHomeSnapshotCodec implements SnapshotCodec<ForumHomePayload> {
       isLoggedIn: ParseUtils.asBool(map['isLoggedIn']),
       favoriteForums: ParseUtils.asList(map['favoriteForums'])
           .map((item) => _decodeFavoriteForum(ParseUtils.asMap(item)))
+          .toList(growable: false),
+      homeSections: ParseUtils.asList(map['homeSections'])
+          .map((item) => _decodeHomeSection(ParseUtils.asMap(item)))
           .toList(growable: false),
       chromeData: _decodeChromeData(map['chromeData']),
     );
@@ -189,7 +195,50 @@ class ForumHomeSnapshotCodec implements SnapshotCodec<ForumHomePayload> {
       fid: ParseUtils.asString(map['fid']),
       title: ParseUtils.asString(map['title']),
       description: ParseUtils.asString(map['description']),
-      todayPosts: ParseUtils.asInt(map['todayPosts']),
+      todayPosts: _nullableInt(map['todayPosts']),
+    );
+  }
+
+  Map<String, Object?> _encodeHomeSection(ForumHomeSectionData value) {
+    return <String, Object?>{
+      'title': value.title,
+      'kind': value.kind.name,
+      'items': value.items.map(_encodeHomeForum).toList(growable: false),
+    };
+  }
+
+  ForumHomeSectionData _decodeHomeSection(Map<String, dynamic> map) {
+    return ForumHomeSectionData(
+      title: ParseUtils.asString(map['title']),
+      kind: _decodeSectionKind(ParseUtils.asString(map['kind'])),
+      items: ParseUtils.asList(map['items'])
+          .map((item) => _decodeHomeForum(ParseUtils.asMap(item)))
+          .toList(growable: false),
+    );
+  }
+
+  Map<String, Object?> _encodeHomeForum(ForumHomeForumData value) {
+    return <String, Object?>{
+      'fid': value.fid,
+      'title': value.title,
+      'description': value.description,
+      'todayPosts': value.todayPosts,
+    };
+  }
+
+  ForumHomeForumData _decodeHomeForum(Map<String, dynamic> map) {
+    return ForumHomeForumData(
+      fid: ParseUtils.asString(map['fid']),
+      title: ParseUtils.asString(map['title']),
+      description: ParseUtils.asString(map['description']),
+      todayPosts: _nullableInt(map['todayPosts']),
+    );
+  }
+
+  ForumHomeSectionKind _decodeSectionKind(String raw) {
+    return ForumHomeSectionKind.values.firstWhere(
+      (value) => value.name == raw,
+      orElse: () => ForumHomeSectionKind.regular,
     );
   }
 
@@ -204,5 +253,15 @@ class ForumHomeSnapshotCodec implements SnapshotCodec<ForumHomePayload> {
       return value.toDouble();
     }
     return double.tryParse(value.toString());
+  }
+
+  int? _nullableInt(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is int) {
+      return value;
+    }
+    return int.tryParse(value.toString());
   }
 }

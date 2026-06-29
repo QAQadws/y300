@@ -1,27 +1,84 @@
+import 'dart:async';
+
+import 'package:animated_flip_counter/animated_flip_counter.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/theme/app_theme_tokens.dart';
 import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
-import 'package:y300/features/forum/data/services/forum_home_carousel_image_probe.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
+import 'package:y300/features/forum/data/services/forum_home_carousel_image_probe.dart';
 
-class ForumHomeCarousel extends StatelessWidget {
+class ForumHomeCarousel extends ConsumerStatefulWidget {
   const ForumHomeCarousel({
     super.key,
     required this.items,
     required this.headerBuilder,
     required this.onOpen,
+    this.isActive = true,
   });
 
   final List<ForumHomeCarouselItem> items;
   final ImageRequestHeaderBuilder headerBuilder;
   final ValueChanged<ForumHomeCarouselItem> onOpen;
+  final bool isActive;
+
+  @override
+  ConsumerState<ForumHomeCarousel> createState() => _ForumHomeCarouselState();
+}
+
+class _ForumHomeCarouselState extends ConsumerState<ForumHomeCarousel> {
+  final CarouselSliderController _carouselController =
+      CarouselSliderController();
+  List<ForumHomeCarouselItem> _displayedItems = const <ForumHomeCarouselItem>[];
+  List<ForumHomeCarouselItem>? _pendingItems;
+  String? _displayedSignature;
+  String? _pendingSignature;
+  int _currentIndex = 0;
+  int _pendingGeneration = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _displayedItems = widget.items;
+    _displayedSignature = _signatureFor(widget.items);
+  }
+
+  @override
+  void didUpdateWidget(covariant ForumHomeCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final nextSignature = _signatureFor(widget.items);
+    if (_displayedSignature == null) {
+      _displayedItems = widget.items;
+      _displayedSignature = nextSignature;
+      return;
+    }
+    if (nextSignature == _displayedSignature) {
+      if (!oldWidget.isActive && widget.isActive && _pendingItems != null) {
+        _applyPendingItemsIfPossible();
+      }
+      return;
+    }
+
+    _pendingItems = widget.items;
+    _pendingSignature = nextSignature;
+    final generation = ++_pendingGeneration;
+    unawaited(_primePendingImages(generation));
+    if (!widget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _commitPendingItems();
+        }
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) {
+    if (_displayedItems.isEmpty) {
       return const SizedBox.shrink();
     }
     final palette = ForumHomeNativePalette.resolve(Theme.of(context));
@@ -29,31 +86,129 @@ class ForumHomeCarousel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
       child: _ForumHomeCarouselBody(
         aspectRatio:
-            items.first.aspectRatio ??
+            _displayedItems.first.aspectRatio ??
             ForumHomeCarouselImageProbe.fallbackAspectRatio,
-        headerBuilder: headerBuilder,
-        items: items,
-        onOpen: onOpen,
+        controller: _carouselController,
+        headerBuilder: widget.headerBuilder,
+        items: _displayedItems,
+        onOpen: widget.onOpen,
         palette: palette,
+        onPageChanged: _handlePageChanged,
       ),
     );
+  }
+
+  Future<void> _primePendingImages(int generation) async {
+    final items = _pendingItems;
+    if (items == null || items.isEmpty) {
+      return;
+    }
+    await Future.wait<void>(
+      items.map((item) => _resolveImage(item)),
+      eagerError: false,
+    );
+    if (!mounted || generation != _pendingGeneration) {
+      return;
+    }
+    if (items.length <= 1 || !widget.isActive) {
+      _commitPendingItems();
+    }
+  }
+
+  Future<void> _resolveImage(ForumHomeCarouselItem item) async {
+    final request = ForumImageCacheRequests.forumHeadImage(url: item.imageUrl);
+    final cacheService = ref.read(imageCacheServiceProvider);
+    try {
+      await cacheService.ensureCached(request);
+    } catch (_) {
+      // Carousel prewarm only reduces visible swaps; failure should silently
+      // fall back to normal image resolution when the item is eventually shown.
+    }
+    if (!mounted) {
+      return;
+    }
+    final headers = await widget.headerBuilder.buildHeaders(item.imageUrl);
+    if (!mounted) {
+      return;
+    }
+    final provider = NetworkImage(item.imageUrl, headers: headers);
+    try {
+      await precacheImage(provider, context);
+    } catch (_) {
+      return;
+    }
+  }
+
+  void _handlePageChanged(int index, CarouselPageChangedReason reason) {
+    _currentIndex = index;
+    _applyPendingItemsIfPossible();
+  }
+
+  void _applyPendingItemsIfPossible() {
+    final pending = _pendingItems;
+    if (pending == null || pending.isEmpty) {
+      return;
+    }
+    if (!widget.isActive || pending.length <= 1) {
+      _commitPendingItems();
+      return;
+    }
+    final lastIndex = _displayedItems.isEmpty ? 0 : _displayedItems.length - 1;
+    if (_currentIndex >= lastIndex) {
+      _commitPendingItems();
+    }
+  }
+
+  void _commitPendingItems() {
+    final pending = _pendingItems;
+    if (pending == null) {
+      return;
+    }
+    setState(() {
+      _displayedItems = pending;
+      _displayedSignature = _pendingSignature;
+      _pendingItems = null;
+      _pendingSignature = null;
+      _currentIndex = 0;
+    });
+    if (_displayedItems.length > 1) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        _carouselController.jumpToPage(0);
+      });
+    }
+  }
+
+  String _signatureFor(List<ForumHomeCarouselItem> items) {
+    if (items.isEmpty) {
+      return 'empty';
+    }
+    return items
+        .map((item) => '${item.imageUrl}|${item.targetUrl}')
+        .join('||');
   }
 }
 
 class _ForumHomeCarouselBody extends StatelessWidget {
   const _ForumHomeCarouselBody({
     required this.aspectRatio,
+    required this.controller,
     required this.headerBuilder,
     required this.items,
     required this.onOpen,
     required this.palette,
+    required this.onPageChanged,
   });
 
   final double aspectRatio;
+  final CarouselSliderController controller;
   final ImageRequestHeaderBuilder headerBuilder;
   final List<ForumHomeCarouselItem> items;
   final ValueChanged<ForumHomeCarouselItem> onOpen;
   final ForumHomeNativePalette palette;
+  final void Function(int index, CarouselPageChangedReason reason) onPageChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -70,6 +225,7 @@ class _ForumHomeCarouselBody extends StatelessWidget {
             width: double.infinity,
             height: carouselHeight,
             child: CarouselSlider.builder(
+              carouselController: controller,
               itemCount: items.length,
               options: CarouselOptions(
                 height: carouselHeight,
@@ -79,6 +235,7 @@ class _ForumHomeCarouselBody extends StatelessWidget {
                 autoPlayAnimationDuration: const Duration(milliseconds: 450),
                 enableInfiniteScroll: items.length > 1,
                 disableCenter: true,
+                onPageChanged: onPageChanged,
               ),
               itemBuilder: (context, index, realIndex) {
                 final item = items[index];
@@ -280,7 +437,7 @@ class ForumHomeForumRow extends StatelessWidget {
 
   final String title;
   final String description;
-  final int todayPosts;
+  final int? todayPosts;
   final bool isLast;
   final VoidCallback onTap;
 
@@ -309,8 +466,7 @@ class ForumHomeForumRow extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.start,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Flexible(
-                        fit: FlexFit.loose,
+                      Expanded(
                         child: Text(
                           title,
                           maxLines: 1,
@@ -322,16 +478,12 @@ class ForumHomeForumRow extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (todayPosts > 0) ...[
-                        const SizedBox(width: 8),
-                        Text(
-                          '今日 $todayPosts',
-                          textAlign: TextAlign.start,
-                          style: textTheme.bodyMedium?.copyWith(
-                            color: palette.todayText,
-                          ),
-                        ),
-                      ],
+                      const SizedBox(width: 8),
+                      _TodayBadge(
+                        todayPosts: todayPosts,
+                        textTheme: textTheme,
+                        palette: palette,
+                      ),
                     ],
                   ),
                   if (description.trim().isNotEmpty) ...[
@@ -351,6 +503,71 @@ class ForumHomeForumRow extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TodayBadge extends StatelessWidget {
+  const _TodayBadge({
+    required this.todayPosts,
+    required this.textTheme,
+    required this.palette,
+  });
+
+  final int? todayPosts;
+  final TextTheme textTheme;
+  final ForumHomeNativePalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 72),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 220),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) {
+            return FadeTransition(
+              opacity: animation,
+              child: SizeTransition(
+                sizeFactor: animation,
+                axis: Axis.horizontal,
+                axisAlignment: -1,
+                child: child,
+              ),
+            );
+          },
+          child: todayPosts == null
+              ? const SizedBox(
+                  key: ValueKey('forum-home-today-badge-empty'),
+                )
+              : Row(
+                  key: ValueKey('forum-home-today-badge-$todayPosts'),
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '今日',
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: palette.todayText,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    AnimatedFlipCounter(
+                      value: todayPosts!,
+                      duration: const Duration(milliseconds: 260),
+                      textStyle: textTheme.bodyMedium?.copyWith(
+                        color: palette.todayText,
+                        fontFeatures: const <FontFeature>[
+                          FontFeature.tabularFigures(),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
         ),
       ),
     );

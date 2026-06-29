@@ -50,6 +50,9 @@ void main() {
         final payload = result.dataOrNull!;
         expect(payload.isLoggedIn, isTrue);
         expect(payload.favoriteForums.map((forum) => forum.fid), ['33']);
+        expect(payload.homeSections, hasLength(2));
+        expect(payload.homeSections.first.kind, ForumHomeSectionKind.favorite);
+        expect(payload.homeSections.first.items.single.todayPosts, 88);
         expect(payload.forumIndex.categories.map((category) => category.name), [
           '庙堂',
         ]);
@@ -142,6 +145,20 @@ void main() {
           ),
           isLoggedIn: false,
           favoriteForums: const <FavoriteForum>[],
+          homeSections: const <ForumHomeSectionData>[
+            ForumHomeSectionData(
+              title: '缓存分类',
+              kind: ForumHomeSectionKind.regular,
+              items: [
+                ForumHomeForumData(
+                  fid: '88',
+                  title: '缓存版块',
+                  description: '',
+                  todayPosts: null,
+                ),
+              ],
+            ),
+          ],
         ),
       );
       final repository = _buildHtmlRepository(
@@ -153,6 +170,7 @@ void main() {
 
       expect(result.isSuccess, isTrue);
       expect(result.dataOrNull!.forumIndex.forums.single.name, '缓存版块');
+      expect(result.dataOrNull!.homeSections.single.items.single.title, '缓存版块');
       expect(adapter.htmlRequestedUris, isEmpty);
       expect(adapter.imageRequestedUris, isEmpty);
     });
@@ -524,6 +542,37 @@ void main() {
       final payload = result.dataOrNull!;
       expect(payload.isLoggedIn, isTrue);
       expect(payload.favoriteForums.single.fid, '30');
+      expect(payload.homeSections.first.items.single.todayPosts, isNull);
+    });
+
+    test('legacy repo maps zero today count to missing badge in regular sections', () async {
+      final repository = DiscuzForumHomeRepository(
+        loadForumIndex: () async => ApiSuccess(
+          ForumIndexData(
+            categories: [
+              ForumCategory(fid: '1', name: '综合区', forums: ['2']),
+            ],
+            forums: [
+              ForumItem(
+                fid: '2',
+                name: '公告区',
+                threads: 12,
+                posts: 34,
+                todayPosts: 0,
+                description: '站点公告与维护信息',
+                icon: '',
+                subForums: const [],
+              ),
+            ],
+          ),
+        ),
+        refreshSession: () async => ApiSuccess(_loggedOutSession()),
+      );
+
+      final result = await repository.getForumHomePayload();
+
+      expect(result.isSuccess, isTrue);
+      expect(result.dataOrNull!.homeSections.single.items.single.todayPosts, isNull);
     });
 
     test('includes home chrome payload when chrome loader succeeds', () async {

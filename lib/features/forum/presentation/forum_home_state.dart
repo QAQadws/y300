@@ -1,11 +1,10 @@
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
-import 'package:y300/features/forum/data/models/forum_index_models.dart';
 
 enum ForumSectionType { regular, favorite }
 
-class FavoriteForumDisplayItem {
-  const FavoriteForumDisplayItem({
+class ForumHomeForumDisplayItem {
+  const ForumHomeForumDisplayItem({
     required this.fid,
     required this.title,
     required this.description,
@@ -15,21 +14,19 @@ class FavoriteForumDisplayItem {
   final String fid;
   final String title;
   final String description;
-  final int todayPosts;
+  final int? todayPosts;
 }
 
 /// 论坛首页中一个可展示分组，通常对应一个分类
 class ForumSection {
   const ForumSection({
     required this.title,
-    this.items = const <ForumItem>[],
-    this.favoriteItems = const <FavoriteForumDisplayItem>[],
+    required this.items,
     this.type = ForumSectionType.regular,
   });
 
   final String title;
-  final List<ForumItem> items;
-  final List<FavoriteForumDisplayItem> favoriteItems;
+  final List<ForumHomeForumDisplayItem> items;
   final ForumSectionType type;
 }
 
@@ -47,19 +44,15 @@ class ForumHomeViewData {
 
   int get sectionCount => sections.length;
 
-  int get regularForumCount =>
-      sections.fold<int>(0, (sum, section) => sum + section.items.length);
+  int get regularForumCount => sections
+      .where((section) => section.type == ForumSectionType.regular)
+      .fold<int>(0, (sum, section) => sum + section.items.length);
 
   int get forumCount {
     final countedFids = <String>{};
     var count = 0;
     for (final section in sections) {
       for (final item in section.items) {
-        if (countedFids.add(item.fid)) {
-          count++;
-        }
-      }
-      for (final item in section.favoriteItems) {
         if (countedFids.add(item.fid)) {
           count++;
         }
@@ -74,18 +67,21 @@ class ForumHomePageState {
     required this.viewData,
     required this.requestProfile,
     required this.isRefreshing,
+    required this.lastUpdatedAt,
     this.refreshHint,
   });
 
   final ForumHomeViewData viewData;
   final DocumentRequestProfile requestProfile;
   final bool isRefreshing;
+  final DateTime lastUpdatedAt;
   final String? refreshHint;
 
   ForumHomePageState copyWith({
     ForumHomeViewData? viewData,
     DocumentRequestProfile? requestProfile,
     bool? isRefreshing,
+    DateTime? lastUpdatedAt,
     String? refreshHint,
     bool clearHint = false,
   }) {
@@ -93,6 +89,7 @@ class ForumHomePageState {
       viewData: viewData ?? this.viewData,
       requestProfile: requestProfile ?? this.requestProfile,
       isRefreshing: isRefreshing ?? this.isRefreshing,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
       refreshHint: clearHint ? null : (refreshHint ?? this.refreshHint),
     );
   }

@@ -97,6 +97,25 @@ void main() {
       expect(result.carouselItems, isEmpty);
     });
 
+    test('preserves missing today badge as null in favorite forums', () {
+      final result = parser.parse('''
+<body id="forum">
+  <div id="sub-forum-myfav" class="sub-forum mlist1 cl">
+    <ul>
+      <li>
+        <a href="forum.php?mod=forumdisplay&amp;fid=33&amp;mobile=2" class="murl">
+          <p class="mtit">海域區</p>
+          <p class="mtxt">风声水起。</p>
+        </a>
+      </li>
+    </ul>
+  </div>
+</body>
+''');
+
+      expect(result.favoriteForums.single.todayPosts, isNull);
+    });
+
     test('skips invalid carousel entries', () {
       final result = parser.parse('''
 <div class="yami-swiper">

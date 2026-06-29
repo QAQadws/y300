@@ -41,7 +41,7 @@ class ForumHomeHtmlForumItem {
   final String fid;
   final String title;
   final String description;
-  final int todayPosts;
+  final int? todayPosts;
   final String url;
   final String? iconUrl;
 }

@@ -173,14 +173,14 @@ class ForumHomeHtmlParser {
     return source.substring(0, source.length - suffix.length).trim();
   }
 
-  int _parseTodayPosts(String? source) {
+  int? _parseTodayPosts(String? source) {
     if (source == null || source.trim().isEmpty) {
-      return 0;
+      return null;
     }
     final match = RegExp(r'\d+').firstMatch(source);
     if (match == null) {
-      return 0;
+      return null;
     }
-    return int.tryParse(match.group(0) ?? '') ?? 0;
+    return int.tryParse(match.group(0) ?? '');
   }
 }

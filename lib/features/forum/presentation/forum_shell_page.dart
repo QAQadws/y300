@@ -10,7 +10,12 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart
 import 'package:y300/features/forum/presentation/widgets/forum_bootstrap_placeholder.dart';
 
 class ForumShellPage extends ConsumerWidget {
-  const ForumShellPage({super.key});
+  const ForumShellPage({
+    super.key,
+    this.isActive = true,
+  });
+
+  final bool isActive;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -27,7 +32,7 @@ class ForumShellPage extends ConsumerWidget {
       error: (_, _) => const _ForumShellLoadingView(),
       data: (mode) {
         return switch (mode) {
-          ForumShellMode.native => const ForumHomePage(),
+          ForumShellMode.native => ForumHomePage(isActive: isActive),
           ForumShellMode.webview => ProviderScope(
             key: webViewScopeKey,
             overrides: [

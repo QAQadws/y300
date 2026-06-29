@@ -55,5 +55,5 @@ class ForumHomeChromeForumItem {
   final String fid;
   final String title;
   final String description;
-  final int todayPosts;
+  final int? todayPosts;
 }
