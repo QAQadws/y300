@@ -3,6 +3,7 @@ import 'dart:io' as io;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/media/image_display_provider.dart';
 import 'package:y300/core/media/image_downscale_policy.dart';
 import 'package:y300/features/image_loading/data/app_image_providers.dart';
 import 'package:y300/features/image_loading/domain/app_image_source.dart';
@@ -55,8 +56,11 @@ class AppImage extends ConsumerStatefulWidget {
 }
 
 class _AppImageState extends ConsumerState<AppImage> {
-  /// 本帧解码目标，由 build 时的 LayoutBuilder 写入，供各分支读取。
+  /// 本帧解码目标（宽度优先策略结果），用于网络分支的 maxWidth/maxHeight。
   ImageDecodeTarget _decodeTarget = ImageDecodeTarget.none;
+  /// 本帧显示框尺寸与 DPR，由 build 时的 LayoutBuilder 写入，供降采样解析复用。
+  Size _displaySize = Size.zero;
+  double _devicePixelRatio = 1;
   bool _networkResolved = false;
   String? _reportedImageIdentity;
   String? _reportedFailureIdentity;
@@ -76,7 +80,15 @@ class _AppImageState extends ConsumerState<AppImage> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        _decodeTarget = _resolveDecodeTarget(context, constraints);
+        _displaySize = Size(
+          _finiteOr(widget.width, constraints.maxWidth),
+          _finiteOr(widget.height, constraints.maxHeight),
+        );
+        _devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+        _decodeTarget = widget.downscalePolicy.resolve(
+          displaySize: _displaySize,
+          devicePixelRatio: _devicePixelRatio,
+        );
         return _buildContent(context);
       },
     );
@@ -88,17 +100,24 @@ class _AppImageState extends ConsumerState<AppImage> {
     if (local != null && local.isNotEmpty) {
       final file = io.File(local);
       if (file.existsSync()) {
-        return Image.file(
-          file,
+        final fileProvider = FileImage(file);
+        // cover 用 cover 感知降采样修复横长竖短图模糊；其它 fit 走宽度优先策略。
+        final displayProvider = resolveDownscaledImageProvider(
+          base: fileProvider,
+          fit: widget.fit,
+          displaySize: _displaySize,
+          devicePixelRatio: _devicePixelRatio,
+          downscalePolicy: widget.downscalePolicy,
+        );
+        return Image(
+          image: displayProvider,
           fit: widget.fit,
           width: widget.width,
           height: widget.height,
-          cacheWidth: _decodeTarget.cacheWidth,
-          cacheHeight: _decodeTarget.cacheHeight,
           gaplessPlayback: true,
           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
             if (frame != null || wasSynchronouslyLoaded) {
-              _reportImageResolved(FileImage(file), 'file:${file.path}');
+              _reportImageResolved(fileProvider, 'file:${file.path}');
             }
             return child;
           },
@@ -184,20 +203,6 @@ class _AppImageState extends ConsumerState<AppImage> {
       return const <String, String>{};
     }
     return builder.buildHeaders(source.resolvedUrl);
-  }
-
-  ImageDecodeTarget _resolveDecodeTarget(
-    BuildContext context,
-    BoxConstraints constraints,
-  ) {
-    final displaySize = Size(
-      _finiteOr(widget.width, constraints.maxWidth),
-      _finiteOr(widget.height, constraints.maxHeight),
-    );
-    return widget.downscalePolicy.resolve(
-      displaySize: displaySize,
-      devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
-    );
   }
 
   double _finiteOr(double? preferred, double fallback) {
