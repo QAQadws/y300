@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_rich_block_text.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 
 void main() {
@@ -12,10 +13,11 @@ void main() {
       fallbackParagraphs: const <String>[],
     );
 
-    expect(document.nodes.length, 2);
-    expect(document.nodes.first.type, NovelReaderNodeType.paragraph);
-    expect(document.nodes.first.text, '第一行\n第二行');
-    expect(document.nodes.last.text, '第三段');
+    expect(document.blocks.length, 2);
+    final first = document.blocks.first as RichTextBlock;
+    expect(first.isHeading, isFalse);
+    expect(first.novelPlainText, '第一行\n第二行');
+    expect((document.blocks.last as RichTextBlock).novelPlainText, '第三段');
   });
 
   test('parses headings quotes dividers images and links', () {
@@ -32,35 +34,50 @@ void main() {
       fallbackParagraphs: const <String>[],
     );
 
-    expect(document.nodes.map((node) => node.type), <NovelReaderNodeType>[
-      NovelReaderNodeType.heading,
-      NovelReaderNodeType.quote,
-      NovelReaderNodeType.divider,
-      NovelReaderNodeType.image,
-      NovelReaderNodeType.link,
-    ]);
-    expect(document.nodes[0].text, '标题');
-    expect(document.nodes[1].text, '引用内容');
-    expect(
-      document.nodes[3].image?.url,
-      'https://bbs.yamibo.com/data/attachment/forum/novel.jpg',
-    );
-    expect(document.nodes[3].image?.altText, '插图');
-    expect(document.nodes[4].link?.tid, '123');
+    final heading = document.blocks[0] as RichTextBlock;
+    expect(heading.isHeading, isTrue);
+    expect(heading.novelPlainText, '标题');
+
+    expect(document.blocks[1], isA<RichQuoteBlock>());
+    expect((document.blocks[1] as RichQuoteBlock).novelPlainText, '引用内容');
+
+    expect(document.blocks[2], isA<RichDividerBlock>());
+
+    final image = document.blocks[3] as RichImageBlock;
+    expect(image.url, 'https://bbs.yamibo.com/data/attachment/forum/novel.jpg');
+    expect(image.altText, '插图');
+
+    final link = document.blocks[4] as RichTextBlock;
+    expect(link.isNovelLinkButton, isTrue);
+    expect(link.runs.single.linkTid, '123');
   });
 
-  test('parses image file attribute as image node', () {
+  test('parses image file attribute as image block', () {
     final document = parser.parse(
       episodeId: 'ep1',
       rawHtml: '<img file="//bbs.yamibo.com/data/attachment/forum/file-image.png">',
       fallbackParagraphs: const <String>[],
     );
 
-    expect(document.nodes.single.type, NovelReaderNodeType.image);
+    final image = document.blocks.single as RichImageBlock;
     expect(
-      document.nodes.single.image?.url,
+      image.url,
       'https://bbs.yamibo.com/data/attachment/forum/file-image.png',
     );
+  });
+
+  test('preserves img aid for later attachment resolution', () {
+    final document = parser.parse(
+      episodeId: 'ep1',
+      rawHtml:
+          '<img aid="4567" width="800" height="1200" src="https://bbs.yamibo.com/data/attachment/forum/p.jpg">',
+      fallbackParagraphs: const <String>[],
+    );
+
+    final image = document.blocks.single as RichImageBlock;
+    expect(image.aid, '4567');
+    expect(image.originalWidth, 800);
+    expect(image.originalHeight, 1200);
   });
 
   test('drops dangerous link href but keeps link text as paragraph', () {
@@ -70,21 +87,23 @@ void main() {
       fallbackParagraphs: const <String>[],
     );
 
-    expect(document.nodes.single.type, NovelReaderNodeType.paragraph);
-    expect(document.nodes.single.text, '危险链接');
-    expect(document.nodes.single.link, isNull);
+    final block = document.blocks.single as RichTextBlock;
+    expect(block.isNovelLinkButton, isFalse);
+    expect(block.novelPlainText, '危险链接');
+    expect(block.runs.single.linkUrl, isNull);
   });
 
-  test('keeps paragraph wrapped single link as link node', () {
+  test('keeps paragraph wrapped single link as link block', () {
     final document = parser.parse(
       episodeId: 'ep1',
       rawHtml: '<p><a href="forum.php?mod=viewthread&amp;tid=200">跳转原帖</a></p>',
       fallbackParagraphs: const <String>[],
     );
 
-    expect(document.nodes.single.type, NovelReaderNodeType.link);
-    expect(document.nodes.single.text, '跳转原帖');
-    expect(document.nodes.single.link?.tid, '200');
+    final block = document.blocks.single as RichTextBlock;
+    expect(block.isNovelLinkButton, isTrue);
+    expect(block.novelPlainText, '跳转原帖');
+    expect(block.runs.single.linkTid, '200');
   });
 
   test('falls back to paragraphs when raw html is empty or invalid', () {
@@ -94,9 +113,8 @@ void main() {
       fallbackParagraphs: const <String>['第一段', '第二段'],
     );
 
-    expect(document.nodes.length, 2);
-    expect(document.nodes.first.type, NovelReaderNodeType.paragraph);
-    expect(document.nodes.first.text, '第一段');
+    expect(document.blocks.length, 2);
+    expect((document.blocks.first as RichTextBlock).novelPlainText, '第一段');
     expect(document.plainText, '第一段\n第二段');
   });
 }

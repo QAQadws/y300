@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_rich_block_text.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
 
@@ -20,8 +21,8 @@ void main() {
     );
 
     expect(executor.callCount, 0);
-    expect(document.nodes, hasLength(2));
-    expect(document.nodes.first.text, '第一段');
+    expect(document.blocks, hasLength(2));
+    expect((document.blocks.first as RichTextBlock).novelPlainText, '第一段');
   });
 
   test('large request builds through async executor', () async {
@@ -58,7 +59,7 @@ void main() {
       ),
     );
 
-    expect(document.nodes, hasLength(2));
+    expect(document.blocks, hasLength(2));
     expect(document.plainText, '第一段\n第二段');
   });
 }

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_rich_block_text.dart';
 
 class NovelReaderProgressSnapshot {
   const NovelReaderProgressSnapshot({
@@ -102,12 +103,12 @@ class NovelReaderPaginationMetrics {
 class NovelReaderPageSlice {
   const NovelReaderPageSlice({
     required this.index,
-    required this.nodes,
+    required this.blocks,
     this.anchorNodeId,
   });
 
   final int index;
-  final List<NovelReaderNode> nodes;
+  final List<RichBlock> blocks;
   final String? anchorNodeId;
 }
 
@@ -131,7 +132,7 @@ class NovelReaderPageLayout {
 
   NovelReaderPageSlice pageAt(int pageIndex) {
     if (pages.isEmpty) {
-      return const NovelReaderPageSlice(index: 0, nodes: <NovelReaderNode>[]);
+      return const NovelReaderPageSlice(index: 0, blocks: <RichBlock>[]);
     }
     return pages[clampPageIndex(pageIndex)];
   }
@@ -149,20 +150,20 @@ class NovelReaderPageLayout {
       if (page.anchorNodeId == anchor) {
         return true;
       }
-      return page.nodes.any((node) => node.id == anchor);
+      return page.blocks.any((block) => block.anchorId == anchor);
     });
   }
 
   NovelReaderDocument documentForPage(int pageIndex) {
     final slice = pageAt(pageIndex);
-    final plainText = slice.nodes
-        .map(_textForNode)
+    final plainText = slice.blocks
+        .map((block) => block.novelPlainText)
         .where((text) => text.trim().isNotEmpty)
         .join('\n');
     return NovelReaderDocument(
       episodeId: document.episodeId,
       rawHtmlHash: document.rawHtmlHash,
-      nodes: slice.nodes,
+      body: RichDocument(blocks: slice.blocks),
       plainText: plainText,
       wordCount: _countWords(plainText),
     );
@@ -180,39 +181,39 @@ class NovelReaderPaginator {
     final safeHeight = math.max(120.0, viewportSize.height);
     final safeWidth = math.max(160.0, viewportSize.width);
     final pages = <NovelReaderPageSlice>[];
-    var currentNodes = <NovelReaderNode>[];
+    var currentBlocks = <RichBlock>[];
     var currentHeight = 0.0;
     var currentPageHeightLimit = _pageHeightLimit(
       safeHeight,
       reservedHeight: typography.firstPageReservedHeight,
     );
 
-    for (final node in document.nodes) {
-      final nodeHeight = _estimateNodeHeight(
-        node: node,
+    for (final block in document.blocks) {
+      final nodeHeight = _estimateBlockHeight(
+        block: block,
         metrics: typography,
         width: safeWidth,
         viewportHeight: safeHeight,
       );
-      final spacing = currentNodes.isEmpty ? 0.0 : typography.paragraphSpacing;
-      if (currentNodes.isNotEmpty &&
+      final spacing = currentBlocks.isEmpty ? 0.0 : typography.paragraphSpacing;
+      if (currentBlocks.isNotEmpty &&
           currentHeight + spacing + nodeHeight > currentPageHeightLimit) {
-        pages.add(_slice(pages.length, currentNodes));
-        currentNodes = <NovelReaderNode>[node];
+        pages.add(_slice(pages.length, currentBlocks));
+        currentBlocks = <RichBlock>[block];
         currentHeight = nodeHeight;
         currentPageHeightLimit = safeHeight;
         continue;
       }
-      currentNodes.add(node);
+      currentBlocks.add(block);
       currentHeight += spacing + nodeHeight;
     }
 
-    if (currentNodes.isNotEmpty) {
-      pages.add(_slice(pages.length, currentNodes));
+    if (currentBlocks.isNotEmpty) {
+      pages.add(_slice(pages.length, currentBlocks));
     }
     if (pages.isEmpty) {
       pages.add(
-        const NovelReaderPageSlice(index: 0, nodes: <NovelReaderNode>[]),
+        const NovelReaderPageSlice(index: 0, blocks: <RichBlock>[]),
       );
     }
     return NovelReaderPageLayout(document: document, pages: pages);
@@ -226,62 +227,66 @@ class NovelReaderPaginator {
     return math.max(80.0, safeHeight - effectiveReserved);
   }
 
-  NovelReaderPageSlice _slice(int index, List<NovelReaderNode> nodes) {
+  NovelReaderPageSlice _slice(int index, List<RichBlock> blocks) {
     return NovelReaderPageSlice(
       index: index,
-      nodes: List<NovelReaderNode>.unmodifiable(nodes),
-      anchorNodeId: nodes.isEmpty ? null : nodes.first.id,
+      blocks: List<RichBlock>.unmodifiable(blocks),
+      anchorNodeId: blocks.isEmpty ? null : blocks.first.anchorId,
     );
   }
 
-  double _estimateNodeHeight({
-    required NovelReaderNode node,
+  double _estimateBlockHeight({
+    required RichBlock block,
     required NovelReaderPaginationMetrics metrics,
     required double width,
     required double viewportHeight,
   }) {
-    switch (node.type) {
-      case NovelReaderNodeType.heading:
+    if (block is RichTextBlock) {
+      if (block.isHeading) {
         return _estimateTextHeight(
-              _textForNode(node),
+              block.novelPlainText,
               width: width,
               fontSize: metrics.headingFontSize,
               lineHeight: metrics.headingLineHeight,
             ) +
             8;
-      case NovelReaderNodeType.quote:
+      }
+      if (block.isNovelLinkButton) {
         return _estimateTextHeight(
-              _textForNode(node),
-              width: width - 16,
-              fontSize: metrics.bodyFontSize,
-              lineHeight: metrics.bodyLineHeight,
-            ) +
-            16;
-      case NovelReaderNodeType.image:
-        return math.min(
-          math.max(140.0, width * 0.62),
-          math.max(160.0, viewportHeight * 0.56),
-        );
-      case NovelReaderNodeType.link:
-        return _estimateTextHeight(
-              _textForNode(node),
+              block.novelPlainText,
               width: width,
               fontSize: metrics.bodyFontSize,
               lineHeight: metrics.bodyLineHeight,
             ) +
             12;
-      case NovelReaderNodeType.divider:
-        return 24;
-      case NovelReaderNodeType.spacer:
-        return math.max(8.0, metrics.paragraphSpacing);
-      case NovelReaderNodeType.paragraph:
-        return _estimateTextHeight(
-          _textForNode(node),
-          width: width,
-          fontSize: metrics.bodyFontSize,
-          lineHeight: metrics.bodyLineHeight,
-        );
+      }
+      return _estimateTextHeight(
+        block.novelPlainText,
+        width: width,
+        fontSize: metrics.bodyFontSize,
+        lineHeight: metrics.bodyLineHeight,
+      );
     }
+    if (block is RichQuoteBlock) {
+      return _estimateTextHeight(
+            block.novelPlainText,
+            width: width - 16,
+            fontSize: metrics.bodyFontSize,
+            lineHeight: metrics.bodyLineHeight,
+          ) +
+          16;
+    }
+    if (block is RichImageBlock) {
+      return math.min(
+        math.max(140.0, width * 0.62),
+        math.max(160.0, viewportHeight * 0.56),
+      );
+    }
+    if (block is RichDividerBlock) {
+      return 24;
+    }
+    // RichSpacerBlock and any unrecognised block.
+    return math.max(8.0, metrics.paragraphSpacing);
   }
 
   double _estimateTextHeight(
@@ -418,21 +423,6 @@ class NovelReaderProgressPolicy {
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
-}
-
-String _textForNode(NovelReaderNode node) {
-  final ownText = node.text?.trim();
-  if (ownText != null && ownText.isNotEmpty) {
-    return ownText;
-  }
-  final linkText = node.link?.text.trim();
-  if (linkText != null && linkText.isNotEmpty) {
-    return linkText;
-  }
-  return node.children
-      .map(_textForNode)
-      .where((text) => text.trim().isNotEmpty)
-      .join('\n');
 }
 
 int _countWords(String text) {

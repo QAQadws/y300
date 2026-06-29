@@ -1,4 +1,5 @@
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_rich_block_text.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 
 class NovelReaderSearchService {
@@ -17,8 +18,8 @@ class NovelReaderSearchService {
     final lowerKeyword = normalizedKeyword.toLowerCase();
     final results = <NovelReaderSearchResult>[];
     var globalIndex = 0;
-    for (final node in document.nodes) {
-      final text = _textForNode(node);
+    for (final block in document.blocks) {
+      final text = block.novelPlainText;
       final lowerText = text.toLowerCase();
       var start = 0;
       while (start < lowerText.length) {
@@ -29,11 +30,11 @@ class NovelReaderSearchService {
         final matchEnd = index + normalizedKeyword.length;
         results.add(
           NovelReaderSearchResult(
-            resultId: '${document.episodeId}:${node.id}:$globalIndex',
+            resultId: '${document.episodeId}:${block.anchorId}:$globalIndex',
             keyword: normalizedKeyword,
             anchor: NovelReaderTextAnchor(
               episodeId: document.episodeId,
-              nodeId: node.id,
+              nodeId: block.anchorId,
               textOffset: index,
             ),
             snippet: _snippet(
@@ -44,7 +45,7 @@ class NovelReaderSearchService {
             ),
             matchStart: index,
             matchEnd: matchEnd,
-            nodeId: node.id,
+            nodeId: block.anchorId,
           ),
         );
         globalIndex++;
@@ -66,19 +67,5 @@ class NovelReaderSearchService {
     final prefix = snippetStart > 0 ? '...' : '';
     final suffix = snippetEnd < text.length ? '...' : '';
     return '$prefix${text.substring(snippetStart, snippetEnd)}$suffix';
-  }
-
-  String _textForNode(NovelReaderNode node) {
-    final ownText = node.text;
-    if (ownText != null && ownText.isNotEmpty) {
-      return ownText;
-    }
-    if (node.link != null) {
-      return node.link!.text;
-    }
-    return node.children
-        .map(_textForNode)
-        .where((text) => text.trim().isNotEmpty)
-        .join('\n');
   }
 }

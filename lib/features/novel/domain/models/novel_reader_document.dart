@@ -1,35 +1,11 @@
-enum NovelReaderNodeType {
-  paragraph,
-  heading,
-  quote,
-  image,
-  link,
-  divider,
-  spacer,
-}
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 
-class NovelReaderInlineStyle {
-  const NovelReaderInlineStyle({
-    this.bold = false,
-    this.italic = false,
-    this.color,
-  });
+export 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 
-  final bool bold;
-  final bool italic;
-  final String? color;
-}
-
-class NovelReaderImage {
-  const NovelReaderImage({
-    required this.url,
-    this.altText,
-  });
-
-  final String url;
-  final String? altText;
-}
-
+/// Lightweight tap payload for a novel reader link. The reader opens an in-app
+/// thread when [tid] is present, otherwise falls back to launching [url].
+/// Derived from a [RichRun] at tap time; kept as its own type so the page-level
+/// link handler does not depend on render internals.
 class NovelReaderLink {
   const NovelReaderLink({
     required this.url,
@@ -42,38 +18,25 @@ class NovelReaderLink {
   final String? tid;
 }
 
-class NovelReaderNode {
-  const NovelReaderNode({
-    required this.id,
-    required this.type,
-    this.text,
-    this.children = const <NovelReaderNode>[],
-    this.image,
-    this.link,
-    this.style = const NovelReaderInlineStyle(),
-  });
-
-  final String id;
-  final NovelReaderNodeType type;
-  final String? text;
-  final List<NovelReaderNode> children;
-  final NovelReaderImage? image;
-  final NovelReaderLink? link;
-  final NovelReaderInlineStyle style;
-}
-
+/// A parsed novel chapter: the shared [RichDocument] body plus novel-only
+/// metadata (episode identity, source hash, plain text and word count used by
+/// pagination, search and progress). The block tree itself is the canonical
+/// reader_shared model — see plan §6.
 class NovelReaderDocument {
   const NovelReaderDocument({
     required this.episodeId,
     required this.rawHtmlHash,
-    required this.nodes,
+    required this.body,
     required this.plainText,
     required this.wordCount,
   });
 
   final String episodeId;
   final String rawHtmlHash;
-  final List<NovelReaderNode> nodes;
+  final RichDocument body;
   final String plainText;
   final int wordCount;
+
+  /// Block tree in document order.
+  List<RichBlock> get blocks => body.blocks;
 }

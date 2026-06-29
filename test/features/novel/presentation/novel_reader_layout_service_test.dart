@@ -92,8 +92,8 @@ class _RecordingPaginator extends NovelReaderPaginator {
       pages: [
         NovelReaderPageSlice(
           index: 0,
-          nodes: document.nodes,
-          anchorNodeId: document.nodes.isEmpty ? null : document.nodes.first.id,
+          blocks: document.blocks,
+          anchorNodeId: document.blocks.isEmpty ? null : document.blocks.first.anchorId,
         ),
       ],
     );
@@ -111,13 +111,14 @@ NovelReaderLayoutRequest _request({
     document: NovelReaderDocument(
       episodeId: episodeId,
       rawHtmlHash: rawHtmlHash,
-      nodes: const <NovelReaderNode>[
-        NovelReaderNode(
-          id: 'node-1',
-          type: NovelReaderNodeType.paragraph,
-          text: '正文',
-        ),
-      ],
+      body: const RichDocument(
+        blocks: <RichBlock>[
+          RichTextBlock(
+            anchorId: 'node-1',
+            runs: <RichRun>[RichRun(text: '正文')],
+          ),
+        ],
+      ),
       plainText: '正文',
       wordCount: 2,
     ),

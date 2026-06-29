@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_rich_block_text.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_preference_impact_analyzer.dart';
@@ -25,7 +26,7 @@ void main() {
         converter: _UppercaseConverter(),
       );
 
-      expect(document.nodes.first.text, 'ABC');
+      expect((document.blocks.first as RichTextBlock).novelPlainText, 'ABC');
     });
 
     test('identity converter leaves content unchanged', () async {
@@ -42,7 +43,7 @@ void main() {
         ),
       );
 
-      expect(document.nodes.first.text, '第一段');
+      expect((document.blocks.first as RichTextBlock).novelPlainText, '第一段');
     });
   });
 

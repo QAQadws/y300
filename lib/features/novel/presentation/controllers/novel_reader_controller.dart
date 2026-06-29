@@ -6,6 +6,7 @@ import 'package:y300/features/novel/data/services/novel_reader_cache_service.dar
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_rich_block_text.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_transition_state.dart';
@@ -1046,9 +1047,9 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   ) {
     final nodeId = anchor.nodeId;
     if (nodeId != null) {
-      for (final node in document.nodes) {
-        if (node.id == nodeId) {
-          final text = _textForNode(node).trim();
+      for (final block in document.blocks) {
+        if (block.anchorId == nodeId) {
+          final text = block.novelPlainText.trim();
           if (text.isNotEmpty) {
             final start = anchor.textOffset.clamp(0, text.length).toInt();
             final end = (start + 36).clamp(0, text.length).toInt();
@@ -1062,20 +1063,6 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       return '当前位置';
     }
     return plainText.length <= 36 ? plainText : plainText.substring(0, 36);
-  }
-
-  String _textForNode(NovelReaderNode node) {
-    final ownText = node.text;
-    if (ownText != null && ownText.isNotEmpty) {
-      return ownText;
-    }
-    if (node.link != null) {
-      return node.link!.text;
-    }
-    return node.children
-        .map(_textForNode)
-        .where((text) => text.trim().isNotEmpty)
-        .join('\n');
   }
 
   Future<NovelReaderCacheResult> _runCacheOperation(

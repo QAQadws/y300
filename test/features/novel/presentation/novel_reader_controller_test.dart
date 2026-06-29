@@ -205,8 +205,8 @@ void main() {
     final layout = NovelReaderPageLayout(
       document: _document('novel:49:100:5001'),
       pages: const <NovelReaderPageSlice>[
-        NovelReaderPageSlice(index: 0, nodes: <NovelReaderNode>[], anchorNodeId: 'a'),
-        NovelReaderPageSlice(index: 1, nodes: <NovelReaderNode>[], anchorNodeId: 'b'),
+        NovelReaderPageSlice(index: 0, blocks: <RichBlock>[], anchorNodeId: 'a'),
+        NovelReaderPageSlice(index: 1, blocks: <RichBlock>[], anchorNodeId: 'b'),
       ],
     );
     await container.read(provider.notifier).onPagedPageChanged(1, layout);
@@ -1340,13 +1340,14 @@ NovelReaderDocument _document(String episodeId) {
   return NovelReaderDocument(
     episodeId: episodeId,
     rawHtmlHash: 'test',
-    nodes: <NovelReaderNode>[
-      NovelReaderNode(
-        id: 'node-0',
-        type: NovelReaderNodeType.paragraph,
-        text: '正文。',
-      ),
-    ],
+    body: const RichDocument(
+      blocks: <RichBlock>[
+        RichTextBlock(
+          anchorId: 'node-0',
+          runs: <RichRun>[RichRun(text: '正文。')],
+        ),
+      ],
+    ),
     plainText: '正文。',
     wordCount: 3,
   );
@@ -1373,13 +1374,14 @@ NovelReaderCriticalBootstrap _criticalBootstrap({
     document: NovelReaderDocument(
       episodeId: episodeId,
       rawHtmlHash: 'test-$episodeId',
-      nodes: <NovelReaderNode>[
-        NovelReaderNode(
-          id: 'node-0',
-          type: NovelReaderNodeType.paragraph,
-          text: paragraphText,
-        ),
-      ],
+      body: RichDocument(
+        blocks: <RichBlock>[
+          RichTextBlock(
+            anchorId: 'node-0',
+            runs: <RichRun>[RichRun(text: paragraphText)],
+          ),
+        ],
+      ),
       plainText: paragraphText,
       wordCount: paragraphText.length,
     ),

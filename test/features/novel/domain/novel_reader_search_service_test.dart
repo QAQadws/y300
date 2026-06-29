@@ -8,16 +8,14 @@ void main() {
   test('search finds Chinese keyword in source order with snippets', () {
     final results = service.search(
       document: _document(
-        nodes: const <NovelReaderNode>[
-          NovelReaderNode(
-            id: 'n1',
-            type: NovelReaderNodeType.paragraph,
-            text: '这是第一段，关键词出现。',
+        blocks: const <RichBlock>[
+          RichTextBlock(
+            anchorId: 'n1',
+            runs: <RichRun>[RichRun(text: '这是第一段，关键词出现。')],
           ),
-          NovelReaderNode(
-            id: 'n2',
-            type: NovelReaderNodeType.paragraph,
-            text: '关键词再次出现。',
+          RichTextBlock(
+            anchorId: 'n2',
+            runs: <RichRun>[RichRun(text: '关键词再次出现。')],
           ),
         ],
       ),
@@ -35,11 +33,10 @@ void main() {
 
   test('search is case insensitive and returns empty for blank keyword', () {
     final document = _document(
-      nodes: const <NovelReaderNode>[
-        NovelReaderNode(
-          id: 'n1',
-          type: NovelReaderNodeType.paragraph,
-          text: 'Alpha beta ALPHA',
+      blocks: const <RichBlock>[
+        RichTextBlock(
+          anchorId: 'n1',
+          runs: <RichRun>[RichRun(text: 'Alpha beta ALPHA')],
         ),
       ],
     );
@@ -51,13 +48,13 @@ void main() {
 }
 
 NovelReaderDocument _document({
-  required List<NovelReaderNode> nodes,
+  required List<RichBlock> blocks,
 }) {
   return NovelReaderDocument(
     episodeId: 'episode-1',
     rawHtmlHash: 'hash',
-    nodes: nodes,
-    plainText: nodes.map((node) => node.text ?? '').join('\n'),
+    body: RichDocument(blocks: blocks),
+    plainText: '',
     wordCount: 0,
   );
 }

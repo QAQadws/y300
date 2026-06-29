@@ -16,24 +16,25 @@ void main() {
 
   test('NovelReaderPaginator creates at least one page for empty document', () {
     final layout = paginator.paginate(
-      document: _document(const <NovelReaderNode>[]),
+      document: _document(const <RichBlock>[]),
       typography: metrics,
       viewportSize: const NovelReaderViewport(width: 360, height: 640),
     );
 
     expect(layout.pageCount, 1);
-    expect(layout.pageAt(0).nodes, isEmpty);
+    expect(layout.pageAt(0).blocks, isEmpty);
   });
 
-  test('NovelReaderPaginator paginates by viewport and node estimates', () {
+  test('NovelReaderPaginator paginates by viewport and block estimates', () {
     final layout = paginator.paginate(
       document: _document(
-        List<NovelReaderNode>.generate(
+        List<RichBlock>.generate(
           12,
-          (index) => NovelReaderNode(
-            id: 'node-$index',
-            type: NovelReaderNodeType.paragraph,
-            text: '第$index段 ${List<String>.filled(80, '正文').join()}',
+          (index) => RichTextBlock(
+            anchorId: 'node-$index',
+            runs: <RichRun>[
+              RichRun(text: '第$index段 ${List<String>.filled(80, '正文').join()}'),
+            ],
           ),
         ),
       ),
@@ -43,17 +44,16 @@ void main() {
 
     expect(layout.pageCount, greaterThan(1));
     expect(layout.pageAt(0).anchorNodeId, 'node-0');
-    expect(layout.pageAt(1).nodes.first.id, isNot('node-0'));
+    expect(layout.pageAt(1).blocks.first.anchorId, isNot('node-0'));
   });
 
   test('NovelReaderProgressPolicy clamps old page after layout changes', () {
     final layout = paginator.paginate(
       document: _document(
-        const <NovelReaderNode>[
-          NovelReaderNode(
-            id: 'node-0',
-            type: NovelReaderNodeType.paragraph,
-            text: '短正文',
+        const <RichBlock>[
+          RichTextBlock(
+            anchorId: 'node-0',
+            runs: <RichRun>[RichRun(text: '短正文')],
           ),
         ],
       ),
@@ -74,10 +74,10 @@ void main() {
 
   test('NovelReaderProgressPolicy restores page by anchor before page index', () {
     final layout = NovelReaderPageLayout(
-      document: _document(const <NovelReaderNode>[]),
+      document: _document(const <RichBlock>[]),
       pages: const <NovelReaderPageSlice>[
-        NovelReaderPageSlice(index: 0, nodes: <NovelReaderNode>[], anchorNodeId: 'a'),
-        NovelReaderPageSlice(index: 1, nodes: <NovelReaderNode>[], anchorNodeId: 'b'),
+        NovelReaderPageSlice(index: 0, blocks: <RichBlock>[], anchorNodeId: 'a'),
+        NovelReaderPageSlice(index: 1, blocks: <RichBlock>[], anchorNodeId: 'b'),
       ],
     );
     const snapshot = NovelReaderProgressSnapshot(
@@ -104,11 +104,11 @@ void main() {
     expect(vertical.progressPercent, 0.25);
 
     final layout = NovelReaderPageLayout(
-      document: _document(const <NovelReaderNode>[]),
+      document: _document(const <RichBlock>[]),
       pages: const <NovelReaderPageSlice>[
-        NovelReaderPageSlice(index: 0, nodes: <NovelReaderNode>[], anchorNodeId: 'a'),
-        NovelReaderPageSlice(index: 1, nodes: <NovelReaderNode>[], anchorNodeId: 'b'),
-        NovelReaderPageSlice(index: 2, nodes: <NovelReaderNode>[], anchorNodeId: 'c'),
+        NovelReaderPageSlice(index: 0, blocks: <RichBlock>[], anchorNodeId: 'a'),
+        NovelReaderPageSlice(index: 1, blocks: <RichBlock>[], anchorNodeId: 'b'),
+        NovelReaderPageSlice(index: 2, blocks: <RichBlock>[], anchorNodeId: 'c'),
       ],
     );
     final paged = policy.pagedSnapshot(
@@ -125,12 +125,12 @@ void main() {
   });
 }
 
-NovelReaderDocument _document(List<NovelReaderNode> nodes) {
+NovelReaderDocument _document(List<RichBlock> blocks) {
   return NovelReaderDocument(
     episodeId: 'ep1',
     rawHtmlHash: 'hash',
-    nodes: nodes,
-    plainText: nodes.map((node) => node.text ?? '').join('\n'),
+    body: RichDocument(blocks: blocks),
+    plainText: '',
     wordCount: 0,
   );
 }

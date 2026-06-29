@@ -8,34 +8,37 @@ import 'package:y300/features/novel/presentation/services/novel_reader_display_r
 import 'package:y300/features/novel/presentation/widgets/novel_reader_document_view.dart';
 
 void main() {
-  testWidgets('NovelReaderDocumentView renders rich node blocks', (tester) async {
+  testWidgets('NovelReaderDocumentView renders rich blocks', (tester) async {
     final tappedLinks = <NovelReaderLink>[];
     await tester.pumpWidget(
       MaterialApp(
         home: NovelReaderDocumentView(
           document: _document(
-            nodes: const <NovelReaderNode>[
-              NovelReaderNode(
-                id: 'p',
-                type: NovelReaderNodeType.paragraph,
-                text: '正文',
+            blocks: const <RichBlock>[
+              RichTextBlock(
+                anchorId: 'p',
+                runs: <RichRun>[RichRun(text: '正文')],
               ),
-              NovelReaderNode(
-                id: 'h',
-                type: NovelReaderNodeType.heading,
-                text: '标题',
+              RichTextBlock(
+                anchorId: 'h',
+                headingLevel: 1,
+                runs: <RichRun>[RichRun(text: '标题')],
               ),
-              NovelReaderNode(
-                id: 'q',
-                type: NovelReaderNodeType.quote,
-                text: '引用',
+              RichQuoteBlock(
+                anchorId: 'q',
+                blocks: <RichBlock>[
+                  RichTextBlock(
+                    anchorId: 'q',
+                    runs: <RichRun>[RichRun(text: '引用')],
+                  ),
+                ],
               ),
-              NovelReaderNode(id: 'd', type: NovelReaderNodeType.divider),
-              NovelReaderNode(
-                id: 'l',
-                type: NovelReaderNodeType.link,
-                text: '链接',
-                link: NovelReaderLink(url: 'https://example.com', text: '链接'),
+              RichDividerBlock(anchorId: 'd'),
+              RichTextBlock(
+                anchorId: 'l',
+                runs: <RichRun>[
+                  RichRun(text: '链接', linkUrl: 'https://example.com'),
+                ],
               ),
             ],
           ),
@@ -63,28 +66,13 @@ void main() {
       MaterialApp(
         home: NovelReaderDocumentView(
           document: _document(
-            nodes: const <NovelReaderNode>[
-              NovelReaderNode(
-                id: 'p',
-                type: NovelReaderNodeType.paragraph,
-                text: '前文 链接 后文',
-                children: <NovelReaderNode>[
-                  NovelReaderNode(
-                    id: 'p-0',
-                    type: NovelReaderNodeType.paragraph,
-                    text: '前文 ',
-                  ),
-                  NovelReaderNode(
-                    id: 'p-1',
-                    type: NovelReaderNodeType.link,
-                    text: '链接',
-                    link: NovelReaderLink(url: 'https://example.com', text: '链接'),
-                  ),
-                  NovelReaderNode(
-                    id: 'p-2',
-                    type: NovelReaderNodeType.paragraph,
-                    text: ' 后文',
-                  ),
+            blocks: const <RichBlock>[
+              RichTextBlock(
+                anchorId: 'p',
+                runs: <RichRun>[
+                  RichRun(text: '前文 '),
+                  RichRun(text: '链接', linkUrl: 'https://example.com'),
+                  RichRun(text: ' 后文'),
                 ],
               ),
             ],
@@ -116,16 +104,17 @@ void main() {
             rawHtmlHash: 'hash',
             plainText: '',
             wordCount: 0,
-            nodes: <NovelReaderNode>[
-              NovelReaderNode(
-                id: 'img',
-                type: NovelReaderNodeType.image,
-                image: NovelReaderImage(
+            body: RichDocument(
+              blocks: <RichBlock>[
+                RichImageBlock(
+                  anchorId: 'img',
                   url: 'https://img.test/novel.jpg',
+                  rawUrl: 'novel.jpg',
+                  index: 0,
                   altText: '插图',
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           typography: _TestTypography.value,
           paragraphSpacing: 8,
@@ -147,11 +136,10 @@ void main() {
       MaterialApp(
         home: NovelReaderDocumentView(
           document: _document(
-            nodes: const <NovelReaderNode>[
-              NovelReaderNode(
-                id: 'p',
-                type: NovelReaderNodeType.paragraph,
-                text: '关键词在这里',
+            blocks: const <RichBlock>[
+              RichTextBlock(
+                anchorId: 'p',
+                runs: <RichRun>[RichRun(text: '关键词在这里')],
               ),
             ],
           ),
@@ -174,11 +162,11 @@ void main() {
   });
 }
 
-NovelReaderDocument _document({required List<NovelReaderNode> nodes}) {
+NovelReaderDocument _document({required List<RichBlock> blocks}) {
   return NovelReaderDocument(
     episodeId: 'ep1',
     rawHtmlHash: 'hash',
-    nodes: nodes,
+    body: RichDocument(blocks: blocks),
     plainText: '',
     wordCount: 0,
   );

@@ -1288,7 +1288,7 @@ void main() {
       expect(find.byKey(const Key('novel-reader-search-empty')), findsNothing);
       await tester.tap(
         find.byKey(
-          const Key('novel-reader-search-result-novel:49:100:5001:node-1:0'),
+          const Key('novel-reader-search-result-novel:49:100:5001:node-0:0'),
         ),
       );
       await tester.pumpAndSettle();
@@ -2446,41 +2446,49 @@ class _ControlledNovelReaderLayoutService implements NovelReaderLayoutService {
     required NovelChapterContent content,
     required int pages,
   }) {
-    final sourceNodes = request.document.nodes;
-    final resolvedNodes = sourceNodes.isEmpty
-        ? <NovelReaderNode>[
-            NovelReaderNode(
-              id: '${request.episodeId}-node-0',
-              type: NovelReaderNodeType.paragraph,
-              text: content.paragraphs.isEmpty
-                  ? content.plainText
-                  : content.paragraphs.first,
+    final sourceBlocks = request.document.blocks;
+    final resolvedBlocks = sourceBlocks.isEmpty
+        ? <RichBlock>[
+            RichTextBlock(
+              anchorId: '${request.episodeId}-node-0',
+              runs: <RichRun>[
+                RichRun(
+                  text: content.paragraphs.isEmpty
+                      ? content.plainText
+                      : content.paragraphs.first,
+                ),
+              ],
             ),
           ]
-        : sourceNodes;
+        : sourceBlocks;
     final resolvedPages = List<NovelReaderPageSlice>.generate(pages, (index) {
-      final node = index < resolvedNodes.length
-          ? resolvedNodes[index]
-          : NovelReaderNode(
-              id: '${request.episodeId}-node-$index',
-              type: NovelReaderNodeType.paragraph,
-              text: content.paragraphs.isEmpty
-                  ? '${content.plainText} 第${index + 1}页'
-                  : content.paragraphs[index % content.paragraphs.length],
+      final block = index < resolvedBlocks.length
+          ? resolvedBlocks[index]
+          : RichTextBlock(
+              anchorId: '${request.episodeId}-node-$index',
+              runs: <RichRun>[
+                RichRun(
+                  text: content.paragraphs.isEmpty
+                      ? '${content.plainText} 第${index + 1}页'
+                      : content.paragraphs[index % content.paragraphs.length],
+                ),
+              ],
             );
       return NovelReaderPageSlice(
         index: index,
-        nodes: <NovelReaderNode>[node],
-        anchorNodeId: node.id,
+        blocks: <RichBlock>[block],
+        anchorNodeId: block.anchorId,
       );
     });
     return NovelReaderPageLayout(
       document: NovelReaderDocument(
         episodeId: request.document.episodeId,
         rawHtmlHash: request.document.rawHtmlHash,
-        nodes: resolvedPages
-            .expand((page) => page.nodes)
-            .toList(growable: false),
+        body: RichDocument(
+          blocks: resolvedPages
+              .expand((page) => page.blocks)
+              .toList(growable: false),
+        ),
         plainText: content.plainText,
         wordCount: content.plainText.length,
       ),
