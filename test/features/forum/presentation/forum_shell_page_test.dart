@@ -4,7 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
+import 'package:y300/features/cache/domain/services/native_page_cache_invalidation_service.dart';
 import 'package:y300/features/auth/data/repositories/auth_repository.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
@@ -78,10 +81,46 @@ void main() {
         child: const MaterialApp(home: ForumShellPage()),
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
     expect(find.text('百合会论坛'), findsOneWidget);
+  });
+
+  testWidgets('ForumShellPage keeps placeholder before native mode resolves', (
+    tester,
+  ) async {
+    final driverRegistry = _FakeForumWebViewDriverRegistry();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _DeferredForumModeSettingsRepository(mode: ForumShellMode.native),
+          ),
+          forumHomeRepositoryProvider.overrideWithValue(
+            _FakeForumHomeRepository(),
+          ),
+          nativePageCacheInvalidationServiceProvider.overrideWithValue(
+            _RecordingNativePageCacheInvalidationService(),
+          ),
+          forumWebViewDriverFactoryProvider.overrideWithValue(
+            driverRegistry.create,
+          ),
+          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
+        ],
+        child: const MaterialApp(home: ForumShellPage()),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('forum-shell-bootstrap-placeholder-list')), findsOneWidget);
+    expect(find.byKey(const Key('forum-webview-page')), findsNothing);
+    expect(find.byKey(const Key('forum-home-list')), findsNothing);
+
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
   });
 
   testWidgets('ForumShellPage shows native forum home when mode is native', (
@@ -97,6 +136,9 @@ void main() {
           ),
           forumHomeRepositoryProvider.overrideWithValue(
             _FakeForumHomeRepository(),
+          ),
+          nativePageCacheInvalidationServiceProvider.overrideWithValue(
+            _RecordingNativePageCacheInvalidationService(),
           ),
           forumWebViewDriverFactoryProvider.overrideWithValue(
             driverRegistry.create,
@@ -124,6 +166,9 @@ void main() {
           forumModeSettingsRepositoryProvider.overrideWithValue(modeRepository),
           forumHomeRepositoryProvider.overrideWithValue(
             _FakeForumHomeRepository(),
+          ),
+          nativePageCacheInvalidationServiceProvider.overrideWithValue(
+            _RecordingNativePageCacheInvalidationService(),
           ),
           forumWebViewDriverFactoryProvider.overrideWithValue(
             driverRegistry.create,
@@ -370,6 +415,9 @@ void main() {
             forumHomeRepositoryProvider.overrideWithValue(
               _FakeForumHomeRepository(),
             ),
+            nativePageCacheInvalidationServiceProvider.overrideWithValue(
+              _RecordingNativePageCacheInvalidationService(),
+            ),
             forumWebViewDriverFactoryProvider.overrideWithValue(
               driverRegistry.create,
             ),
@@ -423,6 +471,7 @@ class _FakeForumHomeRepository implements ForumHomeRepository {
   @override
   Future<ApiResult<ForumHomePayload>> getForumHomePayload({
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    DocumentRequestProfile? requestProfileOverride,
   }) async {
     return ApiSuccess(
       ForumHomePayload(
@@ -448,6 +497,22 @@ class _FakeForumHomeRepository implements ForumHomeRepository {
       ),
     );
   }
+}
+
+class _DeferredForumModeSettingsRepository
+    implements ForumModeSettingsRepository {
+  _DeferredForumModeSettingsRepository({required this.mode});
+
+  final ForumShellMode mode;
+
+  @override
+  Future<ForumShellMode> loadMode() async {
+    await Future<void>.delayed(Duration.zero);
+    return mode;
+  }
+
+  @override
+  Future<void> saveMode(ForumShellMode mode) async {}
 }
 
 class _FakeAuthRepository implements AuthRepository {
@@ -598,4 +663,16 @@ class _FakeCookieStore extends CookieStore {
   Future<String?> readCookieHeader(Uri uri) async {
     return null;
   }
+}
+
+class _RecordingNativePageCacheInvalidationService
+    implements NativePageCacheInvalidationService {
+  @override
+  Future<void> invalidateForumDisplay(String fid) async {}
+
+  @override
+  Future<void> invalidateForumHome() async {}
+
+  @override
+  Future<void> invalidateThread(String tid) async {}
 }

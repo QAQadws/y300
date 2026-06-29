@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
@@ -14,23 +17,70 @@ import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
-class ForumHomePage extends ConsumerWidget {
+class ForumHomePage extends ConsumerStatefulWidget {
   const ForumHomePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    ref.listen(authSessionControllerProvider, (previous, next) {
-      final wasLoggedIn = previous?.asData?.value.isLoggedIn ?? false;
-      final isLoggedIn = next.asData?.value.isLoggedIn ?? false;
-      if (!wasLoggedIn && isLoggedIn) {
-        ref
-            .read(forumHomeControllerProvider.notifier)
-            .refresh(forceNetwork: true);
-      }
-    });
+  ConsumerState<ForumHomePage> createState() => _ForumHomePageState();
+}
 
-    final state = ref.watch(forumHomeControllerProvider);
+class _ForumHomePageState extends ConsumerState<ForumHomePage> {
+  ProviderSubscription<AsyncValue<AuthSessionViewState>>? _authSubscription;
+  String? _lastResolvedAuthContextKey;
+  bool _isHandlingAuthContextChange = false;
+  bool _isSwitchingAuthContext = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _authSubscription =
+        ref.listenManual<AsyncValue<AuthSessionViewState>>(
+      authSessionControllerProvider,
+      (previous, next) {
+        final nextState = next.asData?.value;
+        if (nextState == null) {
+          return;
+        }
+        final nextKey = _authContextKey(nextState);
+        final previousKey = _lastResolvedAuthContextKey;
+        _lastResolvedAuthContextKey = nextKey;
+        if (previousKey == null || previousKey == nextKey) {
+          return;
+        }
+        if (_isHandlingAuthContextChange) {
+          return;
+        }
+        setState(() {
+          _isSwitchingAuthContext = true;
+        });
+        _isHandlingAuthContextChange = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) {
+            _isHandlingAuthContextChange = false;
+            return;
+          }
+          unawaited(_handleAuthContextChanged());
+        });
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.close();
+    _authSubscription = null;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final authState = ref.watch(authSessionControllerProvider);
     final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
+    final resolvedAuthState = authState.asData?.value;
+    final isAuthResolved = resolvedAuthState != null;
+    if (resolvedAuthState != null) {
+      _lastResolvedAuthContextKey ??= _authContextKey(resolvedAuthState);
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -50,18 +100,69 @@ class ForumHomePage extends ConsumerWidget {
           ),
         ],
       ),
-      body: state.when(
-        loading: () => const SizedBox.shrink(),
-        error: (error, _) => _ForumHomeErrorView(
-          message: error.toString(),
-          onRetry: () => ref
-              .read(forumHomeControllerProvider.notifier)
-              .refresh(forceNetwork: true),
-        ),
-        data: (data) => _ForumHomeContent(
-          data: data,
-          imageHeaderBuilder: imageHeaderBuilder,
-        ),
+      body: !isAuthResolved || _isSwitchingAuthContext
+          ? const _ForumHomeLoadingBody()
+          : _ResolvedForumHomeBody(imageHeaderBuilder: imageHeaderBuilder),
+    );
+  }
+
+  Future<void> _handleAuthContextChanged() async {
+    try {
+      await ref
+          .read(nativePageCacheInvalidationServiceProvider)
+          .invalidateForumHome();
+      ref.invalidate(forumHomeControllerProvider);
+    } finally {
+      _isHandlingAuthContextChange = false;
+      if (mounted) {
+        setState(() {
+          _isSwitchingAuthContext = false;
+        });
+      }
+    }
+  }
+
+  String _authContextKey(AuthSessionViewState state) {
+    if (!state.isLoggedIn) {
+      return 'anonymous';
+    }
+    return 'logged_in:${state.uid.trim()}';
+  }
+}
+
+class _ResolvedForumHomeBody extends ConsumerWidget {
+  const _ResolvedForumHomeBody({required this.imageHeaderBuilder});
+
+  final ImageRequestHeaderBuilder imageHeaderBuilder;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen<AsyncValue<ForumHomePageState>>(forumHomeControllerProvider, (
+      previous,
+      next,
+    ) {
+      final previousHint = previous?.asData?.value.refreshHint;
+      final nextHint = next.asData?.value.refreshHint;
+      if (nextHint == null || nextHint == previousHint) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(nextHint)));
+    });
+
+    final state = ref.watch(forumHomeControllerProvider);
+    return state.when(
+      loading: () => const _ForumHomeLoadingBody(),
+      error: (error, _) => _ForumHomeErrorView(
+        message: error.toString(),
+        onRetry: () => ref
+            .read(forumHomeControllerProvider.notifier)
+            .refresh(forceNetwork: true),
+      ),
+      data: (data) => _ForumHomeContent(
+        state: data,
+        imageHeaderBuilder: imageHeaderBuilder,
       ),
     );
   }
@@ -69,11 +170,11 @@ class ForumHomePage extends ConsumerWidget {
 
 class _ForumHomeContent extends ConsumerStatefulWidget {
   const _ForumHomeContent({
-    required this.data,
+    required this.state,
     required this.imageHeaderBuilder,
   });
 
-  final ForumHomeViewData data;
+  final ForumHomePageState state;
   final ImageRequestHeaderBuilder imageHeaderBuilder;
 
   @override
@@ -87,7 +188,7 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
   void didUpdateWidget(covariant _ForumHomeContent oldWidget) {
     super.didUpdateWidget(oldWidget);
     final activeKeys = {
-      for (final section in widget.data.sections) _sectionKey(section),
+      for (final section in widget.state.viewData.sections) _sectionKey(section),
     };
     _collapsedSectionKeys.removeWhere((key) => !activeKeys.contains(key));
   }
@@ -99,29 +200,45 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
       onRefresh: () => ref
           .read(forumHomeControllerProvider.notifier)
           .refresh(forceNetwork: true),
-      child: ColoredBox(
-        color: palette.background,
-        child: ListView(
-          key: const Key('forum-home-list'),
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.only(bottom: 10),
-          children: [
-            ForumHomeCarousel(
-              items: widget.data.carouselItems,
-              headerBuilder: widget.imageHeaderBuilder,
-              onOpen: (item) => _openCarouselTarget(context, ref, item),
-            ),
-            for (final section in widget.data.sections)
-              ForumHomeSectionCard(
-                title: section.title,
-                isCollapsed: _collapsedSectionKeys.contains(
-                  _sectionKey(section),
+      child: Stack(
+        children: [
+          ColoredBox(
+            color: palette.background,
+            child: ListView(
+              key: const Key('forum-home-list'),
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.only(bottom: 10),
+              children: [
+                ForumHomeCarousel(
+                  items: widget.state.viewData.carouselItems,
+                  headerBuilder: widget.imageHeaderBuilder,
+                  onOpen: (item) => _openCarouselTarget(context, ref, item),
                 ),
-                onToggle: () => _toggleSection(section),
-                children: _buildRows(context, section),
+                for (final section in widget.state.viewData.sections)
+                  ForumHomeSectionCard(
+                    title: section.title,
+                    isCollapsed: _collapsedSectionKeys.contains(
+                      _sectionKey(section),
+                    ),
+                    onToggle: () => _toggleSection(section),
+                    children: _buildRows(context, section),
+                  ),
+              ],
+            ),
+          ),
+          if (widget.state.isRefreshing)
+            const Positioned(
+              top: 0,
+              left: 12,
+              right: 12,
+              child: IgnorePointer(
+                child: LinearProgressIndicator(
+                  key: Key('forum-home-refresh-progress'),
+                  minHeight: 2,
+                ),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
@@ -203,6 +320,17 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
 
     final uri = ref.read(forumWebViewNavigatorProvider).resolve(item.targetUrl);
     await ref.read(forumWebViewExternalLauncherProvider).launch(uri);
+  }
+}
+
+class _ForumHomeLoadingBody extends StatelessWidget {
+  const _ForumHomeLoadingBody();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox.expand(
+      key: Key('forum-home-loading-body'),
+    );
   }
 }
 

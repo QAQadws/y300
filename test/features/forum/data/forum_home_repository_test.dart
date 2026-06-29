@@ -197,6 +197,47 @@ void main() {
     );
 
     test(
+      'request profile override takes precedence over session store when writing caches',
+      () async {
+        final adapter = _ForumHomeHtmlTestAdapter();
+        final documentCache = _FakeDocumentCacheService();
+        final snapshotCache =
+            _FakeParsedSnapshotCacheService<ForumHomePayload>();
+        final sessionStore = YamiboSessionStore()
+          ..saveExtracted(
+            YamiboSessionSnapshot(
+              isLoggedIn: true,
+              uid: '597454',
+              username: 'tester',
+              formhash: '14502ecf',
+              updatedAt: DateTime(2026, 1, 1),
+              source: 'test',
+            ),
+          );
+        final repository = _buildHtmlRepository(
+          adapter,
+          sessionStore: sessionStore,
+          documentCacheService: documentCache,
+          snapshotCacheService: snapshotCache,
+        );
+
+        final result = await repository.getForumHomePayload(
+          requestProfileOverride: DocumentRequestProfile.anonymous,
+        );
+
+        expect(result.isSuccess, isTrue);
+        expect(
+          documentCache.putDocuments.single.requestProfile,
+          DocumentRequestProfile.anonymous,
+        );
+        expect(
+          snapshotCache.putDescriptors.single.cacheKey,
+          contains(DocumentRequestProfile.anonymous.id),
+        );
+      },
+    );
+
+    test(
       'network first skips fresh home snapshot and refreshes network',
       () async {
         final adapter = _ForumHomeHtmlTestAdapter();
@@ -283,6 +324,53 @@ void main() {
       expect(documentCache.touchedKeys, <String>[descriptor.cacheKey]);
       expect(documentCache.touchedAt[descriptor.cacheKey], now);
     });
+
+    test(
+      'request profile override uses explicit cache bucket for document fallback',
+      () async {
+        final adapter = _ForumHomeHtmlTestAdapter(failMobileIndex: true);
+        final documentCache = _FakeDocumentCacheService();
+        final sessionStore = YamiboSessionStore()
+          ..saveExtracted(
+            YamiboSessionSnapshot(
+              isLoggedIn: true,
+              uid: '597454',
+              username: 'tester',
+              formhash: '14502ecf',
+              updatedAt: DateTime(2026, 1, 1),
+              source: 'test',
+            ),
+          );
+        final descriptor = const CacheKeyCanonicalizer().forumHome(
+          requestProfile: DocumentRequestProfile.anonymous,
+        );
+        documentCache.seed(
+          CachedDocument(
+            cacheKey: descriptor.cacheKey,
+            ownerType: descriptor.ownerType,
+            ownerId: descriptor.ownerId,
+            sourceUrl: descriptor.sourceUrl,
+            requestProfile: descriptor.requestProfile,
+            body: _mobileHomeHtml,
+            fetchedAt: DateTime(2026, 1, 1, 10),
+            updatedAt: DateTime(2026, 1, 1, 10),
+          ),
+        );
+        final repository = _buildHtmlRepository(
+          adapter,
+          sessionStore: sessionStore,
+          documentCacheService: documentCache,
+        );
+
+        final result = await repository.getForumHomePayload(
+          cachePolicy: CacheLoadPolicy.networkFirst,
+          requestProfileOverride: DocumentRequestProfile.anonymous,
+        );
+
+        expect(result.isSuccess, isTrue);
+        expect(documentCache.touchedKeys, <String>[descriptor.cacheKey]);
+      },
+    );
 
     test(
       'network failure does not fall back to other request profile cache',

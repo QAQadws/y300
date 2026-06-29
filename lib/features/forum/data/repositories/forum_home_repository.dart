@@ -38,6 +38,7 @@ class ForumHomePayload {
 abstract class ForumHomeRepository {
   Future<ApiResult<ForumHomePayload>> getForumHomePayload({
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    DocumentRequestProfile? requestProfileOverride,
   });
 }
 
@@ -89,8 +90,11 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
   @override
   Future<ApiResult<ForumHomePayload>> getForumHomePayload({
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    DocumentRequestProfile? requestProfileOverride,
   }) async {
-    final requestProfile = _resolveRequestProfile();
+    final requestProfile = _resolveRequestProfile(
+      requestProfileOverride: requestProfileOverride,
+    );
     final documentDescriptor = _cacheKeyCanonicalizer.forumHome(
       requestProfile: requestProfile,
     );
@@ -176,7 +180,12 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
     }
   }
 
-  DocumentRequestProfile _resolveRequestProfile() {
+  DocumentRequestProfile _resolveRequestProfile({
+    DocumentRequestProfile? requestProfileOverride,
+  }) {
+    if (requestProfileOverride != null) {
+      return requestProfileOverride;
+    }
     final session = _sessionStore?.readCurrent();
     return session?.isLoggedIn == true
         ? DocumentRequestProfile.loggedIn
@@ -447,6 +456,7 @@ class DiscuzForumHomeRepository implements ForumHomeRepository {
   @override
   Future<ApiResult<ForumHomePayload>> getForumHomePayload({
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    DocumentRequestProfile? requestProfileOverride,
   }) async {
     final forumResult = await _loadForumIndex();
     if (forumResult.isFailure) {

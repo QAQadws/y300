@@ -1,48 +1,87 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
+import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
 
 final forumHomeControllerProvider =
-    AsyncNotifierProvider.autoDispose<ForumHomeController, ForumHomeViewData>(
+    AsyncNotifierProvider.autoDispose<ForumHomeController, ForumHomePageState>(
       ForumHomeController.new,
     );
 
 /// 论坛首页状态控制器：负责拉取数据和映射为 UI 模型
-class ForumHomeController extends AsyncNotifier<ForumHomeViewData> {
+class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
   @override
-  Future<ForumHomeViewData> build() async {
+  Future<ForumHomePageState> build() async {
     return _fetchForumHome();
   }
 
   Future<void> refresh({bool forceNetwork = false}) async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(
-      () => _fetchForumHome(
-        cachePolicy: forceNetwork
-            ? CacheLoadPolicy.networkFirst
-            : CacheLoadPolicy.cacheFirst,
-      ),
-    );
+    final current = state.asData?.value;
+    final cachePolicy = forceNetwork
+        ? CacheLoadPolicy.networkFirst
+        : CacheLoadPolicy.cacheFirst;
+    if (current == null) {
+      state = const AsyncLoading();
+      state = await AsyncValue.guard(
+        () => _fetchForumHome(cachePolicy: cachePolicy),
+      );
+      return;
+    }
+
+    if (current.isRefreshing) {
+      return;
+    }
+    state = AsyncData(current.copyWith(isRefreshing: true, clearHint: true));
+    try {
+      final nextState = await _fetchForumHome(cachePolicy: cachePolicy);
+      state = AsyncData(
+        nextState.copyWith(
+          isRefreshing: false,
+          clearHint: true,
+        ),
+      );
+    } catch (error) {
+      state = AsyncData(
+        current.copyWith(
+          isRefreshing: false,
+          refreshHint: '刷新失败：$error',
+        ),
+      );
+    }
   }
 
-  Future<ForumHomeViewData> _fetchForumHome({
+  Future<ForumHomePageState> _fetchForumHome({
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
     final repository = ref.read(forumHomeRepositoryProvider);
+    final requestProfile = _resolveRequestProfile();
     final result = await repository.getForumHomePayload(
       cachePolicy: cachePolicy,
+      requestProfileOverride: requestProfile,
     );
 
     return result.when(
-      success: (payload) => ForumHomeViewData(
-        sections: _mapSections(payload),
-        isLoggedIn: payload.isLoggedIn,
-        carouselItems: payload.chromeData.carouselItems,
+      success: (payload) => ForumHomePageState(
+        viewData: ForumHomeViewData(
+          sections: _mapSections(payload),
+          isLoggedIn: payload.isLoggedIn,
+          carouselItems: payload.chromeData.carouselItems,
+        ),
+        requestProfile: requestProfile,
+        isRefreshing: false,
       ),
       failure: (error) => throw ForumHomeException(error.message),
     );
+  }
+
+  DocumentRequestProfile _resolveRequestProfile() {
+    final authState = ref.read(authSessionControllerProvider).asData?.value;
+    return authState?.isLoggedIn == true
+        ? DocumentRequestProfile.loggedIn
+        : DocumentRequestProfile.anonymous;
   }
 
   List<ForumSection> _mapSections(ForumHomePayload payload) {

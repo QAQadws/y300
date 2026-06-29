@@ -1,3 +1,4 @@
+import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
 
@@ -65,5 +66,34 @@ class ForumHomeViewData {
       }
     }
     return count;
+  }
+}
+
+class ForumHomePageState {
+  const ForumHomePageState({
+    required this.viewData,
+    required this.requestProfile,
+    required this.isRefreshing,
+    this.refreshHint,
+  });
+
+  final ForumHomeViewData viewData;
+  final DocumentRequestProfile requestProfile;
+  final bool isRefreshing;
+  final String? refreshHint;
+
+  ForumHomePageState copyWith({
+    ForumHomeViewData? viewData,
+    DocumentRequestProfile? requestProfile,
+    bool? isRefreshing,
+    String? refreshHint,
+    bool clearHint = false,
+  }) {
+    return ForumHomePageState(
+      viewData: viewData ?? this.viewData,
+      requestProfile: requestProfile ?? this.requestProfile,
+      isRefreshing: isRefreshing ?? this.isRefreshing,
+      refreshHint: clearHint ? null : (refreshHint ?? this.refreshHint),
+    );
   }
 }
