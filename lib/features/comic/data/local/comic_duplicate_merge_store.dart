@@ -314,15 +314,26 @@ class ComicDuplicateMergeStore {
     required String targetComicId,
     bool moveEpisodeState = true,
   }) async {
-    await txn.update(
-      ComicLocalDb.episodeImagesTable,
-      <String, Object?>{
-        'episode_id': targetEpisodeId,
-        'stable_cache_key': null,
-      },
-      where: 'episode_id = ?',
-      whereArgs: <Object>[sourceEpisodeId],
-    );
+    // Only reparent images if the target episode has none yet. When both
+    // episodes are from the same source thread, their image lists are
+    // identical — keeping the target's copy and discarding the source's
+    // avoids duplicates. The source images are removed by cascade when the
+    // source episode row is deleted at the end of mergeSourceComicIntoTarget.
+    final targetImageCount = (await txn.rawQuery(
+      'SELECT COUNT(*) AS c FROM ${ComicLocalDb.episodeImagesTable} WHERE episode_id = ?',
+      <Object>[targetEpisodeId],
+    )).first['c'] as int? ?? 0;
+    if (targetImageCount == 0) {
+      await txn.update(
+        ComicLocalDb.episodeImagesTable,
+        <String, Object?>{
+          'episode_id': targetEpisodeId,
+          'stable_cache_key': null,
+        },
+        where: 'episode_id = ?',
+        whereArgs: <Object>[sourceEpisodeId],
+      );
+    }
     await txn.update(
       ComicLocalDb.readingProgressTable,
       <String, Object?>{'episode_id': targetEpisodeId},

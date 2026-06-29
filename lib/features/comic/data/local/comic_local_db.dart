@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 25;
+  static const int dbVersion = 26;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -122,6 +122,7 @@ class ComicLocalDb {
         protected INTEGER NOT NULL DEFAULT 0,
         cache_local_path TEXT,
         cache_status TEXT NOT NULL DEFAULT 'none',
+        UNIQUE(episode_id, image_index),
         FOREIGN KEY (episode_id) REFERENCES $episodesTable(episode_id) ON DELETE CASCADE
       )
     ''');

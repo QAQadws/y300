@@ -262,5 +262,53 @@ void main() {
       expect(cachedRows.single['owner_id'], 'yamibo:target');
       expect(queueRows.single['comic_id'], 'yamibo:target');
     });
+
+    test('mergeDuplicateGroup: shared episode with images on both sides → no duplicate images after merge', () async {
+      // Both comics share source_tid '6000' and both have images seeded for it.
+      // After merge, the surviving episode must have exactly those images — not doubled.
+      await repository.addToShelf(
+        comicId: 'yamibo:aa',
+        tid: '6000',
+        fid: '30',
+        title: 'Long Duplicate Title',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>[
+            'https://img.test/p1.jpg',
+            'https://img.test/p2.jpg',
+          ],
+          episodeLinks: <ComicEpisodeLink>[],
+          plainTextSummary: '',
+        ),
+      );
+      await repository.addToShelf(
+        comicId: 'yamibo:bb',
+        tid: '6000',
+        fid: '30',
+        title: 'Short',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>[
+            'https://img.test/p1.jpg',
+            'https://img.test/p2.jpg',
+          ],
+          episodeLinks: <ComicEpisodeLink>[],
+          plainTextSummary: '',
+        ),
+      );
+
+      final result = await store.mergeDuplicateGroup(
+        comicIds: const <String>{'yamibo:aa', 'yamibo:bb'},
+      );
+
+      final db = await dbFuture;
+      final images = await db.query(
+        ComicLocalDb.episodeImagesTable,
+        where: 'episode_id = ?',
+        whereArgs: <Object>['${result.targetComicId}:6000'],
+        orderBy: 'image_index ASC',
+      );
+      expect(images, hasLength(2));
+      expect(images[0]['image_url'], 'https://img.test/p1.jpg');
+      expect(images[1]['image_url'], 'https://img.test/p2.jpg');
+    });
   });
 }
