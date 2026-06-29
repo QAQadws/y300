@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
@@ -207,28 +208,30 @@ void main() {
 
   testWidgets('list mode keeps leading cover when item has cover source', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: UnifiedShelfPage(
-          adapter: _FakeShelfAdapter(
-            initialDisplayMode: LibraryDisplayMode.list,
-            onQuery: ({
-              required List<LibraryCategory> categories,
-              required LibraryFilterSet filters,
-              required LibraryShelfSortOption sortOption,
-              required String keyword,
-            }) async {
-              return {
-                'default': [
-                  _item(
-                    workId: 'covered',
-                    title: 'Covered Comic',
-                    coverImageUrl: 'https://example.com/covered.jpg',
-                  ),
-                ],
-              };
-            },
+      ProviderScope(
+        child: MaterialApp(
+          home: UnifiedShelfPage(
+            adapter: _FakeShelfAdapter(
+              initialDisplayMode: LibraryDisplayMode.list,
+              onQuery: ({
+                required List<LibraryCategory> categories,
+                required LibraryFilterSet filters,
+                required LibraryShelfSortOption sortOption,
+                required String keyword,
+              }) async {
+                return {
+                  'default': [
+                    _item(
+                      workId: 'covered',
+                      title: 'Covered Comic',
+                      coverImageUrl: 'https://example.com/covered.jpg',
+                    ),
+                  ],
+                };
+              },
+            ),
+            onOpenWork: (context, workId) async {},
           ),
-          onOpenWork: (context, workId) async {},
         ),
       ),
     );
@@ -350,30 +353,32 @@ void main() {
     addTearDown(progress.dispose);
 
     await tester.pumpWidget(
-      MaterialApp(
-        theme: theme,
-        home: UnifiedShelfPage(
-          adapter: _FakeShelfAdapter(
-            initialDisplayMode: LibraryDisplayMode.list,
-            taskProgress: progress,
-            onQuery: ({
-              required List<LibraryCategory> categories,
-              required LibraryFilterSet filters,
-              required LibraryShelfSortOption sortOption,
-              required String keyword,
-            }) async {
-              return {
-                'default': [
-                  _item(
-                    workId: 'covered',
-                    title: 'Covered Comic',
-                    coverImageUrl: 'https://example.com/covered.jpg',
-                  ),
-                ],
-              };
-            },
+      ProviderScope(
+        child: MaterialApp(
+          theme: theme,
+          home: UnifiedShelfPage(
+            adapter: _FakeShelfAdapter(
+              initialDisplayMode: LibraryDisplayMode.list,
+              taskProgress: progress,
+              onQuery: ({
+                required List<LibraryCategory> categories,
+                required LibraryFilterSet filters,
+                required LibraryShelfSortOption sortOption,
+                required String keyword,
+              }) async {
+                return {
+                  'default': [
+                    _item(
+                      workId: 'covered',
+                      title: 'Covered Comic',
+                      coverImageUrl: 'https://example.com/covered.jpg',
+                    ),
+                  ],
+                };
+              },
+            ),
+            onOpenWork: (context, workId) async {},
           ),
-          onOpenWork: (context, workId) async {},
         ),
       ),
     );

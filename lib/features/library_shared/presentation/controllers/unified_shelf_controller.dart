@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:y300/features/image_loading/domain/image_prefetcher.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -111,13 +112,19 @@ class UnifiedShelfState {
 class UnifiedShelfController {
   UnifiedShelfController({
     required ShelfModuleAdapter adapter,
-    ShelfCoverWarmupService? coverWarmupService,
+    int coverPrefetchConcurrency = 3,
+    ImagePrefetcher Function(
+      ImagePrefetchRunner runner,
+      ImagePrefetcherSnapshotHandler onSnapshot,
+    )?
+    coverPrefetcherFactory,
     ShelfFeatureFlags featureFlags = ShelfFeatureFlags.defaults,
     void Function()? onStateChanged,
     bool backgroundReloadEnabled = true,
     LibraryTaskProgressHub? taskProgressHub,
   })  : _adapter = adapter,
-        _coverWarmupService = coverWarmupService ?? ShelfCoverWarmupService(),
+        _coverPrefetchConcurrency = coverPrefetchConcurrency,
+        _coverPrefetcherFactory = coverPrefetcherFactory,
         _featureFlags = featureFlags,
         _onStateChanged = onStateChanged,
         _backgroundReloadEnabled = backgroundReloadEnabled,
@@ -146,7 +153,11 @@ class UnifiedShelfController {
   }
 
   final ShelfModuleAdapter _adapter;
-  final ShelfCoverWarmupService _coverWarmupService;
+  final int _coverPrefetchConcurrency;
+  final ImagePrefetcher Function(
+    ImagePrefetchRunner runner,
+    ImagePrefetcherSnapshotHandler onSnapshot,
+  )? _coverPrefetcherFactory;
   final ShelfFeatureFlags _featureFlags;
   final LibraryShelfSnapshotDiffer _snapshotDiffer = const LibraryShelfSnapshotDiffer();
   final void Function()? _onStateChanged;
@@ -161,7 +172,9 @@ class UnifiedShelfController {
   Timer? _backgroundReloadTimer;
   Completer<void>? _pendingKeywordCompleter;
   final Map<String, ShelfCoverVisibleRange> _visibleRangesByCategory = <String, ShelfCoverVisibleRange>{};
-  ShelfCoverWarmupToken? _coverWarmupToken;
+  /// 持久化封面预取器：跨可见区变化复用，只重排不取消可见项（替代旧的
+  /// cancel-restart 令牌）。懒创建于首次预热。
+  ImagePrefetcher? _coverPrefetcher;
   ValueNotifier<LibraryShelfTaskProgress?>? _coverWarmupProgress;
   LibraryTaskProgressRegistration? _coverWarmupProgressRegistration;
   LibraryShelfTaskProgress? _lastTaskProgress;
@@ -188,8 +201,8 @@ class UnifiedShelfController {
   void dispose() {
     _disposed = true;
     _reloadGeneration++;
-    _coverWarmupToken?.cancel();
-    _coverWarmupToken = null;
+    _coverPrefetcher?.dispose();
+    _coverPrefetcher = null;
     _coverWarmupProgress?.value = null;
     _coverWarmupProgressRegistration?.dispose();
     _coverWarmupProgressRegistration = null;
@@ -567,24 +580,18 @@ class UnifiedShelfController {
         ? _adapter as ShelfCoverWarmupAdapter
         : null;
     if (!_featureFlags.useShelfCoverQueue || warmupAdapter == null) {
-      _setCoverWarmupProgress(
-        null,
-        generation: generation,
-        token: _coverWarmupToken,
-      );
+      _setCoverWarmupProgress(null, generation: generation);
       return;
     }
+    final prefetcher = _ensureCoverPrefetcher(warmupAdapter);
     final snapshot = _state;
-    _coverWarmupToken?.cancel();
-    final token = ShelfCoverWarmupToken();
-    _coverWarmupToken = token;
     unawaited(() async {
       try {
         final requests = await warmupAdapter.buildCoverWarmupRequests(
           itemsByCategory: snapshot.itemsByCategory,
           selectedCategoryId: snapshot.selectedCategoryId,
         );
-        if (_disposed || generation != _reloadGeneration || token.isCancelled) {
+        if (_disposed || generation != _reloadGeneration) {
           return;
         }
         final prioritized = prioritizeShelfCoverWarmupRequests(
@@ -597,70 +604,80 @@ class UnifiedShelfController {
           gridColumnCount: snapshot.gridColumnCount,
         );
         if (prioritized.isEmpty) {
-          _setCoverWarmupProgress(null, generation: generation, token: token);
           return;
         }
-        var processedCount = 0;
-        _setCoverWarmupProgress(
-          LibraryShelfTaskProgress(
-            message: '正在预热封面',
-            current: 0,
-            total: prioritized.length,
-            source: LibraryMutationSource.coverWarmup,
-            visible: false,
-            reloadOnCompletion: false,
-          ),
-          generation: generation,
-          token: token,
-        );
-        await _coverWarmupService.warmCovers(
-          requests: prioritized,
-          warmCover: (request) async {
-            try {
-              return await warmupAdapter.warmCover(request);
-            } finally {
-              processedCount += 1;
-              _setCoverWarmupProgress(
-                LibraryShelfTaskProgress(
-                  message: '正在预热封面',
-                  current: processedCount,
-                  total: prioritized.length,
-                  source: LibraryMutationSource.coverWarmup,
-                  visible: false,
-                  reloadOnCompletion: false,
-                ),
-                generation: generation,
-                token: token,
-              );
-            }
-          },
-          onResult: (result) {
-            if (_disposed || generation != _reloadGeneration) {
-              return;
-            }
-            _applyCoverWarmupResult(result);
-          },
-          token: token,
-        );
+        // 只重排、不取消：把新窗口的优先级合并进持久队列。快速滚动时可见项
+        // （priority=currentViewport）始终排在最前，且正在运行的下载不被打断。
+        prefetcher.submit(<ImagePrefetchRequest>[
+          for (final request in prioritized)
+            ImagePrefetchRequest(
+              dedupeKey: request.cacheKey,
+              priority: request.priority.index,
+              payload: request,
+            ),
+        ]);
       } catch (_) {
         // Cover warmup is an opportunistic background path. Request building
         // failures must not escape into Flutter's unawaited future handler.
-      } finally {
-        _setCoverWarmupProgress(null, generation: generation, token: token);
       }
     }());
+  }
+
+  /// 懒创建持久封面预取器。runner 执行实际预热与写回，snapshot 驱动进度提示。
+  ImagePrefetcher _ensureCoverPrefetcher(ShelfCoverWarmupAdapter warmupAdapter) {
+    final existing = _coverPrefetcher;
+    if (existing != null) {
+      return existing;
+    }
+    Future<bool> runner(ImagePrefetchRequest request) async {
+      if (_disposed) {
+        return false;
+      }
+      final coverRequest = request.payload as ShelfCoverWarmupRequest;
+      final result = await warmupAdapter.warmCover(coverRequest);
+      if (_disposed || result == null || !result.hasPath) {
+        return false;
+      }
+      // workId 已不在当前书架时，_applyCoverWarmupResult 自然 no-op。
+      _applyCoverWarmupResult(result);
+      return true;
+    }
+
+    void onSnapshot(ImagePrefetcherSnapshot snapshot) {
+      if (_disposed) {
+        return;
+      }
+      final progress = snapshot.isIdle
+          ? null
+          : LibraryShelfTaskProgress(
+              message: '正在预热封面',
+              current: snapshot.runningCount,
+              total: snapshot.runningCount + snapshot.pendingCount,
+              source: LibraryMutationSource.coverWarmup,
+              visible: false,
+              reloadOnCompletion: false,
+            );
+      _setCoverWarmupProgress(progress, generation: _reloadGeneration);
+    }
+
+    final factory = _coverPrefetcherFactory;
+    final prefetcher = factory != null
+        ? factory(runner, onSnapshot)
+        : DefaultImagePrefetcher(
+            runner: runner,
+            onSnapshot: onSnapshot,
+            maxConcurrent: _coverPrefetchConcurrency,
+          );
+    _coverPrefetcher = prefetcher;
+    return prefetcher;
   }
 
   void _setCoverWarmupProgress(
     LibraryShelfTaskProgress? progress, {
     required int generation,
-    required ShelfCoverWarmupToken? token,
   }) {
     final notifier = _coverWarmupProgress;
     if (notifier == null || _disposed || generation != _reloadGeneration) {
-      return;
-    }
-    if (token != null && !identical(_coverWarmupToken, token)) {
       return;
     }
     notifier.value = progress;

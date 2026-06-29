@@ -81,22 +81,6 @@ class ShelfCoverWarmupResult {
   }
 }
 
-typedef ShelfCoverWarmupRunner = Future<ShelfCoverWarmupResult?> Function(
-  ShelfCoverWarmupRequest request,
-);
-
-typedef ShelfCoverWarmupResultHandler = void Function(ShelfCoverWarmupResult result);
-
-class ShelfCoverWarmupToken {
-  var _cancelled = false;
-
-  bool get isCancelled => _cancelled;
-
-  void cancel() {
-    _cancelled = true;
-  }
-}
-
 class ShelfCoverVisibleRange {
   const ShelfCoverVisibleRange({
     required this.firstIndex,
@@ -132,116 +116,6 @@ class ShelfCoverVisibleRange {
 
   @override
   int get hashCode => Object.hash(firstIndex, lastIndex);
-}
-
-class ShelfCoverWarmupService {
-  ShelfCoverWarmupService({
-    int maxConcurrent = 3,
-    Duration failureCooldown = const Duration(minutes: 5),
-    DateTime Function()? now,
-  })  : _maxConcurrent = maxConcurrent < 1 ? 1 : maxConcurrent,
-        _failureCooldown = failureCooldown,
-        _now = now ?? DateTime.now;
-
-  final int _maxConcurrent;
-  final Duration _failureCooldown;
-  final DateTime Function() _now;
-  final Set<String> _runningCacheKeys = <String>{};
-  final Set<String> _completedRequestKeys = <String>{};
-  final Map<String, DateTime> _cooldownUntilByRequestKey = <String, DateTime>{};
-
-  Future<void> warmCovers({
-    required Iterable<ShelfCoverWarmupRequest> requests,
-    required ShelfCoverWarmupRunner warmCover,
-    required ShelfCoverWarmupResultHandler onResult,
-    ShelfCoverWarmupToken? token,
-  }) async {
-    final queue = _dedupeAndSort(requests);
-    if (queue.isEmpty) {
-      return;
-    }
-
-    var nextIndex = 0;
-    final workerCount = queue.length < _maxConcurrent ? queue.length : _maxConcurrent;
-    final workers = List<Future<void>>.generate(workerCount, (_) async {
-      while (nextIndex < queue.length) {
-        if (token?.isCancelled ?? false) {
-          return;
-        }
-        final request = queue[nextIndex++];
-        final requestKey = _requestKey(request);
-        if (!_shouldRun(request, requestKey)) {
-          continue;
-        }
-        if (!_runningCacheKeys.add(request.cacheKey)) {
-          continue;
-        }
-        try {
-          final result = await warmCover(request);
-          if (result != null && result.hasPath) {
-            _completedRequestKeys.add(requestKey);
-            onResult(result);
-          } else {
-            _cooldownUntilByRequestKey[requestKey] = _now().add(_failureCooldown);
-          }
-        } catch (_) {
-          _cooldownUntilByRequestKey[requestKey] = _now().add(_failureCooldown);
-          // Cover warming is best-effort. A failed cover must never break the
-          // visible shelf metadata path.
-        } finally {
-          _runningCacheKeys.remove(request.cacheKey);
-        }
-      }
-    });
-
-    await Future.wait(workers);
-  }
-
-  List<ShelfCoverWarmupRequest> _dedupeAndSort(
-    Iterable<ShelfCoverWarmupRequest> requests,
-  ) {
-    final seenCacheKeysInBatch = <String>{};
-    final orderByRequest = <ShelfCoverWarmupRequest, int>{};
-    final queue = <ShelfCoverWarmupRequest>[];
-    for (final request in requests) {
-      final cacheKey = request.cacheKey.trim();
-      final sourceUrl = request.sourceUrl.trim();
-      if (cacheKey.isEmpty || sourceUrl.isEmpty) {
-        continue;
-      }
-      if (!seenCacheKeysInBatch.add(cacheKey)) {
-        continue;
-      }
-      orderByRequest[request] = queue.length;
-      queue.add(request);
-    }
-    queue.sort((a, b) {
-      final priority = a.priority.index.compareTo(b.priority.index);
-      if (priority != 0) {
-        return priority;
-      }
-      return (orderByRequest[a] ?? 0).compareTo(orderByRequest[b] ?? 0);
-    });
-    return queue;
-  }
-
-  bool _shouldRun(ShelfCoverWarmupRequest request, String requestKey) {
-    if (_completedRequestKeys.contains(requestKey)) {
-      return false;
-    }
-    final cooldownUntil = _cooldownUntilByRequestKey[requestKey];
-    if (cooldownUntil != null) {
-      if (_now().isBefore(cooldownUntil)) {
-        return false;
-      }
-      _cooldownUntilByRequestKey.remove(requestKey);
-    }
-    return !_runningCacheKeys.contains(request.cacheKey);
-  }
-
-  String _requestKey(ShelfCoverWarmupRequest request) {
-    return '${request.cacheKey.trim()}\n${request.sourceUrl.trim()}';
-  }
 }
 
 List<LibraryWorkItem> orderedShelfItemsForCoverWarmup({

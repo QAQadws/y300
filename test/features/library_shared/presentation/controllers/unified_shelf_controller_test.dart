@@ -318,7 +318,7 @@ void main() {
       var stateChangeCount = 0;
       final controller = UnifiedShelfController(
         adapter: adapter,
-        coverWarmupService: ShelfCoverWarmupService(maxConcurrent: 1),
+        coverPrefetchConcurrency: 1,
         onStateChanged: () {
           stateChangeCount++;
         },
@@ -372,7 +372,7 @@ void main() {
       );
       final controller = UnifiedShelfController(
         adapter: adapter,
-        coverWarmupService: ShelfCoverWarmupService(maxConcurrent: 1),
+        coverPrefetchConcurrency: 1,
       );
       final emitted = <UnifiedShelfState>[];
       final patched = Completer<void>();
@@ -415,7 +415,7 @@ void main() {
       );
       final controller = UnifiedShelfController(
         adapter: adapter,
-        coverWarmupService: ShelfCoverWarmupService(maxConcurrent: 1),
+        coverPrefetchConcurrency: 1,
       );
 
       controller.reportVisibleRange(categoryId: 'default', firstIndex: 1, lastIndex: 1);
@@ -442,7 +442,7 @@ void main() {
       );
       final controller = UnifiedShelfController(
         adapter: adapter,
-        coverWarmupService: ShelfCoverWarmupService(maxConcurrent: 1),
+        coverPrefetchConcurrency: 1,
         featureFlags: ShelfFeatureFlags.defaults.copyWith(useShelfCoverQueue: false),
       );
 
@@ -667,7 +667,7 @@ void main() {
       addTearDown(hub.dispose);
       final controller = UnifiedShelfController(
         adapter: adapter,
-        coverWarmupService: ShelfCoverWarmupService(maxConcurrent: 1),
+        coverPrefetchConcurrency: 1,
         taskProgressHub: hub,
       );
 
