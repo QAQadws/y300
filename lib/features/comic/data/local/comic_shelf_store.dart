@@ -257,7 +257,9 @@ class ComicShelfStore {
         COALESCE(c.custom_cover_image_url, c.cover_image_url) AS cover_image_url,
         c.custom_cover_image_url,
         c.cover_local_path,
-        c.custom_cover_local_path
+        c.custom_cover_local_path,
+        c.custom_cover_focus_x,
+        c.custom_cover_focus_y
       FROM ${ComicLocalDb.shelfItemsTable} si
       INNER JOIN ${ComicLocalDb.comicsTable} c
         ON si.comic_id = c.comic_id
@@ -291,6 +293,10 @@ class ComicShelfStore {
             coverLocalPath: row['cover_local_path'] as String?,
             customCoverLocalPath:
                 row['custom_cover_local_path'] as String?,
+            customCoverFocusX:
+                (row['custom_cover_focus_x'] as num?)?.toDouble(),
+            customCoverFocusY:
+                (row['custom_cover_focus_y'] as num?)?.toDouble(),
             categoryId: row['category_id'] as String,
             addedAt: DateTime.fromMillisecondsSinceEpoch(
               row['added_at'] as int,

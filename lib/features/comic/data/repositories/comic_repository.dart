@@ -40,6 +40,15 @@ abstract class ComicRepository implements CatalogUrlUpdater {
     String? sourceEpisodeId,
     int? sourceImageIndex,
     String? sourceImageUrl,
+    double? focusX,
+    double? focusY,
+  });
+
+  /// 仅更新已有自定义封面的焦点（不改封面文件），用于详情页“调整封面焦点”。
+  Future<void> updateCustomCoverFocus({
+    required String comicId,
+    required double? focusX,
+    required double? focusY,
   });
 
   Future<void> updateCustomMetadata({

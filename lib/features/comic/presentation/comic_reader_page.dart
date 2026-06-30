@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' as io;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,7 @@ import 'package:y300/features/comic/domain/services/comic_reader_chapter_preload
 import 'package:y300/features/comic/presentation/comic_reader_capability.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
+import 'package:y300/features/library_shared/presentation/widgets/cover_focal_point_picker.dart';
 import 'package:y300/features/reader_shared/domain/reader_preferences/reader_preferences.dart';
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 import 'package:y300/features/reader_shared/presentation/reader_preferences/reader_preferences_provider.dart';
@@ -199,7 +201,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
       case _ComicReaderMoreAction.markReadToggle:
         await controller.setCurrentEpisodeRead(!viewState.isCurrentEpisodeRead);
       case _ComicReaderMoreAction.setCurrentPageAsCover:
-        await controller.setCurrentImageAsCover();
+        await _handleSetCoverWithFocus();
       case _ComicReaderMoreAction.cacheEpisode:
         await controller.cacheCurrentEpisode();
       case _ComicReaderMoreAction.cacheUnread:
@@ -209,6 +211,28 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
       case _ComicReaderMoreAction.retryFailedImages:
         await controller.retryFailedImages();
     }
+  }
+
+  /// 设当前页为封面：先落盘取本地文件，弹出焦点选区器让用户取景，再保存焦点。
+  Future<void> _handleSetCoverWithFocus() async {
+    final controller = _controller();
+    final localPath = await controller.prepareCurrentImageForCover();
+    if (localPath == null || localPath.trim().isEmpty || !mounted) {
+      return;
+    }
+    final focus = await CoverFocalPointPicker.show(
+      context,
+      image: FileImage(io.File(localPath)),
+      title: '调整封面焦点',
+    );
+    if (focus == null || !mounted) {
+      // 取消选区则不改动封面。
+      return;
+    }
+    await controller.setCurrentImageAsCover(
+      focusX: focus.x,
+      focusY: focus.y,
+    );
   }
 
   Future<void> _showMoreActionSheet(ComicReaderViewState viewState) async {

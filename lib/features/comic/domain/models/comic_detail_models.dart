@@ -22,6 +22,8 @@
     this.customCoverSourceEpisodeId,
     this.customCoverSourceImageIndex,
     this.customCoverSourceImageUrl,
+    this.customCoverFocusX,
+    this.customCoverFocusY,
     required this.updatedAt,
     required this.episodeCount,
     this.catalogUrl,
@@ -54,6 +56,10 @@
   final String? customCoverSourceEpisodeId;
   final int? customCoverSourceImageIndex;
   final String? customCoverSourceImageUrl;
+  /// 自定义封面焦点（归一化到 [-1,1]，对齐 Flutter [Alignment]；null 表示居中）。
+  /// 非破坏性：原图保持不变，仅记录裁剪/对齐焦点，由显示层按 cover 对齐应用。
+  final double? customCoverFocusX;
+  final double? customCoverFocusY;
   final DateTime updatedAt;
   final int episodeCount;
   final String? catalogUrl;

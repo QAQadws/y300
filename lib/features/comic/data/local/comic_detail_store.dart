@@ -28,6 +28,8 @@ class ComicDetailStore {
         'custom_cover_source_episode_id': null,
         'custom_cover_source_image_index': null,
         'custom_cover_source_image_url': null,
+        'custom_cover_focus_x': null,
+        'custom_cover_focus_y': null,
         'metadata_updated_at': DateTime.now().millisecondsSinceEpoch,
         'updated_at': DateTime.now().millisecondsSinceEpoch,
       },
@@ -42,6 +44,8 @@ class ComicDetailStore {
     String? sourceEpisodeId,
     int? sourceImageIndex,
     String? sourceImageUrl,
+    double? focusX,
+    double? focusY,
   }) async {
     final normalizedPath = normalizeNullable(localCoverPath);
     if (normalizedPath == null) {
@@ -57,7 +61,28 @@ class ComicDetailStore {
         'custom_cover_source_episode_id': normalizeNullable(sourceEpisodeId),
         'custom_cover_source_image_index': sourceImageIndex,
         'custom_cover_source_image_url': normalizeNullable(sourceImageUrl),
+        'custom_cover_focus_x': focusX,
+        'custom_cover_focus_y': focusY,
         'metadata_updated_at': DateTime.now().millisecondsSinceEpoch,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'comic_id = ?',
+      whereArgs: <Object>[comicId],
+    );
+  }
+
+  /// 仅更新已有自定义封面的焦点（不改封面文件），用于详情页“调整封面焦点”。
+  Future<void> updateCustomCoverFocus({
+    required String comicId,
+    required double? focusX,
+    required double? focusY,
+  }) async {
+    final db = await _dbFuture;
+    await db.update(
+      ComicLocalDb.comicsTable,
+      <String, Object?>{
+        'custom_cover_focus_x': focusX,
+        'custom_cover_focus_y': focusY,
         'updated_at': DateTime.now().millisecondsSinceEpoch,
       },
       where: 'comic_id = ?',
@@ -232,6 +257,8 @@ class ComicDetailStore {
         c.custom_cover_source_episode_id,
         c.custom_cover_source_image_index,
         c.custom_cover_source_image_url,
+        c.custom_cover_focus_x,
+        c.custom_cover_focus_y,
         c.catalog_url,
         c.updated_at,
         COUNT(e.episode_id) AS episode_count
@@ -278,6 +305,8 @@ class ComicDetailStore {
           row['custom_cover_source_image_index'] as int?,
       customCoverSourceImageUrl:
           row['custom_cover_source_image_url'] as String?,
+      customCoverFocusX: (row['custom_cover_focus_x'] as num?)?.toDouble(),
+      customCoverFocusY: (row['custom_cover_focus_y'] as num?)?.toDouble(),
       catalogUrl: row['catalog_url'] as String?,
       updatedAt: DateTime.fromMillisecondsSinceEpoch(
         row['updated_at'] as int,

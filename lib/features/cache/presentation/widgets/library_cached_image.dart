@@ -26,6 +26,7 @@ class LibraryCachedImage extends StatefulWidget {
     required this.fit,
     this.width,
     this.height,
+    this.alignment = Alignment.center,
     this.downscalePolicy = const WidthBoundImageDownscalePolicy(),
     required this.placeholder,
     this.errorPlaceholder,
@@ -44,6 +45,9 @@ class LibraryCachedImage extends StatefulWidget {
   final BoxFit fit;
   final double? width;
   final double? height;
+
+  /// `BoxFit.cover` 下的对齐点（自定义封面焦点）。默认居中。
+  final AlignmentGeometry alignment;
   final ImageDownscalePolicy downscalePolicy;
   final Widget placeholder;
   final Widget? errorPlaceholder;
@@ -131,6 +135,7 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
         fit: widget.fit,
         width: widget.width,
         height: widget.height,
+        alignment: widget.alignment,
         gaplessPlayback: true,
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
           if (frame != null || wasSynchronouslyLoaded) {
@@ -166,6 +171,7 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
           fit: widget.fit,
           width: widget.width,
           height: widget.height,
+          alignment: widget.alignment,
           gaplessPlayback: true,
           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
             if (frame != null || wasSynchronouslyLoaded) {
@@ -243,6 +249,7 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
       fit: widget.fit,
       width: widget.width,
       height: widget.height,
+      alignment: widget.alignment,
       gaplessPlayback: true,
       loadingBuilder: (context, child, loadingProgress) {
         if (loadingProgress == null) {

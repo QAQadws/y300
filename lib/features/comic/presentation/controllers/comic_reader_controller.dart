@@ -561,7 +561,32 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     );
   }
 
-  Future<void> setCurrentImageAsCover() async {
+  /// 为“设为封面”准备当前页的本地文件，供 UI 在焦点选区器里预览。
+  ///
+  /// 返回可读的本地路径（必要时先落盘缓存）；失败返回 null 并写入提示。
+  /// 与 [setCurrentImageAsCover] 解耦：UI 先拿到图预览选焦点，再回调保存。
+  Future<String?> prepareCurrentImageForCover() async {
+    final current = state.value;
+    final image = current?.currentImage;
+    if (current == null || image == null) {
+      return null;
+    }
+    final localPath = await _ensureCurrentImageLocalFile(image);
+    if (localPath == null || localPath.trim().isEmpty) {
+      if (!ref.mounted) {
+        return null;
+      }
+      final latest = state.value ?? current;
+      state = AsyncData(latest.copyWith(hint: '当前页图片缓存失败，无法设为封面'));
+      return null;
+    }
+    return localPath;
+  }
+
+  Future<void> setCurrentImageAsCover({
+    double? focusX,
+    double? focusY,
+  }) async {
     final current = state.value;
     final image = current?.currentImage;
     if (current == null || image == null) {
@@ -609,6 +634,8 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         sourceEpisodeId: current.episodeId,
         sourceImageIndex: image.imageIndex,
         sourceImageUrl: image.imageUrl,
+        focusX: focusX,
+        focusY: focusY,
       );
     } catch (_) {
       if (!ref.mounted) {

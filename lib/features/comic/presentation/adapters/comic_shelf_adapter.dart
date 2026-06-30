@@ -624,6 +624,8 @@ class ComicShelfAdapter
                 ),
       customCoverLocalPath:
           useCustomMetadata ? source.customCoverLocalPath : null,
+      customCoverFocusX: useCustomMetadata ? source.customCoverFocusX : null,
+      customCoverFocusY: useCustomMetadata ? source.customCoverFocusY : null,
       unreadCount: unread,
       totalChapterCount: stats?.totalCount ?? unread + read,
       readChapterCount: read,

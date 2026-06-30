@@ -159,6 +159,31 @@ abstract class DetailMetadataEditor {
   });
 }
 
+/// 自定义封面编辑可选合同。
+///
+/// 仅漫画详情页需要：从本地图片设自定义封面、调整已有自定义封面的焦点。
+/// 小说/收藏不实现该接口，统一详情页据此决定是否展示相关入口。
+///
+/// 焦点为归一化 [-1,1] 坐标（对齐 Flutter `Alignment`），null 表示居中。
+abstract class DetailCoverEditor {
+  /// 用本地图片文件设为自定义封面，并保存焦点。
+  ///
+  /// [sourceLocalPath] 为用户选择的原始图片；实现负责复制到受保护缓存区。
+  Future<void> setCustomCoverFromLocalFile({
+    required String workId,
+    required String sourceLocalPath,
+    double? focusX,
+    double? focusY,
+  });
+
+  /// 仅更新已有自定义封面的焦点（不改封面文件）。
+  Future<void> updateCustomCoverFocus({
+    required String workId,
+    required double? focusX,
+    required double? focusY,
+  });
+}
+
 /// 原帖跳转目标。
 class ThreadRouteTarget {
   const ThreadRouteTarget({required this.tid, this.subject});

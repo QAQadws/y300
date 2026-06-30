@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/core/media/cover_focal_point.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
@@ -1037,6 +1038,8 @@ class _WorkGrid extends StatelessWidget {
             coverImageUrl: item.coverImageUrl,
             coverLocalPath: item.coverLocalPath,
             customCoverLocalPath: item.customCoverLocalPath,
+            customCoverFocusX: item.customCoverFocusX,
+            customCoverFocusY: item.customCoverFocusY,
             imageHeaderBuilder: imageHeaderBuilder,
             coverLayerBuilder: useShelfCoverImage ? null : _legacyCoverLayerBuilder,
             onTap: () async => onTapItem(item.workId),
@@ -1060,6 +1063,7 @@ class _WorkGrid extends StatelessWidget {
       localPath: config.localPath,
       imageUrl: config.remoteUrl,
       fit: config.fit,
+      alignment: config.alignment,
       placeholder: config.placeholder,
       headerBuilder: config.imageHeaderBuilder,
     );
@@ -1223,11 +1227,16 @@ class _WorkList extends StatelessWidget {
       color: shelfPalette.coverPlaceholderBackground,
       child: const Icon(Icons.image_not_supported_outlined),
     );
+    // 焦点仅作用于自定义封面；展示来源封面时保持居中。
+    final alignment = _isShowingCustomCover(item)
+        ? coverAlignmentFromFocus(item.customCoverFocusX, item.customCoverFocusY)
+        : Alignment.center;
     if (!useShelfCoverImage) {
       return LibraryCachedImage(
         localPath: _preferredLocalPath(item),
         imageUrl: _preferredRemoteUrl(item),
         fit: BoxFit.cover,
+        alignment: alignment,
         placeholder: placeholder,
         headerBuilder: imageHeaderBuilder,
       );
@@ -1238,8 +1247,14 @@ class _WorkList extends StatelessWidget {
       remoteUrl: _preferredRemoteUrl(item),
       imageHeaderBuilder: imageHeaderBuilder,
       fit: BoxFit.cover,
+      alignment: alignment,
       placeholder: placeholder,
     );
+  }
+
+  bool _isShowingCustomCover(LibraryWorkItem item) {
+    final custom = item.customCoverLocalPath?.trim();
+    return custom != null && custom.isNotEmpty;
   }
 
   bool _hasCoverSource(LibraryWorkItem item) {

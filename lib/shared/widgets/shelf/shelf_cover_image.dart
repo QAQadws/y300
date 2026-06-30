@@ -21,6 +21,7 @@ class ShelfCoverImage extends StatelessWidget {
     required this.fit,
     this.width,
     this.height,
+    this.alignment = Alignment.center,
     this.downscalePolicy = const WidthBoundImageDownscalePolicy(),
     required this.placeholder,
     this.errorPlaceholder,
@@ -33,6 +34,9 @@ class ShelfCoverImage extends StatelessWidget {
   final BoxFit fit;
   final double? width;
   final double? height;
+
+  /// `BoxFit.cover` 下的对齐点（自定义封面焦点）。默认居中。
+  final AlignmentGeometry alignment;
   final ImageDownscalePolicy downscalePolicy;
   final Widget placeholder;
   final Widget? errorPlaceholder;
@@ -50,6 +54,7 @@ class ShelfCoverImage extends StatelessWidget {
       fit: fit,
       width: width,
       height: height,
+      alignment: alignment,
       downscalePolicy: downscalePolicy,
       placeholder: placeholder,
       errorPlaceholder: errorPlaceholder,

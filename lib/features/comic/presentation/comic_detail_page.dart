@@ -11,6 +11,7 @@ import 'package:y300/features/comic/domain/models/comic_reader_exit_result.dart'
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/adapters/comic_detail_adapter.dart';
 import 'package:y300/features/comic/presentation/comic_reader_page.dart';
+import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_detail_page.dart';
@@ -48,6 +49,17 @@ class ComicDetailPage extends ConsumerWidget {
       adapter: adapter,
       workId: comicId,
       imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
+      pickCoverImage: () async {
+        // 用通用图片选择器选一张本地图作为自定义封面来源（仅取第一张）。
+        final picked = await ref
+            .read(composerImagePickerProvider)
+            .pickImagesInOrder();
+        if (picked.isEmpty) {
+          return null;
+        }
+        final path = picked.first.path.trim();
+        return path.isEmpty ? null : path;
+      },
       onOpenReader: (context, target) async {
         var nextTarget = target;
         while (context.mounted) {

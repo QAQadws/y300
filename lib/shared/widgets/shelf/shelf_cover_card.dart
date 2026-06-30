@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:y300/core/media/cover_focal_point.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
 import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
@@ -14,6 +15,7 @@ class ShelfCoverLayerConfig {
     required this.remoteUrl,
     required this.placeholder,
     required this.fit,
+    this.alignment = Alignment.center,
     this.imageHeaderBuilder,
   });
 
@@ -21,6 +23,9 @@ class ShelfCoverLayerConfig {
   final String? remoteUrl;
   final Widget placeholder;
   final BoxFit fit;
+
+  /// `BoxFit.cover` 下的对齐点（自定义封面焦点）。默认居中。
+  final AlignmentGeometry alignment;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
 }
 
@@ -38,6 +43,8 @@ class ShelfCoverCard extends StatelessWidget {
     required this.onTap,
     this.coverLocalPath,
     this.customCoverLocalPath,
+    this.customCoverFocusX,
+    this.customCoverFocusY,
     this.onLongPress,
     this.topLeftBadge,
     this.showTwoLineCustomEllipsis = false,
@@ -53,6 +60,10 @@ class ShelfCoverCard extends StatelessWidget {
   final String? coverImageUrl;
   final String? coverLocalPath;
   final String? customCoverLocalPath;
+
+  /// 自定义封面焦点（归一化 [-1,1]）。仅当展示的是自定义封面时生效。
+  final double? customCoverFocusX;
+  final double? customCoverFocusY;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
   final Widget? topLeftBadge;
@@ -107,6 +118,10 @@ class ShelfCoverCard extends StatelessWidget {
 
   Widget _buildCoverLayer(BuildContext context) {
     final placeholder = _buildFallback(context);
+    // 焦点仅作用于自定义封面：当前展示的若不是自定义封面，保持居中。
+    final alignment = _isShowingCustomCover
+        ? coverAlignmentFromFocus(customCoverFocusX, customCoverFocusY)
+        : Alignment.center;
     final builder = coverLayerBuilder;
     if (builder != null) {
       return builder(
@@ -115,6 +130,7 @@ class ShelfCoverCard extends StatelessWidget {
           localPath: _preferredLocalPath,
           remoteUrl: coverImageUrl,
           fit: BoxFit.cover,
+          alignment: alignment,
           placeholder: placeholder,
           imageHeaderBuilder: imageHeaderBuilder,
         ),
@@ -126,8 +142,15 @@ class ShelfCoverCard extends StatelessWidget {
       remoteUrl: coverImageUrl,
       imageHeaderBuilder: imageHeaderBuilder,
       fit: BoxFit.cover,
+      alignment: alignment,
       placeholder: placeholder,
     );
+  }
+
+  /// 当前是否在展示自定义封面（自定义本地图存在时优先于来源封面）。
+  bool get _isShowingCustomCover {
+    final custom = customCoverLocalPath?.trim();
+    return custom != null && custom.isNotEmpty;
   }
 
   String? get _preferredLocalPath {

@@ -91,6 +91,8 @@ class LibraryWorkItem {
     this.customCoverImageUrl,
     this.coverLocalPath,
     this.customCoverLocalPath,
+    this.customCoverFocusX,
+    this.customCoverFocusY,
     required this.unreadCount,
     required this.totalChapterCount,
     required this.readChapterCount,
@@ -111,6 +113,13 @@ class LibraryWorkItem {
   final String? customCoverImageUrl;
   final String? coverLocalPath;
   final String? customCoverLocalPath;
+
+  /// 自定义封面焦点（归一化 [-1,1]，映射为 [Alignment]）。
+  ///
+  /// 仅作用于自定义封面：宽幅图的中部未必是合适区域，焦点选区让用户
+  /// 在不裁剪原图的前提下指定 `BoxFit.cover` 的对齐点。为空表示居中。
+  final double? customCoverFocusX;
+  final double? customCoverFocusY;
   final int unreadCount;
   final int totalChapterCount;
   final int readChapterCount;
@@ -129,6 +138,8 @@ class LibraryWorkItem {
     String? customCoverImageUrl,
     String? coverLocalPath,
     String? customCoverLocalPath,
+    double? customCoverFocusX,
+    double? customCoverFocusY,
     int? unreadCount,
     int? totalChapterCount,
     int? readChapterCount,
@@ -141,6 +152,7 @@ class LibraryWorkItem {
     bool? isDownloaded,
     bool clearCoverLocalPath = false,
     bool clearCustomCoverLocalPath = false,
+    bool clearCustomCoverFocus = false,
   }) {
     return LibraryWorkItem(
       workId: workId,
@@ -153,6 +165,10 @@ class LibraryWorkItem {
       customCoverLocalPath: clearCustomCoverLocalPath
           ? null
           : (customCoverLocalPath ?? this.customCoverLocalPath),
+      customCoverFocusX:
+          clearCustomCoverFocus ? null : (customCoverFocusX ?? this.customCoverFocusX),
+      customCoverFocusY:
+          clearCustomCoverFocus ? null : (customCoverFocusY ?? this.customCoverFocusY),
       unreadCount: unreadCount ?? this.unreadCount,
       totalChapterCount: totalChapterCount ?? this.totalChapterCount,
       readChapterCount: readChapterCount ?? this.readChapterCount,
@@ -176,6 +192,8 @@ class LibraryDetailHeader {
     this.customCoverImageUrl,
     this.coverLocalPath,
     this.customCoverLocalPath,
+    this.customCoverFocusX,
+    this.customCoverFocusY,
     this.author,
     this.sourceAuthor,
     this.customAuthor,
@@ -199,6 +217,10 @@ class LibraryDetailHeader {
   final String? customCoverImageUrl;
   final String? coverLocalPath;
   final String? customCoverLocalPath;
+
+  /// 自定义封面焦点（归一化 [-1,1]，映射为 [Alignment]）。详见 [LibraryWorkItem]。
+  final double? customCoverFocusX;
+  final double? customCoverFocusY;
   final String? author;
   final String? sourceAuthor;
   final String? customAuthor;

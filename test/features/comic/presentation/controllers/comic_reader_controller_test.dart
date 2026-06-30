@@ -1422,6 +1422,8 @@ class _ReaderRepoForControllerTest
   final Map<String, List<String>> savedImageUrlsByEpisode =
       <String, List<String>>{};
   String? lastCustomCoverLocalPath;
+  double? lastCustomCoverFocusX;
+  double? lastCustomCoverFocusY;
 
   @override
   Future<void> addToShelf({
@@ -1462,8 +1464,22 @@ class _ReaderRepoForControllerTest
     String? sourceEpisodeId,
     int? sourceImageIndex,
     String? sourceImageUrl,
+    double? focusX,
+    double? focusY,
   }) async {
     lastCustomCoverLocalPath = localCoverPath;
+    lastCustomCoverFocusX = focusX;
+    lastCustomCoverFocusY = focusY;
+  }
+
+  @override
+  Future<void> updateCustomCoverFocus({
+    required String comicId,
+    required double? focusX,
+    required double? focusY,
+  }) async {
+    lastCustomCoverFocusX = focusX;
+    lastCustomCoverFocusY = focusY;
   }
 
   @override

@@ -17,6 +17,8 @@
     this.customCoverImageUrl,
     this.coverLocalPath,
     this.customCoverLocalPath,
+    this.customCoverFocusX,
+    this.customCoverFocusY,
     required this.categoryId,
     required this.addedAt,
   });
@@ -40,6 +42,10 @@
   final String? customCoverImageUrl;
   final String? coverLocalPath;
   final String? customCoverLocalPath;
+
+  /// 自定义封面焦点（归一化 [-1,1]，映射为 Alignment）。为空表示居中。
+  final double? customCoverFocusX;
+  final double? customCoverFocusY;
   final String categoryId;
   final DateTime addedAt;
 }

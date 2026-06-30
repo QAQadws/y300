@@ -30,7 +30,8 @@ import 'package:y300/features/library_shared/domain/services/reading_state_batch
 /// 刷新抓取通过 ComicEpisodeRefreshService 下沉到漫画域 services，
 /// 而“合并章节/提升封面/通知书架”则统一交给 ComicRefreshOutcomeApplier，
 /// 保证统一详情页只保留编排，不耦合漫画刷新策略细节。
-class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
+class ComicDetailAdapter
+    implements DetailModuleAdapter, DetailMetadataEditor, DetailCoverEditor {
   ComicDetailAdapter(
     this._repository, {
     ComicEpisodeRefreshService? refreshService,
@@ -187,6 +188,8 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
       customCoverImageUrl: useCustomMetadata ? customCoverImageUrl : null,
       coverLocalPath: coverLocalPath,
       customCoverLocalPath: useCustomMetadata ? customCoverLocalPath : null,
+      customCoverFocusX: useCustomMetadata ? detail.customCoverFocusX : null,
+      customCoverFocusY: useCustomMetadata ? detail.customCoverFocusY : null,
       author: useCustomMetadata
           ? detail.author
           : (detail.sourceAuthor ?? detail.author),
@@ -780,6 +783,48 @@ class ComicDetailAdapter implements DetailModuleAdapter, DetailMetadataEditor {
       customAuthor: customAuthor,
       customTranslationGroup: customTranslationGroup,
       customSearchTitle: customSearchTitle,
+    );
+  }
+
+  @override
+  Future<void> setCustomCoverFromLocalFile({
+    required String workId,
+    required String sourceLocalPath,
+    double? focusX,
+    double? focusY,
+  }) async {
+    // 复制到受保护缓存区，避免引用用户原图路径（可能被系统清理/移动）。
+    final cached = await _coverCacheService.copyProtectedCoverFromLocalFile(
+      cacheKey: ImageCacheKeys.customCover(
+        ownerType: ImageCacheOwnerType.comic.dbValue,
+        ownerId: workId,
+      ),
+      sourcePath: sourceLocalPath,
+      ownerType: ImageCacheOwnerType.comic,
+      ownerId: workId,
+    );
+    final protectedPath = cached?.localPath?.trim();
+    if (protectedPath == null || protectedPath.isEmpty) {
+      throw StateError('封面图片缓存失败');
+    }
+    await _repository.updateCustomCoverFromLocalFile(
+      comicId: workId,
+      localCoverPath: protectedPath,
+      focusX: focusX,
+      focusY: focusY,
+    );
+  }
+
+  @override
+  Future<void> updateCustomCoverFocus({
+    required String workId,
+    required double? focusX,
+    required double? focusY,
+  }) {
+    return _repository.updateCustomCoverFocus(
+      comicId: workId,
+      focusX: focusX,
+      focusY: focusY,
     );
   }
 

@@ -27,6 +27,7 @@ class AppImage extends ConsumerStatefulWidget {
     required this.fit,
     this.width,
     this.height,
+    this.alignment = Alignment.center,
     this.downscalePolicy = const WidthBoundImageDownscalePolicy(),
     required this.placeholder,
     this.errorPlaceholder,
@@ -43,6 +44,10 @@ class AppImage extends ConsumerStatefulWidget {
   final BoxFit fit;
   final double? width;
   final double? height;
+
+  /// `BoxFit.cover` 下的对齐点（焦点选区）。默认居中；自定义封面可传入
+  /// 由焦点坐标映射出的 [Alignment]，让宽幅图对齐到合适区域而不裁剪原图。
+  final AlignmentGeometry alignment;
   final ImageDownscalePolicy downscalePolicy;
   final Widget placeholder;
   final Widget? errorPlaceholder;
@@ -114,6 +119,7 @@ class _AppImageState extends ConsumerState<AppImage> {
           fit: widget.fit,
           width: widget.width,
           height: widget.height,
+          alignment: widget.alignment,
           gaplessPlayback: true,
           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
             if (frame != null || wasSynchronouslyLoaded) {
@@ -176,6 +182,7 @@ class _AppImageState extends ConsumerState<AppImage> {
               fit: widget.fit,
               width: widget.width,
               height: widget.height,
+              alignment: widget.alignment,
               gaplessPlayback: true,
               loadingBuilder: (context, child, loadingProgress) {
                 if (loadingProgress == null) {

@@ -220,6 +220,15 @@ class _FakeComicRepository implements ComicRepository {
     String? sourceEpisodeId,
     int? sourceImageIndex,
     String? sourceImageUrl,
+    double? focusX,
+    double? focusY,
+  }) async {}
+
+  @override
+  Future<void> updateCustomCoverFocus({
+    required String comicId,
+    required double? focusX,
+    required double? focusY,
   }) async {}
 
   @override

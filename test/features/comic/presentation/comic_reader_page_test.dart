@@ -534,7 +534,13 @@ void main() {
     await tapVisibleByKey(tester, const Key('shared-reader-top-action-more'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('shared-reader-action-set-cover')));
-    await tester.pumpAndSettle();
+    // 选区器打开后会显示加载中的图片（测试环境图片不会解析完成，故不能
+    // pumpAndSettle——加载圈是常驻动画）。“确定”按钮始终可见，直接确认默认焦点。
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('确定'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
 
     expect(repository.lastCustomCoverLocalPath, '/protected/cover.jpg');
     expect(imageCache.lastLocalCopyRequest?.role, ImageCacheRole.customCover);
@@ -1104,9 +1110,18 @@ class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
     String? sourceEpisodeId,
     int? sourceImageIndex,
     String? sourceImageUrl,
+    double? focusX,
+    double? focusY,
   }) async {
     lastCustomCoverLocalPath = localCoverPath;
   }
+
+  @override
+  Future<void> updateCustomCoverFocus({
+    required String comicId,
+    required double? focusX,
+    required double? focusY,
+  }) async {}
 
   @override
   Future<void> deleteCategory({required String categoryId}) async {}

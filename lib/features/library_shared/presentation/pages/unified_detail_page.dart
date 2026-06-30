@@ -1,4 +1,7 @@
+import 'dart:io' as io;
+
 import 'package:flutter/material.dart';
+import 'package:y300/core/media/cover_focal_point.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
@@ -11,6 +14,7 @@ import 'package:y300/features/library_shared/presentation/detail/unified_detail_
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_metadata_sheet.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_misc_sections.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_palette.dart';
+import 'package:y300/features/library_shared/presentation/widgets/cover_focal_point_picker.dart';
 
 /// 统一详情页骨架（Phase 4）
 ///
@@ -26,6 +30,7 @@ class UnifiedDetailPage extends StatefulWidget {
     required this.onOpenReader,
     required this.onOpenThread,
     this.imageHeaderBuilder,
+    this.pickCoverImage,
   });
 
   final DetailModuleAdapter adapter;
@@ -35,6 +40,12 @@ class UnifiedDetailPage extends StatefulWidget {
   final Future<void> Function(BuildContext context, ThreadRouteTarget target)
   onOpenThread;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
+
+  /// 选择本地封面图片的回调，返回所选图片的本地路径（取消返回 null）。
+  ///
+  /// 由具体模块外壳（如漫画详情页）用各自的图片选择器注入，使本共享页不直接
+  /// 依赖 image_picker。仅当 adapter 实现 [DetailCoverEditor] 时才会被调用。
+  final Future<String?> Function()? pickCoverImage;
 
   @override
   State<UnifiedDetailPage> createState() => _UnifiedDetailPageState();
@@ -152,6 +163,19 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                   value: 'edit-metadata',
                   child: Text('编辑作品信息'),
                 ),
+              if (_supportsCoverEditing) ...[
+                const PopupMenuItem(
+                  key: Key('unified-detail-set-cover'),
+                  value: 'set-custom-cover',
+                  child: Text('自定义封面'),
+                ),
+                if (_hasCustomCover)
+                  const PopupMenuItem(
+                    key: Key('unified-detail-adjust-cover-focus'),
+                    value: 'adjust-cover-focus',
+                    child: Text('调整封面焦点'),
+                  ),
+              ],
               const PopupMenuItem(value: 'edit-intro', child: Text('编辑简介')),
               const PopupMenuItem(value: 'add-tag', child: Text('添加标签')),
               const PopupMenuItem(value: 'remove-tag', child: Text('移除标签')),
@@ -670,6 +694,14 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       await _showEditMetadataSheet();
       return;
     }
+    if (value == 'set-custom-cover') {
+      await _handleSetCustomCover();
+      return;
+    }
+    if (value == 'adjust-cover-focus') {
+      await _handleAdjustCoverFocus();
+      return;
+    }
     if (value == 'edit-intro') {
       await _showEditIntroDialog();
       return;
@@ -792,6 +824,102 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
         );
       },
     );
+  }
+
+  /// 是否支持自定义封面编辑：adapter 实现合同且外壳注入了图片选择器。
+  bool get _supportsCoverEditing =>
+      widget.adapter is DetailCoverEditor && widget.pickCoverImage != null;
+
+  bool get _hasCustomCover {
+    final custom = _controller.state.header?.customCoverLocalPath?.trim();
+    return custom != null && custom.isNotEmpty;
+  }
+
+  DetailCoverEditor? get _coverEditor =>
+      widget.adapter is DetailCoverEditor
+          ? widget.adapter as DetailCoverEditor
+          : null;
+
+  /// 自定义封面：选图 → 焦点选区 → 落盘保存 → 刷新。
+  Future<void> _handleSetCustomCover() async {
+    final editor = _coverEditor;
+    final pick = widget.pickCoverImage;
+    if (editor == null || pick == null) {
+      return;
+    }
+    final sourcePath = await pick();
+    if (sourcePath == null || sourcePath.trim().isEmpty || !mounted) {
+      return;
+    }
+    final focus = await CoverFocalPointPicker.show(
+      context,
+      image: FileImage(io.File(sourcePath)),
+      title: '调整封面焦点',
+    );
+    if (focus == null || !mounted) {
+      return;
+    }
+    try {
+      await editor.setCustomCoverFromLocalFile(
+        workId: widget.workId,
+        sourceLocalPath: sourcePath,
+        focusX: focus.x,
+        focusY: focus.y,
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _showDetailSnackBar('封面更新失败：$error');
+      return;
+    }
+    await _controller.reload();
+    if (!mounted) {
+      return;
+    }
+    _showDetailSnackBar('封面已更新');
+    setState(() {});
+  }
+
+  /// 调整已有自定义封面的焦点（不更换图片）。
+  Future<void> _handleAdjustCoverFocus() async {
+    final editor = _coverEditor;
+    final header = _controller.state.header;
+    final localPath = header?.customCoverLocalPath?.trim();
+    if (editor == null || localPath == null || localPath.isEmpty) {
+      return;
+    }
+    final focus = await CoverFocalPointPicker.show(
+      context,
+      image: FileImage(io.File(localPath)),
+      initialFocus: CoverFocalPoint.fromNullable(
+        header?.customCoverFocusX,
+        header?.customCoverFocusY,
+      ),
+      title: '调整封面焦点',
+    );
+    if (focus == null || !mounted) {
+      return;
+    }
+    try {
+      await editor.updateCustomCoverFocus(
+        workId: widget.workId,
+        focusX: focus.x,
+        focusY: focus.y,
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _showDetailSnackBar('焦点更新失败：$error');
+      return;
+    }
+    await _controller.reload();
+    if (!mounted) {
+      return;
+    }
+    _showDetailSnackBar('封面焦点已更新');
+    setState(() {});
   }
 
   Future<void> _showMoveCategorySheet() async {

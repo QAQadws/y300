@@ -163,6 +163,106 @@ void main() {
     expect(find.text('新标题'), findsWidgets);
   });
 
+  testWidgets(
+    'UnifiedDetailPage shows cover-edit menu only when editor + picker present',
+    (tester) async {
+      final adapter = _CoverEditableDetailAdapter();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: UnifiedDetailPage(
+            adapter: adapter,
+            workId: 'work-1',
+            onOpenReader: (context, target) async {},
+            onOpenThread: (context, target) async {},
+            pickCoverImage: () async => null,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('unified-detail-set-cover')),
+        findsOneWidget,
+      );
+      // 无自定义封面时不显示“调整焦点”。
+      expect(
+        find.byKey(const Key('unified-detail-adjust-cover-focus')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets(
+    'UnifiedDetailPage hides cover-edit menu when picker not injected',
+    (tester) async {
+      final adapter = _CoverEditableDetailAdapter();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: UnifiedDetailPage(
+            adapter: adapter,
+            workId: 'work-1',
+            onOpenReader: (context, target) async {},
+            onOpenThread: (context, target) async {},
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('unified-detail-set-cover')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets(
+    'UnifiedDetailPage adjust-focus updates focus through cover editor',
+    (tester) async {
+      final adapter = _CoverEditableDetailAdapter(hasCustomCover: true);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: UnifiedDetailPage(
+            adapter: adapter,
+            workId: 'work-1',
+            onOpenReader: (context, target) async {},
+            onOpenThread: (context, target) async {},
+            pickCoverImage: () async => null,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('unified-detail-adjust-cover-focus')),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.byKey(const Key('unified-detail-adjust-cover-focus')),
+      );
+
+      // 焦点选区器弹出；测试环境图片不会解析完成（加载圈常驻动画），不能
+      // pumpAndSettle。“确定”按钮始终可见，直接确认默认（居中）焦点。
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.text('确定'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(adapter.focusUpdated, isTrue);
+      expect(adapter.lastFocusX, 0.0);
+      expect(adapter.lastFocusY, 0.0);
+    },
+  );
+
   testWidgets('UnifiedDetailPage header gradient follows scaffold background', (tester) async {
     const pageBackground = Color(0xFF123456);
     final adapter = _FakeDetailAdapter(
@@ -1107,6 +1207,56 @@ class _EditableDetailAdapter extends _FakeDetailAdapter implements DetailMetadat
     title = customTitle ?? '来源标题';
     author = customAuthor ?? '来源作者';
     translationGroup = customTranslationGroup ?? '来源汉化组';
+  }
+}
+
+class _CoverEditableDetailAdapter extends _FakeDetailAdapter
+    implements DetailCoverEditor {
+  _CoverEditableDetailAdapter({this.hasCustomCover = false});
+
+  final bool hasCustomCover;
+  bool focusUpdated = false;
+  String? lastSourcePath;
+  double? lastFocusX;
+  double? lastFocusY;
+
+  @override
+  LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
+
+  @override
+  Future<LibraryDetailHeader> loadHeader({required String workId}) async {
+    return LibraryDetailHeader(
+      workId: 'work-1',
+      title: '测试作品',
+      sourceTitle: '来源标题',
+      customCoverLocalPath:
+          hasCustomCover ? 'missing-y300-custom-cover.png' : null,
+      inShelf: true,
+      intro: '简介',
+    );
+  }
+
+  @override
+  Future<void> setCustomCoverFromLocalFile({
+    required String workId,
+    required String sourceLocalPath,
+    double? focusX,
+    double? focusY,
+  }) async {
+    lastSourcePath = sourceLocalPath;
+    lastFocusX = focusX;
+    lastFocusY = focusY;
+  }
+
+  @override
+  Future<void> updateCustomCoverFocus({
+    required String workId,
+    required double? focusX,
+    required double? focusY,
+  }) async {
+    focusUpdated = true;
+    lastFocusX = focusX;
+    lastFocusY = focusY;
   }
 }
 

@@ -131,6 +131,8 @@ class LocalComicRepository
     String? sourceEpisodeId,
     int? sourceImageIndex,
     String? sourceImageUrl,
+    double? focusX,
+    double? focusY,
   }) {
     return _detailStore.updateCustomCoverFromLocalFile(
       comicId: comicId,
@@ -138,6 +140,21 @@ class LocalComicRepository
       sourceEpisodeId: sourceEpisodeId,
       sourceImageIndex: sourceImageIndex,
       sourceImageUrl: sourceImageUrl,
+      focusX: focusX,
+      focusY: focusY,
+    );
+  }
+
+  @override
+  Future<void> updateCustomCoverFocus({
+    required String comicId,
+    required double? focusX,
+    required double? focusY,
+  }) {
+    return _detailStore.updateCustomCoverFocus(
+      comicId: comicId,
+      focusX: focusX,
+      focusY: focusY,
     );
   }
 

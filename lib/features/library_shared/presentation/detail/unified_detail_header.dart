@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:y300/core/media/cover_focal_point.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -128,6 +129,12 @@ class _HeroInfoSection extends StatelessWidget {
                 _CoverImage(
                   url: _preferredRemoteUrl(header),
                   localPath: _preferredLocalPath(header),
+                  alignment: _isShowingCustomCover(header)
+                      ? coverAlignmentFromFocus(
+                          header.customCoverFocusX,
+                          header.customCoverFocusY,
+                        )
+                      : Alignment.center,
                   moduleKey: moduleKey,
                   palette: palette,
                   imageHeaderBuilder: imageHeaderBuilder,
@@ -169,6 +176,12 @@ class _HeroInfoSection extends StatelessWidget {
     return _preferredLocalPath(header) != null ||
         header.customCoverImageUrl?.trim().isNotEmpty == true ||
         header.coverImageUrl?.trim().isNotEmpty == true;
+  }
+
+  /// 当前是否在展示自定义封面（焦点仅对自定义封面生效）。
+  bool _isShowingCustomCover(LibraryDetailHeader header) {
+    final custom = header.customCoverLocalPath?.trim();
+    return custom != null && custom.isNotEmpty;
   }
 
   String? _preferredLocalPath(LibraryDetailHeader header) {
@@ -405,6 +418,7 @@ class _CoverImage extends StatelessWidget {
     required this.moduleKey,
     required this.palette,
     required this.imageHeaderBuilder,
+    this.alignment = Alignment.center,
   });
 
   final String? url;
@@ -412,6 +426,9 @@ class _CoverImage extends StatelessWidget {
   final LibraryModuleKey moduleKey;
   final UnifiedDetailPalette palette;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
+
+  /// `BoxFit.cover` 下的对齐点（自定义封面焦点）。默认居中。
+  final AlignmentGeometry alignment;
 
   @override
   Widget build(BuildContext context) {
@@ -445,6 +462,7 @@ class _CoverImage extends StatelessWidget {
                 localPath: localPath,
                 imageUrl: url,
                 fit: BoxFit.cover,
+                alignment: alignment,
                 placeholder: Container(
                   color: palette.headerPlaceholderBackground,
                   child: const Icon(Icons.broken_image_outlined),

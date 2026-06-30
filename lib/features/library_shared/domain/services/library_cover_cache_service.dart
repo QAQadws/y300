@@ -43,4 +43,32 @@ class LibraryCoverCacheService {
     );
     return result.success ? result : null;
   }
+
+  /// 把用户选择的本地图片复制到受保护缓存区，作为自定义封面。
+  ///
+  /// 与 [ensureProtectedCover] 同属“封面落盘”策略，但来源是本地文件而非远端
+  /// URL（详情页“自定义封面”入口）。失败返回 null。
+  Future<CachedImageResult?> copyProtectedCoverFromLocalFile({
+    required String cacheKey,
+    required String sourcePath,
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+    ImageCacheRole role = ImageCacheRole.customCover,
+  }) async {
+    final service = _imageCacheService ?? _imageCacheServiceResolver?.call();
+    final normalizedSource = sourcePath.trim();
+    if (service == null || normalizedSource.isEmpty) {
+      return null;
+    }
+    final result = await service.copyProtectedLocalFile(
+      ImageCacheLocalCopyRequest(
+        cacheKey: cacheKey,
+        sourcePath: normalizedSource,
+        ownerType: ownerType,
+        ownerId: ownerId,
+        role: role,
+      ),
+    );
+    return result.success ? result : null;
+  }
 }
