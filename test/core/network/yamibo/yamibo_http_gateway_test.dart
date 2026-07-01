@@ -20,6 +20,45 @@ void main() {
     });
 
     test(
+      'injects a browser User-Agent fallback when the caller omits one',
+      () async {
+        final adapter = _GatewayTestAdapter(textBody: '{}');
+        final gateway = _buildGateway(adapter: adapter);
+
+        await gateway.getJson(
+          Uri.parse(
+            'https://bbs.yamibo.com/api/mobile/index.php?module=profile',
+          ),
+          context: const YamiboRequestContext(
+            kind: YamiboRequestKind.api,
+            operation: 'profile',
+            module: 'profile',
+          ),
+        );
+
+        final ua = adapter.lastHeaders['User-Agent'] as String?;
+        expect(ua, isNotNull);
+        expect(ua, contains('Mozilla/5.0'));
+      },
+    );
+
+    test('does not override a caller-supplied User-Agent', () async {
+      final adapter = _GatewayTestAdapter(textBody: 'ok');
+      final gateway = _buildGateway(adapter: adapter);
+
+      await gateway.getText(
+        Uri.parse('https://bbs.yamibo.com/index.php?mobile=2'),
+        context: const YamiboRequestContext(
+          kind: YamiboRequestKind.html,
+          operation: 'forum.home.html',
+        ),
+        headers: const <String, String>{'User-Agent': 'CustomAgent/1.0'},
+      );
+
+      expect(adapter.lastHeaders['User-Agent'], 'CustomAgent/1.0');
+    });
+
+    test(
       'getText attaches cookies, saves set-cookie, records diagnostics, and logs string length',
       () async {
         final adapter = _GatewayTestAdapter(

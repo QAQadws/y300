@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:logger/logger.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/network/browser_user_agents.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_diagnostic_recorder.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_response.dart';
@@ -23,9 +24,11 @@ class YamiboHttpGateway {
     YamiboSessionExtractor? sessionExtractor,
     Dio? dio,
     bool enableLog = true,
+    String defaultUserAgent = BrowserUserAgents.mobile,
   }) : _cookieStore = cookieStore,
        _sessionStore = sessionStore,
        _sessionExtractor = sessionExtractor,
+       _defaultUserAgent = defaultUserAgent,
        _diagnosticRecorder =
            diagnosticRecorder ?? const NoopNetworkDiagnosticRecorder(),
        _requestLogger = YamiboRequestLogger(
@@ -48,6 +51,7 @@ class YamiboHttpGateway {
   final CookieStore _cookieStore;
   final YamiboSessionStore? _sessionStore;
   final YamiboSessionExtractor? _sessionExtractor;
+  final String _defaultUserAgent;
   final NetworkDiagnosticRecorder _diagnosticRecorder;
   final YamiboRequestLogger _requestLogger;
   final Dio _dio;
@@ -230,6 +234,13 @@ class YamiboHttpGateway {
     final startedAt = DateTime.now();
     final requestId = _generateRequestId();
     final requestHeaders = <String, String>{...?headers};
+    // The forum's WAF answers non-browser requests with a JS challenge instead
+    // of JSON/HTML. Guarantee a browser User-Agent on every request here at the
+    // single transport chokepoint, so no caller (e.g. the mobile JSON API) can
+    // accidentally omit it. Callers that set their own UA are left untouched.
+    if (!_hasHeader(requestHeaders, 'user-agent')) {
+      requestHeaders['User-Agent'] = _defaultUserAgent;
+    }
     final cookieHeader = await _cookieStore.readCookieHeader(uri);
     if (cookieHeader != null && cookieHeader.isNotEmpty) {
       requestHeaders['Cookie'] = cookieHeader;
@@ -495,6 +506,14 @@ class YamiboHttpGateway {
 
   int _elapsedMs(DateTime startedAt) {
     return DateTime.now().difference(startedAt).inMilliseconds;
+  }
+
+  /// Case-insensitive header presence check. HTTP header names are
+  /// case-insensitive, so a caller-supplied `User-Agent` / `user-agent` must
+  /// suppress the fallback regardless of casing.
+  bool _hasHeader(Map<String, String> headers, String name) {
+    final lower = name.toLowerCase();
+    return headers.keys.any((key) => key.toLowerCase() == lower);
   }
 
   String _generateRequestId() {
