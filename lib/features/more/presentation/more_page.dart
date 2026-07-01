@@ -7,7 +7,7 @@ import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/library_shared/presentation/controllers/sync_diagnostic_mode_controller.dart';
-import 'package:y300/features/auth/presentation/login_page.dart';
+import 'package:y300/features/auth/presentation/login_webview_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/more/presentation/appearance_settings_page.dart';
 import 'package:y300/features/more/presentation/data_storage_page.dart';
@@ -274,9 +274,12 @@ class _MorePageState extends ConsumerState<MorePage> {
   }
 
   Future<void> _openLoginPage(BuildContext context) async {
-    await Navigator.of(
-      context,
-    ).push<bool>(MaterialPageRoute<bool>(builder: (_) => const LoginPage()));
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        settings: const RouteSettings(name: LoginWebViewPage.routeName),
+        builder: (_) => const LoginWebViewPage(),
+      ),
+    );
   }
 
   void _openMyProfilePage(BuildContext context) {

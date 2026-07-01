@@ -1,4 +1,5 @@
 export 'yamibo_api_client.dart';
+export 'yamibo_auth_cookie.dart';
 export 'yamibo_html_client.dart';
 export 'yamibo_http_gateway.dart';
 export 'yamibo_http_response.dart';

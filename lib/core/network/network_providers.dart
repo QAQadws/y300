@@ -4,6 +4,7 @@ import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import 'package:y300/core/network/yamibo/yamibo.dart';
 import 'package:y300/features/library_shared/data/providers/sync_diagnostic_providers.dart';
 
@@ -13,6 +14,17 @@ final loggerProvider = Provider<Logger>((ref) {
 
 final cookieStoreProvider = Provider<CookieStore>((ref) {
   return CookieStore();
+});
+
+/// WebView → dio cookie 同步服务。默认基于 `flutter_inappwebview` 的全局
+/// CookieManager，把 WebView 赢得的 WAF 通行证与登录态回灌到 dio 存储。
+final webViewCookieSyncServiceProvider = Provider<WebViewCookieSyncService>((
+  ref,
+) {
+  return WebViewCookieSyncService(
+    cookieJar: InAppWebViewCookieJar(),
+    cookieStore: ref.watch(cookieStoreProvider),
+  );
 });
 
 final yamiboSessionStoreProvider = Provider<YamiboSessionStore>((ref) {

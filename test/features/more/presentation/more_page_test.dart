@@ -7,6 +7,7 @@ import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/auth/data/repositories/auth_repository.dart';
+import 'package:y300/features/auth/presentation/login_webview_page.dart';
 import 'package:y300/features/forum/data/repositories/forum_mode_settings_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
@@ -175,10 +176,11 @@ void main() {
     expect(find.text('当前：原生模式'), findsOneWidget);
   });
 
-  testWidgets('MorePage login flow refreshes session through LoginPage', (
+  testWidgets('MorePage login entry navigates to the WebView login page', (
     tester,
   ) async {
     final repository = _FakeAuthRepository(isLoggedIn: false);
+    final routeObserver = _RouteNameObserver();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -190,27 +192,24 @@ void main() {
             () => _FakeAppAppearanceController(),
           ),
         ],
-        child: const MaterialApp(home: MorePage()),
+        child: MaterialApp(
+          home: const MorePage(),
+          navigatorObservers: [routeObserver],
+        ),
       ),
     );
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('more-login-entry')));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const Key('login-username-field')),
-      'tester',
-    );
-    await tester.enterText(
-      find.byKey(const Key('login-password-field')),
-      '123456',
-    );
-    await tester.tap(find.byKey(const Key('login-submit-button')));
-    await tester.pumpAndSettle();
+    // 不 pump 目标页：Navigator.push 会同步通知 observer.didPush 记录路由名，
+    // 而目标页（含真实 InAppWebView 平台视图）的 build 被推迟到下一帧。此处
+    // 只断言“入栈了正确的登录路由”，避免在纯 widget 测试环境构建平台视图。
+    // 登录检测/校验逻辑已由 resolver 单测覆盖。
 
-    expect(find.byType(MorePage), findsOneWidget);
-    expect(find.byKey(const Key('more-logout-entry')), findsOneWidget);
-    expect(find.text('当前账号：tester'), findsOneWidget);
+    expect(
+      routeObserver.pushedNames,
+      contains(LoginWebViewPage.routeName),
+    );
   });
 
   testWidgets('MorePage shows snackbar when forum mode save fails', (
@@ -436,12 +435,20 @@ void main() {
   });
 }
 
+class _RouteNameObserver extends NavigatorObserver {
+  final List<String?> pushedNames = <String?>[];
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    pushedNames.add(route.settings.name);
+    super.didPush(route, previousRoute);
+  }
+}
+
 class _FakeAuthRepository implements AuthRepository {
   _FakeAuthRepository({required bool isLoggedIn}) : _isLoggedIn = isLoggedIn;
-
   bool _isLoggedIn;
   var logoutCount = 0;
-
   @override
   Future<ApiResult<SessionInfo>> login({
     required String username,

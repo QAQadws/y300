@@ -71,6 +71,43 @@ class CookieStore {
     await _writeAll(all);
   }
 
+  /// 将一批已解析好的 name=value cookie 合并写入指定 host。
+  ///
+  /// 用于 WebView → dio 的反向同步：WebView 里由真实浏览器赢得的
+  /// WAF 通行证（acw_sc__v2）和登录态 cookie，通过此方法灌回 dio 的
+  /// cookie 存储，从而让原生 API 请求也带上这些凭证。
+  ///
+  /// 采用合并语义而非整体覆盖：只更新传入的键，保留该 host 下其它已有
+  /// cookie；空值视为删除，避免把已有有效 cookie 清空。
+  Future<void> saveCookies(Uri uri, Map<String, String> cookies) async {
+    if (cookies.isEmpty) {
+      return;
+    }
+
+    final all = await _readAll();
+    final hostCookies = <String, String>{...?all[uri.host]};
+
+    for (final entry in cookies.entries) {
+      final name = entry.key.trim();
+      final value = entry.value.trim();
+      if (name.isEmpty) {
+        continue;
+      }
+      if (value.isEmpty || value.toLowerCase() == 'deleted') {
+        hostCookies.remove(name);
+        continue;
+      }
+      hostCookies[name] = value;
+    }
+
+    if (hostCookies.isEmpty) {
+      all.remove(uri.host);
+    } else {
+      all[uri.host] = hostCookies;
+    }
+    await _writeAll(all);
+  }
+
   Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_storageKey);

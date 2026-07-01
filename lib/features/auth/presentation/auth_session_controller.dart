@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/auth/data/repositories/auth_repository.dart';
 
 final authSessionControllerProvider =
@@ -83,6 +84,11 @@ class AuthSessionController extends AsyncNotifier<AuthSessionViewState> {
     state = AsyncData(current.copyWith(isLoggingOut: true, clearError: true));
     try {
       await _repository.logout();
+      // API 侧登出成功后，尽力清空 WebView 平台 cookie jar，避免残留的登录态
+      // cookie 让下次 WebView 登录直接“自动登入”旧账号。这一步是加固而非成败
+      // 关键——决定登录态的 dio 会话已在 repository.logout 里清除，因此即使平台
+      // cookie 清理抛错（如平台通道不可用），也不应让整个登出失败。
+      await _clearWebViewCookiesBestEffort();
       state = const AsyncData(AuthSessionViewState.signedOut());
       return true;
     } catch (error) {
@@ -93,6 +99,14 @@ class AuthSessionController extends AsyncNotifier<AuthSessionViewState> {
         ),
       );
       return false;
+    }
+  }
+
+  Future<void> _clearWebViewCookiesBestEffort() async {
+    try {
+      await ref.read(webViewCookieSyncServiceProvider).clearWebViewCookies();
+    } catch (_) {
+      // 忽略平台 cookie 清理异常，dio 会话已清除即视为登出成功。
     }
   }
 

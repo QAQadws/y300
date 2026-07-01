@@ -70,4 +70,61 @@ void main() {
       },
     );
   });
+
+  test('saveCookies merges new cookies while keeping existing host cookies', () async {
+    final cookieStore = CookieStore();
+    final uri = Uri.parse('https://bbs.yamibo.com/member.php');
+
+    await cookieStore.saveFromSetCookie(
+      uri,
+      const <String>['saltkey=alive; Path=/; HttpOnly'],
+    );
+    // 模拟 WebView 反向同步：新增 WAF 通行证 + 登录态，同时更新已有 saltkey。
+    await cookieStore.saveCookies(uri, const <String, String>{
+      'acw_sc__v2': 'wafpass',
+      'EeqY_2132_auth': 'authtoken',
+      'saltkey': 'refreshed',
+    });
+
+    expect(
+      await cookieStore.readCookieMap(uri),
+      <String, String>{
+        'saltkey': 'refreshed',
+        'acw_sc__v2': 'wafpass',
+        'EeqY_2132_auth': 'authtoken',
+      },
+    );
+  });
+
+  test('saveCookies drops entries with empty or deleted values', () async {
+    final cookieStore = CookieStore();
+    final uri = Uri.parse('https://bbs.yamibo.com/member.php');
+
+    await cookieStore.saveCookies(uri, const <String, String>{
+      'keep': 'yes',
+      'gone': '',
+      'stale': 'deleted',
+    });
+
+    expect(
+      await cookieStore.readCookieMap(uri),
+      <String, String>{'keep': 'yes'},
+    );
+  });
+
+  test('saveCookies is a no-op for an empty map', () async {
+    final cookieStore = CookieStore();
+    final uri = Uri.parse('https://bbs.yamibo.com/member.php');
+
+    await cookieStore.saveFromSetCookie(
+      uri,
+      const <String>['auth=token123; Path=/; HttpOnly'],
+    );
+    await cookieStore.saveCookies(uri, const <String, String>{});
+
+    expect(
+      await cookieStore.readCookieMap(uri),
+      <String, String>{'auth': 'token123'},
+    );
+  });
 }

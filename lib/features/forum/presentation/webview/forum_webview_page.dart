@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
@@ -311,6 +312,11 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       return;
     }
 
+    // 逛论坛时持续把 WebView 赢得的 cookie（刷新过的 WAF 通行证 / 登录态）
+    // 回灌 dio，让原生 API 功能（收藏、回复、搜索）始终握着有效凭证。
+    // best-effort：同步失败不影响页面清理主流程。
+    unawaited(_syncWebViewCookiesToDio(uri));
+
     await injector.cleanChrome(driver, visualPolicy: visualPolicy);
 
     // 蒙版关闭已经在方法顶部同步完成；这里保留 300ms 二次清理作为 chrome
@@ -331,6 +337,15 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       }
       await injector.cleanChrome(driver, visualPolicy: visualPolicy);
     });
+  }
+
+  /// 把当前 WebView 作用域下的 cookie 回灌 dio（WebView → dio 单向同步）。
+  Future<void> _syncWebViewCookiesToDio(Uri uri) async {
+    try {
+      await ref.read(webViewCookieSyncServiceProvider).syncToStore(uri);
+    } catch (_) {
+      // 同步失败不影响浏览体验，下次 pageFinished 会再次尝试。
+    }
   }
 
   void _handleProgress(int progress) {
