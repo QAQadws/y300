@@ -7,6 +7,7 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/browser_user_agents.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_diagnostic_recorder.dart';
+import 'package:y300/core/network/waf/waf.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_response.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_logger.dart';
@@ -22,12 +23,14 @@ class YamiboHttpGateway {
     NetworkDiagnosticRecorder? diagnosticRecorder,
     YamiboSessionStore? sessionStore,
     YamiboSessionExtractor? sessionExtractor,
+    WafChallengeResolver? wafChallengeResolver,
     Dio? dio,
     bool enableLog = true,
     String defaultUserAgent = BrowserUserAgents.mobile,
   }) : _cookieStore = cookieStore,
        _sessionStore = sessionStore,
        _sessionExtractor = sessionExtractor,
+       _wafChallengeResolver = wafChallengeResolver,
        _defaultUserAgent = defaultUserAgent,
        _diagnosticRecorder =
            diagnosticRecorder ?? const NoopNetworkDiagnosticRecorder(),
@@ -51,6 +54,7 @@ class YamiboHttpGateway {
   final CookieStore _cookieStore;
   final YamiboSessionStore? _sessionStore;
   final YamiboSessionExtractor? _sessionExtractor;
+  final WafChallengeResolver? _wafChallengeResolver;
   final String _defaultUserAgent;
   final NetworkDiagnosticRecorder _diagnosticRecorder;
   final YamiboRequestLogger _requestLogger;
@@ -230,6 +234,7 @@ class YamiboHttpGateway {
     bool? followRedirects,
     ValidateStatus? validateStatus,
     ProgressCallback? onSendProgress,
+    int attempt = 0,
   }) async {
     final startedAt = DateTime.now();
     final requestId = _generateRequestId();
@@ -263,6 +268,67 @@ class YamiboHttpGateway {
       );
       await _saveCookies(response);
       final body = normalizeBody(response.data);
+
+      // 阿里云 WAF 挑战检测：正文看起来是 arg1 挑战脚本时，让 resolver
+      // 用 headless WebView 跑一遍挑战、把 acw_sc__v2 回灌 dio，然后重发
+      // 一次同一请求。只在第一次尝试上做检测，避免死循环。若刷新失败
+      // （已在放行窗口内 / passer 抛错），把这次响应作为失败结果返回。
+      final resolver = _wafChallengeResolver;
+      if (attempt == 0 &&
+          resolver != null &&
+          WafChallengeDetector.isChallenge(body)) {
+        final refreshed =
+            await resolver.ensureFreshPass(triggeringUri: uri);
+        _requestLogger.logWafChallenge(
+          context: context,
+          requestId: requestId,
+          method: response.requestOptions.method,
+          uri: response.requestOptions.uri,
+          willRetry: refreshed,
+        );
+        if (refreshed) {
+          return _request<T>(
+            uri,
+            method: method,
+            context: context,
+            responseType: responseType,
+            normalizeBody: normalizeBody,
+            headers: headers,
+            cancelToken: cancelToken,
+            data: data,
+            contentType: contentType,
+            followRedirects: followRedirects,
+            validateStatus: validateStatus,
+            onSendProgress: onSendProgress,
+            attempt: attempt + 1,
+          );
+        }
+        // 刷新未发生（窗口内 / passer 失败）——把这次响应视为错误返回。
+        final elapsedMs = _elapsedMs(startedAt);
+        _diagnosticRecorder.recordHttpRequest(
+          method: response.requestOptions.method,
+          uri: response.requestOptions.uri,
+          startedAt: startedAt,
+          elapsedMs: elapsedMs,
+          statusCode: response.statusCode,
+          succeeded: false,
+          error: 'waf_challenge',
+          kind: context.kind.name,
+          operation: context.operation,
+          module: context.module,
+          pageKind: context.pageKind,
+          requestId: requestId,
+        );
+        return ApiFailure(
+          ApiError(
+            type: ApiErrorType.server,
+            message: '被 WAF 挑战拦截，请稍后重试',
+            statusCode: response.statusCode,
+            raw: body,
+          ),
+        );
+      }
+
       _saveExtractedSession(body: body, context: context);
       final elapsedMs = _elapsedMs(startedAt);
       _recordSuccess(

@@ -14,11 +14,22 @@ abstract class WebViewCookieJar {
 }
 
 /// 基于 `flutter_inappwebview` [inapp.CookieManager] 的默认实现。
+///
+/// 平台通道懒加载：`CookieManager.instance()` 会立刻 touch flutter_inappwebview
+/// 平台通道，在单元测试环境（无平台绑定）里会抛 assertion。为了让上层 provider
+/// 图能在纯 dart 测试里正常展开——只有真正调用 [readCookies] / [clear] 时才
+/// 会向平台通道要 manager——把实例化推迟到首次使用。
 class InAppWebViewCookieJar implements WebViewCookieJar {
   InAppWebViewCookieJar({inapp.CookieManager? cookieManager})
-    : _cookieManager = cookieManager ?? inapp.CookieManager.instance();
+      : _explicitCookieManager = cookieManager;
 
-  final inapp.CookieManager _cookieManager;
+  final inapp.CookieManager? _explicitCookieManager;
+  inapp.CookieManager? _cachedCookieManager;
+
+  inapp.CookieManager get _cookieManager {
+    return _explicitCookieManager ??
+        (_cachedCookieManager ??= inapp.CookieManager.instance());
+  }
 
   @override
   Future<Map<String, String>> readCookies(Uri uri) async {
