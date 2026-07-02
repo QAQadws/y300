@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
@@ -127,7 +128,10 @@ void main() {
       find.byKey(const Key('comic-reader-image-list')),
     );
     // viewportCacheExtentFactor 1.5 × 测试视口高度。
-    expect(listView.cacheExtent, 4800);
+    expect(
+      listView.scrollCacheExtent,
+      const ScrollCacheExtent.pixels(4800),
+    );
     expect(
       find.byKey(const Key('shared-reader-center-tap-zone')),
       findsOneWidget,

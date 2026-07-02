@@ -356,7 +356,7 @@ class ForumHomeSectionCard extends StatelessWidget {
                   opacity: animation,
                   child: SizeTransition(
                     sizeFactor: animation,
-                    axisAlignment: -1,
+                    alignment: const Alignment(-1, -1),
                     child: child,
                   ),
                 );
@@ -535,7 +535,7 @@ class _TodayBadge extends StatelessWidget {
               child: SizeTransition(
                 sizeFactor: animation,
                 axis: Axis.vertical,
-                axisAlignment: -1,
+                alignment: const Alignment(-1, -1),
                 child: child,
               ),
             );

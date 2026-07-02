@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 
 import 'continuous_image_extent_observer.dart';
@@ -23,7 +24,7 @@ class ContinuousImageReaderView extends StatelessWidget {
     this.scrollController,
     this.pageController,
     this.layoutResolver = const ContinuousImageLayoutResolver(),
-    this.cacheExtent,
+    this.scrollCacheExtent,
     this.reverse = false,
     this.onPageChanged,
     this.horizontalPhysics,
@@ -41,7 +42,7 @@ class ContinuousImageReaderView extends StatelessWidget {
   final ScrollController? scrollController;
   final PageController? pageController;
   final ContinuousImageLayoutResolver layoutResolver;
-  final double? cacheExtent;
+  final ScrollCacheExtent? scrollCacheExtent;
   final bool reverse;
   final ValueChanged<int>? onPageChanged;
   final ScrollPhysics? horizontalPhysics;
@@ -66,7 +67,7 @@ class ContinuousImageReaderView extends StatelessWidget {
     return ListView.builder(
       key: verticalListKey,
       controller: scrollController,
-      cacheExtent: cacheExtent,
+      scrollCacheExtent: scrollCacheExtent,
       padding: EdgeInsets.zero,
       itemCount: items.length + (hasTrailing ? 1 : 0),
       itemBuilder: (context, index) {

@@ -899,7 +899,7 @@ class _SubForumListState extends State<_SubForumList> {
                       opacity: animation,
                       child: SizeTransition(
                         sizeFactor: animation,
-                        axisAlignment: -1,
+                        alignment: const Alignment(-1, -1),
                         child: child,
                       ),
                     );
@@ -1043,7 +1043,7 @@ class _TopEntrySection extends StatelessWidget {
                       opacity: animation,
                       child: SizeTransition(
                         sizeFactor: animation,
-                        axisAlignment: -1,
+                        alignment: const Alignment(-1, -1),
                         child: child,
                       ),
                     );

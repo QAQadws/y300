@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' as riverpod_misc;
 import 'package:flutter/services.dart';
@@ -1702,7 +1703,7 @@ void main() {
       final list = tester.widget<ListView>(
         find.byKey(const Key('thread-detail-list')),
       );
-      expect(list.cacheExtent, 900);
+      expect(list.scrollCacheExtent, const ScrollCacheExtent.pixels(900));
       expect(find.byKey(const Key('thread-post-card-bulk-0')), findsOneWidget);
       expect(find.byKey(const Key('thread-post-card-bulk-79')), findsNothing);
     });

@@ -1,3 +1,4 @@
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dart';
@@ -161,7 +162,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       key: const Key('thread-detail-list'),
       controller: widget.scrollController,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
-      cacheExtent: 900,
+      scrollCacheExtent: const ScrollCacheExtent.pixels(900),
       itemCount: entries.length,
       itemBuilder: (context, index) {
         final entry = entries[index];

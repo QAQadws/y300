@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
@@ -119,11 +120,12 @@ class _ContinuousImageReaderRouteState
               scrollController: _scrollController,
               pageController: _pageController,
               layoutResolver: widget.layoutResolver,
-              cacheExtent:
-                  MediaQuery.sizeOf(context).height *
-                  ContinuousImageFlowPolicy
-                      .comicVerticalReading
-                      .viewportCacheExtentFactor,
+              scrollCacheExtent: ScrollCacheExtent.pixels(
+                MediaQuery.sizeOf(context).height *
+                    ContinuousImageFlowPolicy
+                        .comicVerticalReading
+                        .viewportCacheExtentFactor,
+              ),
               onExtentResolved: _recordExtent,
               onPageChanged: _handlePageChanged,
               verticalListKey: widget.listKey,

@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
@@ -135,7 +136,7 @@ void main() {
     expect(adapter.refreshCalls, 1);
   });
 
-  testWidgets('grid and list have cacheExtent for large shelf scrolling', (tester) async {
+  testWidgets('grid and list have scrollCacheExtent for large shelf scrolling', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: UnifiedShelfPage(
@@ -147,7 +148,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final grid = tester.widget<GridView>(find.byKey(const Key('unified-shelf-grid-view')));
-    expect(grid.cacheExtent, 900);
+    expect(grid.scrollCacheExtent, const ScrollCacheExtent.pixels(900));
 
     await tester.tap(find.byIcon(Icons.filter_list).first);
     await tester.pumpAndSettle();
@@ -159,7 +160,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final list = tester.widget<ListView>(find.byKey(const Key('unified-shelf-list-view')));
-    expect(list.cacheExtent, 900);
+    expect(list.scrollCacheExtent, const ScrollCacheExtent.pixels(900));
   });
 
   testWidgets('cover image feature flag can fall back to LibraryCachedImage', (tester) async {

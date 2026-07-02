@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
@@ -185,9 +186,10 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       items: items,
       mode: ContinuousImageReaderMode.vertical,
       scrollController: _scrollController,
-      cacheExtent:
-          MediaQuery.sizeOf(context).height *
-          widget.flowPolicy.viewportCacheExtentFactor,
+      scrollCacheExtent: ScrollCacheExtent.pixels(
+        MediaQuery.sizeOf(context).height *
+            widget.flowPolicy.viewportCacheExtentFactor,
+      ),
       layoutResolver: _layoutResolver,
       onExtentResolved: _recordExtent,
       verticalListKey: widget.listKey,

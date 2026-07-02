@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:y300/core/media/cover_focal_point.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
@@ -1020,7 +1021,7 @@ class _WorkGrid extends StatelessWidget {
         // 保证短列表也能触发 RefreshIndicator 下拉手势。
         physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
         // 大书架场景预渲染适度前后缓存，降低滑动抖动。
-        cacheExtent: 900,
+        scrollCacheExtent: const ScrollCacheExtent.pixels(900),
         padding: const EdgeInsets.all(12),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: gridColumns,
@@ -1161,7 +1162,7 @@ class _WorkList extends StatelessWidget {
         // 保证短列表也能触发 RefreshIndicator 下拉手势。
         physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
         // 大书架场景预渲染适度前后缓存，降低滑动抖动。
-        cacheExtent: 900,
+        scrollCacheExtent: const ScrollCacheExtent.pixels(900),
         padding: const EdgeInsets.all(12),
         itemCount: items.length,
         separatorBuilder: (context, index) => const SizedBox(height: 10),
