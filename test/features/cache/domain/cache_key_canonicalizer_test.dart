@@ -27,6 +27,7 @@ void main() {
     expect(first.sourceUrl, second.sourceUrl);
     expect(first.sourceUrl, contains('authorid=448216'));
     expect(first.sourceUrl, contains('ordertype=1'));
+    expect(first.sourceUrl, contains('mobile=2'));
   });
 
   test('threadDetail separates author and order variants', () {

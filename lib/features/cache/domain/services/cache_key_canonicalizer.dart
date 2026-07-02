@@ -45,6 +45,7 @@ class CacheKeyCanonicalizer {
       'mod': 'viewthread',
       'tid': tid,
       'page': page.toString(),
+      'mobile': '2',
     });
     final uri = Uri.parse(
       AppConfig.siteBaseUrl,

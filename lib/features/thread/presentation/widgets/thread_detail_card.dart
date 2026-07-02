@@ -265,14 +265,6 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (post.tagLinks.isNotEmpty) ...[
-            ThreadPostTagLinksSection(
-              tags: post.tagLinks,
-              palette: palette,
-              onOpenTag: onOpenPostLink,
-            ),
-            const SizedBox(height: 10),
-          ],
           if (post.poll != null) ...[
             ThreadPollCard(
               poll: post.poll!,
@@ -461,14 +453,6 @@ class ThreadPostCard extends StatelessWidget {
               onOpenImage: (request) => onOpenPostImages?.call(post, request),
             ),
           ),
-          if (post.tagLinks.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            ThreadPostTagLinksSection(
-              tags: post.tagLinks,
-              palette: palette,
-              onOpenTag: onOpenPostLink,
-            ),
-          ],
           if (post.poll != null) ...[
             const SizedBox(height: 10),
             ThreadPollCard(
@@ -622,4 +606,3 @@ class _PostHeader extends StatelessWidget {
     );
   }
 }
-

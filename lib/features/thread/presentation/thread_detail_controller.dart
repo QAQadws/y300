@@ -824,8 +824,8 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         ? current!.tid.trim()
         : _args.tid;
     return pid.isEmpty
-        ? '${AppConfig.siteBaseUrl}/forum.php?mod=viewthread&tid=$tid'
-        : '${AppConfig.siteBaseUrl}/forum.php?mod=viewthread&tid=$tid#pid$pid';
+        ? '${AppConfig.siteBaseUrl}/forum.php?mod=viewthread&tid=$tid&mobile=2'
+        : '${AppConfig.siteBaseUrl}/forum.php?mod=viewthread&tid=$tid&mobile=2#pid$pid';
   }
 
   ThreadRepository _readRepository() {

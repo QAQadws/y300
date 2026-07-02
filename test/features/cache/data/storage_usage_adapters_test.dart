@@ -90,7 +90,8 @@ void main() {
           cacheKey: 'document|thread|tid=1&page=1',
           ownerType: CacheOwnerType.thread,
           ownerId: 'tid=1&page=1',
-          sourceUrl: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1',
+          sourceUrl:
+              'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1&mobile=2',
           body: 'abc',
           fetchedAt: now,
           updatedAt: now,

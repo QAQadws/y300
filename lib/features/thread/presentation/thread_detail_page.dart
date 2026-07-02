@@ -291,10 +291,11 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     }
     _prewarmSignature = signature;
 
-    final prewarmer = _imageDimensionPrewarmer ??= ThreadPostImageDimensionPrewarmer(
-      imageCacheService: ref.read(imageCacheServiceProvider),
-      store: _imageDimensionStore,
-    );
+    final prewarmer = _imageDimensionPrewarmer ??=
+        ThreadPostImageDimensionPrewarmer(
+          imageCacheService: ref.read(imageCacheServiceProvider),
+          store: _imageDimensionStore,
+        );
     const planner = ThreadPostBodyRenderPlanner();
     final documents = state.posts
         .map((post) => planner.plan(post.message).document)
@@ -324,6 +325,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
             'mod': 'viewthread',
             'tid': widget.tid,
             'page': currentPage.toString(),
+            'mobile': '2',
           },
         )
         .toString();
@@ -378,7 +380,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
             target: ReplyTarget.thread(
               fid: fid,
               tid: tid,
-              sourceUri: Uri.tryParse(state.desktopUrl ?? ''),
+              sourceUri: Uri.tryParse(_threadUrlForCopy(state)),
             ),
             title: state.subject,
           ),
@@ -534,6 +536,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
           queryParameters: <String, String>{
             'mod': 'viewthread',
             'tid': tid,
+            'mobile': '2',
             if (page > 1) 'page': page.toString(),
           },
         )
@@ -993,8 +996,6 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
         ),
         if (state.homeUrl?.trim().isNotEmpty == true)
           const PopupMenuItem<String>(value: 'home', child: Text('返回首页')),
-        if (state.desktopUrl?.trim().isNotEmpty == true)
-          const PopupMenuItem<String>(value: 'desktop', child: Text('电脑版')),
       ],
       onSelected: (value) {
         switch (value) {
@@ -1012,9 +1013,6 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
             return;
           case 'home':
             onCopyUrl('首页链接', state.homeUrl!);
-            return;
-          case 'desktop':
-            onCopyUrl('电脑版链接', state.desktopUrl!);
             return;
         }
       },

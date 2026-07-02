@@ -243,6 +243,151 @@ void main() {
         'https://bbs.yamibo.com/data/attachment/forum/202606/20/132245ea1y0rwiv1y1o00i.png',
       );
     });
+
+    test('parses mobile comic thread with multiple inline attachment images', () {
+      final html = File('docs/html/移动端html/漫画帖1.html').readAsStringSync();
+
+      final result = parser.parse(html, fallbackTid: '573172', fallbackPage: 1);
+
+      expect(result.tid, '573172');
+      expect(result.fid, '30');
+      expect(result.subject, '【雨月星系汉化】[ろんろ]关于耳洞的故事');
+      expect(result.posts, isNotEmpty);
+
+      final firstPost = result.posts.first;
+      expect(firstPost.pid, '41574124');
+      expect(firstPost.author, '懒得取名菌');
+      expect(firstPost.message, contains('翻译：取名'));
+      expect(
+        firstPost.message,
+        contains(
+          'src="data/attachment/forum/202607/02/120322itw04wwgllu4t0ye.jpg"',
+        ),
+      );
+      expect(
+        firstPost.message,
+        contains(
+          'src="data/attachment/forum/202607/02/120329kr61q3oe6rw86ac1.png"',
+        ),
+      );
+      expect(
+        firstPost.message,
+        isNot(contains('static/image/common/none.gif')),
+      );
+
+      final sources = DefaultForumImageSourcePipeline.collectDomImageSources(
+        firstPost.message,
+        urlResolver: const SiteUrlResolver(),
+        domAttributes: const <String>[
+          'zoomfile',
+          'file',
+          'data-original',
+          'data-src',
+          'src',
+        ],
+      );
+      expect(sources, hasLength(8));
+      expect(
+        sources.first.normalizedUrl,
+        'https://bbs.yamibo.com/data/attachment/forum/202607/02/120322itw04wwgllu4t0ye.jpg',
+      );
+      expect(
+        sources.last.normalizedUrl,
+        'https://bbs.yamibo.com/data/attachment/forum/202607/02/120329kr61q3oe6rw86ac1.png',
+      );
+    });
+
+    test('parses older mobile comic thread with large inline image set', () {
+      final html = File('docs/html/移动端html/漫画帖2.html').readAsStringSync();
+
+      final result = parser.parse(html, fallbackTid: '499220', fallbackPage: 1);
+
+      expect(result.tid, '499220');
+      expect(result.fid, '30');
+      expect(result.typeName, '長篇連載');
+      expect(result.subject, '[Kirara漢化組][月刊コミック電撃大王][仲谷鳰]終將成為妳 第四十四話');
+      expect(result.posts, isNotEmpty);
+
+      final firstPost = result.posts.first;
+      expect(firstPost.pid, '39360959');
+      expect(firstPost.author, 'atj');
+      expect(firstPost.message, contains('改圖僅供試看'));
+      expect(
+        firstPost.message,
+        contains(
+          'src="data/attachment/forum/201908/28/001314yjq2hkh7qjh3uhap.jpg"',
+        ),
+      );
+      expect(
+        firstPost.message,
+        contains('src="http://qimg.hxnews.com/2019/0710/1562727280983.jpg"'),
+      );
+      expect(
+        firstPost.message,
+        isNot(contains('static/image/common/none.gif')),
+      );
+
+      final sources = DefaultForumImageSourcePipeline.collectDomImageSources(
+        firstPost.message,
+        urlResolver: const SiteUrlResolver(),
+        domAttributes: const <String>[
+          'zoomfile',
+          'file',
+          'data-original',
+          'data-src',
+          'src',
+        ],
+      );
+      expect(sources, hasLength(37));
+      expect(
+        sources.first.normalizedUrl,
+        'https://bbs.yamibo.com/data/attachment/forum/201908/28/001314yjq2hkh7qjh3uhap.jpg',
+      );
+      expect(
+        sources.last.normalizedUrl,
+        'http://qimg.hxnews.com/2019/0710/1562727280983.jpg',
+      );
+    });
+
+    test('parses mobile poll result thread and keeps floor action urls', () {
+      final html = File('docs/html/移动端html/一个投票帖.html').readAsStringSync();
+
+      final result = parser.parse(html, fallbackTid: '565687', fallbackPage: 1);
+
+      expect(result.tid, '565687');
+      expect(result.fid, '33');
+      expect(result.subject, '大家能接受自己看百合的事情，被别人知道吗？');
+      expect(result.posts, isNotEmpty);
+
+      final firstPost = result.posts.first;
+      expect(firstPost.pid, '41437380');
+      expect(firstPost.replyUrl, contains('action=reply'));
+      expect(firstPost.rateUrl, contains('action=rate'));
+      expect(firstPost.commentUrl, contains('action=comment'));
+      expect(firstPost.message, contains('我爱看百合的事'));
+      expect(firstPost.message, isNot(contains('单选投票, 共有 960 人参与投票')));
+
+      final poll = firstPost.poll;
+      expect(poll, isNotNull);
+      expect(poll!.isMultipleChoice, isFalse);
+      expect(poll.canVote, isFalse);
+      expect(poll.summary, '单选投票, 共有 960 人参与投票');
+      expect(poll.deadlineText, contains('距结束还有'));
+      expect(poll.statusText, '您已经投过票，谢谢您的参与');
+      expect(poll.formHash, '041e5224');
+      expect(poll.options, hasLength(7));
+      expect(poll.options.first.id, '1');
+      expect(poll.options.first.label, '不希望');
+      expect(poll.options.first.percent, 10.94);
+      expect(poll.options.first.voteCount, 105);
+      expect(poll.options.first.colorHex, '#E92725');
+      expect(poll.options[5].label, '不希望太多人知道');
+      expect(poll.options[5].percent, 30.52);
+      expect(poll.options[5].voteCount, 293);
+      expect(poll.options.last.label, '其他');
+      expect(poll.options.last.percent, 1.04);
+      expect(poll.options.last.voteCount, 10);
+    });
   });
 }
 

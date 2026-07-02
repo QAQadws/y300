@@ -21,7 +21,7 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
-  test('ThreadDetailHtmlRepository requests desktop viewthread HTML', () async {
+  test('ThreadDetailHtmlRepository requests mobile viewthread HTML', () async {
     final adapter = _ThreadDetailHtmlTestAdapter();
     final repository = _buildRepository(adapter);
 
@@ -36,12 +36,12 @@ void main() {
     expect(requested.queryParameters['mod'], 'viewthread');
     expect(requested.queryParameters['tid'], '572529');
     expect(requested.queryParameters['page'], '3');
-    expect(requested.queryParameters.containsKey('mobile'), isFalse);
-    expect(adapter.userAgents.single, isNot(contains('Mobile')));
+    expect(requested.queryParameters['mobile'], '2');
+    expect(adapter.userAgents.single, contains('Mobile'));
   });
 
   test(
-    'ThreadDetailHtmlRepository wraps desktop HTML request failure',
+    'ThreadDetailHtmlRepository wraps mobile HTML request failure',
     () async {
       final adapter = _ThreadDetailHtmlTestAdapter(statusCode: 503);
       final repository = _buildRepository(adapter);

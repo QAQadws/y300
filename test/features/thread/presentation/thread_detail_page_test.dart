@@ -420,7 +420,7 @@ void main() {
       await tester.tap(find.byKey(const Key('thread-detail-more-menu')));
       await tester.pumpAndSettle();
       expect(find.text('返回首页'), findsOneWidget);
-      expect(find.text('电脑版'), findsOneWidget);
+      expect(find.text('电脑版'), findsNothing);
       expect(callCount, 2);
 
       await tester.tap(find.text('倒序浏览'));
@@ -1369,61 +1369,6 @@ void main() {
       expect(pollVoteRepository.called, isFalse);
       expect(find.byIcon(Icons.check_box), findsNothing);
       expect(find.byIcon(Icons.check_box_outline_blank), findsNothing);
-    });
-
-    testWidgets('shows bottom tag links and opens native tag page', (
-      tester,
-    ) async {
-      final repository = _FakeThreadRepository((tid, page) async {
-        return ApiSuccess(
-          ThreadDetailData(
-            tid: tid,
-            fid: '30',
-            subject: '漫画主题',
-            author: 'alice',
-            replies: 0,
-            views: 12,
-            currentPage: page,
-            perPage: 20,
-            posts: [
-              ThreadPost(
-                pid: 'p1',
-                author: 'alice',
-                authorId: '1',
-                message: '<p>正文</p>',
-                number: 1,
-                isFirst: true,
-                dateline: 'today',
-                tagLinks: const <ThreadPostTagLink>[
-                  ThreadPostTagLink(
-                    label: '狱门抚子在此',
-                    url: 'https://bbs.yamibo.com/misc.php?mod=tag&id=20674',
-                    tagId: '20674',
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      });
-      final tagRepository = _FakeYamiboTagThreadPageRepository();
-
-      await tester.pumpWidget(
-        _buildTestApp(repository, tagThreadPageRepository: tagRepository),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
-
-      expect(find.byKey(const Key('thread-post-tag-links')), findsOneWidget);
-      expect(find.text('狱门抚子在此'), findsOneWidget);
-
-      await tester.tap(find.text('狱门抚子在此'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
-
-      expect(tagRepository.requestedUrls.single, contains('id=20674'));
-      expect(find.byKey(const Key('yamibo-tag-thread-page')), findsOneWidget);
-      expect(find.text('狱门抚子在此'), findsWidgets);
     });
 
     testWidgets('opens same-domain tag link from post body natively', (

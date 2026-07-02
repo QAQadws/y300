@@ -632,57 +632,6 @@ class ThreadPostActionRow extends StatelessWidget {
   }
 }
 
-class ThreadPostTagLinksSection extends StatelessWidget {
-  const ThreadPostTagLinksSection({
-    super.key,
-    required this.tags,
-    required this.palette,
-    required this.onOpenTag,
-  });
-
-  final List<ThreadPostTagLink> tags;
-  final ThreadDetailNativePalette palette;
-  final ValueChanged<String> onOpenTag;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      key: const Key('thread-post-tag-links'),
-      spacing: 7,
-      runSpacing: 7,
-      children: [
-        for (final tag in tags)
-          Material(
-            key: Key('thread-post-tag-link-${tag.tagId ?? tag.label}'),
-            color: palette.chipBackground,
-            borderRadius: BorderRadius.circular(9),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(9),
-              onTap: () => onOpenTag(tag.url),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.sell_outlined, size: 13, color: palette.accent),
-                    const SizedBox(width: 4),
-                    Text(
-                      tag.label,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: palette.muted,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
 class ThreadActionChip extends StatelessWidget {
   const ThreadActionChip({
     super.key,
@@ -729,4 +678,3 @@ class ThreadActionChip extends StatelessWidget {
     );
   }
 }
-

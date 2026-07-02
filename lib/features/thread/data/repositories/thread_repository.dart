@@ -103,13 +103,14 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
       descriptor: documentDescriptor,
       reason: 'snapshot_not_fresh',
     );
-    final htmlResult = await _htmlClient.getDesktopPage(
+    final htmlResult = await _htmlClient.getMobilePage(
       path: '/forum.php',
       queryParameters: <String, String>{
         ...queryParameters,
         'mod': 'viewthread',
         'tid': tid,
         'page': page.toString(),
+        'mobile': '2',
       },
       context: const YamiboRequestContext(
         kind: YamiboRequestKind.html,
