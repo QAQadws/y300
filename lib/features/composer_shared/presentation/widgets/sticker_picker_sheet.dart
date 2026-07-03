@@ -2,10 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dart';
-import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
 
 /// 表情选择底部面板。
 ///
@@ -219,10 +218,8 @@ class StickerGrid extends StatelessWidget {
           onPressed: () {
             Navigator.of(context).pop(sticker);
           },
-          icon: CachedLibraryImage(
-            request: ForumImageCacheRequests.remoteSmiley(
-              url: sticker.imageUrl,
-            ),
+          icon: ComposerStickerImage(
+            sticker: sticker,
             width: 48,
             height: 48,
             fit: BoxFit.contain,

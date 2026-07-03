@@ -15,10 +15,12 @@ import 'package:y300/features/composer_shared/domain/models/sticker_models.dart'
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_service.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_tokenizer.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_sticker_image_cache_loader.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_submission_error_presenter.dart';
 import 'package:y300/features/composer_shared/domain/services/sticker_bbcode_tokenizer.dart';
 import 'package:y300/features/composer_shared/domain/services/sticker_code_normalizer.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 
 /// composer_shared 模块的 Riverpod 接线集合。
 ///
@@ -45,6 +47,13 @@ final stickerCatalogRepositoryProvider = Provider<StickerCatalogRepository>((
 final stickerGroupsProvider = FutureProvider<List<StickerGroup>>((ref) {
   return ref.read(stickerCatalogRepositoryProvider).loadStickerGroups();
 });
+
+final composerStickerImageCacheLoaderProvider =
+    Provider<ComposerStickerImageCacheLoader>((ref) {
+      return ComposerStickerImageCacheLoader(
+        imageCacheService: ref.watch(imageCacheServiceProvider),
+      );
+    });
 
 final stickerPickerPreferencesRepositoryProvider =
     Provider<StickerPickerPreferencesRepository>((_) {

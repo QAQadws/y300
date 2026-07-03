@@ -10,6 +10,7 @@ import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/data/repositories/sticker_picker_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_sticker_image_cache_loader.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/sticker_picker_sheet.dart';
 
 void main() {
@@ -64,6 +65,9 @@ void main() {
           imageCacheServiceProvider.overrideWithValue(
             _FailingImageCacheService(),
           ),
+          composerStickerImageCacheLoaderProvider.overrideWithValue(
+            _testStickerImageLoader(),
+          ),
         ],
         child: const MaterialApp(home: Scaffold(body: StickerPickerSheet())),
       ),
@@ -95,6 +99,9 @@ void main() {
           }),
           imageCacheServiceProvider.overrideWithValue(
             _FailingImageCacheService(),
+          ),
+          composerStickerImageCacheLoaderProvider.overrideWithValue(
+            _testStickerImageLoader(),
           ),
         ],
         child: MaterialApp(
@@ -179,8 +186,19 @@ Widget _buildSheet({
             .loadLastGroupId();
       }),
       imageCacheServiceProvider.overrideWithValue(_FailingImageCacheService()),
+      composerStickerImageCacheLoaderProvider.overrideWithValue(
+        _testStickerImageLoader(),
+      ),
     ],
     child: const MaterialApp(home: Scaffold(body: StickerPickerSheet())),
+  );
+}
+
+ComposerStickerImageCacheLoader _testStickerImageLoader() {
+  return ComposerStickerImageCacheLoader(
+    imageCacheService: _FailingImageCacheService(),
+    networkGap: Duration.zero,
+    delay: (_) async {},
   );
 }
 

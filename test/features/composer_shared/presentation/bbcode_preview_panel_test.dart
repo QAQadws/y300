@@ -80,26 +80,22 @@ void main() {
     );
   });
 
-  testWidgets(
-    'BbCodePreviewPanel renders known sticker as cached remote image',
-    (tester) async {
-      final sticker = _sticker();
+  testWidgets('BbCodePreviewPanel renders known sticker with preview builder', (
+    tester,
+  ) async {
+    final sticker = _sticker();
 
-      await tester.pumpWidget(
-        _buildPanel(source: '表情{:9_656:}', stickers: [sticker]),
-      );
+    await tester.pumpWidget(
+      _buildPanel(source: '表情{:9_656:}', stickers: [sticker]),
+    );
 
-      expect(
-        find.byKey(const Key('reply-bbcode-preview-sticker-{:9_656:}')),
-        findsOneWidget,
-      );
-      expect(find.byType(Image), findsOneWidget);
-      expect(
-        find.textContaining('{:9_656:}', findRichText: true),
-        findsNothing,
-      );
-    },
-  );
+    expect(
+      find.byKey(const Key('reply-bbcode-preview-sticker-{:9_656:}')),
+      findsOneWidget,
+    );
+    expect(find.byType(_TestStickerPreviewImage), findsOneWidget);
+    expect(find.textContaining('{:9_656:}', findRichText: true), findsNothing);
+  });
 
   testWidgets('BbCodePreviewPanel aligns sticker bottom with text', (
     tester,
@@ -125,7 +121,15 @@ void main() {
     final sticker = _sticker(imagePath: 'missing/missing.gif');
 
     await tester.pumpWidget(
-      _buildPanel(source: '{:9_656:}', stickers: [sticker]),
+      _buildPanel(
+        source: '{:9_656:}',
+        renderer: FlutterBbCodeForumRenderer(
+          stickerImageBuilder: (_, key) {
+            return Icon(Icons.broken_image_outlined, key: key);
+          },
+        ),
+        stickers: [sticker],
+      ),
     );
     await tester.pump();
 
@@ -333,10 +337,15 @@ ComposerImageAttachment _uploadedAttachment({
 final _testRenderer = FlutterBbCodeForumRenderer(
   attachImageBuilder: _buildTestAttachPreviewImage,
   attachFileExists: _testAttachFileExists,
+  stickerImageBuilder: _buildTestStickerPreviewImage,
 );
 
 Widget _buildTestAttachPreviewImage(File file, Key key) {
   return _TestAttachPreviewImage(file: file, key: key);
+}
+
+Widget _buildTestStickerPreviewImage(StickerItem sticker, Key key) {
+  return _TestStickerPreviewImage(sticker: sticker, key: key);
 }
 
 bool _testAttachFileExists(File file) {
@@ -347,6 +356,17 @@ class _TestAttachPreviewImage extends StatelessWidget {
   const _TestAttachPreviewImage({super.key, required this.file});
 
   final File file;
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(width: 28, height: 28);
+  }
+}
+
+class _TestStickerPreviewImage extends StatelessWidget {
+  const _TestStickerPreviewImage({super.key, required this.sticker});
+
+  final StickerItem sticker;
 
   @override
   Widget build(BuildContext context) {

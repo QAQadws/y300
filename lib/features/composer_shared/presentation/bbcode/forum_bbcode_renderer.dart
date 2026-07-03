@@ -2,15 +2,16 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bbcode/flutter_bbcode.dart';
-import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dart';
-import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_tokenizer.dart';
 import 'package:y300/features/composer_shared/domain/services/sticker_bbcode_tokenizer.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
 
 typedef ForumAttachPreviewImageBuilder = Widget Function(File file, Key key);
 typedef ForumAttachPreviewFileExists = bool Function(File file);
+typedef ForumStickerPreviewImageBuilder =
+    Widget Function(StickerItem sticker, Key key);
 
 Widget _defaultAttachPreviewImageBuilder(File file, Key key) {
   return Image.file(
@@ -23,6 +24,16 @@ Widget _defaultAttachPreviewImageBuilder(File file, Key key) {
 
 bool _defaultAttachPreviewFileExists(File file) {
   return file.existsSync();
+}
+
+Widget _defaultStickerPreviewImageBuilder(StickerItem sticker, Key key) {
+  return ComposerStickerImage(
+    sticker: sticker,
+    key: key,
+    fit: BoxFit.contain,
+    placeholder: const SizedBox.shrink(),
+    errorPlaceholder: const Icon(Icons.broken_image_outlined),
+  );
 }
 
 /// 论坛 BBCode 渲染契约。把表情码与 `[attach]aid[/attach]` 转成可读图像，
@@ -45,12 +56,14 @@ class FlutterBbCodeForumRenderer extends ForumBbCodeRenderer {
     this.attachTokenizer = const ComposerAttachBbCodeTokenizer(),
     this.attachImageBuilder = _defaultAttachPreviewImageBuilder,
     this.attachFileExists = _defaultAttachPreviewFileExists,
+    this.stickerImageBuilder = _defaultStickerPreviewImageBuilder,
   });
 
   final StickerBbCodeTokenizer stickerTokenizer;
   final ComposerAttachBbCodeTokenizer attachTokenizer;
   final ForumAttachPreviewImageBuilder attachImageBuilder;
   final ForumAttachPreviewFileExists attachFileExists;
+  final ForumStickerPreviewImageBuilder stickerImageBuilder;
 
   @override
   Widget buildPreview(
@@ -79,7 +92,7 @@ class FlutterBbCodeForumRenderer extends ForumBbCodeRenderer {
             : 520.0;
         final stylesheet = defaultBBStylesheet(textStyle: textStyle);
         stylesheet.removeTag('img');
-        stylesheet.addTag(_StickerPreviewTag(stickers));
+        stylesheet.addTag(_StickerPreviewTag(stickers, stickerImageBuilder));
         stylesheet.addTag(_AttachSourceFallbackTag());
         stylesheet.addTag(
           _AttachPreviewTag(
@@ -178,11 +191,12 @@ List<InlineSpan> _attachTextFallback(FlutterRenderer renderer, String aid) {
 }
 
 class _StickerPreviewTag extends WrappedStyleTag {
-  _StickerPreviewTag(List<StickerItem> stickers)
+  _StickerPreviewTag(List<StickerItem> stickers, this.stickerImageBuilder)
     : _stickersByCode = {for (final sticker in stickers) sticker.code: sticker},
       super(StickerBbCodeTokenizer.previewTag);
 
   final Map<String, StickerItem> _stickersByCode;
+  final ForumStickerPreviewImageBuilder stickerImageBuilder;
 
   @override
   List<InlineSpan> wrap(
@@ -201,12 +215,9 @@ class _StickerPreviewTag extends WrappedStyleTag {
     return [
       WidgetSpan(
         alignment: PlaceholderAlignment.bottom,
-        child: CachedLibraryImage(
-          request: ForumImageCacheRequests.remoteSmiley(url: sticker.imageUrl),
-          key: Key('reply-bbcode-preview-sticker-${sticker.code}'),
-          fit: BoxFit.contain,
-          placeholder: const SizedBox.shrink(),
-          errorPlaceholder: const Icon(Icons.broken_image_outlined),
+        child: stickerImageBuilder(
+          sticker,
+          Key('reply-bbcode-preview-sticker-${sticker.code}'),
         ),
       ),
     ];
