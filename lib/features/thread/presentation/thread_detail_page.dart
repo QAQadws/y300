@@ -249,21 +249,12 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                         ),
                       );
                     },
-                    onOpenPostReply: (post) {
-                      _openPostReplyComposer(args, state, post);
-                    },
-                    onOpenPostRate: (post) {
-                      _openPostRateSheet(args, controller, post);
-                    },
-                    onOpenPostComment: (post) {
-                      _openPostCommentSheet(args, controller, post);
-                    },
                     onOpenAuthorProfile: _openAuthorProfile,
                     onCopyActionUrl: _copyActionUrl,
                     onOpenPostLink: _openForumLink,
                     onOpenPostImages: _openPostImages,
-                    onOpenPostCopyActions: (post, plan) {
-                      _openPostCopyActions(state, post, plan);
+                    onOpenPostActions: (post, plan) {
+                      _openPostActions(args, state, controller, post, plan);
                     },
                     diagnosticRecorder: diagnosticRecorder,
                     onTogglePollOption: controller.togglePollOption,
@@ -559,21 +550,32 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     );
   }
 
-  Future<void> _openPostCopyActions(
+  Future<void> _openPostActions(
+    ThreadDetailArgs args,
     ThreadDetailPageState state,
+    ThreadDetailController controller,
     ThreadPost post,
     ThreadPostBodyRenderPlan plan,
   ) async {
-    final action = await showModalBottomSheet<_ThreadPostCopyAction>(
+    final action = await showModalBottomSheet<_ThreadPostAction>(
       context: context,
       showDragHandle: true,
-      builder: (context) => const _ThreadPostCopyActionSheet(),
+      builder: (context) => _ThreadPostActionSheet(post: post),
     );
     if (!mounted || action == null) {
       return;
     }
     switch (action) {
-      case _ThreadPostCopyAction.select:
+      case _ThreadPostAction.reply:
+        await _openPostReplyComposer(args, state, post);
+        return;
+      case _ThreadPostAction.rate:
+        await _openPostRateSheet(args, controller, post);
+        return;
+      case _ThreadPostAction.comment:
+        await _openPostCommentSheet(args, controller, post);
+        return;
+      case _ThreadPostAction.selectCopy:
         await Navigator.of(context).push<void>(
           MaterialPageRoute<void>(
             builder: (_) => _ThreadPostSelectableCopyPage(
@@ -588,7 +590,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
           ),
         );
         return;
-      case _ThreadPostCopyAction.copyAll:
+      case _ThreadPostAction.copyAll:
         await _copyPostPlainText(post, plan);
         return;
     }
@@ -1020,10 +1022,12 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
   }
 }
 
-enum _ThreadPostCopyAction { select, copyAll }
+enum _ThreadPostAction { reply, rate, comment, selectCopy, copyAll }
 
-class _ThreadPostCopyActionSheet extends StatelessWidget {
-  const _ThreadPostCopyActionSheet();
+class _ThreadPostActionSheet extends StatelessWidget {
+  const _ThreadPostActionSheet({required this.post});
+
+  final ThreadPost post;
 
   @override
   Widget build(BuildContext context) {
@@ -1032,16 +1036,41 @@ class _ThreadPostCopyActionSheet extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
         child: SingleChildScrollView(
           child: Column(
-            key: const Key('thread-post-copy-action-sheet'),
+            key: const Key('thread-post-action-sheet'),
             mainAxisSize: MainAxisSize.min,
             children: [
+              ListTile(
+                key: const Key('thread-post-reply-action'),
+                dense: true,
+                leading: const Icon(Icons.reply_outlined),
+                title: const Text('回复'),
+                onTap: () => Navigator.of(context).pop(_ThreadPostAction.reply),
+              ),
+              if (post.rateUrl?.trim().isNotEmpty == true)
+                ListTile(
+                  key: const Key('thread-post-rate-action'),
+                  dense: true,
+                  leading: const Icon(Icons.favorite_border),
+                  title: const Text('评分'),
+                  onTap: () =>
+                      Navigator.of(context).pop(_ThreadPostAction.rate),
+                ),
+              if (post.commentUrl?.trim().isNotEmpty == true)
+                ListTile(
+                  key: const Key('thread-post-comment-action'),
+                  dense: true,
+                  leading: const Icon(Icons.chat_bubble_outline),
+                  title: const Text('点评'),
+                  onTap: () =>
+                      Navigator.of(context).pop(_ThreadPostAction.comment),
+                ),
               ListTile(
                 key: const Key('thread-post-select-copy-action'),
                 dense: true,
                 leading: const Icon(Icons.text_fields),
                 title: const Text('选择复制'),
                 onTap: () =>
-                    Navigator.of(context).pop(_ThreadPostCopyAction.select),
+                    Navigator.of(context).pop(_ThreadPostAction.selectCopy),
               ),
               ListTile(
                 key: const Key('thread-post-copy-all-action'),
@@ -1049,7 +1078,7 @@ class _ThreadPostCopyActionSheet extends StatelessWidget {
                 leading: const Icon(Icons.copy_all_outlined),
                 title: const Text('全部复制'),
                 onTap: () =>
-                    Navigator.of(context).pop(_ThreadPostCopyAction.copyAll),
+                    Navigator.of(context).pop(_ThreadPostAction.copyAll),
               ),
             ],
           ),
@@ -1201,9 +1230,6 @@ Widget threadDetailPostCardPreview() {
       post: _threadDetailPreviewPost,
       state: state,
       imageHeaderBuilder: null,
-      onOpenPostReply: (_) {},
-      onOpenPostRate: (_) {},
-      onOpenPostComment: (_) {},
       onOpenAuthorProfile: (_) {},
       onCopyActionUrl: (_, _) {},
       onOpenPostLink: (_) {},

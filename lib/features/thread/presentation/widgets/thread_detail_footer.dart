@@ -1,8 +1,6 @@
 part of 'thread_detail_widgets.dart';
 
-// Post footer widgets: comment section, rating section, action row, and tag
-// links. Moved verbatim from thread_detail_widgets.dart (Phase 5b file split);
-// keys and logic unchanged.
+// Post footer widgets: comment section, rating section, and tag links.
 
 class ThreadPostCommentSection extends StatefulWidget {
   const ThreadPostCommentSection({
@@ -573,104 +571,6 @@ class ThreadRatingLinkButton extends StatelessWidget {
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
               color: palette.accent,
               fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class ThreadPostActionRow extends StatelessWidget {
-  const ThreadPostActionRow({
-    super.key,
-    required this.post,
-    required this.palette,
-    required this.onOpenPostReply,
-    required this.onOpenPostRate,
-    required this.onOpenPostComment,
-    required this.onCopyActionUrl,
-  });
-
-  final ThreadPost post;
-  final ThreadDetailNativePalette palette;
-  final ValueChanged<ThreadPost> onOpenPostReply;
-  final ValueChanged<ThreadPost> onOpenPostRate;
-  final ValueChanged<ThreadPost> onOpenPostComment;
-  final void Function(String label, String url) onCopyActionUrl;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      key: Key('thread-post-actions-${post.pid}'),
-      spacing: 6,
-      runSpacing: 6,
-      alignment: WrapAlignment.end,
-      children: [
-        if (post.rateUrl?.trim().isNotEmpty == true)
-          ThreadActionChip(
-            label: '评分',
-            icon: Icons.favorite_border,
-            palette: palette,
-            onPressed: () => onOpenPostRate(post),
-          ),
-        if (post.commentUrl?.trim().isNotEmpty == true)
-          ThreadActionChip(
-            label: '点评',
-            icon: Icons.chat_bubble_outline,
-            palette: palette,
-            onPressed: () => onOpenPostComment(post),
-          ),
-        ThreadActionChip(
-          label: '回复',
-          icon: Icons.reply_outlined,
-          palette: palette,
-          onPressed: () => onOpenPostReply(post),
-        ),
-      ],
-    );
-  }
-}
-
-class ThreadActionChip extends StatelessWidget {
-  const ThreadActionChip({
-    super.key,
-    required this.label,
-    required this.icon,
-    required this.palette,
-    required this.onPressed,
-  });
-
-  final String label;
-  final IconData icon;
-  final ThreadDetailNativePalette palette;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: palette.chipBackground,
-      borderRadius: BorderRadius.circular(9),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(9),
-        onTap: onPressed,
-        child: SizedBox(
-          height: 27,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 13, color: palette.softText),
-                const SizedBox(width: 4),
-                Text(
-                  label,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: palette.muted,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
             ),
           ),
         ),

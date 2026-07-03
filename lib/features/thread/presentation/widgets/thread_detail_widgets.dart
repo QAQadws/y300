@@ -43,14 +43,11 @@ class ThreadDetailContent extends StatefulWidget {
     required this.onLoadPreviousPage,
     required this.onLoadNextPage,
     required this.onLoadPageNumber,
-    required this.onOpenPostReply,
-    required this.onOpenPostRate,
-    required this.onOpenPostComment,
     required this.onOpenAuthorProfile,
     required this.onCopyActionUrl,
     required this.onOpenPostLink,
     this.onOpenPostImages,
-    required this.onOpenPostCopyActions,
+    required this.onOpenPostActions,
     this.diagnosticRecorder = const NoopThreadDetailDiagnosticRecorder(),
     this.onPostBuilt,
     this.imageDimensionStore,
@@ -67,16 +64,13 @@ class ThreadDetailContent extends StatefulWidget {
   final VoidCallback onLoadPreviousPage;
   final VoidCallback onLoadNextPage;
   final ValueChanged<int> onLoadPageNumber;
-  final ValueChanged<ThreadPost> onOpenPostReply;
-  final ValueChanged<ThreadPost> onOpenPostRate;
-  final ValueChanged<ThreadPost> onOpenPostComment;
   final ValueChanged<ThreadPost> onOpenAuthorProfile;
   final void Function(String label, String url) onCopyActionUrl;
   final ValueChanged<String> onOpenPostLink;
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
   onOpenPostImages;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
-  onOpenPostCopyActions;
+  onOpenPostActions;
   final ThreadDetailDiagnosticRecorder diagnosticRecorder;
   final ValueChanged<int>? onPostBuilt;
 
@@ -109,10 +103,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       widget.imageDimensionStore?.addListener(_onImageDimensionsChanged);
     }
     if (!identical(oldWidget.diagnosticRecorder, widget.diagnosticRecorder) ||
-        !identical(
-          oldWidget.imageDimensionStore,
-          widget.imageDimensionStore,
-        )) {
+        !identical(oldWidget.imageDimensionStore, widget.imageDimensionStore)) {
       _entryPlanner = _createEntryPlanner();
     }
     if (!identical(oldWidget.state.posts, widget.state.posts) ||
@@ -198,13 +189,16 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   ) {
     switch (entry.kind) {
       case ThreadDetailRenderEntryKind.postHeader:
+        final plan = _entryPlanner.planFor(entry.post!);
         final header = _ThreadPostCardHeaderEntry(
           key: Key(entry.key),
           post: entry.post!,
           state: widget.state,
+          plan: plan,
           highlighted: entry.post!.pid == widget.highlightPostPid,
           palette: palette,
           onOpenAuthorProfile: widget.onOpenAuthorProfile,
+          onOpenPostActions: widget.onOpenPostActions,
         );
         return _PostBuildObserver(
           index: entry.postIndex,
@@ -224,7 +218,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           palette: palette,
           onOpenPostLink: widget.onOpenPostLink,
           onOpenPostImages: widget.onOpenPostImages,
-          onOpenPostCopyActions: widget.onOpenPostCopyActions,
+          onOpenPostActions: widget.onOpenPostActions,
           diagnosticRecorder: widget.diagnosticRecorder,
         );
       case ThreadDetailRenderEntryKind.postBodySegment:
@@ -240,7 +234,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           palette: palette,
           onOpenPostLink: widget.onOpenPostLink,
           onOpenPostImages: widget.onOpenPostImages,
-          onOpenPostCopyActions: widget.onOpenPostCopyActions,
+          onOpenPostActions: widget.onOpenPostActions,
           diagnosticRecorder: widget.diagnosticRecorder,
         );
         if (entry.segment!.index == 0) {
@@ -251,15 +245,15 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         }
         return segmentEntry;
       case ThreadDetailRenderEntryKind.postFooter:
+        final plan = _entryPlanner.planFor(entry.post!);
         return _ThreadPostCardFooterEntry(
           key: Key(entry.key),
           post: entry.post!,
           state: widget.state,
+          plan: plan,
           highlighted: entry.post!.pid == widget.highlightPostPid,
           imageHeaderBuilder: widget.imageHeaderBuilder,
-          onOpenPostReply: widget.onOpenPostReply,
-          onOpenPostRate: widget.onOpenPostRate,
-          onOpenPostComment: widget.onOpenPostComment,
+          onOpenPostActions: widget.onOpenPostActions,
           onCopyActionUrl: widget.onCopyActionUrl,
           onOpenPostLink: widget.onOpenPostLink,
           onTogglePollOption: widget.onTogglePollOption,
@@ -305,4 +299,3 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
     );
   }
 }
-

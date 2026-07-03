@@ -10,62 +10,73 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
     super.key,
     required this.post,
     required this.state,
+    required this.plan,
     required this.highlighted,
     required this.palette,
     required this.onOpenAuthorProfile,
+    required this.onOpenPostActions,
   });
 
   final ThreadPost post;
   final ThreadDetailPageState state;
+  final ThreadPostBodyRenderPlan plan;
   final bool highlighted;
   final ThreadDetailNativePalette palette;
   final ValueChanged<ThreadPost> onOpenAuthorProfile;
+  final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
+  onOpenPostActions;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      key: Key('thread-post-card-${post.pid}'),
-      padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
-      decoration: _cardSegmentDecoration(
-        palette: palette,
-        highlighted: highlighted,
-        position: _ThreadPostCardSegmentPosition.header,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (post.isFirst) ...[
-            _FirstPostThreadSummary(state: state, palette: palette),
-            const SizedBox(height: 11),
-          ],
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ThreadAuthorAvatar(
-                key: Key('thread-author-avatar-${post.pid}'),
-                author: post.author,
-                authorId: post.authorId,
-                avatarUrl: post.avatarUrl,
-                palette: palette,
-                onTap: post.authorId.trim().isEmpty
-                    ? null
-                    : () => onOpenAuthorProfile(post),
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: _PostHeader(
-                  post: post,
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onLongPress: () => onOpenPostActions(post, plan),
+      child: Container(
+        key: Key('thread-post-card-${post.pid}'),
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+        decoration: _cardSegmentDecoration(
+          palette: palette,
+          highlighted: highlighted,
+          position: _ThreadPostCardSegmentPosition.header,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (post.isFirst) ...[
+              _FirstPostThreadSummary(state: state, palette: palette),
+              const SizedBox(height: 11),
+            ],
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ThreadAuthorAvatar(
+                  key: Key('thread-author-avatar-${post.pid}'),
+                  author: post.author,
+                  authorId: post.authorId,
+                  avatarUrl: post.avatarUrl,
                   palette: palette,
-                  viewsLabel: post.isFirst ? state.views.toString() : null,
-                  repliesLabel: post.isFirst ? state.replies.toString() : null,
-                  onOpenAuthorProfile: post.authorId.trim().isEmpty
+                  onTap: post.authorId.trim().isEmpty
                       ? null
                       : () => onOpenAuthorProfile(post),
                 ),
-              ),
-            ],
-          ),
-        ],
+                const SizedBox(width: 9),
+                Expanded(
+                  child: _PostHeader(
+                    post: post,
+                    palette: palette,
+                    viewsLabel: post.isFirst ? state.views.toString() : null,
+                    repliesLabel: post.isFirst
+                        ? state.replies.toString()
+                        : null,
+                    onOpenAuthorProfile: post.authorId.trim().isEmpty
+                        ? null
+                        : () => onOpenAuthorProfile(post),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -83,7 +94,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
     required this.palette,
     required this.onOpenPostLink,
     required this.onOpenPostImages,
-    required this.onOpenPostCopyActions,
+    required this.onOpenPostActions,
     required this.diagnosticRecorder,
   });
 
@@ -98,14 +109,14 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
   onOpenPostImages;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
-  onOpenPostCopyActions;
+  onOpenPostActions;
   final ThreadDetailDiagnosticRecorder diagnosticRecorder;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onLongPress: () => onOpenPostCopyActions(post, plan),
+      onLongPress: () => onOpenPostActions(post, plan),
       child: Container(
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
         decoration: _cardSegmentDecoration(
@@ -153,7 +164,7 @@ class _ThreadPostCardBodySegmentEntry extends StatelessWidget {
     required this.palette,
     required this.onOpenPostLink,
     required this.onOpenPostImages,
-    required this.onOpenPostCopyActions,
+    required this.onOpenPostActions,
     required this.diagnosticRecorder,
   });
 
@@ -169,14 +180,14 @@ class _ThreadPostCardBodySegmentEntry extends StatelessWidget {
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
   onOpenPostImages;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
-  onOpenPostCopyActions;
+  onOpenPostActions;
   final ThreadDetailDiagnosticRecorder diagnosticRecorder;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onLongPress: () => onOpenPostCopyActions(post, plan),
+      onLongPress: () => onOpenPostActions(post, plan),
       child: Container(
         padding: EdgeInsets.fromLTRB(10, _segmentTopPadding(segment), 10, 0),
         decoration: _cardSegmentDecoration(
@@ -226,11 +237,10 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
     super.key,
     required this.post,
     required this.state,
+    required this.plan,
     required this.highlighted,
     required this.imageHeaderBuilder,
-    required this.onOpenPostReply,
-    required this.onOpenPostRate,
-    required this.onOpenPostComment,
+    required this.onOpenPostActions,
     required this.onCopyActionUrl,
     required this.onOpenPostLink,
     required this.onTogglePollOption,
@@ -240,11 +250,11 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
 
   final ThreadPost post;
   final ThreadDetailPageState state;
+  final ThreadPostBodyRenderPlan plan;
   final bool highlighted;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
-  final ValueChanged<ThreadPost> onOpenPostReply;
-  final ValueChanged<ThreadPost> onOpenPostRate;
-  final ValueChanged<ThreadPost> onOpenPostComment;
+  final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
+  onOpenPostActions;
   final void Function(String label, String url) onCopyActionUrl;
   final ValueChanged<String> onOpenPostLink;
   final void Function(ThreadPoll poll, ThreadPollOption option)
@@ -254,55 +264,55 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.fromLTRB(10, 10, 10, 11),
-      decoration: _cardSegmentDecoration(
-        palette: palette,
-        highlighted: highlighted,
-        position: _ThreadPostCardSegmentPosition.footer,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (post.poll != null) ...[
-            ThreadPollCard(
-              poll: post.poll!,
-              selectedOptionIds: state.selectedPollOptionIds,
-              isSubmitting: state.isPollVoteSubmitting,
-              hint: state.pollVoteHint,
-              onToggleOption: (option) =>
-                  onTogglePollOption(post.poll!, option),
-              onSubmit: () => onSubmitPollVote(post.poll!),
-              palette: palette,
-            ),
-            const SizedBox(height: 10),
+    final hasFooterContent =
+        post.poll != null ||
+        post.comments.isNotEmpty ||
+        post.ratingSummary != null;
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onLongPress: () => onOpenPostActions(post, plan),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: EdgeInsets.fromLTRB(10, hasFooterContent ? 10 : 0, 10, 10),
+        decoration: _cardSegmentDecoration(
+          palette: palette,
+          highlighted: highlighted,
+          position: _ThreadPostCardSegmentPosition.footer,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (post.poll != null) ...[
+              ThreadPollCard(
+                poll: post.poll!,
+                selectedOptionIds: state.selectedPollOptionIds,
+                isSubmitting: state.isPollVoteSubmitting,
+                hint: state.pollVoteHint,
+                onToggleOption: (option) =>
+                    onTogglePollOption(post.poll!, option),
+                onSubmit: () => onSubmitPollVote(post.poll!),
+                palette: palette,
+              ),
+            ],
+            if (post.comments.isNotEmpty) ...[
+              if (post.poll != null) const SizedBox(height: 10),
+              ThreadPostCommentSection(
+                comments: post.comments,
+                imageHeaderBuilder: imageHeaderBuilder,
+                palette: palette,
+              ),
+            ],
+            if (post.ratingSummary != null) ...[
+              if (post.poll != null || post.comments.isNotEmpty)
+                const SizedBox(height: 10),
+              ThreadPostRatingSection(
+                summary: post.ratingSummary!,
+                palette: palette,
+                onCopyActionUrl: onCopyActionUrl,
+              ),
+            ],
           ],
-          if (post.comments.isNotEmpty) ...[
-            ThreadPostCommentSection(
-              comments: post.comments,
-              imageHeaderBuilder: imageHeaderBuilder,
-              palette: palette,
-            ),
-            const SizedBox(height: 10),
-          ],
-          if (post.ratingSummary != null) ...[
-            ThreadPostRatingSection(
-              summary: post.ratingSummary!,
-              palette: palette,
-              onCopyActionUrl: onCopyActionUrl,
-            ),
-            const SizedBox(height: 10),
-          ],
-          ThreadPostActionRow(
-            post: post,
-            palette: palette,
-            onOpenPostReply: onOpenPostReply,
-            onOpenPostRate: onOpenPostRate,
-            onOpenPostComment: onOpenPostComment,
-            onCopyActionUrl: onCopyActionUrl,
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -366,9 +376,6 @@ class ThreadPostCard extends StatelessWidget {
     required this.state,
     this.highlighted = false,
     required this.imageHeaderBuilder,
-    required this.onOpenPostReply,
-    required this.onOpenPostRate,
-    required this.onOpenPostComment,
     required this.onOpenAuthorProfile,
     required this.onCopyActionUrl,
     required this.onOpenPostLink,
@@ -376,15 +383,13 @@ class ThreadPostCard extends StatelessWidget {
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
     required this.palette,
+    this.onOpenPostActions,
   });
 
   final ThreadPost post;
   final ThreadDetailPageState state;
   final bool highlighted;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
-  final ValueChanged<ThreadPost> onOpenPostReply;
-  final ValueChanged<ThreadPost> onOpenPostRate;
-  final ValueChanged<ThreadPost> onOpenPostComment;
   final ValueChanged<ThreadPost> onOpenAuthorProfile;
   final void Function(String label, String url) onCopyActionUrl;
   final ValueChanged<String> onOpenPostLink;
@@ -394,10 +399,13 @@ class ThreadPostCard extends StatelessWidget {
   onTogglePollOption;
   final ValueChanged<ThreadPoll> onSubmitPollVote;
   final ThreadDetailNativePalette palette;
+  final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)?
+  onOpenPostActions;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final plan = const ThreadPostBodyRenderPlanner().plan(post.message);
+    final card = Container(
       key: Key('thread-post-card-${post.pid}'),
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 11),
@@ -482,17 +490,17 @@ class ThreadPostCard extends StatelessWidget {
               onCopyActionUrl: onCopyActionUrl,
             ),
           ],
-          const SizedBox(height: 10),
-          ThreadPostActionRow(
-            post: post,
-            palette: palette,
-            onOpenPostReply: onOpenPostReply,
-            onOpenPostRate: onOpenPostRate,
-            onOpenPostComment: onOpenPostComment,
-            onCopyActionUrl: onCopyActionUrl,
-          ),
         ],
       ),
+    );
+    final openActions = onOpenPostActions;
+    if (openActions == null) {
+      return card;
+    }
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onLongPress: () => openActions(post, plan),
+      child: card,
     );
   }
 }

@@ -257,9 +257,9 @@ void main() {
         find.byKey(const Key('thread-poll-submit-button')),
       );
       expect(pollSubmitBeforeSelection.onPressed, isNull);
-      expect(find.byKey(const Key('thread-post-actions-p1')), findsOneWidget);
-      expect(find.text('评分'), findsAtLeastNWidgets(1));
-      expect(find.text('点评'), findsNWidgets(2));
+      expect(find.byKey(const Key('thread-post-actions-p1')), findsNothing);
+      expect(find.text('评分'), findsOneWidget);
+      expect(find.text('点评'), findsOneWidget);
       expect(
         find.byKey(const Key('thread-post-comment-section')),
         findsOneWidget,
@@ -751,13 +751,10 @@ void main() {
               onLoadPreviousPage: () {},
               onLoadNextPage: () {},
               onLoadPageNumber: (_) {},
-              onOpenPostReply: (_) {},
-              onOpenPostRate: (_) {},
-              onOpenPostComment: (_) {},
               onOpenAuthorProfile: (_) {},
               onCopyActionUrl: (_, _) {},
               onOpenPostLink: (_) {},
-              onOpenPostCopyActions: (_, _) {},
+              onOpenPostActions: (_, _) {},
               onTogglePollOption: (_, _) {},
               onSubmitPollVote: (_) {},
             ),
@@ -820,14 +817,11 @@ void main() {
                   onLoadPreviousPage: () {},
                   onLoadNextPage: () {},
                   onLoadPageNumber: (_) {},
-                  onOpenPostReply: (_) {},
-                  onOpenPostRate: (_) {},
-                  onOpenPostComment: (_) {},
                   onOpenAuthorProfile: (_) {},
                   onCopyActionUrl: (_, _) {},
                   onOpenPostLink: (_) {},
                   onOpenPostImages: (_, request) => opened = request,
-                  onOpenPostCopyActions: (_, _) {},
+                  onOpenPostActions: (_, _) {},
                   onTogglePollOption: (_, _) {},
                   onSubmitPollVote: (_) {},
                 ),
@@ -1908,14 +1902,15 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(
-        find.byKey(const Key('thread-post-copy-action-sheet')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('thread-post-action-sheet')), findsOneWidget);
+      expect(find.text('回复'), findsOneWidget);
       expect(find.text('选择复制'), findsOneWidget);
       expect(find.text('全部复制'), findsOneWidget);
 
-      await tester.tap(find.byKey(const Key('thread-post-copy-all-action')));
+      await _tapPostActionSheetItem(
+        tester,
+        const Key('thread-post-copy-all-action'),
+      );
       await tester.pumpAndSettle();
 
       expect(copiedTexts.single, contains('第一段链接文本'));
@@ -1929,7 +1924,10 @@ void main() {
         find.byKey(const Key('thread-post-body-copy-1-0')),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('thread-post-select-copy-action')));
+      await _tapPostActionSheetItem(
+        tester,
+        const Key('thread-post-select-copy-action'),
+      );
       await tester.pumpAndSettle();
 
       expect(
@@ -2063,7 +2061,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('评分'));
+      await _openPostAction(
+        tester,
+        bodyKey: const Key('thread-post-body-p1'),
+        actionKey: const Key('thread-post-rate-action'),
+      );
       await tester.pumpAndSettle();
 
       expect(rateRepository.loadedUrl, contains('action=rate'));
@@ -2129,7 +2131,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('点评'));
+      await _openPostAction(
+        tester,
+        bodyKey: const Key('thread-post-body-p1'),
+        actionKey: const Key('thread-post-comment-action'),
+      );
       await tester.pumpAndSettle();
 
       expect(commentRepository.loadedUrl, contains('action=comment'));
@@ -2189,14 +2195,20 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final postActions = find.byKey(const Key('thread-post-actions-p2'));
-      expect(postActions, findsOneWidget);
+      await _longPressVisibleTop(
+        tester,
+        find.byKey(const Key('thread-post-body-p2')),
+      );
+      await tester.pumpAndSettle();
+
+      final actionSheet = find.byKey(const Key('thread-post-action-sheet'));
+      expect(actionSheet, findsOneWidget);
       expect(
-        find.descendant(of: postActions, matching: find.text('点评')),
+        find.descendant(of: actionSheet, matching: find.text('点评')),
         findsNothing,
       );
       expect(
-        find.descendant(of: postActions, matching: find.text('回复')),
+        find.descendant(of: actionSheet, matching: find.text('回复')),
         findsOneWidget,
       );
       expect(commentRepository.loadedSeed, isNull);
@@ -2832,6 +2844,24 @@ Future<void> _longPressVisibleTop(WidgetTester tester, Finder finder) async {
     tester.view.physicalSize.width / tester.view.devicePixelRatio - 1,
   );
   await tester.longPressAt(Offset(x, y));
+}
+
+Future<void> _openPostAction(
+  WidgetTester tester, {
+  required Key bodyKey,
+  required Key actionKey,
+}) async {
+  await _longPressVisibleTop(tester, find.byKey(bodyKey));
+  await tester.pumpAndSettle();
+  expect(find.byKey(const Key('thread-post-action-sheet')), findsOneWidget);
+  await _tapPostActionSheetItem(tester, actionKey);
+}
+
+Future<void> _tapPostActionSheetItem(WidgetTester tester, Key key) async {
+  final item = find.byKey(key);
+  await tester.ensureVisible(item);
+  await tester.pump();
+  await tester.tap(item);
 }
 
 class _FakeForumTagRepository implements ForumTagRepository {
