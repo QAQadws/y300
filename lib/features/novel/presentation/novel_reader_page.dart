@@ -37,10 +37,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   late final ScrollController _scrollController;
   late final ReaderOverlayController _overlayController;
   late final NovelReaderPagedSurfaceController _pagedSurfaceController;
-  final NovelReaderThemeResolver _themeResolver = const NovelReaderThemeResolver();
+  final NovelReaderThemeResolver _themeResolver =
+      const NovelReaderThemeResolver();
   final NovelReaderTypographyResolver _typographyResolver =
       const NovelReaderTypographyResolver();
-  final NovelReaderProgressPolicy _progressPolicy = const NovelReaderProgressPolicy();
+  final NovelReaderProgressPolicy _progressPolicy =
+      const NovelReaderProgressPolicy();
   final Map<String, GlobalKey> _nodeKeys = <String, GlobalKey>{};
   Timer? _displayPreviewThrottle;
   Timer? _displayPersistDebounce;
@@ -49,13 +51,16 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   NovelReaderPreferences? _lastPersistedDisplayPreferences;
   NovelReaderPreferences? _inFlightDisplayPreferences;
   int _displayPersistSerial = 0;
+  int _readerSemanticsSuspendCount = 0;
   bool _hasRestoredOffset = false;
   bool _isProgrammaticScrollChange = false;
   bool _allowPopAfterProgressFlush = false;
   bool _isHandlingPop = false;
 
-  NovelReaderArgs get _args =>
-      NovelReaderArgs(novelId: widget.novelId, episodeId: widget.initialEpisodeId);
+  NovelReaderArgs get _args => NovelReaderArgs(
+    novelId: widget.novelId,
+    episodeId: widget.initialEpisodeId,
+  );
 
   @override
   void initState() {
@@ -138,7 +143,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                   final reader = ListenableBuilder(
                     listenable: _pagedSurfaceController,
                     builder: (context, _) {
-                      final pagedInteractionEnabled = isPaged &&
+                      final pagedInteractionEnabled =
+                          isPaged &&
                           !_pagedSurfaceController.isResolving &&
                           _pagedSurfaceController.currentLayout != null;
                       return ReaderOverlayScaffold(
@@ -153,21 +159,21 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                         onLeftTap: !pagedInteractionEnabled
                             ? null
                             : () => unawaited(
-                                  _handlePagedReaderTap(
-                                    isLeftTap: true,
-                                    viewState: viewState,
-                                    controller: controller,
-                                  ),
+                                _handlePagedReaderTap(
+                                  isLeftTap: true,
+                                  viewState: viewState,
+                                  controller: controller,
                                 ),
+                              ),
                         onRightTap: !pagedInteractionEnabled
                             ? null
                             : () => unawaited(
-                                  _handlePagedReaderTap(
-                                    isLeftTap: false,
-                                    viewState: viewState,
-                                    controller: controller,
-                                  ),
+                                _handlePagedReaderTap(
+                                  isLeftTap: false,
+                                  viewState: viewState,
+                                  controller: controller,
                                 ),
+                              ),
                         child: !isPaged
                             ? _buildReaderList(
                                 viewState,
@@ -185,18 +191,27 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                                     _openReaderLink(link, externalLauncher),
                                 onPageChanged: controller.onPagedPageChanged,
                                 onInteraction: _overlayController.hideMenu,
-                                nodeKeyBuilder: _nodeKeyFor,
                               ),
                       );
                     },
                   );
-                  final chromePalette =
-                      const ReaderChromePaletteResolver().resolve(
-                    Theme.of(context),
-                  );
+                  final readerSurfaceIdentity =
+                      '${viewState.currentEpisode.episodeId}|'
+                      '${viewState.document.rawHtmlHash}|'
+                      '${viewState.preferences.flowMode.name}';
+                  final chromePalette = const ReaderChromePaletteResolver()
+                      .resolve(Theme.of(context));
                   return Stack(
                     children: [
-                      Positioned.fill(child: reader),
+                      Positioned.fill(
+                        child: ExcludeSemantics(
+                          excluding: _readerSemanticsSuspendCount > 0,
+                          child: KeyedSubtree(
+                            key: ValueKey<String>(readerSurfaceIdentity),
+                            child: reader,
+                          ),
+                        ),
+                      ),
                       if (viewState.transition != null)
                         Positioned.fill(
                           child: AbsorbPointer(
@@ -207,7 +222,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                               ),
                               child: Center(
                                 child: DecoratedBox(
-                                  key: const Key('novel-reader-transition-indicator'),
+                                  key: const Key(
+                                    'novel-reader-transition-indicator',
+                                  ),
                                   decoration: BoxDecoration(
                                     color:
                                         chromePalette.transitionCardBackground,
@@ -283,15 +300,15 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       final layout = _pagedSurfaceController.currentLayout;
       final interactionLocked =
           _pagedSurfaceController.isResolving || layout == null;
-      final safeTotal = layout?.pageCount ?? _pagedSurfaceController.currentPageCount;
-      final clampedPageIndex = layout?.clampPageIndex(
-            _pagedSurfaceController.currentPageIndex,
-          ) ??
-          0;
+      final safeTotal =
+          layout?.pageCount ?? _pagedSurfaceController.currentPageCount;
+      final clampedPageIndex =
+          layout?.clampPageIndex(_pagedSurfaceController.currentPageIndex) ?? 0;
       final canGoPrevious =
           !interactionLocked &&
-              (clampedPageIndex > 0 || viewState.hasPreviousEpisode);
-      final canGoNext = !interactionLocked &&
+          (clampedPageIndex > 0 || viewState.hasPreviousEpisode);
+      final canGoNext =
+          !interactionLocked &&
           (clampedPageIndex < safeTotal - 1 || viewState.hasNextEpisode);
       return ReaderBottomBarConfig(
         showProgress: viewState.preferences.showProgressIndicator,
@@ -324,7 +341,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         onPrevious: () => _switchToPreviousEpisode(controller),
         onNext: () => _switchToNextEpisode(controller),
         onChanged: (_) {},
-        onChangeEnd: (value) => _openEpisodeBySlider(value, viewState, controller),
+        onChangeEnd: (value) =>
+            _openEpisodeBySlider(value, viewState, controller),
       ),
       actions: _buildBottomActions(viewState, controller),
     );
@@ -395,7 +413,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         imageHeaderBuilder: imageHeaderBuilder,
         onLinkTap: (link) => _openReaderLink(link, externalLauncher),
         highlightedResult: viewState.currentSearchResult,
-        nodeKeyBuilder: _nodeKeyFor,
+        nodeKeyBuilder: (nodeId) =>
+            _nodeKeyForEpisode(viewState.currentEpisode.episodeId, nodeId),
       ),
       if (viewState.nextEpisode != null) ...[
         SizedBox(height: viewState.preferences.paragraphSpacing * 2),
@@ -417,7 +436,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         Center(
           child: ConstrainedBox(
             key: const Key('novel-reader-content-column'),
-            constraints: BoxConstraints(maxWidth: _safeContentMaxWidth(typography)),
+            constraints: BoxConstraints(
+              maxWidth: _safeContentMaxWidth(typography),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: children,
@@ -505,7 +526,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     }
   }
 
-  Future<void> _switchToPreviousEpisode(NovelReaderController controller) async {
+  Future<void> _switchToPreviousEpisode(
+    NovelReaderController controller,
+  ) async {
     await _openDifferentEpisode(() => controller.goToPreviousEpisode());
   }
 
@@ -557,7 +580,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     }
     final controller = ref.read(novelReaderControllerProvider(_args).notifier);
     if (!_isPagedMode(viewState.preferences.flowMode)) {
-      final offset = _scrollController.hasClients ? _scrollController.offset : 0.0;
+      final offset = _scrollController.hasClients
+          ? _scrollController.offset
+          : 0.0;
       final maxScrollExtent = _scrollController.hasClients
           ? _scrollController.position.maxScrollExtent
           : 0.0;
@@ -587,7 +612,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     required NovelReaderViewState viewState,
     required NovelReaderController controller,
   }) async {
-    final isRtl = viewState.preferences.flowMode == NovelReaderFlowMode.pagedRtl;
+    final isRtl =
+        viewState.preferences.flowMode == NovelReaderFlowMode.pagedRtl;
     final shouldGoNext = isRtl ? isLeftTap : !isLeftTap;
     if (shouldGoNext) {
       await _goToNextPagedEdge(controller);
@@ -613,58 +639,101 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     await _pagedSurfaceController.jumpToPage(pageIndex);
   }
 
+  Future<T> _runWithReaderSemanticsSuspended<T>(
+    Future<T> Function() action,
+  ) async {
+    _suspendReaderSemantics();
+    try {
+      return await action();
+    } finally {
+      _resumeReaderSemantics();
+    }
+  }
+
+  void _suspendReaderSemantics() {
+    if (!mounted) {
+      _readerSemanticsSuspendCount += 1;
+      return;
+    }
+    setState(() {
+      _readerSemanticsSuspendCount += 1;
+    });
+  }
+
+  void _resumeReaderSemantics() {
+    if (_readerSemanticsSuspendCount == 0) {
+      return;
+    }
+    if (!mounted) {
+      _readerSemanticsSuspendCount -= 1;
+      return;
+    }
+    setState(() {
+      _readerSemanticsSuspendCount -= 1;
+    });
+  }
+
   Future<void> _showChapterListSheet(
     NovelReaderViewState viewState,
     NovelReaderController controller,
   ) async {
-    final selected = await showModalBottomSheet<NovelEpisodeItem>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => Consumer(
-        builder: (context, ref, _) {
-          final latest =
-              ref.watch(novelReaderControllerProvider(_args)).value ?? viewState;
-          return NovelReaderChapterListSheet(viewState: latest);
-        },
-      ),
-    );
-    if (selected == null || selected.episodeId == viewState.currentEpisode.episodeId) {
-      return;
-    }
-    if (!mounted) {
-      return;
-    }
-    await _openDifferentEpisode(
-      () => controller.openEpisodeFromCatalog(selected.episodeId),
-    );
+    await _runWithReaderSemanticsSuspended(() async {
+      final selected = await showModalBottomSheet<NovelEpisodeItem>(
+        context: context,
+        showDragHandle: true,
+        builder: (context) => Consumer(
+          builder: (context, ref, _) {
+            final latest =
+                ref.watch(novelReaderControllerProvider(_args)).value ??
+                viewState;
+            return NovelReaderChapterListSheet(viewState: latest);
+          },
+        ),
+      );
+      if (selected == null ||
+          selected.episodeId == viewState.currentEpisode.episodeId) {
+        return;
+      }
+      if (!mounted) {
+        return;
+      }
+      await _openDifferentEpisode(
+        () => controller.openEpisodeFromCatalog(selected.episodeId),
+      );
+    });
   }
 
   Future<void> _showSearchSheet(NovelReaderViewState viewState) async {
     _overlayController.hideMenu();
     final controller = ref.read(novelReaderControllerProvider(_args).notifier);
-    final selected = await showModalBottomSheet<NovelReaderSearchResult>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => NovelReaderSearchSheet(
-        initialKeyword: viewState.searchKeyword,
-        initialResults: viewState.searchResults,
-        onSearch: (keyword) {
-          controller.searchInCurrentChapter(keyword);
-          return ref.read(novelReaderControllerProvider(_args)).value?.searchResults ??
-              const <NovelReaderSearchResult>[];
-        },
-        onClear: controller.clearSearch,
-      ),
-    );
-    if (selected == null) {
-      return;
-    }
-    if (!mounted) {
-      return;
-    }
-    controller.selectSearchResult(selected.resultId);
-    await _jumpToAnchor(selected.anchor);
+    await _runWithReaderSemanticsSuspended(() async {
+      final selected = await showModalBottomSheet<NovelReaderSearchResult>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        builder: (context) => NovelReaderSearchSheet(
+          initialKeyword: viewState.searchKeyword,
+          initialResults: viewState.searchResults,
+          onSearch: (keyword) {
+            controller.searchInCurrentChapter(keyword);
+            return ref
+                    .read(novelReaderControllerProvider(_args))
+                    .value
+                    ?.searchResults ??
+                const <NovelReaderSearchResult>[];
+          },
+          onClear: controller.clearSearch,
+        ),
+      );
+      if (selected == null) {
+        return;
+      }
+      if (!mounted) {
+        return;
+      }
+      controller.selectSearchResult(selected.resultId);
+      await _jumpToAnchor(selected.anchor);
+    });
   }
 
   Future<void> _showBookmarkSheet(
@@ -672,50 +741,55 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     NovelReaderController controller,
   ) async {
     _overlayController.hideMenu();
-    final action = await showModalBottomSheet<_BookmarkSheetAction>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => Consumer(
-        builder: (context, ref, _) {
-          final latest =
-              ref.watch(novelReaderControllerProvider(_args)).value ?? viewState;
-          return NovelReaderBookmarkSheet(
-            bookmarks: latest.currentEpisodeBookmarks,
+    await _runWithReaderSemanticsSuspended(() async {
+      final action = await showModalBottomSheet<_BookmarkSheetAction>(
+        context: context,
+        showDragHandle: true,
+        builder: (context) => Consumer(
+          builder: (context, ref, _) {
+            final latest =
+                ref.watch(novelReaderControllerProvider(_args)).value ??
+                viewState;
+            return NovelReaderBookmarkSheet(
+              bookmarks: latest.currentEpisodeBookmarks,
+            );
+          },
+        ),
+      );
+      if (action == null) {
+        return;
+      }
+      if (!mounted) {
+        return;
+      }
+      switch (action.type) {
+        case _BookmarkSheetActionType.add:
+          await controller.addBookmarkAtCurrentPosition(
+            _currentAnchor(viewState),
           );
-        },
-      ),
-    );
-    if (action == null) {
-      return;
-    }
-    if (!mounted) {
-      return;
-    }
-    switch (action.type) {
-      case _BookmarkSheetActionType.add:
-        await controller.addBookmarkAtCurrentPosition(_currentAnchor(viewState));
-        if (!mounted) {
-          return;
-        }
-        _showReaderSnackBar('已添加书签');
-        break;
-      case _BookmarkSheetActionType.open:
-        final bookmark = action.bookmark;
-        if (bookmark != null) {
-          await _jumpToAnchor(bookmark.anchor);
-        }
-        break;
-      case _BookmarkSheetActionType.remove:
-        final bookmark = action.bookmark;
-        if (bookmark != null) {
-          await controller.removeBookmark(bookmark.bookmarkId);
           if (!mounted) {
             return;
           }
-          _showReaderSnackBar('已移除书签');
-        }
-        break;
-    }
+          _showReaderSnackBar('已添加书签');
+          break;
+        case _BookmarkSheetActionType.open:
+          final bookmark = action.bookmark;
+          if (bookmark != null) {
+            await _jumpToAnchor(bookmark.anchor);
+          }
+          break;
+        case _BookmarkSheetActionType.remove:
+          final bookmark = action.bookmark;
+          if (bookmark != null) {
+            await controller.removeBookmark(bookmark.bookmarkId);
+            if (!mounted) {
+              return;
+            }
+            _showReaderSnackBar('已移除书签');
+          }
+          break;
+      }
+    });
   }
 
   Future<void> _showCacheSheet(
@@ -723,37 +797,34 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     NovelReaderController controller,
   ) async {
     _overlayController.hideMenu();
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => Consumer(
-        builder: (context, ref, _) {
-          final latest =
-              ref.watch(novelReaderControllerProvider(_args)).value ?? viewState;
-          return NovelReaderCacheSheet(
-            viewState: latest,
-            onCacheCurrent: () => unawaited(
-              _handleCacheAction(
-                _CacheSheetAction.cacheCurrent,
-                controller,
+    await _runWithReaderSemanticsSuspended(() async {
+      await showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (context) => Consumer(
+          builder: (context, ref, _) {
+            final latest =
+                ref.watch(novelReaderControllerProvider(_args)).value ??
+                viewState;
+            return NovelReaderCacheSheet(
+              viewState: latest,
+              onCacheCurrent: () => unawaited(
+                _handleCacheAction(_CacheSheetAction.cacheCurrent, controller),
               ),
-            ),
-            onCacheFollowing: () => unawaited(
-              _handleCacheAction(
-                _CacheSheetAction.cacheFollowing,
-                controller,
+              onCacheFollowing: () => unawaited(
+                _handleCacheAction(
+                  _CacheSheetAction.cacheFollowing,
+                  controller,
+                ),
               ),
-            ),
-            onDeleteCurrent: () => unawaited(
-              _handleCacheAction(
-                _CacheSheetAction.deleteCurrent,
-                controller,
+              onDeleteCurrent: () => unawaited(
+                _handleCacheAction(_CacheSheetAction.deleteCurrent, controller),
               ),
-            ),
-          );
-        },
-      ),
-    );
+            );
+          },
+        ),
+      );
+    });
   }
 
   Future<void> _handleCacheAction(
@@ -818,20 +889,22 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     _lastPreviewedDisplayPreferences = viewState.preferences;
     _lastPersistedDisplayPreferences = viewState.persistedPreferences;
     _inFlightDisplayPreferences = null;
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      constraints: BoxConstraints(maxHeight: maxSheetHeight),
-      builder: (context) => NovelReaderDisplaySettingsSheet(
-        initialPreferences: viewState.preferences,
-        onPreferencesChanged: (preferences) =>
-            _onDisplayPreferencesChanged(preferences, controller),
-      ),
-    );
-    if (!mounted) {
-      return;
-    }
-    await _flushDisplayPreferenceChanges(controller);
+    await _runWithReaderSemanticsSuspended(() async {
+      await showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        constraints: BoxConstraints(maxHeight: maxSheetHeight),
+        builder: (context) => NovelReaderDisplaySettingsSheet(
+          initialPreferences: viewState.preferences,
+          onPreferencesChanged: (preferences) =>
+              _onDisplayPreferencesChanged(preferences, controller),
+        ),
+      );
+      if (!mounted) {
+        return;
+      }
+      await _flushDisplayPreferenceChanges(controller);
+    });
   }
 
   void _onDisplayPreferencesChanged(
@@ -920,12 +993,18 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     }
     final latest = ref.read(novelReaderControllerProvider(_args)).value;
     final isBookmarked =
-        latest?.hasCurrentEpisodeBookmark ?? !viewState.hasCurrentEpisodeBookmark;
+        latest?.hasCurrentEpisodeBookmark ??
+        !viewState.hasCurrentEpisodeBookmark;
     _showReaderSnackBar(isBookmarked ? '已添加书签' : '已移除书签');
   }
 
-  GlobalKey _nodeKeyFor(String nodeId) {
-    return _nodeKeys.putIfAbsent(nodeId, () => GlobalKey());
+  String _nodeKeyId(String episodeId, String nodeId) {
+    return '$episodeId::$nodeId';
+  }
+
+  GlobalKey _nodeKeyForEpisode(String episodeId, String nodeId) {
+    final keyId = _nodeKeyId(episodeId, nodeId);
+    return _nodeKeys.putIfAbsent(keyId, () => GlobalKey());
   }
 
   NovelReaderTextAnchor _currentAnchor(NovelReaderViewState viewState) {
@@ -943,7 +1022,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         progressPercent: viewState.progressSnapshot.progressPercent,
       );
     }
-    final offset = _scrollController.hasClients ? _scrollController.offset : 0.0;
+    final offset = _scrollController.hasClients
+        ? _scrollController.offset
+        : 0.0;
     final max = _scrollController.hasClients
         ? _scrollController.position.maxScrollExtent
         : 0.0;
@@ -979,7 +1060,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     }
     final nodeId = anchor.nodeId;
     if (nodeId != null) {
-      final context = _nodeKeys[nodeId]?.currentContext;
+      final keyId = _nodeKeyId(latest.currentEpisode.episodeId, nodeId);
+      final context = _nodeKeys[keyId]?.currentContext;
       if (context != null && context.mounted) {
         await Scrollable.ensureVisible(
           context,
@@ -1001,7 +1083,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         : viewState.currentEpisode.sourceTid;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => ThreadDetailPage(tid: tid, subject: _novelTitle(viewState)),
+        builder: (_) =>
+            ThreadDetailPage(tid: tid, subject: _novelTitle(viewState)),
       ),
     );
   }
@@ -1012,7 +1095,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       await _openSourceThread(viewState);
       return;
     }
-    final tid = _sourceTidFromId(widget.initialEpisodeId) ??
+    final tid =
+        _sourceTidFromId(widget.initialEpisodeId) ??
         _sourceTidFromId(widget.novelId) ??
         widget.novelId;
     await Navigator.of(context).push(
@@ -1099,10 +1183,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 }
 
 class NovelReaderChapterListSheet extends StatefulWidget {
-  const NovelReaderChapterListSheet({
-    super.key,
-    required this.viewState,
-  });
+  const NovelReaderChapterListSheet({super.key, required this.viewState});
 
   final NovelReaderViewState viewState;
 
@@ -1113,7 +1194,8 @@ class NovelReaderChapterListSheet extends StatefulWidget {
       _NovelReaderChapterListSheetState();
 }
 
-class _NovelReaderChapterListSheetState extends State<NovelReaderChapterListSheet> {
+class _NovelReaderChapterListSheetState
+    extends State<NovelReaderChapterListSheet> {
   late final ScrollController _scrollController;
   String _keyword = '';
 
@@ -1216,11 +1298,13 @@ class _NovelReaderChapterListSheetState extends State<NovelReaderChapterListShee
     if (keyword.isEmpty) {
       return viewState.episodes;
     }
-    return viewState.episodes.where((episode) {
-      return episode.episodeTitle.toLowerCase().contains(keyword) ||
-          (episode.datelineText ?? '').toLowerCase().contains(keyword) ||
-          (episode.sourcePid ?? '').toLowerCase().contains(keyword);
-    }).toList(growable: false);
+    return viewState.episodes
+        .where((episode) {
+          return episode.episodeTitle.toLowerCase().contains(keyword) ||
+              (episode.datelineText ?? '').toLowerCase().contains(keyword) ||
+              (episode.sourcePid ?? '').toLowerCase().contains(keyword);
+        })
+        .toList(growable: false);
   }
 }
 
@@ -1253,8 +1337,8 @@ class _ChapterListTile extends StatelessWidget {
         isBookmarked
             ? Icons.bookmark
             : isCurrent
-                ? Icons.radio_button_checked
-                : Icons.radio_button_unchecked,
+            ? Icons.radio_button_checked
+            : Icons.radio_button_unchecked,
       ),
       title: Text(
         episode.episodeTitle,
@@ -1281,7 +1365,10 @@ class _ChapterListTile extends StatelessWidget {
               '已缓存',
               key: Key('novel-reader-chapter-downloaded-${episode.episodeId}'),
             ),
-          if (isCurrent) const Text('当前') else if (isLastRead) const Text('上次阅读'),
+          if (isCurrent)
+            const Text('当前')
+          else if (isLastRead)
+            const Text('上次阅读'),
         ],
       ),
       onTap: () => Navigator.of(context).pop(episode),
@@ -1440,8 +1527,8 @@ class NovelReaderCacheSheet extends StatelessWidget {
                   value: viewState.cacheTotal <= 0
                       ? null
                       : (viewState.cacheCurrent / viewState.cacheTotal)
-                          .clamp(0.0, 1.0)
-                          .toDouble(),
+                            .clamp(0.0, 1.0)
+                            .toDouble(),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -1489,11 +1576,7 @@ class NovelReaderCacheSheet extends StatelessWidget {
   }
 }
 
-enum _CacheSheetAction {
-  cacheCurrent,
-  cacheFollowing,
-  deleteCurrent,
-}
+enum _CacheSheetAction { cacheCurrent, cacheFollowing, deleteCurrent }
 
 class NovelReaderSearchSheet extends StatefulWidget {
   const NovelReaderSearchSheet({
@@ -1557,7 +1640,8 @@ class _NovelReaderSearchSheetState extends State<NovelReaderSearchSheet> {
                             _controller.clear();
                             widget.onClear();
                             setState(
-                              () => _results = const <NovelReaderSearchResult>[],
+                              () =>
+                                  _results = const <NovelReaderSearchResult>[],
                             );
                           },
                         ),
@@ -1582,7 +1666,9 @@ class _NovelReaderSearchSheetState extends State<NovelReaderSearchSheet> {
                       itemBuilder: (context, index) {
                         final result = _results[index];
                         return ListTile(
-                          key: Key('novel-reader-search-result-${result.resultId}'),
+                          key: Key(
+                            'novel-reader-search-result-${result.resultId}',
+                          ),
                           leading: Text('${index + 1}'),
                           title: Text(
                             result.snippet,
@@ -1603,17 +1689,16 @@ class _NovelReaderSearchSheetState extends State<NovelReaderSearchSheet> {
 }
 
 class NovelReaderBookmarkSheet extends StatelessWidget {
-  const NovelReaderBookmarkSheet({
-    super.key,
-    required this.bookmarks,
-  });
+  const NovelReaderBookmarkSheet({super.key, required this.bookmarks});
 
   final List<NovelReaderBookmark> bookmarks;
 
   @override
   Widget build(BuildContext context) {
     final positionBookmarks = bookmarks
-        .where((bookmark) => !bookmark.bookmarkId.startsWith('episode-bookmark:'))
+        .where(
+          (bookmark) => !bookmark.bookmarkId.startsWith('episode-bookmark:'),
+        )
         .toList(growable: false);
     return SafeArea(
       child: ConstrainedBox(
@@ -1628,9 +1713,8 @@ class NovelReaderBookmarkSheet extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: FilledButton.icon(
                 key: const Key('novel-reader-add-position-bookmark'),
-                onPressed: () => Navigator.of(context).pop(
-                  const _BookmarkSheetAction.add(),
-                ),
+                onPressed: () =>
+                    Navigator.of(context).pop(const _BookmarkSheetAction.add()),
                 icon: const Icon(Icons.bookmark_add_outlined),
                 label: const Text('添加当前位置'),
               ),
@@ -1646,7 +1730,9 @@ class NovelReaderBookmarkSheet extends StatelessWidget {
                       itemBuilder: (context, index) {
                         final bookmark = positionBookmarks[index];
                         return ListTile(
-                          key: Key('novel-reader-bookmark-${bookmark.bookmarkId}'),
+                          key: Key(
+                            'novel-reader-bookmark-${bookmark.bookmarkId}',
+                          ),
                           leading: const Icon(Icons.bookmark),
                           title: Text(
                             bookmark.snippet,
@@ -1654,17 +1740,17 @@ class NovelReaderBookmarkSheet extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Text(bookmark.title),
-                          onTap: () => Navigator.of(context).pop(
-                            _BookmarkSheetAction.open(bookmark),
-                          ),
+                          onTap: () => Navigator.of(
+                            context,
+                          ).pop(_BookmarkSheetAction.open(bookmark)),
                           trailing: IconButton(
                             key: Key(
                               'novel-reader-remove-bookmark-${bookmark.bookmarkId}',
                             ),
                             icon: const Icon(Icons.delete_outline),
-                            onPressed: () => Navigator.of(context).pop(
-                              _BookmarkSheetAction.remove(bookmark),
-                            ),
+                            onPressed: () => Navigator.of(
+                              context,
+                            ).pop(_BookmarkSheetAction.remove(bookmark)),
                           ),
                         );
                       },
@@ -1677,22 +1763,18 @@ class NovelReaderBookmarkSheet extends StatelessWidget {
   }
 }
 
-enum _BookmarkSheetActionType {
-  add,
-  open,
-  remove,
-}
+enum _BookmarkSheetActionType { add, open, remove }
 
 class _BookmarkSheetAction {
   const _BookmarkSheetAction.add()
-      : type = _BookmarkSheetActionType.add,
-        bookmark = null;
+    : type = _BookmarkSheetActionType.add,
+      bookmark = null;
 
   const _BookmarkSheetAction.open(this.bookmark)
-      : type = _BookmarkSheetActionType.open;
+    : type = _BookmarkSheetActionType.open;
 
   const _BookmarkSheetAction.remove(this.bookmark)
-      : type = _BookmarkSheetActionType.remove;
+    : type = _BookmarkSheetActionType.remove;
 
   final _BookmarkSheetActionType type;
   final NovelReaderBookmark? bookmark;

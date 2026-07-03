@@ -277,8 +277,7 @@ class YamiboHttpGateway {
       if (attempt == 0 &&
           resolver != null &&
           WafChallengeDetector.isChallenge(body)) {
-        final refreshed =
-            await resolver.ensureFreshPass(triggeringUri: uri);
+        final refreshed = await resolver.ensureFreshPass(triggeringUri: uri);
         _requestLogger.logWafChallenge(
           context: context,
           requestId: requestId,

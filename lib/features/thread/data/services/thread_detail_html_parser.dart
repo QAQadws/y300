@@ -432,9 +432,7 @@ class ThreadDetailHtmlParser {
       final dateline = _cleanText(
         item.querySelector('.authi .mtime')?.text ?? '',
       ).replaceFirst(RegExp(r'^发表于\s*'), '').trim();
-      final message = _cleanText(
-        item.querySelector('.authi .mtxt')?.text ?? '',
-      );
+      final message = _cleanPlainTextHtml(item.querySelector('.authi .mtxt'));
       if (author.isEmpty && dateline.isEmpty && message.isEmpty) {
         continue;
       }
@@ -665,14 +663,10 @@ class ThreadDetailHtmlParser {
   }
 
   String _parseDesktopPostCommentMessage(html_dom.Element? messageNode) {
-    if (messageNode == null) {
-      return '';
-    }
-    final clone = messageNode.clone(true);
-    clone.querySelectorAll('.xg1, script, style').forEach((node) {
-      node.remove();
-    });
-    return _cleanText(clone.text);
+    return _cleanPlainTextHtml(
+      messageNode,
+      selectorsToRemove: const <String>['.xg1', 'script', 'style'],
+    );
   }
 
   String _parseDesktopPostCommentDateline(html_dom.Element? messageNode) {
@@ -856,14 +850,54 @@ class ThreadDetailHtmlParser {
   }
 
   String _cleanPostMessageBodyHtml(html_dom.Element? messageNode) {
-    if (messageNode == null) {
+    final clone = _cloneAndSanitizeThreadHtml(
+      messageNode,
+      selectorsToRemove: const <String>['script', 'style', '.aimg_tip'],
+      normalizeImageSources: true,
+    );
+    if (clone == null) {
       return '';
     }
-    final clone = messageNode.clone(true);
-    clone
-        .querySelectorAll('script, style, .aimg_tip')
-        .forEach((node) => node.remove());
-    for (final image in clone.querySelectorAll('img')) {
+    return clone.innerHtml.trim();
+  }
+
+  String _cleanPlainTextHtml(
+    html_dom.Element? source, {
+    List<String> selectorsToRemove = const <String>[],
+  }) {
+    final clone = _cloneAndSanitizeThreadHtml(
+      source,
+      selectorsToRemove: selectorsToRemove,
+    );
+    if (clone == null) {
+      return '';
+    }
+    return _cleanText(clone.text);
+  }
+
+  html_dom.Element? _cloneAndSanitizeThreadHtml(
+    html_dom.Element? source, {
+    List<String> selectorsToRemove = const <String>[],
+    bool normalizeImageSources = false,
+  }) {
+    if (source == null) {
+      return null;
+    }
+    final clone = source.clone(true);
+    if (selectorsToRemove.isNotEmpty) {
+      clone
+          .querySelectorAll(selectorsToRemove.join(', '))
+          .forEach((node) => node.remove());
+    }
+    _removeObfuscatedThreadNodes(clone);
+    if (normalizeImageSources) {
+      _normalizeThreadImageSources(clone);
+    }
+    return clone;
+  }
+
+  void _normalizeThreadImageSources(html_dom.Element root) {
+    for (final image in root.querySelectorAll('img')) {
       final realSource = _firstPresentAttribute(image, const <String>[
         'zoomfile',
         'file',
@@ -875,7 +909,39 @@ class ThreadDetailHtmlParser {
         image.attributes['src'] = realSource;
       }
     }
-    return clone.innerHtml.trim();
+  }
+
+  void _removeObfuscatedThreadNodes(html_dom.Element root) {
+    // Discuz anti-scraping may inject hidden jammer nodes into otherwise valid
+    // post/comment HTML; remove them before downstream parsing and rendering.
+    root.querySelectorAll('font.jammer, .jammer').forEach((node) {
+      node.remove();
+    });
+    for (final element in root.querySelectorAll('[style]')) {
+      final style = element.attributes['style']?.trim() ?? '';
+      if (style.isEmpty) {
+        continue;
+      }
+      for (final declaration in style.split(';')) {
+        final separatorIndex = declaration.indexOf(':');
+        if (separatorIndex <= 0) {
+          continue;
+        }
+        final key = declaration
+            .substring(0, separatorIndex)
+            .trim()
+            .toLowerCase();
+        final value = declaration
+            .substring(separatorIndex + 1)
+            .trim()
+            .toLowerCase()
+            .replaceAll(RegExp(r'\s+'), '');
+        if (key == 'display' && value.startsWith('none')) {
+          element.remove();
+          break;
+        }
+      }
+    }
   }
 
   List<String> _cleanPostAttachmentImageHtml({

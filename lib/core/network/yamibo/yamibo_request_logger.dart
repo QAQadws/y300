@@ -3,11 +3,9 @@ import 'package:logger/logger.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 
 class YamiboRequestLogger {
-  const YamiboRequestLogger({
-    required Logger logger,
-    bool enableLog = true,
-  })  : _logger = logger,
-        _enableLog = enableLog;
+  const YamiboRequestLogger({required Logger logger, bool enableLog = true})
+    : _logger = logger,
+      _enableLog = enableLog;
 
   final Logger _logger;
   final bool _enableLog;

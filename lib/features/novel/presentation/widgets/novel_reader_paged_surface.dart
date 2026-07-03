@@ -75,9 +75,7 @@ class NovelReaderPagedSurfaceController extends ChangeNotifier {
     await state._jumpToAnchor(anchor);
   }
 
-  Future<void> goPreviousOrEdge(
-    Future<void> Function() onEpisodeEdge,
-  ) async {
+  Future<void> goPreviousOrEdge(Future<void> Function() onEpisodeEdge) async {
     final state = _state;
     if (state == null || !_canDriveLayout(state)) {
       return;
@@ -85,9 +83,7 @@ class NovelReaderPagedSurfaceController extends ChangeNotifier {
     await state._goPreviousOrEdge(onEpisodeEdge);
   }
 
-  Future<void> goNextOrEdge(
-    Future<void> Function() onEpisodeEdge,
-  ) async {
+  Future<void> goNextOrEdge(Future<void> Function() onEpisodeEdge) async {
     final state = _state;
     if (state == null || !_canDriveLayout(state)) {
       return;
@@ -113,9 +109,7 @@ class NovelReaderPagedSurfaceController extends ChangeNotifier {
     );
   }
 
-  NovelReaderTextAnchor? currentAnchor({
-    required String episodeId,
-  }) {
+  NovelReaderTextAnchor? currentAnchor({required String episodeId}) {
     final layout = _currentLayout;
     if (layout == null) {
       return null;
@@ -125,8 +119,9 @@ class NovelReaderPagedSurfaceController extends ChangeNotifier {
       episodeId: episodeId,
       nodeId: layout.anchorForPage(pageIndex),
       pageIndex: pageIndex,
-      progressPercent:
-          layout.pageCount <= 1 ? 0 : pageIndex / (layout.pageCount - 1),
+      progressPercent: layout.pageCount <= 1
+          ? 0
+          : pageIndex / (layout.pageCount - 1),
     );
   }
 
@@ -141,7 +136,8 @@ class NovelReaderPagedSurfaceController extends ChangeNotifier {
     required int pageCount,
     required bool isResolving,
   }) {
-    final didChange = _currentLayout != layout ||
+    final didChange =
+        _currentLayout != layout ||
         _currentLayoutKey != layoutKey ||
         _currentPageIndex != pageIndex ||
         _currentPageCount != pageCount ||
@@ -156,7 +152,9 @@ class NovelReaderPagedSurfaceController extends ChangeNotifier {
     }
   }
 
-  Future<void> _consumePendingAction(_NovelReaderPagedSurfaceState state) async {
+  Future<void> _consumePendingAction(
+    _NovelReaderPagedSurfaceState state,
+  ) async {
     final pendingAction = _pendingAction;
     _pendingAction = null;
     if (pendingAction == null) {
@@ -203,7 +201,6 @@ class NovelReaderPagedSurface extends ConsumerStatefulWidget {
     required this.onLinkTap,
     required this.onPageChanged,
     required this.onInteraction,
-    required this.nodeKeyBuilder,
   });
 
   final NovelReaderPagedSurfaceController controller;
@@ -212,19 +209,21 @@ class NovelReaderPagedSurface extends ConsumerStatefulWidget {
   final Color backgroundColor;
   final ImageRequestHeaderBuilder imageHeaderBuilder;
   final ValueChanged<NovelReaderLink> onLinkTap;
-  final Future<void> Function(int pageIndex, NovelReaderPageLayout layout) onPageChanged;
+  final Future<void> Function(int pageIndex, NovelReaderPageLayout layout)
+  onPageChanged;
   final VoidCallback onInteraction;
-  final Key Function(String nodeId) nodeKeyBuilder;
 
   @override
   ConsumerState<NovelReaderPagedSurface> createState() =>
       _NovelReaderPagedSurfaceState();
 }
 
-class _NovelReaderPagedSurfaceState extends ConsumerState<NovelReaderPagedSurface> {
+class _NovelReaderPagedSurfaceState
+    extends ConsumerState<NovelReaderPagedSurface> {
   final NovelReaderProgressPolicy _progressPolicy =
       const NovelReaderProgressPolicy();
-  final Set<PageController> _pendingPageControllerDisposals = <PageController>{};
+  final Set<PageController> _pendingPageControllerDisposals =
+      <PageController>{};
 
   PageController? _pageController;
   NovelReaderLayoutRequest? _pendingRequest;
@@ -268,7 +267,8 @@ class _NovelReaderPagedSurfaceState extends ConsumerState<NovelReaderPagedSurfac
         final activeKey = _activeRequestKey;
         final visibleKey = _visibleLayoutKey;
         final needsResolve = visibleKey != request.key;
-        final sameContentIdentity = visibleKey != null &&
+        final sameContentIdentity =
+            visibleKey != null &&
             visibleKey.hasSameContentIdentity(request.key);
         final visibleLayout = needsResolve
             ? (sameContentIdentity ? _visibleLayout : null)
@@ -281,17 +281,13 @@ class _NovelReaderPagedSurfaceState extends ConsumerState<NovelReaderPagedSurfac
           key: const Key('novel-reader-paged-surface'),
           children: [
             if (visibleLayout != null)
-              Positioned.fill(
-                child: _buildPagedView(visibleLayout),
-              ),
+              Positioned.fill(child: _buildPagedView(visibleLayout)),
             if (showLoading)
               Positioned.fill(
                 child: ColoredBox(
                   key: const Key('novel-reader-paged-layout-loading'),
                   color: widget.backgroundColor,
-                  child: const Center(
-                    child: CircularProgressIndicator(),
-                  ),
+                  child: const Center(child: CircularProgressIndicator()),
                 ),
               ),
             if (showReflowMask && shouldShowProgressIndicator)
@@ -327,22 +323,28 @@ class _NovelReaderPagedSurfaceState extends ConsumerState<NovelReaderPagedSurfac
 
   NovelReaderLayoutRequest _buildRequest(BoxConstraints constraints) {
     final preferences = widget.viewState.preferences;
-    final contentMaxWidth = _safeContentMaxWidth(widget.typography.contentMaxWidth);
+    final contentMaxWidth = _safeContentMaxWidth(
+      widget.typography.contentMaxWidth,
+    );
     final horizontalPadding = preferences.pagePadding * 2;
     final verticalPadding = preferences.pagePadding * 2;
     final availableWidth = (constraints.maxWidth - horizontalPadding)
         .clamp(160.0, contentMaxWidth)
         .toDouble();
-    final availableHeight =
-        (constraints.maxHeight - verticalPadding).clamp(160.0, 10000.0).toDouble();
-    final bodyFontSize = widget.typography.body.fontSize ?? preferences.fontSize;
-    final bodyLineHeight = widget.typography.body.height ?? preferences.lineHeight;
+    final availableHeight = (constraints.maxHeight - verticalPadding)
+        .clamp(160.0, 10000.0)
+        .toDouble();
+    final bodyFontSize =
+        widget.typography.body.fontSize ?? preferences.fontSize;
+    final bodyLineHeight =
+        widget.typography.body.height ?? preferences.lineHeight;
     final headingFontSize =
         widget.typography.chapterTitle.fontSize ?? preferences.fontSize + 4;
     final headingLineHeight =
         widget.typography.chapterTitle.height ?? preferences.lineHeight;
     final firstPageReservedHeight = preferences.showChapterTitle
-        ? headingFontSize * headingLineHeight + preferences.paragraphSpacing * 1.6
+        ? headingFontSize * headingLineHeight +
+              preferences.paragraphSpacing * 1.6
         : 0.0;
     return NovelReaderLayoutRequest(
       episodeId: widget.viewState.currentEpisode.episodeId,
@@ -396,7 +398,8 @@ class _NovelReaderPagedSurfaceState extends ConsumerState<NovelReaderPagedSurfac
 
   Future<void> _resolveLayout(NovelReaderLayoutRequest request) async {
     final requestKey = request.key;
-    final isSameContentIdentity = _visibleLayoutKey != null &&
+    final isSameContentIdentity =
+        _visibleLayoutKey != null &&
         _visibleLayoutKey!.hasSameContentIdentity(requestKey);
     final serial = ++_requestSerial;
     _activeRequestKey = requestKey;
@@ -419,13 +422,19 @@ class _NovelReaderPagedSurfaceState extends ConsumerState<NovelReaderPagedSurfac
     }
     setState(() {});
     try {
-      final layout = await ref.read(novelReaderLayoutServiceProvider).resolve(request);
-      if (!mounted || serial != _requestSerial || _activeRequestKey != requestKey) {
+      final layout = await ref
+          .read(novelReaderLayoutServiceProvider)
+          .resolve(request);
+      if (!mounted ||
+          serial != _requestSerial ||
+          _activeRequestKey != requestKey) {
         return;
       }
       _applyResolvedLayout(request, layout);
     } catch (_) {
-      if (!mounted || serial != _requestSerial || _activeRequestKey != requestKey) {
+      if (!mounted ||
+          serial != _requestSerial ||
+          _activeRequestKey != requestKey) {
         return;
       }
       _activeRequestKey = null;
@@ -478,7 +487,9 @@ class _NovelReaderPagedSurfaceState extends ConsumerState<NovelReaderPagedSurfac
       return layout.clampPageIndex(pendingAction.pageIndex);
     }
     if (pendingAction case _PendingAnchorAction()) {
-      final anchorIndex = layout.pageIndexForAnchor(pendingAction.anchor.nodeId);
+      final anchorIndex = layout.pageIndexForAnchor(
+        pendingAction.anchor.nodeId,
+      );
       return layout.clampPageIndex(
         anchorIndex >= 0 ? anchorIndex : pendingAction.anchor.pageIndex,
       );
@@ -513,7 +524,8 @@ class _NovelReaderPagedSurfaceState extends ConsumerState<NovelReaderPagedSurfac
     return PageView.builder(
       key: const Key('novel-reader-paged-view'),
       controller: _pageController,
-      reverse: widget.viewState.preferences.flowMode == NovelReaderFlowMode.pagedRtl,
+      reverse:
+          widget.viewState.preferences.flowMode == NovelReaderFlowMode.pagedRtl,
       itemCount: layout.pageCount,
       onPageChanged: (index) {
         if (_suppressedOnPageChangedIndex == index) {
@@ -529,12 +541,15 @@ class _NovelReaderPagedSurfaceState extends ConsumerState<NovelReaderPagedSurfac
           child: Center(
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                maxWidth: _safeContentMaxWidth(widget.typography.contentMaxWidth),
+                maxWidth: _safeContentMaxWidth(
+                  widget.typography.contentMaxWidth,
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (index == 0 && widget.viewState.preferences.showChapterTitle) ...[
+                  if (index == 0 &&
+                      widget.viewState.preferences.showChapterTitle) ...[
                     Text(
                       widget.viewState.currentEpisode.episodeTitle,
                       key: const Key('novel-reader-inline-chapter-title'),
@@ -542,17 +557,18 @@ class _NovelReaderPagedSurfaceState extends ConsumerState<NovelReaderPagedSurfac
                       textAlign: TextAlign.center,
                     ),
                     SizedBox(
-                      height: widget.viewState.preferences.paragraphSpacing * 1.6,
+                      height:
+                          widget.viewState.preferences.paragraphSpacing * 1.6,
                     ),
                   ],
                   NovelReaderDocumentView(
                     document: layout.documentForPage(index),
                     typography: widget.typography,
-                    paragraphSpacing: widget.viewState.preferences.paragraphSpacing,
+                    paragraphSpacing:
+                        widget.viewState.preferences.paragraphSpacing,
                     imageHeaderBuilder: widget.imageHeaderBuilder,
                     onLinkTap: widget.onLinkTap,
                     highlightedResult: widget.viewState.currentSearchResult,
-                    nodeKeyBuilder: widget.nodeKeyBuilder,
                   ),
                 ],
               ),
@@ -586,9 +602,7 @@ class _NovelReaderPagedSurfaceState extends ConsumerState<NovelReaderPagedSurfac
     await _jumpToPage(anchorIndex >= 0 ? anchorIndex : anchor.pageIndex);
   }
 
-  Future<void> _goPreviousOrEdge(
-    Future<void> Function() onEpisodeEdge,
-  ) async {
+  Future<void> _goPreviousOrEdge(Future<void> Function() onEpisodeEdge) async {
     final layout = _visibleLayout;
     if (layout == null) {
       return;
@@ -601,9 +615,7 @@ class _NovelReaderPagedSurfaceState extends ConsumerState<NovelReaderPagedSurfac
     await onEpisodeEdge();
   }
 
-  Future<void> _goNextOrEdge(
-    Future<void> Function() onEpisodeEdge,
-  ) async {
+  Future<void> _goNextOrEdge(Future<void> Function() onEpisodeEdge) async {
     final layout = _visibleLayout;
     if (layout == null) {
       return;

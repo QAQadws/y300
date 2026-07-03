@@ -250,8 +250,7 @@ void main() {
         final adapter = _GatewayTestAdapter.scripted(
           responses: const <_ScriptedResponse>[
             _ScriptedResponse(
-              textBody:
-                  "<html><script>var arg1='DEADBEEF';</script></html>",
+              textBody: "<html><script>var arg1='DEADBEEF';</script></html>",
             ),
             _ScriptedResponse(textBody: '<html>ok</html>'),
           ],
@@ -286,22 +285,23 @@ void main() {
 
         expect(result.isSuccess, isTrue);
         expect(result.dataOrNull?.body, '<html>ok</html>');
-        expect(passer.calls, 1,
-            reason: 'challenge must trigger exactly one refresh');
-        expect(adapter.fetchCount, 2,
-            reason: 'gateway must retry the original request after refresh');
         expect(
-          await cookieStore.readCookieMap(
-            Uri.parse('https://bbs.yamibo.com/'),
-          ),
+          passer.calls,
+          1,
+          reason: 'challenge must trigger exactly one refresh',
+        );
+        expect(
+          adapter.fetchCount,
+          2,
+          reason: 'gateway must retry the original request after refresh',
+        );
+        expect(
+          await cookieStore.readCookieMap(Uri.parse('https://bbs.yamibo.com/')),
           containsPair('acw_sc__v2', 'wafpass'),
         );
         // First (challenged) response is not counted as a success; only the
         // retry emits a success diagnostic.
-        expect(
-          diagnostics.records.where((r) => r.succeeded).length,
-          1,
-        );
+        expect(diagnostics.records.where((r) => r.succeeded).length, 1);
       },
     );
 
@@ -311,8 +311,7 @@ void main() {
         final adapter = _GatewayTestAdapter.scripted(
           responses: const <_ScriptedResponse>[
             _ScriptedResponse(
-              textBody:
-                  "<html><script>var arg1='DEAD';</script></html>",
+              textBody: "<html><script>var arg1='DEAD';</script></html>",
             ),
           ],
         );
@@ -334,10 +333,7 @@ void main() {
           triggeringUri: Uri.parse('https://bbs.yamibo.com/'),
         );
         expect(passer.calls, 1);
-        final gateway = _buildGateway(
-          adapter: adapter,
-          resolver: resolver,
-        );
+        final gateway = _buildGateway(adapter: adapter, resolver: resolver);
 
         final result = await gateway.getText(
           Uri.parse('https://bbs.yamibo.com/search.php?mod=forum'),
@@ -349,10 +345,16 @@ void main() {
 
         expect(result.isFailure, isTrue);
         expect(result.errorOrNull?.message, contains('WAF'));
-        expect(adapter.fetchCount, 1,
-            reason: 'no retry when resolver refuses to refresh');
-        expect(passer.calls, 1,
-            reason: 'resolver must skip refresh within the pass window');
+        expect(
+          adapter.fetchCount,
+          1,
+          reason: 'no retry when resolver refuses to refresh',
+        );
+        expect(
+          passer.calls,
+          1,
+          reason: 'resolver must skip refresh within the pass window',
+        );
       },
     );
 
@@ -454,23 +456,22 @@ class _GatewayTestAdapter implements HttpClientAdapter {
     List<int> bytesBody = const <int>[],
     List<String> setCookie = const <String>[],
   }) : _responses = <_ScriptedResponse>[
-          _ScriptedResponse(
-            statusCode: statusCode,
-            textBody: textBody,
-            bytesBody: bytesBody,
-            setCookie: setCookie,
-          ),
-        ],
-        _replayLastForever = true;
+         _ScriptedResponse(
+           statusCode: statusCode,
+           textBody: textBody,
+           bytesBody: bytesBody,
+           setCookie: setCookie,
+         ),
+       ],
+       _replayLastForever = true;
 
   /// Scripted-response ctor: emits [responses] in order across successive
   /// fetches. The last entry is replayed once the script is exhausted, which
   /// makes writing retry tests less finicky.
-  _GatewayTestAdapter.scripted({
-    required List<_ScriptedResponse> responses,
-  })  : assert(responses.isNotEmpty),
-        _responses = List<_ScriptedResponse>.of(responses),
-        _replayLastForever = true;
+  _GatewayTestAdapter.scripted({required List<_ScriptedResponse> responses})
+    : assert(responses.isNotEmpty),
+      _responses = List<_ScriptedResponse>.of(responses),
+      _replayLastForever = true;
 
   final List<_ScriptedResponse> _responses;
   final bool _replayLastForever;
@@ -494,8 +495,8 @@ class _GatewayTestAdapter implements HttpClientAdapter {
     final scripted = index < _responses.length
         ? _responses[index]
         : (_replayLastForever
-            ? _responses.last
-            : throw StateError('No more scripted responses'));
+              ? _responses.last
+              : throw StateError('No more scripted responses'));
     final headers = scripted.setCookie.isEmpty
         ? const <String, List<String>>{}
         : <String, List<String>>{'set-cookie': scripted.setCookie};

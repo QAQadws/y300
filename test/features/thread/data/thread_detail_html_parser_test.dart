@@ -388,6 +388,67 @@ void main() {
       expect(poll.options.last.percent, 1.04);
       expect(poll.options.last.voteCount, 10);
     });
+
+    test(
+      'removes desktop thread obfuscation nodes before keeping message html',
+      () {
+        final result = parser.parse(
+          _desktopObfuscatedThreadHtml,
+          fallbackTid: '123456',
+          fallbackPage: 1,
+        );
+
+        final firstPost = result.posts.single;
+        expect(firstPost.message, contains('正常正文'));
+        expect(firstPost.message, contains('保留文本'));
+        expect(firstPost.message, isNot(contains('干扰A')));
+        expect(firstPost.message, isNot(contains('干扰B')));
+        expect(firstPost.message, isNot(contains('干扰C')));
+        expect(firstPost.message, isNot(contains('jammer')));
+      },
+    );
+
+    test(
+      'removes desktop comment obfuscation text before extracting plain text',
+      () {
+        final result = parser.parse(
+          _desktopCommentObfuscatedThreadHtml,
+          fallbackTid: '123457',
+          fallbackPage: 1,
+        );
+
+        final firstPost = result.posts.single;
+        expect(firstPost.comments, hasLength(1));
+        expect(firstPost.comments.single.message, '点评正文 保留文本');
+        expect(firstPost.comments.single.message, isNot(contains('干扰点评')));
+        expect(firstPost.comments.single.message, isNot(contains('隐藏点评')));
+      },
+    );
+
+    test(
+      'removes jammer and hidden spans from real obfuscated mobile thread html',
+      () {
+        final html = File('docs/html/被混淆的html/贴图区帖子.html').readAsStringSync();
+
+        final result = parser.parse(
+          html,
+          fallbackTid: '544684',
+          fallbackPage: 1,
+        );
+
+        final firstPost = result.posts.first;
+        expect(firstPost.pid, '40951752');
+        expect(firstPost.author, '玉枫kaete');
+        expect(firstPost.message, contains('注意：主要更新《与你相恋到生命尽头》的同人图'));
+        expect(firstPost.message, contains('社畜工作党所以更新应该会很慢。'));
+        expect(firstPost.message, contains('不嫌弃的话请吃吃看孩子做的饭饭。'));
+        expect(firstPost.message, isNot(contains('! R4 I1 a9 @+ H5 g')));
+        expect(firstPost.message, isNot(contains('2 i"')));
+        expect(firstPost.message, isNot(contains('# Q% \\; I: }')));
+        expect(firstPost.comments.first.message, '好萌好萌好萌');
+        expect(firstPost.comments.last.message, '画得好好看啊啊啊啊老师你是我的主人');
+      },
+    );
   });
 }
 
@@ -478,6 +539,86 @@ const _alreadyVotedPollThreadHtml = '''
             </div>
           </form>
         </td>
+      </div>
+    </div>
+  </body>
+</html>
+''';
+
+const _desktopObfuscatedThreadHtml = '''
+<html>
+  <body>
+    <div class="pg"><strong>1</strong></div>
+    <div id="postlist">
+      <div id="post_500001">
+        <div class="pls">
+          <div class="avatar"><img src="avatar.jpg" /></div>
+          <div class="pi">
+            <div class="authi">
+              <a class="xw1" href="home.php?mod=space&amp;uid=42">Tester</a>
+            </div>
+          </div>
+        </div>
+        <div class="plc">
+          <div class="pi">
+            <strong><a id="postnum500001"><em>1</em><sup>#</sup></a></strong>
+            <div class="pti">
+              <div class="authi"><em id="authorposton500001">发表于 2026-7-2 10:00</em></div>
+            </div>
+          </div>
+          <div class="t_f" id="postmessage_500001">
+            <p>正常正文</p>
+            <font class="jammer">干扰A</font>
+            <span class="jammer">干扰B</span>
+            <span style="display: none">干扰C</span>
+            <span style="display : inline">保留文本</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+''';
+
+const _desktopCommentObfuscatedThreadHtml = '''
+<html>
+  <body>
+    <div class="pg"><strong>1</strong></div>
+    <div id="postlist">
+      <div id="post_500002">
+        <div class="pls">
+          <div class="avatar"><img src="avatar.jpg" /></div>
+          <div class="pi">
+            <div class="authi">
+              <a class="xw1" href="home.php?mod=space&amp;uid=43">CommentOwner</a>
+            </div>
+          </div>
+        </div>
+        <div class="plc">
+          <div class="pi">
+            <strong><a id="postnum500002"><em>1</em><sup>#</sup></a></strong>
+            <div class="pti">
+              <div class="authi"><em id="authorposton500002">发表于 2026-7-2 10:05</em></div>
+            </div>
+          </div>
+          <div class="t_f" id="postmessage_500002">
+            <p>楼层正文</p>
+          </div>
+          <div id="comment_500002" class="cm">
+            <div class="pstl">
+              <div class="psta">
+                <a class="xi2" href="home.php?mod=space&amp;uid=99">Commenter</a>
+              </div>
+              <div class="psti">
+                点评正文
+                <font class="jammer">干扰点评</font>
+                <span style="display:none">隐藏点评</span>
+                <span>保留文本</span>
+                <span class="xg1">发表于 2026-7-2 10:06</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </body>

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
@@ -100,10 +102,7 @@ class NovelReaderDocumentView extends StatelessWidget {
       return Divider(key: _nodeKey(block.anchorId));
     }
     // RichSpacerBlock.
-    return SizedBox(
-      key: _nodeKey(block.anchorId),
-      height: paragraphSpacing,
-    );
+    return SizedBox(key: _nodeKey(block.anchorId), height: paragraphSpacing);
   }
 
   List<RichRun> _quoteRuns(RichQuoteBlock block) {
@@ -166,7 +165,7 @@ class NovelReaderParagraphBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final spans = <InlineSpan>[
-      if (firstLineIndent > 0) WidgetSpan(child: SizedBox(width: firstLineIndent)),
+      if (firstLineIndent > 0) TextSpan(text: _firstLineIndentPrefix()),
       if (highlight != null)
         ..._highlightedTextSpans()
       else
@@ -177,6 +176,12 @@ class NovelReaderParagraphBlock extends StatelessWidget {
       style: style,
       textAlign: textAlign,
     );
+  }
+
+  String _firstLineIndentPrefix() {
+    final fontSize = style.fontSize ?? 16;
+    final indentCount = math.max(1, (firstLineIndent / fontSize).round());
+    return List<String>.filled(indentCount, '\u3000').join();
   }
 
   List<InlineSpan> _highlightedTextSpans() {
@@ -224,9 +229,7 @@ class NovelReaderParagraphBlock extends StatelessWidget {
     if (run.text.isEmpty) {
       return const <InlineSpan>[];
     }
-    return <InlineSpan>[
-      TextSpan(text: run.text, style: _styleForRun(run)),
-    ];
+    return <InlineSpan>[TextSpan(text: run.text, style: _styleForRun(run))];
   }
 
   TextStyle? _styleForRun(RichRun run) {
@@ -277,7 +280,8 @@ class NovelReaderQuoteBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = typography.quote.color ?? Theme.of(context).dividerColor;
+    final borderColor =
+        typography.quote.color ?? Theme.of(context).dividerColor;
     return DecoratedBox(
       key: const Key('novel-reader-quote-block'),
       decoration: BoxDecoration(
@@ -375,7 +379,9 @@ class NovelReaderLinkBlock extends StatelessWidget {
         label: Text(
           link.text,
           style: highlighted
-              ? typography.link.copyWith(backgroundColor: const Color(0x66FFD54F))
+              ? typography.link.copyWith(
+                  backgroundColor: const Color(0x66FFD54F),
+                )
               : typography.link,
         ),
       ),
