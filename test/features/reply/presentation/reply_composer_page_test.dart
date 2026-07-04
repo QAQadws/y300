@@ -44,9 +44,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('回复帖子'), findsOneWidget);
-    expect(find.text('源码'), findsOneWidget);
     expect(find.text('预览'), findsOneWidget);
-    expect(find.byKey(const Key('reply-composer-mode-switch')), findsOneWidget);
+    expect(find.byKey(const Key('reply-composer-more-button')), findsOneWidget);
     expect(
       find.byKey(const Key('reply-composer-sticker-button')),
       findsOneWidget,
@@ -56,8 +55,12 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.byKey(const Key('reply-composer-use-signature-switch')),
+      find.byKey(const Key('reply-composer-bbcode-preview-panel')),
       findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('reply-composer-use-signature-switch')),
+      findsNothing,
     );
     expect(
       find.byKey(const Key('reply-composer-image-button')),
@@ -66,12 +69,15 @@ void main() {
     expect(find.byKey(const Key('reply-composer-send-button')), findsOneWidget);
   });
 
-  testWidgets('ReplyComposerPage places image action before send action', (
+  testWidgets('ReplyComposerPage places more action before image and send', (
     tester,
   ) async {
     await tester.pumpWidget(_buildPage());
     await tester.pump();
 
+    final moreCenter = tester.getCenter(
+      find.byKey(const Key('reply-composer-more-button')),
+    );
     final imageCenter = tester.getCenter(
       find.byKey(const Key('reply-composer-image-button')),
     );
@@ -79,6 +85,7 @@ void main() {
       find.byKey(const Key('reply-composer-send-button')),
     );
 
+    expect(moreCenter.dx, lessThan(imageCenter.dx));
     expect(imageCenter.dx, lessThan(sendCenter.dx));
   });
 
@@ -98,16 +105,35 @@ void main() {
       _buildPage(args: args, draftRepository: draftRepository),
     );
     await tester.pump();
+    await tester.pump();
 
     expect(find.text('恢复的草稿'), findsOneWidget);
     expect(find.text('已恢复未发送草稿'), findsOneWidget);
+    expect(
+      find.byKey(const Key('reply-composer-restored-draft-banner')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('reply-composer-use-signature-switch')),
+      findsNothing,
+    );
+    await tester.tap(find.byKey(const Key('reply-composer-more-button')));
+    await tester.pumpAndSettle();
     final switchTile = tester.widget<SwitchListTile>(
       find.byKey(const Key('reply-composer-use-signature-switch')),
     );
     expect(switchTile.value, isFalse);
+    await tester.tap(
+      find.byKey(const Key('reply-composer-use-signature-switch')),
+    );
+    await tester.pumpAndSettle();
+    final toggledSwitchTile = tester.widget<SwitchListTile>(
+      find.byKey(const Key('reply-composer-use-signature-switch')),
+    );
+    expect(toggledSwitchTile.value, isTrue);
   });
 
-  testWidgets('ReplyComposerPage restores uploaded image attachment queue', (
+  testWidgets('ReplyComposerPage restores uploaded image without fixed queue', (
     tester,
   ) async {
     final args = _threadArgs();
@@ -133,9 +159,13 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.byKey(const Key('reply-composer-image-queue')), findsOneWidget);
-    expect(find.text('image-1.jpg'), findsOneWidget);
-    expect(find.textContaining('已上传'), findsOneWidget);
+    expect(find.byKey(const Key('reply-composer-image-queue')), findsNothing);
+    expect(find.text('image-1.jpg'), findsNothing);
+    expect(find.textContaining('已上传'), findsNothing);
+    expect(
+      find.byKey(const Key('reply-bbcode-preview-attach-123456')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('ReplyComposerPage previews restored uploaded local image', (
@@ -165,15 +195,19 @@ void main() {
       _buildPage(args: args, draftRepository: draftRepository),
     );
     await tester.pump();
-    await tester.tap(find.text('预览'));
-    await tester.pump();
 
     final previewImage = tester.widget<_TestAttachPreviewImage>(
       find.byKey(const Key('reply-bbcode-preview-attach-123456')),
     );
     expect(previewImage.file.path, path);
     expect(
-      find.textContaining('[attach]123456[/attach]', findRichText: true),
+      find.descendant(
+        of: find.byKey(const Key('reply-composer-bbcode-preview-panel')),
+        matching: find.textContaining(
+          '[attach]123456[/attach]',
+          findRichText: true,
+        ),
+      ),
       findsNothing,
     );
   });
@@ -223,7 +257,7 @@ void main() {
     expect(sendButton.onPressed, isNull);
   });
 
-  testWidgets('ReplyComposerPage switches between source and preview modes', (
+  testWidgets('ReplyComposerPage shows source input and preview together', (
     tester,
   ) async {
     await tester.pumpWidget(_buildPage());
@@ -234,24 +268,18 @@ void main() {
       '[b]粗体内容[/b]',
     );
     await tester.pump();
-    await tester.tap(find.text('预览'));
-    await tester.pump();
 
     expect(
       find.byKey(const Key('reply-composer-bbcode-preview-panel')),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('reply-composer-message-input')), findsNothing);
-    expect(find.text('粗体内容', findRichText: true), findsOneWidget);
-
-    await tester.tap(find.text('源码'));
-    await tester.pump();
-
     expect(
       find.byKey(const Key('reply-composer-message-input')),
       findsOneWidget,
     );
-    expect(find.text('[b]粗体内容[/b]'), findsOneWidget);
+    expect(find.text('粗体内容', findRichText: true), findsOneWidget);
+    final editable = tester.widget<EditableText>(find.byType(EditableText));
+    expect(editable.controller.text, '[b]粗体内容[/b]');
   });
 
   testWidgets('ReplyComposerPage pops sent result after successful submit', (
@@ -288,7 +316,7 @@ void main() {
     expect(poppedResult?.message, '回复发布成功');
   });
 
-  testWidgets('ReplyComposerPage submits source message from preview mode', (
+  testWidgets('ReplyComposerPage submits raw source message while previewing', (
     tester,
   ) async {
     final replyRepository = _FakeReplyRepository(
@@ -305,8 +333,6 @@ void main() {
       find.byKey(const Key('reply-composer-message-input')),
       '[quote]原始源码[/quote]',
     );
-    await tester.pump();
-    await tester.tap(find.text('预览'));
     await tester.pump();
     await tester.tap(find.byKey(const Key('reply-composer-send-button')));
     await tester.pumpAndSettle();
@@ -346,14 +372,18 @@ void main() {
       '{:9_656:}',
     );
     await tester.pump();
-    await tester.tap(find.text('预览'));
-    await tester.pump();
 
     expect(
       find.byKey(const Key('reply-bbcode-preview-sticker-{:9_656:}')),
       findsOneWidget,
     );
-    expect(find.textContaining('{:9_656:}', findRichText: true), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('reply-composer-bbcode-preview-panel')),
+        matching: find.textContaining('{:9_656:}', findRichText: true),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('ReplyComposerPage submits raw sticker code', (tester) async {
@@ -376,8 +406,6 @@ void main() {
       find.byKey(const Key('reply-composer-message-input')),
       '表情{:9_656:}',
     );
-    await tester.pump();
-    await tester.tap(find.text('预览'));
     await tester.pump();
     await tester.tap(find.byKey(const Key('reply-composer-send-button')));
     await tester.pumpAndSettle();
@@ -536,8 +564,11 @@ void main() {
 
     await tester.tap(find.byKey(const Key('reply-composer-image-button')));
     await _pumpUntilMessageContains(tester, '[attach]123456[/attach]');
+    await tester.pump();
     final editable = tester.widget<EditableText>(find.byType(EditableText));
     expect(editable.controller.text, '正文\n[attach]123456[/attach]');
+    expect(find.byKey(const Key('reply-composer-image-queue')), findsNothing);
+    expect(find.text('first.jpg 已上传'), findsOneWidget);
     await tester.tap(find.byKey(const Key('reply-composer-send-button')));
     await tester.pumpAndSettle();
 
@@ -591,24 +622,27 @@ void main() {
 
       await tester.tap(find.byKey(const Key('reply-composer-image-button')));
       await _pumpUntilMessageContains(tester, '[attach]123456[/attach]');
-      await tester.tap(find.text('预览'));
       await tester.pump();
 
+      expect(find.byKey(const Key('reply-composer-image-queue')), findsNothing);
+      expect(find.text('uploaded.png 已上传'), findsOneWidget);
       expect(
         find.byKey(const Key('reply-bbcode-preview-attach-123456')),
         findsOneWidget,
       );
       expect(
-        find.textContaining('[attach]123456[/attach]', findRichText: true),
+        find.descendant(
+          of: find.byKey(const Key('reply-composer-bbcode-preview-panel')),
+          matching: find.textContaining(
+            '[attach]123456[/attach]',
+            findRichText: true,
+          ),
+        ),
         findsNothing,
       );
 
-      await tester.tap(find.text('源码'));
-      await tester.pump();
       final editable = tester.widget<EditableText>(find.byType(EditableText));
       expect(editable.controller.text, '正文\n[attach]123456[/attach]');
-      await tester.tap(find.text('预览'));
-      await tester.pump();
       await tester.tap(find.byKey(const Key('reply-composer-send-button')));
       await tester.pumpAndSettle();
 
@@ -1041,10 +1075,15 @@ ReplyImageAttachment _uploadedAttachment({
 final _testRenderer = FlutterBbCodeForumRenderer(
   attachImageBuilder: _buildTestAttachPreviewImage,
   attachFileExists: _testAttachFileExists,
+  stickerImageBuilder: _buildTestStickerPreviewImage,
 );
 
 Widget _buildTestAttachPreviewImage(File file, Key key) {
   return _TestAttachPreviewImage(file: file, key: key);
+}
+
+Widget _buildTestStickerPreviewImage(StickerItem sticker, Key key) {
+  return _TestStickerPreviewImage(sticker: sticker, key: key);
 }
 
 bool _testAttachFileExists(File file) {
@@ -1055,6 +1094,17 @@ class _TestAttachPreviewImage extends StatelessWidget {
   const _TestAttachPreviewImage({super.key, required this.file});
 
   final File file;
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(width: 28, height: 28);
+  }
+}
+
+class _TestStickerPreviewImage extends StatelessWidget {
+  const _TestStickerPreviewImage({super.key, required this.sticker});
+
+  final StickerItem sticker;
 
   @override
   Widget build(BuildContext context) {

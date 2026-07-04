@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 
-typedef ComposerImageAttachmentTileKeyBuilder = Key Function(
-  ComposerImageAttachment attachment,
-);
+typedef ComposerImageAttachmentTileKeyBuilder =
+    Key Function(ComposerImageAttachment attachment);
 
-typedef ComposerImageAttachmentStatusLabelBuilder = String Function(
-  ComposerImageAttachment attachment,
-);
+typedef ComposerImageAttachmentStatusLabelBuilder =
+    String Function(ComposerImageAttachment attachment);
 
 String defaultComposerImageAttachmentStatusLabel(
   ComposerImageAttachment attachment,
@@ -25,6 +23,9 @@ String defaultComposerImageAttachmentStatusLabel(
 }
 
 /// 图片附件队列展示。
+///
+/// 仅用于仍需占位反馈的附件（等待上传 / 上传中 / 失败）。已上传附件由
+/// 页面弹出 SnackBar，避免长期占用编辑区空间。
 ///
 /// 包含：上传进度计数 + 进度条（仅在上传中显示）和每个附件的 ListTile。
 /// 调用方注入 widget key（队列容器、计数文本、进度条、每个附件 tile），

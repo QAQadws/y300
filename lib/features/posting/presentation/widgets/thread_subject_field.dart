@@ -32,6 +32,16 @@ class ThreadSubjectField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasLimit = maxLength > 0;
+    final colorScheme = Theme.of(context).colorScheme;
+    final underlineBorder = UnderlineInputBorder(
+      borderSide: BorderSide(color: colorScheme.outlineVariant),
+    );
+    final focusedUnderlineBorder = UnderlineInputBorder(
+      borderSide: BorderSide(color: colorScheme.primary, width: 2),
+    );
+    final errorUnderlineBorder = UnderlineInputBorder(
+      borderSide: BorderSide(color: colorScheme.error, width: 2),
+    );
     return TextField(
       key: fieldKey,
       controller: controller,
@@ -44,7 +54,13 @@ class ThreadSubjectField extends StatelessWidget {
       // 的字符截断。preflight + state.canSubmit 已经在网络/按钮层兜住超限。
       decoration: InputDecoration(
         hintText: hintText,
-        border: const OutlineInputBorder(),
+        filled: false,
+        border: underlineBorder,
+        enabledBorder: underlineBorder,
+        focusedBorder: focusedUnderlineBorder,
+        errorBorder: errorUnderlineBorder,
+        focusedErrorBorder: errorUnderlineBorder,
+        disabledBorder: underlineBorder,
       ),
     );
   }

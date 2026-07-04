@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
-import 'package:y300/features/composer_shared/presentation/controllers/composer_editor_mode.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/bbcode_preview_panel.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_app_bar_action_style.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_editor_preview.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_image_attachment_queue.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_load_error_view.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/composer_mode_switch.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/composer_restored_draft_banner.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_settings_sheet.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_status_banner.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_transient_feedback.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/sticker_picker_sheet.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_controller.dart';
@@ -18,10 +18,7 @@ import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 import 'package:y300/features/reply/presentation/widgets/reply_editor_toolbar.dart';
 
 class ReplyComposerPage extends ConsumerStatefulWidget {
-  const ReplyComposerPage({
-    super.key,
-    required this.args,
-  });
+  const ReplyComposerPage({super.key, required this.args});
 
   final ReplyComposerArgs args;
 
@@ -33,8 +30,10 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
   late final TextEditingController _messageController;
   ReplyComposerController? _controller;
   bool _didApplyRestoredDraft = false;
+  bool _didNotifyRestoredDraft = false;
   bool _allowPopWithoutConfirm = false;
   String? _lastAppliedStateMessage;
+  Set<String> _notifiedUploadedAttachmentIds = const <String>{};
 
   @override
   void initState() {
@@ -58,7 +57,9 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
     final asyncState = ref.watch(provider);
     final controller = ref.read(provider.notifier);
     final bbCodeRenderer = ref.watch(forumBbCodeRendererProvider);
-    final stickerGroups = ref.watch(stickerGroupsProvider).maybeWhen(
+    final stickerGroups = ref
+        .watch(stickerGroupsProvider)
+        .maybeWhen(
           data: (groups) => groups,
           orElse: () => const <StickerGroup>[],
         );
@@ -66,6 +67,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
     final state = asyncState.value;
     if (state != null) {
       _syncMessageController(state);
+      _scheduleTransientFeedback(state);
     }
 
     return PopScope(
@@ -81,6 +83,17 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
           title: Text(widget.args.target.isPostReply ? '回复楼层' : '回复帖子'),
           actions: [
             IconButton(
+              key: const Key('reply-composer-more-button'),
+              tooltip: '更多',
+              onPressed: state == null
+                  ? null
+                  : () {
+                      _showSettingsSheet();
+                    },
+              style: composerAppBarActionStyle(context),
+              icon: const Icon(Icons.more_vert),
+            ),
+            IconButton(
               key: const Key('reply-composer-image-button'),
               tooltip: '图片',
               onPressed: state == null || !state.canPickImages
@@ -88,6 +101,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
                   : () {
                       unawaited(controller.pickImages());
                     },
+              style: composerAppBarActionStyle(context),
               icon: const Icon(Icons.image),
             ),
             IconButton(
@@ -98,6 +112,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
                   : () {
                       unawaited(_submit(context, controller));
                     },
+              style: composerAppBarActionStyle(context),
               icon: const Icon(Icons.send),
             ),
           ],
@@ -113,12 +128,10 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
             bbCodeRenderer: bbCodeRenderer,
             stickers: _flattenStickers(stickerGroups),
             messageController: _messageController,
-            onModeChanged: controller.switchMode,
             onMessageChanged: (value) {
               _lastAppliedStateMessage = value;
               controller.updateMessage(value);
             },
-            onUseSignatureChanged: controller.toggleUseSignature,
             onRetryPrepare: controller.retryPreparePostReply,
             onStickerPressed: () {
               unawaited(_pickAndInsertSticker(context, controller));
@@ -130,9 +143,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
   }
 
   List<StickerItem> _flattenStickers(List<StickerGroup> groups) {
-    return [
-      for (final group in groups) ...group.stickers,
-    ];
+    return [for (final group in groups) ...group.stickers];
   }
 
   void _syncMessageController(ReplyComposerState state) {
@@ -156,6 +167,39 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
       selection: TextSelection.collapsed(offset: state.message.length),
     );
     _lastAppliedStateMessage = state.message;
+  }
+
+  void _scheduleTransientFeedback(ReplyComposerState state) {
+    final shouldNotifyRestoredDraft =
+        state.restoredDraft && !_didNotifyRestoredDraft;
+    if (shouldNotifyRestoredDraft) {
+      _didNotifyRestoredDraft = true;
+    }
+    final uploadedIds = uploadedComposerImageAttachmentIds(
+      state.imageAttachments,
+    );
+    final newUploadedIds = uploadedIds.difference(
+      _notifiedUploadedAttachmentIds,
+    );
+    _notifiedUploadedAttachmentIds = uploadedIds;
+    if (!shouldNotifyRestoredDraft && newUploadedIds.isEmpty) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      if (shouldNotifyRestoredDraft) {
+        showComposerSnackBar(context, '已恢复未发送草稿');
+        return;
+      }
+      for (final attachment in state.imageAttachments) {
+        if (newUploadedIds.contains(attachment.localId)) {
+          showComposerSnackBar(context, '${attachment.fileName} 已上传');
+          return;
+        }
+      }
+    });
   }
 
   Future<void> _submit(
@@ -235,10 +279,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
     _insertSticker(sticker, controller);
   }
 
-  void _insertSticker(
-    StickerItem sticker,
-    ReplyComposerController controller,
-  ) {
+  void _insertSticker(StickerItem sticker, ReplyComposerController controller) {
     final value = _messageController.value;
     final text = value.text;
     final selection = value.selection;
@@ -261,6 +302,38 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
     controller.updateMessage(nextText);
     _lastAppliedStateMessage = nextText;
   }
+
+  void _showSettingsSheet() {
+    final provider = replyComposerControllerProvider(widget.args);
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (_) {
+        return Consumer(
+          builder: (context, ref, _) {
+            final sheetState = ref.watch(provider).value;
+            final enabled =
+                sheetState != null &&
+                !sheetState.isSubmitting &&
+                !sheetState.isPreparing;
+            return ComposerSettingsSheet(
+              key: const Key('reply-composer-settings-sheet'),
+              title: '更多设置',
+              children: [
+                ComposerSettingsSwitchTile(
+                  tileKey: const Key('reply-composer-use-signature-switch'),
+                  title: '使用个人签名',
+                  value: sheetState?.useSignature ?? false,
+                  onChanged: ref.read(provider.notifier).toggleUseSignature,
+                  enabled: enabled,
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 }
 
 class _ReplyComposerBody extends StatelessWidget {
@@ -269,9 +342,7 @@ class _ReplyComposerBody extends StatelessWidget {
     required this.bbCodeRenderer,
     required this.stickers,
     required this.messageController,
-    required this.onModeChanged,
     required this.onMessageChanged,
-    required this.onUseSignatureChanged,
     required this.onRetryPrepare,
     required this.onStickerPressed,
   });
@@ -280,29 +351,21 @@ class _ReplyComposerBody extends StatelessWidget {
   final ForumBbCodeRenderer bbCodeRenderer;
   final List<StickerItem> stickers;
   final TextEditingController messageController;
-  final ValueChanged<ComposerEditorMode> onModeChanged;
   final ValueChanged<String> onMessageChanged;
-  final ValueChanged<bool> onUseSignatureChanged;
   final VoidCallback onRetryPrepare;
   final VoidCallback onStickerPressed;
 
   @override
   Widget build(BuildContext context) {
+    final visibleAttachments = visibleComposerImageAttachments(
+      state.imageAttachments,
+    );
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           if (state.target.isPostReply) ...[
-            _ReplyReferenceStatus(
-              state: state,
-              onRetryPrepare: onRetryPrepare,
-            ),
-            const SizedBox(height: 12),
-          ],
-          if (state.restoredDraft) ...[
-            const ComposerRestoredDraftBanner(
-              textKey: Key('reply-composer-restored-draft-banner'),
-            ),
+            _ReplyReferenceStatus(state: state, onRetryPrepare: onRetryPrepare),
             const SizedBox(height: 12),
           ],
           if (state.imageUploadError != null &&
@@ -314,67 +377,38 @@ class _ReplyComposerBody extends StatelessWidget {
             ),
             const SizedBox(height: 12),
           ],
-          ComposerModeSwitch(
-            widgetKey: const Key('reply-composer-mode-switch'),
-            mode: state.mode,
-            onModeChanged: onModeChanged,
-            enabled: !state.isSubmitting && !state.isPreparing,
-          ),
-          const SizedBox(height: 12),
           ReplyEditorToolbar(
             enabled: !state.isSubmitting && !state.isPreparing,
             onStickerPressed: onStickerPressed,
           ),
           const SizedBox(height: 12),
-          if (state.mode == ComposerEditorMode.source)
-            TextField(
-              key: const Key('reply-composer-message-input'),
-              controller: messageController,
-              enabled: !state.isSubmitting && !state.isPreparing,
-              minLines: 8,
-              maxLines: null,
-              keyboardType: TextInputType.multiline,
-              textInputAction: TextInputAction.newline,
-              onChanged: onMessageChanged,
-              decoration: const InputDecoration(
-                hintText: '输入回复内容',
-                border: OutlineInputBorder(),
-                alignLabelWithHint: true,
-              ),
-            )
-          else
-            BbCodePreviewPanel(
-              source: state.message,
-              renderer: bbCodeRenderer,
-              stickers: stickers,
-              imageAttachments: state.imageAttachments,
-            ),
-          if (state.imageAttachments.isNotEmpty) ...[
+          ComposerEditorPreview(
+            inputKey: const Key('reply-composer-message-input'),
+            previewLabelKey: const Key('reply-composer-preview-label'),
+            controller: messageController,
+            enabled: !state.isSubmitting && !state.isPreparing,
+            hintText: '输入回复内容',
+            onChanged: onMessageChanged,
+            renderer: bbCodeRenderer,
+            stickers: stickers,
+            imageAttachments: state.imageAttachments,
+          ),
+          if (visibleAttachments.isNotEmpty) ...[
             const SizedBox(height: 12),
             ComposerImageAttachmentQueue(
               containerKey: const Key('reply-composer-image-queue'),
               uploadCountKey: const Key('reply-composer-image-upload-count'),
-              uploadProgressKey:
-                  const Key('reply-composer-image-upload-progress'),
-              tileKeyBuilder: (attachment) => Key(
-                'reply-composer-image-attachment-${attachment.localId}',
+              uploadProgressKey: const Key(
+                'reply-composer-image-upload-progress',
               ),
-              attachments: state.imageAttachments,
+              tileKeyBuilder: (attachment) =>
+                  Key('reply-composer-image-attachment-${attachment.localId}'),
+              attachments: visibleAttachments,
               isUploadingImages: state.isUploadingImages,
               imageUploadCurrent: state.imageUploadCurrent,
               imageUploadTotal: state.imageUploadTotal,
             ),
           ],
-          const SizedBox(height: 12),
-          SwitchListTile(
-            key: const Key('reply-composer-use-signature-switch'),
-            value: state.useSignature,
-            onChanged: state.isSubmitting || state.isPreparing
-                ? null
-                : onUseSignatureChanged,
-            title: const Text('使用个人签名'),
-            contentPadding: EdgeInsets.zero,
-          ),
           if (state.errorMessage != null &&
               state.errorMessage!.trim().isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -402,9 +436,7 @@ class _ReplyReferenceStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (state.isPreparing) {
-      return const ComposerStatusBanner.loading(
-        text: '正在准备楼层引用',
-      );
+      return const ComposerStatusBanner.loading(text: '正在准备楼层引用');
     }
 
     final error = state.preparationError;

@@ -5,18 +5,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
-import 'package:y300/features/composer_shared/presentation/controllers/composer_editor_mode.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/bbcode_preview_panel.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_app_bar_action_style.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_editor_preview.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_image_attachment_queue.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_load_error_view.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/composer_mode_switch.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/composer_restored_draft_banner.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_settings_sheet.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_status_banner.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_transient_feedback.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/sticker_picker_sheet.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
 import 'package:y300/features/posting/presentation/posting_composer_controller.dart';
 import 'package:y300/features/posting/presentation/posting_composer_state.dart';
-import 'package:y300/features/posting/presentation/widgets/posting_options_panel.dart';
 import 'package:y300/features/posting/presentation/widgets/thread_poll_editor.dart';
 import 'package:y300/features/posting/presentation/widgets/thread_special_switch.dart';
 import 'package:y300/features/posting/presentation/widgets/thread_subject_field.dart';
@@ -28,13 +27,10 @@ import 'package:y300/features/reply/presentation/widgets/reply_editor_toolbar.da
 ///
 /// 沿用 reply 页的整体节奏（StatefulWidget + AsyncNotifier 单向数据流 +
 /// 标题/正文 TextEditingController 自维护 + PopScope 保存草稿），但比 reply
-/// 多了：标题输入框、主题分类选择器、五项发布选项面板，以及顶部"加载 metadata"
-/// 状态条。AppBar 标题随 metadata 加载完成后变为"发帖 — {forumName}"。
+/// 多了：标题输入框、主题分类选择器、更多设置抽屉，以及 metadata 加载
+/// SnackBar 提示。AppBar 标题随 metadata 加载完成后变为"发帖 — {forumName}"。
 class PostingComposerPage extends ConsumerStatefulWidget {
-  const PostingComposerPage({
-    super.key,
-    required this.args,
-  });
+  const PostingComposerPage({super.key, required this.args});
 
   final PostingComposerArgs args;
 
@@ -48,9 +44,12 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
   late final TextEditingController _messageController;
   PostingComposerController? _controller;
   bool _didApplyRestoredDraft = false;
+  bool _didNotifyRestoredDraft = false;
+  bool _wasLoadingMetadata = false;
   bool _allowPopWithoutConfirm = false;
   String? _lastAppliedStateMessage;
   String? _lastAppliedStateSubject;
+  Set<String> _notifiedUploadedAttachmentIds = const <String>{};
 
   @override
   void initState() {
@@ -78,7 +77,9 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
     final asyncState = ref.watch(provider);
     final controller = ref.read(provider.notifier);
     final bbCodeRenderer = ref.watch(forumBbCodeRendererProvider);
-    final stickerGroups = ref.watch(stickerGroupsProvider).maybeWhen(
+    final stickerGroups = ref
+        .watch(stickerGroupsProvider)
+        .maybeWhen(
           data: (groups) => groups,
           orElse: () => const <StickerGroup>[],
         );
@@ -86,6 +87,7 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
     final state = asyncState.value;
     if (state != null) {
       _syncTextControllers(state);
+      _scheduleTransientFeedback(state);
     }
 
     return PopScope(
@@ -101,6 +103,17 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
           title: Text(_appBarTitle(state)),
           actions: [
             IconButton(
+              key: const Key('posting-composer-more-button'),
+              tooltip: '更多',
+              onPressed: state == null
+                  ? null
+                  : () {
+                      _showSettingsSheet();
+                    },
+              style: composerAppBarActionStyle(context),
+              icon: const Icon(Icons.more_vert),
+            ),
+            IconButton(
               key: const Key('posting-composer-image-button'),
               tooltip: '图片',
               onPressed: state == null || !state.canPickImages
@@ -108,6 +121,7 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
                   : () {
                       unawaited(controller.pickImages());
                     },
+              style: composerAppBarActionStyle(context),
               icon: const Icon(Icons.image),
             ),
             IconButton(
@@ -118,6 +132,7 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
                   : () {
                       unawaited(_submit(context, controller));
                     },
+              style: composerAppBarActionStyle(context),
               icon: const Icon(Icons.send),
             ),
           ],
@@ -142,15 +157,8 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
               _lastAppliedStateMessage = value;
               controller.updateMessage(value);
             },
-            onModeChanged: controller.switchMode,
-            onUseSignatureChanged: controller.toggleUseSignature,
-            onAllowNoticeAuthorChanged: controller.updateAllowNoticeAuthor,
-            onBbCodeOffChanged: controller.updateBbCodeOff,
-            onSmileyOffChanged: controller.updateSmileyOff,
-            onParseUrlOffChanged: controller.updateParseUrlOff,
             onSelectedTypeIdChanged: controller.updateSelectedTypeId,
             onRetryLoadMetadata: controller.retryLoadMetadata,
-            onTagsChanged: controller.updateTags,
             onSpecialChanged: controller.updateSpecial,
             onPollOptionsChanged: controller.updatePollOptions,
             onPollMultipleChanged: controller.updatePollMultiple,
@@ -176,9 +184,7 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
   }
 
   List<StickerItem> _flattenStickers(List<StickerGroup> groups) {
-    return [
-      for (final group in groups) ...group.stickers,
-    ];
+    return [for (final group in groups) ...group.stickers];
   }
 
   void _syncTextControllers(PostingComposerState state) {
@@ -214,6 +220,51 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
     );
     _lastAppliedStateSubject = state.subject;
     _lastAppliedStateMessage = state.message;
+  }
+
+  void _scheduleTransientFeedback(PostingComposerState state) {
+    final shouldNotifyMetadataLoading =
+        state.isLoadingMetadata && !_wasLoadingMetadata;
+    _wasLoadingMetadata = state.isLoadingMetadata;
+    final shouldNotifyRestoredDraft =
+        state.restoredDraft && !_didNotifyRestoredDraft;
+    if (shouldNotifyRestoredDraft) {
+      _didNotifyRestoredDraft = true;
+    }
+    final uploadedIds = uploadedComposerImageAttachmentIds(
+      state.imageAttachments,
+    );
+    final newUploadedIds = uploadedIds.difference(
+      _notifiedUploadedAttachmentIds,
+    );
+    _notifiedUploadedAttachmentIds = uploadedIds;
+    if (!shouldNotifyMetadataLoading &&
+        !shouldNotifyRestoredDraft &&
+        newUploadedIds.isEmpty) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      if (shouldNotifyRestoredDraft) {
+        final message = state.tags.isNotEmpty
+            ? '已恢复未发送的草稿，请注意已恢复的主题标签'
+            : '已恢复未发送草稿';
+        showComposerSnackBar(context, message);
+        return;
+      }
+      if (shouldNotifyMetadataLoading) {
+        showComposerSnackBar(context, '正在加载发帖表单');
+        return;
+      }
+      for (final attachment in state.imageAttachments) {
+        if (newUploadedIds.contains(attachment.localId)) {
+          showComposerSnackBar(context, '${attachment.fileName} 已上传');
+          return;
+        }
+      }
+    });
   }
 
   Future<void> _submit(
@@ -310,10 +361,12 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
     final end = selection.isValid ? selection.end : text.length;
     final normalizedStart = start.clamp(0, text.length).toInt();
     final normalizedEnd = end.clamp(0, text.length).toInt();
-    final replaceStart =
-        normalizedStart < normalizedEnd ? normalizedStart : normalizedEnd;
-    final replaceEnd =
-        normalizedStart < normalizedEnd ? normalizedEnd : normalizedStart;
+    final replaceStart = normalizedStart < normalizedEnd
+        ? normalizedStart
+        : normalizedEnd;
+    final replaceEnd = normalizedStart < normalizedEnd
+        ? normalizedEnd
+        : normalizedStart;
     final nextText = text.replaceRange(replaceStart, replaceEnd, sticker.code);
     final nextOffset = replaceStart + sticker.code.length;
     _messageController.value = TextEditingValue(
@@ -322,6 +375,77 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
     );
     controller.updateMessage(nextText);
     _lastAppliedStateMessage = nextText;
+  }
+
+  void _showSettingsSheet() {
+    final provider = postingComposerControllerProvider(widget.args);
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (_) {
+        return Consumer(
+          builder: (context, ref, _) {
+            final sheetState = ref.watch(provider).value;
+            final enabled = sheetState != null && !sheetState.isSubmitting;
+            final notifier = ref.read(provider.notifier);
+            return ComposerSettingsSheet(
+              key: const Key('posting-composer-settings-sheet'),
+              title: '更多设置',
+              children: [
+                ThreadTagsField(
+                  containerKey: const Key('posting-composer-tags-field'),
+                  inputFieldKey: const Key('posting-composer-tags-input'),
+                  chipKeyBuilder: (tag, index) =>
+                      Key('posting-composer-tag-chip-$index'),
+                  tags: sheetState?.tags ?? const <String>[],
+                  onChanged: notifier.updateTags,
+                  enabled: enabled,
+                ),
+                const SizedBox(height: 12),
+                ComposerSettingsSwitchTile(
+                  tileKey: const Key('posting-composer-use-signature-switch'),
+                  title: '使用个人签名',
+                  value: sheetState?.useSignature ?? false,
+                  onChanged: notifier.toggleUseSignature,
+                  enabled: enabled,
+                ),
+                ComposerSettingsSwitchTile(
+                  tileKey: const Key(
+                    'posting-composer-allow-notice-author-switch',
+                  ),
+                  title: '允许通知作者',
+                  value: sheetState?.allowNoticeAuthor ?? false,
+                  onChanged: notifier.updateAllowNoticeAuthor,
+                  enabled: enabled,
+                ),
+                ComposerSettingsSwitchTile(
+                  tileKey: const Key('posting-composer-bbcode-off-switch'),
+                  title: '关闭 BBCode 解析',
+                  value: sheetState?.bbCodeOff ?? false,
+                  onChanged: notifier.updateBbCodeOff,
+                  enabled: enabled,
+                ),
+                ComposerSettingsSwitchTile(
+                  tileKey: const Key('posting-composer-smiley-off-switch'),
+                  title: '关闭表情解析',
+                  value: sheetState?.smileyOff ?? false,
+                  onChanged: notifier.updateSmileyOff,
+                  enabled: enabled,
+                ),
+                ComposerSettingsSwitchTile(
+                  tileKey: const Key('posting-composer-parseurl-off-switch'),
+                  title: '关闭 URL 解析',
+                  value: sheetState?.parseUrlOff ?? false,
+                  onChanged: notifier.updateParseUrlOff,
+                  enabled: enabled,
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 }
 
@@ -334,15 +458,8 @@ class _PostingComposerBody extends StatelessWidget {
     required this.messageController,
     required this.onSubjectChanged,
     required this.onMessageChanged,
-    required this.onModeChanged,
-    required this.onUseSignatureChanged,
-    required this.onAllowNoticeAuthorChanged,
-    required this.onBbCodeOffChanged,
-    required this.onSmileyOffChanged,
-    required this.onParseUrlOffChanged,
     required this.onSelectedTypeIdChanged,
     required this.onRetryLoadMetadata,
-    required this.onTagsChanged,
     required this.onSpecialChanged,
     required this.onPollOptionsChanged,
     required this.onPollMultipleChanged,
@@ -360,15 +477,8 @@ class _PostingComposerBody extends StatelessWidget {
   final TextEditingController messageController;
   final ValueChanged<String> onSubjectChanged;
   final ValueChanged<String> onMessageChanged;
-  final ValueChanged<ComposerEditorMode> onModeChanged;
-  final ValueChanged<bool> onUseSignatureChanged;
-  final ValueChanged<bool> onAllowNoticeAuthorChanged;
-  final ValueChanged<bool> onBbCodeOffChanged;
-  final ValueChanged<bool> onSmileyOffChanged;
-  final ValueChanged<bool> onParseUrlOffChanged;
   final ValueChanged<String?> onSelectedTypeIdChanged;
   final VoidCallback onRetryLoadMetadata;
-  final ValueChanged<List<String>> onTagsChanged;
   final ValueChanged<NewThreadSpecial> onSpecialChanged;
   final ValueChanged<List<String>> onPollOptionsChanged;
   final ValueChanged<bool> onPollMultipleChanged;
@@ -382,18 +492,15 @@ class _PostingComposerBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final disabled = state.isSubmitting;
+    final visibleAttachments = visibleComposerImageAttachments(
+      state.imageAttachments,
+    );
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           _buildMetadataBanner(),
           _buildMetadataSpacer(),
-          if (state.restoredDraft) ...[
-            const ComposerRestoredDraftBanner(
-              textKey: Key('posting-composer-restored-draft-banner'),
-            ),
-            const SizedBox(height: 12),
-          ],
           if (state.imageUploadError != null &&
               state.imageUploadError!.trim().isNotEmpty) ...[
             Text(
@@ -412,55 +519,99 @@ class _PostingComposerBody extends StatelessWidget {
             maxLength: state.metadata?.maxSubjectLength ?? 0,
           ),
           const SizedBox(height: 12),
-          ThreadTagsField(
-            containerKey: const Key('posting-composer-tags-field'),
-            inputFieldKey: const Key('posting-composer-tags-input'),
-            chipKeyBuilder: (tag, index) =>
-                Key('posting-composer-tag-chip-$index'),
-            tags: state.tags,
-            onChanged: onTagsChanged,
-            enabled: !disabled,
-          ),
-          const SizedBox(height: 12),
-          if (state.metadata != null && state.metadata!.threadTypes.isNotEmpty)
+          if (state.metadata != null &&
+              state.metadata!.threadTypes.isNotEmpty &&
+              state.metadata!.typeRequired) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: ThreadTypeSelector(
+                    containerKey: const Key('posting-composer-type-selector'),
+                    toggleKey: const Key('posting-composer-type-toggle'),
+                    summaryKey: const Key('posting-composer-type-summary'),
+                    noneChipKey: const Key('posting-composer-type-none'),
+                    chipKeyBuilder: (type) =>
+                        Key('posting-composer-type-${type.id}'),
+                    types: state.metadata!.threadTypes,
+                    typeRequired: state.metadata!.typeRequired,
+                    selectedTypeId: state.selectedTypeId,
+                    onSelected: onSelectedTypeIdChanged,
+                    enabled: !disabled,
+                    useDropdown: true,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ThreadSpecialSwitch(
+                    widgetKey: const Key('posting-composer-special-switch'),
+                    summaryKey: const Key('posting-composer-special-summary'),
+                    normalItemKey: const Key('posting-composer-special-normal'),
+                    pollItemKey: const Key('posting-composer-special-poll'),
+                    special: state.special,
+                    onChanged: onSpecialChanged,
+                    enabled: !disabled,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ] else if (state.metadata != null &&
+              state.metadata!.threadTypes.isNotEmpty) ...[
             ThreadTypeSelector(
               containerKey: const Key('posting-composer-type-selector'),
+              toggleKey: const Key('posting-composer-type-toggle'),
+              summaryKey: const Key('posting-composer-type-summary'),
               noneChipKey: const Key('posting-composer-type-none'),
-              chipKeyBuilder: (type) =>
-                  Key('posting-composer-type-${type.id}'),
+              chipKeyBuilder: (type) => Key('posting-composer-type-${type.id}'),
               types: state.metadata!.threadTypes,
               typeRequired: state.metadata!.typeRequired,
               selectedTypeId: state.selectedTypeId,
               onSelected: onSelectedTypeIdChanged,
               enabled: !disabled,
             ),
-          if (state.metadata != null && state.metadata!.threadTypes.isNotEmpty)
             const SizedBox(height: 12),
-          ThreadSpecialSwitch(
-            widgetKey: const Key('posting-composer-special-switch'),
-            special: state.special,
-            onChanged: onSpecialChanged,
-            enabled: !disabled,
-          ),
+            ThreadSpecialSwitch(
+              widgetKey: const Key('posting-composer-special-switch'),
+              summaryKey: const Key('posting-composer-special-summary'),
+              normalItemKey: const Key('posting-composer-special-normal'),
+              pollItemKey: const Key('posting-composer-special-poll'),
+              special: state.special,
+              onChanged: onSpecialChanged,
+              enabled: !disabled,
+            ),
+            const SizedBox(height: 12),
+          ] else ...[
+            ThreadSpecialSwitch(
+              widgetKey: const Key('posting-composer-special-switch'),
+              summaryKey: const Key('posting-composer-special-summary'),
+              normalItemKey: const Key('posting-composer-special-normal'),
+              pollItemKey: const Key('posting-composer-special-poll'),
+              special: state.special,
+              onChanged: onSpecialChanged,
+              enabled: !disabled,
+            ),
+            const SizedBox(height: 12),
+          ],
           if (state.special == NewThreadSpecial.poll) ...[
-            const SizedBox(height: 12),
             ThreadPollEditor(
               containerKey: const Key('posting-composer-poll-editor'),
               optionFieldKeyBuilder: (index) =>
                   Key('posting-composer-poll-option-$index'),
               optionRemoveKeyBuilder: (index) =>
                   Key('posting-composer-poll-option-remove-$index'),
-              addOptionButtonKey:
-                  const Key('posting-composer-poll-add-option'),
-              multipleSwitchKey:
-                  const Key('posting-composer-poll-multiple-switch'),
-              maxChoicesFieldKey:
-                  const Key('posting-composer-poll-max-choices'),
-              expirationFieldKey:
-                  const Key('posting-composer-poll-expiration'),
+              addOptionButtonKey: const Key('posting-composer-poll-add-option'),
+              multipleSwitchKey: const Key(
+                'posting-composer-poll-multiple-switch',
+              ),
+              maxChoicesFieldKey: const Key(
+                'posting-composer-poll-max-choices',
+              ),
+              expirationFieldKey: const Key('posting-composer-poll-expiration'),
               overtSwitchKey: const Key('posting-composer-poll-overt-switch'),
-              visibilityPollSwitchKey:
-                  const Key('posting-composer-poll-visibility-switch'),
+              visibilityPollSwitchKey: const Key(
+                'posting-composer-poll-visibility-switch',
+              ),
               poll: state.poll ?? NewThreadPollDraft.empty,
               enabled: !disabled,
               onOptionsChanged: onPollOptionsChanged,
@@ -472,87 +623,48 @@ class _PostingComposerBody extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 12),
-          ComposerModeSwitch(
-            widgetKey: const Key('posting-composer-mode-switch'),
-            mode: state.mode,
-            onModeChanged: onModeChanged,
-            enabled: !disabled,
-          ),
-          const SizedBox(height: 12),
           ReplyEditorToolbar(
-            // 暂沿用 reply 工具栏（只有"表情"按钮）；方案 §2.6 的
-            // ComposerEditorToolbar slot 留待 Phase 7 体验润色阶段再扩展。
             enabled: !disabled,
             onStickerPressed: onStickerPressed,
           ),
           const SizedBox(height: 12),
-          if (state.mode == ComposerEditorMode.source)
-            TextField(
-              key: const Key('posting-composer-message-input'),
-              controller: messageController,
-              enabled: !disabled,
-              minLines: 8,
-              maxLines: null,
-              keyboardType: TextInputType.multiline,
-              textInputAction: TextInputAction.newline,
-              onChanged: onMessageChanged,
-              decoration: const InputDecoration(
-                hintText: '输入正文',
-                border: OutlineInputBorder(),
-                alignLabelWithHint: true,
-              ),
-            )
-          else
-            BbCodePreviewPanel(
-              source: state.message,
-              renderer: bbCodeRenderer,
-              stickers: stickers,
-              imageAttachments: state.imageAttachments,
-            ),
-          // 正文字数计数（仅当 metadata 声明了上限）。源码 / 预览模式都展示，
-          // 让用户在预览页也能看到提交前的字数对比。
+          ComposerEditorPreview(
+            inputKey: const Key('posting-composer-message-input'),
+            previewPanelKey: const Key('posting-composer-bbcode-preview-panel'),
+            previewEmptyKey: const Key('posting-composer-bbcode-preview-empty'),
+            previewLabelKey: const Key('posting-composer-preview-label'),
+            controller: messageController,
+            enabled: !disabled,
+            hintText: '请注意图片仅在本地保存24小时',
+            onChanged: onMessageChanged,
+            renderer: bbCodeRenderer,
+            stickers: stickers,
+            imageAttachments: state.imageAttachments,
+          ),
+          // 正文字数计数（仅当 metadata 声明了上限）。
           if (state.metadata?.hasMessageLimit ?? false)
             _MessageCounter(
               counterKey: const Key('posting-composer-message-counter'),
               currentLength: state.message.length,
               maxLength: state.metadata!.maxMessageLength,
             ),
-          if (state.imageAttachments.isNotEmpty) ...[
+          if (visibleAttachments.isNotEmpty) ...[
             const SizedBox(height: 12),
             ComposerImageAttachmentQueue(
               containerKey: const Key('posting-composer-image-queue'),
               uploadCountKey: const Key('posting-composer-image-upload-count'),
-              uploadProgressKey:
-                  const Key('posting-composer-image-upload-progress'),
+              uploadProgressKey: const Key(
+                'posting-composer-image-upload-progress',
+              ),
               tileKeyBuilder: (attachment) => Key(
                 'posting-composer-image-attachment-${attachment.localId}',
               ),
-              attachments: state.imageAttachments,
+              attachments: visibleAttachments,
               isUploadingImages: state.isUploadingImages,
               imageUploadCurrent: state.imageUploadCurrent,
               imageUploadTotal: state.imageUploadTotal,
             ),
           ],
-          const SizedBox(height: 12),
-          PostingOptionsPanel(
-            useSignatureKey: const Key('posting-composer-use-signature-switch'),
-            allowNoticeAuthorKey:
-                const Key('posting-composer-allow-notice-author-switch'),
-            bbCodeOffKey: const Key('posting-composer-bbcode-off-switch'),
-            smileyOffKey: const Key('posting-composer-smiley-off-switch'),
-            parseUrlOffKey: const Key('posting-composer-parseurl-off-switch'),
-            useSignature: state.useSignature,
-            allowNoticeAuthor: state.allowNoticeAuthor,
-            bbCodeOff: state.bbCodeOff,
-            smileyOff: state.smileyOff,
-            parseUrlOff: state.parseUrlOff,
-            onUseSignatureChanged: onUseSignatureChanged,
-            onAllowNoticeAuthorChanged: onAllowNoticeAuthorChanged,
-            onBbCodeOffChanged: onBbCodeOffChanged,
-            onSmileyOffChanged: onSmileyOffChanged,
-            onParseUrlOffChanged: onParseUrlOffChanged,
-            enabled: !disabled,
-          ),
           if (state.errorMessage != null &&
               state.errorMessage!.trim().isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -567,16 +679,8 @@ class _PostingComposerBody extends StatelessWidget {
     );
   }
 
-  /// metadata 三种状态走同一个 [ComposerStatusBanner]：加载中 / 加载失败带重试 /
-  /// 已加载（隐藏 banner）。
+  /// metadata 加载中用 SnackBar 轻提示；只有失败态保留正文重试入口。
   Widget _buildMetadataBanner() {
-    if (state.isLoadingMetadata) {
-      return const ComposerStatusBanner.loading(
-        key: Key('posting-composer-metadata-loading'),
-        text: '正在加载发帖表单',
-        textKey: Key('posting-composer-metadata-loading-text'),
-      );
-    }
     final error = state.metadataError;
     if (error != null && error.trim().isNotEmpty) {
       return ComposerStatusBanner.error(
@@ -591,9 +695,7 @@ class _PostingComposerBody extends StatelessWidget {
   }
 
   Widget _buildMetadataSpacer() {
-    if (state.isLoadingMetadata ||
-        (state.metadataError != null &&
-            state.metadataError!.trim().isNotEmpty)) {
+    if (state.metadataError != null && state.metadataError!.trim().isNotEmpty) {
       return const SizedBox(height: 12);
     }
     return const SizedBox.shrink();
@@ -631,4 +733,3 @@ class _MessageCounter extends StatelessWidget {
     );
   }
 }
-

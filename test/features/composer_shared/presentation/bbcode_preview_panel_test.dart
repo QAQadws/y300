@@ -57,6 +57,18 @@ void main() {
     );
   });
 
+  testWidgets('BbCodePreviewPanel renders without framed decoration', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildPanel(source: '普通文本'));
+
+    final panel = tester.widget<Container>(
+      find.byKey(const Key('reply-composer-bbcode-preview-panel')),
+    );
+    expect(panel.decoration, isNull);
+    expect(panel.padding, isNull);
+  });
+
   testWidgets('BbCodePreviewPanel falls back to raw source for bad BBCode', (
     tester,
   ) async {
