@@ -36,8 +36,8 @@ Widget _defaultStickerPreviewImageBuilder(StickerItem sticker, Key key) {
   );
 }
 
-/// 论坛 BBCode 渲染契约。把表情码与 `[attach]aid[/attach]` 转成可读图像，
-/// 其余 tag 走 [flutter_bbcode] 默认实现。
+/// 论坛 BBCode 渲染契约。把 Discuz 常用扩展、表情码与 `[attach]aid[/attach]`
+/// 转成可读预览，其余 tag 走 [flutter_bbcode] 默认实现。
 abstract class ForumBbCodeRenderer {
   const ForumBbCodeRenderer();
 
@@ -92,6 +92,10 @@ class FlutterBbCodeForumRenderer extends ForumBbCodeRenderer {
             : 520.0;
         final stylesheet = defaultBBStylesheet(textStyle: textStyle);
         stylesheet.removeTag('img');
+        stylesheet.addTag(_BackColorTag());
+        stylesheet.addTag(_DiscuzSizeTag());
+        stylesheet.addTag(_DiscuzCodeTag(colorScheme, textStyle));
+        stylesheet.addTag(_DiscuzAlignTag());
         stylesheet.addTag(_StickerPreviewTag(stickers, stickerImageBuilder));
         stylesheet.addTag(_AttachSourceFallbackTag());
         stylesheet.addTag(
@@ -110,6 +114,150 @@ class FlutterBbCodeForumRenderer extends ForumBbCodeRenderer {
         );
       },
     );
+  }
+}
+
+class _BackColorTag extends StyleTag {
+  _BackColorTag() : super('backcolor');
+
+  @override
+  TextStyle transformStyle(
+    TextStyle oldStyle,
+    Map<String, String>? attributes,
+  ) {
+    final color = _parseBbCodeColor(_firstAttributeValue(attributes));
+    return color == null ? oldStyle : oldStyle.copyWith(backgroundColor: color);
+  }
+}
+
+class _DiscuzSizeTag extends StyleTag {
+  _DiscuzSizeTag() : super('size');
+
+  @override
+  TextStyle transformStyle(
+    TextStyle oldStyle,
+    Map<String, String>? attributes,
+  ) {
+    final rawSize = int.tryParse(_firstAttributeValue(attributes) ?? '');
+    final size = rawSize == null || rawSize < 1 || rawSize > 7 ? 3 : rawSize;
+    return oldStyle.copyWith(fontSize: _discuzSizeToFontSize(size));
+  }
+}
+
+class _DiscuzCodeTag extends AdvancedTag {
+  _DiscuzCodeTag(this.colorScheme, this.baseTextStyle) : super('code');
+
+  final ColorScheme colorScheme;
+  final TextStyle baseTextStyle;
+
+  @override
+  List<InlineSpan> parse(FlutterRenderer renderer, Object element) {
+    final code = _rawBbCodeChildren(element);
+    final codeStyle = baseTextStyle.copyWith(
+      color: colorScheme.onSurface,
+      fontFamily: 'monospace',
+      fontFamilyFallback: const ['Consolas', 'Courier New'],
+    );
+    return [
+      WidgetSpan(
+        alignment: PlaceholderAlignment.bottom,
+        child: Container(
+          key: const Key('reply-bbcode-preview-code-block'),
+          width: double.infinity,
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(code, style: codeStyle),
+        ),
+      ),
+    ];
+  }
+}
+
+String _rawBbCodeChildren(Object element) {
+  final children = (element as dynamic).children as Iterable<dynamic>;
+  return children.map((child) => _rawBbCodeNode(child)).join();
+}
+
+String _rawBbCodeNode(dynamic node) {
+  final tag = _dynamicString(node, 'tag');
+  if (tag == null) {
+    return _dynamicString(node, 'text') ??
+        _dynamicString(node, 'textContent') ??
+        '';
+  }
+  final attributes = (node as dynamic).attributes as Map<String, String>?;
+  final children = (node as dynamic).children as Iterable<dynamic>;
+  final serializedAttributes = _serializeRawBbCodeAttributes(attributes);
+  return '[$tag$serializedAttributes]'
+      '${children.map((child) => _rawBbCodeNode(child)).join()}'
+      '[/$tag]';
+}
+
+String? _dynamicString(dynamic node, String propertyName) {
+  try {
+    final value = switch (propertyName) {
+      'tag' => (node as dynamic).tag,
+      'text' => (node as dynamic).text,
+      'textContent' => (node as dynamic).textContent,
+      _ => null,
+    };
+    return value is String ? value : null;
+  } on Object {
+    return null;
+  }
+}
+
+String _serializeRawBbCodeAttributes(Map<String, String>? attributes) {
+  if (attributes == null || attributes.isEmpty) {
+    return '';
+  }
+  if (attributes.length == 1) {
+    final entry = attributes.entries.single;
+    if (entry.key == entry.value || entry.key.isEmpty) {
+      return '=${entry.value}';
+    }
+  }
+  return attributes.entries.map((entry) {
+    if (entry.value.isEmpty || entry.key == entry.value) {
+      return ' ${entry.key}';
+    }
+    return ' ${entry.key}=${entry.value}';
+  }).join();
+}
+
+class _DiscuzAlignTag extends WrappedStyleTag {
+  _DiscuzAlignTag() : super('align');
+
+  @override
+  List<InlineSpan> wrap(
+    FlutterRenderer renderer,
+    Object element,
+    List<InlineSpan> spans,
+  ) {
+    final textAlign = switch (_firstAttributeValue(
+      (element as dynamic).attributes as Map<String, String>?,
+    )?.toLowerCase()) {
+      'center' => TextAlign.center,
+      'right' => TextAlign.right,
+      _ => TextAlign.left,
+    };
+    return [
+      WidgetSpan(
+        alignment: PlaceholderAlignment.bottom,
+        child: SizedBox(
+          key: Key('reply-bbcode-preview-align-${textAlign.name}'),
+          width: double.infinity,
+          child: RichText(
+            textAlign: textAlign,
+            text: TextSpan(children: spans),
+          ),
+        ),
+      ),
+    ];
   }
 }
 
@@ -164,6 +312,54 @@ class _AttachPreviewTag extends WrappedStyleTag {
       ),
     ];
   }
+}
+
+String? _firstAttributeValue(Map<String, String>? attributes) {
+  if (attributes == null || attributes.isEmpty) {
+    return null;
+  }
+  for (final value in attributes.values) {
+    final trimmed = value.trim();
+    if (trimmed.isNotEmpty) {
+      return trimmed;
+    }
+  }
+  for (final key in attributes.keys) {
+    final trimmed = key.trim();
+    if (trimmed.isNotEmpty) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
+Color? _parseBbCodeColor(String? rawColor) {
+  if (rawColor == null) {
+    return null;
+  }
+  final match = RegExp(
+    r'^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$',
+  ).firstMatch(rawColor.trim());
+  if (match == null) {
+    return null;
+  }
+  final hex = match.group(1)!;
+  final expanded = hex.length == 3
+      ? hex.split('').map((digit) => '$digit$digit').join()
+      : hex;
+  return Color(int.parse('ff$expanded', radix: 16));
+}
+
+double _discuzSizeToFontSize(int size) {
+  return switch (size.clamp(1, 7).toInt()) {
+    1 => 10,
+    2 => 12,
+    3 => 14,
+    4 => 16,
+    5 => 18,
+    6 => 20,
+    _ => 24,
+  };
 }
 
 class _AttachSourceFallbackTag extends WrappedStyleTag {

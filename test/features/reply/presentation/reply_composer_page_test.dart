@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
@@ -51,6 +52,25 @@ void main() {
       findsOneWidget,
     );
     expect(
+      find.byKey(const Key('reply-composer-color-button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('reply-composer-backcolor-button')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('reply-composer-link-button')), findsOneWidget);
+    expect(find.byKey(const Key('reply-composer-size-button')), findsOneWidget);
+    expect(
+      find.byKey(const Key('reply-composer-quote-button')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('reply-composer-code-button')), findsNothing);
+    expect(
+      find.byKey(const Key('reply-composer-align-button')),
+      findsOneWidget,
+    );
+    expect(
       find.byKey(const Key('reply-composer-message-input')),
       findsOneWidget,
     );
@@ -67,6 +87,94 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const Key('reply-composer-send-button')), findsOneWidget);
+  });
+
+  testWidgets('ReplyComposerPage wraps selection with quote BBCode', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildPage());
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('reply-composer-message-input')),
+      '前引用后',
+    );
+    final editable = tester.widget<EditableText>(find.byType(EditableText));
+    editable.controller.selection = const TextSelection(
+      baseOffset: 1,
+      extentOffset: 3,
+    );
+
+    await tester.tap(find.byKey(const Key('reply-composer-quote-button')));
+    await tester.pump();
+
+    expect(editable.controller.text, '前[quote]引用[/quote]后');
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('reply-composer-bbcode-preview-panel')),
+        matching: find.textContaining('引用', findRichText: true),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('ReplyComposerPage wraps selection from text context menu', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildPage());
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('reply-composer-message-input')),
+      '前选中后',
+    );
+    final editable = tester.widget<EditableText>(find.byType(EditableText));
+    editable.controller.selection = const TextSelection(
+      baseOffset: 1,
+      extentOffset: 3,
+    );
+    tester.state<EditableTextState>(find.byType(EditableText)).showToolbar();
+    await tester.pumpAndSettle();
+
+    expect(find.text('代码'), findsNothing);
+
+    await tester.tap(find.text('引用'));
+    await tester.pumpAndSettle();
+
+    expect(editable.controller.text, '前[quote]选中[/quote]后');
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('reply-composer-bbcode-preview-panel')),
+        matching: find.textContaining('选中', findRichText: true),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('ReplyComposerPage inserts picked backcolor BBCode', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildPage());
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('reply-composer-backcolor-button')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('reply-composer-backcolor-sheet')),
+      findsOneWidget,
+    );
+    final picker = tester.widget<ColorPicker>(
+      find.byKey(const Key('reply-composer-backcolor-picker')),
+    );
+    picker.onColorChanged(const Color(0xffff33aa));
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const Key('reply-composer-backcolor-use-button')),
+    );
+    await tester.pumpAndSettle();
+
+    final editable = tester.widget<EditableText>(find.byType(EditableText));
+    expect(editable.controller.text, '[backcolor=#ff33aa][/backcolor]');
+    expect(editable.controller.selection.baseOffset, 19);
+    expect(editable.controller.selection.extentOffset, 19);
   });
 
   testWidgets('ReplyComposerPage places more action before image and send', (

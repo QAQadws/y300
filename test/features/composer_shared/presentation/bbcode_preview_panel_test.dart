@@ -36,6 +36,72 @@ void main() {
     expect(find.text('灰色内容', findRichText: true), findsOneWidget);
   });
 
+  testWidgets('BbCodePreviewPanel renders Discuz backcolor tag', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildPanel(source: '[backcolor=#fff3b0]高亮内容[/backcolor]'),
+    );
+
+    final span = _findTextSpanWithText(
+      tester.widgetList<RichText>(find.byType(RichText)),
+      '高亮内容',
+    );
+    expect(span?.style?.backgroundColor, const Color(0xfffff3b0));
+  });
+
+  testWidgets('BbCodePreviewPanel renders Discuz size tag', (tester) async {
+    await tester.pumpWidget(_buildPanel(source: '[size=5]大字[/size]'));
+
+    final span = _findTextSpanWithText(
+      tester.widgetList<RichText>(find.byType(RichText)),
+      '大字',
+    );
+    expect(span?.style?.fontSize, 18);
+  });
+
+  testWidgets('BbCodePreviewPanel falls back invalid Discuz size to 3', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildPanel(source: '[size=99]默认字[/size]'));
+
+    final span = _findTextSpanWithText(
+      tester.widgetList<RichText>(find.byType(RichText)),
+      '默认字',
+    );
+    expect(span?.style?.fontSize, 14);
+  });
+
+  testWidgets('BbCodePreviewPanel renders Discuz align tag', (tester) async {
+    await tester.pumpWidget(_buildPanel(source: '[align=center]居中内容[/align]'));
+
+    final alignBox = tester.widget<SizedBox>(
+      find.byKey(const Key('reply-bbcode-preview-align-center')),
+    );
+    expect(alignBox.width, double.infinity);
+    final richText = tester.widget<RichText>(
+      find.descendant(
+        of: find.byKey(const Key('reply-bbcode-preview-align-center')),
+        matching: find.byType(RichText),
+      ),
+    );
+    expect(richText.textAlign, TextAlign.center);
+    expect(find.text('居中内容', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('BbCodePreviewPanel renders Discuz code tag as raw text', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildPanel(source: '[code][b]raw[/b][/code]'));
+
+    expect(
+      find.byKey(const Key('reply-bbcode-preview-code-block')),
+      findsOneWidget,
+    );
+    expect(find.text('[b]raw[/b]'), findsOneWidget);
+    expect(find.text('raw', findRichText: true), findsNothing);
+  });
+
   testWidgets('BbCodePreviewPanel keeps url label visible', (tester) async {
     await tester.pumpWidget(
       _buildPanel(source: '[url=https://example.com]链接文字[/url]'),
@@ -447,6 +513,33 @@ WidgetSpan? _findWidgetSpanInInlineSpan(InlineSpan span, Key childKey) {
   }
   for (final child in children) {
     final match = _findWidgetSpanInInlineSpan(child, childKey);
+    if (match != null) {
+      return match;
+    }
+  }
+  return null;
+}
+
+TextSpan? _findTextSpanWithText(Iterable<RichText> richTexts, String text) {
+  for (final richText in richTexts) {
+    final span = _findTextSpanInInlineSpan(richText.text, text);
+    if (span != null) {
+      return span;
+    }
+  }
+  return null;
+}
+
+TextSpan? _findTextSpanInInlineSpan(InlineSpan span, String text) {
+  if (span is TextSpan && span.text == text) {
+    return span;
+  }
+  final children = span is TextSpan ? span.children : null;
+  if (children == null) {
+    return null;
+  }
+  for (final child in children) {
+    final match = _findTextSpanInInlineSpan(child, text);
     if (match != null) {
       return match;
     }

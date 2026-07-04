@@ -3,6 +3,7 @@ import 'package:y300/features/composer_shared/domain/models/composer_attachment_
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/bbcode_preview_panel.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_context_menu.dart';
 
 /// 同屏编辑与预览，避免在源码/预览之间来回切换。
 class ComposerEditorPreview extends StatelessWidget {
@@ -50,6 +51,7 @@ class ComposerEditorPreview extends StatelessWidget {
           keyboardType: TextInputType.multiline,
           textInputAction: TextInputAction.newline,
           onChanged: onChanged,
+          contextMenuBuilder: ComposerBbCodeContextMenu.build,
           decoration: InputDecoration(
             hintText: hintText,
             border: const OutlineInputBorder(),

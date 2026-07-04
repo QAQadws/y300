@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
@@ -41,6 +42,35 @@ void main() {
     );
     expect(
       find.byKey(const Key('posting-composer-message-input')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('posting-composer-sticker-button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('posting-composer-color-button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('posting-composer-backcolor-button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('posting-composer-link-button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('posting-composer-size-button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('posting-composer-quote-button')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('posting-composer-code-button')), findsNothing);
+    expect(
+      find.byKey(const Key('posting-composer-align-button')),
       findsOneWidget,
     );
     expect(find.text('请注意图片仅在本地保存24小时'), findsOneWidget);
@@ -134,6 +164,146 @@ void main() {
       find.byKey(const Key('posting-composer-message-input')),
     );
     expect(messageField.controller?.text, '[b]正文[/b]');
+  });
+
+  testWidgets('PostingComposerPage inserts size BBCode from toolbar', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildPage(
+        metadataRepository: _FakeMetadataRepository.success(_metadata()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('posting-composer-size-button')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('posting-composer-size-sheet')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('posting-composer-size-5')));
+    await tester.pumpAndSettle();
+
+    final messageField = tester.widget<TextField>(
+      find.byKey(const Key('posting-composer-message-input')),
+    );
+    final controller = messageField.controller!;
+    expect(controller.text, '[size=5][/size]');
+    expect(controller.selection.baseOffset, 8);
+    expect(controller.selection.extentOffset, 8);
+  });
+
+  testWidgets('PostingComposerPage inserts color BBCode from toolbar', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildPage(
+        metadataRepository: _FakeMetadataRepository.success(_metadata()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('posting-composer-color-button')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('posting-composer-color-sheet')),
+      findsOneWidget,
+    );
+    final picker = tester.widget<ColorPicker>(
+      find.byKey(const Key('posting-composer-color-picker')),
+    );
+    picker.onColorChanged(const Color(0xff2255aa));
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const Key('posting-composer-color-use-button')),
+    );
+    await tester.pumpAndSettle();
+
+    final messageField = tester.widget<TextField>(
+      find.byKey(const Key('posting-composer-message-input')),
+    );
+    final controller = messageField.controller!;
+    expect(controller.text, '[color=#2255aa][/color]');
+    expect(controller.selection.baseOffset, 15);
+    expect(controller.selection.extentOffset, 15);
+  });
+
+  testWidgets('PostingComposerPage inserts link BBCode from toolbar', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildPage(
+        metadataRepository: _FakeMetadataRepository.success(_metadata()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('posting-composer-link-button')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('posting-composer-link-sheet')),
+      findsOneWidget,
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('posting-composer-link-url-input')),
+      'https://example.com',
+    );
+    await tester.enterText(
+      find.byKey(const Key('posting-composer-link-label-input')),
+      '示例链接',
+    );
+    await tester.tap(find.byKey(const Key('posting-composer-link-use-button')));
+    await tester.pumpAndSettle();
+
+    final messageField = tester.widget<TextField>(
+      find.byKey(const Key('posting-composer-message-input')),
+    );
+    final controller = messageField.controller!;
+    expect(controller.text, '[url=https://example.com]示例链接[/url]');
+    expect(controller.selection.baseOffset, controller.text.length);
+    expect(find.text('示例链接', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('PostingComposerPage wraps selection from text context menu', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildPage(
+        metadataRepository: _FakeMetadataRepository.success(_metadata()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('posting-composer-message-input')),
+      '前选中后',
+    );
+    final messageField = tester.widget<TextField>(
+      find.byKey(const Key('posting-composer-message-input')),
+    );
+    final controller = messageField.controller!;
+    controller.selection = const TextSelection(baseOffset: 1, extentOffset: 3);
+    final editableFinder = find.descendant(
+      of: find.byKey(const Key('posting-composer-message-input')),
+      matching: find.byType(EditableText),
+    );
+    tester.state<EditableTextState>(editableFinder).showToolbar();
+    await tester.pumpAndSettle();
+
+    expect(find.text('居中'), findsNothing);
+
+    await tester.tap(find.text('引用'));
+    await tester.pumpAndSettle();
+
+    expect(controller.text, '前[quote]选中[/quote]后');
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('posting-composer-bbcode-preview-panel')),
+        matching: find.textContaining('选中', findRichText: true),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('PostingComposerPage warns restored draft includes tags', (

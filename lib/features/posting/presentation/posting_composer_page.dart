@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
+import 'package:y300/features/composer_shared/presentation/bbcode/composer_bbcode_command.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_app_bar_action_style.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_toolbar.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_editor_preview.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_image_attachment_queue.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_load_error_view.dart';
@@ -21,7 +23,6 @@ import 'package:y300/features/posting/presentation/widgets/thread_special_switch
 import 'package:y300/features/posting/presentation/widgets/thread_subject_field.dart';
 import 'package:y300/features/posting/presentation/widgets/thread_tags_field.dart';
 import 'package:y300/features/posting/presentation/widgets/thread_type_selector.dart';
-import 'package:y300/features/reply/presentation/widgets/reply_editor_toolbar.dart';
 
 /// 自制发帖页。
 ///
@@ -40,6 +41,8 @@ class PostingComposerPage extends ConsumerStatefulWidget {
 }
 
 class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
+  static const _bbCodeInsertionService = ComposerBbCodeInsertionService();
+
   late final TextEditingController _subjectController;
   late final TextEditingController _messageController;
   PostingComposerController? _controller;
@@ -168,6 +171,9 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
             onPollVisibilityPollChanged: controller.updatePollVisibilityPoll,
             onStickerPressed: () {
               unawaited(_pickAndInsertSticker(context, controller));
+            },
+            onBbCodeCommandSelected: (command) {
+              _insertBbCode(command, controller);
             },
           ),
         ),
@@ -377,6 +383,19 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
     _lastAppliedStateMessage = nextText;
   }
 
+  void _insertBbCode(
+    ComposerBbCodeCommand command,
+    PostingComposerController controller,
+  ) {
+    final nextValue = _bbCodeInsertionService.wrapSelection(
+      _messageController.value,
+      command,
+    );
+    _messageController.value = nextValue;
+    controller.updateMessage(nextValue.text);
+    _lastAppliedStateMessage = nextValue.text;
+  }
+
   void _showSettingsSheet() {
     final provider = postingComposerControllerProvider(widget.args);
     showModalBottomSheet<void>(
@@ -468,6 +487,7 @@ class _PostingComposerBody extends StatelessWidget {
     required this.onPollOvertChanged,
     required this.onPollVisibilityPollChanged,
     required this.onStickerPressed,
+    required this.onBbCodeCommandSelected,
   });
 
   final PostingComposerState state;
@@ -487,6 +507,7 @@ class _PostingComposerBody extends StatelessWidget {
   final ValueChanged<bool> onPollOvertChanged;
   final ValueChanged<bool> onPollVisibilityPollChanged;
   final VoidCallback onStickerPressed;
+  final ValueChanged<ComposerBbCodeCommand> onBbCodeCommandSelected;
 
   // PLACEHOLDER_PHASE_5_BODY_BUILD
   @override
@@ -623,9 +644,11 @@ class _PostingComposerBody extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 12),
-          ReplyEditorToolbar(
+          ComposerBbCodeToolbar(
+            keyPrefix: 'posting-composer',
             enabled: !disabled,
             onStickerPressed: onStickerPressed,
+            onCommandSelected: onBbCodeCommandSelected,
           ),
           const SizedBox(height: 12),
           ComposerEditorPreview(

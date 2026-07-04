@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
+import 'package:y300/features/composer_shared/presentation/bbcode/composer_bbcode_command.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_app_bar_action_style.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_toolbar.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_editor_preview.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_image_attachment_queue.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_load_error_view.dart';
@@ -15,7 +17,6 @@ import 'package:y300/features/composer_shared/presentation/widgets/sticker_picke
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_controller.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
-import 'package:y300/features/reply/presentation/widgets/reply_editor_toolbar.dart';
 
 class ReplyComposerPage extends ConsumerStatefulWidget {
   const ReplyComposerPage({super.key, required this.args});
@@ -27,6 +28,8 @@ class ReplyComposerPage extends ConsumerStatefulWidget {
 }
 
 class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
+  static const _bbCodeInsertionService = ComposerBbCodeInsertionService();
+
   late final TextEditingController _messageController;
   ReplyComposerController? _controller;
   bool _didApplyRestoredDraft = false;
@@ -135,6 +138,9 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
             onRetryPrepare: controller.retryPreparePostReply,
             onStickerPressed: () {
               unawaited(_pickAndInsertSticker(context, controller));
+            },
+            onBbCodeCommandSelected: (command) {
+              _insertBbCode(command, controller);
             },
           ),
         ),
@@ -303,6 +309,19 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
     _lastAppliedStateMessage = nextText;
   }
 
+  void _insertBbCode(
+    ComposerBbCodeCommand command,
+    ReplyComposerController controller,
+  ) {
+    final nextValue = _bbCodeInsertionService.wrapSelection(
+      _messageController.value,
+      command,
+    );
+    _messageController.value = nextValue;
+    controller.updateMessage(nextValue.text);
+    _lastAppliedStateMessage = nextValue.text;
+  }
+
   void _showSettingsSheet() {
     final provider = replyComposerControllerProvider(widget.args);
     showModalBottomSheet<void>(
@@ -345,6 +364,7 @@ class _ReplyComposerBody extends StatelessWidget {
     required this.onMessageChanged,
     required this.onRetryPrepare,
     required this.onStickerPressed,
+    required this.onBbCodeCommandSelected,
   });
 
   final ReplyComposerState state;
@@ -354,6 +374,7 @@ class _ReplyComposerBody extends StatelessWidget {
   final ValueChanged<String> onMessageChanged;
   final VoidCallback onRetryPrepare;
   final VoidCallback onStickerPressed;
+  final ValueChanged<ComposerBbCodeCommand> onBbCodeCommandSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -377,9 +398,10 @@ class _ReplyComposerBody extends StatelessWidget {
             ),
             const SizedBox(height: 12),
           ],
-          ReplyEditorToolbar(
+          ComposerBbCodeToolbar(
             enabled: !state.isSubmitting && !state.isPreparing,
             onStickerPressed: onStickerPressed,
+            onCommandSelected: onBbCodeCommandSelected,
           ),
           const SizedBox(height: 12),
           ComposerEditorPreview(
