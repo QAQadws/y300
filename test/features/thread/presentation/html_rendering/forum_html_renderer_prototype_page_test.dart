@@ -8,6 +8,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/thread/domain/html_rendering/forum_html_sample_document.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
 
 void main() {
@@ -66,6 +67,12 @@ void main() {
     expect(find.textContaining('正文 fragment：'), findsOneWidget);
     expect(find.textContaining('转换模式：原文'), findsOneWidget);
     expect(find.textContaining('转换文本节点：0 个'), findsOneWidget);
+    expect(find.textContaining('字号 100%'), findsOneWidget);
+    expect(find.textContaining('作者样式：字号保留'), findsOneWidget);
+    expect(
+      find.byKey(const Key('forum-html-prototype-reader-settings-button')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const Key('forum-html-prototype-conversion-selector')),
       findsOneWidget,
@@ -150,6 +157,72 @@ void main() {
     expect(find.textContaining('转换模式：转繁'), findsOneWidget);
   });
 
+  testWidgets('reader settings sheet updates preview summary', (tester) async {
+    await tester.pumpWidget(
+      _wrapWithProviders(
+        ForumHtmlRendererPrototypePage(
+          samples: samples,
+          assetBundle: _FakeAssetBundle(
+            assets: const <String, String>{
+              'assets/prototypes/forum_html/one.html':
+                  '<html><body><div class="message">'
+                  '<p style="font-size: 24px; color: red; '
+                  'background-color: yellow">第一个样例</p>'
+                  '</div></body></html>',
+              'assets/prototypes/forum_html/two.html':
+                  '<html><body><div class="message">第二个样例</div></body></html>',
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const Key('forum-html-prototype-reader-settings-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('forum-html-reader-font-scale-slider')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('forum-html-reader-line-height-slider')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('forum-html-reader-paragraph-spacing-slider')),
+      findsOneWidget,
+    );
+
+    final slider = tester.widget<Slider>(
+      find.descendant(
+        of: find.byKey(const Key('forum-html-reader-paragraph-spacing-slider')),
+        matching: find.byType(Slider),
+      ),
+    );
+    slider.onChanged?.call(24);
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const Key('forum-html-reader-preserve-font-size-switch')),
+    );
+    await tester.tap(
+      find.byKey(const Key('forum-html-reader-preserve-color-switch')),
+    );
+    await tester.tap(
+      find.byKey(const Key('forum-html-reader-preserve-background-switch')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('段距 24px'), findsOneWidget);
+    expect(find.textContaining('作者样式：字号忽略 / 颜色忽略 / 背景忽略'), findsOneWidget);
+  });
+
   testWidgets('shows missing local asset message', (tester) async {
     await tester.pumpWidget(
       _wrapWithProviders(
@@ -171,9 +244,18 @@ void main() {
   });
 }
 
-Widget _wrapWithProviders(Widget child) {
+Widget _wrapWithProviders(
+  Widget child, {
+  ForumHtmlReaderPreferences? initialPreferences,
+}) {
+  final preferencesRepository = _FakeForumHtmlReaderPreferencesRepository(
+    initialPreferences ?? ForumHtmlReaderPreferences.defaults(),
+  );
   return ProviderScope(
     overrides: [
+      forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
+        preferencesRepository,
+      ),
       textConverterProvider.overrideWith(
         (ref, mode) => switch (mode) {
           TextConversionMode.none => _FakeTextConverter(mode),
@@ -184,6 +266,21 @@ Widget _wrapWithProviders(Widget child) {
     ],
     child: MaterialApp(home: child),
   );
+}
+
+class _FakeForumHtmlReaderPreferencesRepository
+    implements ForumHtmlReaderPreferencesRepository {
+  _FakeForumHtmlReaderPreferencesRepository(this.current);
+
+  ForumHtmlReaderPreferences current;
+
+  @override
+  Future<ForumHtmlReaderPreferences> load() async => current;
+
+  @override
+  Future<void> save(ForumHtmlReaderPreferences preferences) async {
+    current = preferences;
+  }
 }
 
 class _FakeAssetBundle extends CachingAssetBundle {

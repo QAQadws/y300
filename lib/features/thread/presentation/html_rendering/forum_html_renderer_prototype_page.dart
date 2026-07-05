@@ -6,6 +6,8 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/thread/domain/html_rendering/forum_html_fragment_extractor.dart';
 import 'package:y300/features/thread/domain/html_rendering/forum_html_render_input.dart';
 import 'package:y300/features/thread/domain/html_rendering/forum_html_sample_document.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_settings_sheet.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 
@@ -29,14 +31,13 @@ class ForumHtmlRendererPrototypePage extends ConsumerStatefulWidget {
 class _ForumHtmlRendererPrototypePageState
     extends ConsumerState<ForumHtmlRendererPrototypePage> {
   late ForumHtmlSampleDocument _selectedSample;
-  TextConversionMode _conversionMode = TextConversionMode.none;
+  ForumHtmlReaderPreferences? _loadPreferences;
   Future<_ForumHtmlPrototypeLoadResult>? _loadFuture;
 
   @override
   void initState() {
     super.initState();
     _selectedSample = widget.samples.first;
-    _loadFuture = _loadSelectedSample();
   }
 
   @override
@@ -45,14 +46,38 @@ class _ForumHtmlRendererPrototypePageState
     if (widget.samples != oldWidget.samples ||
         !widget.samples.contains(_selectedSample)) {
       _selectedSample = widget.samples.first;
-      _loadFuture = _loadSelectedSample();
+      _loadPreferences = null;
+      _loadFuture = null;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final preferencesAsync = ref.watch(
+      forumHtmlReaderPreferencesControllerProvider,
+    );
+    final preferences =
+        preferencesAsync.value ?? ForumHtmlReaderPreferences.defaults();
+    if (_loadPreferences == null) {
+      _loadPreferences = preferences;
+      _loadFuture ??= _loadSelectedSample(preferences);
+    } else if (_loadPreferences != preferences) {
+      _loadPreferences = preferences;
+      _loadFuture = _loadSelectedSample(preferences);
+    }
+
     return Scaffold(
-      appBar: AppBar(title: const Text('HTML 正文渲染原型')),
+      appBar: AppBar(
+        title: const Text('HTML 正文渲染原型'),
+        actions: [
+          IconButton(
+            key: const Key('forum-html-prototype-reader-settings-button'),
+            tooltip: '阅读设置',
+            icon: const Icon(Icons.tune),
+            onPressed: _openReaderSettings,
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -63,7 +88,7 @@ class _ForumHtmlRendererPrototypePageState
               onSelected: _selectSample,
             ),
             _ConversionSelector(
-              mode: _conversionMode,
+              mode: preferences.conversionMode,
               onSelected: _selectConversionMode,
             ),
             Expanded(
@@ -119,18 +144,30 @@ class _ForumHtmlRendererPrototypePageState
     }
     setState(() {
       _selectedSample = sample;
-      _loadFuture = _loadSelectedSample();
+      _loadFuture = _loadSelectedSample(
+        _loadPreferences ?? ForumHtmlReaderPreferences.defaults(),
+      );
     });
   }
 
   void _selectConversionMode(TextConversionMode mode) {
-    if (mode == _conversionMode) {
+    final current =
+        ref.read(forumHtmlReaderPreferencesControllerProvider).value ??
+        ForumHtmlReaderPreferences.defaults();
+    if (mode == current.conversionMode) {
       return;
     }
-    setState(() {
-      _conversionMode = mode;
-      _loadFuture = _loadSelectedSample();
-    });
+    ref
+        .read(forumHtmlReaderPreferencesControllerProvider.notifier)
+        .setConversionMode(mode);
+  }
+
+  void _openReaderSettings() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: false,
+      builder: (context) => const ForumHtmlReaderSettingsSheet(),
+    );
   }
 
   Future<bool> _handleTapUrl(String url) async {
@@ -146,9 +183,11 @@ class _ForumHtmlRendererPrototypePageState
     return true;
   }
 
-  Future<_ForumHtmlPrototypeLoadResult> _loadSelectedSample() async {
+  Future<_ForumHtmlPrototypeLoadResult> _loadSelectedSample(
+    ForumHtmlReaderPreferences preferences,
+  ) async {
     final bundle = widget.assetBundle ?? DefaultAssetBundle.of(context);
-    final conversionMode = _conversionMode;
+    final conversionMode = preferences.conversionMode;
     try {
       final rawHtml = await bundle.loadString(_selectedSample.assetPath);
       final input = widget.extractor.extract(
@@ -161,6 +200,7 @@ class _ForumHtmlRendererPrototypePageState
           .convert(html: input.fragmentHtml, converter: converter);
       return _ForumHtmlPrototypeLoadResult.loaded(
         input: input,
+        preferences: preferences,
         conversionMode: conversionMode,
         conversionResult: conversionResult,
       );
@@ -263,6 +303,7 @@ class _LoadedSampleView extends StatelessWidget {
   Widget build(BuildContext context) {
     final input = result.input!;
     final conversionResult = result.conversionResult!;
+    final preferences = result.preferences!;
     return ListView(
       key: const Key('forum-html-prototype-loaded-view'),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -270,6 +311,7 @@ class _LoadedSampleView extends StatelessWidget {
         _DebugSummary(
           sample: sample,
           input: input,
+          preferences: preferences,
           conversionMode: result.conversionMode!,
           conversionResult: conversionResult,
         ),
@@ -277,6 +319,7 @@ class _LoadedSampleView extends StatelessWidget {
         ForumHtmlWidgetPostRenderer(
           html: conversionResult.html,
           sourceId: input.sourceId,
+          preferences: preferences,
           callbacks: ForumHtmlRenderCallbacks(onTapUrl: onTapUrl),
         ),
       ],
@@ -288,12 +331,14 @@ class _DebugSummary extends StatelessWidget {
   const _DebugSummary({
     required this.sample,
     required this.input,
+    required this.preferences,
     required this.conversionMode,
     required this.conversionResult,
   });
 
   final ForumHtmlSampleDocument sample;
   final ForumHtmlRenderInput input;
+  final ForumHtmlReaderPreferences preferences;
   final TextConversionMode conversionMode;
   final HtmlTextNodeConversionResult conversionResult;
 
@@ -321,6 +366,8 @@ class _DebugSummary extends StatelessWidget {
                 Text('转换模式：${_conversionModeLabel(conversionMode)}'),
                 Text('转换器：${conversionResult.converterId}'),
                 Text('转换文本节点：${conversionResult.convertedTextNodeCount} 个'),
+                Text(preferences.typographyDebugLabel),
+                Text(preferences.authorStyleDebugLabel),
               ],
             ),
           ),
@@ -376,6 +423,7 @@ class _ErrorState extends StatelessWidget {
 class _ForumHtmlPrototypeLoadResult {
   const _ForumHtmlPrototypeLoadResult._({
     required this.input,
+    required this.preferences,
     required this.conversionMode,
     required this.conversionResult,
     required this.isMissingLocalAsset,
@@ -383,10 +431,12 @@ class _ForumHtmlPrototypeLoadResult {
 
   const _ForumHtmlPrototypeLoadResult.loaded({
     required ForumHtmlRenderInput input,
+    required ForumHtmlReaderPreferences preferences,
     required TextConversionMode conversionMode,
     required HtmlTextNodeConversionResult conversionResult,
   }) : this._(
          input: input,
+         preferences: preferences,
          conversionMode: conversionMode,
          conversionResult: conversionResult,
          isMissingLocalAsset: false,
@@ -395,12 +445,14 @@ class _ForumHtmlPrototypeLoadResult {
   const _ForumHtmlPrototypeLoadResult.missingLocalAsset()
     : this._(
         input: null,
+        preferences: null,
         conversionMode: null,
         conversionResult: null,
         isMissingLocalAsset: true,
       );
 
   final ForumHtmlRenderInput? input;
+  final ForumHtmlReaderPreferences? preferences;
   final TextConversionMode? conversionMode;
   final HtmlTextNodeConversionResult? conversionResult;
   final bool isMissingLocalAsset;
