@@ -605,6 +605,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_widget_from_html_core:
+    dependency: "direct main"
+    description:
+      name: flutter_widget_from_html_core
+      sha256: "7ff010b116f6abc16429923e616fbc727f3f65ef4cee12ffdb280aeecbc21e7f"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.17.2"
   frontend_server_client:
     dependency: transitive
     description:

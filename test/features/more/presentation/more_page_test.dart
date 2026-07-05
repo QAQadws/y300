@@ -22,6 +22,7 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart
 import 'package:y300/features/library_shared/presentation/controllers/sync_diagnostic_mode_controller.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
 
 void main() {
   testWidgets('MorePage builds dark theme chrome', (tester) async {
@@ -86,8 +87,47 @@ void main() {
       find.byKey(const Key('more-reader-settings-placeholder')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const Key('more-html-renderer-prototype-entry')),
+      findsOneWidget,
+    );
+    await _scrollUntilVisibleIfNeeded(
+      tester,
+      find.byKey(const Key('more-about-placeholder')),
+    );
     expect(find.byKey(const Key('more-about-placeholder')), findsOneWidget);
     expect(find.textContaining('连续快速点击 5 次可开启诊断日志模式'), findsOneWidget);
+  });
+
+  testWidgets('MorePage opens the HTML renderer prototype in debug builds', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(
+            _FakeAuthRepository(isLoggedIn: false),
+          ),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
+          appAppearanceControllerProvider.overrideWith(
+            () => _FakeAppAppearanceController(),
+          ),
+        ],
+        child: const MaterialApp(home: MorePage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final entry = find.byKey(const Key('more-html-renderer-prototype-entry'));
+    await _scrollUntilVisibleIfNeeded(tester, entry);
+    await tester.tap(entry);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byType(ForumHtmlRendererPrototypePage), findsOneWidget);
+    expect(find.text('HTML 正文渲染原型'), findsWidgets);
   });
 
   testWidgets('MorePage renders logout entry when signed in', (tester) async {
@@ -287,6 +327,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final aboutTile = find.byKey(const Key('more-about-placeholder'));
+    await _scrollUntilVisibleIfNeeded(tester, aboutTile);
     for (var i = 0; i < 5; i++) {
       await tester.tap(aboutTile);
       await tester.pump(const Duration(milliseconds: 100));
@@ -295,6 +336,10 @@ void main() {
 
     expect(controller.toggleCount, 1);
     expect(find.textContaining('诊断日志模式已开启'), findsOneWidget);
+    await _scrollUntilVisibleIfNeeded(
+      tester,
+      find.byKey(const Key('more-thread-detail-diagnostic-switch')),
+    );
     expect(
       find.byKey(const Key('more-thread-detail-diagnostic-switch')),
       findsOneWidget,
@@ -350,6 +395,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      await _scrollUntilVisibleIfNeeded(
+        tester,
+        find.byKey(const Key('more-thread-detail-diagnostic-switch')),
+      );
       expect(
         find.byKey(const Key('more-thread-detail-diagnostic-switch')),
         findsOneWidget,
@@ -452,6 +501,18 @@ void main() {
     expect(find.textContaining('主题设置保存失败'), findsOneWidget);
     expect(appearanceController.themePreference, AppThemePreference.light);
   });
+}
+
+Future<void> _scrollUntilVisibleIfNeeded(
+  WidgetTester tester,
+  Finder finder,
+) async {
+  if (finder.evaluate().isNotEmpty) {
+    await tester.ensureVisible(finder);
+    await tester.pump();
+    return;
+  }
+  await tester.scrollUntilVisible(finder, 160);
 }
 
 class _RouteNameObserver extends NavigatorObserver {

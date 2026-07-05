@@ -42,6 +42,7 @@ dependencies:
   shared_preferences: ^2.5.5
   logger: ^2.7.0
   flutter_html: ^3.0.0
+  flutter_widget_from_html_core: ^0.17.2
   html: ^0.15.6
   archive: ^4.0.9
   path: ^1.9.1
@@ -95,6 +96,7 @@ flutter:
   assets:
     - assets/tag.json
     - assets/noavatar.png
+    - assets/prototypes/forum_html/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

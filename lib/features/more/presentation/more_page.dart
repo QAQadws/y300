@@ -18,6 +18,7 @@ import 'package:y300/features/more/presentation/appearance_settings_page.dart';
 import 'package:y300/features/more/presentation/data_storage_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_page.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
 
 class MorePage extends ConsumerStatefulWidget {
   const MorePage({super.key});
@@ -112,7 +113,7 @@ class _MorePageState extends ConsumerState<MorePage> {
             title: Text('阅读设置（预留）'),
             subtitle: Text('后续阶段接入阅读器细项配置'),
           ),
-          if (kDebugMode)
+          if (kDebugMode) ...[
             ListTile(
               key: const Key('more-composer-quill-prototype-entry'),
               leading: const Icon(Icons.edit_note_outlined),
@@ -126,6 +127,20 @@ class _MorePageState extends ConsumerState<MorePage> {
                 );
               },
             ),
+            ListTile(
+              key: const Key('more-html-renderer-prototype-entry'),
+              leading: const Icon(Icons.article_outlined),
+              title: const Text('HTML 正文渲染原型'),
+              subtitle: const Text('验证复杂正文 HTML 的原生渲染'),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ForumHtmlRendererPrototypePage(),
+                  ),
+                );
+              },
+            ),
+          ],
           if (diagnosticEnabled) ...[
             SwitchListTile(
               key: const Key('more-thread-detail-diagnostic-switch'),
