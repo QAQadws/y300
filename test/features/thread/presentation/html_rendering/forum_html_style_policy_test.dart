@@ -52,6 +52,74 @@ void main() {
     expect(policy.customStylesFor(fragment.querySelector('span')!), isNull);
   });
 
+  test('adds code block whitespace and monospace styles', () {
+    final policy = ForumHtmlStylePolicy(ForumHtmlReaderPreferences.defaults());
+    final fragment = html_parser.parseFragment(
+      '<pre>pre</pre><code>code</code><div class="blockcode">block</div>',
+    );
+
+    for (final selector in ['pre', 'code', '.blockcode']) {
+      final styles = policy.customStylesFor(fragment.querySelector(selector)!);
+      expect(styles, containsPair('font-family', 'monospace'));
+      expect(styles, containsPair('white-space', 'pre-wrap'));
+      expect(styles, containsPair('overflow-wrap', 'anywhere'));
+    }
+  });
+
+  test('adds table and table cell safety styles', () {
+    final policy = ForumHtmlStylePolicy(
+      ForumHtmlReaderPreferences.defaults().copyWith(
+        typography: const RichTextTypography(
+          fontScale: 1,
+          lineHeightScale: 1.5,
+          paragraphSpacing: 12,
+        ),
+      ),
+    );
+    final fragment = html_parser.parseFragment(
+      '<table><tr><th>头</th><td>格</td></tr></table>',
+    );
+
+    expect(policy.customStylesFor(fragment.querySelector('table')!), {
+      'border-collapse': 'collapse',
+      'border-spacing': '0',
+      'margin': '0 0 12.0px',
+      'max-width': '100%',
+    });
+    expect(policy.customStylesFor(fragment.querySelector('th')!), {
+      'border': '1px solid #d0d0d0',
+      'padding': '4px 6px',
+      'vertical-align': 'top',
+    });
+    expect(policy.customStylesFor(fragment.querySelector('td')!), {
+      'border': '1px solid #d0d0d0',
+      'padding': '4px 6px',
+      'vertical-align': 'top',
+    });
+  });
+
+  test(
+    'hides collapse wrappers as a fallback when custom widget is unavailable',
+    () {
+      final policy = ForumHtmlStylePolicy(
+        ForumHtmlReaderPreferences.defaults(),
+      );
+      final fragment = html_parser.parseFragment(
+        '<div class="showcollapse_box showcollapse_active">'
+        '<div class="showcollapse_gather">收起</div>'
+        '</div>',
+      );
+      final box = fragment.querySelector('.showcollapse_box')!;
+      final gather = fragment.querySelector('.showcollapse_gather')!;
+
+      expect(policy.isForumCollapseElement(box), isTrue);
+      expect(policy.isForumCollapseGatherElement(gather), isTrue);
+      expect(policy.isForumCollapseInitiallyExpanded(box), isTrue);
+      expect(policy.customStylesFor(box), {'display': 'none'});
+      expect(policy.customStylesFor(gather), {'display': 'none'});
+    },
+  );
+
   test('sanitizes selected author inline styles and font attributes', () {
     final preferences = ForumHtmlReaderPreferences.defaults().copyWith(
       preserveAuthorFontSize: false,

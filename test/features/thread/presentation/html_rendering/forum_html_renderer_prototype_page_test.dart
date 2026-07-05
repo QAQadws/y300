@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/thread/domain/html_rendering/forum_html_sample_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
+import 'package:y300/features/thread/presentation/html_rendering/widgets/forum_collapse_block.dart';
 
 void main() {
   const samples = <ForumHtmlSampleDocument>[
@@ -118,6 +120,54 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('第二个样例', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('renders and expands collapse directory sample content', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrapWithProviders(
+        ForumHtmlRendererPrototypePage(
+          samples: samples,
+          assetBundle: _FakeAssetBundle(
+            assets: const <String, String>{
+              'assets/prototypes/forum_html/one.html':
+                  '<html><body><div class="message">'
+                  '<div id="toc" class="showcollapse_box">'
+                  '<div class="showcollapse_title">折叠目录</div>'
+                  '<div class="showcollapse_content">'
+                  '<a href="thread.html">目录链接</a>'
+                  '</div>'
+                  '</div>'
+                  '</div></body></html>',
+              'assets/prototypes/forum_html/two.html':
+                  '<html><body><div class="message">第二个样例</div></body></html>',
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ForumCollapseBlock), findsOneWidget);
+    expect(find.textContaining('目录链接', findRichText: true), findsNothing);
+
+    await tester.tap(
+      find.byKey(const Key('forum-html-collapse-toggle-one-toc')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('目录链接', findRichText: true), findsOneWidget);
+    final nestedRenderer = tester.widget<HtmlWidget>(
+      find.byKey(const Key('forum-html-renderer-one-toc-content')),
+    );
+    await nestedRenderer.onTapUrl?.call('https://bbs.yamibo.com/thread.html');
+    await tester.pump();
+
+    expect(
+      find.textContaining('链接：https://bbs.yamibo.com/thread.html'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('switches conversion mode and renders converted html', (

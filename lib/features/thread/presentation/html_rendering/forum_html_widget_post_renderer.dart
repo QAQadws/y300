@@ -1,8 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
+import 'package:html/dom.dart' as html_dom;
+import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
+import 'package:y300/features/thread/presentation/html_rendering/widgets/forum_collapse_block.dart';
 
 class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   const ForumHtmlWidgetPostRenderer({
@@ -25,14 +30,169 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     final resolvedPreferences =
         preferences ?? ForumHtmlReaderPreferences.defaults();
     final stylePolicy = ForumHtmlStylePolicy(resolvedPreferences);
+    final preparedHtml = stylePolicy.prepareHtml(html);
+    final imageAttachmentIdsByUrl = _collectImageAttachmentIds(preparedHtml);
     return HtmlWidget(
-      stylePolicy.prepareHtml(html),
+      preparedHtml,
       key: Key('forum-html-renderer-${sourceId ?? 'anonymous'}'),
       baseUrl: forumBaseUri,
       customStylesBuilder: stylePolicy.customStylesFor,
+      customWidgetBuilder: (element) =>
+          _buildCustomWidget(element, stylePolicy, resolvedPreferences),
       renderMode: RenderMode.column,
       textStyle: stylePolicy.baseTextStyle(context),
       onTapUrl: callbacks.onTapUrl,
+      onTapImage: (image) => _handleTapImage(image, imageAttachmentIdsByUrl),
     );
+  }
+
+  Widget? _buildCustomWidget(
+    html_dom.Element element,
+    ForumHtmlStylePolicy stylePolicy,
+    ForumHtmlReaderPreferences resolvedPreferences,
+  ) {
+    if (!stylePolicy.isForumCollapseElement(element)) {
+      return null;
+    }
+
+    final collapseId = _collapseSourceId(element);
+    return ForumCollapseBlock(
+      titleHtml:
+          _firstChildWithClass(element, 'showcollapse_title')?.innerHtml ??
+          '折叠内容',
+      contentHtml: _collapseContentHtml(element),
+      initiallyExpanded: stylePolicy.isForumCollapseInitiallyExpanded(element),
+      sourceId: collapseId,
+      nestedRendererBuilder: (html, {required sourceId}) {
+        return ForumHtmlWidgetPostRenderer(
+          html: html,
+          callbacks: callbacks,
+          preferences: resolvedPreferences,
+          sourceId: sourceId,
+        );
+      },
+    );
+  }
+
+  String _collapseContentHtml(html_dom.Element element) {
+    final content = _firstChildWithClass(element, 'showcollapse_content');
+    if (content == null) {
+      return '';
+    }
+    final clone = html_parser.parseFragment(content.innerHtml);
+    for (final gather in clone.querySelectorAll('.showcollapse_gather')) {
+      gather.remove();
+    }
+    return clone.nodes.map(_serializeNode).join();
+  }
+
+  html_dom.Element? _firstChildWithClass(
+    html_dom.Element element,
+    String className,
+  ) {
+    for (final child in element.children) {
+      if (child.classes.contains(className)) {
+        return child;
+      }
+    }
+    return null;
+  }
+
+  String _collapseSourceId(html_dom.Element element) {
+    final id = element.id;
+    if (id.isNotEmpty) {
+      return '${sourceId ?? 'anonymous'}-$id';
+    }
+    final title = _firstChildWithClass(element, 'showcollapse_title');
+    final titleText = title?.text.trim();
+    if (titleText != null && titleText.isNotEmpty) {
+      return '${sourceId ?? 'anonymous'}-${_stableHash(titleText)}';
+    }
+    return '${sourceId ?? 'anonymous'}-${_stableHash(element.outerHtml)}';
+  }
+
+  String _stableHash(String value) {
+    var hash = 0x811c9dc5;
+    for (final unit in value.codeUnits) {
+      hash ^= unit;
+      hash = (hash * 0x01000193) & 0xffffffff;
+    }
+    return hash.toRadixString(16).padLeft(8, '0');
+  }
+
+  String _serializeNode(html_dom.Node node) {
+    if (node is html_dom.Element) {
+      return node.outerHtml;
+    }
+    if (node is html_dom.Text) {
+      return const HtmlEscape().convert(node.data);
+    }
+    return node.text ?? '';
+  }
+
+  Map<String, String> _collectImageAttachmentIds(String html) {
+    final result = <String, String>{};
+    final fragment = html_parser.parseFragment(html);
+    for (final image in fragment.querySelectorAll('img')) {
+      final src = image.attributes['src'];
+      if (src == null || src.isEmpty) {
+        continue;
+      }
+      final attachmentId = _attachmentIdFromElement(image);
+      if (attachmentId == null) {
+        continue;
+      }
+      result[src] = attachmentId;
+      result[forumBaseUri.resolve(src).toString()] = attachmentId;
+    }
+    return result;
+  }
+
+  String? _attachmentIdFromElement(html_dom.Element element) {
+    final id = element.id;
+    final aimgMatch = RegExp(r'^aimg_(\d+)$').firstMatch(id);
+    if (aimgMatch != null) {
+      return aimgMatch.group(1);
+    }
+    final src = element.attributes['src'];
+    return src == null ? null : _attachmentIdFromUrl(src);
+  }
+
+  void _handleTapImage(
+    ImageMetadata image,
+    Map<String, String> imageAttachmentIdsByUrl,
+  ) {
+    final callback = callbacks.onTapImage;
+    if (callback == null || image.sources.isEmpty) {
+      return;
+    }
+    final source = image.sources.first;
+    callback(
+      ForumHtmlImageRequest(
+        url: source.url,
+        alt: image.alt,
+        title: image.title,
+        width: source.width,
+        height: source.height,
+        isSticker: _isForumStickerImage(source.url),
+        attachmentId:
+            imageAttachmentIdsByUrl[source.url] ??
+            _attachmentIdFromUrl(source.url),
+      ),
+    );
+  }
+
+  bool _isForumStickerImage(String url) {
+    return url.contains('/static/image/smiley/') ||
+        url.contains('static/image/smiley/');
+  }
+
+  String? _attachmentIdFromUrl(String url) {
+    final aimgMatch = RegExp(r'aimg[_=/-](\d+)').firstMatch(url);
+    if (aimgMatch != null) {
+      return aimgMatch.group(1);
+    }
+    final aidMatch = RegExp(r'(?:aid|attachmentid)=(\d+)').firstMatch(url);
+    return aidMatch?.group(1);
   }
 }

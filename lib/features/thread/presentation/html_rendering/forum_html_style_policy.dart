@@ -21,10 +21,48 @@ class ForumHtmlStylePolicy {
   }
 
   StylesMap? customStylesFor(html_dom.Element element) {
+    if (isForumCollapseElement(element) ||
+        isForumCollapseGatherElement(element)) {
+      return {'display': 'none'};
+    }
+    if (_isCodeLike(element)) {
+      return {
+        'font-family': 'monospace',
+        'white-space': 'pre-wrap',
+        'overflow-wrap': 'anywhere',
+      };
+    }
+    if (_isTable(element)) {
+      return {
+        'border-collapse': 'collapse',
+        'border-spacing': '0',
+        'margin': '0 0 ${preferences.typography.paragraphSpacing}px',
+        'max-width': '100%',
+      };
+    }
+    if (_isTableCell(element)) {
+      return {
+        'border': '1px solid #d0d0d0',
+        'padding': '4px 6px',
+        'vertical-align': 'top',
+      };
+    }
     if (_isParagraphLike(element)) {
       return {'margin': '0 0 ${preferences.typography.paragraphSpacing}px'};
     }
     return null;
+  }
+
+  bool isForumCollapseElement(html_dom.Element element) {
+    return element.classes.contains('showcollapse_box');
+  }
+
+  bool isForumCollapseGatherElement(html_dom.Element element) {
+    return element.classes.contains('showcollapse_gather');
+  }
+
+  bool isForumCollapseInitiallyExpanded(html_dom.Element element) {
+    return element.classes.contains('showcollapse_active');
   }
 
   String prepareHtml(String html) {
@@ -45,6 +83,22 @@ class ForumHtmlStylePolicy {
   bool _isParagraphLike(html_dom.Element element) {
     final tagName = element.localName?.toLowerCase();
     return tagName == 'p' || tagName == 'div' || tagName == 'blockquote';
+  }
+
+  bool _isCodeLike(html_dom.Element element) {
+    final tagName = element.localName?.toLowerCase();
+    return tagName == 'pre' ||
+        tagName == 'code' ||
+        element.classes.contains('blockcode');
+  }
+
+  bool _isTable(html_dom.Element element) {
+    return element.localName?.toLowerCase() == 'table';
+  }
+
+  bool _isTableCell(html_dom.Element element) {
+    final tagName = element.localName?.toLowerCase();
+    return tagName == 'td' || tagName == 'th';
   }
 
   void _sanitizeStyle(html_dom.Element element) {
