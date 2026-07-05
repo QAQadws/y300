@@ -1,9 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
+import 'package:y300/features/forum/domain/services/forum_webview_thread_link_router.dart';
 
 void main() {
   final navigator = DefaultForumWebViewNavigator();
+  final threadLinkRouter = ForumWebViewThreadLinkRouter(navigator: navigator);
 
   test('classify recognizes forum home', () {
     expect(
@@ -158,5 +160,62 @@ void main() {
       navigator.buildAuthorOnlyUri(currentUri: uri, authorId: '9').toString(),
       'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&extra=page%3D1&page=2&mobile=2&authorid=9',
     );
+  });
+
+  test('thread link router normalizes viewthread mobile url with fragment', () {
+    final result = threadLinkRouter.resolve(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=573279&page=2#pid41575705',
+    );
+
+    expect(result.kind, ForumWebViewThreadLinkKind.threadPost);
+    expect(result.tid, '573279');
+    expect(result.pid, '41575705');
+    expect(result.page, 2);
+    expect(
+      result.normalizedUri.toString(),
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=573279&page=2&mobile=2#pid41575705',
+    );
+  });
+
+  test('thread link router parses escaped findpost redirect', () {
+    final result = threadLinkRouter.resolve(
+      'forum.php?mod=redirect&amp;goto=findpost&amp;ptid=570388&amp;pid=41575705&amp;mobile=2',
+    );
+
+    expect(result.kind, ForumWebViewThreadLinkKind.findPostRedirect);
+    expect(result.tid, '570388');
+    expect(result.pid, '41575705');
+    expect(
+      result.normalizedUri.toString(),
+      'https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=570388&pid=41575705&mobile=2',
+    );
+  });
+
+  test('thread link router recognizes empty findpost redirect', () {
+    final result = threadLinkRouter.resolve(
+      'forum.php?mod=redirect&goto=findpost&ptid=570388&pid=',
+    );
+
+    expect(result.kind, ForumWebViewThreadLinkKind.emptyFindPostRedirect);
+    expect(result.tid, '570388');
+    expect(result.pid, isNull);
+    expect(
+      result.normalizedUri.toString(),
+      'https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=570388&mobile=2',
+    );
+  });
+
+  test('thread link router adds mobile to managed non-thread urls only', () {
+    final managed = threadLinkRouter.resolve(
+      'https://bbs.yamibo.com/home.php?mod=space&uid=100',
+    );
+    final external = threadLinkRouter.resolve('https://example.com/thread/1');
+
+    expect(managed.kind, ForumWebViewThreadLinkKind.none);
+    expect(
+      managed.normalizedUri.toString(),
+      'https://bbs.yamibo.com/home.php?mod=space&uid=100&mobile=2',
+    );
+    expect(external.normalizedUri.toString(), 'https://example.com/thread/1');
   });
 }

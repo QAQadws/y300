@@ -5,8 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/forum/data/services/forum_webview_redirect_resolver.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
+import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_cookie_bootstrapper.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_early_script_builder.dart';
@@ -17,7 +19,9 @@ import 'package:y300/features/forum/domain/services/forum_webview_post_navigator
 import 'package:y300/features/forum/domain/services/forum_webview_reply_navigator.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_script_injector.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_thread_menu_bridge.dart';
+import 'package:y300/features/forum/domain/services/forum_webview_thread_link_router.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_visual_policy_resolver.dart';
+import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
@@ -30,6 +34,9 @@ import 'package:y300/features/posting/presentation/posting_composer_state.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
+import 'package:y300/features/thread/data/repositories/thread_repository.dart';
+import 'package:y300/features/thread/data/services/thread_post_locator.dart';
+import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
 class ForumWebViewPage extends ConsumerStatefulWidget {
   const ForumWebViewPage({super.key});
@@ -380,12 +387,168 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       unawaited(_openPostingComposer(context, newThreadRequest));
       return ForumWebViewNavigationDecision.prevent;
     }
+    if (_isPostComposerUrl(uri)) {
+      return navigator.isManagedSite(uri)
+          ? ForumWebViewNavigationDecision.navigate
+          : ForumWebViewNavigationDecision.prevent;
+    }
     if (navigator.isManagedSite(uri)) {
+      final resolution = ref
+          .read(forumWebViewThreadLinkRouterProvider)
+          .resolve(url);
+      if (resolution.isThreadLink) {
+        unawaited(_openThreadLink(resolution));
+        return ForumWebViewNavigationDecision.prevent;
+      }
+      if (resolution.normalizedUri != resolution.originalUri) {
+        final driver = ref.read(forumWebViewDriverProvider);
+        unawaited(
+          _loadManagedUri(
+            driver,
+            resolution.normalizedUri,
+            referrerUri: ref
+                .read(forumWebViewControllerProvider)
+                .asData
+                ?.value
+                .currentUri,
+          ),
+        );
+        return ForumWebViewNavigationDecision.prevent;
+      }
       return ForumWebViewNavigationDecision.navigate;
     }
 
     unawaited(_launchExternalUri(uri));
     return ForumWebViewNavigationDecision.prevent;
+  }
+
+  Future<void> _openThreadLink(
+    ForumWebViewThreadLinkResolution resolution,
+  ) async {
+    final mode = await ref.read(forumShellModeControllerProvider.future);
+    if (!mounted) {
+      return;
+    }
+    if (mode == ForumShellMode.webview) {
+      await _openThreadLinkInWebView(resolution);
+      return;
+    }
+    await _openThreadLinkNatively(resolution);
+  }
+
+  Future<void> _openThreadLinkInWebView(
+    ForumWebViewThreadLinkResolution resolution,
+  ) {
+    return _loadManagedUri(
+      ref.read(forumWebViewDriverProvider),
+      resolution.normalizedUri,
+      referrerUri: ref
+          .read(forumWebViewControllerProvider)
+          .asData
+          ?.value
+          .currentUri,
+    );
+  }
+
+  Future<void> _openThreadLinkNatively(
+    ForumWebViewThreadLinkResolution resolution,
+  ) async {
+    switch (resolution.kind) {
+      case ForumWebViewThreadLinkKind.thread:
+        _pushNativeThread(tid: resolution.tid!);
+        return;
+      case ForumWebViewThreadLinkKind.threadPost:
+        _pushNativeThread(
+          tid: resolution.tid!,
+          initialPage: resolution.page,
+          targetPid: resolution.pid,
+        );
+        return;
+      case ForumWebViewThreadLinkKind.findPostRedirect:
+        await _openNativeFindPostRedirect(resolution);
+        return;
+      case ForumWebViewThreadLinkKind.emptyFindPostRedirect:
+        await _openNativeEmptyFindPostRedirect(resolution);
+        return;
+      case ForumWebViewThreadLinkKind.none:
+        await _openThreadLinkInWebView(resolution);
+        return;
+    }
+  }
+
+  Future<void> _openNativeFindPostRedirect(
+    ForumWebViewThreadLinkResolution resolution,
+  ) async {
+    final result = await ref
+        .read(threadPostLocatorProvider)
+        .locate(
+          tid: resolution.tid!,
+          pid: resolution.pid!,
+          sourceUri: resolution.normalizedUri,
+        );
+    if (!mounted) {
+      return;
+    }
+    if (result case ApiSuccess<ThreadPostLocation>(:final data)) {
+      _pushNativeThread(
+        tid: data.tid,
+        initialPage: data.page,
+        targetPid: data.pid,
+      );
+      return;
+    }
+    _showSnackBar(ScaffoldMessenger.of(context), '楼层定位失败，已打开帖子');
+    _pushNativeThread(tid: resolution.tid!);
+  }
+
+  Future<void> _openNativeEmptyFindPostRedirect(
+    ForumWebViewThreadLinkResolution resolution,
+  ) async {
+    final result = await ref
+        .read(forumWebViewRedirectResolverProvider)
+        .resolve(resolution.normalizedUri);
+    if (!mounted) {
+      return;
+    }
+    if (result case ApiSuccess<ForumWebViewRedirectResolution>(:final data)) {
+      final finalResolution = ref
+          .read(forumWebViewThreadLinkRouterProvider)
+          .resolve(data.finalUri.toString());
+      if (finalResolution.kind == ForumWebViewThreadLinkKind.thread ||
+          finalResolution.kind == ForumWebViewThreadLinkKind.threadPost) {
+        await _openThreadLinkNatively(finalResolution);
+        return;
+      }
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    _showSnackBar(messenger, '帖子链接解析失败，已在网页中打开');
+    await _openThreadLinkInWebView(resolution);
+  }
+
+  void _pushNativeThread({
+    required String tid,
+    int? initialPage,
+    String? targetPid,
+  }) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ThreadDetailPage(
+          tid: tid,
+          initialPage: initialPage,
+          targetPid: targetPid,
+        ),
+      ),
+    );
+  }
+
+  bool _isPostComposerUrl(Uri uri) {
+    if (!ref.read(forumWebViewNavigatorProvider).isManagedSite(uri) ||
+        !uri.path.endsWith('/forum.php')) {
+      return false;
+    }
+    final query = uri.queryParameters;
+    return query['mod'] == 'post' &&
+        (query['action'] == 'reply' || query['action'] == 'newthread');
   }
 
   PreferredSizeWidget _buildAppBar(

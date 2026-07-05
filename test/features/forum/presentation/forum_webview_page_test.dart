@@ -6,12 +6,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
+import 'package:y300/features/forum/data/repositories/forum_mode_settings_repository.dart';
 import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
+import 'package:y300/features/forum/data/services/forum_webview_redirect_resolver.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
+import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
@@ -26,6 +33,10 @@ import 'package:y300/features/tags/data/repositories/forum_tag_repository.dart';
 import 'package:y300/features/tags/data/providers/tag_providers.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/tags/domain/forum_tag_models.dart';
+import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/data/repositories/thread_repository.dart';
+import 'package:y300/features/thread/data/services/thread_post_locator.dart';
+import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
 Matcher containsCssSelector(String selector) {
   final escapedSelector = RegExp.escape(selector);
@@ -501,6 +512,198 @@ void main() {
     expect(decision, ForumWebViewNavigationDecision.navigate);
     expect(launcher.launchedUris, isEmpty);
   });
+
+  testWidgets(
+    'ForumWebViewPage webview mode normalizes thread links in webview',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver();
+
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
+      await driver.dispatchPageStarted(
+        'https://bbs.yamibo.com/home.php?mod=space&uid=100&mobile=2',
+      );
+      await driver.dispatchPageFinished(
+        'https://bbs.yamibo.com/home.php?mod=space&uid=100&mobile=2',
+      );
+      await tester.pump();
+
+      final decision = await driver.dispatchNavigationRequest(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=573279&extra=',
+      );
+      await tester.pump();
+
+      expect(decision, ForumWebViewNavigationDecision.prevent);
+      expect(
+        driver.loadedUris.last.toString(),
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=573279&mobile=2',
+      );
+    },
+  );
+
+  testWidgets('ForumWebViewPage webview mode loads normalized findpost redirect', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+
+    await tester.pumpWidget(_buildTestApp(driver: driver));
+    await tester.pump();
+
+    final decision = await driver.dispatchNavigationRequest(
+      'forum.php?mod=redirect&amp;goto=findpost&amp;ptid=570388&amp;pid=41575705',
+    );
+    await tester.pump();
+
+    expect(decision, ForumWebViewNavigationDecision.prevent);
+    expect(
+      driver.loadedUris.last.toString(),
+      'https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=570388&pid=41575705&mobile=2',
+    );
+  });
+
+  testWidgets('ForumWebViewPage native mode opens direct thread natively', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+
+    await tester.pumpWidget(
+      _buildTestApp(driver: driver, forumMode: ForumShellMode.native),
+    );
+    await tester.pumpAndSettle();
+
+    final decision = await driver.dispatchNavigationRequest(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=573279&extra=',
+    );
+    await tester.pumpAndSettle();
+
+    expect(decision, ForumWebViewNavigationDecision.prevent);
+    expect(find.byType(ThreadDetailPage), findsOneWidget);
+    expect(driver.loadedUris.length, 1);
+  });
+
+  testWidgets('ForumWebViewPage native mode opens fragment post natively', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+
+    await tester.pumpWidget(
+      _buildTestApp(driver: driver, forumMode: ForumShellMode.native),
+    );
+    await tester.pumpAndSettle();
+
+    final decision = await driver.dispatchNavigationRequest(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=570388&page=2#pid41575705',
+    );
+    await tester.pumpAndSettle();
+
+    expect(decision, ForumWebViewNavigationDecision.prevent);
+    expect(find.byType(ThreadDetailPage), findsOneWidget);
+    expect(
+      find.byKey(const Key('thread-detail-target-scroll-spacer')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('ForumWebViewPage native mode locates findpost before opening', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+    final locator = _FakeThreadPostLocator(
+      const ThreadPostLocation(
+        tid: '570388',
+        pid: '41575705',
+        page: 2,
+        url:
+            'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=570388&page=2#pid41575705',
+      ),
+    );
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        driver: driver,
+        forumMode: ForumShellMode.native,
+        threadPostLocator: locator,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final decision = await driver.dispatchNavigationRequest(
+      'forum.php?mod=redirect&goto=findpost&ptid=570388&pid=41575705',
+    );
+    await tester.pumpAndSettle();
+
+    expect(decision, ForumWebViewNavigationDecision.prevent);
+    expect(locator.lastTid, '570388');
+    expect(locator.lastPid, '41575705');
+    expect(locator.lastSourceUri?.queryParameters['mobile'], '2');
+    expect(find.byType(ThreadDetailPage), findsOneWidget);
+    expect(
+      find.byKey(const Key('thread-detail-target-scroll-spacer')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('ForumWebViewPage native mode resolves empty findpost redirect', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+    final redirectResolver = _FakeForumWebViewRedirectResolver(
+      finalUri: Uri.parse(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=572051',
+      ),
+    );
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        driver: driver,
+        forumMode: ForumShellMode.native,
+        redirectResolver: redirectResolver,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final decision = await driver.dispatchNavigationRequest(
+      'forum.php?mod=redirect&goto=findpost&ptid=570388&pid=',
+    );
+    await tester.pumpAndSettle();
+
+    expect(decision, ForumWebViewNavigationDecision.prevent);
+    expect(redirectResolver.lastSourceUri?.queryParameters['mobile'], '2');
+    expect(find.byType(ThreadDetailPage), findsOneWidget);
+  });
+
+  testWidgets(
+    'ForumWebViewPage falls back to webview when empty redirect fails',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver();
+      final redirectResolver = _FakeForumWebViewRedirectResolver(
+        result: const ApiFailure<ForumWebViewRedirectResolution>(
+          ApiError(type: ApiErrorType.business, message: 'redirect failed'),
+        ),
+      );
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          driver: driver,
+          forumMode: ForumShellMode.native,
+          redirectResolver: redirectResolver,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final decision = await driver.dispatchNavigationRequest(
+        'forum.php?mod=redirect&goto=findpost&ptid=570388&pid=',
+      );
+      await tester.pumpAndSettle();
+
+      expect(decision, ForumWebViewNavigationDecision.prevent);
+      expect(find.text('帖子链接解析失败，已在网页中打开'), findsOneWidget);
+      expect(
+        driver.loadedUris.last.toString(),
+        'https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=570388&mobile=2',
+      );
+    },
+  );
 
   testWidgets('ForumWebViewPage opens external links in system browser', (
     tester,
@@ -1583,9 +1786,16 @@ Widget _buildTestApp({
   ComposerDraftRepository? replyDraftRepository,
   PostingFormMetadataRepository? postingFormMetadataRepository,
   NewThreadRepository? newThreadRepository,
+  ForumShellMode forumMode = ForumShellMode.webview,
+  ThreadRepository? threadRepository,
+  ThreadPostLocator? threadPostLocator,
+  ForumWebViewRedirectResolver? redirectResolver,
 }) {
   return ProviderScope(
     overrides: [
+      forumModeSettingsRepositoryProvider.overrideWithValue(
+        _FakeForumModeSettingsRepository(forumMode),
+      ),
       forumWebViewDriverProvider.overrideWith((ref) => driver),
       forumWebViewExternalLauncherProvider.overrideWithValue(
         launcher ?? _FakeForumWebViewExternalLauncher(),
@@ -1609,6 +1819,16 @@ Widget _buildTestApp({
       newThreadRepositoryProvider.overrideWithValue(
         newThreadRepository ?? _FakeNewThreadRepository(),
       ),
+      threadRepositoryProvider.overrideWithValue(
+        threadRepository ?? _FakeThreadRepository(),
+      ),
+      threadPostLocatorProvider.overrideWithValue(
+        threadPostLocator ?? _FakeThreadPostLocator(null),
+      ),
+      forumWebViewRedirectResolverProvider.overrideWithValue(
+        redirectResolver ?? _FakeForumWebViewRedirectResolver(),
+      ),
+      imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
     ],
     child: const MaterialApp(home: ForumWebViewPage()),
   );
@@ -1624,9 +1844,16 @@ Widget _buildRoutedTestApp({
   ComposerDraftRepository? replyDraftRepository,
   PostingFormMetadataRepository? postingFormMetadataRepository,
   NewThreadRepository? newThreadRepository,
+  ForumShellMode forumMode = ForumShellMode.webview,
+  ThreadRepository? threadRepository,
+  ThreadPostLocator? threadPostLocator,
+  ForumWebViewRedirectResolver? redirectResolver,
 }) {
   return ProviderScope(
     overrides: [
+      forumModeSettingsRepositoryProvider.overrideWithValue(
+        _FakeForumModeSettingsRepository(forumMode),
+      ),
       forumWebViewDriverProvider.overrideWith((ref) => driver),
       forumWebViewExternalLauncherProvider.overrideWithValue(
         launcher ?? _FakeForumWebViewExternalLauncher(),
@@ -1650,6 +1877,16 @@ Widget _buildRoutedTestApp({
       newThreadRepositoryProvider.overrideWithValue(
         newThreadRepository ?? _FakeNewThreadRepository(),
       ),
+      threadRepositoryProvider.overrideWithValue(
+        threadRepository ?? _FakeThreadRepository(),
+      ),
+      threadPostLocatorProvider.overrideWithValue(
+        threadPostLocator ?? _FakeThreadPostLocator(null),
+      ),
+      forumWebViewRedirectResolverProvider.overrideWithValue(
+        redirectResolver ?? _FakeForumWebViewRedirectResolver(),
+      ),
+      imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
     ],
     child: MaterialApp(
       home: Builder(
@@ -1819,6 +2056,155 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
         path: path,
       ),
     );
+  }
+}
+
+class _FakeForumModeSettingsRepository implements ForumModeSettingsRepository {
+  _FakeForumModeSettingsRepository(this.mode);
+
+  ForumShellMode mode;
+
+  @override
+  Future<ForumShellMode> loadMode() async => mode;
+
+  @override
+  Future<void> saveMode(ForumShellMode mode) async {
+    this.mode = mode;
+  }
+}
+
+class _FakeThreadRepository implements ThreadRepository {
+  @override
+  Future<ApiResult<ThreadDetailData>> getThreadDetail({
+    required String tid,
+    int page = 1,
+    Map<String, String> queryParameters = const <String, String>{},
+  }) async {
+    return ApiSuccess<ThreadDetailData>(
+      ThreadDetailData(
+        tid: tid,
+        fid: '33',
+        subject: '测试主题',
+        author: 'alice',
+        replies: 0,
+        views: 1,
+        currentPage: page,
+        lastPage: page,
+        perPage: 20,
+        posts: [
+          ThreadPost(
+            pid: 'p1',
+            author: 'alice',
+            authorId: '1',
+            message: '<p>正文</p>',
+            number: 1,
+            isFirst: true,
+            dateline: 'today',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FakeThreadPostLocator implements ThreadPostLocator {
+  _FakeThreadPostLocator(this.location);
+
+  final ThreadPostLocation? location;
+  String? lastTid;
+  String? lastPid;
+  Uri? lastSourceUri;
+
+  @override
+  Future<ApiResult<ThreadPostLocation>> locate({
+    required String tid,
+    required String pid,
+    required Uri sourceUri,
+  }) async {
+    lastTid = tid;
+    lastPid = pid;
+    lastSourceUri = sourceUri;
+    final value = location;
+    if (value == null) {
+      return const ApiFailure<ThreadPostLocation>(
+        ApiError(type: ApiErrorType.business, message: '测试未配置楼层定位'),
+      );
+    }
+    return ApiSuccess<ThreadPostLocation>(value);
+  }
+}
+
+class _FakeForumWebViewRedirectResolver
+    implements ForumWebViewRedirectResolver {
+  _FakeForumWebViewRedirectResolver({
+    Uri? finalUri,
+    ApiResult<ForumWebViewRedirectResolution>? result,
+  }) : result =
+           result ??
+           ApiSuccess<ForumWebViewRedirectResolution>(
+             ForumWebViewRedirectResolution(
+               finalUri:
+                   finalUri ??
+                   Uri.parse(
+                     'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
+                   ),
+             ),
+           );
+
+  final ApiResult<ForumWebViewRedirectResolution> result;
+  Uri? lastSourceUri;
+
+  @override
+  Future<ApiResult<ForumWebViewRedirectResolution>> resolve(
+    Uri sourceUri,
+  ) async {
+    lastSourceUri = sourceUri;
+    return result;
+  }
+}
+
+class _NoopImageCacheService implements ImageCacheService {
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    return CachedImageResult(
+      success: false,
+      cacheKey: request.cacheKey,
+      fromCache: false,
+    );
+  }
+
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async => null;
+
+  @override
+  Future<CachedImageResult> copyProtectedLocalFile(
+    ImageCacheLocalCopyRequest request,
+  ) async {
+    return CachedImageResult.failed;
+  }
+
+  @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
+
+  @override
+  Future<void> pruneToLimit({required int maxBytes}) async {}
+
+  @override
+  Future<void> clearUnprotected() async {}
+
+  @override
+  Future<int> clearUnprotectedByRoles({
+    required List<ImageCacheRole> roles,
+  }) async {
+    return 0;
   }
 }
 
