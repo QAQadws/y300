@@ -30,6 +30,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -62,6 +64,7 @@ dependencies:
   carousel_slider: ^5.1.2
   flutter_open_chinese_convert: ^0.9.0
   animated_flip_counter: ^0.3.4
+  flutter_quill: ^11.5.1
 
 dev_dependencies:
   flutter_test:

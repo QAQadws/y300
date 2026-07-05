@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
@@ -41,19 +40,15 @@ void main() {
       findsOneWidget,
     );
     expect(
+      find.byKey(const Key('posting-composer-quill-editor')),
+      findsOneWidget,
+    );
+    expect(
       find.byKey(const Key('posting-composer-message-input')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
-      find.byKey(const Key('posting-composer-sticker-button')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('posting-composer-color-button')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('posting-composer-backcolor-button')),
+      find.byKey(const Key('posting-composer-format-button')),
       findsOneWidget,
     );
     expect(
@@ -61,19 +56,31 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.byKey(const Key('posting-composer-size-button')),
+      find.byKey(const Key('posting-composer-align-button')),
       findsOneWidget,
     );
     expect(
       find.byKey(const Key('posting-composer-quote-button')),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('posting-composer-code-button')), findsNothing);
     expect(
-      find.byKey(const Key('posting-composer-align-button')),
+      find.byKey(const Key('posting-composer-sticker-button')),
       findsOneWidget,
     );
-    expect(find.text('请注意图片仅在本地保存24小时'), findsOneWidget);
+    expect(
+      find.byKey(const Key('posting-composer-image-button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('posting-composer-color-button')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('posting-composer-backcolor-button')),
+      findsNothing,
+    );
+    expect(find.byKey(const Key('posting-composer-size-button')), findsNothing);
+    expect(find.byKey(const Key('posting-composer-code-button')), findsNothing);
     expect(
       find.byKey(const Key('posting-composer-send-button')),
       findsOneWidget,
@@ -95,8 +102,8 @@ void main() {
     await tester.pumpAndSettle();
 
     for (final key in const [
+      Key('posting-composer-source-button'),
       Key('posting-composer-more-button'),
-      Key('posting-composer-image-button'),
       Key('posting-composer-send-button'),
     ]) {
       final action = tester.widget<IconButton>(find.byKey(key));
@@ -110,7 +117,7 @@ void main() {
     }
   });
 
-  testWidgets('PostingComposerPage places more action before image and send', (
+  testWidgets('PostingComposerPage places source before more and send', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -120,21 +127,28 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    final sourceCenter = tester.getCenter(
+      find.byKey(const Key('posting-composer-source-button')),
+    );
     final moreCenter = tester.getCenter(
       find.byKey(const Key('posting-composer-more-button')),
-    );
-    final imageCenter = tester.getCenter(
-      find.byKey(const Key('posting-composer-image-button')),
     );
     final sendCenter = tester.getCenter(
       find.byKey(const Key('posting-composer-send-button')),
     );
 
-    expect(moreCenter.dx, lessThan(imageCenter.dx));
-    expect(imageCenter.dx, lessThan(sendCenter.dx));
+    expect(sourceCenter.dx, lessThan(moreCenter.dx));
+    expect(moreCenter.dx, lessThan(sendCenter.dx));
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byKey(const Key('posting-composer-image-button')),
+      ),
+      findsNothing,
+    );
   });
 
-  testWidgets('PostingComposerPage shows editor and live preview together', (
+  testWidgets('PostingComposerPage toggles Quill and source editor', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -145,12 +159,36 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.byKey(const Key('posting-composer-message-input')),
+      find.byKey(const Key('posting-composer-quill-editor')),
       findsOneWidget,
     );
     expect(
       find.byKey(const Key('posting-composer-bbcode-preview-panel')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('posting-composer-message-input')),
+      findsNothing,
+    );
+
+    await tester.tap(find.byKey(const Key('posting-composer-source-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('posting-composer-source-view')),
       findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('posting-composer-message-input')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('posting-composer-quill-editor')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('posting-composer-bbcode-preview-panel')),
+      findsNothing,
     );
 
     await tester.enterText(
@@ -159,42 +197,30 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('正文', findRichText: true), findsOneWidget);
     final messageField = tester.widget<TextField>(
       find.byKey(const Key('posting-composer-message-input')),
     );
     expect(messageField.controller?.text, '[b]正文[/b]');
-  });
 
-  testWidgets('PostingComposerPage inserts size BBCode from toolbar', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _buildPage(
-        metadataRepository: _FakeMetadataRepository.success(_metadata()),
-      ),
-    );
+    await tester.tap(find.byKey(const Key('posting-composer-source-button')));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('posting-composer-size-button')));
-    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('posting-composer-source-view')), findsNothing);
     expect(
-      find.byKey(const Key('posting-composer-size-sheet')),
+      find.byKey(const Key('posting-composer-quill-editor')),
       findsOneWidget,
     );
-    await tester.tap(find.byKey(const Key('posting-composer-size-5')));
+
+    await tester.tap(find.byKey(const Key('posting-composer-source-button')));
     await tester.pumpAndSettle();
 
-    final messageField = tester.widget<TextField>(
+    final restoredField = tester.widget<TextField>(
       find.byKey(const Key('posting-composer-message-input')),
     );
-    final controller = messageField.controller!;
-    expect(controller.text, '[size=5][/size]');
-    expect(controller.selection.baseOffset, 8);
-    expect(controller.selection.extentOffset, 8);
+    expect(restoredField.controller?.text, '[b]正文[/b]');
   });
 
-  testWidgets('PostingComposerPage inserts color BBCode from toolbar', (
+  testWidgets('PostingComposerPage source editor inserts link BBCode', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -204,41 +230,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('posting-composer-color-button')));
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const Key('posting-composer-color-sheet')),
-      findsOneWidget,
-    );
-    final picker = tester.widget<ColorPicker>(
-      find.byKey(const Key('posting-composer-color-picker')),
-    );
-    picker.onColorChanged(const Color(0xff2255aa));
-    await tester.pump();
-    await tester.tap(
-      find.byKey(const Key('posting-composer-color-use-button')),
-    );
-    await tester.pumpAndSettle();
-
-    final messageField = tester.widget<TextField>(
-      find.byKey(const Key('posting-composer-message-input')),
-    );
-    final controller = messageField.controller!;
-    expect(controller.text, '[color=#2255aa][/color]');
-    expect(controller.selection.baseOffset, 15);
-    expect(controller.selection.extentOffset, 15);
-  });
-
-  testWidgets('PostingComposerPage inserts link BBCode from toolbar', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _buildPage(
-        metadataRepository: _FakeMetadataRepository.success(_metadata()),
-      ),
-    );
-    await tester.pumpAndSettle();
-
+    await _enterPostingSourceMode(tester);
     await tester.tap(find.byKey(const Key('posting-composer-link-button')));
     await tester.pumpAndSettle();
     expect(
@@ -263,47 +255,6 @@ void main() {
     final controller = messageField.controller!;
     expect(controller.text, '[url=https://example.com]示例链接[/url]');
     expect(controller.selection.baseOffset, controller.text.length);
-    expect(find.text('示例链接', findRichText: true), findsOneWidget);
-  });
-
-  testWidgets('PostingComposerPage wraps selection from text context menu', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _buildPage(
-        metadataRepository: _FakeMetadataRepository.success(_metadata()),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const Key('posting-composer-message-input')),
-      '前选中后',
-    );
-    final messageField = tester.widget<TextField>(
-      find.byKey(const Key('posting-composer-message-input')),
-    );
-    final controller = messageField.controller!;
-    controller.selection = const TextSelection(baseOffset: 1, extentOffset: 3);
-    final editableFinder = find.descendant(
-      of: find.byKey(const Key('posting-composer-message-input')),
-      matching: find.byType(EditableText),
-    );
-    tester.state<EditableTextState>(editableFinder).showToolbar();
-    await tester.pumpAndSettle();
-
-    expect(find.text('居中'), findsNothing);
-
-    await tester.tap(find.text('引用'));
-    await tester.pumpAndSettle();
-
-    expect(controller.text, '前[quote]选中[/quote]后');
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('posting-composer-bbcode-preview-panel')),
-        matching: find.textContaining('选中', findRichText: true),
-      ),
-      findsOneWidget,
-    );
   });
 
   testWidgets('PostingComposerPage warns restored draft includes tags', (
@@ -424,7 +375,6 @@ void main() {
     expect(toggledSignatureSwitch.value, isFalse);
   });
 
-  // PLACEHOLDER_PHASE_5_PAGE_TESTS
   testWidgets(
     'PostingComposerPage shows metadata loading SnackBar first frame',
     (tester) async {
@@ -516,6 +466,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      await _enterPostingSourceMode(tester);
       // 输入标题 + 正文，但没选分类。
       await tester.enterText(
         find.byKey(const Key('posting-composer-subject-input')),
@@ -560,6 +511,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      await _enterPostingSourceMode(tester);
       expect(
         find.byKey(const Key('posting-composer-type-selector')),
         findsNothing,
@@ -637,9 +589,21 @@ void main() {
       final specialTopLeft = tester.getTopLeft(
         find.byKey(const Key('posting-composer-special-switch')),
       );
+      final quillTopLeft = tester.getTopLeft(
+        find.byKey(const Key('posting-composer-quill-editor')),
+      );
       expect((typeSize.width - specialSize.width).abs(), lessThan(1));
       expect(typeTopLeft.dy, specialTopLeft.dy);
       expect(specialTopLeft.dx, greaterThan(typeTopLeft.dx));
+      expect(
+        quillTopLeft.dy -
+            tester
+                .getBottomLeft(
+                  find.byKey(const Key('posting-composer-special-switch')),
+                )
+                .dy,
+        lessThan(64),
+      );
 
       final switchTopBefore = tester.getTopLeft(
         find.byKey(const Key('posting-composer-special-switch')),
@@ -692,9 +656,181 @@ void main() {
       );
       expect(specialSummary.data, '投票');
       expect(
+        find.byKey(const Key('posting-composer-poll-config-toggle')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('posting-composer-poll-config-summary')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('posting-composer-poll-config-panel')),
+        findsOneWidget,
+      );
+      expect(
         find.byKey(const Key('posting-composer-poll-editor')),
         findsOneWidget,
       );
+      final visibleQuillAfterPoll = find.byKey(
+        const Key('posting-composer-quill-editor'),
+      );
+      if (visibleQuillAfterPoll.evaluate().isNotEmpty) {
+        expect(
+          tester
+              .getBottomLeft(
+                find.byKey(const Key('posting-composer-poll-config-panel')),
+              )
+              .dy,
+          lessThanOrEqualTo(tester.getTopLeft(visibleQuillAfterPoll).dy),
+        );
+      }
+
+      await tester.tap(
+        find.byKey(const Key('posting-composer-poll-config-toggle')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('posting-composer-poll-config-toggle')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('posting-composer-poll-config-panel')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('posting-composer-poll-editor')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('posting-composer-quill-editor')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('posting-composer-format-button')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(const Key('posting-composer-poll-config-toggle')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('posting-composer-poll-config-panel')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('posting-composer-poll-editor')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(const Key('posting-composer-special-switch')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('posting-composer-special-normal')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('posting-composer-poll-config-toggle')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('posting-composer-poll-config-panel')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets(
+    'PostingComposerPage edits expandable poll config and submits payload',
+    (tester) async {
+      final newThreadRepository = _FakeNewThreadRepository();
+      await tester.pumpWidget(
+        _buildLauncher(
+          newThreadRepository: newThreadRepository,
+          metadataRepository: _FakeMetadataRepository.success(_metadata()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('open-posting-composer-page')));
+      await tester.pumpAndSettle();
+
+      await _enterPostingSourceMode(tester);
+      await tester.enterText(
+        find.byKey(const Key('posting-composer-subject-input')),
+        '投票标题',
+      );
+      await tester.enterText(
+        find.byKey(const Key('posting-composer-message-input')),
+        '投票正文',
+      );
+      await tester.tap(
+        find.byKey(const Key('posting-composer-special-switch')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('posting-composer-special-poll')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('posting-composer-poll-config-panel')),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.byKey(const Key('posting-composer-poll-add-option')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('posting-composer-poll-add-option')),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('posting-composer-poll-option-0')),
+        '选项 A',
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('posting-composer-poll-option-1')),
+        '选项 B',
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const Key('posting-composer-poll-multiple-switch')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('posting-composer-poll-multiple-switch')),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const Key('posting-composer-poll-expiration')),
+      );
+      await tester.enterText(
+        find.byKey(const Key('posting-composer-poll-expiration')),
+        '7',
+      );
+      await tester.pumpAndSettle();
+
+      final summary = tester.widget<Text>(
+        find.byKey(const Key('posting-composer-poll-config-summary')),
+      );
+      expect(summary.data, '已填 2 项 / 多选');
+      await tester.tap(find.byKey(const Key('posting-composer-send-button')));
+      await tester.pumpAndSettle();
+
+      expect(newThreadRepository.submittedPayloads, hasLength(1));
+      final payload = newThreadRepository.submittedPayloads.single;
+      expect(payload.subject, '投票标题');
+      expect(payload.message, '投票正文');
+      expect(payload.special, NewThreadSpecial.poll);
+      expect(payload.poll, isNotNull);
+      expect(payload.poll!.options, const ['选项 A', '选项 B']);
+      expect(payload.poll!.multiple, isTrue);
+      expect(payload.poll!.maxChoices, 2);
+      expect(payload.poll!.expirationDays, 7);
     },
   );
 
@@ -720,8 +856,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      await _enterPostingSourceMode(tester);
       // 没输入时计数显示 0/limit。
-      // 加了 tags / special switch / poll editor 之后，message-counter 在窄
+      // 加了 tags / special switch / poll 配置入口之后，message-counter 在窄
       // 视口下被推到 fold 之外。ListView 对屏外子项不建 element，
       // ensureVisible 拿不到 element 会抛 No element。所以分两阶段断言：
       //   1) 滚之前 subject-counter 在 viewport 顶部，能直接断言 "0 / 5"。
@@ -854,6 +991,7 @@ void main() {
     await tester.tap(find.byKey(const Key('open-posting-composer-page')));
     await tester.pumpAndSettle();
 
+    await _enterPostingSourceMode(tester);
     await tester.enterText(
       find.byKey(const Key('posting-composer-subject-input')),
       '标题',
@@ -888,6 +1026,7 @@ void main() {
       await tester.tap(find.byKey(const Key('open-posting-composer-page')));
       await tester.pumpAndSettle();
 
+      await _enterPostingSourceMode(tester);
       await tester.enterText(
         find.byKey(const Key('posting-composer-subject-input')),
         '草稿标题',
@@ -914,4 +1053,10 @@ void main() {
       expect(saved?.message, '草稿正文');
     },
   );
+}
+
+Future<void> _enterPostingSourceMode(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('posting-composer-source-button')));
+  await tester.pumpAndSettle();
+  expect(find.byKey(const Key('posting-composer-source-view')), findsOneWidget);
 }

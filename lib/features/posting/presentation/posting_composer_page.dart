@@ -3,22 +3,21 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
-import 'package:y300/features/composer_shared/presentation/bbcode/composer_bbcode_command.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_app_bar_action_style.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_toolbar.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/composer_editor_preview.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_source_editor.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_image_attachment_queue.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_load_error_view.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_editor.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_settings_sheet.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_status_banner.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_transient_feedback.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/sticker_picker_sheet.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
 import 'package:y300/features/posting/presentation/posting_composer_controller.dart';
 import 'package:y300/features/posting/presentation/posting_composer_state.dart';
-import 'package:y300/features/posting/presentation/widgets/thread_poll_editor.dart';
+import 'package:y300/features/posting/presentation/widgets/thread_poll_expandable_editor.dart';
 import 'package:y300/features/posting/presentation/widgets/thread_special_switch.dart';
 import 'package:y300/features/posting/presentation/widgets/thread_subject_field.dart';
 import 'package:y300/features/posting/presentation/widgets/thread_tags_field.dart';
@@ -41,11 +40,10 @@ class PostingComposerPage extends ConsumerStatefulWidget {
 }
 
 class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
-  static const _bbCodeInsertionService = ComposerBbCodeInsertionService();
-
   late final TextEditingController _subjectController;
   late final TextEditingController _messageController;
   PostingComposerController? _controller;
+  _PostingEditorSurface _editorSurface = _PostingEditorSurface.quill;
   bool _didApplyRestoredDraft = false;
   bool _didNotifyRestoredDraft = false;
   bool _wasLoadingMetadata = false;
@@ -73,7 +71,6 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
     super.dispose();
   }
 
-  // PLACEHOLDER_PHASE_5_BUILD_AND_HELPERS
   @override
   Widget build(BuildContext context) {
     final provider = postingComposerControllerProvider(widget.args);
@@ -102,9 +99,27 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
         unawaited(_confirmAndPop(context, controller));
       },
       child: Scaffold(
+        resizeToAvoidBottomInset: _editorSurface != _PostingEditorSurface.quill,
         appBar: AppBar(
           title: Text(_appBarTitle(state)),
           actions: [
+            IconButton(
+              key: const Key('posting-composer-source-button'),
+              tooltip: _editorSurface == _PostingEditorSurface.quill
+                  ? '源码'
+                  : '返回编辑',
+              onPressed: state == null
+                  ? null
+                  : () {
+                      _toggleEditorSurface(state);
+                    },
+              style: composerAppBarActionStyle(context),
+              icon: Icon(
+                _editorSurface == _PostingEditorSurface.quill
+                    ? Icons.code
+                    : Icons.edit_outlined,
+              ),
+            ),
             IconButton(
               key: const Key('posting-composer-more-button'),
               tooltip: '更多',
@@ -115,17 +130,6 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
                     },
               style: composerAppBarActionStyle(context),
               icon: const Icon(Icons.more_vert),
-            ),
-            IconButton(
-              key: const Key('posting-composer-image-button'),
-              tooltip: '图片',
-              onPressed: state == null || !state.canPickImages
-                  ? null
-                  : () {
-                      unawaited(controller.pickImages());
-                    },
-              style: composerAppBarActionStyle(context),
-              icon: const Icon(Icons.image),
             ),
             IconButton(
               key: const Key('posting-composer-send-button'),
@@ -149,9 +153,11 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
           data: (state) => _PostingComposerBody(
             state: state,
             bbCodeRenderer: bbCodeRenderer,
+            stickerGroups: stickerGroups,
             stickers: _flattenStickers(stickerGroups),
             subjectController: _subjectController,
             messageController: _messageController,
+            editorSurface: _editorSurface,
             onSubjectChanged: (value) {
               _lastAppliedStateSubject = value;
               controller.updateSubject(value);
@@ -169,16 +175,23 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
             onPollExpirationDaysChanged: controller.updatePollExpirationDays,
             onPollOvertChanged: controller.updatePollOvert,
             onPollVisibilityPollChanged: controller.updatePollVisibilityPoll,
-            onStickerPressed: () {
-              unawaited(_pickAndInsertSticker(context, controller));
-            },
-            onBbCodeCommandSelected: (command) {
-              _insertBbCode(command, controller);
-            },
+            onImagePressed: controller.pickImages,
           ),
         ),
       ),
     );
+  }
+
+  void _toggleEditorSurface(PostingComposerState state) {
+    setState(() {
+      if (_editorSurface == _PostingEditorSurface.quill) {
+        _messageController.text = state.message;
+        _lastAppliedStateMessage = state.message;
+        _editorSurface = _PostingEditorSurface.source;
+        return;
+      }
+      _editorSurface = _PostingEditorSurface.quill;
+    });
   }
 
   String _appBarTitle(PostingComposerState? state) {
@@ -341,61 +354,6 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
     navigator.pop();
   }
 
-  Future<void> _pickAndInsertSticker(
-    BuildContext context,
-    PostingComposerController controller,
-  ) async {
-    final sticker = await showModalBottomSheet<StickerItem>(
-      context: context,
-      showDragHandle: true,
-      builder: (_) => const StickerPickerSheet(),
-    );
-    if (!mounted || sticker == null) {
-      return;
-    }
-    _insertSticker(sticker, controller);
-  }
-
-  void _insertSticker(
-    StickerItem sticker,
-    PostingComposerController controller,
-  ) {
-    final value = _messageController.value;
-    final text = value.text;
-    final selection = value.selection;
-    final start = selection.isValid ? selection.start : text.length;
-    final end = selection.isValid ? selection.end : text.length;
-    final normalizedStart = start.clamp(0, text.length).toInt();
-    final normalizedEnd = end.clamp(0, text.length).toInt();
-    final replaceStart = normalizedStart < normalizedEnd
-        ? normalizedStart
-        : normalizedEnd;
-    final replaceEnd = normalizedStart < normalizedEnd
-        ? normalizedEnd
-        : normalizedStart;
-    final nextText = text.replaceRange(replaceStart, replaceEnd, sticker.code);
-    final nextOffset = replaceStart + sticker.code.length;
-    _messageController.value = TextEditingValue(
-      text: nextText,
-      selection: TextSelection.collapsed(offset: nextOffset),
-    );
-    controller.updateMessage(nextText);
-    _lastAppliedStateMessage = nextText;
-  }
-
-  void _insertBbCode(
-    ComposerBbCodeCommand command,
-    PostingComposerController controller,
-  ) {
-    final nextValue = _bbCodeInsertionService.wrapSelection(
-      _messageController.value,
-      command,
-    );
-    _messageController.value = nextValue;
-    controller.updateMessage(nextValue.text);
-    _lastAppliedStateMessage = nextValue.text;
-  }
-
   void _showSettingsSheet() {
     final provider = postingComposerControllerProvider(widget.args);
     showModalBottomSheet<void>(
@@ -468,13 +426,15 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
   }
 }
 
-class _PostingComposerBody extends StatelessWidget {
+class _PostingComposerBody extends StatefulWidget {
   const _PostingComposerBody({
     required this.state,
     required this.bbCodeRenderer,
+    required this.stickerGroups,
     required this.stickers,
     required this.subjectController,
     required this.messageController,
+    required this.editorSurface,
     required this.onSubjectChanged,
     required this.onMessageChanged,
     required this.onSelectedTypeIdChanged,
@@ -486,15 +446,16 @@ class _PostingComposerBody extends StatelessWidget {
     required this.onPollExpirationDaysChanged,
     required this.onPollOvertChanged,
     required this.onPollVisibilityPollChanged,
-    required this.onStickerPressed,
-    required this.onBbCodeCommandSelected,
+    required this.onImagePressed,
   });
 
   final PostingComposerState state;
   final ForumBbCodeRenderer bbCodeRenderer;
+  final List<StickerGroup> stickerGroups;
   final List<StickerItem> stickers;
   final TextEditingController subjectController;
   final TextEditingController messageController;
+  final _PostingEditorSurface editorSurface;
   final ValueChanged<String> onSubjectChanged;
   final ValueChanged<String> onMessageChanged;
   final ValueChanged<String?> onSelectedTypeIdChanged;
@@ -506,204 +467,270 @@ class _PostingComposerBody extends StatelessWidget {
   final ValueChanged<int> onPollExpirationDaysChanged;
   final ValueChanged<bool> onPollOvertChanged;
   final ValueChanged<bool> onPollVisibilityPollChanged;
-  final VoidCallback onStickerPressed;
-  final ValueChanged<ComposerBbCodeCommand> onBbCodeCommandSelected;
+  final Future<void> Function() onImagePressed;
 
-  // PLACEHOLDER_PHASE_5_BODY_BUILD
+  @override
+  State<_PostingComposerBody> createState() => _PostingComposerBodyState();
+}
+
+class _PostingComposerBodyState extends State<_PostingComposerBody> {
+  bool _isPollConfigExpanded = false;
+  NewThreadSpecial? _lastSpecial;
+
+  @override
+  void initState() {
+    super.initState();
+    _lastSpecial = widget.state.special;
+    _isPollConfigExpanded = widget.state.special == NewThreadSpecial.poll;
+  }
+
+  @override
+  void didUpdateWidget(covariant _PostingComposerBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final wasPoll = _lastSpecial == NewThreadSpecial.poll;
+    final isPoll = widget.state.special == NewThreadSpecial.poll;
+    if (!wasPoll && isPoll) {
+      _isPollConfigExpanded = true;
+    } else if (wasPoll && !isPoll) {
+      _isPollConfigExpanded = false;
+    }
+    _lastSpecial = widget.state.special;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final disabled = state.isSubmitting;
     final visibleAttachments = visibleComposerImageAttachments(
-      state.imageAttachments,
+      widget.state.imageAttachments,
     );
+    final editor = _PostingMessageEditor(
+      surface: widget.editorSurface,
+      state: widget.state,
+      bbCodeRenderer: widget.bbCodeRenderer,
+      stickerGroups: widget.stickerGroups,
+      stickers: widget.stickers,
+      messageController: widget.messageController,
+      onMessageChanged: widget.onMessageChanged,
+      onImagePressed: widget.onImagePressed,
+    );
+    if (widget.editorSurface == _PostingEditorSurface.quill) {
+      return SafeArea(
+        bottom: false,
+        child: CustomScrollView(
+          physics: const ClampingScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ..._buildFormFields(context),
+                    ..._buildTrailingFeedbackWidgets(
+                      context,
+                      visibleAttachments,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SliverFillRemaining(hasScrollBody: false, child: editor),
+          ],
+        ),
+      );
+    }
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _buildMetadataBanner(),
-          _buildMetadataSpacer(),
-          if (state.imageUploadError != null &&
-              state.imageUploadError!.trim().isNotEmpty) ...[
-            Text(
-              state.imageUploadError!,
-              key: const Key('posting-composer-image-error'),
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-            const SizedBox(height: 12),
-          ],
-          ThreadSubjectField(
-            fieldKey: const Key('posting-composer-subject-input'),
-            counterTextKey: const Key('posting-composer-subject-counter'),
-            controller: subjectController,
-            enabled: !disabled,
-            onChanged: onSubjectChanged,
-            maxLength: state.metadata?.maxSubjectLength ?? 0,
-          ),
-          const SizedBox(height: 12),
-          if (state.metadata != null &&
-              state.metadata!.threadTypes.isNotEmpty &&
-              state.metadata!.typeRequired) ...[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: ThreadTypeSelector(
-                    containerKey: const Key('posting-composer-type-selector'),
-                    toggleKey: const Key('posting-composer-type-toggle'),
-                    summaryKey: const Key('posting-composer-type-summary'),
-                    noneChipKey: const Key('posting-composer-type-none'),
-                    chipKeyBuilder: (type) =>
-                        Key('posting-composer-type-${type.id}'),
-                    types: state.metadata!.threadTypes,
-                    typeRequired: state.metadata!.typeRequired,
-                    selectedTypeId: state.selectedTypeId,
-                    onSelected: onSelectedTypeIdChanged,
-                    enabled: !disabled,
-                    useDropdown: true,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ThreadSpecialSwitch(
-                    widgetKey: const Key('posting-composer-special-switch'),
-                    summaryKey: const Key('posting-composer-special-summary'),
-                    normalItemKey: const Key('posting-composer-special-normal'),
-                    pollItemKey: const Key('posting-composer-special-poll'),
-                    special: state.special,
-                    onChanged: onSpecialChanged,
-                    enabled: !disabled,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-          ] else if (state.metadata != null &&
-              state.metadata!.threadTypes.isNotEmpty) ...[
-            ThreadTypeSelector(
-              containerKey: const Key('posting-composer-type-selector'),
-              toggleKey: const Key('posting-composer-type-toggle'),
-              summaryKey: const Key('posting-composer-type-summary'),
-              noneChipKey: const Key('posting-composer-type-none'),
-              chipKeyBuilder: (type) => Key('posting-composer-type-${type.id}'),
-              types: state.metadata!.threadTypes,
-              typeRequired: state.metadata!.typeRequired,
-              selectedTypeId: state.selectedTypeId,
-              onSelected: onSelectedTypeIdChanged,
-              enabled: !disabled,
-            ),
-            const SizedBox(height: 12),
-            ThreadSpecialSwitch(
-              widgetKey: const Key('posting-composer-special-switch'),
-              summaryKey: const Key('posting-composer-special-summary'),
-              normalItemKey: const Key('posting-composer-special-normal'),
-              pollItemKey: const Key('posting-composer-special-poll'),
-              special: state.special,
-              onChanged: onSpecialChanged,
-              enabled: !disabled,
-            ),
-            const SizedBox(height: 12),
-          ] else ...[
-            ThreadSpecialSwitch(
-              widgetKey: const Key('posting-composer-special-switch'),
-              summaryKey: const Key('posting-composer-special-summary'),
-              normalItemKey: const Key('posting-composer-special-normal'),
-              pollItemKey: const Key('posting-composer-special-poll'),
-              special: state.special,
-              onChanged: onSpecialChanged,
-              enabled: !disabled,
-            ),
-            const SizedBox(height: 12),
-          ],
-          if (state.special == NewThreadSpecial.poll) ...[
-            ThreadPollEditor(
-              containerKey: const Key('posting-composer-poll-editor'),
-              optionFieldKeyBuilder: (index) =>
-                  Key('posting-composer-poll-option-$index'),
-              optionRemoveKeyBuilder: (index) =>
-                  Key('posting-composer-poll-option-remove-$index'),
-              addOptionButtonKey: const Key('posting-composer-poll-add-option'),
-              multipleSwitchKey: const Key(
-                'posting-composer-poll-multiple-switch',
-              ),
-              maxChoicesFieldKey: const Key(
-                'posting-composer-poll-max-choices',
-              ),
-              expirationFieldKey: const Key('posting-composer-poll-expiration'),
-              overtSwitchKey: const Key('posting-composer-poll-overt-switch'),
-              visibilityPollSwitchKey: const Key(
-                'posting-composer-poll-visibility-switch',
-              ),
-              poll: state.poll ?? NewThreadPollDraft.empty,
-              enabled: !disabled,
-              onOptionsChanged: onPollOptionsChanged,
-              onMultipleChanged: onPollMultipleChanged,
-              onMaxChoicesChanged: onPollMaxChoicesChanged,
-              onExpirationDaysChanged: onPollExpirationDaysChanged,
-              onOvertChanged: onPollOvertChanged,
-              onVisibilityPollChanged: onPollVisibilityPollChanged,
-            ),
-          ],
-          const SizedBox(height: 12),
-          ComposerBbCodeToolbar(
-            keyPrefix: 'posting-composer',
-            enabled: !disabled,
-            onStickerPressed: onStickerPressed,
-            onCommandSelected: onBbCodeCommandSelected,
-          ),
-          const SizedBox(height: 12),
-          ComposerEditorPreview(
-            inputKey: const Key('posting-composer-message-input'),
-            previewPanelKey: const Key('posting-composer-bbcode-preview-panel'),
-            previewEmptyKey: const Key('posting-composer-bbcode-preview-empty'),
-            previewLabelKey: const Key('posting-composer-preview-label'),
-            controller: messageController,
-            enabled: !disabled,
-            hintText: '请注意图片仅在本地保存24小时',
-            onChanged: onMessageChanged,
-            renderer: bbCodeRenderer,
-            stickers: stickers,
-            imageAttachments: state.imageAttachments,
-          ),
-          // 正文字数计数（仅当 metadata 声明了上限）。
-          if (state.metadata?.hasMessageLimit ?? false)
+          ..._buildFormFields(context),
+          editor,
+          if (widget.state.metadata?.hasMessageLimit ?? false)
             _MessageCounter(
               counterKey: const Key('posting-composer-message-counter'),
-              currentLength: state.message.length,
-              maxLength: state.metadata!.maxMessageLength,
+              currentLength: widget.state.message.length,
+              maxLength: widget.state.metadata!.maxMessageLength,
             ),
-          if (visibleAttachments.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            ComposerImageAttachmentQueue(
-              containerKey: const Key('posting-composer-image-queue'),
-              uploadCountKey: const Key('posting-composer-image-upload-count'),
-              uploadProgressKey: const Key(
-                'posting-composer-image-upload-progress',
-              ),
-              tileKeyBuilder: (attachment) => Key(
-                'posting-composer-image-attachment-${attachment.localId}',
-              ),
-              attachments: visibleAttachments,
-              isUploadingImages: state.isUploadingImages,
-              imageUploadCurrent: state.imageUploadCurrent,
-              imageUploadTotal: state.imageUploadTotal,
-            ),
-          ],
-          if (state.errorMessage != null &&
-              state.errorMessage!.trim().isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              state.errorMessage!,
-              key: const Key('posting-composer-error-message'),
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          ],
+          ..._buildTrailingFeedbackWidgets(context, visibleAttachments),
         ],
       ),
     );
   }
 
+  List<Widget> _buildFormFields(BuildContext context) {
+    final state = widget.state;
+    final disabled = state.isSubmitting;
+    return [
+      _buildMetadataBanner(),
+      _buildMetadataSpacer(),
+      if (state.imageUploadError != null &&
+          state.imageUploadError!.trim().isNotEmpty) ...[
+        Text(
+          state.imageUploadError!,
+          key: const Key('posting-composer-image-error'),
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
+        const SizedBox(height: 12),
+      ],
+      ThreadSubjectField(
+        fieldKey: const Key('posting-composer-subject-input'),
+        counterTextKey: const Key('posting-composer-subject-counter'),
+        controller: widget.subjectController,
+        enabled: !disabled,
+        onChanged: widget.onSubjectChanged,
+        maxLength: state.metadata?.maxSubjectLength ?? 0,
+      ),
+      const SizedBox(height: 12),
+      ..._buildTypeAndSpecialFields(disabled: disabled),
+      if (state.special == NewThreadSpecial.poll) ...[
+        _buildPollEditor(disabled: disabled),
+        const SizedBox(height: 12),
+      ],
+    ];
+  }
+
+  List<Widget> _buildTypeAndSpecialFields({required bool disabled}) {
+    final state = widget.state;
+    final metadata = state.metadata;
+    if (metadata != null &&
+        metadata.threadTypes.isNotEmpty &&
+        metadata.typeRequired) {
+      return [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: ThreadTypeSelector(
+                containerKey: const Key('posting-composer-type-selector'),
+                toggleKey: const Key('posting-composer-type-toggle'),
+                summaryKey: const Key('posting-composer-type-summary'),
+                noneChipKey: const Key('posting-composer-type-none'),
+                chipKeyBuilder: (type) =>
+                    Key('posting-composer-type-${type.id}'),
+                types: metadata.threadTypes,
+                typeRequired: metadata.typeRequired,
+                selectedTypeId: state.selectedTypeId,
+                onSelected: widget.onSelectedTypeIdChanged,
+                enabled: !disabled,
+                useDropdown: true,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: _buildSpecialSwitch(disabled: disabled)),
+          ],
+        ),
+        const SizedBox(height: 12),
+      ];
+    }
+    if (metadata != null && metadata.threadTypes.isNotEmpty) {
+      return [
+        ThreadTypeSelector(
+          containerKey: const Key('posting-composer-type-selector'),
+          toggleKey: const Key('posting-composer-type-toggle'),
+          summaryKey: const Key('posting-composer-type-summary'),
+          noneChipKey: const Key('posting-composer-type-none'),
+          chipKeyBuilder: (type) => Key('posting-composer-type-${type.id}'),
+          types: metadata.threadTypes,
+          typeRequired: metadata.typeRequired,
+          selectedTypeId: state.selectedTypeId,
+          onSelected: widget.onSelectedTypeIdChanged,
+          enabled: !disabled,
+        ),
+        const SizedBox(height: 12),
+        _buildSpecialSwitch(disabled: disabled),
+        const SizedBox(height: 12),
+      ];
+    }
+    return [
+      _buildSpecialSwitch(disabled: disabled),
+      const SizedBox(height: 12),
+    ];
+  }
+
+  Widget _buildSpecialSwitch({required bool disabled}) {
+    return ThreadSpecialSwitch(
+      widgetKey: const Key('posting-composer-special-switch'),
+      summaryKey: const Key('posting-composer-special-summary'),
+      normalItemKey: const Key('posting-composer-special-normal'),
+      pollItemKey: const Key('posting-composer-special-poll'),
+      special: widget.state.special,
+      onChanged: widget.onSpecialChanged,
+      enabled: !disabled,
+    );
+  }
+
+  Widget _buildPollEditor({required bool disabled}) {
+    final state = widget.state;
+    return ThreadPollExpandableEditor(
+      toggleKey: const Key('posting-composer-poll-config-toggle'),
+      summaryKey: const Key('posting-composer-poll-config-summary'),
+      panelKey: const Key('posting-composer-poll-config-panel'),
+      editorKey: const Key('posting-composer-poll-editor'),
+      optionFieldKeyBuilder: (index) =>
+          Key('posting-composer-poll-option-$index'),
+      optionRemoveKeyBuilder: (index) =>
+          Key('posting-composer-poll-option-remove-$index'),
+      addOptionButtonKey: const Key('posting-composer-poll-add-option'),
+      multipleSwitchKey: const Key('posting-composer-poll-multiple-switch'),
+      maxChoicesFieldKey: const Key('posting-composer-poll-max-choices'),
+      expirationFieldKey: const Key('posting-composer-poll-expiration'),
+      overtSwitchKey: const Key('posting-composer-poll-overt-switch'),
+      visibilityPollSwitchKey: const Key(
+        'posting-composer-poll-visibility-switch',
+      ),
+      poll: state.poll ?? NewThreadPollDraft.empty,
+      enabled: !disabled,
+      expanded: _isPollConfigExpanded,
+      onExpansionChanged: (expanded) {
+        setState(() {
+          _isPollConfigExpanded = expanded;
+        });
+      },
+      onOptionsChanged: widget.onPollOptionsChanged,
+      onMultipleChanged: widget.onPollMultipleChanged,
+      onMaxChoicesChanged: widget.onPollMaxChoicesChanged,
+      onExpirationDaysChanged: widget.onPollExpirationDaysChanged,
+      onOvertChanged: widget.onPollOvertChanged,
+      onVisibilityPollChanged: widget.onPollVisibilityPollChanged,
+    );
+  }
+
+  List<Widget> _buildTrailingFeedbackWidgets(
+    BuildContext context,
+    List<ComposerImageAttachment> visibleAttachments,
+  ) {
+    final state = widget.state;
+    return [
+      if (visibleAttachments.isNotEmpty) ...[
+        const SizedBox(height: 12),
+        ComposerImageAttachmentQueue(
+          containerKey: const Key('posting-composer-image-queue'),
+          uploadCountKey: const Key('posting-composer-image-upload-count'),
+          uploadProgressKey: const Key(
+            'posting-composer-image-upload-progress',
+          ),
+          tileKeyBuilder: (attachment) =>
+              Key('posting-composer-image-attachment-${attachment.localId}'),
+          attachments: visibleAttachments,
+          isUploadingImages: state.isUploadingImages,
+          imageUploadCurrent: state.imageUploadCurrent,
+          imageUploadTotal: state.imageUploadTotal,
+        ),
+      ],
+      if (state.errorMessage != null &&
+          state.errorMessage!.trim().isNotEmpty) ...[
+        const SizedBox(height: 8),
+        Text(
+          state.errorMessage!,
+          key: const Key('posting-composer-error-message'),
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
+      ],
+    ];
+  }
+
   /// metadata 加载中用 SnackBar 轻提示；只有失败态保留正文重试入口。
   Widget _buildMetadataBanner() {
+    final state = widget.state;
     final error = state.metadataError;
     if (error != null && error.trim().isNotEmpty) {
       return ComposerStatusBanner.error(
@@ -711,17 +738,82 @@ class _PostingComposerBody extends StatelessWidget {
         text: '加载发帖表单失败：$error',
         textKey: const Key('posting-composer-metadata-error-text'),
         retryButtonKey: const Key('posting-composer-metadata-retry-button'),
-        onRetry: onRetryLoadMetadata,
+        onRetry: widget.onRetryLoadMetadata,
       );
     }
     return const SizedBox.shrink();
   }
 
   Widget _buildMetadataSpacer() {
-    if (state.metadataError != null && state.metadataError!.trim().isNotEmpty) {
+    final error = widget.state.metadataError;
+    if (error != null && error.trim().isNotEmpty) {
       return const SizedBox(height: 12);
     }
     return const SizedBox.shrink();
+  }
+}
+
+enum _PostingEditorSurface { quill, source }
+
+class _PostingMessageEditor extends StatelessWidget {
+  const _PostingMessageEditor({
+    required this.surface,
+    required this.state,
+    required this.bbCodeRenderer,
+    required this.stickerGroups,
+    required this.stickers,
+    required this.messageController,
+    required this.onMessageChanged,
+    required this.onImagePressed,
+  });
+
+  final _PostingEditorSurface surface;
+  final PostingComposerState state;
+  final ForumBbCodeRenderer bbCodeRenderer;
+  final List<StickerGroup> stickerGroups;
+  final List<StickerItem> stickers;
+  final TextEditingController messageController;
+  final ValueChanged<String> onMessageChanged;
+  final Future<void> Function() onImagePressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = !state.isSubmitting;
+    final renderer = bbCodeRenderer;
+    return switch (surface) {
+      _PostingEditorSurface.quill => ComposerQuillEditorSurface(
+        key: const Key('posting-composer-quill-editor'),
+        keyPrefix: 'posting-composer',
+        bbCode: state.message,
+        enabled: enabled,
+        stickers: stickers,
+        stickerGroups: stickerGroups,
+        imageAttachments: state.imageAttachments,
+        attachImageBuilder: renderer is FlutterBbCodeForumRenderer
+            ? renderer.attachImageBuilder
+            : null,
+        attachFileExists: renderer is FlutterBbCodeForumRenderer
+            ? renderer.attachFileExists
+            : null,
+        hintText: '请注意图片仅在本地保存24小时',
+        expand: true,
+        contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+        onBbCodeChanged: onMessageChanged,
+        onImagePressed: (_) async {
+          await onImagePressed();
+          return null;
+        },
+      ),
+      _PostingEditorSurface.source => ComposerBbCodeSourceEditor(
+        keyPrefix: 'posting-composer',
+        viewKey: const Key('posting-composer-source-view'),
+        inputKey: const Key('posting-composer-message-input'),
+        controller: messageController,
+        enabled: enabled,
+        hintText: '请注意图片仅在本地保存24小时',
+        onChanged: onMessageChanged,
+      ),
+    };
   }
 }
 

@@ -34,7 +34,7 @@ void main() {
 
     expect(find.byType(Scaffold), findsOneWidget);
     expect(
-      find.byKey(const Key('reply-composer-message-input')),
+      find.byKey(const Key('reply-composer-quill-editor')),
       findsOneWidget,
     );
     expect(find.byKey(const Key('reply-composer-send-button')), findsOneWidget);
@@ -45,22 +45,27 @@ void main() {
     await tester.pump();
 
     expect(find.text('回复帖子'), findsOneWidget);
-    expect(find.text('预览'), findsOneWidget);
+    expect(find.text('预览'), findsNothing);
+    expect(
+      find.byKey(const Key('reply-composer-source-button')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('reply-composer-more-button')), findsOneWidget);
     expect(
       find.byKey(const Key('reply-composer-sticker-button')),
       findsOneWidget,
     );
     expect(
-      find.byKey(const Key('reply-composer-color-button')),
+      find.byKey(const Key('reply-composer-format-button')),
       findsOneWidget,
     );
+    expect(find.byKey(const Key('reply-composer-color-button')), findsNothing);
     expect(
       find.byKey(const Key('reply-composer-backcolor-button')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(find.byKey(const Key('reply-composer-link-button')), findsOneWidget);
-    expect(find.byKey(const Key('reply-composer-size-button')), findsOneWidget);
+    expect(find.byKey(const Key('reply-composer-size-button')), findsNothing);
     expect(
       find.byKey(const Key('reply-composer-quote-button')),
       findsOneWidget,
@@ -70,13 +75,10 @@ void main() {
       find.byKey(const Key('reply-composer-align-button')),
       findsOneWidget,
     );
-    expect(
-      find.byKey(const Key('reply-composer-message-input')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('reply-composer-message-input')), findsNothing);
     expect(
       find.byKey(const Key('reply-composer-bbcode-preview-panel')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.byKey(const Key('reply-composer-use-signature-switch')),
@@ -94,10 +96,7 @@ void main() {
   ) async {
     await tester.pumpWidget(_buildPage());
     await tester.pump();
-    await tester.enterText(
-      find.byKey(const Key('reply-composer-message-input')),
-      '前引用后',
-    );
+    await _enterReplySourceText(tester, '前引用后');
     final editable = tester.widget<EditableText>(find.byType(EditableText));
     editable.controller.selection = const TextSelection(
       baseOffset: 1,
@@ -108,13 +107,6 @@ void main() {
     await tester.pump();
 
     expect(editable.controller.text, '前[quote]引用[/quote]后');
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('reply-composer-bbcode-preview-panel')),
-        matching: find.textContaining('引用', findRichText: true),
-      ),
-      findsOneWidget,
-    );
   });
 
   testWidgets('ReplyComposerPage wraps selection from text context menu', (
@@ -122,10 +114,7 @@ void main() {
   ) async {
     await tester.pumpWidget(_buildPage());
     await tester.pump();
-    await tester.enterText(
-      find.byKey(const Key('reply-composer-message-input')),
-      '前选中后',
-    );
+    await _enterReplySourceText(tester, '前选中后');
     final editable = tester.widget<EditableText>(find.byType(EditableText));
     editable.controller.selection = const TextSelection(
       baseOffset: 1,
@@ -140,13 +129,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(editable.controller.text, '前[quote]选中[/quote]后');
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('reply-composer-bbcode-preview-panel')),
-        matching: find.textContaining('选中', findRichText: true),
-      ),
-      findsOneWidget,
-    );
   });
 
   testWidgets('ReplyComposerPage inserts picked backcolor BBCode', (
@@ -154,6 +136,7 @@ void main() {
   ) async {
     await tester.pumpWidget(_buildPage());
     await tester.pump();
+    await _openReplySourceEditor(tester);
 
     await tester.tap(find.byKey(const Key('reply-composer-backcolor-button')));
     await tester.pumpAndSettle();
@@ -186,15 +169,30 @@ void main() {
     final moreCenter = tester.getCenter(
       find.byKey(const Key('reply-composer-more-button')),
     );
-    final imageCenter = tester.getCenter(
-      find.byKey(const Key('reply-composer-image-button')),
-    );
     final sendCenter = tester.getCenter(
       find.byKey(const Key('reply-composer-send-button')),
     );
 
-    expect(moreCenter.dx, lessThan(imageCenter.dx));
-    expect(imageCenter.dx, lessThan(sendCenter.dx));
+    final sourceCenter = tester.getCenter(
+      find.byKey(const Key('reply-composer-source-button')),
+    );
+
+    expect(sourceCenter.dx, lessThan(moreCenter.dx));
+    expect(moreCenter.dx, lessThan(sendCenter.dx));
+  });
+
+  testWidgets('ReplyComposerPage keeps Quill toolbar pinned to bottom', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildPage());
+    await tester.pump();
+
+    final scaffoldBottom = tester.getBottomLeft(find.byType(Scaffold)).dy;
+    final imageButtonBottom = tester
+        .getBottomLeft(find.byKey(const Key('reply-composer-image-button')))
+        .dy;
+
+    expect(scaffoldBottom - imageButtonBottom, lessThan(64));
   });
 
   testWidgets('ReplyComposerPage restores draft into input', (tester) async {
@@ -215,7 +213,11 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('恢复的草稿'), findsOneWidget);
+    await _openReplySourceEditor(tester);
+    final restoredField = tester.widget<TextField>(
+      find.byKey(const Key('reply-composer-message-input')),
+    );
+    expect(restoredField.controller?.text, '恢复的草稿');
     expect(find.text('已恢复未发送草稿'), findsOneWidget);
     expect(
       find.byKey(const Key('reply-composer-restored-draft-banner')),
@@ -268,15 +270,14 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('reply-composer-image-queue')), findsNothing);
-    expect(find.text('image-1.jpg'), findsNothing);
     expect(find.textContaining('已上传'), findsNothing);
     expect(
-      find.byKey(const Key('reply-bbcode-preview-attach-123456')),
+      find.byKey(const Key('composer-quill-attach-123456')),
       findsOneWidget,
     );
   });
 
-  testWidgets('ReplyComposerPage previews restored uploaded local image', (
+  testWidgets('ReplyComposerPage restores uploaded attach embed', (
     tester,
   ) async {
     const path = 'E:/test/reply/restored.png';
@@ -304,18 +305,12 @@ void main() {
     );
     await tester.pump();
 
-    final previewImage = tester.widget<_TestAttachPreviewImage>(
-      find.byKey(const Key('reply-bbcode-preview-attach-123456')),
-    );
-    expect(previewImage.file.path, path);
     expect(
-      find.descendant(
-        of: find.byKey(const Key('reply-composer-bbcode-preview-panel')),
-        matching: find.textContaining(
-          '[attach]123456[/attach]',
-          findRichText: true,
-        ),
-      ),
+      find.byKey(const Key('composer-quill-attach-123456')),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('[attach]123456[/attach]', findRichText: true),
       findsNothing,
     );
   });
@@ -350,7 +345,11 @@ void main() {
 
     expect(find.byKey(const Key('reply-composer-image-queue')), findsNothing);
     expect(find.textContaining('[attach]123456[/attach]'), findsNothing);
-    expect(find.text('正文'), findsOneWidget);
+    await _openReplySourceEditor(tester);
+    final sanitizedField = tester.widget<TextField>(
+      find.byKey(const Key('reply-composer-message-input')),
+    );
+    expect(sanitizedField.controller?.text, '正文');
   });
 
   testWidgets('ReplyComposerPage keeps send disabled for empty input', (
@@ -365,29 +364,48 @@ void main() {
     expect(sendButton.onPressed, isNull);
   });
 
-  testWidgets('ReplyComposerPage shows source input and preview together', (
+  testWidgets('ReplyComposerPage switches source and Quill editor', (
     tester,
   ) async {
     await tester.pumpWidget(_buildPage());
     await tester.pump();
 
-    await tester.enterText(
-      find.byKey(const Key('reply-composer-message-input')),
-      '[b]粗体内容[/b]',
+    expect(
+      find.byKey(const Key('reply-composer-quill-editor')),
+      findsOneWidget,
     );
+    await _enterReplySourceText(tester, '[b]粗体内容[/b]');
     await tester.pump();
 
     expect(
       find.byKey(const Key('reply-composer-bbcode-preview-panel')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.byKey(const Key('reply-composer-message-input')),
       findsOneWidget,
     );
-    expect(find.text('粗体内容', findRichText: true), findsOneWidget);
     final editable = tester.widget<EditableText>(find.byType(EditableText));
     expect(editable.controller.text, '[b]粗体内容[/b]');
+    final sourceField = tester.widget<TextField>(
+      find.byKey(const Key('reply-composer-message-input')),
+    );
+    final decoration = sourceField.decoration;
+    expect(decoration?.border, InputBorder.none);
+    expect(decoration?.enabledBorder, InputBorder.none);
+    expect(decoration?.focusedBorder, InputBorder.none);
+    expect(decoration?.disabledBorder, InputBorder.none);
+    expect(decoration?.filled, isFalse);
+    expect(decoration?.fillColor, isNull);
+
+    await tester.tap(find.byKey(const Key('reply-composer-source-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('reply-composer-quill-editor')),
+      findsOneWidget,
+    );
+    expect(find.text('粗体内容', findRichText: true), findsOneWidget);
   });
 
   testWidgets('ReplyComposerPage pops sent result after successful submit', (
@@ -411,10 +429,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('open-reply-composer-page')));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const Key('reply-composer-message-input')),
-      '提交内容',
-    );
+    await _enterReplySourceText(tester, '提交内容');
     await tester.pump();
     await tester.tap(find.byKey(const Key('reply-composer-send-button')));
     await tester.pumpAndSettle();
@@ -424,7 +439,7 @@ void main() {
     expect(poppedResult?.message, '回复发布成功');
   });
 
-  testWidgets('ReplyComposerPage submits raw source message while previewing', (
+  testWidgets('ReplyComposerPage submits raw source message from source mode', (
     tester,
   ) async {
     final replyRepository = _FakeReplyRepository(
@@ -437,10 +452,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('open-reply-composer-page')));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const Key('reply-composer-message-input')),
-      '[quote]原始源码[/quote]',
-    );
+    await _enterReplySourceText(tester, '[quote]原始源码[/quote]');
     await tester.pump();
     await tester.tap(find.byKey(const Key('reply-composer-send-button')));
     await tester.pumpAndSettle();
@@ -453,10 +465,7 @@ void main() {
   ) async {
     await tester.pumpWidget(_buildPage(stickerGroups: _stickerGroups));
     await tester.pump();
-    await tester.enterText(
-      find.byKey(const Key('reply-composer-message-input')),
-      '前后',
-    );
+    await _enterReplySourceText(tester, '前后');
     final editable = tester.widget<EditableText>(find.byType(EditableText));
     editable.controller.selection = const TextSelection.collapsed(offset: 1);
 
@@ -470,28 +479,21 @@ void main() {
     expect(find.text('前{:9_656:}后'), findsOneWidget);
   });
 
-  testWidgets('ReplyComposerPage previews inserted sticker as remote image', (
+  testWidgets('ReplyComposerPage shows inserted sticker as Quill embed', (
     tester,
   ) async {
     await tester.pumpWidget(_buildPage(stickerGroups: _stickerGroups));
     await tester.pump();
-    await tester.enterText(
-      find.byKey(const Key('reply-composer-message-input')),
-      '{:9_656:}',
-    );
+    await _enterReplySourceText(tester, '{:9_656:}');
     await tester.pump();
+    await tester.tap(find.byKey(const Key('reply-composer-source-button')));
+    await tester.pumpAndSettle();
 
     expect(
-      find.byKey(const Key('reply-bbcode-preview-sticker-{:9_656:}')),
+      find.byKey(const Key('composer-quill-sticker-{:9_656:}')),
       findsOneWidget,
     );
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('reply-composer-bbcode-preview-panel')),
-        matching: find.textContaining('{:9_656:}', findRichText: true),
-      ),
-      findsNothing,
-    );
+    expect(find.textContaining('{:9_656:}', findRichText: true), findsNothing);
   });
 
   testWidgets('ReplyComposerPage submits raw sticker code', (tester) async {
@@ -510,10 +512,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('open-reply-composer-page')));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const Key('reply-composer-message-input')),
-      '表情{:9_656:}',
-    );
+    await _enterReplySourceText(tester, '表情{:9_656:}');
     await tester.pump();
     await tester.tap(find.byKey(const Key('reply-composer-send-button')));
     await tester.pumpAndSettle();
@@ -580,7 +579,10 @@ void main() {
     await tester.pump();
 
     final imageButton = tester.widget<IconButton>(
-      find.byKey(const Key('reply-composer-image-button')),
+      find.descendant(
+        of: find.byKey(const Key('reply-composer-image-button')),
+        matching: find.byType(IconButton),
+      ),
     );
     expect(imageButton.onPressed, isNull);
     preparationCompleter.complete(
@@ -664,11 +666,10 @@ void main() {
       ),
     );
     await tester.pump();
-    await tester.enterText(
-      find.byKey(const Key('reply-composer-message-input')),
-      '正文',
-    );
+    await _enterReplySourceText(tester, '正文');
     await tester.pump();
+    await tester.tap(find.byKey(const Key('reply-composer-source-button')));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('reply-composer-image-button')));
     await _pumpUntilMessageContains(tester, '[attach]123456[/attach]');
@@ -687,7 +688,7 @@ void main() {
   });
 
   testWidgets(
-    'ReplyComposerPage previews uploaded image and submits raw attach code',
+    'ReplyComposerPage shows uploaded image embed and submits raw attach code',
     (tester) async {
       const path = 'E:/test/reply/uploaded.png';
       final replyRepository = _FakeReplyRepository();
@@ -722,35 +723,42 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.enterText(
-        find.byKey(const Key('reply-composer-message-input')),
-        '正文',
-      );
+      await _enterReplySourceText(tester, '正文');
       await tester.pump();
+      await tester.tap(find.byKey(const Key('reply-composer-source-button')));
+      await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('reply-composer-image-button')));
-      await _pumpUntilMessageContains(tester, '[attach]123456[/attach]');
+      await _pumpUntilFound(
+        tester,
+        find.byKey(const Key('composer-quill-attach-123456')),
+      );
       await tester.pump();
 
       expect(find.byKey(const Key('reply-composer-image-queue')), findsNothing);
       expect(find.text('uploaded.png 已上传'), findsOneWidget);
       expect(
-        find.byKey(const Key('reply-bbcode-preview-attach-123456')),
+        find.byKey(const Key('composer-quill-attach-123456')),
         findsOneWidget,
       );
       expect(
-        find.descendant(
-          of: find.byKey(const Key('reply-composer-bbcode-preview-panel')),
-          matching: find.textContaining(
-            '[attach]123456[/attach]',
-            findRichText: true,
-          ),
-        ),
+        find.byKey(const Key('composer-quill-attach-image-123456')),
+        findsOneWidget,
+      );
+      final previewImage = tester.widget<_TestAttachPreviewImage>(
+        find.byKey(const Key('composer-quill-attach-image-123456')),
+      );
+      expect(previewImage.file.path, path);
+      expect(
+        find.textContaining('[attach]123456[/attach]', findRichText: true),
         findsNothing,
       );
 
-      final editable = tester.widget<EditableText>(find.byType(EditableText));
-      expect(editable.controller.text, '正文\n[attach]123456[/attach]');
+      await _openReplySourceEditor(tester);
+      final sourceField = tester.widget<TextField>(
+        find.byKey(const Key('reply-composer-message-input')),
+      );
+      expect(sourceField.controller?.text, '正文\n[attach]123456[/attach]');
       await tester.tap(find.byKey(const Key('reply-composer-send-button')));
       await tester.pumpAndSettle();
 
@@ -790,18 +798,21 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.enterText(
-        find.byKey(const Key('reply-composer-message-input')),
-        '正文',
-      );
+      await _enterReplySourceText(tester, '正文');
       await tester.pump();
+      await tester.tap(find.byKey(const Key('reply-composer-source-button')));
+      await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('reply-composer-image-button')));
       await tester.pump();
       await tester.pump();
 
       expect(find.textContaining('上传失败'), findsWidgets);
-      expect(find.text('正文'), findsOneWidget);
+      await _openReplySourceEditor(tester);
+      final sourceField = tester.widget<TextField>(
+        find.byKey(const Key('reply-composer-message-input')),
+      );
+      expect(sourceField.controller?.text, '正文');
       expect(find.textContaining('[attach]'), findsNothing);
     },
   );
@@ -815,10 +826,7 @@ void main() {
     );
     await tester.pump();
     await tester.pump();
-    await tester.enterText(
-      find.byKey(const Key('reply-composer-message-input')),
-      '楼层回复',
-    );
+    await _enterReplySourceText(tester, '楼层回复');
     await tester.pump();
     await tester.tap(find.byKey(const Key('reply-composer-send-button')));
     await tester.pumpAndSettle();
@@ -837,10 +845,7 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('open-reply-composer-page')));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const Key('reply-composer-message-input')),
-      '未发送内容',
-    );
+    await _enterReplySourceText(tester, '未发送内容');
     await tester.pump();
 
     await tester.binding.handlePopRoute();
@@ -864,10 +869,7 @@ void main() {
     await tester.pumpWidget(_buildLauncher(draftRepository: draftRepository));
     await tester.tap(find.byKey(const Key('open-reply-composer-page')));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const Key('reply-composer-message-input')),
-      '离开前保存',
-    );
+    await _enterReplySourceText(tester, '离开前保存');
     await tester.pump();
 
     await tester.binding.handlePopRoute();
@@ -907,10 +909,7 @@ void main() {
       await tester.pumpWidget(_buildLauncher(replyRepository: replyRepository));
       await tester.tap(find.byKey(const Key('open-reply-composer-page')));
       await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byKey(const Key('reply-composer-message-input')),
-        '提交内容',
-      );
+      await _enterReplySourceText(tester, '提交内容');
       await tester.pump();
       await tester.tap(find.byKey(const Key('reply-composer-send-button')));
       await tester.pumpAndSettle();
@@ -973,11 +972,51 @@ Future<void> _pumpUntilMessageContains(
 }) async {
   for (var i = 0; i < maxPumps; i += 1) {
     await tester.pump();
-    final editable = tester.widget<EditableText>(find.byType(EditableText));
-    if (editable.controller.text.contains(expected)) {
+    if (find
+        .byKey(const Key('reply-composer-message-input'))
+        .evaluate()
+        .isEmpty) {
+      await _openReplySourceEditor(tester);
+    }
+    final sourceField = tester.widget<TextField>(
+      find.byKey(const Key('reply-composer-message-input')),
+    );
+    if ((sourceField.controller?.text ?? '').contains(expected)) {
       return;
     }
   }
+}
+
+Future<void> _pumpUntilFound(
+  WidgetTester tester,
+  Finder finder, {
+  int maxPumps = 12,
+}) async {
+  for (var i = 0; i < maxPumps; i += 1) {
+    await tester.pump();
+    if (finder.evaluate().isNotEmpty) {
+      return;
+    }
+  }
+}
+
+Future<void> _enterReplySourceText(WidgetTester tester, String text) async {
+  await _openReplySourceEditor(tester);
+  await tester.enterText(
+    find.byKey(const Key('reply-composer-message-input')),
+    text,
+  );
+}
+
+Future<void> _openReplySourceEditor(WidgetTester tester) async {
+  if (find
+      .byKey(const Key('reply-composer-message-input'))
+      .evaluate()
+      .isNotEmpty) {
+    return;
+  }
+  await tester.tap(find.byKey(const Key('reply-composer-source-button')));
+  await tester.pumpAndSettle();
 }
 
 Widget _buildLauncher({

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
@@ -13,6 +14,7 @@ import 'package:y300/features/more/presentation/appearance_settings_page.dart';
 import 'package:y300/features/more/presentation/data_storage_page.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_page.dart';
 
 class MorePage extends ConsumerStatefulWidget {
   const MorePage({super.key});
@@ -107,6 +109,20 @@ class _MorePageState extends ConsumerState<MorePage> {
             title: Text('阅读设置（预留）'),
             subtitle: Text('后续阶段接入阅读器细项配置'),
           ),
+          if (kDebugMode)
+            ListTile(
+              key: const Key('more-composer-quill-prototype-entry'),
+              leading: const Icon(Icons.edit_note_outlined),
+              title: const Text('Quill Composer 原型'),
+              subtitle: const Text('验证所见即所得到 Discuz BBCode 的转换'),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ComposerQuillPrototypePage(),
+                  ),
+                );
+              },
+            ),
           if (diagnosticEnabled) ...[
             SwitchListTile(
               key: const Key('more-thread-detail-diagnostic-switch'),

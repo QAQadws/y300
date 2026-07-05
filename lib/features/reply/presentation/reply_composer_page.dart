@@ -3,17 +3,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
-import 'package:y300/features/composer_shared/presentation/bbcode/composer_bbcode_command.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_app_bar_action_style.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_toolbar.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/composer_editor_preview.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_source_editor.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_image_attachment_queue.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_load_error_view.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_settings_sheet.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_status_banner.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_transient_feedback.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/sticker_picker_sheet.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_editor.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_controller.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
@@ -28,10 +27,9 @@ class ReplyComposerPage extends ConsumerStatefulWidget {
 }
 
 class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
-  static const _bbCodeInsertionService = ComposerBbCodeInsertionService();
-
   late final TextEditingController _messageController;
   ReplyComposerController? _controller;
+  _ReplyEditorSurface _editorSurface = _ReplyEditorSurface.quill;
   bool _didApplyRestoredDraft = false;
   bool _didNotifyRestoredDraft = false;
   bool _allowPopWithoutConfirm = false;
@@ -82,9 +80,27 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
         unawaited(_confirmAndPop(context, controller));
       },
       child: Scaffold(
+        resizeToAvoidBottomInset: _editorSurface != _ReplyEditorSurface.quill,
         appBar: AppBar(
           title: Text(widget.args.target.isPostReply ? '回复楼层' : '回复帖子'),
           actions: [
+            IconButton(
+              key: const Key('reply-composer-source-button'),
+              tooltip: _editorSurface == _ReplyEditorSurface.quill
+                  ? '源码'
+                  : '返回编辑',
+              onPressed: state == null
+                  ? null
+                  : () {
+                      _toggleEditorSurface(state);
+                    },
+              style: composerAppBarActionStyle(context),
+              icon: Icon(
+                _editorSurface == _ReplyEditorSurface.quill
+                    ? Icons.code
+                    : Icons.edit_outlined,
+              ),
+            ),
             IconButton(
               key: const Key('reply-composer-more-button'),
               tooltip: '更多',
@@ -95,17 +111,6 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
                     },
               style: composerAppBarActionStyle(context),
               icon: const Icon(Icons.more_vert),
-            ),
-            IconButton(
-              key: const Key('reply-composer-image-button'),
-              tooltip: '图片',
-              onPressed: state == null || !state.canPickImages
-                  ? null
-                  : () {
-                      unawaited(controller.pickImages());
-                    },
-              style: composerAppBarActionStyle(context),
-              icon: const Icon(Icons.image),
             ),
             IconButton(
               key: const Key('reply-composer-send-button'),
@@ -129,27 +134,31 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
           data: (state) => _ReplyComposerBody(
             state: state,
             bbCodeRenderer: bbCodeRenderer,
-            stickers: _flattenStickers(stickerGroups),
+            stickerGroups: stickerGroups,
             messageController: _messageController,
+            editorSurface: _editorSurface,
             onMessageChanged: (value) {
               _lastAppliedStateMessage = value;
               controller.updateMessage(value);
             },
             onRetryPrepare: controller.retryPreparePostReply,
-            onStickerPressed: () {
-              unawaited(_pickAndInsertSticker(context, controller));
-            },
-            onBbCodeCommandSelected: (command) {
-              _insertBbCode(command, controller);
-            },
+            onImagePressed: controller.pickImages,
           ),
         ),
       ),
     );
   }
 
-  List<StickerItem> _flattenStickers(List<StickerGroup> groups) {
-    return [for (final group in groups) ...group.stickers];
+  void _toggleEditorSurface(ReplyComposerState state) {
+    setState(() {
+      if (_editorSurface == _ReplyEditorSurface.quill) {
+        _messageController.text = state.message;
+        _lastAppliedStateMessage = state.message;
+        _editorSurface = _ReplyEditorSurface.source;
+        return;
+      }
+      _editorSurface = _ReplyEditorSurface.quill;
+    });
   }
 
   void _syncMessageController(ReplyComposerState state) {
@@ -270,58 +279,6 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
     navigator.pop();
   }
 
-  Future<void> _pickAndInsertSticker(
-    BuildContext context,
-    ReplyComposerController controller,
-  ) async {
-    final sticker = await showModalBottomSheet<StickerItem>(
-      context: context,
-      showDragHandle: true,
-      builder: (_) => const StickerPickerSheet(),
-    );
-    if (!mounted || sticker == null) {
-      return;
-    }
-    _insertSticker(sticker, controller);
-  }
-
-  void _insertSticker(StickerItem sticker, ReplyComposerController controller) {
-    final value = _messageController.value;
-    final text = value.text;
-    final selection = value.selection;
-    final start = selection.isValid ? selection.start : text.length;
-    final end = selection.isValid ? selection.end : text.length;
-    final normalizedStart = start.clamp(0, text.length).toInt();
-    final normalizedEnd = end.clamp(0, text.length).toInt();
-    final replaceStart = normalizedStart < normalizedEnd
-        ? normalizedStart
-        : normalizedEnd;
-    final replaceEnd = normalizedStart < normalizedEnd
-        ? normalizedEnd
-        : normalizedStart;
-    final nextText = text.replaceRange(replaceStart, replaceEnd, sticker.code);
-    final nextOffset = replaceStart + sticker.code.length;
-    _messageController.value = TextEditingValue(
-      text: nextText,
-      selection: TextSelection.collapsed(offset: nextOffset),
-    );
-    controller.updateMessage(nextText);
-    _lastAppliedStateMessage = nextText;
-  }
-
-  void _insertBbCode(
-    ComposerBbCodeCommand command,
-    ReplyComposerController controller,
-  ) {
-    final nextValue = _bbCodeInsertionService.wrapSelection(
-      _messageController.value,
-      command,
-    );
-    _messageController.value = nextValue;
-    controller.updateMessage(nextValue.text);
-    _lastAppliedStateMessage = nextValue.text;
-  }
-
   void _showSettingsSheet() {
     final provider = replyComposerControllerProvider(widget.args);
     showModalBottomSheet<void>(
@@ -359,90 +316,188 @@ class _ReplyComposerBody extends StatelessWidget {
   const _ReplyComposerBody({
     required this.state,
     required this.bbCodeRenderer,
-    required this.stickers,
+    required this.stickerGroups,
     required this.messageController,
+    required this.editorSurface,
     required this.onMessageChanged,
     required this.onRetryPrepare,
-    required this.onStickerPressed,
-    required this.onBbCodeCommandSelected,
+    required this.onImagePressed,
   });
 
   final ReplyComposerState state;
   final ForumBbCodeRenderer bbCodeRenderer;
-  final List<StickerItem> stickers;
+  final List<StickerGroup> stickerGroups;
   final TextEditingController messageController;
+  final _ReplyEditorSurface editorSurface;
   final ValueChanged<String> onMessageChanged;
   final VoidCallback onRetryPrepare;
-  final VoidCallback onStickerPressed;
-  final ValueChanged<ComposerBbCodeCommand> onBbCodeCommandSelected;
+  final Future<void> Function() onImagePressed;
 
   @override
   Widget build(BuildContext context) {
     final visibleAttachments = visibleComposerImageAttachments(
       state.imageAttachments,
     );
+    final editor = _ReplyMessageEditor(
+      surface: editorSurface,
+      state: state,
+      bbCodeRenderer: bbCodeRenderer,
+      stickerGroups: stickerGroups,
+      messageController: messageController,
+      onMessageChanged: onMessageChanged,
+      onImagePressed: onImagePressed,
+    );
+    final topFeedback = _buildFeedbackWidgets(context, visibleAttachments);
+    if (editorSurface == _ReplyEditorSurface.quill) {
+      return SafeArea(
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (topFeedback.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: topFeedback,
+                ),
+              ),
+            Expanded(child: editor),
+          ],
+        ),
+      );
+    }
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (state.target.isPostReply) ...[
-            _ReplyReferenceStatus(state: state, onRetryPrepare: onRetryPrepare),
-            const SizedBox(height: 12),
-          ],
-          if (state.imageUploadError != null &&
-              state.imageUploadError!.trim().isNotEmpty) ...[
-            Text(
-              state.imageUploadError!,
-              key: const Key('reply-composer-image-error'),
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-            const SizedBox(height: 12),
-          ],
-          ComposerBbCodeToolbar(
-            enabled: !state.isSubmitting && !state.isPreparing,
-            onStickerPressed: onStickerPressed,
-            onCommandSelected: onBbCodeCommandSelected,
-          ),
-          const SizedBox(height: 12),
-          ComposerEditorPreview(
-            inputKey: const Key('reply-composer-message-input'),
-            previewLabelKey: const Key('reply-composer-preview-label'),
-            controller: messageController,
-            enabled: !state.isSubmitting && !state.isPreparing,
-            hintText: '输入回复内容',
-            onChanged: onMessageChanged,
-            renderer: bbCodeRenderer,
-            stickers: stickers,
-            imageAttachments: state.imageAttachments,
-          ),
-          if (visibleAttachments.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            ComposerImageAttachmentQueue(
-              containerKey: const Key('reply-composer-image-queue'),
-              uploadCountKey: const Key('reply-composer-image-upload-count'),
-              uploadProgressKey: const Key(
-                'reply-composer-image-upload-progress',
-              ),
-              tileKeyBuilder: (attachment) =>
-                  Key('reply-composer-image-attachment-${attachment.localId}'),
-              attachments: visibleAttachments,
-              isUploadingImages: state.isUploadingImages,
-              imageUploadCurrent: state.imageUploadCurrent,
-              imageUploadTotal: state.imageUploadTotal,
-            ),
-          ],
-          if (state.errorMessage != null &&
-              state.errorMessage!.trim().isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              state.errorMessage!,
-              key: const Key('reply-composer-error-message'),
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          ],
+          ..._buildLeadingFeedbackWidgets(context),
+          editor,
+          ..._buildTrailingFeedbackWidgets(context, visibleAttachments),
         ],
       ),
     );
+  }
+
+  List<Widget> _buildFeedbackWidgets(
+    BuildContext context,
+    List<ComposerImageAttachment> visibleAttachments,
+  ) {
+    return [
+      ..._buildLeadingFeedbackWidgets(context),
+      ..._buildTrailingFeedbackWidgets(context, visibleAttachments),
+    ];
+  }
+
+  List<Widget> _buildLeadingFeedbackWidgets(BuildContext context) {
+    return [
+      if (state.target.isPostReply) ...[
+        _ReplyReferenceStatus(state: state, onRetryPrepare: onRetryPrepare),
+        const SizedBox(height: 12),
+      ],
+      if (state.imageUploadError != null &&
+          state.imageUploadError!.trim().isNotEmpty) ...[
+        Text(
+          state.imageUploadError!,
+          key: const Key('reply-composer-image-error'),
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
+        const SizedBox(height: 12),
+      ],
+    ];
+  }
+
+  List<Widget> _buildTrailingFeedbackWidgets(
+    BuildContext context,
+    List<ComposerImageAttachment> visibleAttachments,
+  ) {
+    return [
+      if (visibleAttachments.isNotEmpty) ...[
+        const SizedBox(height: 12),
+        ComposerImageAttachmentQueue(
+          containerKey: const Key('reply-composer-image-queue'),
+          uploadCountKey: const Key('reply-composer-image-upload-count'),
+          uploadProgressKey: const Key('reply-composer-image-upload-progress'),
+          tileKeyBuilder: (attachment) =>
+              Key('reply-composer-image-attachment-${attachment.localId}'),
+          attachments: visibleAttachments,
+          isUploadingImages: state.isUploadingImages,
+          imageUploadCurrent: state.imageUploadCurrent,
+          imageUploadTotal: state.imageUploadTotal,
+        ),
+      ],
+      if (state.errorMessage != null &&
+          state.errorMessage!.trim().isNotEmpty) ...[
+        const SizedBox(height: 8),
+        Text(
+          state.errorMessage!,
+          key: const Key('reply-composer-error-message'),
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
+      ],
+    ];
+  }
+}
+
+enum _ReplyEditorSurface { quill, source }
+
+class _ReplyMessageEditor extends StatelessWidget {
+  const _ReplyMessageEditor({
+    required this.surface,
+    required this.state,
+    required this.bbCodeRenderer,
+    required this.stickerGroups,
+    required this.messageController,
+    required this.onMessageChanged,
+    required this.onImagePressed,
+  });
+
+  final _ReplyEditorSurface surface;
+  final ReplyComposerState state;
+  final ForumBbCodeRenderer bbCodeRenderer;
+  final List<StickerGroup> stickerGroups;
+  final TextEditingController messageController;
+  final ValueChanged<String> onMessageChanged;
+  final Future<void> Function() onImagePressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = !state.isSubmitting && !state.isPreparing;
+    final stickers = [for (final group in stickerGroups) ...group.stickers];
+    final renderer = bbCodeRenderer;
+    return switch (surface) {
+      _ReplyEditorSurface.quill => ComposerQuillEditorSurface(
+        key: const Key('reply-composer-quill-editor'),
+        keyPrefix: 'reply-composer',
+        bbCode: state.message,
+        enabled: enabled,
+        stickers: stickers,
+        stickerGroups: stickerGroups,
+        imageAttachments: state.imageAttachments,
+        attachImageBuilder: renderer is FlutterBbCodeForumRenderer
+            ? renderer.attachImageBuilder
+            : null,
+        attachFileExists: renderer is FlutterBbCodeForumRenderer
+            ? renderer.attachFileExists
+            : null,
+        hintText: '输入回复内容',
+        expand: true,
+        onBbCodeChanged: onMessageChanged,
+        onImagePressed: (_) async {
+          await onImagePressed();
+          return null;
+        },
+      ),
+      _ReplyEditorSurface.source => ComposerBbCodeSourceEditor(
+        keyPrefix: 'reply-composer',
+        viewKey: const Key('reply-composer-source-view'),
+        inputKey: const Key('reply-composer-message-input'),
+        controller: messageController,
+        enabled: enabled,
+        hintText: '输入回复内容',
+        onChanged: onMessageChanged,
+      ),
+    };
   }
 }
 
