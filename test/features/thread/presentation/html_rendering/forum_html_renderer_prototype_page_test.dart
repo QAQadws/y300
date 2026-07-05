@@ -1,8 +1,12 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/thread/domain/html_rendering/forum_html_sample_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
 
@@ -26,8 +30,8 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: ForumHtmlRendererPrototypePage(
+      _wrapWithProviders(
+        ForumHtmlRendererPrototypePage(
           samples: samples,
           assetBundle: _FakeAssetBundle(
             assets: const <String, String>{
@@ -60,6 +64,24 @@ void main() {
     expect(find.textContaining('样例：样例一'), findsOneWidget);
     expect(find.textContaining('原 HTML：'), findsOneWidget);
     expect(find.textContaining('正文 fragment：'), findsOneWidget);
+    expect(find.textContaining('转换模式：原文'), findsOneWidget);
+    expect(find.textContaining('转换文本节点：0 个'), findsOneWidget);
+    expect(
+      find.byKey(const Key('forum-html-prototype-conversion-selector')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('forum-html-prototype-conversion-none')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('forum-html-prototype-conversion-simplified')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('forum-html-prototype-conversion-traditional')),
+      findsOneWidget,
+    );
     expect(find.textContaining('第一个样例', findRichText: true), findsOneWidget);
 
     expect(find.byKey(const Key('forum-html-renderer-one')), findsOneWidget);
@@ -67,8 +89,8 @@ void main() {
 
   testWidgets('switches selected sample and reloads asset', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: ForumHtmlRendererPrototypePage(
+      _wrapWithProviders(
+        ForumHtmlRendererPrototypePage(
           samples: samples,
           assetBundle: _FakeAssetBundle(
             assets: const <String, String>{
@@ -91,10 +113,47 @@ void main() {
     expect(find.textContaining('第二个样例', findRichText: true), findsOneWidget);
   });
 
+  testWidgets('switches conversion mode and renders converted html', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrapWithProviders(
+        ForumHtmlRendererPrototypePage(
+          samples: samples,
+          assetBundle: _FakeAssetBundle(
+            assets: const <String, String>{
+              'assets/prototypes/forum_html/one.html':
+                  '<html><body><div class="message">第一个样例</div></body></html>',
+              'assets/prototypes/forum_html/two.html':
+                  '<html><body><div class="message">第二个样例</div></body></html>',
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const Key('forum-html-prototype-conversion-traditional')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('第一个樣例', findRichText: true), findsOneWidget);
+    expect(find.textContaining('转换模式：转繁'), findsOneWidget);
+    expect(find.textContaining('转换器：fake:toTraditional'), findsOneWidget);
+    expect(find.textContaining('转换文本节点：1 个'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('forum-html-prototype-sample-two')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('第二个樣例', findRichText: true), findsOneWidget);
+    expect(find.textContaining('转换模式：转繁'), findsOneWidget);
+  });
+
   testWidgets('shows missing local asset message', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: ForumHtmlRendererPrototypePage(
+      _wrapWithProviders(
+        ForumHtmlRendererPrototypePage(
           samples: samples,
           assetBundle: _FakeAssetBundle(assets: const <String, String>{}),
         ),
@@ -112,6 +171,21 @@ void main() {
   });
 }
 
+Widget _wrapWithProviders(Widget child) {
+  return ProviderScope(
+    overrides: [
+      textConverterProvider.overrideWith(
+        (ref, mode) => switch (mode) {
+          TextConversionMode.none => _FakeTextConverter(mode),
+          TextConversionMode.toSimplified => _FakeTextConverter(mode),
+          TextConversionMode.toTraditional => _FakeTextConverter(mode),
+        },
+      ),
+    ],
+    child: MaterialApp(home: child),
+  );
+}
+
 class _FakeAssetBundle extends CachingAssetBundle {
   _FakeAssetBundle({required this.assets});
 
@@ -125,5 +199,24 @@ class _FakeAssetBundle extends CachingAssetBundle {
     }
     final bytes = utf8.encode(value);
     return ByteData.view(Uint8List.fromList(bytes).buffer);
+  }
+}
+
+class _FakeTextConverter implements TextConverter {
+  const _FakeTextConverter(this.mode);
+
+  @override
+  final TextConversionMode mode;
+
+  @override
+  String get id => 'fake:${mode.name}';
+
+  @override
+  Future<String> convertHtml(String html) async {
+    return switch (mode) {
+      TextConversionMode.none => html,
+      TextConversionMode.toSimplified => html.replaceAll('樣', '样'),
+      TextConversionMode.toTraditional => html.replaceAll('样', '樣'),
+    };
   }
 }
