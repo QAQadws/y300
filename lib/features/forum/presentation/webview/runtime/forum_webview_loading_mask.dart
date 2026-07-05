@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:y300/features/forum/presentation/webview/runtime/forum_webview_bootstrap_placeholder.dart';
 
 class ForumWebViewLoadingMask extends StatelessWidget {
   const ForumWebViewLoadingMask({super.key});
@@ -7,9 +6,9 @@ class ForumWebViewLoadingMask extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IgnorePointer(
-      child: SizedBox.expand(
+      child: ColoredBox(
         key: const Key('forum-webview-loading-mask'),
-        child: const ForumWebViewBootstrapPlaceholder(),
+        color: Theme.of(context).colorScheme.surface,
       ),
     );
   }

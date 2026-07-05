@@ -44,6 +44,7 @@ class ThreadDetailContent extends StatefulWidget {
     required this.onLoadNextPage,
     required this.onLoadPageNumber,
     required this.onOpenAuthorProfile,
+    required this.onOpenCommentAuthorProfile,
     required this.onCopyActionUrl,
     required this.onOpenPostLink,
     this.onOpenPostImages,
@@ -65,6 +66,7 @@ class ThreadDetailContent extends StatefulWidget {
   final VoidCallback onLoadNextPage;
   final ValueChanged<int> onLoadPageNumber;
   final ValueChanged<ThreadPost> onOpenAuthorProfile;
+  final ValueChanged<ThreadPostCommentEntry> onOpenCommentAuthorProfile;
   final void Function(String label, String url) onCopyActionUrl;
   final ValueChanged<String> onOpenPostLink;
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
@@ -256,6 +258,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           onOpenPostActions: widget.onOpenPostActions,
           onCopyActionUrl: widget.onCopyActionUrl,
           onOpenPostLink: widget.onOpenPostLink,
+          onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,
           onTogglePollOption: widget.onTogglePollOption,
           onSubmitPollVote: widget.onSubmitPollVote,
           palette: palette,

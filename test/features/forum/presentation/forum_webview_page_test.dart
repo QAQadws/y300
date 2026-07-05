@@ -36,7 +36,7 @@ Matcher containsCssSelector(String selector) {
 
 void main() {
   testWidgets(
-    'ForumWebViewPage waits for bootstrap config before building the real webview',
+    'ForumWebViewPage waits for bootstrap config without skeleton page',
     (tester) async {
       final driver = _FakeForumWebViewDriver()
         ..capabilityProfile = const ForumWebViewCapabilityProfile(
@@ -56,7 +56,7 @@ void main() {
       );
       expect(
         find.byKey(const Key('forum-webview-bootstrap-placeholder-list')),
-        findsOneWidget,
+        findsNothing,
       );
       expect(find.byKey(const Key('forum-webview-surface')), findsNothing);
       expect(driver.buildWidgetCallCount, 0);
@@ -299,7 +299,7 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(
         find.byKey(const Key('forum-webview-bootstrap-placeholder-list')),
-        findsWidgets,
+        findsNothing,
       );
 
       await driver.dispatchPageStarted(
@@ -956,6 +956,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('回复帖子'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('reply-composer-source-button')));
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('reply-composer-message-input')),
       '来自 WebView 的回复',
@@ -997,6 +999,8 @@ void main() {
         find.byKey(const Key('reply-composer-reference-banner')),
         findsOneWidget,
       );
+      await tester.tap(find.byKey(const Key('reply-composer-source-button')));
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const Key('reply-composer-message-input')),
         '来自 WebView 的楼层回复',
@@ -1060,6 +1064,8 @@ void main() {
         find.byKey(const Key('posting-composer-subject-input')),
         '来自 WebView 的标题',
       );
+      await tester.tap(find.byKey(const Key('posting-composer-source-button')));
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const Key('posting-composer-message-input')),
         '来自 WebView 的正文',

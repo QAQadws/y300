@@ -6,17 +6,21 @@ import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import 'package:y300/features/auth/data/repositories/auth_repository.dart';
 import 'package:y300/features/auth/presentation/login_webview_page.dart';
+import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_mode_settings_repository.dart';
+import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
+import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
 import 'package:y300/features/library_shared/presentation/controllers/sync_diagnostic_mode_controller.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
-import 'package:y300/features/profile/data/models/my_message_models.dart';
-import 'package:y300/features/profile/data/models/user_profile_models.dart';
-import 'package:y300/features/profile/data/repositories/my_message_repository.dart';
-import 'package:y300/features/profile/data/repositories/user_profile_repository.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
 
 void main() {
@@ -88,6 +92,7 @@ void main() {
 
   testWidgets('MorePage renders logout entry when signed in', (tester) async {
     final repository = _FakeAuthRepository(isLoggedIn: true);
+    final webViewDriver = _FakeForumWebViewDriver();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -98,11 +103,16 @@ void main() {
           appAppearanceControllerProvider.overrideWith(
             () => _FakeAppAppearanceController(),
           ),
-          userProfileRepositoryProvider.overrideWithValue(
-            const _FakeUserProfileRepository(),
+          forumWebViewDriverFactoryProvider.overrideWith(
+            (ref) =>
+                () => webViewDriver,
           ),
-          myMessageRepositoryProvider.overrideWithValue(
-            const _FakeMyMessageRepository(),
+          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
+          webViewCookieSyncServiceProvider.overrideWithValue(
+            _FakeWebViewCookieSyncService(),
+          ),
+          forumFavoriteRepositoryProvider.overrideWithValue(
+            const _FakeForumFavoriteRepository(),
           ),
         ],
         child: const MaterialApp(home: MorePage()),
@@ -119,8 +129,18 @@ void main() {
     await tester.tap(find.byKey(const Key('more-my-profile-entry')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('user-profile-page-list')), findsOneWidget);
+    expect(find.byType(ForumWebViewPage), findsOneWidget);
+    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
     expect(find.text('我的资料'), findsWidgets);
+    expect(
+      webViewDriver.bootstrapConfig?.initialUri.toString(),
+      'https://bbs.yamibo.com/home.php?mod=space&uid=100&do=profile&mycenter=1&mobile=2',
+    );
+    expect(webViewDriver.loadedUris, <Uri>[
+      Uri.parse(
+        'https://bbs.yamibo.com/home.php?mod=space&uid=100&do=profile&mycenter=1&mobile=2',
+      ),
+    ]);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -206,10 +226,7 @@ void main() {
     // 只断言“入栈了正确的登录路由”，避免在纯 widget 测试环境构建平台视图。
     // 登录检测/校验逻辑已由 resolver 单测覆盖。
 
-    expect(
-      routeObserver.pushedNames,
-      contains(LoginWebViewPage.routeName),
-    );
+    expect(routeObserver.pushedNames, contains(LoginWebViewPage.routeName));
   });
 
   testWidgets('MorePage shows snackbar when forum mode save fails', (
@@ -343,9 +360,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(threadController.enabled, isTrue);
-      await tester.tap(
-        find.byKey(const Key('more-thread-detail-diagnostic-copy-entry')),
+      final copyEntry = find.byKey(
+        const Key('more-thread-detail-diagnostic-copy-entry'),
       );
+      await tester.scrollUntilVisible(copyEntry, 160);
+      await tester.tap(copyEntry);
       await tester.pumpAndSettle();
 
       expect(copiedTexts.single, 'entry build log');
@@ -590,66 +609,142 @@ class _FakeAppAppearanceController extends AppAppearanceController {
   }
 }
 
-class _FakeUserProfileRepository implements UserProfileRepository {
-  const _FakeUserProfileRepository();
-
+class _FakeCookieStore extends CookieStore {
   @override
-  Future<ApiResult<UserProfileData>> getUserProfile({
-    required String uid,
-  }) async {
-    return getMyProfile(uid: uid);
+  Future<Map<String, String>> readCookieMap(Uri uri) async {
+    return const <String, String>{};
   }
 
   @override
-  Future<ApiResult<UserProfileData>> getMyProfile({required String uid}) async {
-    return const ApiSuccess<UserProfileData>(
-      UserProfileData(
-        uid: '100',
-        username: 'tester',
-        title: '我的资料',
-        credits: [UserProfileMetric(label: '总积分', value: '65')],
-        actions: [
-          UserProfileAction(
-            label: '消息提醒',
-            url: 'https://bbs.yamibo.com/home.php?mod=space&do=pm',
-          ),
-        ],
-        details: [UserProfileDetailItem(label: 'UID', value: '100')],
-      ),
+  Future<void> saveCookies(Uri uri, Map<String, String> cookies) async {}
+}
+
+class _FakeWebViewCookieJar implements WebViewCookieJar {
+  @override
+  Future<void> clear() async {}
+
+  @override
+  Future<Map<String, String>> readCookies(Uri uri) async {
+    return const <String, String>{};
+  }
+}
+
+class _FakeWebViewCookieSyncService extends WebViewCookieSyncService {
+  _FakeWebViewCookieSyncService()
+    : super(
+        cookieJar: _FakeWebViewCookieJar(),
+        cookieStore: _FakeCookieStore(),
+      );
+
+  @override
+  Future<void> clearWebViewCookies() async {}
+
+  @override
+  Future<Map<String, String>> syncToStore(Uri uri) async {
+    return const <String, String>{};
+  }
+}
+
+class _FakeForumFavoriteRepository implements ForumFavoriteRepository {
+  const _FakeForumFavoriteRepository();
+
+  @override
+  Future<ApiResult<ForumFavoriteMutationResult>> favoriteForum({
+    required String fid,
+  }) async {
+    return const ApiSuccess<ForumFavoriteMutationResult>(
+      ForumFavoriteMutationResult(message: '收藏成功'),
+    );
+  }
+
+  @override
+  Future<ApiResult<List<FavoriteForum>>> loadFavoriteForums() async {
+    return const ApiSuccess<List<FavoriteForum>>(<FavoriteForum>[]);
+  }
+
+  @override
+  Future<ApiResult<ForumFavoriteMutationResult>> unfavoriteForum({
+    required String favid,
+  }) async {
+    return const ApiSuccess<ForumFavoriteMutationResult>(
+      ForumFavoriteMutationResult(message: '取消收藏成功'),
     );
   }
 }
 
-class _FakeMyMessageRepository implements MyMessageRepository {
-  const _FakeMyMessageRepository();
+class _FakeForumWebViewDriver implements ForumWebViewDriver {
+  final List<Uri> loadedUris = <Uri>[];
+  ForumWebViewBootstrapConfig? bootstrapConfig;
+  ForumWebViewCallbacks? _callbacks;
 
   @override
-  Future<ApiResult<MyMessageCenterData>> getMessageCenter() async {
-    return const ApiSuccess<MyMessageCenterData>(
-      MyMessageCenterData(
-        notifications: MyNotificationPage(
-          items: <MyNotificationItem>[],
-          count: 0,
-          page: 1,
-          perPage: 30,
-        ),
-        privateMessages: MyPrivateMessagePage(
-          items: <MyPrivateMessageItem>[],
-          count: 0,
-          page: 1,
-          perPage: 15,
-        ),
-      ),
+  Widget buildWidget({Key? key}) {
+    return SizedBox.expand(key: key);
+  }
+
+  @override
+  Future<bool> canGoBack() async {
+    return false;
+  }
+
+  @override
+  Future<bool> clearCookies() async {
+    return true;
+  }
+
+  @override
+  Future<String?> getTitle() async {
+    return '我的资料';
+  }
+
+  @override
+  Future<void> goBack() async {}
+
+  @override
+  Future<void> initialize({
+    required ForumWebViewCallbacks callbacks,
+    required ForumWebViewBootstrapConfig bootstrapConfig,
+  }) async {
+    _callbacks = callbacks;
+    this.bootstrapConfig = bootstrapConfig;
+  }
+
+  @override
+  Future<void> load(Uri uri, {Map<String, String> headers = const {}}) async {
+    loadedUris.add(uri);
+    _callbacks?.onPageStarted(uri.toString());
+    _callbacks?.onProgress(100);
+    await _callbacks?.onPageFinished(uri.toString());
+  }
+
+  @override
+  Future<ForumWebViewCapabilityProfile> probeCapabilities() async {
+    return const ForumWebViewCapabilityProfile(
+      engine: ForumWebViewEngine.advanced,
+      documentStartMode: ForumWebViewDocumentStartMode.reliable,
+      supportsContentBlockers: false,
+      supportsTransparentBackground: true,
+      supportsPlatformScrollTuning: true,
+      supportsCookieHooks: true,
+      supportsPageCommitVisible: true,
     );
   }
 
   @override
-  Future<ApiResult<MyNotificationPage>> getNotifications() async {
-    return ApiSuccess((await getMessageCenter()).dataOrNull!.notifications);
+  Future<void> reload() async {}
+
+  @override
+  Future<void> runJavaScript(String script) async {}
+
+  @override
+  Future<Object?> runJavaScriptReturningResult(String script) async {
+    return null;
   }
 
   @override
-  Future<ApiResult<MyPrivateMessagePage>> getPrivateMessages() async {
-    return ApiSuccess((await getMessageCenter()).dataOrNull!.privateMessages);
-  }
+  Future<void> seedCookies({
+    required String domain,
+    required Map<String, String> cookies,
+    String path = '/',
+  }) async {}
 }

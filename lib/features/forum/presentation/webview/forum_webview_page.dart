@@ -23,7 +23,6 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_driver.da
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_resource_diagnostic_recorder.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_state.dart';
-import 'package:y300/features/forum/presentation/webview/runtime/forum_webview_bootstrap_placeholder.dart';
 import 'package:y300/features/forum/presentation/webview/runtime/forum_webview_loading_mask.dart';
 import 'package:y300/features/posting/domain/models/posting_target.dart';
 import 'package:y300/features/posting/presentation/posting_composer_page.dart';
@@ -779,9 +778,9 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     required ForumWebViewDriver driver,
   }) {
     if (_bootstrapConfig == null) {
-      return SizedBox.expand(
+      return ColoredBox(
         key: const Key('forum-webview-bootstrap-placeholder'),
-        child: const ForumWebViewBootstrapPlaceholder(),
+        color: Theme.of(context).colorScheme.surface,
       );
     }
     // Platform views must own vertical drag gestures directly. Re-wrapping the

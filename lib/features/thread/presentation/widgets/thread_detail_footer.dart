@@ -8,11 +8,13 @@ class ThreadPostCommentSection extends StatefulWidget {
     required this.comments,
     required this.imageHeaderBuilder,
     required this.palette,
+    this.onOpenAuthorProfile,
   });
 
   final List<ThreadPostCommentEntry> comments;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ThreadDetailNativePalette palette;
+  final ValueChanged<ThreadPostCommentEntry>? onOpenAuthorProfile;
 
   @override
   State<ThreadPostCommentSection> createState() =>
@@ -71,6 +73,7 @@ class _ThreadPostCommentSectionState extends State<ThreadPostCommentSection> {
                     comment: widget.comments[index],
                     imageHeaderBuilder: widget.imageHeaderBuilder,
                     palette: widget.palette,
+                    onOpenAuthorProfile: widget.onOpenAuthorProfile,
                   ),
                 ],
               ],
@@ -220,22 +223,35 @@ class ThreadPostCommentRow extends StatelessWidget {
     required this.comment,
     required this.imageHeaderBuilder,
     required this.palette,
+    this.onOpenAuthorProfile,
   });
 
   final ThreadPostCommentEntry comment;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ThreadDetailNativePalette palette;
+  final ValueChanged<ThreadPostCommentEntry>? onOpenAuthorProfile;
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final authorLabel = comment.author.isEmpty ? '用户' : comment.author;
+    final authorProfileTap = onOpenAuthorProfile == null
+        ? null
+        : () => onOpenAuthorProfile!(comment);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _ThreadCommentAvatar(
-          comment: comment,
-          imageHeaderBuilder: imageHeaderBuilder,
-          palette: palette,
+        _ThreadCommentAuthorTapTarget(
+          onTap: authorProfileTap,
+          borderRadius: BorderRadius.circular(999),
+          child: _ThreadCommentAvatar(
+            key: Key(
+              'thread-comment-author-avatar-${_commentAuthorKey(comment)}',
+            ),
+            comment: comment,
+            imageHeaderBuilder: imageHeaderBuilder,
+            palette: palette,
+          ),
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -246,14 +262,24 @@ class ThreadPostCommentRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Text(
-                      comment.author.isEmpty ? '用户' : comment.author,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.labelMedium?.copyWith(
-                        color: palette.author,
-                        fontWeight: FontWeight.w800,
-                        height: 1.15,
+                    child: _ThreadCommentAuthorTapTarget(
+                      onTap: authorProfileTap,
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 1),
+                        child: Text(
+                          authorLabel,
+                          key: Key(
+                            'thread-comment-author-name-${_commentAuthorKey(comment)}',
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: textTheme.labelMedium?.copyWith(
+                            color: palette.author,
+                            fontWeight: FontWeight.w800,
+                            height: 1.15,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -293,8 +319,32 @@ class ThreadPostCommentRow extends StatelessWidget {
   }
 }
 
+class _ThreadCommentAuthorTapTarget extends StatelessWidget {
+  const _ThreadCommentAuthorTapTarget({
+    required this.onTap,
+    required this.borderRadius,
+    required this.child,
+  });
+
+  final VoidCallback? onTap;
+  final BorderRadius borderRadius;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (onTap == null) {
+      return child;
+    }
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(onTap: onTap, borderRadius: borderRadius, child: child),
+    );
+  }
+}
+
 class _ThreadCommentAvatar extends StatelessWidget {
   const _ThreadCommentAvatar({
+    super.key,
     required this.comment,
     required this.imageHeaderBuilder,
     required this.palette,
@@ -308,15 +358,12 @@ class _ThreadCommentAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     const size = 24.0;
     final imageUrl = comment.avatarUrl?.trim();
-    final fallback = _ThreadCommentAvatarFallback(
-      author: comment.author,
-      palette: palette,
-    );
+    final fallback = _ThreadCommentDefaultAvatar(palette: palette, size: size);
     return ClipOval(
       child: SizedBox(
         width: size,
         height: size,
-        child: imageUrl == null || imageUrl.isEmpty
+        child: isForumDefaultOrUnsupportedAvatarUrl(imageUrl)
             ? fallback
             : CachedLibraryImage(
                 request: ForumImageCacheRequests.avatar(
@@ -324,7 +371,7 @@ class _ThreadCommentAvatar extends StatelessWidget {
                       ? comment.authorId!
                       : comment.author,
                   ownerType: ImageCacheOwnerType.thread,
-                  url: imageUrl,
+                  url: imageUrl!,
                 ),
                 fit: BoxFit.cover,
                 width: size,
@@ -338,31 +385,35 @@ class _ThreadCommentAvatar extends StatelessWidget {
   }
 }
 
-class _ThreadCommentAvatarFallback extends StatelessWidget {
-  const _ThreadCommentAvatarFallback({
-    required this.author,
+class _ThreadCommentDefaultAvatar extends StatelessWidget {
+  const _ThreadCommentDefaultAvatar({
     required this.palette,
+    required this.size,
   });
 
-  final String author;
   final ThreadDetailNativePalette palette;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
       color: palette.avatarBackground,
-      child: Center(
-        child: Text(
-          _authorInitial(author),
-          style: TextStyle(
-            color: palette.avatarForeground,
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ),
+      child: forumDefaultAvatarImage(width: size, height: size),
     );
   }
+}
+
+String _commentAuthorKey(ThreadPostCommentEntry comment) {
+  final authorId = comment.authorId?.trim();
+  if (authorId != null && authorId.isNotEmpty) {
+    return authorId;
+  }
+  final authorUrl = comment.authorUrl?.trim();
+  if (authorUrl != null && authorUrl.isNotEmpty) {
+    return authorUrl.replaceAll(RegExp(r'[^0-9A-Za-z_-]+'), '_');
+  }
+  final author = comment.author.trim();
+  return author.isNotEmpty ? author : 'unknown';
 }
 
 class ThreadPostRatingSection extends StatefulWidget {

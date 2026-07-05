@@ -243,6 +243,7 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
     required this.onOpenPostActions,
     required this.onCopyActionUrl,
     required this.onOpenPostLink,
+    required this.onOpenCommentAuthorProfile,
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
     required this.palette,
@@ -257,6 +258,7 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
   onOpenPostActions;
   final void Function(String label, String url) onCopyActionUrl;
   final ValueChanged<String> onOpenPostLink;
+  final ValueChanged<ThreadPostCommentEntry> onOpenCommentAuthorProfile;
   final void Function(ThreadPoll poll, ThreadPollOption option)
   onTogglePollOption;
   final ValueChanged<ThreadPoll> onSubmitPollVote;
@@ -300,6 +302,7 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
                 comments: post.comments,
                 imageHeaderBuilder: imageHeaderBuilder,
                 palette: palette,
+                onOpenAuthorProfile: onOpenCommentAuthorProfile,
               ),
             ],
             if (post.ratingSummary != null) ...[
@@ -383,6 +386,7 @@ class ThreadPostCard extends StatelessWidget {
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
     required this.palette,
+    this.onOpenCommentAuthorProfile,
     this.onOpenPostActions,
   });
 
@@ -399,6 +403,7 @@ class ThreadPostCard extends StatelessWidget {
   onTogglePollOption;
   final ValueChanged<ThreadPoll> onSubmitPollVote;
   final ThreadDetailNativePalette palette;
+  final ValueChanged<ThreadPostCommentEntry>? onOpenCommentAuthorProfile;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)?
   onOpenPostActions;
 
@@ -480,6 +485,7 @@ class ThreadPostCard extends StatelessWidget {
               comments: post.comments,
               imageHeaderBuilder: imageHeaderBuilder,
               palette: palette,
+              onOpenAuthorProfile: onOpenCommentAuthorProfile,
             ),
           ],
           if (post.ratingSummary != null) ...[

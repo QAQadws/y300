@@ -7,11 +7,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/domain/services/native_page_cache_invalidation_service.dart';
+import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
+import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
@@ -28,8 +36,6 @@ import 'package:y300/features/reader_shared/domain/continuous_image/continuous_i
 import 'package:y300/features/reply/data/providers/reply_providers.dart';
 import 'package:y300/features/reply/data/repositories/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
-import 'package:y300/features/profile/data/models/user_profile_models.dart';
-import 'package:y300/features/profile/data/repositories/user_profile_repository.dart';
 import 'package:y300/features/tags/data/repositories/forum_tag_repository.dart';
 import 'package:y300/features/tags/data/providers/tag_providers.dart';
 import 'package:y300/features/tags/data/repositories/yamibo_tag_thread_page_repository.dart';
@@ -752,6 +758,7 @@ void main() {
               onLoadNextPage: () {},
               onLoadPageNumber: (_) {},
               onOpenAuthorProfile: (_) {},
+              onOpenCommentAuthorProfile: (_) {},
               onCopyActionUrl: (_, _) {},
               onOpenPostLink: (_) {},
               onOpenPostActions: (_, _) {},
@@ -818,6 +825,7 @@ void main() {
                   onLoadNextPage: () {},
                   onLoadPageNumber: (_) {},
                   onOpenAuthorProfile: (_) {},
+                  onOpenCommentAuthorProfile: (_) {},
                   onCopyActionUrl: (_, _) {},
                   onOpenPostLink: (_) {},
                   onOpenPostImages: (_, request) => opened = request,
@@ -2391,6 +2399,7 @@ void main() {
     });
 
     testWidgets('opens user profile from post author name', (tester) async {
+      final webViewDriver = _FakeForumWebViewDriver();
       final repository = _FakeThreadRepository((tid, page) async {
         return ApiSuccess(
           ThreadDetailData(
@@ -2417,18 +2426,32 @@ void main() {
         );
       });
 
-      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          forumWebViewDriverFactory: () => webViewDriver,
+        ),
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('alice').first);
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('user-profile-page-list')), findsOneWidget);
-      expect(find.text('alice的资料'), findsWidgets);
-      expect(find.text('5263'), findsOneWidget);
+      expect(find.byType(ForumWebViewPage), findsOneWidget);
+      expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+      expect(
+        webViewDriver.bootstrapConfig?.initialUri.toString(),
+        'https://bbs.yamibo.com/home.php?mod=space&uid=509957&mobile=2',
+      );
+      expect(webViewDriver.loadedUris, <Uri>[
+        Uri.parse(
+          'https://bbs.yamibo.com/home.php?mod=space&uid=509957&mobile=2',
+        ),
+      ]);
     });
 
     testWidgets('opens user profile from post author avatar', (tester) async {
+      final webViewDriver = _FakeForumWebViewDriver();
       final repository = _FakeThreadRepository((tid, page) async {
         return ApiSuccess(
           ThreadDetailData(
@@ -2455,14 +2478,311 @@ void main() {
         );
       });
 
-      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          forumWebViewDriverFactory: () => webViewDriver,
+        ),
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('thread-author-avatar-p1')));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('user-profile-page-list')), findsOneWidget);
-      expect(find.text('alice的资料'), findsWidgets);
+      expect(find.byType(ForumWebViewPage), findsOneWidget);
+      expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+      expect(
+        webViewDriver.bootstrapConfig?.initialUri.toString(),
+        'https://bbs.yamibo.com/home.php?mod=space&uid=509957&mobile=2',
+      );
+    });
+
+    testWidgets('opens user profile from comment author name', (tester) async {
+      final webViewDriver = _FakeForumWebViewDriver();
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            subject: '测试主题',
+            author: 'alice',
+            replies: 0,
+            views: 1,
+            currentPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+                comments: const <ThreadPostCommentEntry>[
+                  ThreadPostCommentEntry(
+                    author: 'commenter',
+                    authorId: '777',
+                    authorUrl:
+                        'https://bbs.yamibo.com/home.php?mod=space&uid=777&mobile=2',
+                    avatarUrl:
+                        'https://bbs.yamibo.com/uc_server/data/avatar/000/00/07/77_avatar_small.jpg',
+                    message: '点评内容',
+                    dateline: 'today',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          forumWebViewDriverFactory: () => webViewDriver,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('thread-comment-author-name-777')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ForumWebViewPage), findsOneWidget);
+      expect(
+        webViewDriver.bootstrapConfig?.initialUri.toString(),
+        'https://bbs.yamibo.com/home.php?mod=space&uid=777&mobile=2',
+      );
+      expect(webViewDriver.loadedUris, <Uri>[
+        Uri.parse('https://bbs.yamibo.com/home.php?mod=space&uid=777&mobile=2'),
+      ]);
+    });
+
+    testWidgets('opens user profile from comment author avatar', (
+      tester,
+    ) async {
+      final webViewDriver = _FakeForumWebViewDriver();
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            subject: '测试主题',
+            author: 'alice',
+            replies: 0,
+            views: 1,
+            currentPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+                comments: const <ThreadPostCommentEntry>[
+                  ThreadPostCommentEntry(
+                    author: 'commenter',
+                    authorId: '778',
+                    avatarUrl:
+                        'https://bbs.yamibo.com/uc_server/data/avatar/000/00/07/78_avatar_small.jpg',
+                    message: '点评内容',
+                    dateline: 'today',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          forumWebViewDriverFactory: () => webViewDriver,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const Key('thread-comment-author-avatar-778')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ForumWebViewPage), findsOneWidget);
+      expect(
+        webViewDriver.bootstrapConfig?.initialUri.toString(),
+        'https://bbs.yamibo.com/home.php?mod=space&uid=778&mobile=2',
+      );
+    });
+
+    testWidgets('opens comment profile from author url uid when id is empty', (
+      tester,
+    ) async {
+      final webViewDriver = _FakeForumWebViewDriver();
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            subject: '测试主题',
+            author: 'alice',
+            replies: 0,
+            views: 1,
+            currentPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+                comments: const <ThreadPostCommentEntry>[
+                  ThreadPostCommentEntry(
+                    author: 'url-user',
+                    authorId: '',
+                    authorUrl: 'home.php?mod=space&uid=888&mobile=2',
+                    message: '点评内容',
+                    dateline: 'today',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          forumWebViewDriverFactory: () => webViewDriver,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('url-user'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ForumWebViewPage), findsOneWidget);
+      expect(
+        webViewDriver.bootstrapConfig?.initialUri.toString(),
+        'https://bbs.yamibo.com/home.php?mod=space&uid=888&mobile=2',
+      );
+    });
+
+    testWidgets('shows snackbar when comment author uid is missing', (
+      tester,
+    ) async {
+      final webViewDriver = _FakeForumWebViewDriver();
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            subject: '测试主题',
+            author: 'alice',
+            replies: 0,
+            views: 1,
+            currentPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+                comments: const <ThreadPostCommentEntry>[
+                  ThreadPostCommentEntry(
+                    author: 'missing-user',
+                    message: '点评内容',
+                    dateline: 'today',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          forumWebViewDriverFactory: () => webViewDriver,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('missing-user'));
+      await tester.pump();
+
+      expect(find.text('用户 UID 缺失'), findsOneWidget);
+      expect(find.byType(ForumWebViewPage), findsNothing);
+      expect(webViewDriver.loadedUris, isEmpty);
+    });
+
+    testWidgets('default comment avatar uses local noavatar asset', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            subject: '测试主题',
+            author: 'alice',
+            replies: 0,
+            views: 1,
+            currentPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+                comments: const <ThreadPostCommentEntry>[
+                  ThreadPostCommentEntry(
+                    author: 'commenter',
+                    authorId: '779',
+                    avatarUrl:
+                        'https://bbs.yamibo.com/uc_server/data/avatar/noavatar.svg',
+                    message: '点评内容',
+                    dateline: 'today',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpAndSettle();
+
+      final image = tester.widget<Image>(
+        find.descendant(
+          of: find.byKey(const Key('thread-comment-author-avatar-779')),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Image &&
+                widget.image is AssetImage &&
+                (widget.image as AssetImage).assetName ==
+                    forumDefaultAvatarAsset,
+          ),
+        ),
+      );
+      expect((image.image as AssetImage).assetName, forumDefaultAvatarAsset);
     });
 
     testWidgets('favorites thread from app bar action', (tester) async {
@@ -2557,9 +2877,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.byKey(const Key('reply-composer-message-input')),
+        find.byKey(const Key('reply-composer-quill-editor')),
         findsOneWidget,
       );
+      await tester.tap(find.byKey(const Key('reply-composer-source-button')));
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const Key('reply-composer-message-input')),
         '这是测试回复',
@@ -2592,6 +2914,7 @@ Widget _buildTestApp(
   ThreadPostLocator? threadPostLocator,
   NativePageCacheInvalidationService? pageCacheInvalidationService,
   ImageCacheService? imageCacheService,
+  ForumWebViewDriverFactory? forumWebViewDriverFactory,
 }) {
   return ProviderScope(
     overrides: _threadDetailOverrides(
@@ -2606,6 +2929,7 @@ Widget _buildTestApp(
       threadPostLocator: threadPostLocator,
       pageCacheInvalidationService: pageCacheInvalidationService,
       imageCacheService: imageCacheService,
+      forumWebViewDriverFactory: forumWebViewDriverFactory,
     ),
     child: const MaterialApp(
       home: ThreadDetailPage(tid: '100', subject: '测试主题'),
@@ -2625,6 +2949,7 @@ List<riverpod_misc.Override> _threadDetailOverrides(
   ThreadPostLocator? threadPostLocator,
   NativePageCacheInvalidationService? pageCacheInvalidationService,
   ImageCacheService? imageCacheService,
+  ForumWebViewDriverFactory? forumWebViewDriverFactory,
 }) {
   return [
     threadRepositoryProvider.overrideWithValue(repository),
@@ -2655,8 +2980,15 @@ List<riverpod_misc.Override> _threadDetailOverrides(
     threadPostLocatorProvider.overrideWithValue(
       threadPostLocator ?? _FakeThreadPostLocator(null),
     ),
-    userProfileRepositoryProvider.overrideWithValue(
-      const _FakeUserProfileRepository(),
+    forumWebViewDriverFactoryProvider.overrideWith(
+      (ref) => forumWebViewDriverFactory ?? _FakeForumWebViewDriver.new,
+    ),
+    cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
+    webViewCookieSyncServiceProvider.overrideWithValue(
+      _FakeWebViewCookieSyncService(),
+    ),
+    forumFavoriteRepositoryProvider.overrideWithValue(
+      const _FakeForumFavoriteRepository(),
     ),
     forumTagRepositoryProvider.overrideWithValue(_FakeForumTagRepository()),
     yamiboTagThreadPageRepositoryProvider.overrideWithValue(
@@ -2984,33 +3316,144 @@ class _FakeThreadPostLocator implements ThreadPostLocator {
   }
 }
 
-class _FakeUserProfileRepository implements UserProfileRepository {
-  const _FakeUserProfileRepository();
+class _FakeCookieStore extends CookieStore {
+  @override
+  Future<Map<String, String>> readCookieMap(Uri uri) async {
+    return const <String, String>{};
+  }
 
   @override
-  Future<ApiResult<UserProfileData>> getUserProfile({
-    required String uid,
+  Future<void> saveCookies(Uri uri, Map<String, String> cookies) async {}
+}
+
+class _FakeWebViewCookieJar implements WebViewCookieJar {
+  @override
+  Future<void> clear() async {}
+
+  @override
+  Future<Map<String, String>> readCookies(Uri uri) async {
+    return const <String, String>{};
+  }
+}
+
+class _FakeWebViewCookieSyncService extends WebViewCookieSyncService {
+  _FakeWebViewCookieSyncService()
+    : super(
+        cookieJar: _FakeWebViewCookieJar(),
+        cookieStore: _FakeCookieStore(),
+      );
+
+  @override
+  Future<Map<String, String>> syncToStore(Uri uri) async {
+    return const <String, String>{};
+  }
+
+  @override
+  Future<void> clearWebViewCookies() async {}
+}
+
+class _FakeForumFavoriteRepository implements ForumFavoriteRepository {
+  const _FakeForumFavoriteRepository();
+
+  @override
+  Future<ApiResult<ForumFavoriteMutationResult>> favoriteForum({
+    required String fid,
   }) async {
-    return ApiSuccess<UserProfileData>(
-      UserProfileData(
-        uid: uid,
-        username: 'alice',
-        title: 'alice的资料',
-        avatarUrl: 'https://bbs.yamibo.com/avatar.jpg',
-        credits: const <UserProfileMetric>[
-          UserProfileMetric(label: '总积分', value: '5263'),
-        ],
-        details: const <UserProfileDetailItem>[
-          UserProfileDetailItem(label: 'UID', value: '509957'),
-        ],
-      ),
+    return const ApiSuccess<ForumFavoriteMutationResult>(
+      ForumFavoriteMutationResult(message: '收藏成功'),
     );
   }
 
   @override
-  Future<ApiResult<UserProfileData>> getMyProfile({required String uid}) async {
-    return getUserProfile(uid: uid);
+  Future<ApiResult<List<FavoriteForum>>> loadFavoriteForums() async {
+    return const ApiSuccess<List<FavoriteForum>>(<FavoriteForum>[]);
   }
+
+  @override
+  Future<ApiResult<ForumFavoriteMutationResult>> unfavoriteForum({
+    required String favid,
+  }) async {
+    return const ApiSuccess<ForumFavoriteMutationResult>(
+      ForumFavoriteMutationResult(message: '取消收藏成功'),
+    );
+  }
+}
+
+class _FakeForumWebViewDriver implements ForumWebViewDriver {
+  final List<Uri> loadedUris = <Uri>[];
+  ForumWebViewBootstrapConfig? bootstrapConfig;
+  ForumWebViewCallbacks? _callbacks;
+
+  @override
+  Widget buildWidget({Key? key}) {
+    return SizedBox.expand(key: key);
+  }
+
+  @override
+  Future<bool> canGoBack() async {
+    return false;
+  }
+
+  @override
+  Future<bool> clearCookies() async {
+    return true;
+  }
+
+  @override
+  Future<String?> getTitle() async {
+    return '个人资料';
+  }
+
+  @override
+  Future<void> goBack() async {}
+
+  @override
+  Future<void> initialize({
+    required ForumWebViewCallbacks callbacks,
+    required ForumWebViewBootstrapConfig bootstrapConfig,
+  }) async {
+    _callbacks = callbacks;
+    this.bootstrapConfig = bootstrapConfig;
+  }
+
+  @override
+  Future<void> load(Uri uri, {Map<String, String> headers = const {}}) async {
+    loadedUris.add(uri);
+    _callbacks?.onPageStarted(uri.toString());
+    _callbacks?.onProgress(100);
+    await _callbacks?.onPageFinished(uri.toString());
+  }
+
+  @override
+  Future<ForumWebViewCapabilityProfile> probeCapabilities() async {
+    return const ForumWebViewCapabilityProfile(
+      engine: ForumWebViewEngine.advanced,
+      documentStartMode: ForumWebViewDocumentStartMode.reliable,
+      supportsContentBlockers: false,
+      supportsTransparentBackground: true,
+      supportsPlatformScrollTuning: true,
+      supportsCookieHooks: true,
+      supportsPageCommitVisible: true,
+    );
+  }
+
+  @override
+  Future<void> reload() async {}
+
+  @override
+  Future<void> runJavaScript(String script) async {}
+
+  @override
+  Future<Object?> runJavaScriptReturningResult(String script) async {
+    return null;
+  }
+
+  @override
+  Future<void> seedCookies({
+    required String domain,
+    required Map<String, String> cookies,
+    String path = '/',
+  }) async {}
 }
 
 class _FakeThreadPostRateRepository implements ThreadPostRateRepository {

@@ -16,7 +16,6 @@ import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.d
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
-import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
@@ -250,6 +249,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                       );
                     },
                     onOpenAuthorProfile: _openAuthorProfile,
+                    onOpenCommentAuthorProfile: _openCommentAuthorProfile,
                     onCopyActionUrl: _copyActionUrl,
                     onOpenPostLink: _openForumLink,
                     onOpenPostImages: _openPostImages,
@@ -612,9 +612,48 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       _showSnackBar('用户 UID 缺失');
       return;
     }
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => UserProfilePage(uid: uid)));
+    _openManagedWebView(_authorProfileUri(uid));
+  }
+
+  void _openCommentAuthorProfile(ThreadPostCommentEntry comment) {
+    final uid = _commentAuthorUid(comment);
+    if (uid == null || uid.isEmpty) {
+      _showSnackBar('用户 UID 缺失');
+      return;
+    }
+    _openManagedWebView(_authorProfileUri(uid));
+  }
+
+  String? _commentAuthorUid(ThreadPostCommentEntry comment) {
+    final authorId = comment.authorId?.trim();
+    if (authorId != null && authorId.isNotEmpty) {
+      return authorId;
+    }
+    final authorUrl = comment.authorUrl?.trim();
+    if (authorUrl == null || authorUrl.isEmpty) {
+      return null;
+    }
+    final uri = Uri.tryParse(authorUrl);
+    final uid = uri?.queryParameters['uid']?.trim();
+    if (uid != null && uid.isNotEmpty) {
+      return uid;
+    }
+    final match = RegExp(
+      r'space-uid-(\d+)',
+      caseSensitive: false,
+    ).firstMatch(authorUrl);
+    return match?.group(1);
+  }
+
+  Uri _authorProfileUri(String uid) {
+    return Uri.parse(AppConfig.siteBaseUrl).replace(
+      path: '/home.php',
+      queryParameters: <String, String>{
+        'mod': 'space',
+        'uid': uid,
+        'mobile': '2',
+      },
+    );
   }
 
   void _scheduleTargetPostScroll(ThreadDetailPageState? state) {

@@ -7,7 +7,9 @@ void main() {
 
   test('classify recognizes forum home', () {
     expect(
-      navigator.classify(Uri.parse('https://bbs.yamibo.com/index.php?mobile=2')),
+      navigator.classify(
+        Uri.parse('https://bbs.yamibo.com/index.php?mobile=2'),
+      ),
       ForumWebViewPageKind.home,
     );
   });
@@ -60,10 +62,7 @@ void main() {
       'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=30&mobile=2',
     );
     expect(navigator.classify(uri), ForumWebViewPageKind.search);
-    expect(
-      navigator.extractSearchScope(uri),
-      ForumWebViewSearchScope.curForum,
-    );
+    expect(navigator.extractSearchScope(uri), ForumWebViewSearchScope.curForum);
     expect(navigator.extractSearchFid(uri), '30');
   });
 
@@ -80,6 +79,15 @@ void main() {
       navigator.classify(Uri.parse('https://example.com/index.php?mobile=2')),
       ForumWebViewPageKind.other,
     );
+  });
+
+  test('classify keeps managed profile page under other policy', () {
+    final uri = Uri.parse(
+      'https://bbs.yamibo.com/home.php?mod=space&uid=100&do=profile&mycenter=1&mobile=2',
+    );
+
+    expect(navigator.isManagedSite(uri), isTrue);
+    expect(navigator.classify(uri), ForumWebViewPageKind.other);
   });
 
   test('resolve maps relative url to managed site', () {

@@ -10,10 +10,7 @@ void main() {
     '.footer.mt10.cl',
     '.foot.flex-box',
   };
-  const pwaLateOnlySelectors = <String>{
-    '.foot_height',
-    '.foot-pwa',
-  };
+  const pwaLateOnlySelectors = <String>{'.foot_height', '.foot-pwa'};
   const threadDetailExtraSelectors = <String>{
     '.foot.foot_reply.flex-box.cl',
     '.foot_height_view',
@@ -60,13 +57,10 @@ void main() {
     ]) {
       final policy = resolver.resolve(pageKind);
       expect(policy.earlyHiddenSelectors, baselineSelectors);
-      expect(
-        policy.lateRemovedSelectors,
-        <String>{
-          ...baselineSelectors,
-          ...pwaLateOnlySelectors,
-        },
-      );
+      expect(policy.lateRemovedSelectors, <String>{
+        ...baselineSelectors,
+        ...pwaLateOnlySelectors,
+      });
       expect(policy.earlyHiddenSelectors, isNot(contains('.foot_height')));
       expect(policy.earlyHiddenSelectors, isNot(contains('.foot-pwa')));
       expect(
@@ -81,20 +75,14 @@ void main() {
   test('thread detail includes reply footer cleanup selectors', () {
     final policy = resolver.resolve(ForumWebViewPageKind.threadDetail);
 
-    expect(
-      policy.earlyHiddenSelectors,
-      <String>{
-        ...baselineSelectors,
-        ...threadDetailExtraSelectors,
-      },
-    );
-    expect(
-      policy.lateRemovedSelectors,
-      <String>{
-        ...baselineSelectors,
-        ...threadDetailExtraSelectors,
-      },
-    );
+    expect(policy.earlyHiddenSelectors, <String>{
+      ...baselineSelectors,
+      ...threadDetailExtraSelectors,
+    });
+    expect(policy.lateRemovedSelectors, <String>{
+      ...baselineSelectors,
+      ...threadDetailExtraSelectors,
+    });
     expect(policy.earlyHiddenSelectors, isNot(contains('.foot_height')));
     expect(policy.earlyHiddenSelectors, isNot(contains('.foot-pwa')));
     expectSharedPolicyShape(ForumWebViewPageKind.threadDetail);
@@ -112,6 +100,16 @@ void main() {
       isNot(contains('.foot.foot_reply.flex-box.cl')),
     );
     expect(policy.earlyHiddenSelectors, isNot(contains('.foot_height_view')));
+    expectSharedPolicyShape(ForumWebViewPageKind.other);
+  });
+
+  test('managed profile pages reuse other chrome cleanup policy', () {
+    final policy = resolver.resolve(ForumWebViewPageKind.other);
+
+    expect(policy.earlyHiddenSelectors, contains('#header-padding'));
+    expect(policy.earlyHiddenSelectors, contains('.header.cl'));
+    expect(policy.lateRemovedSelectors, contains('.footer.mt10.cl'));
+    expect(policy.lateRemovedSelectors, contains('.foot.flex-box'));
     expectSharedPolicyShape(ForumWebViewPageKind.other);
   });
 }

@@ -4,15 +4,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
+import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
 import 'package:y300/features/library_shared/presentation/controllers/sync_diagnostic_mode_controller.dart';
 import 'package:y300/features/auth/presentation/login_webview_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/more/presentation/appearance_settings_page.dart';
 import 'package:y300/features/more/presentation/data_storage_page.dart';
-import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_page.dart';
 
@@ -65,7 +68,7 @@ class _MorePageState extends ConsumerState<MorePage> {
                   : '登录后查看个人资料、消息提醒',
             ),
             onTap: authSession.isLoggedIn
-                ? () => _openMyProfilePage(context)
+                ? () => _openMyProfileWebViewPage(context, authSession)
                 : () => _openLoginPage(context),
           ),
           ListTile(
@@ -298,10 +301,43 @@ class _MorePageState extends ConsumerState<MorePage> {
     );
   }
 
-  void _openMyProfilePage(BuildContext context) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const MyProfilePage()));
+  void _openMyProfileWebViewPage(
+    BuildContext context,
+    AuthSessionViewState session,
+  ) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ProviderScope(
+          overrides: [
+            forumWebViewInitialUriProvider.overrideWithValue(
+              _buildMyProfileUri(session),
+            ),
+            forumWebViewPopOnRootBackProvider.overrideWithValue(true),
+            forumWebViewDriverProvider.overrideWith((ref) {
+              final factory = ref.watch(forumWebViewDriverFactoryProvider);
+              return factory();
+            }),
+            forumWebViewControllerProvider.overrideWith(
+              ForumWebViewController.new,
+            ),
+          ],
+          child: const ForumWebViewPage(),
+        ),
+      ),
+    );
+  }
+
+  Uri _buildMyProfileUri(AuthSessionViewState session) {
+    return Uri.parse(AppConfig.siteBaseUrl).replace(
+      path: '/home.php',
+      queryParameters: <String, String>{
+        'mod': 'space',
+        'uid': session.uid,
+        'do': 'profile',
+        'mycenter': '1',
+        'mobile': '2',
+      },
+    );
   }
 
   String _myProfileSubtitle(AuthSessionViewState session) {
