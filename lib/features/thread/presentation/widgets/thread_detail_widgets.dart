@@ -262,6 +262,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
     }
     return _htmlImagePreloadCoordinator ??= ThreadHtmlImagePreloadCoordinator(
       precacheService: service,
+      diagnosticRecorder: widget.diagnosticRecorder,
     );
   }
 

@@ -7,6 +7,8 @@ import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
+import 'package:y300/features/thread/presentation/html_rendering/thread_html_first_image_diagnostics_service.dart';
+import 'package:y300/features/thread/presentation/html_rendering/thread_html_image_reader_bridge.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
@@ -40,6 +42,7 @@ class ThreadPostHtmlFirstComparisonPage extends StatefulWidget {
 class _ThreadPostHtmlFirstComparisonPageState
     extends State<ThreadPostHtmlFirstComparisonPage> {
   String _lastImageTapStatus = '尚未点击 HTML-first 图片';
+  ThreadHtmlImageReaderBridgeResult? _lastBridgeResult;
 
   @override
   Widget build(BuildContext context) {
@@ -74,12 +77,23 @@ class _ThreadPostHtmlFirstComparisonPageState
                 plan: widget.plan,
                 imageHeaderBuilder: widget.imageHeaderBuilder,
                 onOpenPostLink: widget.onOpenPostLink,
-                onOpenPostImage: (post, request) {
+                onOpenPostImage: widget.onOpenPostImage,
+                onImageDiagnostics: (post, request, result) {
                   setState(() {
-                    _lastImageTapStatus =
-                        '匹配图片：index=${request.initialIndex}, url=${request.image.url}';
+                    _lastBridgeResult = result;
+                    if (result.canOpen) {
+                      final index = request.readableIndex;
+                      final via = index == null
+                          ? 'aid/url fallback'
+                          : 'readableIndex=$index';
+                      _lastImageTapStatus =
+                          '匹配图片：index=${result.request!.initialIndex}，$via';
+                    } else if (request.isSticker) {
+                      _lastImageTapStatus = '表情不进入阅读器';
+                    } else {
+                      _lastImageTapStatus = '未匹配图片：${request.url}';
+                    }
                   });
-                  widget.onOpenPostImage(post, request);
                 },
                 onImageFallback: (post, request) {
                   setState(() {
@@ -96,6 +110,7 @@ class _ThreadPostHtmlFirstComparisonPageState
               plan: widget.plan,
               fallbackWouldRender: widget.post.message.trim().isEmpty,
               lastImageTapStatus: _lastImageTapStatus,
+              lastBridgeResult: _lastBridgeResult,
             ),
           ],
         ),
@@ -171,6 +186,7 @@ class _DebugPane extends StatelessWidget {
     required this.plan,
     required this.fallbackWouldRender,
     required this.lastImageTapStatus,
+    required this.lastBridgeResult,
   });
 
   final ThreadPost post;
@@ -178,6 +194,7 @@ class _DebugPane extends StatelessWidget {
   final ThreadPostBodyRenderPlan plan;
   final bool fallbackWouldRender;
   final String lastImageTapStatus;
+  final ThreadHtmlImageReaderBridgeResult? lastBridgeResult;
 
   @override
   Widget build(BuildContext context) {
@@ -189,6 +206,14 @@ class _DebugPane extends StatelessWidget {
       threadId: threadId,
       imageCacheOwnerId: threadId,
     );
+    final diagnostics = const ThreadHtmlFirstImageDiagnosticsService()
+        .buildReport(
+          post: post,
+          legacyPlan: plan,
+          preparedDocument: prepared,
+          lastTapStatus: lastImageTapStatus,
+          lastBridgeResult: lastBridgeResult,
+        );
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
       children: [
@@ -201,7 +226,17 @@ class _DebugPane extends StatelessWidget {
           value:
               '${prepared.readableImageCount}，跳过表情 ${prepared.skippedStickerCount}，跳过非网络 ${prepared.skippedNonNetworkCount}',
         ),
+        _DebugLine(
+          key: const Key('thread-post-html-first-image-diagnostics-summary'),
+          label: '图片诊断',
+          value: diagnostics.summaryText,
+        ),
         _DebugLine(label: '旧 plan 图片数', value: '${plan.images.length}'),
+        _DebugLine(
+          key: const Key('thread-post-html-first-image-sequence-diff'),
+          label: '序列对照',
+          value: diagnostics.sequenceDiffText,
+        ),
         _DebugLine(
           label: '旧 plan block 数',
           value: '${plan.document.blocks.length}',
@@ -214,6 +249,11 @@ class _DebugPane extends StatelessWidget {
           key: const Key('thread-post-html-first-image-reader-fallback'),
           label: '图片点击匹配',
           value: lastImageTapStatus,
+        ),
+        _DebugLine(
+          key: const Key('thread-post-html-first-image-failure-breakdown'),
+          label: '失败/降级',
+          value: diagnostics.failureBreakdownText,
         ),
       ],
     );

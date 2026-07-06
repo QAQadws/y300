@@ -138,6 +138,29 @@ void main() {
                     label: '图片缓存',
                     bytes: 4096,
                     clearable: true,
+                    categories: <StorageUsageCategory>[
+                      StorageUsageCategory(
+                        id: 'clearable',
+                        label: '可清缓存',
+                        bytes: 1024,
+                        clearable: true,
+                        protected: false,
+                      ),
+                      StorageUsageCategory(
+                        id: 'sticky',
+                        label: '长期缓存',
+                        bytes: 2048,
+                        clearable: false,
+                        protected: false,
+                      ),
+                      StorageUsageCategory(
+                        id: 'protected',
+                        label: '受保护/下载内容',
+                        bytes: 1024,
+                        clearable: false,
+                        protected: true,
+                      ),
+                    ],
                     slices: <StorageUsageSlice>[
                       StorageUsageSlice(
                         id: 'image:thread',
@@ -197,6 +220,18 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('帖子图片'), findsOneWidget);
+    expect(
+      find.byKey(const Key('data-storage-image-cache-category-clearable')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('data-storage-image-cache-category-sticky')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('data-storage-image-cache-category-protected')),
+      findsOneWidget,
+    );
   });
 
   testWidgets(

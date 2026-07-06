@@ -54,13 +54,19 @@ class DefaultForumImagePrecacheService implements ForumImagePrecacheService {
     final request = _imageRequestResolver.resolveCacheRequest(spec);
     if (request == null) {
       return Future<ForumImagePrecacheResult>.value(
-        const ForumImagePrecacheResult(success: false),
+        const ForumImagePrecacheResult(
+          success: false,
+          failureReason: 'no_cache_request',
+        ),
       );
     }
     final key = request.cacheKey.trim();
     if (key.isEmpty) {
       return Future<ForumImagePrecacheResult>.value(
-        const ForumImagePrecacheResult(success: false),
+        const ForumImagePrecacheResult(
+          success: false,
+          failureReason: 'empty_cache_key',
+        ),
       );
     }
     final existing = _diskTasks[key];
@@ -86,14 +92,20 @@ class DefaultForumImagePrecacheService implements ForumImagePrecacheService {
     final policy = _imageRequestResolver.resolveRenderPolicy(spec);
     if (policy.precacheMode == ForumImagePrecacheMode.none) {
       return Future<ForumImagePrecacheResult>.value(
-        const ForumImagePrecacheResult(success: false),
+        const ForumImagePrecacheResult(
+          success: false,
+          failureReason: 'precache_disabled',
+        ),
       );
     }
     final request = _imageRequestResolver.resolveCacheRequest(spec);
     final key = request?.cacheKey.trim();
     if (request == null || key == null || key.isEmpty) {
       return Future<ForumImagePrecacheResult>.value(
-        const ForumImagePrecacheResult(success: false),
+        const ForumImagePrecacheResult(
+          success: false,
+          failureReason: 'no_cache_request',
+        ),
       );
     }
     final decodeKey = '$key:${_sizeSignature(expectedDisplaySize)}';
@@ -128,11 +140,13 @@ class DefaultForumImagePrecacheService implements ForumImagePrecacheService {
       return ForumImagePrecacheResult(
         success: result.success,
         fromDiskCache: result.fromCache,
+        diskCacheAttempted: true,
         cacheKey: request.cacheKey,
         localPath: result.localPath,
+        failureReason: result.success ? null : 'disk_cache_failed',
       );
     } catch (error) {
-      return ForumImagePrecacheResult.failed(error);
+      return ForumImagePrecacheResult.failed(error, diskCacheAttempted: true);
     }
   }
 
@@ -148,7 +162,16 @@ class DefaultForumImagePrecacheService implements ForumImagePrecacheService {
       final disk = await ensureDiskCached(spec);
       final localPath = disk.localPath?.trim();
       if (!disk.success || localPath == null || localPath.isEmpty) {
-        return disk;
+        return ForumImagePrecacheResult(
+          success: false,
+          fromDiskCache: disk.fromDiskCache,
+          diskCacheAttempted: disk.diskCacheAttempted,
+          decodePrecacheAttempted: true,
+          cacheKey: request.cacheKey,
+          localPath: localPath,
+          error: disk.error,
+          failureReason: disk.failureReason ?? 'disk_cache_failed',
+        );
       }
       final provider = _imageProviderBuilder(
         localPath: localPath,
@@ -161,11 +184,16 @@ class DefaultForumImagePrecacheService implements ForumImagePrecacheService {
         success: true,
         fromDiskCache: disk.fromDiskCache,
         decoded: true,
+        diskCacheAttempted: disk.diskCacheAttempted,
+        decodePrecacheAttempted: true,
         cacheKey: request.cacheKey,
         localPath: localPath,
       );
     } catch (error) {
-      return ForumImagePrecacheResult.failed(error);
+      return ForumImagePrecacheResult.failed(
+        error,
+        decodePrecacheAttempted: true,
+      );
     }
   }
 

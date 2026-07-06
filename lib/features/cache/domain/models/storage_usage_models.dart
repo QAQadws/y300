@@ -74,6 +74,7 @@ class StorageUsageSection {
     required this.bytes,
     required this.clearable,
     this.slices = const <StorageUsageSlice>[],
+    this.categories = const <StorageUsageCategory>[],
   });
 
   final StorageBucket bucket;
@@ -81,6 +82,23 @@ class StorageUsageSection {
   final int bytes;
   final bool clearable;
   final List<StorageUsageSlice> slices;
+  final List<StorageUsageCategory> categories;
+}
+
+class StorageUsageCategory {
+  const StorageUsageCategory({
+    required this.id,
+    required this.label,
+    required this.bytes,
+    required this.clearable,
+    required this.protected,
+  });
+
+  final String id;
+  final String label;
+  final int bytes;
+  final bool clearable;
+  final bool protected;
 }
 
 class StorageUsageSlice {

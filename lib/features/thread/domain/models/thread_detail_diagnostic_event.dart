@@ -5,6 +5,7 @@ enum ThreadDetailDiagnosticEventType {
   scrollAnimate,
   targetPostScroll,
   continuousImage,
+  htmlFirstImageDiagnostics,
 }
 
 class ThreadDetailDiagnosticEvent {

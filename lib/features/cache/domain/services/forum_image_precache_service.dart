@@ -16,19 +16,36 @@ class ForumImagePrecacheResult {
     required this.success,
     this.fromDiskCache = false,
     this.decoded = false,
+    this.diskCacheAttempted = false,
+    this.decodePrecacheAttempted = false,
     this.cacheKey,
     this.localPath,
     this.error,
+    this.failureReason,
   });
 
   final bool success;
   final bool fromDiskCache;
   final bool decoded;
+  final bool diskCacheAttempted;
+  final bool decodePrecacheAttempted;
   final String? cacheKey;
   final String? localPath;
   final Object? error;
+  final String? failureReason;
 
-  static ForumImagePrecacheResult failed(Object error) {
-    return ForumImagePrecacheResult(success: false, error: error);
+  static ForumImagePrecacheResult failed(
+    Object error, {
+    String? failureReason,
+    bool diskCacheAttempted = false,
+    bool decodePrecacheAttempted = false,
+  }) {
+    return ForumImagePrecacheResult(
+      success: false,
+      error: error,
+      failureReason: failureReason ?? error.runtimeType.toString(),
+      diskCacheAttempted: diskCacheAttempted,
+      decodePrecacheAttempted: decodePrecacheAttempted,
+    );
   }
 }

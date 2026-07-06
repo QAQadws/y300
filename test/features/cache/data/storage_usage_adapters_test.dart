@@ -54,18 +54,41 @@ void main() {
           updatedAt: now,
         ),
       );
+      await repository.upsert(
+        CachedImageRecord(
+          cacheKey: 'smiley/1',
+          ownerType: ImageCacheOwnerType.sticker.dbValue,
+          ownerId: 'smiley',
+          role: ImageCacheRole.remoteSmiley.dbValue,
+          retentionClass: ImageRetentionClass.sticky,
+          bytes: 20,
+          protected: false,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
 
       final section = await ImageCacheStorageAccountingAdapter(
         repository: repository,
       ).calculateUsage();
 
       expect(section.bucket, StorageBucket.imageCache);
-      expect(section.bytes, 140);
+      expect(section.bytes, 160);
       expect(section.clearable, isTrue);
       expect(
         section.slices.map((slice) => slice.label),
-        containsAll(<String>['封面（受保护）', '帖子图片（最近阅读）']),
+        containsAll(<String>['封面（受保护）', '帖子图片（最近阅读）', '表情图片（低淘汰）']),
       );
+      expect(section.categories.map((category) => category.label), <String>[
+        '可清缓存',
+        '长期缓存',
+        '受保护/下载内容',
+      ]);
+      expect(section.categories.map((category) => category.bytes), <int>[
+        40,
+        20,
+        100,
+      ]);
 
       await deleteDatabase(dbName);
     },

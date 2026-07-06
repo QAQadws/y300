@@ -50,10 +50,13 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
     final fragment = html_parser.parseFragment(deduplicated);
     final entries = <ForumHtmlReadableImageEntry>[];
     final attachmentIdsByUrl = <String, String>{};
+    final readableUrlCounts = <String, int>{};
+    final images = fragment.querySelectorAll('img');
     var skippedStickerCount = 0;
     var skippedNonNetworkCount = 0;
+    var attachmentTaggedCount = 0;
 
-    for (final image in fragment.querySelectorAll('img')) {
+    for (final image in images) {
       final rawSrc = image.attributes['src']?.trim();
       if (rawSrc == null || rawSrc.isEmpty) {
         skippedNonNetworkCount++;
@@ -67,6 +70,7 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
 
       final attachmentId = _attachmentIdFromElement(image);
       if (attachmentId != null) {
+        attachmentTaggedCount++;
         _recordAttachmentId(attachmentIdsByUrl, rawSrc, resolved, attachmentId);
       }
 
@@ -101,6 +105,9 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
       }
 
       image.attributes[forumHtmlReadableImageIndexAttribute] = index.toString();
+      final normalizedUrl = resolved.removeFragment().toString();
+      readableUrlCounts[normalizedUrl] =
+          (readableUrlCounts[normalizedUrl] ?? 0) + 1;
       entries.add(
         ForumHtmlReadableImageEntry(
           index: index,
@@ -137,9 +144,22 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
         entries: List<ForumHtmlReadableImageEntry>.unmodifiable(entries),
       ),
       attachmentIdsByUrl: Map<String, String>.unmodifiable(attachmentIdsByUrl),
+      totalImageCount: images.length,
       skippedStickerCount: skippedStickerCount,
       skippedNonNetworkCount: skippedNonNetworkCount,
+      duplicatedReadableUrlCount: _duplicateCount(readableUrlCounts),
+      attachmentTaggedCount: attachmentTaggedCount,
     );
+  }
+
+  int _duplicateCount(Map<String, int> counts) {
+    var duplicates = 0;
+    for (final count in counts.values) {
+      if (count > 1) {
+        duplicates += count - 1;
+      }
+    }
+    return duplicates;
   }
 
   String _ownerId({

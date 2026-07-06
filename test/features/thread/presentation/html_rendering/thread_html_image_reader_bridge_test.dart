@@ -35,6 +35,9 @@ void main() {
           .querySelectorAll('img');
 
       expect(prepared.sequence.entries, hasLength(2));
+      expect(prepared.totalImageCount, 2);
+      expect(prepared.readableImageCount, 2);
+      expect(prepared.attachmentTaggedCount, 1);
       expect(prepared.sequence.entries.first.index, 0);
       expect(prepared.sequence.entries.first.attachmentId, '123');
       expect(prepared.sequence.entries.first.htmlWidth, 640);
@@ -62,6 +65,7 @@ void main() {
       );
 
       expect(prepared.sequence.entries, hasLength(1));
+      expect(prepared.totalImageCount, 4);
       expect(prepared.skippedStickerCount, 1);
       expect(prepared.skippedNonNetworkCount, 2);
     });
@@ -78,6 +82,7 @@ void main() {
       );
 
       expect(prepared.sequence.entries, hasLength(2));
+      expect(prepared.duplicatedReadableUrlCount, 1);
       expect(
         prepared.sequence.entries[0].url,
         prepared.sequence.entries[1].url,

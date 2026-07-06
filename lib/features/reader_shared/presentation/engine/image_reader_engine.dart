@@ -78,8 +78,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       ContinuousImageScrollAnchorCoordinator(layoutResolver: _layoutResolver);
   final InMemoryContinuousImageExtentRegistry _extentRegistry =
       InMemoryContinuousImageExtentRegistry();
-  final ReaderImageSessionPreloadCoordinator _sessionPreloadCoordinator =
-      ReaderImageSessionPreloadCoordinator();
+  late final ReaderImageSessionPreloadCoordinator _sessionPreloadCoordinator =
+      ReaderImageSessionPreloadCoordinator(onResult: _recordSessionPreload);
 
   List<ContinuousImageItem> _latestItems = const <ContinuousImageItem>[];
   double _pendingScrollCompensationDelta = 0;
@@ -796,6 +796,32 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       return null;
     }
     return Size(mediaSize.width, mediaSize.height);
+  }
+
+  void _recordSessionPreload(ReaderImageSessionPreloadResult result) {
+    final recorder = _capability.diagnosticRecorder;
+    if (!recorder.enabled) {
+      return;
+    }
+    recorder.recordContinuousImage(
+      ContinuousImageDiagnosticEvent(
+        time: DateTime.now(),
+        type: ContinuousImageDiagnosticEventType.prefetchCompleted,
+        itemId: result.spec.cacheKey ?? result.spec.sourceUrl,
+        ownerId: _capability.content.ownerId,
+        index: result.spec.imageIndex ?? -1,
+        source: result.spec.sourceUrl,
+        message:
+            'sessionPreload kind=${result.kind.name} '
+            'success=${result.result.success} '
+            'applied=${result.applied} '
+            'diskAttempted=${result.result.diskCacheAttempted} '
+            'diskHit=${result.result.fromDiskCache} '
+            'decodeAttempted=${result.result.decodePrecacheAttempted} '
+            'decoded=${result.result.decoded} '
+            'reason=${result.result.failureReason ?? '-'}',
+      ),
+    );
   }
 
   // --- mode + display settings sheets ---

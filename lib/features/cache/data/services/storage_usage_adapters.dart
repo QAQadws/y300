@@ -38,13 +38,60 @@ class ImageCacheStorageAccountingAdapter implements StorageAccountingAdapter {
         .where((slice) => slice.bytes > 0)
         .toList(growable: false);
     final total = slices.fold<int>(0, (sum, slice) => sum + slice.bytes);
+    final categories = _imageCategories(groups);
     return StorageUsageSection(
       bucket: bucket,
       label: bucket.label,
       bytes: total,
       clearable: slices.any((slice) => !slice.protected),
       slices: slices,
+      categories: categories,
     );
+  }
+
+  List<StorageUsageCategory> _imageCategories(
+    List<ImageCacheUsageGroup> groups,
+  ) {
+    var clearable = 0;
+    var sticky = 0;
+    var protectedAssets = 0;
+    for (final group in groups) {
+      if (group.bytes <= 0) {
+        continue;
+      }
+      if (group.protected ||
+          group.retentionClass == ImageRetentionClass.protected.dbValue ||
+          group.retentionClass == ImageRetentionClass.downloaded.dbValue) {
+        protectedAssets += group.bytes;
+      } else if (group.retentionClass == ImageRetentionClass.sticky.dbValue) {
+        sticky += group.bytes;
+      } else {
+        clearable += group.bytes;
+      }
+    }
+    return <StorageUsageCategory>[
+      StorageUsageCategory(
+        id: 'clearable',
+        label: '可清缓存',
+        bytes: clearable,
+        clearable: true,
+        protected: false,
+      ),
+      StorageUsageCategory(
+        id: 'sticky',
+        label: '长期缓存',
+        bytes: sticky,
+        clearable: false,
+        protected: false,
+      ),
+      StorageUsageCategory(
+        id: 'protected',
+        label: '受保护/下载内容',
+        bytes: protectedAssets,
+        clearable: false,
+        protected: true,
+      ),
+    ].where((category) => category.bytes > 0).toList(growable: false);
   }
 
   String _imageGroupLabel(ImageCacheUsageGroup group) {

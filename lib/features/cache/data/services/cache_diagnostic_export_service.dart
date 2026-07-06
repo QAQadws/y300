@@ -41,6 +41,16 @@ class JsonCacheDiagnosticExportService implements CacheDiagnosticExportService {
             'label': section.label,
             'bytes': section.bytes,
             'clearable': section.clearable,
+            'categories': [
+              for (final category in section.categories)
+                <String, Object?>{
+                  'id': category.id,
+                  'label': category.label,
+                  'bytes': category.bytes,
+                  'clearable': category.clearable,
+                  'protected': category.protected,
+                },
+            ],
             'slices': [
               for (final slice in section.slices)
                 <String, Object?>{

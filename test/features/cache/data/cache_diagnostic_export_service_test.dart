@@ -28,6 +28,15 @@ void main() {
           label: '图片缓存',
           bytes: 1024,
           clearable: true,
+          categories: <StorageUsageCategory>[
+            StorageUsageCategory(
+              id: 'clearable',
+              label: '可清缓存',
+              bytes: 1024,
+              clearable: true,
+              protected: false,
+            ),
+          ],
           slices: <StorageUsageSlice>[
             StorageUsageSlice(
               id: 'image:thread',
@@ -51,7 +60,11 @@ void main() {
             as Map<String, dynamic>;
     expect(payload['totalBytes'], 1024);
     final sections = payload['sections'] as List<dynamic>;
-    expect((sections.single as Map<String, dynamic>)['bucket'], 'image_cache');
+    final section = sections.single as Map<String, dynamic>;
+    expect(section['bucket'], 'image_cache');
+    expect(section['slices'], isNotEmpty);
+    final categories = section['categories'] as List<dynamic>;
+    expect((categories.single as Map<String, dynamic>)['id'], 'clearable');
   });
 }
 

@@ -9,15 +9,21 @@ class ForumHtmlPreparedRenderDocument {
     required this.preparedHtml,
     required this.sequence,
     required this.attachmentIdsByUrl,
+    required this.totalImageCount,
     required this.skippedStickerCount,
     required this.skippedNonNetworkCount,
+    required this.duplicatedReadableUrlCount,
+    required this.attachmentTaggedCount,
   });
 
   final String preparedHtml;
   final ForumHtmlReadableImageSequence sequence;
   final Map<String, String> attachmentIdsByUrl;
+  final int totalImageCount;
   final int skippedStickerCount;
   final int skippedNonNetworkCount;
+  final int duplicatedReadableUrlCount;
+  final int attachmentTaggedCount;
 
   int get readableImageCount => sequence.entries.length;
 
@@ -26,8 +32,11 @@ class ForumHtmlPreparedRenderDocument {
       preparedHtml: preparedHtml ?? this.preparedHtml,
       sequence: sequence,
       attachmentIdsByUrl: attachmentIdsByUrl,
+      totalImageCount: totalImageCount,
       skippedStickerCount: skippedStickerCount,
       skippedNonNetworkCount: skippedNonNetworkCount,
+      duplicatedReadableUrlCount: duplicatedReadableUrlCount,
+      attachmentTaggedCount: attachmentTaggedCount,
     );
   }
 }

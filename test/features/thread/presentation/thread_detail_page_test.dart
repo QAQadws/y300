@@ -2595,6 +2595,22 @@ void main() {
           find.byKey(const Key('thread-post-html-first-debug-summary')),
           findsOneWidget,
         );
+        expect(
+          find.byKey(
+            const Key('thread-post-html-first-image-diagnostics-summary'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('thread-post-html-first-image-sequence-diff')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(
+            const Key('thread-post-html-first-image-failure-breakdown'),
+          ),
+          findsOneWidget,
+        );
         expect(find.text('HTML 长度'), findsOneWidget);
       },
     );

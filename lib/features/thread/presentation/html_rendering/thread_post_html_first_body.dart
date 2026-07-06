@@ -13,6 +13,12 @@ import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart'
 
 typedef ThreadPostHtmlFirstImageFallback =
     void Function(ThreadPost post, ForumHtmlImageRequest request);
+typedef ThreadPostHtmlFirstImageDiagnostics =
+    void Function(
+      ThreadPost post,
+      ForumHtmlImageRequest request,
+      ThreadHtmlImageReaderBridgeResult result,
+    );
 
 class ThreadPostHtmlFirstBody extends ConsumerWidget {
   const ThreadPostHtmlFirstBody({
@@ -25,6 +31,7 @@ class ThreadPostHtmlFirstBody extends ConsumerWidget {
     required this.onOpenPostLink,
     required this.onOpenPostImage,
     this.onImageFallback,
+    this.onImageDiagnostics,
     this.fallback,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
     this.imageReaderBridge = const ThreadHtmlImageReaderBridge(),
@@ -39,6 +46,7 @@ class ThreadPostHtmlFirstBody extends ConsumerWidget {
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
   onOpenPostImage;
   final ThreadPostHtmlFirstImageFallback? onImageFallback;
+  final ThreadPostHtmlFirstImageDiagnostics? onImageDiagnostics;
   final Widget? fallback;
   final ForumHtmlRenderPreparer renderPreparer;
   final ThreadHtmlImageReaderBridge imageReaderBridge;
@@ -98,6 +106,7 @@ class ThreadPostHtmlFirstBody extends ConsumerWidget {
       sequence: sequence,
       imageRequest: request,
     );
+    onImageDiagnostics?.call(post, request, result);
     final openRequest = result.request;
     if (openRequest == null) {
       if (!request.isSticker) {

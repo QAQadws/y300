@@ -222,8 +222,30 @@ class _StorageUsageSectionTile extends StatelessWidget {
             ),
           ],
         ),
-        if (section.slices.isNotEmpty) ...[
+        if (section.slices.isNotEmpty || section.categories.isNotEmpty) ...[
           const SizedBox(height: 4),
+          for (final category in section.categories)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Row(
+                key: Key('data-storage-image-cache-category-${category.id}'),
+                children: [
+                  Expanded(
+                    child: Text(
+                      category.label,
+                      style: textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(
+                    formatDataStorageBytes(category.bytes),
+                    style: textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
           for (final slice in section.slices.take(4))
             Padding(
               padding: const EdgeInsets.only(top: 2),

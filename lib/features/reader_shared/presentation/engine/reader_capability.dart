@@ -116,6 +116,10 @@ abstract class ReaderCapability {
   /// 阅读内容来源。
   ReaderContent get content;
 
+  /// 阅读器诊断记录器。默认 no-op，业务方可在诊断模式下覆写。
+  ContinuousImageDiagnosticRecorder get diagnosticRecorder =>
+      const NoopContinuousImageDiagnosticRecorder();
+
   /// 图片请求头构建器（鉴权/Referer）。
   ImageRequestHeaderBuilder? get imageHeaderBuilder;
 

@@ -4,17 +4,23 @@ import 'package:flutter/widgets.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
+import 'package:y300/features/thread/domain/services/thread_detail_diagnostic_recorder.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 
 class ThreadHtmlImagePreloadCoordinator {
   ThreadHtmlImagePreloadCoordinator({
     required ForumImagePrecacheService precacheService,
+    ThreadDetailDiagnosticRecorder diagnosticRecorder =
+        const NoopThreadDetailDiagnosticRecorder(),
     this.firstWindowImageLimit = 3,
     this.nearWindowImageLimit = 2,
     this.nearWindowPostLookAhead = 2,
-  }) : _precacheService = precacheService;
+  }) : _precacheService = precacheService,
+       _diagnosticRecorder = diagnosticRecorder;
 
   final ForumImagePrecacheService _precacheService;
+  final ThreadDetailDiagnosticRecorder _diagnosticRecorder;
   final int firstWindowImageLimit;
   final int nearWindowImageLimit;
   final int nearWindowPostLookAhead;
@@ -139,6 +145,7 @@ class ThreadHtmlImagePreloadCoordinator {
               if (generation != _generation) {
                 return const ForumImagePrecacheResult(success: false);
               }
+              _recordPrecacheResult(spec, result);
               return result;
             }),
       );
@@ -154,5 +161,25 @@ class ThreadHtmlImagePreloadCoordinator {
   String _scheduleKey(ForumImageLoadSpec spec) {
     final index = spec.imageIndex;
     return '${spec.ownerId ?? 'unknown'}:${spec.sourceUrl}:${index ?? '-'}';
+  }
+
+  void _recordPrecacheResult(
+    ForumImageLoadSpec spec,
+    ForumImagePrecacheResult result,
+  ) {
+    if (!_diagnosticRecorder.enabled) {
+      return;
+    }
+    _diagnosticRecorder.record(
+      type: ThreadDetailDiagnosticEventType.htmlFirstImageDiagnostics,
+      message:
+          'html-first-preload kind=${spec.kind.name} '
+          'url=${spec.sourceUrl} success=${result.success} '
+          'diskAttempted=${result.diskCacheAttempted} '
+          'diskHit=${result.fromDiskCache} '
+          'decodeAttempted=${result.decodePrecacheAttempted} '
+          'decoded=${result.decoded} '
+          'reason=${result.failureReason ?? '-'}',
+    );
   }
 }
