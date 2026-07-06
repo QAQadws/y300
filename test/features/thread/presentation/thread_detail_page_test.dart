@@ -13,6 +13,7 @@ import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
+import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/cache/domain/services/native_page_cache_invalidation_service.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
@@ -2987,6 +2988,74 @@ void main() {
         ),
       );
       expect((image.image as AssetImage).assetName, forumDefaultAvatarAsset);
+    });
+
+    testWidgets('comment avatar uses avatar cache request baseline', (
+      tester,
+    ) async {
+      final cacheService = _RecordingImageCacheService();
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            subject: '测试主题',
+            author: 'alice',
+            replies: 0,
+            views: 1,
+            currentPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+                comments: const <ThreadPostCommentEntry>[
+                  ThreadPostCommentEntry(
+                    author: 'commenter',
+                    authorId: '780',
+                    avatarUrl:
+                        'https://bbs.yamibo.com/uc_server/data/avatar/000/00/07/80_avatar_small.jpg',
+                    message: '点评内容',
+                    dateline: 'today',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        _buildTestApp(repository, imageCacheService: cacheService),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      final cachedAvatar = tester.widget<CachedLibraryImage>(
+        find.descendant(
+          of: find.byKey(const Key('thread-comment-author-avatar-780')),
+          matching: find.byType(CachedLibraryImage),
+        ),
+      );
+
+      expect(cachedAvatar.request?.role, ImageCacheRole.avatar);
+      expect(cachedAvatar.request?.ownerType, ImageCacheOwnerType.thread);
+      expect(cachedAvatar.request?.ownerId, '780');
+      expect(
+        cachedAvatar.request?.sourceUrl,
+        'https://bbs.yamibo.com/uc_server/data/avatar/000/00/07/80_avatar_small.jpg',
+      );
+      expect(
+        cacheService.requests.where(
+          (request) => request.role == ImageCacheRole.avatar,
+        ),
+        isNotEmpty,
+      );
     });
 
     testWidgets('favorites thread from app bar action', (tester) async {

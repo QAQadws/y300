@@ -7,9 +7,11 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
+import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
@@ -326,6 +328,47 @@ void main() {
     expect(cacheService.requests.single.cacheKey, image.request?.cacheKey);
   });
 
+  testWidgets('builds image load specs before resolving cache requests', (
+    tester,
+  ) async {
+    final resolver = _RecordingForumImageRequestResolver();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(
+            _RecordingImageCacheService(),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: ForumHtmlWidgetPostRenderer(
+              sourceId: 'spec-thread-image',
+              threadId: '573279',
+              imageRequestResolver: resolver,
+              html:
+                  '<img src="data/attachment/forum/page-1.jpg" '
+                  'width="640" height="480">',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(CachedLibraryImage), findsOneWidget);
+    expect(resolver.specs, hasLength(1));
+    expect(resolver.specs.single.kind, ForumImageKind.threadInline);
+    expect(resolver.specs.single.ownerId, '573279');
+    expect(resolver.specs.single.imageIndex, 0);
+    expect(resolver.specs.single.htmlWidth, 640);
+    expect(resolver.specs.single.htmlHeight, 480);
+    expect(
+      resolver.specs.single.sourceUrl,
+      'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
+    );
+  });
+
   testWidgets('renders smiley images through long-lived smiley cache', (
     tester,
   ) async {
@@ -628,6 +671,22 @@ class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
   @override
   Future<Map<String, String>> buildHeaders(String imageUrl) async {
     return const <String, String>{'Referer': 'https://bbs.yamibo.com/'};
+  }
+}
+
+class _RecordingForumImageRequestResolver implements ForumImageRequestResolver {
+  final specs = <ForumImageLoadSpec>[];
+  final _delegate = const DefaultForumImageRequestResolver();
+
+  @override
+  ImageCacheRequest? resolveCacheRequest(ForumImageLoadSpec spec) {
+    specs.add(spec);
+    return _delegate.resolveCacheRequest(spec);
+  }
+
+  @override
+  ForumImageRenderPolicy resolveRenderPolicy(ForumImageLoadSpec spec) {
+    return _delegate.resolveRenderPolicy(spec);
   }
 }
 

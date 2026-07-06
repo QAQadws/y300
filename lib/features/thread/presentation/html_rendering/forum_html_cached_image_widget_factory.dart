@@ -5,8 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
-import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 
 class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
@@ -15,12 +16,15 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
     this.imageHeaderBuilder,
     this.imageCacheOwnerId,
     this.onImageResolved,
-  });
+    ForumImageRequestResolver? imageRequestResolver,
+  }) : imageRequestResolver =
+           imageRequestResolver ?? const DefaultForumImageRequestResolver();
 
   final String threadId;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final String? imageCacheOwnerId;
   final ValueChanged<Size>? onImageResolved;
+  final ForumImageRequestResolver imageRequestResolver;
   static const double _fallbackImageAspectRatio = 0.7;
   var _nextImageIndex = 0;
 
@@ -43,14 +47,22 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
 
     final isSticker = _isForumStickerImage(resolved);
     final imageIndex = isSticker ? null : _nextImageIndex++;
-    final request = isSticker
-        ? ForumImageCacheRequests.remoteSmiley(url: resolved)
-        : ForumImageCacheRequests.threadInline(
-            tid: _cacheOwnerId(),
-            url: resolved,
-            imageIndex: imageIndex,
-          );
     final explicitSize = _explicitSize(src);
+    final request = imageRequestResolver.resolveCacheRequest(
+      ForumImageLoadSpec(
+        kind: isSticker
+            ? ForumImageKind.remoteSmiley
+            : ForumImageKind.threadInline,
+        url: uri,
+        ownerId: isSticker ? null : _cacheOwnerId(),
+        imageIndex: imageIndex,
+        htmlWidth: explicitSize?.width,
+        htmlHeight: explicitSize?.height,
+      ),
+    );
+    if (request == null) {
+      return super.buildImageWidget(tree, src);
+    }
     if (isSticker) {
       return _ForumHtmlCachedStickerImageView(
         request: request,

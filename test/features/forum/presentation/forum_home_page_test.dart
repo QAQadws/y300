@@ -16,6 +16,7 @@ import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/cache/domain/services/native_page_cache_invalidation_service.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
+import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
@@ -71,6 +72,45 @@ void main() {
         expect(find.textContaining('共1 个分组'), findsNothing);
       },
     );
+
+    testWidgets('carousel uses sticky forum head image cache request', (
+      tester,
+    ) async {
+      final cacheService = _RecordingImageCacheService();
+      final repository = _FakeForumHomeRepository(
+        () async => ApiSuccess(_loggedOutPayloadWithCarousel()),
+      );
+
+      await tester.pumpWidget(
+        _buildTestApp(repository, imageCacheService: cacheService),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      final carouselImage = tester.widget<CachedLibraryImage>(
+        find.descendant(
+          of: find.byKey(const Key('forum-home-carousel')),
+          matching: find.byType(CachedLibraryImage),
+        ),
+      );
+
+      expect(carouselImage.request?.role, ImageCacheRole.forumHeadImage);
+      expect(carouselImage.request?.ownerType, ImageCacheOwnerType.forum);
+      expect(
+        carouselImage.request?.effectiveRetentionClass,
+        ImageRetentionClass.sticky,
+      );
+      expect(
+        carouselImage.request?.sourceUrl,
+        'https://bbs.yamibo.com/banner.jpg',
+      );
+      expect(
+        cacheService.requests.where(
+          (request) => request.role == ImageCacheRole.forumHeadImage,
+        ),
+        isNotEmpty,
+      );
+    });
 
     testWidgets('renders forum list when carousel is empty', (tester) async {
       final repository = _FakeForumHomeRepository(
@@ -650,12 +690,14 @@ Widget _buildTestApp(
   List<NavigatorObserver> navigatorObservers = const <NavigatorObserver>[],
   bool isActive = true,
   DateTime Function()? nowProvider,
+  ImageCacheService? imageCacheService,
 }) {
   return ProviderScope(
     overrides: _overrides(
       repository,
       launcher: launcher,
       nowProvider: nowProvider,
+      imageCacheService: imageCacheService,
     ),
     child: MaterialApp(
       navigatorObservers: navigatorObservers,
@@ -669,13 +711,16 @@ List<riverpod_misc.Override> _overrides(
   ForumWebViewExternalLauncher? launcher,
   AuthRepository? authRepository,
   DateTime Function()? nowProvider,
+  ImageCacheService? imageCacheService,
 }) {
   return [
     forumHomeRepositoryProvider.overrideWithValue(repository),
     authRepositoryProvider.overrideWithValue(
       authRepository ?? _FakeAuthRepository(),
     ),
-    imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+    imageCacheServiceProvider.overrideWithValue(
+      imageCacheService ?? _FakeImageCacheService(),
+    ),
     imageRequestHeaderBuilderProvider.overrideWithValue(
       const _FakeImageRequestHeaderBuilder(),
     ),
@@ -1092,6 +1137,16 @@ class _FakeImageCacheService implements ImageCacheService {
 
   @override
   Future<void> pruneToLimit({required int maxBytes}) async {}
+}
+
+class _RecordingImageCacheService extends _FakeImageCacheService {
+  final requests = <ImageCacheRequest>[];
+
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    requests.add(request);
+    return super.ensureCached(request);
+  }
 }
 
 class _FakeForumWebViewExternalLauncher
