@@ -6,7 +6,6 @@ import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
-import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_rate_repository.dart';
@@ -25,6 +24,7 @@ import 'package:y300/features/thread/domain/services/thread_post_body_render_pla
 import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
+import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 
@@ -292,6 +292,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           plan: plan,
           highlighted: entry.post!.pid == widget.highlightPostPid,
           palette: palette,
+          imageHeaderBuilder: widget.imageHeaderBuilder,
           onOpenAuthorProfile: widget.onOpenAuthorProfile,
           onOpenPostActions: widget.onOpenPostActions,
         );

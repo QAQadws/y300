@@ -13,6 +13,7 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
     required this.plan,
     required this.highlighted,
     required this.palette,
+    required this.imageHeaderBuilder,
     required this.onOpenAuthorProfile,
     required this.onOpenPostActions,
   });
@@ -22,6 +23,7 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
   final ThreadPostBodyRenderPlan plan;
   final bool highlighted;
   final ThreadDetailNativePalette palette;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<ThreadPost> onOpenAuthorProfile;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
   onOpenPostActions;
@@ -55,6 +57,7 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
                   authorId: post.authorId,
                   avatarUrl: post.avatarUrl,
                   palette: palette,
+                  imageHeaderBuilder: imageHeaderBuilder,
                   onTap: post.authorId.trim().isEmpty
                       ? null
                       : () => onOpenAuthorProfile(post),
@@ -458,6 +461,7 @@ class ThreadPostCard extends StatelessWidget {
                 authorId: post.authorId,
                 avatarUrl: post.avatarUrl,
                 palette: palette,
+                imageHeaderBuilder: imageHeaderBuilder,
                 onTap: post.authorId.trim().isEmpty
                     ? null
                     : () => onOpenAuthorProfile(post),

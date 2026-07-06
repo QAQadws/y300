@@ -4,6 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/image_cache_service.dart';
+import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/auth/data/repositories/auth_repository.dart';
 import 'package:y300/features/profile/data/models/profile_blog_models.dart';
 import 'package:y300/features/profile/data/models/user_profile_models.dart';
@@ -42,6 +46,45 @@ void main() {
     expect(find.byKey(const Key('user-profile-details')), findsOneWidget);
     expect(find.text('用户组'), findsOneWidget);
     expect(find.text('百合達人'), findsOneWidget);
+  });
+
+  testWidgets('UserProfilePage avatar uses avatar cache request', (
+    tester,
+  ) async {
+    final profile = UserProfileData(
+      uid: '509957',
+      username: 'alice',
+      title: 'alice的资料',
+      avatarUrl:
+          'https://bbs.yamibo.com/uc_server/data/avatar/000/50/99/57_avatar_middle.jpg',
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          userProfileRepositoryProvider.overrideWithValue(
+            _FakeUserProfileRepository(profile),
+          ),
+          imageRequestHeaderBuilderProvider.overrideWithValue(
+            const _StaticImageHeaderBuilder(),
+          ),
+          imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
+        ],
+        child: const MaterialApp(home: UserProfilePage(uid: '509957')),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump();
+
+    final avatarImage = tester.widget<CachedLibraryImage>(
+      find.descendant(
+        of: find.byKey(const Key('user-profile-avatar')),
+        matching: find.byType(CachedLibraryImage),
+      ),
+    );
+    expect(avatarImage.request?.role, ImageCacheRole.avatar);
+    expect(avatarImage.request?.ownerType, ImageCacheOwnerType.profile);
+    expect(avatarImage.request?.ownerId, '509957');
   });
 
   testWidgets('MyProfilePage renders my actions and opens message center', (
@@ -270,6 +313,47 @@ class _FakeMyMessageRepository implements MyMessageRepository {
   Future<ApiResult<MyPrivateMessagePage>> getPrivateMessages() async {
     return ApiSuccess((await getMessageCenter()).dataOrNull!.privateMessages);
   }
+}
+
+class _NoopImageCacheService implements ImageCacheService {
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    return CachedImageResult.failed;
+  }
+
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async => null;
+
+  @override
+  Future<CachedImageResult> copyProtectedLocalFile(
+    ImageCacheLocalCopyRequest request,
+  ) async {
+    return CachedImageResult.failed;
+  }
+
+  @override
+  Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
+
+  @override
+  Future<void> clearUnprotected() async {}
+
+  @override
+  Future<int> clearUnprotectedByRoles({
+    required List<ImageCacheRole> roles,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<void> pruneToLimit({required int maxBytes}) async {}
 }
 
 class _FakeAuthRepository implements AuthRepository {

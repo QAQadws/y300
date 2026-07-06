@@ -7,10 +7,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/theme/app_theme_tokens.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
-import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dart';
+import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 import 'package:y300/features/forum/data/services/forum_home_carousel_image_probe.dart';
+import 'package:y300/features/forum/domain/services/forum_chrome_image_adapter.dart';
 
 class ForumHomeCarousel extends ConsumerStatefulWidget {
   const ForumHomeCarousel({
@@ -90,6 +91,7 @@ class _ForumHomeCarouselState extends ConsumerState<ForumHomeCarousel> {
             ForumHomeCarouselImageProbe.fallbackAspectRatio,
         controller: _carouselController,
         headerBuilder: widget.headerBuilder,
+        imageRequestResolver: ref.watch(forumImageRequestResolverProvider),
         items: _displayedItems,
         onOpen: widget.onOpen,
         palette: palette,
@@ -116,27 +118,32 @@ class _ForumHomeCarouselState extends ConsumerState<ForumHomeCarousel> {
   }
 
   Future<void> _resolveImage(ForumHomeCarouselItem item) async {
-    final request = ForumImageCacheRequests.forumHeadImage(url: item.imageUrl);
-    final cacheService = ref.read(imageCacheServiceProvider);
-    try {
-      await cacheService.ensureCached(request);
-    } catch (_) {
-      // Carousel prewarm only reduces visible swaps; failure should silently
-      // fall back to normal image resolution when the item is eventually shown.
-    }
-    if (!mounted) {
+    final spec = const ForumChromeImageAdapter().carouselImage(item.imageUrl);
+    if (spec == null) {
       return;
     }
-    final headers = await widget.headerBuilder.buildHeaders(item.imageUrl);
-    if (!mounted) {
-      return;
-    }
-    final provider = NetworkImage(item.imageUrl, headers: headers);
     try {
-      await precacheImage(provider, context);
+      await ref
+          .read(forumImagePrecacheServiceProvider)
+          .precacheDecoded(
+            context: context,
+            spec: spec,
+            expectedDisplaySize: _carouselDisplaySize(context),
+          );
     } catch (_) {
       return;
     }
+  }
+
+  Size _carouselDisplaySize(BuildContext context) {
+    final mediaWidth = MediaQuery.sizeOf(context).width;
+    final width = (mediaWidth - 20).clamp(1, double.infinity).toDouble();
+    final ratio = _displayedItems.isNotEmpty
+        ? _displayedItems.first.aspectRatio
+        : null;
+    final aspectRatio =
+        ratio ?? ForumHomeCarouselImageProbe.fallbackAspectRatio;
+    return Size(width, width / aspectRatio);
   }
 
   void _handlePageChanged(int index, CarouselPageChangedReason reason) {
@@ -194,6 +201,7 @@ class _ForumHomeCarouselBody extends StatelessWidget {
     required this.aspectRatio,
     required this.controller,
     required this.headerBuilder,
+    required this.imageRequestResolver,
     required this.items,
     required this.onOpen,
     required this.palette,
@@ -203,6 +211,7 @@ class _ForumHomeCarouselBody extends StatelessWidget {
   final double aspectRatio;
   final CarouselSliderController controller;
   final ImageRequestHeaderBuilder headerBuilder;
+  final ForumImageRequestResolver imageRequestResolver;
   final List<ForumHomeCarouselItem> items;
   final ValueChanged<ForumHomeCarouselItem> onOpen;
   final ForumHomeNativePalette palette;
@@ -238,6 +247,9 @@ class _ForumHomeCarouselBody extends StatelessWidget {
               ),
               itemBuilder: (context, index, realIndex) {
                 final item = items[index];
+                final spec = const ForumChromeImageAdapter().carouselImage(
+                  item.imageUrl,
+                );
                 return SizedBox.expand(
                   child: Material(
                     color: palette.carouselPlaceholder,
@@ -245,9 +257,9 @@ class _ForumHomeCarouselBody extends StatelessWidget {
                       key: Key('forum-home-carousel-item-$index'),
                       onTap: () => onOpen(item),
                       child: CachedLibraryImage(
-                        request: ForumImageCacheRequests.forumHeadImage(
-                          url: item.imageUrl,
-                        ),
+                        request: spec == null
+                            ? null
+                            : imageRequestResolver.resolveCacheRequest(spec),
                         fit: BoxFit.contain,
                         width: double.infinity,
                         height: double.infinity,

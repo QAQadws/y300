@@ -10,6 +10,7 @@ import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
+import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/forum/data/repositories/forum_display_repository.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
@@ -297,6 +298,53 @@ void main() {
         ),
         findsNothing,
       );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('forum-thread-summary-avatar-100')),
+          matching: find.byType(CachedLibraryImage),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('thread summary avatar uses avatar cache request', (
+      tester,
+    ) async {
+      final repository = _FakeForumDisplayRepository((_, page, query) async {
+        return ApiSuccess(
+          _displayData(
+            page: 1,
+            total: 1,
+            threads: [
+              ForumThreadSummary(
+                tid: '100',
+                uid: '42',
+                subject: '帖子A',
+                author: 'alice',
+                replies: 1,
+                views: 5,
+                dateline: 'today',
+                avatarUrl:
+                    'https://bbs.yamibo.com/uc_server/data/avatar/000/00/00/42_avatar_middle.jpg',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pump();
+      await tester.pump();
+
+      final avatarImage = tester.widget<CachedLibraryImage>(
+        find.descendant(
+          of: find.byKey(const Key('forum-thread-summary-avatar-100')),
+          matching: find.byType(CachedLibraryImage),
+        ),
+      );
+      expect(avatarImage.request?.role, ImageCacheRole.avatar);
+      expect(avatarImage.request?.ownerType, ImageCacheOwnerType.forumDisplay);
+      expect(avatarImage.request?.ownerId, '42');
     });
 
     testWidgets('loads next page when tapping load more', (tester) async {
@@ -781,6 +829,18 @@ void main() {
       await tester.pump(const Duration(milliseconds: 120));
 
       expect(find.byKey(const Key('forum-display-head-image')), findsOneWidget);
+      final headImage = tester.widget<CachedLibraryImage>(
+        find.descendant(
+          of: find.byKey(const Key('forum-display-head-image')),
+          matching: find.byType(CachedLibraryImage),
+        ),
+      );
+      expect(headImage.request?.role, ImageCacheRole.forumHeadImage);
+      expect(headImage.request?.ownerId, 'forum:2');
+      expect(
+        headImage.request?.effectiveRetentionClass,
+        ImageRetentionClass.sticky,
+      );
       expect(find.text('全部'), findsOneWidget);
       expect(find.text('最新'), findsOneWidget);
       expect(

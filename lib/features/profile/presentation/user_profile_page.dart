@@ -13,6 +13,8 @@ import 'package:y300/features/profile/data/repositories/user_profile_repository.
 import 'package:y300/features/profile/presentation/my_message_center_page.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 
 final userProfileProvider = FutureProvider.autoDispose
     .family<UserProfileData, String>((ref, uid) async {
@@ -269,17 +271,16 @@ class _UserProfileHero extends StatelessWidget {
               CircleAvatar(
                 radius: 36,
                 backgroundColor: palette.card,
-                child: ClipOval(
-                  child: avatarUrl == null || avatarUrl.isEmpty
-                      ? Icon(Icons.person, color: palette.accent, size: 36)
-                      : Image.network(
-                          avatarUrl,
-                          width: 68,
-                          height: 68,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Icon(Icons.person, color: palette.accent),
-                        ),
+                child: ForumCachedAvatar(
+                  key: const Key('user-profile-avatar'),
+                  imageUrl: avatarUrl,
+                  ownerId: profile.uid.trim().isEmpty
+                      ? profile.username
+                      : profile.uid,
+                  ownerType: ImageCacheOwnerType.profile,
+                  size: 68,
+                  placeholder: Icon(Icons.person, color: palette.accent),
+                  headerBuilder: imageHeaderBuilder,
                 ),
               ),
               const SizedBox(height: 12),

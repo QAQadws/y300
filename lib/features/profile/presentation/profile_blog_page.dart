@@ -6,11 +6,11 @@ import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
-import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/profile/data/models/profile_blog_models.dart';
 import 'package:y300/features/profile/data/repositories/profile_blog_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
+import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 
 @immutable
 class ProfileBlogListRequest {
@@ -400,6 +400,7 @@ class _ProfileBlogListCard extends StatelessWidget {
                 children: [
                   _ProfileBlogAvatar(
                     imageUrl: item.avatarUrl,
+                    ownerId: item.author,
                     radius: 17,
                     palette: palette,
                     imageHeaderBuilder: imageHeaderBuilder,
@@ -607,6 +608,7 @@ class _BlogDetailCard extends StatelessWidget {
             children: [
               _ProfileBlogAvatar(
                 imageUrl: data.avatarUrl,
+                ownerId: data.author,
                 radius: 17,
                 palette: palette,
                 imageHeaderBuilder: imageHeaderBuilder,
@@ -680,6 +682,7 @@ class _CommentCard extends StatelessWidget {
             children: [
               _ProfileBlogAvatar(
                 imageUrl: comment.avatarUrl,
+                ownerId: comment.author,
                 radius: 15,
                 palette: palette,
                 imageHeaderBuilder: imageHeaderBuilder,
@@ -723,12 +726,14 @@ class _CommentCard extends StatelessWidget {
 class _ProfileBlogAvatar extends StatelessWidget {
   const _ProfileBlogAvatar({
     required this.imageUrl,
+    required this.ownerId,
     required this.radius,
     required this.palette,
     required this.imageHeaderBuilder,
   });
 
   final String? imageUrl;
+  final String ownerId;
   final double radius;
   final _ProfileBlogPalette palette;
   final ImageRequestHeaderBuilder imageHeaderBuilder;
@@ -745,21 +750,14 @@ class _ProfileBlogAvatar extends StatelessWidget {
       width: size,
       height: size,
       child: ClipOval(
-        child: url == null || url.isEmpty
-            ? placeholder
-            : CachedLibraryImage(
-                request: ForumImageCacheRequests.avatar(
-                  ownerId: url,
-                  ownerType: ImageCacheOwnerType.profile,
-                  url: url,
-                ),
-                fit: BoxFit.cover,
-                width: size,
-                height: size,
-                placeholder: placeholder,
-                errorPlaceholder: placeholder,
-                headerBuilder: imageHeaderBuilder,
-              ),
+        child: ForumCachedAvatar(
+          imageUrl: url,
+          ownerId: ownerId.trim().isEmpty ? (url ?? 'unknown') : ownerId,
+          ownerType: ImageCacheOwnerType.profile,
+          size: size,
+          placeholder: placeholder,
+          headerBuilder: imageHeaderBuilder,
+        ),
       ),
     );
   }

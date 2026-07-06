@@ -768,7 +768,7 @@ void main() {
       );
     });
 
-    testWidgets('normal author avatar uses direct network image', (
+    testWidgets('normal author avatar uses avatar cache request', (
       tester,
     ) async {
       final repository = _FakeThreadRepository((tid, page) async {
@@ -793,23 +793,21 @@ void main() {
       });
 
       await tester.pumpWidget(_buildTestApp(repository));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump();
 
-      final avatarImage = tester.widget<Image>(
-        find
-            .descendant(
-              of: find.byKey(const Key('thread-author-avatar-p1')),
-              matching: find.byType(Image),
-            )
-            .first,
-      );
-      expect(
-        avatarImage.image,
-        isA<NetworkImage>().having(
-          (provider) => provider.url,
-          'url',
-          'https://bbs.yamibo.com/uc_server/data/avatar/000/00/00/01_avatar_small.jpg',
+      final avatarImage = tester.widget<CachedLibraryImage>(
+        find.descendant(
+          of: find.byKey(const Key('thread-author-avatar-p1')),
+          matching: find.byType(CachedLibraryImage),
         ),
+      );
+      expect(avatarImage.request?.role, ImageCacheRole.avatar);
+      expect(avatarImage.request?.ownerType, ImageCacheOwnerType.thread);
+      expect(avatarImage.request?.ownerId, '1');
+      expect(
+        avatarImage.request?.sourceUrl,
+        'https://bbs.yamibo.com/uc_server/data/avatar/000/00/00/01_avatar_small.jpg',
       );
     });
 

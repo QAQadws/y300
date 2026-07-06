@@ -365,19 +365,14 @@ class _ThreadCommentAvatar extends StatelessWidget {
         height: size,
         child: isForumDefaultOrUnsupportedAvatarUrl(imageUrl)
             ? fallback
-            : CachedLibraryImage(
-                request: ForumImageCacheRequests.avatar(
-                  ownerId: comment.authorId?.trim().isNotEmpty == true
-                      ? comment.authorId!
-                      : comment.author,
-                  ownerType: ImageCacheOwnerType.thread,
-                  url: imageUrl!,
-                ),
-                fit: BoxFit.cover,
-                width: size,
-                height: size,
+            : ForumCachedAvatar(
+                imageUrl: imageUrl,
+                ownerId: comment.authorId?.trim().isNotEmpty == true
+                    ? comment.authorId!
+                    : comment.author,
+                ownerType: ImageCacheOwnerType.thread,
+                size: size,
                 placeholder: fallback,
-                errorPlaceholder: fallback,
                 headerBuilder: imageHeaderBuilder,
               ),
       ),

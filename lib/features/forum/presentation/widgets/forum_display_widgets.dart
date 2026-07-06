@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
+import 'package:y300/features/forum/domain/services/forum_chrome_image_adapter.dart';
 import 'package:y300/features/forum/presentation/forum_display_state.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
+import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 
@@ -68,6 +75,7 @@ class _ForumDisplayContentState extends State<ForumDisplayContent> {
             SliverToBoxAdapter(
               child: _ForumHeadImage(
                 key: widget.headImageKey,
+                fid: state.fid,
                 url: state.headImageUrl!.trim(),
                 label: state.title,
                 palette: palette,
@@ -421,42 +429,63 @@ class ForumDisplayErrorView extends StatelessWidget {
   }
 }
 
-class _ForumHeadImage extends StatelessWidget {
+class _ForumHeadImage extends ConsumerWidget {
   const _ForumHeadImage({
     super.key,
+    required this.fid,
     required this.url,
     required this.label,
     required this.palette,
   });
 
+  final String fid;
   final String url;
   final String label;
   final ForumDisplayThemePalette palette;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final spec = const ForumChromeImageAdapter().headImage(
+      fid: fid,
+      imageUrl: url,
+    );
+    final request = spec == null
+        ? null
+        : ref
+              .watch(forumImageRequestResolverProvider)
+              .resolveCacheRequest(spec);
     return ColoredBox(
       key: const Key('forum-display-head-image'),
       color: palette.panel,
-      child: Image.network(
-        url,
+      child: CachedLibraryImage(
+        request: request,
         width: double.infinity,
+        placeholder: _ForumHeadImageErrorPlaceholder(palette: palette),
+        errorPlaceholder: _ForumHeadImageErrorPlaceholder(palette: palette),
+        headerBuilder: ref.watch(imageRequestHeaderBuilderProvider),
         fit: BoxFit.fitWidth,
-        semanticLabel: label.isEmpty ? '版块顶部图' : '$label 版块顶部图',
-        errorBuilder: (context, error, stackTrace) {
-          return SizedBox(
-            height: 72,
-            child: ColoredBox(
-              color: palette.disabled,
-              child: Center(
-                child: Icon(
-                  Icons.image_not_supported_outlined,
-                  color: palette.softText,
-                ),
-              ),
-            ),
-          );
-        },
+      ),
+    );
+  }
+}
+
+class _ForumHeadImageErrorPlaceholder extends StatelessWidget {
+  const _ForumHeadImageErrorPlaceholder({required this.palette});
+
+  final ForumDisplayThemePalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 72,
+      child: ColoredBox(
+        color: palette.disabled,
+        child: Center(
+          child: Icon(
+            Icons.image_not_supported_outlined,
+            color: palette.softText,
+          ),
+        ),
       ),
     );
   }
@@ -1295,7 +1324,10 @@ class _ThreadCardState extends State<_ThreadCard> {
                       children: [
                         _Avatar(
                           url: thread.avatarUrl,
-                          author: thread.author,
+                          ownerId: thread.uid.trim().isNotEmpty
+                              ? thread.uid
+                              : thread.author,
+                          threadId: thread.tid,
                           palette: palette,
                         ),
                         const SizedBox(width: 10),
@@ -1507,12 +1539,14 @@ class _ThreadTagChip extends StatelessWidget {
 class _Avatar extends StatelessWidget {
   const _Avatar({
     required this.url,
-    required this.author,
+    required this.ownerId,
+    required this.threadId,
     required this.palette,
   });
 
   final String? url;
-  final String author;
+  final String ownerId;
+  final String threadId;
   final ForumDisplayThemePalette palette;
 
   @override
@@ -1520,21 +1554,19 @@ class _Avatar extends StatelessWidget {
     final imageUrl = url?.trim();
     final useDefaultAvatar = isForumDefaultOrUnsupportedAvatarUrl(imageUrl);
     return CircleAvatar(
+      key: Key('forum-thread-summary-avatar-$threadId'),
       radius: 18,
       backgroundColor: palette.avatarBackground,
       foregroundColor: palette.avatarForeground,
-      child: useDefaultAvatar
-          ? ClipOval(child: forumDefaultAvatarImage(width: 36, height: 36))
-          : ClipOval(
-              child: Image.network(
-                imageUrl!,
-                width: 36,
-                height: 36,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    forumDefaultAvatarImage(width: 36, height: 36),
-              ),
-            ),
+      child: ForumCachedAvatar(
+        imageUrl: imageUrl,
+        ownerId: ownerId,
+        ownerType: ImageCacheOwnerType.forumDisplay,
+        size: 36,
+        placeholder: useDefaultAvatar
+            ? forumDefaultAvatarImage(width: 36, height: 36)
+            : forumDefaultAvatarImage(width: 36, height: 36),
+      ),
     );
   }
 }

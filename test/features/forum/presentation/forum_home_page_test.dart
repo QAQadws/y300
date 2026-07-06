@@ -12,7 +12,9 @@ import 'package:y300/features/auth/data/repositories/auth_repository.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
+import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/cache/domain/services/native_page_cache_invalidation_service.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
@@ -109,6 +111,65 @@ void main() {
           (request) => request.role == ImageCacheRole.forumHeadImage,
         ),
         isNotEmpty,
+      );
+    });
+
+    testWidgets('carousel pending item prewarm uses forum image precache', (
+      tester,
+    ) async {
+      final precacheService = _RecordingForumImagePrecacheService();
+      const oldItems = [
+        ForumHomeCarouselItem(
+          imageUrl: 'https://bbs.yamibo.com/old-banner.jpg',
+          targetUrl: 'https://bbs.yamibo.com/thread-1-1-1.html',
+        ),
+      ];
+      const newItems = [
+        ForumHomeCarouselItem(
+          imageUrl: 'https://bbs.yamibo.com/new-banner.jpg',
+          targetUrl: 'https://bbs.yamibo.com/thread-2-1-1.html',
+        ),
+      ];
+
+      Widget build(List<ForumHomeCarouselItem> items) {
+        return ProviderScope(
+          overrides: [
+            imageCacheServiceProvider.overrideWithValue(
+              _FakeImageCacheService(),
+            ),
+            imageRequestHeaderBuilderProvider.overrideWithValue(
+              const _FakeImageRequestHeaderBuilder(),
+            ),
+            forumImagePrecacheServiceProvider.overrideWithValue(
+              precacheService,
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: ForumHomeCarousel(
+                items: items,
+                headerBuilder: const _FakeImageRequestHeaderBuilder(),
+                onOpen: (_) {},
+              ),
+            ),
+          ),
+        );
+      }
+
+      await tester.pumpWidget(build(oldItems));
+      await tester.pump();
+      await tester.pumpWidget(build(newItems));
+      await tester.pump();
+
+      expect(precacheService.decodedSpecs, hasLength(1));
+      expect(
+        precacheService.decodedSpecs.single.kind,
+        ForumImageKind.forumHeadImage,
+      );
+      expect(precacheService.decodedSpecs.single.ownerId, 'home');
+      expect(
+        precacheService.decodedSpecs.single.sourceUrl,
+        'https://bbs.yamibo.com/new-banner.jpg',
       );
     });
 
@@ -691,6 +752,7 @@ Widget _buildTestApp(
   bool isActive = true,
   DateTime Function()? nowProvider,
   ImageCacheService? imageCacheService,
+  ForumImagePrecacheService? forumImagePrecacheService,
 }) {
   return ProviderScope(
     overrides: _overrides(
@@ -698,6 +760,7 @@ Widget _buildTestApp(
       launcher: launcher,
       nowProvider: nowProvider,
       imageCacheService: imageCacheService,
+      forumImagePrecacheService: forumImagePrecacheService,
     ),
     child: MaterialApp(
       navigatorObservers: navigatorObservers,
@@ -712,6 +775,7 @@ List<riverpod_misc.Override> _overrides(
   AuthRepository? authRepository,
   DateTime Function()? nowProvider,
   ImageCacheService? imageCacheService,
+  ForumImagePrecacheService? forumImagePrecacheService,
 }) {
   return [
     forumHomeRepositoryProvider.overrideWithValue(repository),
@@ -720,6 +784,9 @@ List<riverpod_misc.Override> _overrides(
     ),
     imageCacheServiceProvider.overrideWithValue(
       imageCacheService ?? _FakeImageCacheService(),
+    ),
+    forumImagePrecacheServiceProvider.overrideWithValue(
+      forumImagePrecacheService ?? _FakeForumImagePrecacheService(),
     ),
     imageRequestHeaderBuilderProvider.overrideWithValue(
       const _FakeImageRequestHeaderBuilder(),
@@ -1146,6 +1213,43 @@ class _RecordingImageCacheService extends _FakeImageCacheService {
   Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
     requests.add(request);
     return super.ensureCached(request);
+  }
+}
+
+class _FakeForumImagePrecacheService implements ForumImagePrecacheService {
+  @override
+  Future<ForumImagePrecacheResult> ensureDiskCached(
+    ForumImageLoadSpec spec,
+  ) async {
+    return const ForumImagePrecacheResult(success: true);
+  }
+
+  @override
+  Future<ForumImagePrecacheResult> precacheDecoded({
+    required BuildContext context,
+    required ForumImageLoadSpec spec,
+    Size? expectedDisplaySize,
+  }) async {
+    return const ForumImagePrecacheResult(success: true, decoded: true);
+  }
+}
+
+class _RecordingForumImagePrecacheService
+    extends _FakeForumImagePrecacheService {
+  final decodedSpecs = <ForumImageLoadSpec>[];
+
+  @override
+  Future<ForumImagePrecacheResult> precacheDecoded({
+    required BuildContext context,
+    required ForumImageLoadSpec spec,
+    Size? expectedDisplaySize,
+  }) async {
+    decodedSpecs.add(spec);
+    return super.precacheDecoded(
+      context: context,
+      spec: spec,
+      expectedDisplaySize: expectedDisplaySize,
+    );
   }
 }
 

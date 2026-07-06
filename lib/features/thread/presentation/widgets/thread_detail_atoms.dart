@@ -11,6 +11,7 @@ class ThreadAuthorAvatar extends StatelessWidget {
     required this.authorId,
     required this.avatarUrl,
     required this.palette,
+    this.imageHeaderBuilder,
     this.onTap,
   });
 
@@ -18,12 +19,12 @@ class ThreadAuthorAvatar extends StatelessWidget {
   final String authorId;
   final String? avatarUrl;
   final ThreadDetailNativePalette palette;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final imageUrl = avatarUrl?.trim();
-    final useDefaultAvatar = isForumDefaultOrUnsupportedAvatarUrl(imageUrl);
     final placeholder = ColoredBox(
       color: palette.avatarBackground,
       child: Center(
@@ -38,21 +39,22 @@ class ThreadAuthorAvatar extends StatelessWidget {
     );
     final avatar = ClipOval(
       child: SizedBox(
+        key: Key('thread-author-avatar-${_avatarOwnerId()}'),
         width: 34,
         height: 34,
-        child: useDefaultAvatar
-            ? ColoredBox(
-                color: palette.avatarBackground,
-                child: forumDefaultAvatarImage(width: 34, height: 34),
-              )
-            : Image.network(
-                imageUrl!,
-                fit: BoxFit.cover,
-                width: 34,
-                height: 34,
-                gaplessPlayback: true,
-                errorBuilder: (context, error, stackTrace) => placeholder,
-              ),
+        child: ForumCachedAvatar(
+          imageUrl: imageUrl,
+          ownerId: _avatarOwnerId(),
+          ownerType: ImageCacheOwnerType.thread,
+          size: 34,
+          headerBuilder: imageHeaderBuilder,
+          placeholder: isForumDefaultOrUnsupportedAvatarUrl(imageUrl)
+              ? ColoredBox(
+                  color: palette.avatarBackground,
+                  child: forumDefaultAvatarImage(width: 34, height: 34),
+                )
+              : placeholder,
+        ),
       ),
     );
     if (onTap == null) {
@@ -63,6 +65,15 @@ class ThreadAuthorAvatar extends StatelessWidget {
       onTap: onTap,
       child: avatar,
     );
+  }
+
+  String _avatarOwnerId() {
+    final id = authorId.trim();
+    if (id.isNotEmpty) {
+      return id;
+    }
+    final name = author.trim();
+    return name.isEmpty ? 'unknown' : name;
   }
 }
 
@@ -137,7 +148,6 @@ class ThreadPill extends StatelessWidget {
     );
   }
 }
-
 
 BoxDecoration _cardDecoration(ThreadDetailNativePalette palette) {
   return BoxDecoration(
