@@ -15,6 +15,7 @@ import 'package:y300/features/cache/domain/services/forum_image_request_resolver
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/widgets/forum_collapse_block.dart';
@@ -277,6 +278,62 @@ void main() {
     expect(tappedImage?.height, 480);
     expect(tappedImage?.isSticker, isFalse);
     expect(tappedImage?.attachmentId, '286401');
+  });
+
+  testWidgets('cached thread image taps include readable sequence metadata', (
+    tester,
+  ) async {
+    ForumHtmlImageRequest? tappedImage;
+    final prepared = const DefaultForumHtmlRenderPreparer().prepare(
+      html:
+          '<img id="aimg_286401" '
+          'src="data/attachment/forum/month_1110/pic.jpg" '
+          'alt="预览图" title="图片标题" width="640" height="480">',
+      preferences: ForumHtmlReaderPreferences.defaults(),
+      sourceId: 'p1',
+      threadId: '573279',
+      imageCacheOwnerId: '573279',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(
+            _RecordingImageCacheService(),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: ForumHtmlWidgetPostRenderer(
+              sourceId: 'p1',
+              threadId: '573279',
+              preparedDocument: prepared,
+              html: prepared.preparedHtml,
+              callbacks: ForumHtmlRenderCallbacks(
+                onTapImage: (request) => tappedImage = request,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(
+      find.byKey(const Key('thread-post-html-first-readable-image-p1-0')),
+    );
+
+    expect(tappedImage?.readableIndex, 0);
+    expect(tappedImage?.attachmentId, '286401');
+    expect(tappedImage?.kind, ForumImageKind.threadInline);
+    expect(
+      tappedImage?.cacheKey,
+      ForumImageCacheRequests.threadInline(
+        tid: '573279',
+        url: 'https://bbs.yamibo.com/data/attachment/forum/month_1110/pic.jpg',
+        imageIndex: 0,
+      ).cacheKey,
+    );
   });
 
   testWidgets('renders thread images through project cache pipeline', (

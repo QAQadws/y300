@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 
 @immutable
 class ForumHtmlRenderCallbacks {
@@ -20,6 +21,9 @@ class ForumHtmlImageRequest {
     this.height,
     this.isSticker = false,
     this.attachmentId,
+    this.readableIndex,
+    this.cacheKey,
+    this.kind,
   });
 
   final String url;
@@ -29,4 +33,7 @@ class ForumHtmlImageRequest {
   final double? height;
   final bool isSticker;
   final String? attachmentId;
+  final int? readableIndex;
+  final String? cacheKey;
+  final ForumImageKind? kind;
 }

@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/image_request_headers.dart';
-import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
-import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
-import 'package:y300/features/thread/presentation/services/thread_image_reader_continuous_image_adapter.dart';
+import 'package:y300/features/thread/presentation/html_rendering/thread_html_image_reader_bridge.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 
 typedef ThreadPostHtmlFirstImageFallback =
@@ -27,6 +26,8 @@ class ThreadPostHtmlFirstBody extends ConsumerWidget {
     required this.onOpenPostImage,
     this.onImageFallback,
     this.fallback,
+    this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
+    this.imageReaderBridge = const ThreadHtmlImageReaderBridge(),
   });
 
   final ThreadPost post;
@@ -39,6 +40,8 @@ class ThreadPostHtmlFirstBody extends ConsumerWidget {
   onOpenPostImage;
   final ThreadPostHtmlFirstImageFallback? onImageFallback;
   final Widget? fallback;
+  final ForumHtmlRenderPreparer renderPreparer;
+  final ThreadHtmlImageReaderBridge imageReaderBridge;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -50,11 +53,20 @@ class ThreadPostHtmlFirstBody extends ConsumerWidget {
         ref.watch(forumHtmlReaderPreferencesControllerProvider).value ??
         ForumHtmlReaderPreferences.defaults();
     try {
+      final sourceId = post.pid.trim().isEmpty ? 'post' : post.pid.trim();
+      final preparedDocument = renderPreparer.prepare(
+        html: html,
+        preferences: preferences,
+        sourceId: sourceId,
+        threadId: threadId,
+        imageCacheOwnerId: threadId,
+      );
       return KeyedSubtree(
         key: Key('thread-post-html-first-body-${post.pid}'),
         child: ForumHtmlWidgetPostRenderer(
           html: html,
-          sourceId: 'thread-$threadId-post-${post.pid}',
+          preparedDocument: preparedDocument,
+          sourceId: sourceId,
           threadId: threadId,
           imageHeaderBuilder: imageHeaderBuilder,
           imageCacheOwnerId: threadId,
@@ -64,7 +76,8 @@ class ThreadPostHtmlFirstBody extends ConsumerWidget {
               onOpenPostLink(url);
               return true;
             },
-            onTapImage: _handleTapImage,
+            onTapImage: (request) =>
+                _handleTapImage(request, preparedDocument.sequence),
           ),
         ),
       );
@@ -73,111 +86,30 @@ class ThreadPostHtmlFirstBody extends ConsumerWidget {
     }
   }
 
-  void _handleTapImage(ForumHtmlImageRequest request) {
-    if (request.isSticker) {
+  void _handleTapImage(
+    ForumHtmlImageRequest request,
+    ForumHtmlReadableImageSequence sequence,
+  ) {
+    final result = imageReaderBridge.buildOpenRequest(
+      post: post,
+      threadId: threadId,
+      imageReferer: imageReferer,
+      legacyPlan: plan,
+      sequence: sequence,
+      imageRequest: request,
+    );
+    final openRequest = result.request;
+    if (openRequest == null) {
+      if (!request.isSticker) {
+        onImageFallback?.call(post, request);
+      }
       return;
     }
-    final images = plan.images;
-    if (images.isEmpty) {
-      onImageFallback?.call(post, request);
-      return;
-    }
-    final resolved = _matchImage(request, images);
-    if (resolved == null) {
-      onImageFallback?.call(post, request);
-      return;
-    }
-    final initialIndex = images.indexOf(resolved);
     final imageOpenHandler = onOpenPostImage;
     if (imageOpenHandler == null) {
       onImageFallback?.call(post, request);
       return;
     }
-    imageOpenHandler(
-      post,
-      ThreadPostImageOpenRequest(
-        document: plan.document,
-        images: images,
-        image: resolved,
-        initialIndex: initialIndex < 0 ? resolved.index : initialIndex,
-        readerRequest: _readerRequest(
-          images: images,
-          initialIndex: initialIndex < 0 ? resolved.index : initialIndex,
-        ),
-      ),
-    );
-  }
-
-  ThreadPostImageBlock? _matchImage(
-    ForumHtmlImageRequest request,
-    List<ThreadPostImageBlock> images,
-  ) {
-    final attachmentId = request.attachmentId?.trim();
-    if (attachmentId != null && attachmentId.isNotEmpty) {
-      for (final image in images) {
-        if (image.aid?.trim() == attachmentId) {
-          return image;
-        }
-      }
-    }
-    final requestUrl = _normalizeUrlForMatch(request.url);
-    for (final image in images) {
-      if (_normalizeUrlForMatch(image.url) == requestUrl ||
-          _normalizeUrlForMatch(image.rawUrl) == requestUrl) {
-        return image;
-      }
-    }
-    return null;
-  }
-
-  ThreadImageOpenRequest _readerRequest({
-    required List<ThreadPostImageBlock> images,
-    required int initialIndex,
-  }) {
-    final entries = images
-        .map((image) {
-          return ThreadPostImageEntry(
-            url: image.url,
-            rawUrl: image.rawUrl,
-            indexInPost: image.index,
-            cacheKey: ForumImageCacheRequests.threadInline(
-              tid: threadId,
-              url: image.url,
-              imageIndex: image.index,
-            ).cacheKey,
-            aid: image.aid,
-            layoutHint: plan.resourceLayoutHints.blockImage(image),
-          );
-        })
-        .toList(growable: false);
-    final request = ThreadImageOpenRequest(
-      tid: threadId,
-      pid: post.pid,
-      postNumber: post.number,
-      referer: imageReferer,
-      group: ThreadPostImageGroup(
-        tid: threadId,
-        pid: post.pid,
-        postNumber: post.number,
-        entries: entries,
-      ),
-      initialIndex: initialIndex,
-    );
-    return ThreadImageOpenRequest(
-      tid: request.tid,
-      pid: request.pid,
-      postNumber: request.postNumber,
-      referer: request.referer,
-      group: request.group,
-      initialIndex: request.initialIndex,
-      continuousImages: const ThreadImageReaderContinuousImageAdapter()
-          .mapRequest(request),
-    );
-  }
-
-  String _normalizeUrlForMatch(String value) {
-    final trimmed = value.trim();
-    final resolved = ForumHtmlWidgetPostRenderer.forumBaseUri.resolve(trimmed);
-    return resolved.removeFragment().toString();
+    imageOpenHandler(post, openRequest);
   }
 }

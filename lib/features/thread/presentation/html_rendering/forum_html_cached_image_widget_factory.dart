@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
+import 'package:html/dom.dart' as html_dom;
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
@@ -12,6 +13,8 @@ import 'package:y300/features/cache/domain/services/forum_image_dimension_index.
 import 'package:y300/features/cache/domain/services/forum_image_layout_hint_resolver.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 
 class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
   ForumHtmlCachedImageWidgetFactory({
@@ -19,6 +22,8 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
     this.imageHeaderBuilder,
     this.imageCacheOwnerId,
     this.onImageResolved,
+    this.onTapImageRequest,
+    this.readableImageKeyPrefix,
     ForumImageRequestResolver? imageRequestResolver,
     this.imageDimensionIndex,
     ForumImageLayoutHintResolver? layoutHintResolver,
@@ -31,6 +36,8 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final String? imageCacheOwnerId;
   final ValueChanged<Size>? onImageResolved;
+  final void Function(ForumHtmlImageRequest request)? onTapImageRequest;
+  final String? readableImageKeyPrefix;
   final ForumImageRequestResolver imageRequestResolver;
   final ForumImageDimensionIndex? imageDimensionIndex;
   final ForumImageLayoutHintResolver layoutHintResolver;
@@ -54,7 +61,8 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
     }
 
     final isSticker = _isForumStickerImage(resolved);
-    final imageIndex = isSticker ? null : _nextImageIndex++;
+    final readableIndex = _readableIndex(tree);
+    final imageIndex = isSticker ? null : readableIndex ?? _nextImageIndex++;
     final explicitSize = _explicitSize(src);
     final spec = ForumImageLoadSpec(
       kind: isSticker
@@ -71,7 +79,27 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
       return super.buildImageWidget(tree, src);
     }
     if (isSticker) {
-      return _ForumHtmlCachedStickerImageView(
+      return _wrapTap(
+        _ForumHtmlCachedStickerImageView(
+          spec: spec,
+          request: request,
+          imageHeaderBuilder: imageHeaderBuilder,
+          onImageResolved: onImageResolved,
+          initialHint: layoutHintResolver.resolve(spec: spec),
+          dimensionIndex: imageDimensionIndex,
+          layoutHintResolver: layoutHintResolver,
+        ),
+        spec: spec,
+        request: request,
+        src: src,
+        element: tree.element,
+        readableIndex: readableIndex,
+        isSticker: true,
+      );
+    }
+
+    return _wrapTap(
+      _ForumHtmlCachedBlockImageView(
         spec: spec,
         request: request,
         imageHeaderBuilder: imageHeaderBuilder,
@@ -79,18 +107,63 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
         initialHint: layoutHintResolver.resolve(spec: spec),
         dimensionIndex: imageDimensionIndex,
         layoutHintResolver: layoutHintResolver,
-      );
-    }
-
-    return _ForumHtmlCachedBlockImageView(
+      ),
       spec: spec,
       request: request,
-      imageHeaderBuilder: imageHeaderBuilder,
-      onImageResolved: onImageResolved,
-      initialHint: layoutHintResolver.resolve(spec: spec),
-      dimensionIndex: imageDimensionIndex,
-      layoutHintResolver: layoutHintResolver,
+      src: src,
+      element: tree.element,
+      readableIndex: readableIndex,
+      isSticker: false,
     );
+  }
+
+  Widget _wrapTap(
+    Widget child, {
+    required ForumImageLoadSpec spec,
+    required ImageCacheRequest request,
+    required ImageSource src,
+    required html_dom.Element element,
+    required int? readableIndex,
+    required bool isSticker,
+  }) {
+    final callback = onTapImageRequest;
+    if (callback == null) {
+      return child;
+    }
+    return GestureDetector(
+      key: readableIndex == null
+          ? null
+          : Key(
+              '${readableImageKeyPrefix ?? 'thread-post-html-first-readable-image'}-$readableIndex',
+            ),
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        callback(
+          ForumHtmlImageRequest(
+            url: spec.sourceUrl,
+            alt: src.image?.alt,
+            title: src.image?.title,
+            width: src.width,
+            height: src.height,
+            isSticker: isSticker,
+            attachmentId: _attachmentIdFromElement(element),
+            readableIndex: readableIndex,
+            cacheKey: request.cacheKey,
+            kind: spec.kind,
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+
+  int? _readableIndex(BuildTree tree) {
+    final raw = tree.element.attributes[forumHtmlReadableImageIndexAttribute];
+    final parsed = int.tryParse(raw?.trim() ?? '');
+    if (parsed == null || parsed < 0) {
+      return null;
+    }
+    return parsed;
   }
 
   String _cacheOwnerId() {
@@ -119,6 +192,29 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
   bool _isForumStickerImage(String url) {
     return url.contains('/static/image/smiley/') ||
         url.contains('static/image/smiley/');
+  }
+
+  String? _attachmentIdFromElement(html_dom.Element element) {
+    final id = element.id;
+    final aimgMatch = RegExp(r'^aimg_(\d+)$').firstMatch(id);
+    if (aimgMatch != null) {
+      return aimgMatch.group(1);
+    }
+    final aid = element.attributes['aid']?.trim();
+    if (aid != null && aid.isNotEmpty) {
+      return aid;
+    }
+    final src = element.attributes['src'];
+    return src == null ? null : _attachmentIdFromUrl(src);
+  }
+
+  String? _attachmentIdFromUrl(String url) {
+    final aimgMatch = RegExp(r'aimg[_=/-](\d+)').firstMatch(url);
+    if (aimgMatch != null) {
+      return aimgMatch.group(1);
+    }
+    final aidMatch = RegExp(r'(?:aid|attachmentid)=(\d+)').firstMatch(url);
+    return aidMatch?.group(1);
   }
 }
 

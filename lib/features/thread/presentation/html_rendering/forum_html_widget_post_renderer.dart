@@ -5,9 +5,11 @@ import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_cached_image_widget_factory.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_image_deduplicator.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
@@ -26,6 +28,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     this.imageCacheOwnerId,
     this.imageRequestResolver,
     this.imageDimensionIndex,
+    this.preparedDocument,
   });
 
   static final Uri forumBaseUri = Uri.parse('https://bbs.yamibo.com/');
@@ -39,6 +42,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   final String? imageCacheOwnerId;
   final ForumImageRequestResolver? imageRequestResolver;
   final ForumImageDimensionIndex? imageDimensionIndex;
+  final ForumHtmlPreparedRenderDocument? preparedDocument;
   static const _imageDeduplicator = ForumHtmlImageDeduplicator();
 
   @override
@@ -46,10 +50,16 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     final resolvedPreferences =
         preferences ?? ForumHtmlReaderPreferences.defaults();
     final stylePolicy = ForumHtmlStylePolicy(resolvedPreferences);
-    final preparedHtml = _imageDeduplicator.deduplicateAttachmentImages(
-      stylePolicy.prepareHtml(html),
-    );
-    final imageAttachmentIdsByUrl = _collectImageAttachmentIds(preparedHtml);
+    final document = preparedDocument;
+    final preparedHtml =
+        document?.preparedHtml ??
+        _imageDeduplicator.deduplicateAttachmentImages(
+          stylePolicy.prepareHtml(html),
+        );
+    final imageAttachmentIdsByUrl =
+        document?.attachmentIdsByUrl ??
+        _collectImageAttachmentIds(preparedHtml);
+    final handlesImageTapInFactory = threadId?.trim().isNotEmpty == true;
     return HtmlWidget(
       preparedHtml,
       key: Key('forum-html-renderer-${sourceId ?? 'anonymous'}'),
@@ -61,7 +71,9 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       renderMode: RenderMode.column,
       textStyle: stylePolicy.baseTextStyle(context),
       onTapUrl: callbacks.onTapUrl,
-      onTapImage: (image) => _handleTapImage(image, imageAttachmentIdsByUrl),
+      onTapImage: handlesImageTapInFactory
+          ? null
+          : (image) => _handleTapImage(image, imageAttachmentIdsByUrl),
     );
   }
 
@@ -74,6 +86,10 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       threadId: tid,
       imageHeaderBuilder: imageHeaderBuilder,
       imageCacheOwnerId: imageCacheOwnerId,
+      onTapImageRequest: callbacks.onTapImage,
+      readableImageKeyPrefix: sourceId == null
+          ? null
+          : 'thread-post-html-first-readable-image-$sourceId',
       imageRequestResolver: imageRequestResolver,
       imageDimensionIndex: imageDimensionIndex,
     );
@@ -107,6 +123,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           imageCacheOwnerId: imageCacheOwnerId,
           imageRequestResolver: imageRequestResolver,
           imageDimensionIndex: imageDimensionIndex,
+          preparedDocument: preparedDocument?.copyWith(preparedHtml: html),
         );
       },
     );
@@ -216,6 +233,9 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
         attachmentId:
             imageAttachmentIdsByUrl[source.url] ??
             _attachmentIdFromUrl(source.url),
+        kind: _isForumStickerImage(source.url)
+            ? ForumImageKind.remoteSmiley
+            : null,
       ),
     );
   }

@@ -586,6 +586,97 @@ void main() {
       expect(smiley.sourceUrl, contains('static/image/smiley/comcom/2.gif'));
     });
 
+    testWidgets(
+      'HTML-first image taps open reader by readable sequence index',
+      (tester) async {
+        final repository = _FakeThreadRepository((tid, page, query) async {
+          return ApiSuccess(
+            _threadDetailData(
+              tid: tid,
+              posts: [
+                ThreadPost(
+                  pid: 'p1',
+                  author: 'alice',
+                  authorId: '1',
+                  message:
+                      '<img src="https://example.com/page-same.jpg">'
+                      '<img src="https://example.com/page-same.jpg">'
+                      '<p>表情 <img src="static/image/smiley/comcom/2.gif"></p>',
+                  number: 1,
+                  isFirst: true,
+                  dateline: 'today',
+                ),
+              ],
+            ),
+          );
+        });
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            imageCacheService: _RecordingImageCacheService(),
+            htmlFirstRenderMode: ThreadDetailHtmlFirstRenderMode.htmlFirst,
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+
+        final secondImage = find.byKey(
+          const Key('thread-post-html-first-readable-image-p1-1'),
+        );
+        await tester.ensureVisible(secondImage);
+        await tester.pump();
+        await tester.tap(secondImage);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ThreadImageReaderPage), findsOneWidget);
+        expect(
+          find.byKey(const Key('thread-image-reader-list')),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('HTML-first smiley taps do not open image reader', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository((tid, page, query) async {
+        return ApiSuccess(
+          _threadDetailData(
+            tid: tid,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message:
+                    '<p>表情 <img src="static/image/smiley/comcom/2.gif"></p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          imageCacheService: _RecordingImageCacheService(),
+          htmlFirstRenderMode: ThreadDetailHtmlFirstRenderMode.htmlFirst,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(
+        find.byKey(const Key('thread-post-html-first-readable-image-p1-0')),
+        findsNothing,
+      );
+      expect(find.byType(ThreadImageReaderPage), findsNothing);
+    });
+
     testWidgets('HTML-first mode triggers lightweight image preheat', (
       tester,
     ) async {

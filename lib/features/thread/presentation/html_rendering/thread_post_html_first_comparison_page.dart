@@ -4,6 +4,8 @@ import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dar
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
@@ -90,6 +92,7 @@ class _ThreadPostHtmlFirstComparisonPageState
             _DebugPane(
               key: const Key('thread-post-html-first-debug-summary'),
               post: widget.post,
+              threadId: widget.threadId,
               plan: widget.plan,
               fallbackWouldRender: widget.post.message.trim().isEmpty,
               lastImageTapStatus: _lastImageTapStatus,
@@ -164,12 +167,14 @@ class _DebugPane extends StatelessWidget {
   const _DebugPane({
     super.key,
     required this.post,
+    required this.threadId,
     required this.plan,
     required this.fallbackWouldRender,
     required this.lastImageTapStatus,
   });
 
   final ThreadPost post;
+  final String threadId;
   final ThreadPostBodyRenderPlan plan;
   final bool fallbackWouldRender;
   final String lastImageTapStatus;
@@ -177,12 +182,25 @@ class _DebugPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final html = post.message;
+    final prepared = const DefaultForumHtmlRenderPreparer().prepare(
+      html: html,
+      preferences: ForumHtmlReaderPreferences.defaults(),
+      sourceId: post.pid.trim().isEmpty ? 'post' : post.pid.trim(),
+      threadId: threadId,
+      imageCacheOwnerId: threadId,
+    );
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
       children: [
         _DebugLine(label: 'pid', value: post.pid),
         _DebugLine(label: '楼层', value: '${post.number}#'),
         _DebugLine(label: 'HTML 长度', value: '${html.length}'),
+        _DebugLine(
+          key: const Key('thread-post-html-first-readable-sequence-summary'),
+          label: 'HTML-first 可读图片',
+          value:
+              '${prepared.readableImageCount}，跳过表情 ${prepared.skippedStickerCount}，跳过非网络 ${prepared.skippedNonNetworkCount}',
+        ),
         _DebugLine(label: '旧 plan 图片数', value: '${plan.images.length}'),
         _DebugLine(
           label: '旧 plan block 数',
@@ -192,14 +210,18 @@ class _DebugPane extends StatelessWidget {
           label: 'HTML-first fallback',
           value: fallbackWouldRender ? '是' : '否',
         ),
-        _DebugLine(label: '图片点击匹配', value: lastImageTapStatus),
+        _DebugLine(
+          key: const Key('thread-post-html-first-image-reader-fallback'),
+          label: '图片点击匹配',
+          value: lastImageTapStatus,
+        ),
       ],
     );
   }
 }
 
 class _DebugLine extends StatelessWidget {
-  const _DebugLine({required this.label, required this.value});
+  const _DebugLine({super.key, required this.label, required this.value});
 
   final String label;
   final String value;
