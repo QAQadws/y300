@@ -17,12 +17,14 @@ import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/cache_maintenance_models.dart';
 import 'package:y300/features/cache/domain/models/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
+import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/domain/services/native_page_cache_invalidation_service.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/services/protected_cover_cache_maintenance.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
+import 'package:y300/features/cache/presentation/services/default_forum_image_precache_service.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/library_shared/data/providers/sync_diagnostic_providers.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
@@ -108,6 +110,15 @@ final forumImageDimensionIndexProvider = Provider<ForumImageDimensionIndex>((
   ref,
 ) {
   return CacheRecordForumImageDimensionIndex(
+    imageCacheService: ref.watch(imageCacheServiceProvider),
+    imageRequestResolver: ref.watch(forumImageRequestResolverProvider),
+  );
+});
+
+final forumImagePrecacheServiceProvider = Provider<ForumImagePrecacheService>((
+  ref,
+) {
+  return DefaultForumImagePrecacheService(
     imageCacheService: ref.watch(imageCacheServiceProvider),
     imageRequestResolver: ref.watch(forumImageRequestResolverProvider),
   );

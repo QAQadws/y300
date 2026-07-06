@@ -121,6 +121,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         .watch(threadDetailHtmlFirstRenderModeControllerProvider)
         .asData
         ?.value;
+    final htmlFirstPrecacheService = htmlFirstRenderMode?.isHtmlFirst == true
+        ? ref.watch(forumImagePrecacheServiceProvider)
+        : null;
     final diagnosticModeEnabled =
         ref.watch(syncDiagnosticModeControllerProvider).asData?.value ?? false;
     _latestImageHeaderBuilder = imageHeaderBuilder;
@@ -277,6 +280,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                         htmlFirstRenderMode ??
                         ThreadDetailHtmlFirstRenderMode.legacy,
                     diagnosticRecorder: diagnosticRecorder,
+                    htmlImagePrecacheService: htmlFirstPrecacheService,
                     onTogglePollOption: controller.togglePollOption,
                     onSubmitPollVote: controller.submitPollVote,
                   ),

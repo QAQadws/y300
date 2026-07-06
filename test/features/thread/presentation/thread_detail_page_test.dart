@@ -11,7 +11,9 @@ import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/cache/domain/services/native_page_cache_invalidation_service.dart';
@@ -582,6 +584,86 @@ void main() {
       expect(smiley.ownerType, ImageCacheOwnerType.sticker);
       expect(smiley.effectiveRetentionClass, ImageRetentionClass.sticky);
       expect(smiley.sourceUrl, contains('static/image/smiley/comcom/2.gif'));
+    });
+
+    testWidgets('HTML-first mode triggers lightweight image preheat', (
+      tester,
+    ) async {
+      final precacheService = _RecordingForumImagePrecacheService();
+      final repository = _FakeThreadRepository((tid, page, query) async {
+        return ApiSuccess(
+          _threadDetailData(
+            tid: tid,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message:
+                    '<p>HTML-first 图片预热</p>'
+                    '<img src="data/attachment/forum/page-1.jpg">'
+                    '<p>表情 <img src="static/image/smiley/comcom/2.gif"></p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          htmlFirstRenderMode: ThreadDetailHtmlFirstRenderMode.htmlFirst,
+          forumImagePrecacheService: precacheService,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(precacheService.decodedSpecs, isNotEmpty);
+      expect(
+        precacheService.decodedSpecs.map((spec) => spec.kind).toSet(),
+        <ForumImageKind>{ForumImageKind.threadInline},
+      );
+      expect(precacheService.decodedSpecs.first.sourceUrl, contains('page-1'));
+    });
+
+    testWidgets('legacy mode does not trigger HTML-first image preheat', (
+      tester,
+    ) async {
+      final precacheService = _RecordingForumImagePrecacheService();
+      final repository = _FakeThreadRepository((tid, page, query) async {
+        return ApiSuccess(
+          _threadDetailData(
+            tid: tid,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<img src="data/attachment/forum/page-1.jpg">',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          htmlFirstRenderMode: ThreadDetailHtmlFirstRenderMode.legacy,
+          forumImagePrecacheService: precacheService,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(precacheService.decodedSpecs, isEmpty);
     });
 
     testWidgets('long pressing app bar copies thread link', (tester) async {
@@ -3187,6 +3269,7 @@ Widget _buildTestApp(
   ThreadPostLocator? threadPostLocator,
   NativePageCacheInvalidationService? pageCacheInvalidationService,
   ImageCacheService? imageCacheService,
+  ForumImagePrecacheService? forumImagePrecacheService,
   ForumWebViewDriverFactory? forumWebViewDriverFactory,
   bool diagnosticModeEnabled = false,
   ThreadDetailHtmlFirstRenderMode htmlFirstRenderMode =
@@ -3205,6 +3288,7 @@ Widget _buildTestApp(
       threadPostLocator: threadPostLocator,
       pageCacheInvalidationService: pageCacheInvalidationService,
       imageCacheService: imageCacheService,
+      forumImagePrecacheService: forumImagePrecacheService,
       forumWebViewDriverFactory: forumWebViewDriverFactory,
       diagnosticModeEnabled: diagnosticModeEnabled,
       htmlFirstRenderMode: htmlFirstRenderMode,
@@ -3227,6 +3311,7 @@ List<riverpod_misc.Override> _threadDetailOverrides(
   ThreadPostLocator? threadPostLocator,
   NativePageCacheInvalidationService? pageCacheInvalidationService,
   ImageCacheService? imageCacheService,
+  ForumImagePrecacheService? forumImagePrecacheService,
   ForumWebViewDriverFactory? forumWebViewDriverFactory,
   bool diagnosticModeEnabled = false,
   ThreadDetailHtmlFirstRenderMode htmlFirstRenderMode =
@@ -3237,6 +3322,10 @@ List<riverpod_misc.Override> _threadDetailOverrides(
     imageCacheServiceProvider.overrideWithValue(
       imageCacheService ?? _NoopImageCacheService(),
     ),
+    if (forumImagePrecacheService != null)
+      forumImagePrecacheServiceProvider.overrideWithValue(
+        forumImagePrecacheService,
+      ),
     nativePageCacheInvalidationServiceProvider.overrideWithValue(
       pageCacheInvalidationService ?? _FakeNativePageCacheInvalidationService(),
     ),
@@ -3404,6 +3493,27 @@ class _RecordingImageCacheService extends _NoopImageCacheService {
   Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
     requests.add(request);
     return CachedImageResult(success: true, cacheKey: request.cacheKey);
+  }
+}
+
+class _RecordingForumImagePrecacheService implements ForumImagePrecacheService {
+  final decodedSpecs = <ForumImageLoadSpec>[];
+
+  @override
+  Future<ForumImagePrecacheResult> ensureDiskCached(
+    ForumImageLoadSpec spec,
+  ) async {
+    return const ForumImagePrecacheResult(success: true);
+  }
+
+  @override
+  Future<ForumImagePrecacheResult> precacheDecoded({
+    required BuildContext context,
+    required ForumImageLoadSpec spec,
+    Size? expectedDisplaySize,
+  }) async {
+    decodedSpecs.add(spec);
+    return const ForumImagePrecacheResult(success: true, decoded: true);
   }
 }
 

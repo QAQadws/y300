@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_comment_repository.dart';
@@ -16,6 +19,7 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_rend
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
 import 'package:y300/features/thread/presentation/thread_detail_render_entries.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
+import 'package:y300/features/thread/presentation/services/thread_html_image_preload_coordinator.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
@@ -54,6 +58,7 @@ class ThreadDetailContent extends StatefulWidget {
     required this.onOpenPostActions,
     this.htmlFirstRenderMode = ThreadDetailHtmlFirstRenderMode.legacy,
     this.diagnosticRecorder = const NoopThreadDetailDiagnosticRecorder(),
+    this.htmlImagePrecacheService,
     this.onPostBuilt,
     this.imageDimensionStore,
     required this.onTogglePollOption,
@@ -79,6 +84,7 @@ class ThreadDetailContent extends StatefulWidget {
   onOpenPostActions;
   final ThreadDetailHtmlFirstRenderMode htmlFirstRenderMode;
   final ThreadDetailDiagnosticRecorder diagnosticRecorder;
+  final ForumImagePrecacheService? htmlImagePrecacheService;
   final ValueChanged<int>? onPostBuilt;
 
   /// 持久化图片尺寸快照（来自缓存预热）。提供时 render plan 会用可信尺寸锁定
@@ -94,6 +100,8 @@ class ThreadDetailContent extends StatefulWidget {
 
 class _ThreadDetailContentState extends State<ThreadDetailContent> {
   late ThreadDetailRenderEntryPlanner _entryPlanner;
+  ThreadHtmlImagePreloadCoordinator? _htmlImagePreloadCoordinator;
+  String? _htmlImagePreloadSignature;
 
   @override
   void initState() {
@@ -114,15 +122,24 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         oldWidget.htmlFirstRenderMode != widget.htmlFirstRenderMode) {
       _entryPlanner = _createEntryPlanner();
     }
+    if (!identical(
+          oldWidget.htmlImagePrecacheService,
+          widget.htmlImagePrecacheService,
+        ) ||
+        oldWidget.htmlFirstRenderMode != widget.htmlFirstRenderMode) {
+      _resetHtmlImagePreload();
+    }
     if (!identical(oldWidget.state.posts, widget.state.posts) ||
         oldWidget.state.currentPage != widget.state.currentPage) {
       _entryPlanner.prune(widget.state.posts);
+      _resetHtmlImagePreload();
     }
   }
 
   @override
   void dispose() {
     widget.imageDimensionStore?.removeListener(_onImageDimensionsChanged);
+    _htmlImagePreloadCoordinator?.dispose();
     super.dispose();
   }
 
@@ -158,6 +175,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       posts: widget.state.posts,
       targetPid: widget.targetPid,
     );
+    _scheduleHtmlImageFirstWindowPreload(context);
     return ListView.builder(
       key: const Key('thread-detail-list'),
       controller: widget.scrollController,
@@ -191,6 +209,74 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
     );
   }
 
+  void _handlePostBuilt(int index) {
+    widget.onPostBuilt?.call(index);
+    if (!widget.htmlFirstRenderMode.isHtmlFirst) {
+      return;
+    }
+    final coordinator = _htmlImageCoordinator();
+    if (coordinator == null || widget.state.posts.isEmpty) {
+      return;
+    }
+    unawaited(
+      coordinator.preloadNearWindow(
+        context: context,
+        tid: widget.state.tid,
+        posts: widget.state.posts,
+        visiblePostIndex: index,
+        planFor: _entryPlanner.planFor,
+        expectedDisplaySize: _expectedImageDisplaySize(context),
+      ),
+    );
+  }
+
+  void _scheduleHtmlImageFirstWindowPreload(BuildContext context) {
+    if (!widget.htmlFirstRenderMode.isHtmlFirst || widget.state.posts.isEmpty) {
+      return;
+    }
+    final coordinator = _htmlImageCoordinator();
+    if (coordinator == null) {
+      return;
+    }
+    final signature =
+        '${widget.state.tid}:${widget.state.currentPage}:${widget.state.posts.length}';
+    if (_htmlImagePreloadSignature == signature) {
+      return;
+    }
+    _htmlImagePreloadSignature = signature;
+    unawaited(
+      coordinator.preloadFirstWindow(
+        context: context,
+        tid: widget.state.tid,
+        posts: widget.state.posts,
+        planFor: _entryPlanner.planFor,
+        expectedDisplaySize: _expectedImageDisplaySize(context),
+      ),
+    );
+  }
+
+  ThreadHtmlImagePreloadCoordinator? _htmlImageCoordinator() {
+    final service = widget.htmlImagePrecacheService;
+    if (service == null) {
+      return null;
+    }
+    return _htmlImagePreloadCoordinator ??= ThreadHtmlImagePreloadCoordinator(
+      precacheService: service,
+    );
+  }
+
+  Size _expectedImageDisplaySize(BuildContext context) {
+    final mediaWidth = MediaQuery.sizeOf(context).width;
+    final estimatedHorizontalPadding = 44.0;
+    final width = mediaWidth - estimatedHorizontalPadding;
+    return Size(width > 0 ? width : mediaWidth, double.nan);
+  }
+
+  void _resetHtmlImagePreload() {
+    _htmlImagePreloadSignature = null;
+    _htmlImagePreloadCoordinator?.reset();
+  }
+
   Widget _buildEntry(
     BuildContext context,
     ThreadDetailRenderEntry entry,
@@ -211,7 +297,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         );
         return _PostBuildObserver(
           index: entry.postIndex,
-          onPostBuilt: widget.onPostBuilt,
+          onPostBuilt: _handlePostBuilt,
           child: header,
         );
       case ThreadDetailRenderEntryKind.postBody:
