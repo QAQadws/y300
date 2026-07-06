@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
@@ -13,10 +16,12 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/services/novel_reader_cache_service.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
-import 'package:y300/features/novel/presentation/widgets/novel_reader_document_view.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_display_settings_sheet.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_paged_surface.dart';
+import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 
 class NovelReaderPage extends ConsumerStatefulWidget {
   const NovelReaderPage({
@@ -43,7 +48,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       const NovelReaderTypographyResolver();
   final NovelReaderProgressPolicy _progressPolicy =
       const NovelReaderProgressPolicy();
-  final Map<String, GlobalKey> _nodeKeys = <String, GlobalKey>{};
   Timer? _displayPreviewThrottle;
   Timer? _displayPersistDebounce;
   NovelReaderPreferences? _pendingDisplayPreferences;
@@ -132,68 +136,26 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
               color: palette.background,
               child: Builder(
                 builder: (context) {
-                  final isPaged = _isPagedMode(viewState.preferences.flowMode);
-                  if (!isPaged) {
-                    _pagedSurfaceController.reset();
-                    _restoreOffsetIfNeeded(
-                      episodeId: viewState.currentEpisode.episodeId,
-                      offset: viewState.currentOffset,
-                    );
-                  }
-                  final reader = ListenableBuilder(
-                    listenable: _pagedSurfaceController,
-                    builder: (context, _) {
-                      final pagedInteractionEnabled =
-                          isPaged &&
-                          !_pagedSurfaceController.isResolving &&
-                          _pagedSurfaceController.currentLayout != null;
-                      return ReaderOverlayScaffold(
-                        controller: _overlayController,
-                        topBar: _buildTopBarConfig(viewState),
-                        bottomBar: _buildBottomBarConfig(
-                          viewState,
-                          controller,
-                          isPaged: isPaged,
-                        ),
-                        bottomSafeFraction: 0.18,
-                        onLeftTap: !pagedInteractionEnabled
-                            ? null
-                            : () => unawaited(
-                                _handlePagedReaderTap(
-                                  isLeftTap: true,
-                                  viewState: viewState,
-                                  controller: controller,
-                                ),
-                              ),
-                        onRightTap: !pagedInteractionEnabled
-                            ? null
-                            : () => unawaited(
-                                _handlePagedReaderTap(
-                                  isLeftTap: false,
-                                  viewState: viewState,
-                                  controller: controller,
-                                ),
-                              ),
-                        child: !isPaged
-                            ? _buildReaderList(
-                                viewState,
-                                typography,
-                                imageHeaderBuilder,
-                                externalLauncher,
-                              )
-                            : NovelReaderPagedSurface(
-                                controller: _pagedSurfaceController,
-                                viewState: viewState,
-                                typography: typography,
-                                backgroundColor: palette.background,
-                                imageHeaderBuilder: imageHeaderBuilder,
-                                onLinkTap: (link) =>
-                                    _openReaderLink(link, externalLauncher),
-                                onPageChanged: controller.onPagedPageChanged,
-                                onInteraction: _overlayController.hideMenu,
-                              ),
-                      );
-                    },
+                  _pagedSurfaceController.reset();
+                  _restoreOffsetIfNeeded(
+                    episodeId: viewState.currentEpisode.episodeId,
+                    offset: viewState.currentOffset,
+                  );
+                  final reader = ReaderOverlayScaffold(
+                    controller: _overlayController,
+                    topBar: _buildTopBarConfig(viewState),
+                    bottomBar: _buildBottomBarConfig(
+                      viewState,
+                      controller,
+                      isPaged: false,
+                    ),
+                    bottomSafeFraction: 0.18,
+                    child: _buildReaderList(
+                      viewState,
+                      typography,
+                      imageHeaderBuilder,
+                      externalLauncher,
+                    ),
                   );
                   final readerSurfaceIdentity =
                       '${viewState.currentEpisode.episodeId}|'
@@ -406,15 +368,16 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         ),
         SizedBox(height: viewState.preferences.paragraphSpacing * 1.6),
       ],
-      NovelReaderDocumentView(
-        document: viewState.document,
+      NovelReaderHtmlDocumentView(
+        rawHtml: viewState.currentContent.rawHtml,
+        episode: viewState.currentEpisode,
+        preferences: viewState.preferences,
         typography: typography,
-        paragraphSpacing: viewState.preferences.paragraphSpacing,
+        imageReferer: _imageRefererFor(viewState),
         imageHeaderBuilder: imageHeaderBuilder,
         onLinkTap: (link) => _openReaderLink(link, externalLauncher),
-        highlightedResult: viewState.currentSearchResult,
-        nodeKeyBuilder: (nodeId) =>
-            _nodeKeyForEpisode(viewState.currentEpisode.episodeId, nodeId),
+        onOpenImage: _openHtmlReaderImage,
+        onImageFallback: (request) => _copyNovelImageUrl(request.url),
       ),
       if (viewState.nextEpisode != null) ...[
         SizedBox(height: viewState.preferences.paragraphSpacing * 2),
@@ -605,21 +568,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       return;
     }
     await controller.saveCurrentProgressNow(snapshot);
-  }
-
-  Future<void> _handlePagedReaderTap({
-    required bool isLeftTap,
-    required NovelReaderViewState viewState,
-    required NovelReaderController controller,
-  }) async {
-    final isRtl =
-        viewState.preferences.flowMode == NovelReaderFlowMode.pagedRtl;
-    final shouldGoNext = isRtl ? isLeftTap : !isLeftTap;
-    if (shouldGoNext) {
-      await _goToNextPagedEdge(controller);
-      return;
-    }
-    await _goToPreviousPagedEdge(controller);
   }
 
   Future<void> _goToPreviousPagedEdge(NovelReaderController controller) async {
@@ -998,15 +946,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     _showReaderSnackBar(isBookmarked ? '已添加书签' : '已移除书签');
   }
 
-  String _nodeKeyId(String episodeId, String nodeId) {
-    return '$episodeId::$nodeId';
-  }
-
-  GlobalKey _nodeKeyForEpisode(String episodeId, String nodeId) {
-    final keyId = _nodeKeyId(episodeId, nodeId);
-    return _nodeKeys.putIfAbsent(keyId, () => GlobalKey());
-  }
-
   NovelReaderTextAnchor _currentAnchor(NovelReaderViewState viewState) {
     if (_isPagedMode(viewState.preferences.flowMode)) {
       final anchor = _pagedSurfaceController.currentAnchor(
@@ -1058,19 +997,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       await _pagedSurfaceController.jumpToAnchor(anchor);
       return;
     }
-    final nodeId = anchor.nodeId;
-    if (nodeId != null) {
-      final keyId = _nodeKeyId(latest.currentEpisode.episodeId, nodeId);
-      final context = _nodeKeys[keyId]?.currentContext;
-      if (context != null && context.mounted) {
-        await Scrollable.ensureVisible(
-          context,
-          duration: const Duration(milliseconds: 220),
-          alignment: 0.16,
-        );
-        return;
-      }
-    }
     if (_scrollController.hasClients) {
       final max = _scrollController.position.maxScrollExtent;
       _scrollController.jumpTo(anchor.scrollOffset.clamp(0.0, max).toDouble());
@@ -1087,6 +1013,25 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             ThreadDetailPage(tid: tid, subject: _novelTitle(viewState)),
       ),
     );
+  }
+
+  String _imageRefererFor(NovelReaderViewState viewState) {
+    final tid = viewState.currentEpisode.sourceTid.trim();
+    if (tid.isEmpty) {
+      return AppConfig.siteBaseUrl;
+    }
+    final page = viewState.currentEpisode.sourcePage;
+    return Uri.parse(AppConfig.siteBaseUrl)
+        .replace(
+          path: '/forum.php',
+          queryParameters: <String, String>{
+            'mod': 'viewthread',
+            'tid': tid,
+            'mobile': '2',
+            if (page != null && page > 1) 'page': page.toString(),
+          },
+        )
+        .toString();
   }
 
   Future<void> _openFallbackSourceThread() async {
@@ -1110,6 +1055,19 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     NovelReaderLink link,
     ForumWebViewExternalLauncher externalLauncher,
   ) async {
+    final destination = const YamiboForumLinkResolver().resolve(link.url);
+    if (destination?.kind == YamiboForumLinkKind.thread ||
+        destination?.kind == YamiboForumLinkKind.threadPost) {
+      final tid = destination?.tid;
+      if (tid != null && tid.trim().isNotEmpty) {
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => ThreadDetailPage(tid: tid, subject: link.text),
+          ),
+        );
+        return;
+      }
+    }
     final tid = link.tid;
     if (tid != null && tid.trim().isNotEmpty) {
       await Navigator.of(context).push(
@@ -1128,6 +1086,36 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       return;
     }
     _showReaderSnackBar('链接打开失败');
+  }
+
+  void _openHtmlReaderImage(ThreadImageOpenRequest request) {
+    if (request.continuousImages.isEmpty) {
+      final entry = request.initialEntry;
+      if (entry != null) {
+        _copyNovelImageUrl(entry.url);
+      }
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ThreadImageReaderPage(
+          request: request,
+          imageHeaderBuilder: ref.read(imageRequestHeaderBuilderProvider),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _copyNovelImageUrl(String url) async {
+    final value = url.trim();
+    if (value.isEmpty) {
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) {
+      return;
+    }
+    _showReaderSnackBar('图片链接已复制');
   }
 
   void _showReaderSnackBar(String message) {
@@ -1174,7 +1162,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }
 
   bool _isPagedMode(NovelReaderFlowMode flowMode) {
-    return flowMode != NovelReaderFlowMode.vertical;
+    return false;
   }
 
   double _safeContentMaxWidth(NovelReaderTypography typography) {

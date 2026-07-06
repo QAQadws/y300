@@ -152,10 +152,45 @@ void main() {
           '<span style="font-size: 20px; color: red; background: yellow">文本</span>',
         );
 
-    expect(result, contains('size="5"'));
+    expect(result, isNot(contains('size="5"')));
+    expect(result, contains('font-size: 125%'));
     expect(result, contains('color="#f00"'));
     expect(result, contains('font-size: 20px'));
     expect(result, contains('color: red'));
     expect(result, contains('background: yellow'));
+  });
+
+  test('normalizes Discuz font sizes to explicit percentages', () {
+    final result = ForumHtmlStylePolicy(ForumHtmlReaderPreferences.defaults())
+        .prepareHtml(
+          '<font size="1">一</font>'
+          '<font size="2">二</font>'
+          '<font size="3">三</font>'
+          '<font size="4">四</font>'
+          '<font size="5">五</font>'
+          '<font size="6">六</font>'
+          '<font size="7">七</font>'
+          '<font size="9">九</font>',
+        );
+
+    expect(result, contains('font-size: 75%'));
+    expect(result, contains('font-size: 87.5%'));
+    expect(result, contains('font-size: 100%'));
+    expect(result, contains('font-size: 112.5%'));
+    expect(result, contains('font-size: 125%'));
+    expect(result, contains('font-size: 150%'));
+    expect(result, contains('font-size: 175%'));
+    expect(result, isNot(contains('size=')));
+  });
+
+  test('font size normalization preserves unrelated inline styles', () {
+    final result = ForumHtmlStylePolicy(ForumHtmlReaderPreferences.defaults())
+        .prepareHtml(
+          '<font size="3" style="color: blue; font-size: 40px">正文</font>',
+        );
+
+    expect(result, contains('style="color: blue; font-size: 100%"'));
+    expect(result, isNot(contains('size="3"')));
+    expect(result, isNot(contains('font-size: 40px')));
   });
 }

@@ -10,6 +10,15 @@ class ForumHtmlStylePolicy {
   const ForumHtmlStylePolicy(this.preferences);
 
   final ForumHtmlReaderPreferences preferences;
+  static const Map<String, String> _discuzFontSizePercent = <String, String>{
+    '1': '75%',
+    '2': '87.5%',
+    '3': '100%',
+    '4': '112.5%',
+    '5': '125%',
+    '6': '150%',
+    '7': '175%',
+  };
 
   TextStyle baseTextStyle(BuildContext context) {
     final fallback = Theme.of(context).textTheme.bodyMedium;
@@ -53,6 +62,10 @@ class ForumHtmlStylePolicy {
     return null;
   }
 
+  bool isDiscuzEditStatusElement(html_dom.Element element) {
+    return element.classes.contains('pstatus');
+  }
+
   bool isForumCollapseElement(html_dom.Element element) {
     return element.classes.contains('showcollapse_box');
   }
@@ -66,12 +79,6 @@ class ForumHtmlStylePolicy {
   }
 
   String prepareHtml(String html) {
-    if (preferences.preserveAuthorFontSize &&
-        preferences.preserveAuthorColor &&
-        preferences.preserveAuthorBackground) {
-      return html;
-    }
-
     final fragment = html_parser.parseFragment(html);
     for (final element in fragment.querySelectorAll('[style],font')) {
       _sanitizeStyle(element);
@@ -138,10 +145,56 @@ class ForumHtmlStylePolicy {
     }
     if (!preferences.preserveAuthorFontSize) {
       element.attributes.remove('size');
+    } else {
+      _normalizeDiscuzFontSize(element);
     }
     if (!preferences.preserveAuthorColor) {
       element.attributes.remove('color');
     }
+  }
+
+  void _normalizeDiscuzFontSize(html_dom.Element element) {
+    final size = element.attributes['size']?.trim();
+    if (size == null || size.isEmpty) {
+      return;
+    }
+    element.attributes.remove('size');
+    final percent = _discuzFontSizePercent[size];
+    if (percent == null) {
+      return;
+    }
+    _upsertStyleDeclaration(element, 'font-size', percent);
+  }
+
+  void _upsertStyleDeclaration(
+    html_dom.Element element,
+    String property,
+    String value,
+  ) {
+    final targetProperty = property.toLowerCase();
+    final declarations = <String>[];
+    final style = element.attributes['style'];
+    if (style != null && style.trim().isNotEmpty) {
+      for (final declaration in style.split(';')) {
+        final trimmed = declaration.trim();
+        if (trimmed.isEmpty) {
+          continue;
+        }
+        final colonIndex = trimmed.indexOf(':');
+        if (colonIndex > 0) {
+          final currentProperty = trimmed
+              .substring(0, colonIndex)
+              .trim()
+              .toLowerCase();
+          if (currentProperty == targetProperty) {
+            continue;
+          }
+        }
+        declarations.add(trimmed);
+      }
+    }
+    declarations.add('$property: $value');
+    element.attributes['style'] = declarations.join('; ');
   }
 
   bool _shouldDropStyleProperty(String property) {

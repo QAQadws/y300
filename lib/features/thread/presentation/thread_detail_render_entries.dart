@@ -17,7 +17,7 @@ class ThreadDetailRenderEntryPlanner {
     ThreadPostBodyRenderSettings renderSettings =
         ThreadPostBodyRenderSettings.defaults,
     ThreadDetailHtmlFirstRenderMode renderMode =
-        ThreadDetailHtmlFirstRenderMode.legacy,
+        ThreadDetailHtmlFirstRenderMode.htmlFirst,
     ThreadDetailDiagnosticRecorder diagnosticRecorder =
         const NoopThreadDetailDiagnosticRecorder(),
   }) : _bodyRenderPlanner = bodyRenderPlanner,

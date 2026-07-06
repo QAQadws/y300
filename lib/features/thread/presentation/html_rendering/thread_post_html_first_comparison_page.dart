@@ -100,7 +100,6 @@ class _ThreadPostHtmlFirstComparisonPageState
                     _lastImageTapStatus = '未匹配图片：${request.url}';
                   });
                 },
-                fallback: _legacyBody(createSelectionArea: true),
               ),
             ),
             _DebugPane(

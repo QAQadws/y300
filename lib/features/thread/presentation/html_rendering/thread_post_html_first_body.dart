@@ -90,7 +90,7 @@ class ThreadPostHtmlFirstBody extends ConsumerWidget {
         ),
       );
     } catch (_) {
-      return fallback ?? const SizedBox.shrink();
+      return fallback ?? const ThreadPostHtmlBodyError();
     }
   }
 
@@ -120,5 +120,83 @@ class ThreadPostHtmlFirstBody extends ConsumerWidget {
       return;
     }
     imageOpenHandler(post, openRequest);
+  }
+}
+
+/// Production HTML-first thread body.
+///
+/// The legacy rich-document renderer is intentionally not used as a runtime
+/// fallback here. Old rendering remains available from diagnostic comparison
+/// surfaces, while the normal thread detail path either renders HTML-first or
+/// shows a small recoverable error block.
+class ThreadPostHtmlBody extends StatelessWidget {
+  const ThreadPostHtmlBody({
+    super.key,
+    required this.post,
+    required this.threadId,
+    required this.imageReferer,
+    required this.plan,
+    required this.imageHeaderBuilder,
+    required this.onOpenPostLink,
+    required this.onOpenPostImage,
+    this.onImageFallback,
+    this.onImageDiagnostics,
+    this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
+    this.imageReaderBridge = const ThreadHtmlImageReaderBridge(),
+  });
+
+  final ThreadPost post;
+  final String threadId;
+  final String imageReferer;
+  final ThreadPostBodyRenderPlan plan;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final ValueChanged<String> onOpenPostLink;
+  final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
+  onOpenPostImage;
+  final ThreadPostHtmlFirstImageFallback? onImageFallback;
+  final ThreadPostHtmlFirstImageDiagnostics? onImageDiagnostics;
+  final ForumHtmlRenderPreparer renderPreparer;
+  final ThreadHtmlImageReaderBridge imageReaderBridge;
+
+  @override
+  Widget build(BuildContext context) {
+    return ThreadPostHtmlFirstBody(
+      post: post,
+      threadId: threadId,
+      imageReferer: imageReferer,
+      plan: plan,
+      imageHeaderBuilder: imageHeaderBuilder,
+      onOpenPostLink: onOpenPostLink,
+      onOpenPostImage: onOpenPostImage,
+      onImageFallback: onImageFallback,
+      onImageDiagnostics: onImageDiagnostics,
+      renderPreparer: renderPreparer,
+      imageReaderBridge: imageReaderBridge,
+    );
+  }
+}
+
+class ThreadPostHtmlBodyError extends StatelessWidget {
+  const ThreadPostHtmlBodyError({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      key: const Key('thread-post-html-body-error'),
+      decoration: BoxDecoration(
+        color: colors.errorContainer.withValues(alpha: 0.42),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Text(
+          '正文渲染失败，可长按楼层复制正文或打开原帖查看。',
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: colors.onErrorContainer),
+        ),
+      ),
+    );
   }
 }

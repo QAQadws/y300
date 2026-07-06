@@ -446,7 +446,7 @@ void main() {
       expect(callCount, 3);
     });
 
-    testWidgets('uses legacy body renderer by default', (tester) async {
+    testWidgets('uses HTML-first body renderer by default', (tester) async {
       final repository = _FakeThreadRepository((tid, page, query) async {
         return ApiSuccess(
           _threadDetailData(
@@ -471,8 +471,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 120));
 
       expect(find.byKey(const Key('thread-post-body-p1')), findsOneWidget);
-      expect(find.byType(ThreadPostBodyView), findsWidgets);
-      expect(find.byType(ThreadPostHtmlFirstBody), findsNothing);
+      expect(find.byType(ThreadPostHtmlBody), findsOneWidget);
+      expect(find.byType(ThreadPostHtmlFirstBody), findsOneWidget);
+      expect(find.byType(ThreadPostBodyView), findsNothing);
       expect(_richTextContaining('默认旧正文'), findsOneWidget);
     });
 
@@ -721,41 +722,46 @@ void main() {
       expect(precacheService.decodedSpecs.first.sourceUrl, contains('page-1'));
     });
 
-    testWidgets('legacy mode does not trigger HTML-first image preheat', (
-      tester,
-    ) async {
-      final precacheService = _RecordingForumImagePrecacheService();
-      final repository = _FakeThreadRepository((tid, page, query) async {
-        return ApiSuccess(
-          _threadDetailData(
-            tid: tid,
-            posts: [
-              ThreadPost(
-                pid: 'p1',
-                author: 'alice',
-                authorId: '1',
-                message: '<img src="data/attachment/forum/page-1.jpg">',
-                number: 1,
-                isFirst: true,
-                dateline: 'today',
-              ),
-            ],
+    testWidgets(
+      'legacy render mode switch no longer disables production preheat',
+      (tester) async {
+        final precacheService = _RecordingForumImagePrecacheService();
+        final repository = _FakeThreadRepository((tid, page, query) async {
+          return ApiSuccess(
+            _threadDetailData(
+              tid: tid,
+              posts: [
+                ThreadPost(
+                  pid: 'p1',
+                  author: 'alice',
+                  authorId: '1',
+                  message: '<img src="data/attachment/forum/page-1.jpg">',
+                  number: 1,
+                  isFirst: true,
+                  dateline: 'today',
+                ),
+              ],
+            ),
+          );
+        });
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            htmlFirstRenderMode: ThreadDetailHtmlFirstRenderMode.legacy,
+            forumImagePrecacheService: precacheService,
           ),
         );
-      });
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
 
-      await tester.pumpWidget(
-        _buildTestApp(
-          repository,
-          htmlFirstRenderMode: ThreadDetailHtmlFirstRenderMode.legacy,
-          forumImagePrecacheService: precacheService,
-        ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
-
-      expect(precacheService.decodedSpecs, isEmpty);
-    });
+        expect(precacheService.decodedSpecs, isNotEmpty);
+        expect(
+          precacheService.decodedSpecs.first.kind,
+          ForumImageKind.threadInline,
+        );
+      },
+    );
 
     testWidgets('long pressing app bar copies thread link', (tester) async {
       final copiedTexts = <String>[];
@@ -902,7 +908,7 @@ void main() {
       );
     });
 
-    testWidgets('does not schedule nearby post media preload in reader', (
+    testWidgets('schedules only lightweight HTML-first post image preloads', (
       tester,
     ) async {
       final imageCacheService = _RecordingImageCacheService();
@@ -956,7 +962,13 @@ void main() {
         imageCacheService.requests.any(
           (request) => request.sourceUrl.contains('page-2.jpg'),
         ),
-        isFalse,
+        isTrue,
+      );
+      expect(
+        imageCacheService.requests
+            .where((request) => request.role == ImageCacheRole.threadInline)
+            .length,
+        lessThanOrEqualTo(3),
       );
     });
 
@@ -1022,12 +1034,13 @@ void main() {
       expect(
         events.any(
           (event) =>
-              event.type == ThreadDetailDiagnosticEventType.continuousImage &&
-              event.message.contains('imageItemBuilt'),
+              event.type ==
+                  ThreadDetailDiagnosticEventType.htmlFirstImageDiagnostics &&
+              event.message.contains('html-first-preload'),
         ),
         isTrue,
       );
-      expect(recorder.exportText(), contains('continuous=imageItemBuilt'));
+      expect(recorder.exportText(), contains('html-first-preload'));
     });
 
     testWidgets('collapsing comments reduces post card height', (tester) async {
@@ -1064,23 +1077,30 @@ void main() {
           );
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ThreadDetailContent(
-              state: state,
-              imageHeaderBuilder: null,
-              imageReferer:
-                  'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
-              onLoadPreviousPage: () {},
-              onLoadNextPage: () {},
-              onLoadPageNumber: (_) {},
-              onOpenAuthorProfile: (_) {},
-              onOpenCommentAuthorProfile: (_) {},
-              onCopyActionUrl: (_, _) {},
-              onOpenPostLink: (_) {},
-              onOpenPostActions: (_, _) {},
-              onTogglePollOption: (_, _) {},
-              onSubmitPollVote: (_) {},
+        ProviderScope(
+          overrides: [
+            imageCacheServiceProvider.overrideWithValue(
+              _NoopImageCacheService(),
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: ThreadDetailContent(
+                state: state,
+                imageHeaderBuilder: null,
+                imageReferer:
+                    'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
+                onLoadPreviousPage: () {},
+                onLoadNextPage: () {},
+                onLoadPageNumber: (_) {},
+                onOpenAuthorProfile: (_) {},
+                onOpenCommentAuthorProfile: (_) {},
+                onCopyActionUrl: (_, _) {},
+                onOpenPostLink: (_) {},
+                onOpenPostActions: (_, _) {},
+                onTogglePollOption: (_, _) {},
+                onSubmitPollVote: (_) {},
+              ),
             ),
           ),
         ),
@@ -1156,16 +1176,12 @@ void main() {
         );
 
         await tester.pump();
-        await tester.tap(find.byKey(const Key('thread-post-image-0')));
+        expect(find.byType(ThreadPostHtmlBody), findsOneWidget);
+        await tester.tap(
+          find.byKey(const Key('thread-post-html-first-readable-image-p1-0')),
+        );
         await tester.pump();
 
-        final bodySegment = tester.widget<ThreadPostBodySegmentView>(
-          find.byType(ThreadPostBodySegmentView).first,
-        );
-        expect(
-          bodySegment.resourceLayoutPolicy,
-          ThreadPostResourceLayoutPolicy.adaptiveBlockImagesForReading,
-        );
         final readerRequest = opened?.readerRequest;
         expect(readerRequest, isNotNull);
         expect(readerRequest!.tid, '100');
@@ -1223,7 +1239,9 @@ void main() {
 
       await tester.pumpWidget(_buildTestApp(repository));
       await tester.pump();
-      await tester.tap(find.byKey(const Key('thread-post-image-0')));
+      await tester.tap(
+        find.byKey(const Key('thread-post-html-first-readable-image-p1-0')),
+      );
       await tester.pumpAndSettle();
 
       expect(find.byType(ThreadImageReaderPage), findsOneWidget);
@@ -1972,7 +1990,9 @@ void main() {
       expect(find.byKey(const Key('thread-post-card-bulk-79')), findsNothing);
     });
 
-    testWidgets('renders long text post as lazy body segments', (tester) async {
+    testWidgets('renders long text post as one HTML-first body', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(390, 260);
       tester.view.devicePixelRatio = 1;
       addTearDown(() {
@@ -2013,18 +2033,8 @@ void main() {
 
       expect(find.byKey(const Key('thread-post-card-long-1')), findsOneWidget);
       expect(find.byKey(const Key('thread-post-body-long-1')), findsOneWidget);
-      expect(
-        find.byKey(const Key('thread-post-body-long-1-0')),
-        findsOneWidget,
-      );
-      expect(find.byKey(const Key('thread-post-body-long-1-3')), findsNothing);
-      expect(
-        find.descendant(
-          of: find.byKey(const Key('thread-post-body-long-1')),
-          matching: find.byType(SelectionArea),
-        ),
-        findsNothing,
-      );
+      expect(find.byKey(const Key('thread-post-body-long-1-0')), findsNothing);
+      expect(find.byType(ThreadPostHtmlBody), findsOneWidget);
       expect(
         find.ancestor(
           of: find.byKey(const Key('thread-detail-list')),
@@ -2052,7 +2062,7 @@ void main() {
       );
     });
 
-    testWidgets('uses lazy body segment entries for image dense posts', (
+    testWidgets('uses one HTML-first body entry for image dense posts', (
       tester,
     ) async {
       tester.view.physicalSize = const Size(390, 260);
@@ -2098,21 +2108,13 @@ void main() {
       await tester.pump(const Duration(milliseconds: 120));
 
       expect(find.byKey(const Key('thread-post-card-image-1')), findsOneWidget);
-      expect(
-        find.byKey(const Key('thread-post-body-image-1-0')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('thread-post-body-image-1')), findsOneWidget);
+      expect(find.byKey(const Key('thread-post-body-image-1-0')), findsNothing);
       expect(find.byKey(const Key('thread-post-body-image-1-6')), findsNothing);
-
-      await tester.scrollUntilVisible(
-        find.byKey(const Key('thread-post-body-image-1-6')),
-        320,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.pump();
-
       expect(
-        find.byKey(const Key('thread-post-body-image-1-6')),
+        find.byKey(
+          const Key('thread-post-html-first-readable-image-image-1-0'),
+        ),
         findsOneWidget,
       );
     });
@@ -2190,10 +2192,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 120));
 
       expect(find.byKey(const Key('thread-post-body-copy-1')), findsOneWidget);
-      expect(
-        find.byKey(const Key('thread-post-body-copy-1-0')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('thread-post-body-copy-1-0')), findsNothing);
       expect(
         find.descendant(
           of: find.byKey(const Key('thread-post-body-copy-1')),
@@ -2223,7 +2222,7 @@ void main() {
 
       await _longPressVisibleTop(
         tester,
-        find.byKey(const Key('thread-post-body-copy-1-0')),
+        find.byKey(const Key('thread-post-body-copy-1')),
       );
       await tester.pumpAndSettle();
 
@@ -2246,7 +2245,7 @@ void main() {
 
       await _longPressVisibleTop(
         tester,
-        find.byKey(const Key('thread-post-body-copy-1-0')),
+        find.byKey(const Key('thread-post-body-copy-1')),
       );
       await tester.pumpAndSettle();
       await _tapPostActionSheetItem(
@@ -2256,24 +2255,28 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.byKey(const Key('thread-post-selectable-copy-page')),
+        find.byKey(const Key('thread-post-html-selection-copy-page')),
         findsOneWidget,
       );
       expect(find.text('选择复制'), findsOneWidget);
       expect(
-        find.byKey(const Key('thread-post-selectable-copy-body-copy-1')),
+        find.byKey(const Key('thread-post-html-selection-copy-body-copy-1')),
         findsOneWidget,
       );
       expect(
         find.descendant(
-          of: find.byKey(const Key('thread-post-selectable-copy-body-copy-1')),
+          of: find.byKey(
+            const Key('thread-post-html-selection-copy-body-copy-1'),
+          ),
           matching: find.byType(SelectionArea),
         ),
-        findsOneWidget,
+        findsNothing,
       );
       final copyPageRichTexts = tester.widgetList<RichText>(
         find.descendant(
-          of: find.byKey(const Key('thread-post-selectable-copy-body-copy-1')),
+          of: find.byKey(
+            const Key('thread-post-html-selection-copy-body-copy-1'),
+          ),
           matching: find.byType(RichText),
         ),
       );
@@ -2320,26 +2323,30 @@ void main() {
       await tester.pump(const Duration(milliseconds: 120));
       await tester.pump();
 
-      expect(find.byKey(const Key('thread-post-image-0')), findsOneWidget);
-      final image = tester.widget<Image>(
-        find
-            .descendant(
-              of: find.byKey(const Key('thread-post-image-0')),
-              matching: find.byType(Image),
-            )
-            .first,
+      final image = tester.widget<CachedLibraryImage>(
+        find.descendant(
+          of: find.byKey(
+            const Key('thread-post-html-first-readable-image-p1-0'),
+          ),
+          matching: find.byType(CachedLibraryImage),
+        ),
       );
-      final provider = _underlyingProvider(image.image) as NetworkImage;
+      final request = image.request;
+      expect(request, isNotNull);
       expect(
-        provider.url,
+        request!.sourceUrl,
         'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
       );
+      expect(image.headerBuilder, isNotNull);
+      final headers = await image.headerBuilder!.buildHeaders(
+        request.sourceUrl,
+      );
       expect(
-        provider.headers?['Referer'],
+        headers['Referer'],
         'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
       );
-      expect(provider.headers?['User-Agent'], contains('Chrome'));
-      expect(provider.headers?['Accept'], contains('image/'));
+      expect(headers['User-Agent'], contains('Chrome'));
+      expect(headers['Accept'], contains('image/'));
     });
 
     testWidgets('opens native rate sheet and submits post rating', (
@@ -4367,9 +4374,4 @@ class _FakeNovelRepository implements NovelRepository {
     required String episodeId,
     required bool isBookmarked,
   }) async {}
-}
-
-/// 解开降采样包裹，取底层真实 provider（Phase 0 起 provider 可能被 ResizeImage 包裹）。
-ImageProvider _underlyingProvider(ImageProvider provider) {
-  return provider is ResizeImage ? provider.imageProvider : provider;
 }

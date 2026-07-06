@@ -30,14 +30,14 @@ import 'package:y300/features/thread/data/repositories/thread_post_rate_reposito
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_html_first_render_mode.dart';
-import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_plain_text_extractor.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
-import 'package:y300/features/thread/presentation/thread_detail_html_first_render_mode_controller.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_comparison_page.dart';
+import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_selection_copy_page.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_prewarmer.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
@@ -45,7 +45,6 @@ import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
-import 'package:y300/shared/widgets/forum_native_surface.dart';
 
 class ThreadDetailPage extends ConsumerStatefulWidget {
   const ThreadDetailPage({
@@ -117,13 +116,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     final diagnosticRecorder = ref.watch(
       threadDetailDiagnosticRecorderProvider,
     );
-    final htmlFirstRenderMode = ref
-        .watch(threadDetailHtmlFirstRenderModeControllerProvider)
-        .asData
-        ?.value;
-    final htmlFirstPrecacheService = htmlFirstRenderMode?.isHtmlFirst == true
-        ? ref.watch(forumImagePrecacheServiceProvider)
-        : null;
+    final htmlFirstPrecacheService = ref.watch(
+      forumImagePrecacheServiceProvider,
+    );
     final diagnosticModeEnabled =
         ref.watch(syncDiagnosticModeControllerProvider).asData?.value ?? false;
     _latestImageHeaderBuilder = imageHeaderBuilder;
@@ -277,8 +272,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                       );
                     },
                     htmlFirstRenderMode:
-                        htmlFirstRenderMode ??
-                        ThreadDetailHtmlFirstRenderMode.legacy,
+                        ThreadDetailHtmlFirstRenderMode.htmlFirst,
                     diagnosticRecorder: diagnosticRecorder,
                     htmlImagePrecacheService: htmlFirstPrecacheService,
                     onTogglePollOption: controller.togglePollOption,
@@ -606,14 +600,15 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       case _ThreadPostAction.selectCopy:
         await Navigator.of(context).push<void>(
           MaterialPageRoute<void>(
-            builder: (_) => _ThreadPostSelectableCopyPage(
+            builder: (_) => ThreadPostHtmlSelectionCopyPage(
               post: post,
               threadId: widget.tid,
               imageReferer: _imageRefererFor(state),
               plan: plan,
               imageHeaderBuilder: _latestImageHeaderBuilder,
-              onOpenLink: _openForumLink,
-              onOpenImage: (request) => _openPostImages(post, request),
+              onOpenPostLink: _openForumLink,
+              onOpenPostImage: _openPostImages,
+              onImageFallback: _copyHtmlFirstImageUrl,
             ),
           ),
         );
@@ -647,6 +642,10 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       plan.document,
     );
     return _copyUrl('${post.number}# 正文', text);
+  }
+
+  void _copyHtmlFirstImageUrl(ThreadPost post, ForumHtmlImageRequest request) {
+    _copyUrl('${post.number}# 图片', request.url);
   }
 
   void _openAuthorProfile(ThreadPost post) {
@@ -1191,80 +1190,6 @@ class _ThreadPostActionSheet extends StatelessWidget {
   }
 }
 
-class _ThreadPostSelectableCopyPage extends StatelessWidget {
-  const _ThreadPostSelectableCopyPage({
-    required this.post,
-    required this.threadId,
-    required this.imageReferer,
-    required this.plan,
-    required this.imageHeaderBuilder,
-    required this.onOpenLink,
-    required this.onOpenImage,
-  });
-
-  final ThreadPost post;
-  final String threadId;
-  final String imageReferer;
-  final ThreadPostBodyRenderPlan plan;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
-  final ValueChanged<String> onOpenLink;
-  final ThreadPostImageOpenHandler onOpenImage;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
-    return Scaffold(
-      key: const Key('thread-post-selectable-copy-page'),
-      backgroundColor: palette.background,
-      appBar: AppBar(centerTitle: false, title: const Text('选择复制')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
-        children: [
-          Container(
-            key: Key('thread-post-selectable-copy-body-${post.pid}'),
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: palette.card,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: ForumNativeSurfaceShadows.card(palette.stateLayer),
-            ),
-            child: DefaultTextStyle.merge(
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: palette.bodyText,
-                height: 1.5,
-              ),
-              child: ThreadPostBodyView(
-                document: plan.document,
-                blocks: plan.displayDocument.blocks,
-                images: plan.images,
-                imageHeaderBuilder: imageHeaderBuilder,
-                imageCacheOwnerId: threadId,
-                imageOpenContext: ThreadImageOpenContext(
-                  tid: threadId,
-                  pid: post.pid,
-                  postNumber: post.number,
-                  referer: imageReferer,
-                  cacheKeyForImage: (image) {
-                    return ForumImageCacheRequests.threadInline(
-                      tid: threadId,
-                      url: image.url,
-                      imageIndex: image.index,
-                    ).cacheKey;
-                  },
-                ),
-                resourceLayoutHints: plan.resourceLayoutHints,
-                selectionEnabled: true,
-                onOpenLink: onOpenLink,
-                onOpenImage: onOpenImage,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _ThreadErrorView extends StatelessWidget {
   const _ThreadErrorView({required this.message, required this.onRetry});
 
@@ -1294,14 +1219,18 @@ class _ThreadErrorView extends StatelessWidget {
 }
 
 Widget threadDetailPreviewShell(Widget child) {
-  return MaterialApp(
-    debugShowCheckedModeBanner: false,
-    theme: AppTheme.light(),
-    home: Scaffold(
-      body: SafeArea(
-        child: ColoredBox(
-          color: ThreadDetailNativePalette.resolve(AppTheme.light()).background,
-          child: child,
+  return ProviderScope(
+    child: MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light(),
+      home: Scaffold(
+        body: SafeArea(
+          child: ColoredBox(
+            color: ThreadDetailNativePalette.resolve(
+              AppTheme.light(),
+            ).background,
+            child: child,
+          ),
         ),
       ),
     ),

@@ -93,15 +93,12 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
     required this.plan,
     required this.highlighted,
     required this.imageHeaderBuilder,
-    required this.imageOpenContext,
     required this.imageReferer,
-    required this.htmlFirstRenderMode,
     required this.palette,
     required this.onOpenPostLink,
     required this.onOpenPostImages,
     required this.onHtmlFirstImageFallback,
     required this.onOpenPostActions,
-    required this.diagnosticRecorder,
   });
 
   final ThreadPost post;
@@ -109,9 +106,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
   final ThreadPostBodyRenderPlan plan;
   final bool highlighted;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
-  final ThreadImageOpenContext imageOpenContext;
   final String imageReferer;
-  final ThreadDetailHtmlFirstRenderMode htmlFirstRenderMode;
   final ThreadDetailNativePalette palette;
   final ValueChanged<String> onOpenPostLink;
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
@@ -119,7 +114,6 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
   final ThreadPostHtmlFirstImageFallback onHtmlFirstImageFallback;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
   onOpenPostActions;
-  final ThreadDetailDiagnosticRecorder diagnosticRecorder;
 
   @override
   Widget build(BuildContext context) {
@@ -138,43 +132,20 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
             color: palette.bodyText,
             height: 1.5,
           ),
-          child: htmlFirstRenderMode.isHtmlFirst
-              ? ThreadPostHtmlFirstBody(
-                  post: post,
-                  threadId: threadId,
-                  imageReferer: imageReferer,
-                  plan: plan,
-                  imageHeaderBuilder: imageHeaderBuilder,
-                  onOpenPostLink: onOpenPostLink,
-                  onOpenPostImage: onOpenPostImages == null
-                      ? null
-                      : (post, request) =>
-                            onOpenPostImages!.call(post, request),
-                  onImageFallback: onHtmlFirstImageFallback,
-                  fallback: _legacyBody(),
-                )
-              : _legacyBody(),
+          child: ThreadPostHtmlBody(
+            post: post,
+            threadId: threadId,
+            imageReferer: imageReferer,
+            plan: plan,
+            imageHeaderBuilder: imageHeaderBuilder,
+            onOpenPostLink: onOpenPostLink,
+            onOpenPostImage: onOpenPostImages == null
+                ? null
+                : (post, request) => onOpenPostImages!.call(post, request),
+            onImageFallback: onHtmlFirstImageFallback,
+          ),
         ),
       ),
-    );
-  }
-
-  Widget _legacyBody() {
-    return ThreadPostBodyView(
-      key: Key('thread-post-${post.pid}'),
-      document: plan.document,
-      blocks: plan.displayDocument.blocks,
-      images: plan.images,
-      imageHeaderBuilder: imageHeaderBuilder,
-      imageCacheOwnerId: threadId,
-      imageOpenContext: imageOpenContext,
-      resourceLayoutHints: plan.resourceLayoutHints,
-      resourceLayoutPolicy:
-          ThreadPostResourceLayoutPolicy.adaptiveBlockImagesForReading,
-      selectionEnabled: false,
-      diagnosticRecorder: diagnosticRecorder,
-      onOpenLink: onOpenPostLink,
-      onOpenImage: (request) => onOpenPostImages?.call(post, request),
     );
   }
 }
@@ -486,13 +457,18 @@ class ThreadPostCard extends StatelessWidget {
               color: palette.bodyText,
               height: 1.5,
             ),
-            child: ThreadPostHtml(
-              data: post.message,
+            child: ThreadPostHtmlBody(
               key: Key('thread-post-${post.pid}'),
+              post: post,
+              threadId: state.tid,
+              imageReferer: state.desktopUrl ?? '',
+              plan: plan,
               imageHeaderBuilder: imageHeaderBuilder,
-              imageCacheOwnerId: state.tid,
-              onOpenLink: onOpenPostLink,
-              onOpenImage: (request) => onOpenPostImages?.call(post, request),
+              onOpenPostLink: onOpenPostLink,
+              onOpenPostImage: onOpenPostImages,
+              onImageFallback: (post, request) {
+                onCopyActionUrl('${post.number}# 图片', request.url);
+              },
             ),
           ),
           if (post.poll != null) ...[

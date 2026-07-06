@@ -13,6 +13,7 @@ import 'package:y300/features/cache/domain/services/forum_image_dimension_index.
 import 'package:y300/features/cache/domain/services/forum_image_layout_hint_resolver.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
+import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 
@@ -204,7 +205,16 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
     if (aid != null && aid.isNotEmpty) {
       return aid;
     }
-    final src = element.attributes['src'];
+    final src = DefaultForumImageSourcePipeline.firstDomImageSourceFromElement(
+      element,
+      domAttributes: const <String>[
+        'zoomfile',
+        'file',
+        'data-original',
+        'data-src',
+        'src',
+      ],
+    );
     return src == null ? null : _attachmentIdFromUrl(src);
   }
 
@@ -244,6 +254,8 @@ class _ForumHtmlCachedBlockImageView extends ConsumerStatefulWidget {
 
 class _ForumHtmlCachedBlockImageViewState
     extends ConsumerState<_ForumHtmlCachedBlockImageView> {
+  static const double _decodedAspectRatioPromotionThreshold = 0.05;
+
   ForumImageLayoutHint? _cachedHint;
   String? _loadedCacheKey;
 
@@ -280,9 +292,52 @@ class _ForumHtmlCachedBlockImageViewState
         icon: Icons.broken_image_outlined,
       ),
       headerBuilder: widget.imageHeaderBuilder,
-      onImageResolved: widget.onImageResolved,
+      onImageResolved: _handleImageResolved,
     );
     return AspectRatio(aspectRatio: hint.aspectRatio ?? 0.7, child: image);
+  }
+
+  void _handleImageResolved(Size size) {
+    widget.onImageResolved?.call(size);
+    _promoteFallbackLayoutFromDecodedSize(size);
+  }
+
+  void _promoteFallbackLayoutFromDecodedSize(Size size) {
+    if (!mounted || ForumImageDimensions.fromHtmlSpec(widget.spec) != null) {
+      return;
+    }
+    final hint = _hint;
+    if (hint.layoutMode != ForumImageLayoutMode.blockWithFallbackAspectRatio) {
+      return;
+    }
+    final decoded = ForumImageDimensions.fromValues(
+      width: size.width,
+      height: size.height,
+      source: ForumImageDimensionSource.decodedImage,
+    );
+    final currentAspectRatio = hint.aspectRatio;
+    final decodedAspectRatio = decoded?.aspectRatio;
+    if (decoded == null ||
+        currentAspectRatio == null ||
+        !currentAspectRatio.isFinite ||
+        currentAspectRatio <= 0 ||
+        decodedAspectRatio == null ||
+        !decodedAspectRatio.isFinite ||
+        decodedAspectRatio <= 0) {
+      return;
+    }
+    final relativeDelta =
+        (decodedAspectRatio - currentAspectRatio).abs() / currentAspectRatio;
+    if (relativeDelta < _decodedAspectRatioPromotionThreshold) {
+      return;
+    }
+    setState(() {
+      _cachedHint = ForumImageLayoutHint(
+        layoutMode: ForumImageLayoutMode.blockWithKnownAspectRatio,
+        dimensionSource: ForumImageDimensionSource.decodedImage,
+        aspectRatio: decodedAspectRatio,
+      );
+    });
   }
 
   Future<void> _loadCachedDimensions() async {

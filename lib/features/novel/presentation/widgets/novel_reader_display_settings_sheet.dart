@@ -117,9 +117,8 @@ class _NovelReaderDisplaySettingsSheetState
                     value: _supportedFontWeight(_draft.fontWeight),
                     values: const <int>[400, 500, 700],
                     labelBuilder: _fontWeightLabel,
-                    onChanged: (value) => _applyPreferences(
-                      _draft.copyWith(fontWeight: value),
-                    ),
+                    onChanged: (value) =>
+                        _applyPreferences(_draft.copyWith(fontWeight: value)),
                   ),
                   ReaderSegmentControl<NovelReaderTextAlignMode>(
                     key: const Key('novel-reader-text-align-control'),
@@ -127,9 +126,8 @@ class _NovelReaderDisplaySettingsSheetState
                     value: _draft.textAlign,
                     values: NovelReaderTextAlignMode.values,
                     labelBuilder: _textAlignLabel,
-                    onChanged: (value) => _applyPreferences(
-                      _draft.copyWith(textAlign: value),
-                    ),
+                    onChanged: (value) =>
+                        _applyPreferences(_draft.copyWith(textAlign: value)),
                   ),
                 ],
               ),
@@ -146,7 +144,8 @@ class _NovelReaderDisplaySettingsSheetState
                           key: const Key('novel-theme-light'),
                           label: '浅色',
                           selected:
-                              _draft.themePreset == NovelReaderThemePreset.light,
+                              _draft.themePreset ==
+                              NovelReaderThemePreset.light,
                           onSelected: () => _applyPreferences(
                             _draft.copyWith(
                               themePreset: NovelReaderThemePreset.light,
@@ -157,7 +156,8 @@ class _NovelReaderDisplaySettingsSheetState
                           key: const Key('novel-theme-sepia'),
                           label: '护眼',
                           selected:
-                              _draft.themePreset == NovelReaderThemePreset.sepia,
+                              _draft.themePreset ==
+                              NovelReaderThemePreset.sepia,
                           onSelected: () => _applyPreferences(
                             _draft.copyWith(
                               themePreset: NovelReaderThemePreset.sepia,
@@ -178,7 +178,8 @@ class _NovelReaderDisplaySettingsSheetState
                         _ThemeChip(
                           key: const Key('novel-theme-follow-system'),
                           label: '跟随系统',
-                          selected: _draft.themePreset ==
+                          selected:
+                              _draft.themePreset ==
                               NovelReaderThemePreset.followSystem,
                           onSelected: () => _applyPreferences(
                             _draft.copyWith(
@@ -197,11 +198,19 @@ class _NovelReaderDisplaySettingsSheetState
                   ReaderSegmentControl<NovelReaderFlowMode>(
                     key: const Key('novel-reader-flow-mode-control'),
                     label: '模式',
-                    value: _draft.flowMode,
-                    values: NovelReaderFlowMode.values,
+                    value: NovelReaderFlowMode.vertical,
+                    values: const <NovelReaderFlowMode>[
+                      NovelReaderFlowMode.vertical,
+                    ],
                     labelBuilder: _flowModeLabel,
-                    onChanged: (value) => _applyPreferences(
-                      _draft.copyWith(flowMode: value),
+                    onChanged: (value) =>
+                        _applyPreferences(_draft.copyWith(flowMode: value)),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('HTML-first 正文暂只支持竖向阅读，分页模式后续重建。'),
                     ),
                   ),
                   ReaderSegmentControl<NovelReaderConversionMode>(
@@ -311,10 +320,7 @@ class _NovelReaderDisplaySettingsSheetState
 }
 
 class _SettingsSection extends StatelessWidget {
-  const _SettingsSection({
-    required this.title,
-    required this.children,
-  });
+  const _SettingsSection({required this.title, required this.children});
 
   final String title;
   final List<Widget> children;
@@ -328,10 +334,7 @@ class _SettingsSection extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Text(
-              title,
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
+            child: Text(title, style: Theme.of(context).textTheme.titleSmall),
           ),
           ...children,
         ],

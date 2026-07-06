@@ -160,8 +160,8 @@ class _MorePageState extends ConsumerState<MorePage> {
             SwitchListTile(
               key: const Key('thread-detail-html-first-renderer-switch'),
               secondary: const Icon(Icons.article_outlined),
-              title: const Text('HTML-first 正文诊断'),
-              subtitle: const Text('帖子详情正文使用 HTML-first 渲染，旧渲染保留兜底'),
+              title: const Text('HTML-first 对照入口'),
+              subtitle: const Text('正文已默认使用 HTML-first；此开关仅显示旧渲染对照入口'),
               value: htmlFirstRendererEnabled,
               onChanged: (value) =>
                   _setThreadDetailHtmlFirstRendererEnabled(context, ref, value),
@@ -242,7 +242,7 @@ class _MorePageState extends ConsumerState<MorePage> {
       }
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('HTML-first 正文诊断设置失败：$error')));
+      ).showSnackBar(SnackBar(content: Text('HTML-first 对照设置失败：$error')));
     }
   }
 

@@ -127,6 +127,96 @@ void main() {
     expect(find.textContaining('正文', findRichText: true), findsOneWidget);
   });
 
+  testWidgets('normalizes Discuz font size 3 to the base body size', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(
+          textTheme: const TextTheme(bodyMedium: TextStyle(fontSize: 20)),
+        ),
+        home: const Scaffold(
+          body: ForumHtmlWidgetPostRenderer(
+            sourceId: 'font-size-three',
+            html: '默认<font size="3">三号</font>',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final defaultSpan = _findTextSpanContaining(tester, '默认');
+    final sizeThreeSpan = _findTextSpanContaining(tester, '三号');
+
+    expect(defaultSpan?.style?.fontSize, 20);
+    expect(sizeThreeSpan?.style?.fontSize, 20);
+  });
+
+  testWidgets('preserves Discuz font size ordering around the base size', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(
+          textTheme: const TextTheme(bodyMedium: TextStyle(fontSize: 20)),
+        ),
+        home: const Scaffold(
+          body: ForumHtmlWidgetPostRenderer(
+            sourceId: 'font-size-ordering',
+            html:
+                '默认'
+                '<font size="2">二号</font>'
+                '<font size="4">四号</font>',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final defaultSize = _findTextSpanContaining(tester, '默认')?.style?.fontSize;
+    final sizeTwo = _findTextSpanContaining(tester, '二号')?.style?.fontSize;
+    final sizeFour = _findTextSpanContaining(tester, '四号')?.style?.fontSize;
+
+    expect(defaultSize, 20);
+    expect(sizeTwo, lessThan(defaultSize!));
+    expect(sizeFour, greaterThan(defaultSize));
+  });
+
+  testWidgets('renders Discuz edit status smaller and quieter', (tester) async {
+    const bodyColor = Color(0xFF203040);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(
+          textTheme: const TextTheme(
+            bodyMedium: TextStyle(fontSize: 20, color: bodyColor),
+          ),
+        ),
+        home: const Scaffold(
+          body: ForumHtmlWidgetPostRenderer(
+            sourceId: 'pstatus',
+            html:
+                '<i class="pstatus"> 本帖最后由 INCSKY16 于 2026-7-3 13:56 编辑 </i>'
+                '<br><i>普通斜体</i><p>正文</p>',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final editStatus = tester.widget<Text>(
+      find.byKey(const Key('forum-html-discuz-edit-status')),
+    );
+    final ordinaryItalic = _findTextSpanContaining(tester, '普通斜体');
+
+    expect(editStatus.data, '本帖最后由 INCSKY16 于 2026-7-3 13:56 编辑');
+    expect(editStatus.style?.fontStyle, FontStyle.italic);
+    expect(editStatus.style?.fontSize, lessThan(20));
+    expect(editStatus.style?.color?.a, lessThan(bodyColor.a));
+    expect(ordinaryItalic?.style?.fontStyle, FontStyle.italic);
+    expect(ordinaryItalic?.style?.fontSize, 20);
+    expect(ordinaryItalic?.style?.color?.a, bodyColor.a);
+  });
+
   testWidgets('renders forum collapse blocks and expands nested content', (
     tester,
   ) async {
@@ -620,6 +710,92 @@ void main() {
     expect(aspectRatio.aspectRatio, 0.7);
   });
 
+  testWidgets('promotes fallback thread image layout after decoded size', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(
+            _RecordingImageCacheService(),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: ForumHtmlWidgetPostRenderer(
+              sourceId: 'decoded-size-image',
+              threadId: '573279',
+              html: '<img src="data/attachment/forum/page-decoded.jpg">',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    AspectRatio currentAspectRatio() {
+      return tester.widget<AspectRatio>(
+        find
+            .ancestor(
+              of: find.byType(CachedLibraryImage).first,
+              matching: find.byType(AspectRatio),
+            )
+            .first,
+      );
+    }
+
+    expect(currentAspectRatio().aspectRatio, 0.7);
+
+    tester
+        .widget<CachedLibraryImage>(find.byType(CachedLibraryImage).first)
+        .onImageResolved
+        ?.call(const Size(1600, 900));
+    await tester.pump();
+
+    expect(currentAspectRatio().aspectRatio, 1600 / 900);
+  });
+
+  testWidgets('keeps fallback layout for decoded sizes near the comic ratio', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(
+            _RecordingImageCacheService(),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: ForumHtmlWidgetPostRenderer(
+              sourceId: 'decoded-comic-ratio-image',
+              threadId: '573279',
+              html: '<img src="data/attachment/forum/page-comic.jpg">',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    tester
+        .widget<CachedLibraryImage>(find.byType(CachedLibraryImage).first)
+        .onImageResolved
+        ?.call(const Size(700, 1000));
+    await tester.pump();
+
+    final aspectRatio = tester.widget<AspectRatio>(
+      find
+          .ancestor(
+            of: find.byType(CachedLibraryImage).first,
+            matching: find.byType(AspectRatio),
+          )
+          .first,
+    );
+
+    expect(aspectRatio.aspectRatio, 0.7);
+  });
+
   testWidgets('uses cached aspect ratio for unsized thread images', (
     tester,
   ) async {
@@ -665,8 +841,19 @@ void main() {
     final image = tester.widget<CachedLibraryImage>(
       find.byType(CachedLibraryImage).first,
     );
+    image.onImageResolved?.call(const Size(1600, 900));
+    await tester.pump();
+    final stableAspectRatio = tester.widget<AspectRatio>(
+      find
+          .ancestor(
+            of: find.byType(CachedLibraryImage).first,
+            matching: find.byType(AspectRatio),
+          )
+          .first,
+    );
 
     expect(aspectRatio.aspectRatio, 1.6);
+    expect(stableAspectRatio.aspectRatio, 1.6);
     expect(image.width, isNull);
     expect(image.height, isNull);
   });
@@ -715,8 +902,22 @@ void main() {
           )
           .first,
     );
+    tester
+        .widget<CachedLibraryImage>(find.byType(CachedLibraryImage).first)
+        .onImageResolved
+        ?.call(const Size(1600, 900));
+    await tester.pump();
+    final stableAspectRatio = tester.widget<AspectRatio>(
+      find
+          .ancestor(
+            of: find.byType(CachedLibraryImage).first,
+            matching: find.byType(AspectRatio),
+          )
+          .first,
+    );
 
     expect(aspectRatio.aspectRatio, 640 / 480);
+    expect(stableAspectRatio.aspectRatio, 640 / 480);
   });
 
   testWidgets('keeps non-network data images on the html library default path', (
@@ -819,6 +1020,37 @@ html_dom.Element _elementFrom(String html) {
       .nodes
       .whereType<html_dom.Element>()
       .first;
+}
+
+TextSpan? _findTextSpanContaining(WidgetTester tester, String text) {
+  for (final richText in tester.widgetList<RichText>(find.byType(RichText))) {
+    final span = _findTextSpanContainingIn(richText.text, text);
+    if (span != null) {
+      return span;
+    }
+  }
+  return null;
+}
+
+TextSpan? _findTextSpanContainingIn(InlineSpan span, String text) {
+  if (span is! TextSpan) {
+    return null;
+  }
+  final value = span.text;
+  if (value != null && value.contains(text)) {
+    return span;
+  }
+  final children = span.children;
+  if (children == null) {
+    return null;
+  }
+  for (final child in children) {
+    final found = _findTextSpanContainingIn(child, text);
+    if (found != null) {
+      return found;
+    }
+  }
+  return null;
 }
 
 class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {

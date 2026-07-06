@@ -100,6 +100,12 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     ForumHtmlStylePolicy stylePolicy,
     ForumHtmlReaderPreferences resolvedPreferences,
   ) {
+    if (stylePolicy.isDiscuzEditStatusElement(element)) {
+      return _DiscuzEditStatusText(
+        text: element.text.trim(),
+        baseStyle: stylePolicy.baseTextStyle,
+      );
+    }
     if (!stylePolicy.isForumCollapseElement(element)) {
       return null;
     }
@@ -252,5 +258,32 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     }
     final aidMatch = RegExp(r'(?:aid|attachmentid)=(\d+)').firstMatch(url);
     return aidMatch?.group(1);
+  }
+}
+
+class _DiscuzEditStatusText extends StatelessWidget {
+  const _DiscuzEditStatusText({required this.text, required this.baseStyle});
+
+  final String text;
+  final TextStyle Function(BuildContext context) baseStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    final source = baseStyle(context);
+    final fallback = DefaultTextStyle.of(context).style;
+    final baseFontSize = source.fontSize ?? fallback.fontSize;
+    final baseColor =
+        source.color ??
+        fallback.color ??
+        Theme.of(context).colorScheme.onSurface;
+    return Text(
+      text,
+      key: const Key('forum-html-discuz-edit-status'),
+      style: source.copyWith(
+        fontSize: baseFontSize == null ? null : baseFontSize * 0.88,
+        fontStyle: FontStyle.italic,
+        color: baseColor.withValues(alpha: 0.62),
+      ),
+    );
   }
 }

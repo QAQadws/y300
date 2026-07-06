@@ -2,15 +2,15 @@ import 'dart:convert';
 
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
+import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
+import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_image_deduplicator.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
-
-final Uri _forumBaseUri = Uri.parse('https://bbs.yamibo.com/');
 
 abstract interface class ForumHtmlRenderPreparer {
   ForumHtmlPreparedRenderDocument prepare({
@@ -28,11 +28,14 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
         const DefaultForumImageRequestResolver(),
     ForumHtmlImageDeduplicator imageDeduplicator =
         const ForumHtmlImageDeduplicator(),
+    SiteUrlResolver urlResolver = const SiteUrlResolver(),
   }) : _imageRequestResolver = imageRequestResolver,
-       _imageDeduplicator = imageDeduplicator;
+       _imageDeduplicator = imageDeduplicator,
+       _urlResolver = urlResolver;
 
   final ForumImageRequestResolver _imageRequestResolver;
   final ForumHtmlImageDeduplicator _imageDeduplicator;
+  final SiteUrlResolver _urlResolver;
 
   @override
   ForumHtmlPreparedRenderDocument prepare({
@@ -57,16 +60,29 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
     var attachmentTaggedCount = 0;
 
     for (final image in images) {
-      final rawSrc = image.attributes['src']?.trim();
+      final rawSrc = _rawImageSourceFromElement(image);
       if (rawSrc == null || rawSrc.isEmpty) {
         skippedNonNetworkCount++;
         continue;
       }
-      final resolved = _forumBaseUri.resolve(rawSrc);
-      if (!_isHttpUri(resolved)) {
+      final normalizedSrc =
+          DefaultForumImageSourcePipeline.normalizeImageSource(
+            rawSrc,
+            urlResolver: _urlResolver,
+          );
+      final resolved = normalizedSrc == null
+          ? null
+          : Uri.tryParse(normalizedSrc);
+      if (resolved == null || !_isHttpUri(resolved)) {
         skippedNonNetworkCount++;
         continue;
       }
+      final resolvedSrc = normalizedSrc;
+      if (resolvedSrc == null) {
+        skippedNonNetworkCount++;
+        continue;
+      }
+      image.attributes['src'] = resolvedSrc;
 
       final attachmentId = _attachmentIdFromElement(image);
       if (attachmentId != null) {
@@ -185,6 +201,19 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
     result[resolved.removeFragment().toString()] = attachmentId;
   }
 
+  String? _rawImageSourceFromElement(html_dom.Element element) {
+    return DefaultForumImageSourcePipeline.firstDomImageSourceFromElement(
+      element,
+      domAttributes: const <String>[
+        'zoomfile',
+        'file',
+        'data-original',
+        'data-src',
+        'src',
+      ],
+    );
+  }
+
   String? _attachmentIdFromElement(html_dom.Element element) {
     final id = element.id;
     final aimgMatch = RegExp(r'^aimg_(\d+)$').firstMatch(id);
@@ -195,7 +224,7 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
     if (aid != null && aid.isNotEmpty) {
       return aid;
     }
-    final src = element.attributes['src'];
+    final src = _rawImageSourceFromElement(element);
     return src == null ? null : _attachmentIdFromUrl(src);
   }
 

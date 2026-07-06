@@ -14,10 +14,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap
 import 'package:y300/features/novel/presentation/services/novel_reader_preference_impact_analyzer.dart';
 
 class NovelReaderArgs {
-  const NovelReaderArgs({
-    required this.novelId,
-    required this.episodeId,
-  });
+  const NovelReaderArgs({required this.novelId, required this.episodeId});
 
   final String novelId;
   final String episodeId;
@@ -168,12 +165,11 @@ class NovelReaderViewState {
       currentEpisode: currentEpisode ?? this.currentEpisode,
       currentContent: currentContent ?? this.currentContent,
       document: document ?? this.document,
-      persistedPreferences:
-          persistedPreferences ?? this.persistedPreferences,
-      effectivePreferences:
-          effectivePreferences ?? this.effectivePreferences,
-      readingProgress:
-          clearReadingProgress ? null : (readingProgress ?? this.readingProgress),
+      persistedPreferences: persistedPreferences ?? this.persistedPreferences,
+      effectivePreferences: effectivePreferences ?? this.effectivePreferences,
+      readingProgress: clearReadingProgress
+          ? null
+          : (readingProgress ?? this.readingProgress),
       progressSnapshot: progressSnapshot ?? this.progressSnapshot,
       currentOffset: currentOffset ?? this.currentOffset,
       bookmarks: bookmarks ?? this.bookmarks,
@@ -196,8 +192,8 @@ class NovelReaderViewState {
 
 final novelReaderControllerProvider = AsyncNotifierProvider.autoDispose
     .family<NovelReaderController, NovelReaderViewState, NovelReaderArgs>(
-  (args) => NovelReaderController(args),
-);
+      (args) => NovelReaderController(args),
+    );
 
 class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   NovelReaderController(this._args);
@@ -224,18 +220,19 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     if (current == null) {
       return;
     }
+    final effectiveNext = _htmlFirstEffectivePreferences(next);
     final diff = _preferenceImpactAnalyzer.compare(
       current.effectivePreferences,
-      next,
+      effectiveNext,
     );
     if (!diff.hasChanges) {
       return;
     }
     state = AsyncData(
       current.copyWith(
-        effectivePreferences: next,
+        effectivePreferences: effectiveNext,
         progressSnapshot: current.progressSnapshot.copyWith(
-          flowMode: next.flowMode,
+          flowMode: effectiveNext.flowMode,
         ),
       ),
     );
@@ -251,14 +248,17 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       next,
     );
     if (!persistedDiff.hasChanges) {
-      if (current.effectivePreferences == current.persistedPreferences) {
+      final persistedEffective = _htmlFirstEffectivePreferences(
+        current.persistedPreferences,
+      );
+      if (current.effectivePreferences == persistedEffective) {
         return;
       }
       state = AsyncData(
         current.copyWith(
-          effectivePreferences: current.persistedPreferences,
+          effectivePreferences: persistedEffective,
           progressSnapshot: current.progressSnapshot.copyWith(
-            flowMode: current.persistedPreferences.flowMode,
+            flowMode: persistedEffective.flowMode,
           ),
         ),
       );
@@ -270,10 +270,11 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       return;
     }
     final latest = state.value ?? current;
-    final effectivePreferences =
-        latest.effectivePreferences == current.effectivePreferences
-            ? next
-            : latest.effectivePreferences;
+    final effectivePreferences = _htmlFirstEffectivePreferences(
+      latest.effectivePreferences == current.effectivePreferences
+          ? next
+          : latest.effectivePreferences,
+    );
     state = AsyncData(
       latest.copyWith(
         persistedPreferences: next,
@@ -293,6 +294,15 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     )) {
       await _rebuildCurrentEpisodeDocument(commitSerial);
     }
+  }
+
+  NovelReaderPreferences _htmlFirstEffectivePreferences(
+    NovelReaderPreferences preferences,
+  ) {
+    if (preferences.flowMode == NovelReaderFlowMode.vertical) {
+      return preferences;
+    }
+    return preferences.copyWith(flowMode: NovelReaderFlowMode.vertical);
   }
 
   /// Reloads the current episode document so preference-driven content
@@ -322,15 +332,20 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
 
   void revertPreferencePreview() {
     final current = state.value;
-    if (current == null ||
-        current.effectivePreferences == current.persistedPreferences) {
+    if (current == null) {
+      return;
+    }
+    final persistedEffective = _htmlFirstEffectivePreferences(
+      current.persistedPreferences,
+    );
+    if (current.effectivePreferences == persistedEffective) {
       return;
     }
     state = AsyncData(
       current.copyWith(
-        effectivePreferences: current.persistedPreferences,
+        effectivePreferences: persistedEffective,
         progressSnapshot: current.progressSnapshot.copyWith(
-          flowMode: current.persistedPreferences.flowMode,
+          flowMode: persistedEffective.flowMode,
         ),
       ),
     );
@@ -438,10 +453,9 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     if (current == null) {
       return;
     }
-    final results = ref.read(novelReaderSearchServiceProvider).search(
-          document: current.document,
-          keyword: keyword,
-        );
+    final results = ref
+        .read(novelReaderSearchServiceProvider)
+        .search(document: current.document, keyword: keyword);
     state = AsyncData(
       current.copyWith(
         searchKeyword: keyword.trim(),
@@ -645,9 +659,9 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     );
     try {
       if (refreshEpisodes) {
-        await ref.read(novelRepositoryProvider).refreshEpisodes(
-              novelId: _args.novelId,
-            );
+        await ref
+            .read(novelRepositoryProvider)
+            .refreshEpisodes(novelId: _args.novelId);
         if (!ref.mounted) {
           return false;
         }
@@ -722,10 +736,11 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     }
 
     try {
-      final downloadedEpisodeIds = await hydrationService.loadDownloadedEpisodeIds(
-        novelId: context.novelId,
-        episodeIds: critical.episodes.map((episode) => episode.episodeId),
-      );
+      final downloadedEpisodeIds = await hydrationService
+          .loadDownloadedEpisodeIds(
+            novelId: context.novelId,
+            episodeIds: critical.episodes.map((episode) => episode.episodeId),
+          );
       _mergeSupplementalDownloadedEpisodes(
         sessionToken: sessionToken,
         episodeId: critical.currentEpisode.episodeId,
@@ -833,9 +848,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       return;
     }
     state = AsyncData(
-      current.copyWith(
-        downloadedEpisodeIds: downloadedEpisodeIds,
-      ),
+      current.copyWith(downloadedEpisodeIds: downloadedEpisodeIds),
     );
   }
 
@@ -856,11 +869,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
         )) {
       return;
     }
-    state = AsyncData(
-      current.copyWith(
-        novel: novel,
-      ),
-    );
+    state = AsyncData(current.copyWith(novel: novel));
   }
 
   void _completeSupplementalHydration({
@@ -879,9 +888,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
         )) {
       return;
     }
-    state = AsyncData(
-      current.copyWith(isHydratingSupplemental: false),
-    );
+    state = AsyncData(current.copyWith(isHydratingSupplemental: false));
   }
 
   NovelReaderViewState _initialStateFromCritical(
@@ -957,11 +964,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     }
     final readingProgress = _readingProgressFromSnapshot(snapshot);
     _rememberReadingProgress(readingProgress);
-    state = AsyncData(
-      current.copyWith(
-        readingProgress: readingProgress,
-      ),
-    );
+    state = AsyncData(current.copyWith(readingProgress: readingProgress));
   }
 
   NovelReadingProgress _readingProgressFromSnapshot(
@@ -1008,7 +1011,9 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     if (current == null) {
       return;
     }
-    final bookmarks = await repository.listReaderBookmarks(novelId: _args.novelId);
+    final bookmarks = await repository.listReaderBookmarks(
+      novelId: _args.novelId,
+    );
     state = AsyncData(
       current.copyWith(
         bookmarks: bookmarks,
@@ -1069,7 +1074,8 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     Future<NovelReaderCacheResult> Function(
       NovelReaderCacheService service,
       NovelReaderViewState current,
-    ) operation,
+    )
+    operation,
   ) async {
     final current = state.value;
     if (current == null || current.isCachingEpisodes) {
@@ -1109,8 +1115,9 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
         isCachingEpisodes: false,
         cacheCurrent: result.totalCount,
         cacheTotal: result.totalCount,
-        cacheError:
-            result.hasFailures ? result.errorMessage ?? '部分章节缓存失败' : null,
+        cacheError: result.hasFailures
+            ? result.errorMessage ?? '部分章节缓存失败'
+            : null,
         clearCacheError: !result.hasFailures,
       ),
     );

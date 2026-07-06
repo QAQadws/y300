@@ -56,7 +56,7 @@ class ThreadDetailContent extends StatefulWidget {
     required this.onOpenPostLink,
     this.onOpenPostImages,
     required this.onOpenPostActions,
-    this.htmlFirstRenderMode = ThreadDetailHtmlFirstRenderMode.legacy,
+    this.htmlFirstRenderMode = ThreadDetailHtmlFirstRenderMode.htmlFirst,
     this.diagnosticRecorder = const NoopThreadDetailDiagnosticRecorder(),
     this.htmlImagePrecacheService,
     this.onPostBuilt,
@@ -311,15 +311,12 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           plan: plan,
           highlighted: entry.post!.pid == widget.highlightPostPid,
           imageHeaderBuilder: widget.imageHeaderBuilder,
-          imageOpenContext: _imageOpenContext(entry.post!),
           imageReferer: widget.imageReferer,
-          htmlFirstRenderMode: widget.htmlFirstRenderMode,
           palette: palette,
           onOpenPostLink: widget.onOpenPostLink,
           onOpenPostImages: widget.onOpenPostImages,
           onHtmlFirstImageFallback: _copyHtmlFirstImageUrl,
           onOpenPostActions: widget.onOpenPostActions,
-          diagnosticRecorder: widget.diagnosticRecorder,
         );
       case ThreadDetailRenderEntryKind.postBodySegment:
         final segmentEntry = _ThreadPostCardBodySegmentEntry(

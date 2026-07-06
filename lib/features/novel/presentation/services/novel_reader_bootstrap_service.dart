@@ -49,12 +49,14 @@ abstract interface class NovelReaderBootstrapService {
   );
 }
 
-class DefaultNovelReaderBootstrapService implements NovelReaderBootstrapService {
+class DefaultNovelReaderBootstrapService
+    implements NovelReaderBootstrapService {
   DefaultNovelReaderBootstrapService({
     required NovelRepository repository,
     required NovelDownloadService downloadService,
     required NovelReaderDocumentBuildService documentBuildService,
-    NovelReaderProgressPolicy progressPolicy = const NovelReaderProgressPolicy(),
+    NovelReaderProgressPolicy progressPolicy =
+        const NovelReaderProgressPolicy(),
   }) : _repository = repository,
        _downloadService = downloadService,
        _documentBuildService = documentBuildService,
@@ -81,11 +83,14 @@ class DefaultNovelReaderBootstrapService implements NovelReaderBootstrapService 
       orElse: () => episodes.first,
     );
 
-    final content = await _downloadService.getDownloadedChapterContent(
+    final content =
+        await _downloadService.getDownloadedChapterContent(
           novelId: context.novelId,
           episodeId: currentEpisode.episodeId,
         ) ??
-        await _repository.getChapterContent(episodeId: currentEpisode.episodeId);
+        await _repository.getChapterContent(
+          episodeId: currentEpisode.episodeId,
+        );
     if (content == null) {
       throw StateError('章节内容不存在');
     }
@@ -93,8 +98,11 @@ class DefaultNovelReaderBootstrapService implements NovelReaderBootstrapService 
     // Load preferences before building so traditional/simplified conversion is
     // applied to the document at build time (and re-applied on episode change).
     final persistedPreferences = await _repository.getReaderPreferences();
+    final effectivePreferences = persistedPreferences.copyWith(
+      flowMode: NovelReaderFlowMode.vertical,
+    );
     final converter = resolveTextConverter(
-      persistedPreferences.sharedConversionMode,
+      effectivePreferences.sharedConversionMode,
     );
 
     final document = await _documentBuildService.build(
@@ -116,7 +124,7 @@ class DefaultNovelReaderBootstrapService implements NovelReaderBootstrapService 
     final progressSnapshot = _progressPolicy.fromReadingProgress(
       novelId: context.novelId,
       episodeId: currentEpisode.episodeId,
-      flowMode: persistedPreferences.flowMode,
+      flowMode: effectivePreferences.flowMode,
       progress: restoredProgress,
     );
 
@@ -126,7 +134,7 @@ class DefaultNovelReaderBootstrapService implements NovelReaderBootstrapService 
       currentContent: content,
       document: document,
       persistedPreferences: persistedPreferences,
-      effectivePreferences: persistedPreferences,
+      effectivePreferences: effectivePreferences,
       readingProgress: readingProgress,
       progressSnapshot: progressSnapshot,
       currentOffset: progressSnapshot.scrollOffset,
