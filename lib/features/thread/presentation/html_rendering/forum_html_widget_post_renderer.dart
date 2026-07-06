@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
+import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_cached_image_widget_factory.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_image_deduplicator.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
 import 'package:y300/features/thread/presentation/html_rendering/widgets/forum_collapse_block.dart';
@@ -16,6 +19,9 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     this.callbacks = const ForumHtmlRenderCallbacks(),
     this.preferences,
     this.sourceId,
+    this.threadId,
+    this.imageHeaderBuilder,
+    this.imageCacheOwnerId,
   });
 
   static final Uri forumBaseUri = Uri.parse('https://bbs.yamibo.com/');
@@ -24,13 +30,19 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   final ForumHtmlRenderCallbacks callbacks;
   final ForumHtmlReaderPreferences? preferences;
   final String? sourceId;
+  final String? threadId;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageCacheOwnerId;
+  static const _imageDeduplicator = ForumHtmlImageDeduplicator();
 
   @override
   Widget build(BuildContext context) {
     final resolvedPreferences =
         preferences ?? ForumHtmlReaderPreferences.defaults();
     final stylePolicy = ForumHtmlStylePolicy(resolvedPreferences);
-    final preparedHtml = stylePolicy.prepareHtml(html);
+    final preparedHtml = _imageDeduplicator.deduplicateAttachmentImages(
+      stylePolicy.prepareHtml(html),
+    );
     final imageAttachmentIdsByUrl = _collectImageAttachmentIds(preparedHtml);
     return HtmlWidget(
       preparedHtml,
@@ -39,10 +51,23 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       customStylesBuilder: stylePolicy.customStylesFor,
       customWidgetBuilder: (element) =>
           _buildCustomWidget(element, stylePolicy, resolvedPreferences),
+      factoryBuilder: _cachedImageFactoryBuilder(),
       renderMode: RenderMode.column,
       textStyle: stylePolicy.baseTextStyle(context),
       onTapUrl: callbacks.onTapUrl,
       onTapImage: (image) => _handleTapImage(image, imageAttachmentIdsByUrl),
+    );
+  }
+
+  WidgetFactory Function()? _cachedImageFactoryBuilder() {
+    final tid = threadId?.trim();
+    if (tid == null || tid.isEmpty) {
+      return null;
+    }
+    return () => ForumHtmlCachedImageWidgetFactory(
+      threadId: tid,
+      imageHeaderBuilder: imageHeaderBuilder,
+      imageCacheOwnerId: imageCacheOwnerId,
     );
   }
 
@@ -69,6 +94,9 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           callbacks: callbacks,
           preferences: resolvedPreferences,
           sourceId: sourceId,
+          threadId: threadId,
+          imageHeaderBuilder: imageHeaderBuilder,
+          imageCacheOwnerId: imageCacheOwnerId,
         );
       },
     );

@@ -13,5 +13,7 @@ abstract final class AppStorageKeys {
   static const String syncDiagnosticManualMode = 'sync_diagnostic_manual_mode';
   static const String threadDetailScrollDiagnosticEnabled =
       'thread_detail_scroll_diagnostic_enabled';
+  static const String threadDetailHtmlFirstRenderMode =
+      'thread_detail_html_first_render_mode';
   static const String replyStickerLastGroupId = 'reply_sticker_last_group_id';
 }

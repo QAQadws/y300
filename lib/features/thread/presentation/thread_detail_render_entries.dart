@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_html_first_render_mode.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/models/thread_post_render_cache_key.dart';
@@ -15,14 +16,18 @@ class ThreadDetailRenderEntryPlanner {
         const ThreadPostBodyRenderPlanner(),
     ThreadPostBodyRenderSettings renderSettings =
         ThreadPostBodyRenderSettings.defaults,
+    ThreadDetailHtmlFirstRenderMode renderMode =
+        ThreadDetailHtmlFirstRenderMode.legacy,
     ThreadDetailDiagnosticRecorder diagnosticRecorder =
         const NoopThreadDetailDiagnosticRecorder(),
   }) : _bodyRenderPlanner = bodyRenderPlanner,
        _renderSettings = renderSettings,
+       _renderMode = renderMode,
        _diagnosticRecorder = diagnosticRecorder;
 
   final ThreadPostBodyRenderPlanner _bodyRenderPlanner;
   final ThreadPostBodyRenderSettings _renderSettings;
+  final ThreadDetailHtmlFirstRenderMode _renderMode;
   final ThreadDetailDiagnosticRecorder _diagnosticRecorder;
   final Map<ThreadDetailPostBodyRenderPlanCacheKey, ThreadPostBodyRenderPlan>
   _bodyRenderPlanCache =
@@ -43,7 +48,7 @@ class ThreadDetailRenderEntryPlanner {
         ),
       );
       final plan = planFor(post);
-      if (plan.usesListSegments) {
+      if (!_renderMode.isHtmlFirst && plan.usesListSegments) {
         for (final segment in plan.segments) {
           entries.add(
             ThreadDetailRenderEntry.postBodySegment(

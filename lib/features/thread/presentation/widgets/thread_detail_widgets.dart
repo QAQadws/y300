@@ -8,9 +8,12 @@ import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_html_first_render_mode.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/services/thread_detail_diagnostic_recorder.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
+import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
 import 'package:y300/features/thread/presentation/thread_detail_render_entries.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
@@ -49,6 +52,7 @@ class ThreadDetailContent extends StatefulWidget {
     required this.onOpenPostLink,
     this.onOpenPostImages,
     required this.onOpenPostActions,
+    this.htmlFirstRenderMode = ThreadDetailHtmlFirstRenderMode.legacy,
     this.diagnosticRecorder = const NoopThreadDetailDiagnosticRecorder(),
     this.onPostBuilt,
     this.imageDimensionStore,
@@ -73,6 +77,7 @@ class ThreadDetailContent extends StatefulWidget {
   onOpenPostImages;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
   onOpenPostActions;
+  final ThreadDetailHtmlFirstRenderMode htmlFirstRenderMode;
   final ThreadDetailDiagnosticRecorder diagnosticRecorder;
   final ValueChanged<int>? onPostBuilt;
 
@@ -105,7 +110,8 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       widget.imageDimensionStore?.addListener(_onImageDimensionsChanged);
     }
     if (!identical(oldWidget.diagnosticRecorder, widget.diagnosticRecorder) ||
-        !identical(oldWidget.imageDimensionStore, widget.imageDimensionStore)) {
+        !identical(oldWidget.imageDimensionStore, widget.imageDimensionStore) ||
+        oldWidget.htmlFirstRenderMode != widget.htmlFirstRenderMode) {
       _entryPlanner = _createEntryPlanner();
     }
     if (!identical(oldWidget.state.posts, widget.state.posts) ||
@@ -129,6 +135,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   ThreadDetailRenderEntryPlanner _createEntryPlanner() {
     return ThreadDetailRenderEntryPlanner(
       diagnosticRecorder: widget.diagnosticRecorder,
+      renderMode: widget.htmlFirstRenderMode,
       bodyRenderPlanner: ThreadPostBodyRenderPlanner(
         resourceLayoutHintResolver: ThreadPostResourceLayoutHintResolver(
           lockTrustedDimensions: true,
@@ -217,9 +224,12 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           highlighted: entry.post!.pid == widget.highlightPostPid,
           imageHeaderBuilder: widget.imageHeaderBuilder,
           imageOpenContext: _imageOpenContext(entry.post!),
+          imageReferer: widget.imageReferer,
+          htmlFirstRenderMode: widget.htmlFirstRenderMode,
           palette: palette,
           onOpenPostLink: widget.onOpenPostLink,
           onOpenPostImages: widget.onOpenPostImages,
+          onHtmlFirstImageFallback: _copyHtmlFirstImageUrl,
           onOpenPostActions: widget.onOpenPostActions,
           diagnosticRecorder: widget.diagnosticRecorder,
         );
@@ -300,5 +310,9 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         ).cacheKey;
       },
     );
+  }
+
+  void _copyHtmlFirstImageUrl(ThreadPost post, ForumHtmlImageRequest request) {
+    widget.onCopyActionUrl('${post.number}# 图片', request.url);
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:html/parser.dart' as html_parser;
 import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/thread/data/services/thread_detail_html_parser.dart';
 import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
@@ -244,6 +245,37 @@ void main() {
       );
     });
 
+    test('does not duplicate attachment gallery images already in message', () {
+      final result = parser.parse(
+        '''
+        <html><body>
+          <div id="postlist">
+            <div id="post_1001">
+              <td class="t_f" id="postmessage_1001">
+                <p>正文</p>
+                <img id="aimg_1" zoomfile="data/attachment/forum/page-1.jpg" src="static/image/common/none.gif">
+                <img id="aimg_2" zoomfile="data/attachment/forum/page-2.jpg" src="static/image/common/none.gif">
+              </td>
+              <div class="attm">
+                <img id="aimg_1" zoomfile="data/attachment/forum/page-1.jpg" src="static/image/common/none.gif">
+                <img id="aimg_2" zoomfile="data/attachment/forum/page-2.jpg" src="static/image/common/none.gif">
+              </div>
+            </div>
+          </div>
+        </body></html>
+        ''',
+        fallbackTid: '100',
+        fallbackPage: 1,
+      );
+
+      final message = result.posts.single.message;
+      final fragment = html_parser.parseFragment(message);
+
+      expect(fragment.querySelectorAll('img'), hasLength(2));
+      expect(message, contains('data/attachment/forum/page-1.jpg'));
+      expect(message, contains('data/attachment/forum/page-2.jpg'));
+    });
+
     test('parses mobile comic thread with multiple inline attachment images', () {
       final html = File('docs/html/移动端html/漫画帖1.html').readAsStringSync();
 
@@ -366,6 +398,8 @@ void main() {
       expect(firstPost.commentUrl, contains('action=comment'));
       expect(firstPost.message, contains('我爱看百合的事'));
       expect(firstPost.message, isNot(contains('单选投票, 共有 960 人参与投票')));
+      expect(firstPost.message, isNot(contains('class="poll"')));
+      expect(firstPost.message, isNot(contains('name="pollanswers[]"')));
 
       final poll = firstPost.poll;
       expect(poll, isNotNull);

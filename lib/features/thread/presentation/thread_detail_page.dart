@@ -16,6 +16,7 @@ import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.d
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
+import 'package:y300/features/library_shared/presentation/controllers/sync_diagnostic_mode_controller.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
@@ -28,12 +29,15 @@ import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_html_first_render_mode.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_plain_text_extractor.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
+import 'package:y300/features/thread/presentation/thread_detail_html_first_render_mode_controller.dart';
+import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_comparison_page.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_prewarmer.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
@@ -113,6 +117,12 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     final diagnosticRecorder = ref.watch(
       threadDetailDiagnosticRecorderProvider,
     );
+    final htmlFirstRenderMode = ref
+        .watch(threadDetailHtmlFirstRenderModeControllerProvider)
+        .asData
+        ?.value;
+    final diagnosticModeEnabled =
+        ref.watch(syncDiagnosticModeControllerProvider).asData?.value ?? false;
     _latestImageHeaderBuilder = imageHeaderBuilder;
     ref.listen<AsyncValue<ThreadDetailPageState>>(
       threadDetailControllerProvider(args),
@@ -254,8 +264,18 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                     onOpenPostLink: _openForumLink,
                     onOpenPostImages: _openPostImages,
                     onOpenPostActions: (post, plan) {
-                      _openPostActions(args, state, controller, post, plan);
+                      _openPostActions(
+                        args,
+                        state,
+                        controller,
+                        post,
+                        plan,
+                        htmlFirstComparisonEnabled: diagnosticModeEnabled,
+                      );
                     },
+                    htmlFirstRenderMode:
+                        htmlFirstRenderMode ??
+                        ThreadDetailHtmlFirstRenderMode.legacy,
                     diagnosticRecorder: diagnosticRecorder,
                     onTogglePollOption: controller.togglePollOption,
                     onSubmitPollVote: controller.submitPollVote,
@@ -555,12 +575,16 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     ThreadDetailPageState state,
     ThreadDetailController controller,
     ThreadPost post,
-    ThreadPostBodyRenderPlan plan,
-  ) async {
+    ThreadPostBodyRenderPlan plan, {
+    required bool htmlFirstComparisonEnabled,
+  }) async {
     final action = await showModalBottomSheet<_ThreadPostAction>(
       context: context,
       showDragHandle: true,
-      builder: (context) => _ThreadPostActionSheet(post: post),
+      builder: (context) => _ThreadPostActionSheet(
+        post: post,
+        showHtmlFirstComparison: htmlFirstComparisonEnabled,
+      ),
     );
     if (!mounted || action == null) {
       return;
@@ -586,6 +610,21 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
               imageHeaderBuilder: _latestImageHeaderBuilder,
               onOpenLink: _openForumLink,
               onOpenImage: (request) => _openPostImages(post, request),
+            ),
+          ),
+        );
+        return;
+      case _ThreadPostAction.htmlFirstCompare:
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => ThreadPostHtmlFirstComparisonPage(
+              post: post,
+              threadId: widget.tid,
+              imageReferer: _imageRefererFor(state),
+              plan: plan,
+              imageHeaderBuilder: _latestImageHeaderBuilder,
+              onOpenPostLink: _openForumLink,
+              onOpenPostImage: _openPostImages,
             ),
           ),
         );
@@ -1061,12 +1100,23 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
   }
 }
 
-enum _ThreadPostAction { reply, rate, comment, selectCopy, copyAll }
+enum _ThreadPostAction {
+  reply,
+  rate,
+  comment,
+  selectCopy,
+  htmlFirstCompare,
+  copyAll,
+}
 
 class _ThreadPostActionSheet extends StatelessWidget {
-  const _ThreadPostActionSheet({required this.post});
+  const _ThreadPostActionSheet({
+    required this.post,
+    this.showHtmlFirstComparison = false,
+  });
 
   final ThreadPost post;
+  final bool showHtmlFirstComparison;
 
   @override
   Widget build(BuildContext context) {
@@ -1111,6 +1161,16 @@ class _ThreadPostActionSheet extends StatelessWidget {
                 onTap: () =>
                     Navigator.of(context).pop(_ThreadPostAction.selectCopy),
               ),
+              if (showHtmlFirstComparison)
+                ListTile(
+                  key: const Key('thread-post-html-first-compare-action'),
+                  dense: true,
+                  leading: const Icon(Icons.article_outlined),
+                  title: const Text('HTML-first 对照'),
+                  onTap: () => Navigator.of(
+                    context,
+                  ).pop(_ThreadPostAction.htmlFirstCompare),
+                ),
               ListTile(
                 key: const Key('thread-post-copy-all-action'),
                 dense: true,

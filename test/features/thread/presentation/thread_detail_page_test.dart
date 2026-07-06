@@ -20,6 +20,7 @@ import 'package:y300/features/forum/data/repositories/forum_favorite_repository.
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
+import 'package:y300/features/library_shared/presentation/controllers/sync_diagnostic_mode_controller.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
@@ -53,9 +54,13 @@ import 'package:y300/features/thread/data/repositories/thread_poll_vote_reposito
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_html_first_render_mode.dart';
 import 'package:y300/features/thread/domain/services/thread_detail_diagnostic_recorder.dart';
 import 'package:y300/features/thread/domain/services/thread_favorite_action_service.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
+import 'package:y300/features/thread/presentation/thread_detail_html_first_render_mode_controller.dart';
+import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
+import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_comparison_page.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
@@ -436,6 +441,146 @@ void main() {
       expect(repository.queryHistory.last['ordertype'], '1');
       expect(_richTextContaining('第一条回复'), findsOneWidget);
       expect(callCount, 3);
+    });
+
+    testWidgets('uses legacy body renderer by default', (tester) async {
+      final repository = _FakeThreadRepository((tid, page, query) async {
+        return ApiSuccess(
+          _threadDetailData(
+            tid: tid,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>默认旧正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(find.byKey(const Key('thread-post-body-p1')), findsOneWidget);
+      expect(find.byType(ThreadPostBodyView), findsWidgets);
+      expect(find.byType(ThreadPostHtmlFirstBody), findsNothing);
+      expect(_richTextContaining('默认旧正文'), findsOneWidget);
+    });
+
+    testWidgets(
+      'HTML-first diagnostic renderer keeps native poll footer separate',
+      (tester) async {
+        final repository = _FakeThreadRepository((tid, page, query) async {
+          return ApiSuccess(
+            _threadDetailData(
+              tid: tid,
+              posts: [
+                ThreadPost(
+                  pid: 'p1',
+                  author: 'alice',
+                  authorId: '1',
+                  message:
+                      '<p>HTML-first 正文</p>'
+                      '<div class="showcollapse_box">'
+                      '<div class="showcollapse_title">目录</div>'
+                      '<div class="showcollapse_content">隐藏内容</div>'
+                      '</div>',
+                  number: 1,
+                  isFirst: true,
+                  dateline: 'today',
+                  poll: const ThreadPoll(
+                    isMultipleChoice: false,
+                    summary: '单选投票',
+                    options: <ThreadPollOption>[
+                      ThreadPollOption(id: '1', label: '投票选项'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        });
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            htmlFirstRenderMode: ThreadDetailHtmlFirstRenderMode.htmlFirst,
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+
+        expect(
+          find.byKey(const Key('thread-post-html-first-body-p1')),
+          findsOneWidget,
+        );
+        expect(find.byType(ThreadPostHtmlFirstBody), findsOneWidget);
+        expect(find.byKey(const Key('thread-poll-card')), findsOneWidget);
+        expect(find.text('投票选项'), findsOneWidget);
+        expect(_richTextContaining('HTML-first 正文'), findsOneWidget);
+      },
+    );
+
+    testWidgets('HTML-first images use project cache requests', (tester) async {
+      final imageCacheService = _RecordingImageCacheService();
+      final repository = _FakeThreadRepository((tid, page, query) async {
+        return ApiSuccess(
+          _threadDetailData(
+            tid: tid,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message:
+                    '<p>HTML-first 图片</p>'
+                    '<img src="data/attachment/forum/page-1.jpg" width="200" height="120">'
+                    '<p>表情 <img src="static/image/smiley/comcom/2.gif" alt=""></p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          imageCacheService: imageCacheService,
+          htmlFirstRenderMode: ThreadDetailHtmlFirstRenderMode.htmlFirst,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(
+        imageCacheService.requests.map((request) => request.role),
+        containsAll(<ImageCacheRole>[
+          ImageCacheRole.threadInline,
+          ImageCacheRole.remoteSmiley,
+        ]),
+      );
+      final threadImage = imageCacheService.requests.firstWhere(
+        (request) => request.role == ImageCacheRole.threadInline,
+      );
+      expect(threadImage.ownerType, ImageCacheOwnerType.thread);
+      expect(threadImage.ownerId, '100');
+      expect(threadImage.sourceUrl, contains('page-1.jpg'));
+
+      final smiley = imageCacheService.requests.firstWhere(
+        (request) => request.role == ImageCacheRole.remoteSmiley,
+      );
+      expect(smiley.ownerType, ImageCacheOwnerType.sticker);
+      expect(smiley.effectiveRetentionClass, ImageRetentionClass.sticky);
+      expect(smiley.sourceUrl, contains('static/image/smiley/comcom/2.gif'));
     });
 
     testWidgets('long pressing app bar copies thread link', (tester) async {
@@ -2223,6 +2368,65 @@ void main() {
       expect(commentRepository.loadedUrl, isNull);
     });
 
+    testWidgets(
+      'opens HTML-first comparison page from diagnostic post actions',
+      (tester) async {
+        final repository = _FakeThreadRepository((tid, page) async {
+          return ApiSuccess(
+            _threadDetailData(
+              tid: tid,
+              posts: [
+                ThreadPost(
+                  pid: 'p1',
+                  author: 'alice',
+                  authorId: '1',
+                  message: '<p>对照正文</p>',
+                  number: 1,
+                  isFirst: true,
+                  dateline: 'today',
+                ),
+              ],
+            ),
+          );
+        });
+
+        await tester.pumpWidget(
+          _buildTestApp(repository, diagnosticModeEnabled: true),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+
+        await _longPressVisibleTop(
+          tester,
+          find.byKey(const Key('thread-post-body-p1')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('thread-post-html-first-compare-action')),
+          findsOneWidget,
+        );
+        await tester.tap(
+          find.byKey(const Key('thread-post-html-first-compare-action')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ThreadPostHtmlFirstComparisonPage), findsOneWidget);
+        expect(
+          find.byKey(const Key('thread-post-html-first-comparison-page')),
+          findsOneWidget,
+        );
+        await tester.tap(find.text('调试信息'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('thread-post-html-first-debug-summary')),
+          findsOneWidget,
+        );
+        expect(find.text('HTML 长度'), findsOneWidget);
+      },
+    );
+
     testWidgets('hides local shelf entry for comic candidate post', (
       tester,
     ) async {
@@ -2915,6 +3119,9 @@ Widget _buildTestApp(
   NativePageCacheInvalidationService? pageCacheInvalidationService,
   ImageCacheService? imageCacheService,
   ForumWebViewDriverFactory? forumWebViewDriverFactory,
+  bool diagnosticModeEnabled = false,
+  ThreadDetailHtmlFirstRenderMode htmlFirstRenderMode =
+      ThreadDetailHtmlFirstRenderMode.legacy,
 }) {
   return ProviderScope(
     overrides: _threadDetailOverrides(
@@ -2930,6 +3137,8 @@ Widget _buildTestApp(
       pageCacheInvalidationService: pageCacheInvalidationService,
       imageCacheService: imageCacheService,
       forumWebViewDriverFactory: forumWebViewDriverFactory,
+      diagnosticModeEnabled: diagnosticModeEnabled,
+      htmlFirstRenderMode: htmlFirstRenderMode,
     ),
     child: const MaterialApp(
       home: ThreadDetailPage(tid: '100', subject: '测试主题'),
@@ -2950,6 +3159,9 @@ List<riverpod_misc.Override> _threadDetailOverrides(
   NativePageCacheInvalidationService? pageCacheInvalidationService,
   ImageCacheService? imageCacheService,
   ForumWebViewDriverFactory? forumWebViewDriverFactory,
+  bool diagnosticModeEnabled = false,
+  ThreadDetailHtmlFirstRenderMode htmlFirstRenderMode =
+      ThreadDetailHtmlFirstRenderMode.legacy,
 }) {
   return [
     threadRepositoryProvider.overrideWithValue(repository),
@@ -2994,6 +3206,14 @@ List<riverpod_misc.Override> _threadDetailOverrides(
     yamiboTagThreadPageRepositoryProvider.overrideWithValue(
       tagThreadPageRepository ?? _FakeYamiboTagThreadPageRepository(),
     ),
+    syncDiagnosticModeControllerProvider.overrideWith(
+      () => _FakeSyncDiagnosticModeController(enabled: diagnosticModeEnabled),
+    ),
+    threadDetailHtmlFirstRenderModeControllerProvider.overrideWith(
+      () => _FakeThreadDetailHtmlFirstRenderModeController(
+        mode: htmlFirstRenderMode,
+      ),
+    ),
     composerDraftRepositoryProvider.overrideWithValue(
       _MemoryComposerDraftRepository(),
     ),
@@ -3023,6 +3243,29 @@ ThreadDetailData _threadDetailData({
     perPage: posts.length,
     posts: posts,
   );
+}
+
+class _FakeSyncDiagnosticModeController extends SyncDiagnosticModeController {
+  _FakeSyncDiagnosticModeController({required this.enabled});
+
+  final bool enabled;
+
+  @override
+  Future<bool> build() async {
+    return enabled;
+  }
+}
+
+class _FakeThreadDetailHtmlFirstRenderModeController
+    extends ThreadDetailHtmlFirstRenderModeController {
+  _FakeThreadDetailHtmlFirstRenderModeController({required this.mode});
+
+  final ThreadDetailHtmlFirstRenderMode mode;
+
+  @override
+  Future<ThreadDetailHtmlFirstRenderMode> build() async {
+    return mode;
+  }
 }
 
 class _NoopImageCacheService implements ImageCacheService {

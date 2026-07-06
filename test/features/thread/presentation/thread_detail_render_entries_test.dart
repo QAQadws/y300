@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_html_first_render_mode.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
@@ -81,6 +82,43 @@ void main() {
       ]);
       expect(bodyEntries.first.plan!.usesListSegments, isTrue);
       expect(parser.parseCount, 1);
+    });
+
+    test('keeps long posts as a single body entry in HTML-first mode', () {
+      final planner = ThreadDetailRenderEntryPlanner(
+        renderMode: ThreadDetailHtmlFirstRenderMode.htmlFirst,
+        bodyRenderPlanner: const ThreadPostBodyRenderPlanner(
+          maxSegmentTextLength: 6,
+        ),
+      );
+
+      final entries = planner.buildEntries(
+        posts: <ThreadPost>[
+          ThreadPost(
+            pid: 'p-html',
+            author: 'alice',
+            authorId: '1',
+            message: '<p>abcdefghijklmnop</p>',
+            number: 1,
+            isFirst: true,
+            dateline: 'today',
+          ),
+        ],
+      );
+
+      expect(
+        entries.where(
+          (entry) => entry.kind == ThreadDetailRenderEntryKind.postBodySegment,
+        ),
+        isEmpty,
+      );
+      expect(entries.map((entry) => entry.kind), <ThreadDetailRenderEntryKind>[
+        ThreadDetailRenderEntryKind.postHeader,
+        ThreadDetailRenderEntryKind.postBody,
+        ThreadDetailRenderEntryKind.postFooter,
+        ThreadDetailRenderEntryKind.pagination,
+      ]);
+      expect(entries[1].requirePlan().usesListSegments, isTrue);
     });
 
     test('builds segment entries for image bodies', () {

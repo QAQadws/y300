@@ -952,13 +952,10 @@ class ThreadDetailHtmlParser {
       return const <String>[];
     }
     final output = <String>[];
-    final seenSources = <String>{};
+    final seenSources = _collectMessageImageSourceKeys(messageNode);
     for (final image in postContainer.querySelectorAll(
       'img[zoomfile], img[file], img[id^="aimg_"]',
     )) {
-      if (messageNode != null && _isDescendantOf(image, messageNode)) {
-        continue;
-      }
       if (!_looksLikeDiscuzAttachmentImage(image)) {
         continue;
       }
@@ -969,12 +966,44 @@ class ThreadDetailHtmlParser {
         'data-src',
         'src',
       ]);
-      if (realSource == null || !seenSources.add(realSource)) {
+      final sourceKey = _imageSourceKey(realSource);
+      if (realSource == null ||
+          sourceKey == null ||
+          !seenSources.add(sourceKey)) {
         continue;
       }
       output.add(_cleanAttachmentImageTag(image, realSource));
     }
     return output;
+  }
+
+  Set<String> _collectMessageImageSourceKeys(html_dom.Element? messageNode) {
+    if (messageNode == null) {
+      return <String>{};
+    }
+    final sources = <String>{};
+    for (final image in messageNode.querySelectorAll('img')) {
+      final source = _firstPresentAttribute(image, const <String>[
+        'zoomfile',
+        'file',
+        'data-original',
+        'data-src',
+        'src',
+      ]);
+      final sourceKey = _imageSourceKey(source);
+      if (sourceKey != null) {
+        sources.add(sourceKey);
+      }
+    }
+    return sources;
+  }
+
+  String? _imageSourceKey(String? source) {
+    final resolved = _resolve(source);
+    if (resolved == null || resolved.isEmpty) {
+      return null;
+    }
+    return Uri.tryParse(resolved)?.removeFragment().toString() ?? resolved;
   }
 
   bool _looksLikeDiscuzAttachmentImage(html_dom.Element image) {
@@ -1024,17 +1053,6 @@ class ThreadDetailHtmlParser {
         .replaceAll('"', '&quot;')
         .replaceAll('<', '&lt;')
         .replaceAll('>', '&gt;');
-  }
-
-  bool _isDescendantOf(html_dom.Node node, html_dom.Element ancestor) {
-    html_dom.Node? current = node.parentNode;
-    while (current != null) {
-      if (identical(current, ancestor)) {
-        return true;
-      }
-      current = current.parentNode;
-    }
-    return false;
   }
 
   bool _hasAncestorClass(html_dom.Node node, String className) {

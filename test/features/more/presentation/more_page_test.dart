@@ -22,6 +22,8 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart
 import 'package:y300/features/library_shared/presentation/controllers/sync_diagnostic_mode_controller.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
+import 'package:y300/features/thread/presentation/thread_detail_html_first_render_mode_controller.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_html_first_render_mode.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
 
 void main() {
@@ -353,6 +355,8 @@ void main() {
       final threadController = _FakeThreadDetailDiagnosticController(
         exportedText: 'entry build log',
       );
+      final htmlFirstController =
+          _FakeThreadDetailHtmlFirstRenderModeController();
       final copiedTexts = <String>[];
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.platform,
@@ -386,6 +390,9 @@ void main() {
             threadDetailDiagnosticControllerProvider.overrideWith(
               () => threadController,
             ),
+            threadDetailHtmlFirstRenderModeControllerProvider.overrideWith(
+              () => htmlFirstController,
+            ),
             appAppearanceControllerProvider.overrideWith(
               () => _FakeAppAppearanceController(),
             ),
@@ -409,6 +416,19 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(threadController.enabled, isTrue);
+      expect(
+        find.byKey(const Key('thread-detail-html-first-renderer-switch')),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.byKey(const Key('thread-detail-html-first-renderer-switch')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        htmlFirstController.mode,
+        ThreadDetailHtmlFirstRenderMode.htmlFirst,
+      );
       final copyEntry = find.byKey(
         const Key('more-thread-detail-diagnostic-copy-entry'),
       );
@@ -637,6 +657,24 @@ class _FakeThreadDetailDiagnosticController
   @override
   String exportText() {
     return exportedText;
+  }
+}
+
+class _FakeThreadDetailHtmlFirstRenderModeController
+    extends ThreadDetailHtmlFirstRenderModeController {
+  var mode = ThreadDetailHtmlFirstRenderMode.legacy;
+
+  @override
+  Future<ThreadDetailHtmlFirstRenderMode> build() async {
+    return mode;
+  }
+
+  @override
+  Future<void> setHtmlFirstEnabled(bool enabled) async {
+    mode = enabled
+        ? ThreadDetailHtmlFirstRenderMode.htmlFirst
+        : ThreadDetailHtmlFirstRenderMode.legacy;
+    state = AsyncData(mode);
   }
 }
 

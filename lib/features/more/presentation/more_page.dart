@@ -17,6 +17,7 @@ import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/more/presentation/appearance_settings_page.dart';
 import 'package:y300/features/more/presentation/data_storage_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
+import 'package:y300/features/thread/presentation/thread_detail_html_first_render_mode_controller.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_page.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
 
@@ -49,6 +50,11 @@ class _MorePageState extends ConsumerState<MorePage> {
     final threadDiagnosticEnabled =
         ref.watch(threadDetailDiagnosticControllerProvider).asData?.value ??
         false;
+    final htmlFirstRenderMode = ref
+        .watch(threadDetailHtmlFirstRenderModeControllerProvider)
+        .asData
+        ?.value;
+    final htmlFirstRendererEnabled = htmlFirstRenderMode?.isHtmlFirst ?? false;
 
     return Scaffold(
       appBar: AppBar(title: const Text('更多')),
@@ -151,6 +157,15 @@ class _MorePageState extends ConsumerState<MorePage> {
               onChanged: (value) =>
                   _setThreadDetailDiagnosticEnabled(context, ref, value),
             ),
+            SwitchListTile(
+              key: const Key('thread-detail-html-first-renderer-switch'),
+              secondary: const Icon(Icons.article_outlined),
+              title: const Text('HTML-first 正文诊断'),
+              subtitle: const Text('帖子详情正文使用 HTML-first 渲染，旧渲染保留兜底'),
+              value: htmlFirstRendererEnabled,
+              onChanged: (value) =>
+                  _setThreadDetailHtmlFirstRendererEnabled(context, ref, value),
+            ),
             ListTile(
               key: const Key('more-thread-detail-diagnostic-copy-entry'),
               leading: const Icon(Icons.content_copy_outlined),
@@ -210,6 +225,25 @@ class _MorePageState extends ConsumerState<MorePage> {
         content: Text(text.trim().isEmpty ? '暂无帖子详情诊断日志' : '帖子详情诊断日志已复制'),
       ),
     );
+  }
+
+  Future<void> _setThreadDetailHtmlFirstRendererEnabled(
+    BuildContext context,
+    WidgetRef ref,
+    bool enabled,
+  ) async {
+    try {
+      await ref
+          .read(threadDetailHtmlFirstRenderModeControllerProvider.notifier)
+          .setHtmlFirstEnabled(enabled);
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('HTML-first 正文诊断设置失败：$error')));
+    }
   }
 
   Future<void> _handleAboutTap() async {

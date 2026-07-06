@@ -1,8 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
+import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dart';
+import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/image_cache_service.dart';
+import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
@@ -269,6 +277,308 @@ void main() {
     expect(tappedImage?.attachmentId, '286401');
   });
 
+  testWidgets('renders thread images through project cache pipeline', (
+    tester,
+  ) async {
+    final cacheService = _RecordingImageCacheService();
+    const headerBuilder = _StaticImageHeaderBuilder();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: ForumHtmlWidgetPostRenderer(
+              sourceId: 'cached-thread-image',
+              threadId: '573279',
+              imageHeaderBuilder: headerBuilder,
+              html:
+                  '<img src="data/attachment/forum/page-1.jpg" '
+                  'width="640" height="480">',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final image = tester.widget<CachedLibraryImage>(
+      find.byType(CachedLibraryImage).first,
+    );
+
+    expect(image.headerBuilder, same(headerBuilder));
+    expect(image.request?.role, ImageCacheRole.threadInline);
+    expect(image.request?.ownerType, ImageCacheOwnerType.thread);
+    expect(image.request?.ownerId, '573279');
+    expect(image.request?.imageIndex, 0);
+    expect(
+      image.request?.sourceUrl,
+      'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
+    );
+    expect(
+      image.request?.cacheKey,
+      ForumImageCacheRequests.threadInline(
+        tid: '573279',
+        url: 'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
+        imageIndex: 0,
+      ).cacheKey,
+    );
+    expect(cacheService.requests.single.cacheKey, image.request?.cacheKey);
+  });
+
+  testWidgets('renders smiley images through long-lived smiley cache', (
+    tester,
+  ) async {
+    final cacheService = _RecordingImageCacheService();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: ForumHtmlWidgetPostRenderer(
+              sourceId: 'cached-smiley',
+              threadId: '573279',
+              html: '<img src="static/image/smiley/gexing/008.gif" alt="">',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final image = tester.widget<CachedLibraryImage>(
+      find.byType(CachedLibraryImage).first,
+    );
+
+    expect(image.request?.role, ImageCacheRole.remoteSmiley);
+    expect(image.request?.ownerType, ImageCacheOwnerType.sticker);
+    expect(image.request?.effectiveRetentionClass, ImageRetentionClass.sticky);
+    expect(
+      image.request?.cacheKey,
+      ImageCacheKeys.remoteSmiley(
+        'https://bbs.yamibo.com/static/image/smiley/gexing/008.gif',
+      ),
+    );
+    expect(cacheService.requests.single.role, ImageCacheRole.remoteSmiley);
+  });
+
+  testWidgets('does not force unsized smiley images to 24 square', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(
+            _RecordingImageCacheService(),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: ForumHtmlWidgetPostRenderer(
+              sourceId: 'unsized-smiley',
+              threadId: '573279',
+              html: '<img src="static/image/smiley/gexing/008.gif" alt="">',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final imageFinder = find.byType(CachedLibraryImage).first;
+    final image = tester.widget<CachedLibraryImage>(imageFinder);
+
+    expect(image.width, isNull);
+    expect(image.height, isNull);
+    expect(
+      find.ancestor(
+        of: imageFinder,
+        matching: find.byWidgetPredicate((widget) {
+          return widget is SizedBox &&
+              widget.width == 24 &&
+              widget.height == 24;
+        }),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('uses html dimensions for smiley images when present', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(
+            _RecordingImageCacheService(),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: ForumHtmlWidgetPostRenderer(
+              sourceId: 'sized-smiley',
+              threadId: '573279',
+              html:
+                  '<img src="static/image/smiley/gexing/008.gif" '
+                  'width="36" height="28" alt="">',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final imageFinder = find.byType(CachedLibraryImage).first;
+    final image = tester.widget<CachedLibraryImage>(imageFinder);
+    final sizedBox = tester.widget<SizedBox>(
+      find.ancestor(of: imageFinder, matching: find.byType(SizedBox)).first,
+    );
+
+    expect(image.width, 36);
+    expect(image.height, 28);
+    expect(sizedBox.width, 36);
+    expect(sizedBox.height, 28);
+  });
+
+  testWidgets('uses cached dimensions for smiley images when html is unsized', (
+    tester,
+  ) async {
+    final cacheService = _RecordingImageCacheService();
+    final cacheKey = ImageCacheKeys.remoteSmiley(
+      'https://bbs.yamibo.com/static/image/smiley/gexing/008.gif',
+    );
+    cacheService.cachedResults[cacheKey] = CachedImageResult(
+      success: true,
+      cacheKey: cacheKey,
+      width: 40,
+      height: 32,
+      fromCache: true,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: ForumHtmlWidgetPostRenderer(
+              sourceId: 'cached-size-smiley',
+              threadId: '573279',
+              html: '<img src="static/image/smiley/gexing/008.gif" alt="">',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final imageFinder = find.byType(CachedLibraryImage).first;
+    final image = tester.widget<CachedLibraryImage>(imageFinder);
+    final sizedBox = tester.widget<SizedBox>(
+      find.ancestor(of: imageFinder, matching: find.byType(SizedBox)).first,
+    );
+
+    expect(image.width, 40);
+    expect(image.height, 32);
+    expect(sizedBox.width, 40);
+    expect(sizedBox.height, 32);
+  });
+
+  testWidgets('uses legacy fallback aspect ratio for unsized thread images', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(
+            _RecordingImageCacheService(),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: ForumHtmlWidgetPostRenderer(
+              sourceId: 'unsized-image',
+              threadId: '573279',
+              html: '<img src="data/attachment/forum/page-unsized.jpg">',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final aspectRatio = tester.widget<AspectRatio>(
+      find
+          .ancestor(
+            of: find.byType(CachedLibraryImage).first,
+            matching: find.byType(AspectRatio),
+          )
+          .first,
+    );
+
+    expect(aspectRatio.aspectRatio, 0.7);
+  });
+
+  testWidgets('keeps non-network data images on the html library default path', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ForumHtmlWidgetPostRenderer(
+            sourceId: 'data-image',
+            threadId: '573279',
+            html:
+                '<img src="data:image/png;base64,'
+                'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=">',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(CachedLibraryImage), findsNothing);
+    expect(find.byType(Image), findsOneWidget);
+  });
+
+  testWidgets(
+    'deduplicates repeated forum attachment images before rendering',
+    (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: ForumHtmlWidgetPostRenderer(
+              sourceId: 'dedupe',
+              html:
+                  '<p>正文</p>'
+                  '<img id="aimg_1" src="data/attachment/forum/page-1.jpg">'
+                  '<img id="aimg_2" src="data/attachment/forum/page-2.jpg">'
+                  '<img id="aimg_1" src="data/attachment/forum/page-1.jpg">'
+                  '<img id="aimg_2" src="data/attachment/forum/page-2.jpg">',
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final htmlWidget = tester.widget<HtmlWidget>(
+        find.byKey(const Key('forum-html-renderer-dedupe')),
+      );
+      final fragment = html_parser.parseFragment(htmlWidget.html);
+
+      expect(fragment.querySelectorAll('img'), hasLength(2));
+      expect(
+        htmlWidget.html.indexOf('page-1.jpg'),
+        htmlWidget.html.lastIndexOf('page-1.jpg'),
+      );
+      expect(
+        htmlWidget.html.indexOf('page-2.jpg'),
+        htmlWidget.html.lastIndexOf('page-2.jpg'),
+      );
+    },
+  );
+
   testWidgets('marks forum smiley images as stickers', (tester) async {
     ForumHtmlImageRequest? tappedImage;
     await tester.pumpWidget(
@@ -310,4 +620,63 @@ html_dom.Element _elementFrom(String html) {
       .nodes
       .whereType<html_dom.Element>()
       .first;
+}
+
+class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
+  const _StaticImageHeaderBuilder();
+
+  @override
+  Future<Map<String, String>> buildHeaders(String imageUrl) async {
+    return const <String, String>{'Referer': 'https://bbs.yamibo.com/'};
+  }
+}
+
+class _RecordingImageCacheService implements ImageCacheService {
+  final requests = <ImageCacheRequest>[];
+  final cachedResults = <String, CachedImageResult>{};
+
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    requests.add(request);
+    return CachedImageResult(success: true, cacheKey: request.cacheKey);
+  }
+
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async =>
+      cachedResults[cacheKey];
+
+  @override
+  Future<CachedImageResult> copyProtectedLocalFile(
+    ImageCacheLocalCopyRequest request,
+  ) async {
+    return CachedImageResult(
+      success: true,
+      cacheKey: request.cacheKey,
+      localPath: request.sourcePath,
+    );
+  }
+
+  @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
+
+  @override
+  Future<void> pruneToLimit({required int maxBytes}) async {}
+
+  @override
+  Future<int> clearUnprotectedByRoles({
+    required List<ImageCacheRole> roles,
+  }) async {
+    return 0;
+  }
+
+  @override
+  Future<void> clearUnprotected() async {}
 }
