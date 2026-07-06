@@ -16,10 +16,7 @@ import 'package:y300/features/novel/presentation/novel_detail_page.dart';
 ///
 /// 仅保留模块级依赖注入，通用书架交互完全复用统一页面。
 class NovelShelfPage extends ConsumerWidget {
-  const NovelShelfPage({
-    super.key,
-    this.isActive = true,
-  });
+  const NovelShelfPage({super.key, this.isActive = true});
 
   final bool isActive;
 
@@ -32,15 +29,12 @@ class NovelShelfPage extends ConsumerWidget {
       imageCacheServiceResolver: () => ref.read(imageCacheServiceProvider),
       shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
       taskProgressHub: taskProgressHub,
-      categoryAssignUseCaseResolver: () => ref.read(
-        novelShelfCategoryAssignUseCaseProvider,
-      ),
-      readingStateBatchWriterResolver: () => ref.read(
-        readingStateBatchWriterProvider,
-      ),
-      unfavoriteWorkUseCaseResolver: () => ref.read(
-        unfavoriteWorkUseCaseProvider,
-      ),
+      categoryAssignUseCaseResolver: () =>
+          ref.read(novelShelfCategoryAssignUseCaseProvider),
+      readingStateBatchWriterResolver: () =>
+          ref.read(readingStateBatchWriterProvider),
+      unfavoriteWorkUseCaseResolver: () =>
+          ref.read(unfavoriteWorkUseCaseProvider),
     );
     return UnifiedShelfPage(
       adapter: adapter,
@@ -48,6 +42,7 @@ class NovelShelfPage extends ConsumerWidget {
       isActive: isActive,
       taskProgressHub: taskProgressHub,
       selectionHost: ref.watch(shelfSelectionHostControllerProvider),
+      coverPrecacheService: ref.watch(forumImagePrecacheServiceProvider),
       onOpenWork: (context, workId) async {
         await Navigator.of(context).push(
           MaterialPageRoute<void>(

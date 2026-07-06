@@ -1,8 +1,11 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -47,40 +50,46 @@ void main() {
       expect(controller.state.itemsByCategory['default']?.length, 1);
     });
 
-    test('initialize prefers snapshot adapter without loading categories separately', () async {
-      final adapter = _SnapshotShelfAdapter(
-        categories: [
-          LibraryCategory(
-            categoryId: 'default',
-            name: 'default',
-            sortOrder: 0,
-            createdAt: DateTime(2026, 1, 1),
-          ),
-        ],
-        queriedItems: {
-          'default': [
-            LibraryWorkItem(
-              workId: 'w1',
+    test(
+      'initialize prefers snapshot adapter without loading categories separately',
+      () async {
+        final adapter = _SnapshotShelfAdapter(
+          categories: [
+            LibraryCategory(
               categoryId: 'default',
-              title: 'snapshot title',
-              unreadCount: 2,
-              totalChapterCount: 3,
-              readChapterCount: 1,
-              addedAt: DateTime.utc(2026, 1, 1),
+              name: 'default',
+              sortOrder: 0,
+              createdAt: DateTime(2026, 1, 1),
             ),
           ],
-        },
-      );
-      final controller = UnifiedShelfController(adapter: adapter);
+          queriedItems: {
+            'default': [
+              LibraryWorkItem(
+                workId: 'w1',
+                categoryId: 'default',
+                title: 'snapshot title',
+                unreadCount: 2,
+                totalChapterCount: 3,
+                readChapterCount: 1,
+                addedAt: DateTime.utc(2026, 1, 1),
+              ),
+            ],
+          },
+        );
+        final controller = UnifiedShelfController(adapter: adapter);
 
-      await controller.initialize();
+        await controller.initialize();
 
-      expect(controller.state.isLoading, isFalse);
-      expect(controller.state.itemsByCategory['default']?.single.title, 'snapshot title');
-      expect(adapter.snapshotCallCount, 1);
-      expect(adapter.loadCategoriesCallCount, 0);
-      expect(adapter.queryCallCount, 0);
-    });
+        expect(controller.state.isLoading, isFalse);
+        expect(
+          controller.state.itemsByCategory['default']?.single.title,
+          'snapshot title',
+        );
+        expect(adapter.snapshotCallCount, 1);
+        expect(adapter.loadCategoriesCallCount, 0);
+        expect(adapter.queryCallCount, 0);
+      },
+    );
 
     test('feature flag can disable snapshot query fallback path', () async {
       final adapter = _SnapshotShelfAdapter(
@@ -108,7 +117,9 @@ void main() {
       );
       final controller = UnifiedShelfController(
         adapter: adapter,
-        featureFlags: ShelfFeatureFlags.defaults.copyWith(useShelfSnapshotQuery: false),
+        featureFlags: ShelfFeatureFlags.defaults.copyWith(
+          useShelfSnapshotQuery: false,
+        ),
       );
 
       await controller.initialize();
@@ -118,43 +129,52 @@ void main() {
       expect(adapter.queryCallCount, 1);
     });
 
-    test('hide default category when default is empty and others have items', () async {
-      final adapter = _FakeShelfAdapter(
-        categories: [
-          LibraryCategory(
-            categoryId: 'default',
-            name: 'default',
-            sortOrder: 0,
-            createdAt: DateTime(2026, 1, 1),
-          ),
-          LibraryCategory(
-            categoryId: 'c1',
-            name: 'follow',
-            sortOrder: 1,
-            createdAt: DateTime(2026, 1, 2),
-          ),
-        ],
-        queriedItems: {
-          'default': [],
-          'c1': [
-            LibraryWorkItem(
-              workId: 'w1',
+    test(
+      'hide default category when default is empty and others have items',
+      () async {
+        final adapter = _FakeShelfAdapter(
+          categories: [
+            LibraryCategory(
+              categoryId: 'default',
+              name: 'default',
+              sortOrder: 0,
+              createdAt: DateTime(2026, 1, 1),
+            ),
+            LibraryCategory(
               categoryId: 'c1',
-              title: 'title',
-              unreadCount: 0,
-              totalChapterCount: 1,
-              readChapterCount: 1,
-              addedAt: DateTime.utc(2026, 1, 1),
+              name: 'follow',
+              sortOrder: 1,
+              createdAt: DateTime(2026, 1, 2),
             ),
           ],
-        },
-      );
-      final controller = UnifiedShelfController(adapter: adapter);
-      await controller.initialize();
+          queriedItems: {
+            'default': [],
+            'c1': [
+              LibraryWorkItem(
+                workId: 'w1',
+                categoryId: 'c1',
+                title: 'title',
+                unreadCount: 0,
+                totalChapterCount: 1,
+                readChapterCount: 1,
+                addedAt: DateTime.utc(2026, 1, 1),
+              ),
+            ],
+          },
+        );
+        final controller = UnifiedShelfController(adapter: adapter);
+        await controller.initialize();
 
-      expect(controller.state.categories.any((e) => e.categoryId == 'default'), isFalse);
-      expect(controller.state.categories.any((e) => e.categoryId == 'c1'), isTrue);
-    });
+        expect(
+          controller.state.categories.any((e) => e.categoryId == 'default'),
+          isFalse,
+        );
+        expect(
+          controller.state.categories.any((e) => e.categoryId == 'c1'),
+          isTrue,
+        );
+      },
+    );
 
     test('keep default visible when it has items', () async {
       final adapter = _FakeShelfAdapter(
@@ -200,7 +220,10 @@ void main() {
       final controller = UnifiedShelfController(adapter: adapter);
       await controller.initialize();
 
-      expect(controller.state.categories.any((e) => e.categoryId == 'default'), isTrue);
+      expect(
+        controller.state.categories.any((e) => e.categoryId == 'default'),
+        isTrue,
+      );
     });
 
     test('search keyword should reload and update match count map', () async {
@@ -275,156 +298,246 @@ void main() {
       controller.dispose();
     });
 
-    test('update display and grid columns should persist through adapter', () async {
-      final adapter = _FakeShelfAdapter(
-        categories: const [],
-        queriedItems: const {},
-      );
-      final controller = UnifiedShelfController(adapter: adapter);
-      await controller.initialize();
-      await controller.updateDisplayMode(LibraryDisplayMode.list);
-      await controller.updateGridColumnCount(2);
+    test(
+      'update display and grid columns should persist through adapter',
+      () async {
+        final adapter = _FakeShelfAdapter(
+          categories: const [],
+          queriedItems: const {},
+        );
+        final controller = UnifiedShelfController(adapter: adapter);
+        await controller.initialize();
+        await controller.updateDisplayMode(LibraryDisplayMode.list);
+        await controller.updateGridColumnCount(2);
 
-      expect(adapter.lastDisplayMode, LibraryDisplayMode.list);
-      expect(adapter.lastGridColumns, 2);
-    });
+        expect(adapter.lastDisplayMode, LibraryDisplayMode.list);
+        expect(adapter.lastGridColumns, 2);
+      },
+    );
 
-    test('initialize shows metadata before cover warmup finishes and applies warmed cover later', () async {
-      final adapter = _WarmupShelfAdapter(
-        categories: [
-          LibraryCategory(
-            categoryId: 'default',
-            name: 'default',
-            sortOrder: 0,
-            createdAt: DateTime(2026, 1, 1),
-          ),
-        ],
-        queriedItems: {
-          'default': [
-            LibraryWorkItem(
-              workId: 'w1',
+    test(
+      'initialize shows metadata before cover warmup finishes and applies warmed cover later',
+      () async {
+        final adapter = _WarmupShelfAdapter(
+          categories: [
+            LibraryCategory(
               categoryId: 'default',
-              title: 'title',
-              coverImageUrl: 'https://img.test/w1.jpg',
-              unreadCount: 0,
-              totalChapterCount: 1,
-              readChapterCount: 0,
-              addedAt: DateTime.utc(2026, 1, 1),
+              name: 'default',
+              sortOrder: 0,
+              createdAt: DateTime(2026, 1, 1),
             ),
           ],
-        },
-      );
-      final patched = Completer<void>();
-      var stateChangeCount = 0;
-      final controller = UnifiedShelfController(
-        adapter: adapter,
-        coverPrefetchConcurrency: 1,
-        onStateChanged: () {
-          stateChangeCount++;
-        },
-      );
-      controller.stateListenable.addListener(() {
-        final coverLocalPath = controller.stateListenable.value.itemsByCategory['default']?.single.coverLocalPath;
-        if (coverLocalPath == '/cache/w1.jpg' && !patched.isCompleted) {
-          patched.complete();
-        }
-      });
+          queriedItems: {
+            'default': [
+              LibraryWorkItem(
+                workId: 'w1',
+                categoryId: 'default',
+                title: 'title',
+                coverImageUrl: 'https://img.test/w1.jpg',
+                unreadCount: 0,
+                totalChapterCount: 1,
+                readChapterCount: 0,
+                addedAt: DateTime.utc(2026, 1, 1),
+              ),
+            ],
+          },
+        );
+        final patched = Completer<void>();
+        var stateChangeCount = 0;
+        final controller = UnifiedShelfController(
+          adapter: adapter,
+          coverPrefetchConcurrency: 1,
+          onStateChanged: () {
+            stateChangeCount++;
+          },
+        );
+        controller.stateListenable.addListener(() {
+          final coverLocalPath = controller
+              .stateListenable
+              .value
+              .itemsByCategory['default']
+              ?.single
+              .coverLocalPath;
+          if (coverLocalPath == '/cache/w1.jpg' && !patched.isCompleted) {
+            patched.complete();
+          }
+        });
 
-      await controller.initialize();
+        await controller.initialize();
 
-      expect(controller.state.isLoading, isFalse);
-      expect(controller.state.itemsByCategory['default']?.single.coverLocalPath, isNull);
-      await adapter.warmCoverStarted;
-      expect(adapter.warmCoverCallCount, 1);
+        expect(controller.state.isLoading, isFalse);
+        expect(
+          controller.state.itemsByCategory['default']?.single.coverLocalPath,
+          isNull,
+        );
+        await adapter.warmCoverStarted;
+        expect(adapter.warmCoverCallCount, 1);
 
-      adapter.completeWarmup('/cache/w1.jpg');
-      await patched.future;
+        adapter.completeWarmup('/cache/w1.jpg');
+        await patched.future;
 
-      expect(controller.state.itemsByCategory['default']?.single.coverLocalPath, '/cache/w1.jpg');
-      expect(stateChangeCount, 0);
-      controller.dispose();
-    });
+        expect(
+          controller.state.itemsByCategory['default']?.single.coverLocalPath,
+          '/cache/w1.jpg',
+        );
+        expect(stateChangeCount, 0);
+        controller.dispose();
+      },
+    );
 
-    test('stateListenable emits incremental cover patch without metadata reload', () async {
-      final adapter = _WarmupShelfAdapter(
-        categories: [
-          LibraryCategory(
-            categoryId: 'default',
-            name: 'default',
-            sortOrder: 0,
-            createdAt: DateTime(2026, 1, 1),
-          ),
-        ],
-        queriedItems: {
-          'default': [
-            LibraryWorkItem(
-              workId: 'w1',
+    test(
+      'stateListenable emits incremental cover patch without metadata reload',
+      () async {
+        final adapter = _WarmupShelfAdapter(
+          categories: [
+            LibraryCategory(
               categoryId: 'default',
-              title: 'title',
-              coverImageUrl: 'https://img.test/w1.jpg',
-              unreadCount: 0,
-              totalChapterCount: 1,
-              readChapterCount: 0,
-              addedAt: DateTime.utc(2026, 1, 1),
+              name: 'default',
+              sortOrder: 0,
+              createdAt: DateTime(2026, 1, 1),
             ),
           ],
-        },
-      );
-      final controller = UnifiedShelfController(
-        adapter: adapter,
-        coverPrefetchConcurrency: 1,
-      );
-      final emitted = <UnifiedShelfState>[];
-      final patched = Completer<void>();
-      controller.stateListenable.addListener(() {
-        final state = controller.stateListenable.value;
-        emitted.add(state);
-        final coverLocalPath = state.itemsByCategory['default']?.single.coverLocalPath;
-        if (coverLocalPath == '/cache/w1.jpg' && !patched.isCompleted) {
-          patched.complete();
-        }
-      });
+          queriedItems: {
+            'default': [
+              LibraryWorkItem(
+                workId: 'w1',
+                categoryId: 'default',
+                title: 'title',
+                coverImageUrl: 'https://img.test/w1.jpg',
+                unreadCount: 0,
+                totalChapterCount: 1,
+                readChapterCount: 0,
+                addedAt: DateTime.utc(2026, 1, 1),
+              ),
+            ],
+          },
+        );
+        final controller = UnifiedShelfController(
+          adapter: adapter,
+          coverPrefetchConcurrency: 1,
+        );
+        final emitted = <UnifiedShelfState>[];
+        final patched = Completer<void>();
+        controller.stateListenable.addListener(() {
+          final state = controller.stateListenable.value;
+          emitted.add(state);
+          final coverLocalPath =
+              state.itemsByCategory['default']?.single.coverLocalPath;
+          if (coverLocalPath == '/cache/w1.jpg' && !patched.isCompleted) {
+            patched.complete();
+          }
+        });
 
-      await controller.initialize();
-      adapter.queryCallCount = 0;
-      adapter.completeWarmup('/cache/w1.jpg');
-      await patched.future;
+        await controller.initialize();
+        adapter.queryCallCount = 0;
+        adapter.completeWarmup('/cache/w1.jpg');
+        await patched.future;
 
-      expect(emitted.last.itemsByCategory['default']?.single.coverLocalPath, '/cache/w1.jpg');
-      expect(adapter.queryCallCount, 0);
-      controller.dispose();
-    });
+        expect(
+          emitted.last.itemsByCategory['default']?.single.coverLocalPath,
+          '/cache/w1.jpg',
+        );
+        expect(adapter.queryCallCount, 0);
+        controller.dispose();
+      },
+    );
 
-    test('reported visible range upgrades cover warmup priority before background items', () async {
-      final adapter = _PriorityWarmupShelfAdapter(
-        categories: [
-          LibraryCategory(
-            categoryId: 'default',
-            name: 'default',
-            sortOrder: 0,
-            createdAt: DateTime(2026, 1, 1),
-          ),
-        ],
-        queriedItems: {
-          'default': [
-            _workItem('w0'),
-            _workItem('w1'),
-            _workItem('w2'),
+    test(
+      'cover warmup uses ForumImagePrecacheService before adapter write-back',
+      () async {
+        final adapter = _WarmupShelfAdapter(
+          categories: [
+            LibraryCategory(
+              categoryId: 'default',
+              name: 'default',
+              sortOrder: 0,
+              createdAt: DateTime(2026, 1, 1),
+            ),
           ],
-        },
-      );
-      final controller = UnifiedShelfController(
-        adapter: adapter,
-        coverPrefetchConcurrency: 1,
-      );
+          queriedItems: {
+            'default': [
+              LibraryWorkItem(
+                workId: 'w1',
+                categoryId: 'default',
+                title: 'title',
+                coverImageUrl: 'https://img.test/w1.jpg',
+                unreadCount: 0,
+                totalChapterCount: 1,
+                readChapterCount: 0,
+                addedAt: DateTime.utc(2026, 1, 1),
+              ),
+            ],
+          },
+        );
+        final precache = _RecordingForumImagePrecacheService(
+          localPath: '/cache/w1.jpg',
+        );
+        final controller = UnifiedShelfController(
+          adapter: adapter,
+          coverPrefetchConcurrency: 1,
+          coverPrecacheService: precache,
+        );
+        final patched = Completer<void>();
+        controller.stateListenable.addListener(() {
+          final coverLocalPath = controller
+              .stateListenable
+              .value
+              .itemsByCategory['default']
+              ?.single
+              .coverLocalPath;
+          if (coverLocalPath == '/cache/w1.jpg' && !patched.isCompleted) {
+            patched.complete();
+          }
+        });
 
-      controller.reportVisibleRange(categoryId: 'default', firstIndex: 1, lastIndex: 1);
-      await controller.initialize();
-      await adapter.waitForWarmupCalls(3);
+        await controller.initialize();
+        await patched.future;
 
-      expect(adapter.warmedWorkIds.first, 'w1');
-      controller.dispose();
-    });
+        expect(precache.diskSpecs.single.kind, ForumImageKind.cover);
+        expect(precache.diskSpecs.single.ownerId, 'w1');
+        expect(adapter.warmCoverCallCount, 0);
+        expect(adapter.applyWarmedCoverCallCount, 1);
+        expect(
+          controller.state.itemsByCategory['default']?.single.coverLocalPath,
+          '/cache/w1.jpg',
+        );
+        controller.dispose();
+      },
+    );
+
+    test(
+      'reported visible range upgrades cover warmup priority before background items',
+      () async {
+        final adapter = _PriorityWarmupShelfAdapter(
+          categories: [
+            LibraryCategory(
+              categoryId: 'default',
+              name: 'default',
+              sortOrder: 0,
+              createdAt: DateTime(2026, 1, 1),
+            ),
+          ],
+          queriedItems: {
+            'default': [_workItem('w0'), _workItem('w1'), _workItem('w2')],
+          },
+        );
+        final controller = UnifiedShelfController(
+          adapter: adapter,
+          coverPrefetchConcurrency: 1,
+        );
+
+        controller.reportVisibleRange(
+          categoryId: 'default',
+          firstIndex: 1,
+          lastIndex: 1,
+        );
+        await controller.initialize();
+        await adapter.waitForWarmupCalls(3);
+
+        expect(adapter.warmedWorkIds.first, 'w1');
+        controller.dispose();
+      },
+    );
 
     test('feature flag can disable background cover warmup queue', () async {
       final adapter = _PriorityWarmupShelfAdapter(
@@ -443,7 +556,9 @@ void main() {
       final controller = UnifiedShelfController(
         adapter: adapter,
         coverPrefetchConcurrency: 1,
-        featureFlags: ShelfFeatureFlags.defaults.copyWith(useShelfCoverQueue: false),
+        featureFlags: ShelfFeatureFlags.defaults.copyWith(
+          useShelfCoverQueue: false,
+        ),
       );
 
       await controller.initialize();
@@ -452,118 +567,138 @@ void main() {
       controller.dispose();
     });
 
-    test('disabling stale-while-revalidate makes refresh enter loading state with old content', () async {
-      final adapter = _BlockingReloadShelfAdapter(
-        categories: [
-          LibraryCategory(
-            categoryId: 'default',
-            name: 'default',
-            sortOrder: 0,
-            createdAt: DateTime(2026, 1, 1),
+    test(
+      'disabling stale-while-revalidate makes refresh enter loading state with old content',
+      () async {
+        final adapter = _BlockingReloadShelfAdapter(
+          categories: [
+            LibraryCategory(
+              categoryId: 'default',
+              name: 'default',
+              sortOrder: 0,
+              createdAt: DateTime(2026, 1, 1),
+            ),
+          ],
+        );
+        final controller = UnifiedShelfController(
+          adapter: adapter,
+          featureFlags: ShelfFeatureFlags.defaults.copyWith(
+            useStaleWhileRevalidate: false,
           ),
-        ],
-      );
-      final controller = UnifiedShelfController(
-        adapter: adapter,
-        featureFlags: ShelfFeatureFlags.defaults.copyWith(useStaleWhileRevalidate: false),
-      );
+        );
 
-      await controller.initialize();
-      final refreshFuture = controller.refresh();
-      await adapter.secondQueryStarted.future;
+        await controller.initialize();
+        final refreshFuture = controller.refresh();
+        await adapter.secondQueryStarted.future;
 
-      expect(controller.state.isLoading, isTrue);
-      expect(controller.state.itemsByCategory['default']?.single.workId, 'w1');
+        expect(controller.state.isLoading, isTrue);
+        expect(
+          controller.state.itemsByCategory['default']?.single.workId,
+          'w1',
+        );
 
-      adapter.completeSecondQuery();
-      await refreshFuture;
-      controller.dispose();
-    });
+        adapter.completeSecondQuery();
+        await refreshFuture;
+        controller.dispose();
+      },
+    );
 
-    test('default stale-while-revalidate keeps old content visible during refresh', () async {
-      final adapter = _BlockingReloadShelfAdapter(
-        categories: [
-          LibraryCategory(
-            categoryId: 'default',
-            name: 'default',
-            sortOrder: 0,
-            createdAt: DateTime(2026, 1, 1),
-          ),
-        ],
-      );
-      final controller = UnifiedShelfController(adapter: adapter);
+    test(
+      'default stale-while-revalidate keeps old content visible during refresh',
+      () async {
+        final adapter = _BlockingReloadShelfAdapter(
+          categories: [
+            LibraryCategory(
+              categoryId: 'default',
+              name: 'default',
+              sortOrder: 0,
+              createdAt: DateTime(2026, 1, 1),
+            ),
+          ],
+        );
+        final controller = UnifiedShelfController(adapter: adapter);
 
-      await controller.initialize();
-      final refreshFuture = controller.refresh();
-      await adapter.secondQueryStarted.future;
+        await controller.initialize();
+        final refreshFuture = controller.refresh();
+        await adapter.secondQueryStarted.future;
 
-      expect(controller.state.isLoading, isFalse);
-      expect(controller.state.itemsByCategory['default']?.single.workId, 'w1');
+        expect(controller.state.isLoading, isFalse);
+        expect(
+          controller.state.itemsByCategory['default']?.single.workId,
+          'w1',
+        );
 
-      adapter.completeSecondQuery();
-      await refreshFuture;
-      controller.dispose();
-    });
+        adapter.completeSecondQuery();
+        await refreshFuture;
+        controller.dispose();
+      },
+    );
 
-    test('completed background task reloads metadata and notifies listener', () async {
-      final progress = ValueNotifier<LibraryShelfTaskProgress?>(null);
-      final adapter = _FakeShelfAdapter(
-        categories: [
-          LibraryCategory(
-            categoryId: 'default',
-            name: 'default',
-            sortOrder: 0,
-            createdAt: DateTime(2026, 1, 1),
-          ),
-        ],
-        queriedItems: {
+    test(
+      'completed background task reloads metadata and notifies listener',
+      () async {
+        final progress = ValueNotifier<LibraryShelfTaskProgress?>(null);
+        final adapter = _FakeShelfAdapter(
+          categories: [
+            LibraryCategory(
+              categoryId: 'default',
+              name: 'default',
+              sortOrder: 0,
+              createdAt: DateTime(2026, 1, 1),
+            ),
+          ],
+          queriedItems: {
+            'default': [
+              LibraryWorkItem(
+                workId: 'w1',
+                categoryId: 'default',
+                title: 'before sync',
+                unreadCount: 0,
+                totalChapterCount: 1,
+                readChapterCount: 0,
+                addedAt: DateTime.utc(2026, 1, 1),
+              ),
+            ],
+          },
+          taskProgress: progress,
+        );
+        final stateChanged = Completer<void>();
+        final controller = UnifiedShelfController(
+          adapter: adapter,
+          onStateChanged: () {
+            if (!stateChanged.isCompleted) {
+              stateChanged.complete();
+            }
+          },
+        );
+
+        await controller.initialize();
+        adapter.queriedItems = {
           'default': [
             LibraryWorkItem(
-              workId: 'w1',
+              workId: 'w2',
               categoryId: 'default',
-              title: 'before sync',
+              title: 'after sync',
               unreadCount: 0,
               totalChapterCount: 1,
               readChapterCount: 0,
-              addedAt: DateTime.utc(2026, 1, 1),
+              addedAt: DateTime.utc(2026, 1, 2),
             ),
           ],
-        },
-        taskProgress: progress,
-      );
-      final stateChanged = Completer<void>();
-      final controller = UnifiedShelfController(
-        adapter: adapter,
-        onStateChanged: () {
-          if (!stateChanged.isCompleted) {
-            stateChanged.complete();
-          }
-        },
-      );
+        };
 
-      await controller.initialize();
-      adapter.queriedItems = {
-        'default': [
-          LibraryWorkItem(
-            workId: 'w2',
-            categoryId: 'default',
-            title: 'after sync',
-            unreadCount: 0,
-            totalChapterCount: 1,
-            readChapterCount: 0,
-            addedAt: DateTime.utc(2026, 1, 2),
-          ),
-        ],
-      };
+        progress.value = const LibraryShelfTaskProgress(message: 'syncing');
+        progress.value = null;
+        await stateChanged.future;
 
-      progress.value = const LibraryShelfTaskProgress(message: 'syncing');
-      progress.value = null;
-      await stateChanged.future;
-
-      expect(controller.state.itemsByCategory['default']?.single.workId, 'w2');
-      controller.dispose();
-      progress.dispose();
-    });
+        expect(
+          controller.state.itemsByCategory['default']?.single.workId,
+          'w2',
+        );
+        controller.dispose();
+        progress.dispose();
+      },
+    );
 
     test('shelf refresh signal reloads matching module only', () async {
       final bus = LibraryShelfRefreshBus();
@@ -616,73 +751,79 @@ void main() {
       controller.dispose();
     });
 
-    test('background task with reloadOnCompletion false does not trigger reload', () async {
-      final progress = ValueNotifier<LibraryShelfTaskProgress?>(null);
-      final adapter = _FakeShelfAdapter(
-        categories: [
-          LibraryCategory(
-            categoryId: 'default',
-            name: 'default',
-            sortOrder: 0,
-            createdAt: DateTime(2026, 1, 1),
-          ),
-        ],
-        queriedItems: {
-          'default': [_workItem('w1')],
-        },
-        taskProgress: progress,
-      );
-      final controller = UnifiedShelfController(adapter: adapter);
+    test(
+      'background task with reloadOnCompletion false does not trigger reload',
+      () async {
+        final progress = ValueNotifier<LibraryShelfTaskProgress?>(null);
+        final adapter = _FakeShelfAdapter(
+          categories: [
+            LibraryCategory(
+              categoryId: 'default',
+              name: 'default',
+              sortOrder: 0,
+              createdAt: DateTime(2026, 1, 1),
+            ),
+          ],
+          queriedItems: {
+            'default': [_workItem('w1')],
+          },
+          taskProgress: progress,
+        );
+        final controller = UnifiedShelfController(adapter: adapter);
 
-      await controller.initialize();
-      adapter.queryCallCount = 0;
-      progress.value = const LibraryShelfTaskProgress(
-        message: 'warming',
-        source: LibraryMutationSource.coverWarmup,
-        reloadOnCompletion: false,
-      );
-      progress.value = null;
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+        await controller.initialize();
+        adapter.queryCallCount = 0;
+        progress.value = const LibraryShelfTaskProgress(
+          message: 'warming',
+          source: LibraryMutationSource.coverWarmup,
+          reloadOnCompletion: false,
+        );
+        progress.value = null;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      expect(adapter.queryCallCount, 0);
-      controller.dispose();
-      progress.dispose();
-    });
+        expect(adapter.queryCallCount, 0);
+        controller.dispose();
+        progress.dispose();
+      },
+    );
 
-    test('hidden cover warmup progress is registered through task progress hub', () async {
-      final adapter = _WarmupShelfAdapter(
-        categories: [
-          LibraryCategory(
-            categoryId: 'default',
-            name: 'default',
-            sortOrder: 0,
-            createdAt: DateTime(2026, 1, 1),
-          ),
-        ],
-        queriedItems: {
-          'default': [_workItem('w1')],
-        },
-      );
-      final hub = DefaultLibraryTaskProgressHub();
-      addTearDown(hub.dispose);
-      final controller = UnifiedShelfController(
-        adapter: adapter,
-        coverPrefetchConcurrency: 1,
-        taskProgressHub: hub,
-      );
+    test(
+      'hidden cover warmup progress is registered through task progress hub',
+      () async {
+        final adapter = _WarmupShelfAdapter(
+          categories: [
+            LibraryCategory(
+              categoryId: 'default',
+              name: 'default',
+              sortOrder: 0,
+              createdAt: DateTime(2026, 1, 1),
+            ),
+          ],
+          queriedItems: {
+            'default': [_workItem('w1')],
+          },
+        );
+        final hub = DefaultLibraryTaskProgressHub();
+        addTearDown(hub.dispose);
+        final controller = UnifiedShelfController(
+          adapter: adapter,
+          coverPrefetchConcurrency: 1,
+          taskProgressHub: hub,
+        );
 
-      await controller.initialize();
-      await adapter.warmCoverStarted;
+        await controller.initialize();
+        await adapter.warmCoverStarted;
 
-      final progress = hub.progressFor(LibraryModuleKey.comic).value;
-      expect(progress?.source, LibraryMutationSource.coverWarmup);
-      expect(progress?.visible, isFalse);
-      expect(progress?.reloadOnCompletion, isFalse);
+        final progress = hub.progressFor(LibraryModuleKey.comic).value;
+        expect(progress?.source, LibraryMutationSource.coverWarmup);
+        expect(progress?.visible, isFalse);
+        expect(progress?.reloadOnCompletion, isFalse);
 
-      adapter.completeWarmup('/cache/w1.jpg');
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-      controller.dispose();
-    });
+        adapter.completeWarmup('/cache/w1.jpg');
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        controller.dispose();
+      },
+    );
   });
 }
 
@@ -716,7 +857,8 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
   String get moduleTitle => 'comic';
 
   @override
-  Future<Object> buildDetailRouteArgument({required String workId}) async => workId;
+  Future<Object> buildDetailRouteArgument({required String workId}) async =>
+      workId;
 
   @override
   Future<String> createCategory({required String name}) async => 'new';
@@ -728,8 +870,9 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
   Future<List<LibraryCategory>> loadCategories() async => categories;
 
   @override
-  Future<List<LibraryWorkItem>> loadCategoryItems({required String categoryId}) async =>
-      queriedItems[categoryId] ?? const <LibraryWorkItem>[];
+  Future<List<LibraryWorkItem>> loadCategoryItems({
+    required String categoryId,
+  }) async => queriedItems[categoryId] ?? const <LibraryWorkItem>[];
 
   @override
   Future<LibraryDisplayPreference> loadDisplayPreference() async {
@@ -773,8 +916,7 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
   @override
   Future<Map<String, List<LibraryWorkItem>>> searchItemsByKeyword({
     required String keyword,
-  }) async =>
-      queriedItems;
+  }) async => queriedItems;
 
   @override
   Future<void> updateDisplayPreference({
@@ -786,15 +928,14 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
   }
 }
 
-class _WarmupShelfAdapter extends _FakeShelfAdapter implements ShelfCoverWarmupAdapter {
-  _WarmupShelfAdapter({
-    required super.categories,
-    required super.queriedItems,
-  });
+class _WarmupShelfAdapter extends _FakeShelfAdapter
+    implements ShelfCoverWarmupAdapter {
+  _WarmupShelfAdapter({required super.categories, required super.queriedItems});
 
   final Completer<String> _warmupCompleter = Completer<String>();
   final Completer<void> _warmCoverStarted = Completer<void>();
   int warmCoverCallCount = 0;
+  int applyWarmedCoverCallCount = 0;
 
   Future<void> get warmCoverStarted => _warmCoverStarted.future;
 
@@ -814,17 +955,29 @@ class _WarmupShelfAdapter extends _FakeShelfAdapter implements ShelfCoverWarmupA
         ownerId: item.workId,
         role: ImageCacheRole.cover,
         useCustomCover: false,
+        imageSpec: _coverSpec(item),
       ),
     ];
   }
 
   @override
-  Future<ShelfCoverWarmupResult?> warmCover(ShelfCoverWarmupRequest request) async {
+  Future<ShelfCoverWarmupResult?> warmCover(
+    ShelfCoverWarmupRequest request,
+  ) async {
     warmCoverCallCount++;
     if (!_warmCoverStarted.isCompleted) {
       _warmCoverStarted.complete();
     }
     final localPath = await _warmupCompleter.future;
+    return applyWarmedCover(request: request, localPath: localPath);
+  }
+
+  @override
+  Future<ShelfCoverWarmupResult?> applyWarmedCover({
+    required ShelfCoverWarmupRequest request,
+    required String localPath,
+  }) async {
+    applyWarmedCoverCallCount++;
     return ShelfCoverWarmupResult(
       workId: request.workId,
       coverLocalPath: localPath,
@@ -836,7 +989,8 @@ class _WarmupShelfAdapter extends _FakeShelfAdapter implements ShelfCoverWarmupA
   }
 }
 
-class _PriorityWarmupShelfAdapter extends _FakeShelfAdapter implements ShelfCoverWarmupAdapter {
+class _PriorityWarmupShelfAdapter extends _FakeShelfAdapter
+    implements ShelfCoverWarmupAdapter {
   _PriorityWarmupShelfAdapter({
     required super.categories,
     required super.queriedItems,
@@ -858,22 +1012,27 @@ class _PriorityWarmupShelfAdapter extends _FakeShelfAdapter implements ShelfCove
     String? selectedCategoryId,
   }) async {
     final items = itemsByCategory['default'] ?? const <LibraryWorkItem>[];
-    return items.map((item) {
-      return ShelfCoverWarmupRequest(
-        moduleKey: LibraryModuleKey.comic,
-        workId: item.workId,
-        cacheKey: 'cover/comic/${item.workId}',
-        sourceUrl: item.coverImageUrl!,
-        ownerType: ImageCacheOwnerType.comic,
-        ownerId: item.workId,
-        role: ImageCacheRole.cover,
-        useCustomCover: false,
-      );
-    }).toList(growable: false);
+    return items
+        .map((item) {
+          return ShelfCoverWarmupRequest(
+            moduleKey: LibraryModuleKey.comic,
+            workId: item.workId,
+            cacheKey: 'cover/comic/${item.workId}',
+            sourceUrl: item.coverImageUrl!,
+            ownerType: ImageCacheOwnerType.comic,
+            ownerId: item.workId,
+            role: ImageCacheRole.cover,
+            useCustomCover: false,
+            imageSpec: _coverSpec(item),
+          );
+        })
+        .toList(growable: false);
   }
 
   @override
-  Future<ShelfCoverWarmupResult?> warmCover(ShelfCoverWarmupRequest request) async {
+  Future<ShelfCoverWarmupResult?> warmCover(
+    ShelfCoverWarmupRequest request,
+  ) async {
     warmedWorkIds.add(request.workId);
     if (warmedWorkIds.length >= 3 && !_callsCompleter.isCompleted) {
       _callsCompleter.complete();
@@ -883,16 +1042,26 @@ class _PriorityWarmupShelfAdapter extends _FakeShelfAdapter implements ShelfCove
       coverLocalPath: '/cache/${request.workId}.jpg',
     );
   }
+
+  @override
+  Future<ShelfCoverWarmupResult?> applyWarmedCover({
+    required ShelfCoverWarmupRequest request,
+    required String localPath,
+  }) async {
+    return ShelfCoverWarmupResult(
+      workId: request.workId,
+      coverLocalPath: localPath,
+    );
+  }
 }
 
 class _BlockingReloadShelfAdapter extends _FakeShelfAdapter {
-  _BlockingReloadShelfAdapter({
-    required super.categories,
-  }) : super(
-          queriedItems: {
-            'default': [_workItem('w1')],
-          },
-        );
+  _BlockingReloadShelfAdapter({required super.categories})
+    : super(
+        queriedItems: {
+          'default': [_workItem('w1')],
+        },
+      );
 
   final Completer<void> secondQueryStarted = Completer<void>();
   final Completer<void> _allowSecondQuery = Completer<void>();
@@ -927,7 +1096,47 @@ class _BlockingReloadShelfAdapter extends _FakeShelfAdapter {
   }
 }
 
-class _SnapshotShelfAdapter extends _FakeShelfAdapter implements ShelfSnapshotAdapter {
+ForumImageLoadSpec _coverSpec(LibraryWorkItem item) {
+  return ForumImageLoadSpec(
+    kind: ForumImageKind.cover,
+    url: Uri.parse(item.coverImageUrl!),
+    ownerType: ImageCacheOwnerType.comic,
+    ownerId: item.workId,
+    cacheKey: 'cover/comic/${item.workId}',
+    allowReaderOpen: false,
+  );
+}
+
+class _RecordingForumImagePrecacheService implements ForumImagePrecacheService {
+  _RecordingForumImagePrecacheService({required this.localPath});
+
+  final String localPath;
+  final diskSpecs = <ForumImageLoadSpec>[];
+
+  @override
+  Future<ForumImagePrecacheResult> ensureDiskCached(
+    ForumImageLoadSpec spec,
+  ) async {
+    diskSpecs.add(spec);
+    return ForumImagePrecacheResult(
+      success: true,
+      cacheKey: spec.cacheKey,
+      localPath: localPath,
+    );
+  }
+
+  @override
+  Future<ForumImagePrecacheResult> precacheDecoded({
+    required BuildContext context,
+    required ForumImageLoadSpec spec,
+    Size? expectedDisplaySize,
+  }) async {
+    return const ForumImagePrecacheResult(success: false);
+  }
+}
+
+class _SnapshotShelfAdapter extends _FakeShelfAdapter
+    implements ShelfSnapshotAdapter {
   _SnapshotShelfAdapter({
     required super.categories,
     required super.queriedItems,
@@ -955,7 +1164,9 @@ class _SnapshotShelfAdapter extends _FakeShelfAdapter implements ShelfSnapshotAd
       itemsByCategory: queriedItems,
       visibleMatchCountByCategory: <String, int>{
         for (final category in categories)
-          category.categoryId: (queriedItems[category.categoryId] ?? const <LibraryWorkItem>[]).length,
+          category.categoryId:
+              (queriedItems[category.categoryId] ?? const <LibraryWorkItem>[])
+                  .length,
       },
     );
   }

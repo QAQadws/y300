@@ -2,7 +2,6 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
@@ -18,6 +17,7 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
+import 'package:y300/features/library_shared/domain/services/library_cover_image_adapter.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_query_utils.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
@@ -56,30 +56,33 @@ class ComicShelfAdapter
     BulkDownloadUseCaseResolver? bulkDownloadUseCaseResolver,
     UnfavoriteWorkUseCase? unfavoriteWorkUseCase,
     UnfavoriteWorkUseCaseResolver? unfavoriteWorkUseCaseResolver,
-  })  : _stateRepository = stateRepository,
-        _featureFlags = featureFlags,
-        _duplicateMergeService = duplicateMergeService,
-        _shelfRefreshBus = shelfRefreshBus,
-        _taskProgress = taskProgressHub?.progressFor(LibraryModuleKey.comic),
-        _categoryAssignUseCaseResolver =
-            categoryAssignUseCaseResolver ?? (() => categoryAssignUseCase),
-        _readingStateBatchWriterResolver =
-            readingStateBatchWriterResolver ?? (() => readingStateBatchWriter),
-        _bulkDownloadUseCaseResolver =
-            bulkDownloadUseCaseResolver ?? (() => bulkDownloadUseCase),
-        _unfavoriteWorkUseCaseResolver =
-            unfavoriteWorkUseCaseResolver ?? (() => unfavoriteWorkUseCase),
-        _supportsCategoryAssign =
-            categoryAssignUseCase != null || categoryAssignUseCaseResolver != null,
-        _supportsReadingStateBatch =
-            readingStateBatchWriter != null || readingStateBatchWriterResolver != null,
-        _supportsBulkDownload =
-            bulkDownloadUseCase != null || bulkDownloadUseCaseResolver != null,
-        _supportsUnfavorite =
-            unfavoriteWorkUseCase != null || unfavoriteWorkUseCaseResolver != null,
-        _coverCacheService = imageCacheServiceResolver == null
-            ? LibraryCoverCacheService(imageCacheService)
-            : LibraryCoverCacheService.lazy(imageCacheServiceResolver);
+  }) : _stateRepository = stateRepository,
+       _featureFlags = featureFlags,
+       _duplicateMergeService = duplicateMergeService,
+       _shelfRefreshBus = shelfRefreshBus,
+       _taskProgress = taskProgressHub?.progressFor(LibraryModuleKey.comic),
+       _categoryAssignUseCaseResolver =
+           categoryAssignUseCaseResolver ?? (() => categoryAssignUseCase),
+       _readingStateBatchWriterResolver =
+           readingStateBatchWriterResolver ?? (() => readingStateBatchWriter),
+       _bulkDownloadUseCaseResolver =
+           bulkDownloadUseCaseResolver ?? (() => bulkDownloadUseCase),
+       _unfavoriteWorkUseCaseResolver =
+           unfavoriteWorkUseCaseResolver ?? (() => unfavoriteWorkUseCase),
+       _supportsCategoryAssign =
+           categoryAssignUseCase != null ||
+           categoryAssignUseCaseResolver != null,
+       _supportsReadingStateBatch =
+           readingStateBatchWriter != null ||
+           readingStateBatchWriterResolver != null,
+       _supportsBulkDownload =
+           bulkDownloadUseCase != null || bulkDownloadUseCaseResolver != null,
+       _supportsUnfavorite =
+           unfavoriteWorkUseCase != null ||
+           unfavoriteWorkUseCaseResolver != null,
+       _coverCacheService = imageCacheServiceResolver == null
+           ? LibraryCoverCacheService(imageCacheService)
+           : LibraryCoverCacheService.lazy(imageCacheServiceResolver);
 
   final ComicRepository _repository;
   final LibraryStateRepository _stateRepository;
@@ -96,6 +99,8 @@ class ComicShelfAdapter
   final bool _supportsBulkDownload;
   final bool _supportsUnfavorite;
   final LibraryCoverCacheService _coverCacheService;
+  final LibraryCoverImageAdapter _coverImageAdapter =
+      const LibraryCoverImageAdapter();
 
   static const String _mergeDuplicatesActionId = 'merge-duplicates';
   static const String _moduleTitle = '\u6f2b\u753b';
@@ -275,7 +280,8 @@ class ComicShelfAdapter
       visibleMatchCountByCategory: <String, int>{
         for (final category in categories)
           category.categoryId:
-              (itemsByCategory[category.categoryId] ?? const <LibraryWorkItem>[])
+              (itemsByCategory[category.categoryId] ??
+                      const <LibraryWorkItem>[])
                   .length,
       },
     );
@@ -299,10 +305,7 @@ class ComicShelfAdapter
     required String categoryId,
     required String newName,
   }) {
-    return _repository.renameCategory(
-      categoryId: categoryId,
-      newName: newName,
-    );
+    return _repository.renameCategory(categoryId: categoryId, newName: newName);
   }
 
   @override
@@ -486,7 +489,8 @@ class ComicShelfAdapter
     final message = switch ((result.downloadedEpisodeCount, failedCount)) {
       (0, 0) => 'No downloadable episodes were found',
       (_, 0) => 'Downloaded ${result.downloadedEpisodeCount} episodes',
-      _ => 'Downloaded ${result.downloadedEpisodeCount} episodes, failed $failedCount',
+      _ =>
+        'Downloaded ${result.downloadedEpisodeCount} episodes, failed $failedCount',
     };
     return SelectionActionResult(
       message: message,
@@ -555,10 +559,9 @@ class ComicShelfAdapter
   }
 
   Future<LibraryWorkItem> _mapWork(ComicShelfItem source) async {
-    final statsRepository =
-        _repository is ComicShelfStatsRepository
-            ? _repository as ComicShelfStatsRepository
-            : null;
+    final statsRepository = _repository is ComicShelfStatsRepository
+        ? _repository as ComicShelfStatsRepository
+        : null;
     final stats = statsRepository == null
         ? null
         : await statsRepository.getShelfWorkStats(comicId: source.comicId);
@@ -585,10 +588,12 @@ class ComicShelfAdapter
       workId: source.comicId,
     );
     final useCustomMetadata = _featureFlags.readerCustomMetadataEnabled;
-    final customSource =
-        useCustomMetadata ? source.customCoverImageUrl?.trim() : null;
-    final customLocal =
-        useCustomMetadata ? source.customCoverLocalPath?.trim() : null;
+    final customSource = useCustomMetadata
+        ? source.customCoverImageUrl?.trim()
+        : null;
+    final customLocal = useCustomMetadata
+        ? source.customCoverLocalPath?.trim()
+        : null;
     final hasPendingCustomCover =
         customSource != null &&
         customSource.isNotEmpty &&
@@ -596,8 +601,9 @@ class ComicShelfAdapter
     return LibraryWorkItem(
       workId: source.comicId,
       categoryId: source.categoryId,
-      title:
-          useCustomMetadata ? source.title : (source.sourceTitle ?? source.title),
+      title: useCustomMetadata
+          ? source.title
+          : (source.sourceTitle ?? source.title),
       secondaryName: _shelfSecondaryName(
         author: useCustomMetadata
             ? source.author
@@ -612,18 +618,20 @@ class ComicShelfAdapter
               coverImageUrl: source.coverImageUrl,
               customCoverImageUrl: source.customCoverImageUrl,
             ),
-      customCoverImageUrl:
-          useCustomMetadata ? source.customCoverImageUrl : null,
+      customCoverImageUrl: useCustomMetadata
+          ? source.customCoverImageUrl
+          : null,
       coverLocalPath: hasPendingCustomCover
           ? null
           : useCustomMetadata
-              ? source.coverLocalPath
-              : _sourceCoverLocalPath(
-                  coverLocalPath: source.coverLocalPath,
-                  customCoverLocalPath: source.customCoverLocalPath,
-                ),
-      customCoverLocalPath:
-          useCustomMetadata ? source.customCoverLocalPath : null,
+          ? source.coverLocalPath
+          : _sourceCoverLocalPath(
+              coverLocalPath: source.coverLocalPath,
+              customCoverLocalPath: source.customCoverLocalPath,
+            ),
+      customCoverLocalPath: useCustomMetadata
+          ? source.customCoverLocalPath
+          : null,
       customCoverFocusX: useCustomMetadata ? source.customCoverFocusX : null,
       customCoverFocusY: useCustomMetadata ? source.customCoverFocusY : null,
       unreadCount: unread,
@@ -646,47 +654,28 @@ class ComicShelfAdapter
       selectedCategoryId: selectedCategoryId,
     );
     for (final item in items) {
-      final customSource = item.customCoverImageUrl?.trim();
-      final customLocal = item.customCoverLocalPath?.trim();
-      if (customSource != null && customSource.isNotEmpty) {
-        if (customLocal == null || customLocal.isEmpty) {
-          requests.add(
-            ShelfCoverWarmupRequest(
-              moduleKey: LibraryModuleKey.comic,
-              workId: item.workId,
-              cacheKey: ImageCacheKeys.customCover(
-                ownerType: ImageCacheOwnerType.comic.dbValue,
-                ownerId: item.workId,
-              ),
-              sourceUrl: customSource,
-              ownerType: ImageCacheOwnerType.comic,
-              ownerId: item.workId,
-              role: ImageCacheRole.customCover,
-              useCustomCover: true,
-            ),
-          );
-        }
+      final specRequest = _coverImageAdapter.buildCoverSpec(
+        moduleKey: LibraryModuleKey.comic,
+        item: item,
+      );
+      if (specRequest == null) {
         continue;
       }
-
-      final local = item.coverLocalPath?.trim();
-      final sourceUrl = item.coverImageUrl?.trim();
-      if ((local == null || local.isEmpty) &&
-          sourceUrl != null &&
-          sourceUrl.isNotEmpty) {
-        requests.add(
-          ShelfCoverWarmupRequest(
-            moduleKey: LibraryModuleKey.comic,
-            workId: item.workId,
-            cacheKey: ImageCacheKeys.comicCover(item.workId),
-            sourceUrl: sourceUrl,
-            ownerType: ImageCacheOwnerType.comic,
-            ownerId: item.workId,
-            role: ImageCacheRole.cover,
-            useCustomCover: false,
-          ),
-        );
-      }
+      requests.add(
+        ShelfCoverWarmupRequest(
+          moduleKey: LibraryModuleKey.comic,
+          workId: item.workId,
+          cacheKey: specRequest.imageSpec.cacheKey!,
+          sourceUrl: specRequest.imageSpec.sourceUrl,
+          ownerType: specRequest.imageSpec.ownerType!,
+          ownerId: specRequest.imageSpec.ownerId!,
+          role: specRequest.useCustomCover
+              ? ImageCacheRole.customCover
+              : ImageCacheRole.cover,
+          useCustomCover: specRequest.useCustomCover,
+          imageSpec: specRequest.imageSpec,
+        ),
+      );
     }
     return requests;
   }
@@ -706,6 +695,14 @@ class ComicShelfAdapter
     if (localPath == null || localPath.isEmpty) {
       return null;
     }
+    return applyWarmedCover(request: request, localPath: localPath);
+  }
+
+  @override
+  Future<ShelfCoverWarmupResult?> applyWarmedCover({
+    required ShelfCoverWarmupRequest request,
+    required String localPath,
+  }) async {
     if (_repository is ComicCoverCacheWriter) {
       await (_repository as ComicCoverCacheWriter).updateCoverCache(
         comicId: request.ownerId,

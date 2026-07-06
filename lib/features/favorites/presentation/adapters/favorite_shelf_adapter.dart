@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
@@ -15,6 +14,7 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
+import 'package:y300/features/library_shared/domain/services/library_cover_image_adapter.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
@@ -86,6 +86,8 @@ class FavoriteShelfAdapter
   final bool _supportsCategoryAssign;
   final bool _supportsUnfavorite;
   final ValueListenable<LibraryShelfTaskProgress?>? _taskProgress;
+  final LibraryCoverImageAdapter _coverImageAdapter =
+      const LibraryCoverImageAdapter();
 
   static const String _moduleTitle = '\u6536\u85cf';
   static const String _assignLabel = '\u8bbe\u7f6e\u5206\u7c7b';
@@ -418,28 +420,13 @@ class FavoriteShelfAdapter
       selectedCategoryId: selectedCategoryId,
     );
     for (final item in items) {
-      final customSourceUrl = item.customCoverImageUrl?.trim();
-      final useCustomCover =
-          customSourceUrl != null && customSourceUrl.isNotEmpty;
-      final sourceUrl = useCustomCover
-          ? customSourceUrl
-          : item.coverImageUrl?.trim();
-      if (sourceUrl == null || sourceUrl.isEmpty) {
-        continue;
-      }
-      if (useCustomCover) {
-        final customLocal = item.customCoverLocalPath?.trim();
-        if (customLocal != null && customLocal.isNotEmpty) {
-          continue;
-        }
-      } else if (_hasPreferredLocalCover(item)) {
-        continue;
-      }
       final target = await _repository.getRouteTargetByShelfWorkId(item.workId);
       final moduleWorkId = target?.workId?.trim();
       if (target == null || moduleWorkId == null || moduleWorkId.isEmpty) {
         continue;
       }
+      final useCustomCover =
+          item.customCoverImageUrl?.trim().isNotEmpty ?? false;
       final cacheTarget = _resolveCacheTarget(
         target.contentKind,
         moduleWorkId,
@@ -448,29 +435,30 @@ class FavoriteShelfAdapter
       if (cacheTarget == null) {
         continue;
       }
+      final specRequest = _coverImageAdapter.buildCoverSpec(
+        moduleKey: LibraryModuleKey.favorite,
+        item: item,
+        ownerType: cacheTarget.ownerType,
+        ownerId: moduleWorkId,
+      );
+      if (specRequest == null) {
+        continue;
+      }
       requests.add(
         ShelfCoverWarmupRequest(
           moduleKey: LibraryModuleKey.favorite,
           workId: item.workId,
-          cacheKey: cacheTarget.cacheKey,
-          sourceUrl: sourceUrl,
+          cacheKey: specRequest.imageSpec.cacheKey!,
+          sourceUrl: specRequest.imageSpec.sourceUrl,
           ownerType: cacheTarget.ownerType,
           ownerId: moduleWorkId,
           role: cacheTarget.role,
-          useCustomCover: useCustomCover,
+          useCustomCover: specRequest.useCustomCover,
+          imageSpec: specRequest.imageSpec,
         ),
       );
     }
     return requests;
-  }
-
-  bool _hasPreferredLocalCover(LibraryWorkItem item) {
-    final custom = item.customCoverLocalPath?.trim();
-    if (custom != null && custom.isNotEmpty) {
-      return true;
-    }
-    final cover = item.coverLocalPath?.trim();
-    return cover != null && cover.isNotEmpty;
   }
 
   @override
@@ -488,6 +476,14 @@ class FavoriteShelfAdapter
     if (localPath == null || localPath.isEmpty) {
       return null;
     }
+    return applyWarmedCover(request: request, localPath: localPath);
+  }
+
+  @override
+  Future<ShelfCoverWarmupResult?> applyWarmedCover({
+    required ShelfCoverWarmupRequest request,
+    required String localPath,
+  }) async {
     final cacheTarget = _resolveCacheTarget(
       _kindFromOwnerType(request.ownerType),
       request.ownerId,
@@ -524,12 +520,6 @@ class FavoriteShelfAdapter
           return null;
         }
         return _FavoriteCoverCacheTarget(
-          cacheKey: useCustomCover
-              ? ImageCacheKeys.customCover(
-                  ownerType: ImageCacheOwnerType.comic.dbValue,
-                  ownerId: workId,
-                )
-              : ImageCacheKeys.comicCover(workId),
           ownerType: ImageCacheOwnerType.comic,
           role: useCustomCover
               ? ImageCacheRole.customCover
@@ -547,12 +537,6 @@ class FavoriteShelfAdapter
           return null;
         }
         return _FavoriteCoverCacheTarget(
-          cacheKey: useCustomCover
-              ? ImageCacheKeys.customCover(
-                  ownerType: ImageCacheOwnerType.novel.dbValue,
-                  ownerId: workId,
-                )
-              : ImageCacheKeys.novelCover(workId),
           ownerType: ImageCacheOwnerType.novel,
           role: useCustomCover
               ? ImageCacheRole.customCover
@@ -605,13 +589,11 @@ class FavoriteShelfAdapter
 
 class _FavoriteCoverCacheTarget {
   const _FavoriteCoverCacheTarget({
-    required this.cacheKey,
     required this.ownerType,
     required this.role,
     required this.writeBack,
   });
 
-  final String cacheKey;
   final ImageCacheOwnerType ownerType;
   final ImageCacheRole role;
   final _FavoriteCoverWriteBack writeBack;

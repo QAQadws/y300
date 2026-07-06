@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/favorites/domain/use_cases/unfavorite_use_cases.dart';
@@ -49,6 +50,9 @@ void main() {
       selectedCategoryId: 'default',
       itemsByCategory: <String, List<LibraryWorkItem>>{'default': items},
     );
+    expect(requests.single.imageSpec.kind, ForumImageKind.cover);
+    expect(requests.single.imageSpec.ownerType, ImageCacheOwnerType.novel);
+    expect(requests.single.imageSpec.cacheKey, 'cover/novel/novel-1');
     final result = await adapter.warmCover(requests.single);
 
     expect(result?.coverLocalPath, '/cache/novel-1.jpg');
@@ -104,37 +108,40 @@ void main() {
     );
   });
 
-  test('NovelShelfAdapter forwards category and reading-state actions', () async {
-    final assignUseCase = _FakeShelfCategoryAssignUseCase();
-    final writer = _FakeReadingStateBatchWriter();
-    final adapter = NovelShelfAdapter(
-      _FakeNovelRepository(shelfItems: const <NovelItem>[]),
-      stateRepository: _FakeLibraryStateRepository(),
-      categoryAssignUseCase: assignUseCase,
-      readingStateBatchWriter: writer,
-    );
+  test(
+    'NovelShelfAdapter forwards category and reading-state actions',
+    () async {
+      final assignUseCase = _FakeShelfCategoryAssignUseCase();
+      final writer = _FakeReadingStateBatchWriter();
+      final adapter = NovelShelfAdapter(
+        _FakeNovelRepository(shelfItems: const <NovelItem>[]),
+        stateRepository: _FakeLibraryStateRepository(),
+        categoryAssignUseCase: assignUseCase,
+        readingStateBatchWriter: writer,
+      );
 
-    await adapter.runSelectionAction(
-      const SelectionActionExecutionRequest(
-        actionId: SelectionActionIds.assignCategory,
-        workIds: <String>{'novel-a'},
-        activeCategoryId: 'default',
-        targetCategoryId: 'archive',
-      ),
-    );
-    await adapter.runSelectionAction(
-      const SelectionActionExecutionRequest(
-        actionId: SelectionActionIds.markAllUnread,
-        workIds: <String>{'novel-a'},
-        activeCategoryId: 'default',
-      ),
-    );
+      await adapter.runSelectionAction(
+        const SelectionActionExecutionRequest(
+          actionId: SelectionActionIds.assignCategory,
+          workIds: <String>{'novel-a'},
+          activeCategoryId: 'default',
+          targetCategoryId: 'archive',
+        ),
+      );
+      await adapter.runSelectionAction(
+        const SelectionActionExecutionRequest(
+          actionId: SelectionActionIds.markAllUnread,
+          workIds: <String>{'novel-a'},
+          activeCategoryId: 'default',
+        ),
+      );
 
-    expect(assignUseCase.lastSourceCategoryId, 'default');
-    expect(assignUseCase.lastTargetCategoryId, 'archive');
-    expect(writer.calls.single.module, LibraryModuleKey.novel);
-    expect(writer.calls.single.isRead, isFalse);
-  });
+      expect(assignUseCase.lastSourceCategoryId, 'default');
+      expect(assignUseCase.lastTargetCategoryId, 'archive');
+      expect(writer.calls.single.module, LibraryModuleKey.novel);
+      expect(writer.calls.single.isRead, isFalse);
+    },
+  );
 
   test('NovelShelfAdapter delegates unfavorite with novel kind', () async {
     final useCase = _FakeUnfavoriteWorkUseCase();
@@ -152,13 +159,10 @@ void main() {
       ),
     );
 
-    expect(
-      useCase.lastWorkKinds,
-      <String, ThreadContentKind>{
-        'novel-a': ThreadContentKind.novel,
-        'novel-b': ThreadContentKind.novel,
-      },
-    );
+    expect(useCase.lastWorkKinds, <String, ThreadContentKind>{
+      'novel-a': ThreadContentKind.novel,
+      'novel-b': ThreadContentKind.novel,
+    });
     expect(result.changed, isTrue);
   });
 }
@@ -343,9 +347,7 @@ class _FakeReadingStateBatchWriter implements ReadingStateBatchWriter {
     required Set<String> workIds,
     required bool isRead,
   }) async {
-    calls.add(
-      _ReadStateCall(module: module, workIds: workIds, isRead: isRead),
-    );
+    calls.add(_ReadStateCall(module: module, workIds: workIds, isRead: isRead));
   }
 }
 

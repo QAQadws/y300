@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
@@ -52,6 +53,9 @@ void main() {
       selectedCategoryId: 'default',
       itemsByCategory: <String, List<LibraryWorkItem>>{'default': items},
     );
+    expect(requests.single.imageSpec.kind, ForumImageKind.cover);
+    expect(requests.single.imageSpec.ownerType, ImageCacheOwnerType.comic);
+    expect(requests.single.imageSpec.cacheKey, 'cover/comic/comic-1');
     final result = await adapter.warmCover(requests.single);
 
     expect(result?.coverLocalPath, '/cache/comic-1.jpg');
@@ -78,7 +82,9 @@ void main() {
           ],
         ),
         stateRepository: _FakeLibraryStateRepository(),
-        imageCacheService: _FakeImageCacheService(localPath: '/cache/custom.jpg'),
+        imageCacheService: _FakeImageCacheService(
+          localPath: '/cache/custom.jpg',
+        ),
       );
 
       final items = await adapter.loadCategoryItems(categoryId: 'default');
@@ -91,45 +97,52 @@ void main() {
       );
       expect(requests.single.role, ImageCacheRole.customCover);
       expect(requests.single.cacheKey, 'cover/custom/comic/comic-2');
+      expect(requests.single.imageSpec.kind, ForumImageKind.customCover);
+      expect(requests.single.imageSpec.protected, isTrue);
     },
   );
 
-  test('custom metadata flag hides custom cover from shelf item mapping', () async {
-    final adapter = ComicShelfAdapter(
-      _FakeComicRepository(
-        shelfItems: <ComicShelfItem>[
-          ComicShelfItem(
-            comicId: 'comic-2',
-            title: 'Custom Title',
-            sourceTitle: 'Source Title',
-            author: 'Custom Author',
-            sourceAuthor: 'Source Author',
-            translationGroup: 'Custom Group',
-            sourceTranslationGroup: 'Source Group',
-            coverImageUrl: 'https://img.test/ordinary.jpg',
-            customCoverImageUrl: 'https://img.test/custom.jpg',
-            coverLocalPath: '/cache/old-ordinary.jpg',
-            customCoverLocalPath: '/cache/custom.jpg',
-            categoryId: 'default',
-            addedAt: DateTime(2026, 1, 1),
-          ),
-        ],
-      ),
-      stateRepository: _FakeLibraryStateRepository(),
-      imageCacheService: _FakeImageCacheService(localPath: '/cache/custom.jpg'),
-      featureFlags: ComicReaderFeatureFlags.defaults.copyWith(
-        readerCustomMetadataEnabled: false,
-      ),
-    );
+  test(
+    'custom metadata flag hides custom cover from shelf item mapping',
+    () async {
+      final adapter = ComicShelfAdapter(
+        _FakeComicRepository(
+          shelfItems: <ComicShelfItem>[
+            ComicShelfItem(
+              comicId: 'comic-2',
+              title: 'Custom Title',
+              sourceTitle: 'Source Title',
+              author: 'Custom Author',
+              sourceAuthor: 'Source Author',
+              translationGroup: 'Custom Group',
+              sourceTranslationGroup: 'Source Group',
+              coverImageUrl: 'https://img.test/ordinary.jpg',
+              customCoverImageUrl: 'https://img.test/custom.jpg',
+              coverLocalPath: '/cache/old-ordinary.jpg',
+              customCoverLocalPath: '/cache/custom.jpg',
+              categoryId: 'default',
+              addedAt: DateTime(2026, 1, 1),
+            ),
+          ],
+        ),
+        stateRepository: _FakeLibraryStateRepository(),
+        imageCacheService: _FakeImageCacheService(
+          localPath: '/cache/custom.jpg',
+        ),
+        featureFlags: ComicReaderFeatureFlags.defaults.copyWith(
+          readerCustomMetadataEnabled: false,
+        ),
+      );
 
-    final items = await adapter.loadCategoryItems(categoryId: 'default');
+      final items = await adapter.loadCategoryItems(categoryId: 'default');
 
-    expect(items.single.coverLocalPath, '/cache/old-ordinary.jpg');
-    expect(items.single.title, 'Source Title');
-    expect(items.single.secondaryName, 'Source Author / Source Group');
-    expect(items.single.customCoverImageUrl, isNull);
-    expect(items.single.customCoverLocalPath, isNull);
-  });
+      expect(items.single.coverLocalPath, '/cache/old-ordinary.jpg');
+      expect(items.single.title, 'Source Title');
+      expect(items.single.secondaryName, 'Source Author / Source Group');
+      expect(items.single.customCoverImageUrl, isNull);
+      expect(items.single.customCoverLocalPath, isNull);
+    },
+  );
 
   test('custom metadata flag bypasses composed snapshot fields', () async {
     final repository = _FakeSnapshotComicRepository(
@@ -176,38 +189,41 @@ void main() {
     expect(item.customCoverLocalPath, isNull);
   });
 
-  test('ComicShelfAdapter fallback uses repository stats for missing state rows', () async {
-    final adapter = ComicShelfAdapter(
-      _FakeComicRepository(
-        shelfItems: <ComicShelfItem>[
-          ComicShelfItem(
-            comicId: 'comic-3',
-            title: 'Comic C',
-            author: 'Author C',
-            coverImageUrl: null,
-            categoryId: 'default',
-            addedAt: DateTime(2026, 1, 1),
-          ),
-        ],
-        statsByComicId: const <String, ComicShelfWorkStats>{
-          'comic-3': ComicShelfWorkStats(
-            totalCount: 3,
-            unreadCount: 2,
-            readCount: 1,
-            downloadedCount: 1,
-          ),
-        },
-      ),
-      stateRepository: _FakeLibraryStateRepository(),
-    );
+  test(
+    'ComicShelfAdapter fallback uses repository stats for missing state rows',
+    () async {
+      final adapter = ComicShelfAdapter(
+        _FakeComicRepository(
+          shelfItems: <ComicShelfItem>[
+            ComicShelfItem(
+              comicId: 'comic-3',
+              title: 'Comic C',
+              author: 'Author C',
+              coverImageUrl: null,
+              categoryId: 'default',
+              addedAt: DateTime(2026, 1, 1),
+            ),
+          ],
+          statsByComicId: const <String, ComicShelfWorkStats>{
+            'comic-3': ComicShelfWorkStats(
+              totalCount: 3,
+              unreadCount: 2,
+              readCount: 1,
+              downloadedCount: 1,
+            ),
+          },
+        ),
+        stateRepository: _FakeLibraryStateRepository(),
+      );
 
-    final items = await adapter.loadCategoryItems(categoryId: 'default');
+      final items = await adapter.loadCategoryItems(categoryId: 'default');
 
-    expect(items.single.totalChapterCount, 3);
-    expect(items.single.unreadCount, 2);
-    expect(items.single.readChapterCount, 1);
-    expect(items.single.isDownloaded, isTrue);
-  });
+      expect(items.single.totalChapterCount, 3);
+      expect(items.single.unreadCount, 2);
+      expect(items.single.readChapterCount, 1);
+      expect(items.single.isDownloaded, isTrue);
+    },
+  );
 
   test('ComicShelfAdapter exposes merge duplicates module action', () async {
     final repository = _FakeDuplicateComicRepository(
@@ -290,59 +306,65 @@ void main() {
     );
   });
 
-  test('ComicShelfAdapter forwards assign-category source and target', () async {
-    final useCase = _FakeShelfCategoryAssignUseCase();
-    final adapter = ComicShelfAdapter(
-      _FakeComicRepository(shelfItems: const <ComicShelfItem>[]),
-      stateRepository: _FakeLibraryStateRepository(),
-      categoryAssignUseCase: useCase,
-    );
+  test(
+    'ComicShelfAdapter forwards assign-category source and target',
+    () async {
+      final useCase = _FakeShelfCategoryAssignUseCase();
+      final adapter = ComicShelfAdapter(
+        _FakeComicRepository(shelfItems: const <ComicShelfItem>[]),
+        stateRepository: _FakeLibraryStateRepository(),
+        categoryAssignUseCase: useCase,
+      );
 
-    final result = await adapter.runSelectionAction(
-      const SelectionActionExecutionRequest(
-        actionId: SelectionActionIds.assignCategory,
-        workIds: <String>{'comic-a', 'comic-b'},
-        activeCategoryId: 'default',
-        targetCategoryId: 'romance',
-      ),
-    );
+      final result = await adapter.runSelectionAction(
+        const SelectionActionExecutionRequest(
+          actionId: SelectionActionIds.assignCategory,
+          workIds: <String>{'comic-a', 'comic-b'},
+          activeCategoryId: 'default',
+          targetCategoryId: 'romance',
+        ),
+      );
 
-    expect(useCase.lastWorkIds, <String>{'comic-a', 'comic-b'});
-    expect(useCase.lastSourceCategoryId, 'default');
-    expect(useCase.lastTargetCategoryId, 'romance');
-    expect(result.changed, isTrue);
-  });
+      expect(useCase.lastWorkIds, <String>{'comic-a', 'comic-b'});
+      expect(useCase.lastSourceCategoryId, 'default');
+      expect(useCase.lastTargetCategoryId, 'romance');
+      expect(result.changed, isTrue);
+    },
+  );
 
-  test('ComicShelfAdapter delegates mark-all-read and mark-all-unread', () async {
-    final writer = _FakeReadingStateBatchWriter();
-    final adapter = ComicShelfAdapter(
-      _FakeComicRepository(shelfItems: const <ComicShelfItem>[]),
-      stateRepository: _FakeLibraryStateRepository(),
-      readingStateBatchWriter: writer,
-    );
+  test(
+    'ComicShelfAdapter delegates mark-all-read and mark-all-unread',
+    () async {
+      final writer = _FakeReadingStateBatchWriter();
+      final adapter = ComicShelfAdapter(
+        _FakeComicRepository(shelfItems: const <ComicShelfItem>[]),
+        stateRepository: _FakeLibraryStateRepository(),
+        readingStateBatchWriter: writer,
+      );
 
-    await adapter.runSelectionAction(
-      const SelectionActionExecutionRequest(
-        actionId: SelectionActionIds.markAllRead,
-        workIds: <String>{'comic-a'},
-        activeCategoryId: 'default',
-      ),
-    );
-    await adapter.runSelectionAction(
-      const SelectionActionExecutionRequest(
-        actionId: SelectionActionIds.markAllUnread,
-        workIds: <String>{'comic-b'},
-        activeCategoryId: 'default',
-      ),
-    );
+      await adapter.runSelectionAction(
+        const SelectionActionExecutionRequest(
+          actionId: SelectionActionIds.markAllRead,
+          workIds: <String>{'comic-a'},
+          activeCategoryId: 'default',
+        ),
+      );
+      await adapter.runSelectionAction(
+        const SelectionActionExecutionRequest(
+          actionId: SelectionActionIds.markAllUnread,
+          workIds: <String>{'comic-b'},
+          activeCategoryId: 'default',
+        ),
+      );
 
-    expect(writer.calls.length, 2);
-    expect(writer.calls.first.module, LibraryModuleKey.comic);
-    expect(writer.calls.first.workIds, <String>{'comic-a'});
-    expect(writer.calls.first.isRead, isTrue);
-    expect(writer.calls.last.workIds, <String>{'comic-b'});
-    expect(writer.calls.last.isRead, isFalse);
-  });
+      expect(writer.calls.length, 2);
+      expect(writer.calls.first.module, LibraryModuleKey.comic);
+      expect(writer.calls.first.workIds, <String>{'comic-a'});
+      expect(writer.calls.first.isRead, isTrue);
+      expect(writer.calls.last.workIds, <String>{'comic-b'});
+      expect(writer.calls.last.isRead, isFalse);
+    },
+  );
 
   test('ComicShelfAdapter delegates download to bulk use case', () async {
     final useCase = _FakeBulkDownloadUseCase();
@@ -380,22 +402,17 @@ void main() {
       ),
     );
 
-    expect(
-      useCase.lastWorkKinds,
-      <String, ThreadContentKind>{
-        'comic-a': ThreadContentKind.comic,
-        'comic-b': ThreadContentKind.comic,
-      },
-    );
+    expect(useCase.lastWorkKinds, <String, ThreadContentKind>{
+      'comic-a': ThreadContentKind.comic,
+      'comic-b': ThreadContentKind.comic,
+    });
     expect(result.changed, isTrue);
   });
 }
 
 class _FakeSnapshotComicRepository extends _FakeComicRepository
     implements ComicShelfSnapshotRepository {
-  _FakeSnapshotComicRepository({
-    required super.shelfItems,
-  });
+  _FakeSnapshotComicRepository({required super.shelfItems});
 
   int snapshotQueryCount = 0;
 
@@ -407,14 +424,16 @@ class _FakeSnapshotComicRepository extends _FakeComicRepository
   }) async {
     snapshotQueryCount++;
     return LibraryShelfSnapshot(
-      categories: (await getCategories()).map((category) {
-        return LibraryCategory(
-          categoryId: category.categoryId,
-          name: category.name,
-          sortOrder: category.sortOrder,
-          createdAt: category.createdAt,
-        );
-      }).toList(growable: false),
+      categories: (await getCategories())
+          .map((category) {
+            return LibraryCategory(
+              categoryId: category.categoryId,
+              name: category.name,
+              sortOrder: category.sortOrder,
+              createdAt: category.createdAt,
+            );
+          })
+          .toList(growable: false),
       itemsByCategory: <String, List<LibraryWorkItem>>{
         'default': <LibraryWorkItem>[
           LibraryWorkItem(
@@ -436,7 +455,10 @@ class _FakeSnapshotComicRepository extends _FakeComicRepository
 }
 
 class _FakeComicRepository
-    implements ComicRepository, ComicShelfStatsRepository, ComicCoverCacheWriter {
+    implements
+        ComicRepository,
+        ComicShelfStatsRepository,
+        ComicCoverCacheWriter {
   _FakeComicRepository({
     required this.shelfItems,
     this.statsByComicId = const <String, ComicShelfWorkStats>{},
@@ -466,7 +488,9 @@ class _FakeComicRepository
   }
 
   @override
-  Future<ComicShelfWorkStats> getShelfWorkStats({required String comicId}) async {
+  Future<ComicShelfWorkStats> getShelfWorkStats({
+    required String comicId,
+  }) async {
     return statsByComicId[comicId] ??
         const ComicShelfWorkStats(
           totalCount: 0,
@@ -504,15 +528,16 @@ class _FakeComicRepository
 
 class _FakeDuplicateComicRepository extends _FakeComicRepository
     implements ComicDuplicateMergeRepository {
-  _FakeDuplicateComicRepository({
-    required this.mergeResult,
-  }) : super(shelfItems: const <ComicShelfItem>[]);
+  _FakeDuplicateComicRepository({required this.mergeResult})
+    : super(shelfItems: const <ComicShelfItem>[]);
 
   final ComicDuplicateMergeResult mergeResult;
   int mergeAllCallCount = 0;
 
   @override
-  Future<List<ComicDuplicateGroup>> findDuplicateGroups({String? comicId}) async {
+  Future<List<ComicDuplicateGroup>> findDuplicateGroups({
+    String? comicId,
+  }) async {
     if (mergeAllCallCount > 0) {
       return const <ComicDuplicateGroup>[];
     }
@@ -674,9 +699,7 @@ class _FakeReadingStateBatchWriter implements ReadingStateBatchWriter {
     required Set<String> workIds,
     required bool isRead,
   }) async {
-    calls.add(
-      _ReadStateCall(module: module, workIds: workIds, isRead: isRead),
-    );
+    calls.add(_ReadStateCall(module: module, workIds: workIds, isRead: isRead));
   }
 }
 

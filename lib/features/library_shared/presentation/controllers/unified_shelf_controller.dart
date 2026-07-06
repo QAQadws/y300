@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/image_loading/domain/image_prefetcher.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
@@ -100,7 +101,8 @@ class UnifiedShelfState {
       categories: categories ?? this.categories,
       selectedCategoryId: selectedCategoryId ?? this.selectedCategoryId,
       itemsByCategory: itemsByCategory ?? this.itemsByCategory,
-      visibleMatchCountByCategory: visibleMatchCountByCategory ?? this.visibleMatchCountByCategory,
+      visibleMatchCountByCategory:
+          visibleMatchCountByCategory ?? this.visibleMatchCountByCategory,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );
   }
@@ -122,18 +124,20 @@ class UnifiedShelfController {
     void Function()? onStateChanged,
     bool backgroundReloadEnabled = true,
     LibraryTaskProgressHub? taskProgressHub,
-  })  : _adapter = adapter,
-        _coverPrefetchConcurrency = coverPrefetchConcurrency,
-        _coverPrefetcherFactory = coverPrefetcherFactory,
-        _featureFlags = featureFlags,
-        _onStateChanged = onStateChanged,
-        _backgroundReloadEnabled = backgroundReloadEnabled,
-        _taskProgressListenable = adapter.taskProgress,
-        _shelfRefreshSignals = adapter.shelfRefreshSignals,
-        _state = _initialState(adapter),
-        _stateListenable = ValueNotifier<UnifiedShelfState>(
-          _initialState(adapter),
-        ) {
+    ForumImagePrecacheService? coverPrecacheService,
+  }) : _adapter = adapter,
+       _coverPrefetchConcurrency = coverPrefetchConcurrency,
+       _coverPrefetcherFactory = coverPrefetcherFactory,
+       _featureFlags = featureFlags,
+       _onStateChanged = onStateChanged,
+       _backgroundReloadEnabled = backgroundReloadEnabled,
+       _coverPrecacheService = coverPrecacheService,
+       _taskProgressListenable = adapter.taskProgress,
+       _shelfRefreshSignals = adapter.shelfRefreshSignals,
+       _state = _initialState(adapter),
+       _stateListenable = ValueNotifier<UnifiedShelfState>(
+         _initialState(adapter),
+       ) {
     final warmupAdapter = adapter is ShelfCoverWarmupAdapter
         ? adapter as ShelfCoverWarmupAdapter
         : null;
@@ -157,21 +161,27 @@ class UnifiedShelfController {
   final ImagePrefetcher Function(
     ImagePrefetchRunner runner,
     ImagePrefetcherSnapshotHandler onSnapshot,
-  )? _coverPrefetcherFactory;
+  )?
+  _coverPrefetcherFactory;
   final ShelfFeatureFlags _featureFlags;
-  final LibraryShelfSnapshotDiffer _snapshotDiffer = const LibraryShelfSnapshotDiffer();
+  final LibraryShelfSnapshotDiffer _snapshotDiffer =
+      const LibraryShelfSnapshotDiffer();
   final void Function()? _onStateChanged;
+  final ForumImagePrecacheService? _coverPrecacheService;
   final ValueListenable<LibraryShelfTaskProgress?>? _taskProgressListenable;
   final ValueListenable<LibraryShelfRefreshSignal?>? _shelfRefreshSignals;
   UnifiedShelfState _state;
   final ValueNotifier<UnifiedShelfState> _stateListenable;
   static const Duration _keywordDebounceDuration = Duration(milliseconds: 250);
-  static const Duration _backgroundReloadThrottleDuration =
-      Duration(seconds: 1);
+  static const Duration _backgroundReloadThrottleDuration = Duration(
+    seconds: 1,
+  );
   Timer? _keywordDebounceTimer;
   Timer? _backgroundReloadTimer;
   Completer<void>? _pendingKeywordCompleter;
-  final Map<String, ShelfCoverVisibleRange> _visibleRangesByCategory = <String, ShelfCoverVisibleRange>{};
+  final Map<String, ShelfCoverVisibleRange> _visibleRangesByCategory =
+      <String, ShelfCoverVisibleRange>{};
+
   /// 持久化封面预取器：跨可见区变化复用，只重排不取消可见项（替代旧的
   /// cancel-restart 令牌）。懒创建于首次预热。
   ImagePrefetcher? _coverPrefetcher;
@@ -215,7 +225,8 @@ class UnifiedShelfController {
     _keywordDebounceTimer = null;
     _backgroundReloadTimer?.cancel();
     _backgroundReloadTimer = null;
-    if (_pendingKeywordCompleter != null && !_pendingKeywordCompleter!.isCompleted) {
+    if (_pendingKeywordCompleter != null &&
+        !_pendingKeywordCompleter!.isCompleted) {
       _pendingKeywordCompleter!.complete();
     }
     _pendingKeywordCompleter = null;
@@ -245,25 +256,21 @@ class UnifiedShelfController {
   }
 
   Future<void> enterSearchMode() async {
-    _setState(_state.copyWith(
-      isSearchMode: true,
-      clearError: true,
-    ));
+    _setState(_state.copyWith(isSearchMode: true, clearError: true));
   }
 
   Future<void> exitSearchMode() async {
-    _setState(_state.copyWith(
-      isSearchMode: false,
-      keyword: '',
-      clearError: true,
-    ));
+    _setState(
+      _state.copyWith(isSearchMode: false, keyword: '', clearError: true),
+    );
     await _reload();
   }
 
   Future<void> updateKeyword(String value) async {
     _setState(_state.copyWith(keyword: value));
     _keywordDebounceTimer?.cancel();
-    if (_pendingKeywordCompleter != null && !_pendingKeywordCompleter!.isCompleted) {
+    if (_pendingKeywordCompleter != null &&
+        !_pendingKeywordCompleter!.isCompleted) {
       // 被新输入打断的旧查询直接完成，避免调用方悬挂等待。
       _pendingKeywordCompleter!.complete();
     }
@@ -381,7 +388,9 @@ class UnifiedShelfController {
     if (_state.categories.isEmpty) {
       return null;
     }
-    final index = _state.categories.indexWhere((e) => e.categoryId == _state.selectedCategoryId);
+    final index = _state.categories.indexWhere(
+      (e) => e.categoryId == _state.selectedCategoryId,
+    );
     if (index < 0) {
       return _state.categories.first;
     }
@@ -389,7 +398,8 @@ class UnifiedShelfController {
   }
 
   List<LibraryWorkItem> get selectedCategoryItems {
-    return _state.itemsByCategory[_state.selectedCategoryId] ?? const <LibraryWorkItem>[];
+    return _state.itemsByCategory[_state.selectedCategoryId] ??
+        const <LibraryWorkItem>[];
   }
 
   Future<void> _reload() async {
@@ -397,10 +407,12 @@ class UnifiedShelfController {
     final trace = ShelfPerfTrace(name: '${_adapter.moduleKey.name}.reload');
     final shouldBlock = !_hasAnyContent(_state);
     final previousSnapshot = _snapshotFromState(_state);
-    _setState(_state.copyWith(
-      isLoading: shouldBlock || !_featureFlags.useStaleWhileRevalidate,
-      clearError: true,
-    ));
+    _setState(
+      _state.copyWith(
+        isLoading: shouldBlock || !_featureFlags.useStaleWhileRevalidate,
+        clearError: true,
+      ),
+    );
     try {
       final displaySettings = await trace.measure(
         'display',
@@ -412,7 +424,13 @@ class UnifiedShelfController {
       );
       trace
         ..metric('categories', snapshot.categories.length)
-        ..metric('items', snapshot.itemsByCategory.values.fold<int>(0, (total, items) => total + items.length))
+        ..metric(
+          'items',
+          snapshot.itemsByCategory.values.fold<int>(
+            0,
+            (total, items) => total + items.length,
+          ),
+        )
         ..metric('blocking', shouldBlock);
       if (previousSnapshot != null) {
         final diff = _snapshotDiffer.diff(
@@ -440,25 +458,26 @@ class UnifiedShelfController {
         hadVisibleCategoriesBefore: _state.categories.isNotEmpty,
       );
 
-      _setState(_state.copyWith(
-        isLoading: false,
-        displayMode: displaySettings.displayMode,
-        gridColumnCount: _normalizeGridColumnCount(displaySettings.gridColumnCount),
-        categories: resolved.visibleCategories,
-        selectedCategoryId: selectedCategoryId,
-        itemsByCategory: snapshot.itemsByCategory,
-        visibleMatchCountByCategory: resolved.visibleMatchCountByCategory,
-        clearError: true,
-      ));
+      _setState(
+        _state.copyWith(
+          isLoading: false,
+          displayMode: displaySettings.displayMode,
+          gridColumnCount: _normalizeGridColumnCount(
+            displaySettings.gridColumnCount,
+          ),
+          categories: resolved.visibleCategories,
+          selectedCategoryId: selectedCategoryId,
+          itemsByCategory: snapshot.itemsByCategory,
+          visibleMatchCountByCategory: resolved.visibleMatchCountByCategory,
+          clearError: true,
+        ),
+      );
       _startCoverWarmup(generation: generation);
     } catch (error) {
       if (_disposed || generation != _reloadGeneration) {
         return;
       }
-      _setState(_state.copyWith(
-        isLoading: false,
-        errorMessage: '$error',
-      ));
+      _setState(_state.copyWith(isLoading: false, errorMessage: '$error'));
     } finally {
       trace.finish();
     }
@@ -488,7 +507,9 @@ class UnifiedShelfController {
       itemsByCategory: queried,
       visibleMatchCountByCategory: <String, int>{
         for (final category in categories)
-          category.categoryId: (queried[category.categoryId] ?? const <LibraryWorkItem>[]).length,
+          category.categoryId:
+              (queried[category.categoryId] ?? const <LibraryWorkItem>[])
+                  .length,
       },
     );
   }
@@ -505,7 +526,8 @@ class UnifiedShelfController {
   }
 
   bool get _shouldUseSnapshotAdapter {
-    return _featureFlags.useShelfSnapshotQuery && _adapter is ShelfSnapshotAdapter;
+    return _featureFlags.useShelfSnapshotQuery &&
+        _adapter is ShelfSnapshotAdapter;
   }
 
   void _handleTaskProgressChanged() {
@@ -599,7 +621,9 @@ class UnifiedShelfController {
           itemsByCategory: snapshot.itemsByCategory,
           categories: snapshot.categories,
           selectedCategoryId: snapshot.selectedCategoryId,
-          visibleRangesByCategory: Map<String, ShelfCoverVisibleRange>.from(_visibleRangesByCategory),
+          visibleRangesByCategory: Map<String, ShelfCoverVisibleRange>.from(
+            _visibleRangesByCategory,
+          ),
           displayMode: snapshot.displayMode,
           gridColumnCount: snapshot.gridColumnCount,
         );
@@ -611,7 +635,7 @@ class UnifiedShelfController {
         prefetcher.submit(<ImagePrefetchRequest>[
           for (final request in prioritized)
             ImagePrefetchRequest(
-              dedupeKey: request.cacheKey,
+              dedupeKey: request.dedupeKey,
               priority: request.priority.index,
               payload: request,
             ),
@@ -624,7 +648,9 @@ class UnifiedShelfController {
   }
 
   /// 懒创建持久封面预取器。runner 执行实际预热与写回，snapshot 驱动进度提示。
-  ImagePrefetcher _ensureCoverPrefetcher(ShelfCoverWarmupAdapter warmupAdapter) {
+  ImagePrefetcher _ensureCoverPrefetcher(
+    ShelfCoverWarmupAdapter warmupAdapter,
+  ) {
     final existing = _coverPrefetcher;
     if (existing != null) {
       return existing;
@@ -634,7 +660,10 @@ class UnifiedShelfController {
         return false;
       }
       final coverRequest = request.payload as ShelfCoverWarmupRequest;
-      final result = await warmupAdapter.warmCover(coverRequest);
+      final result = await _warmCover(
+        warmupAdapter: warmupAdapter,
+        coverRequest: coverRequest,
+      );
       if (_disposed || result == null || !result.hasPath) {
         return false;
       }
@@ -672,6 +701,27 @@ class UnifiedShelfController {
     return prefetcher;
   }
 
+  Future<ShelfCoverWarmupResult?> _warmCover({
+    required ShelfCoverWarmupAdapter warmupAdapter,
+    required ShelfCoverWarmupRequest coverRequest,
+  }) async {
+    final precacheService = _coverPrecacheService;
+    if (precacheService == null) {
+      return warmupAdapter.warmCover(coverRequest);
+    }
+    final result = await precacheService.ensureDiskCached(
+      coverRequest.imageSpec,
+    );
+    final localPath = result.localPath?.trim();
+    if (!result.success || localPath == null || localPath.isEmpty) {
+      return null;
+    }
+    return warmupAdapter.applyWarmedCover(
+      request: coverRequest,
+      localPath: localPath,
+    );
+  }
+
   void _setCoverWarmupProgress(
     LibraryShelfTaskProgress? progress, {
     required int generation,
@@ -695,8 +745,10 @@ class UnifiedShelfController {
           continue;
         }
         final nextCoverLocalPath = result.coverLocalPath ?? item.coverLocalPath;
-        final nextCustomCoverLocalPath = result.customCoverLocalPath ?? item.customCoverLocalPath;
-        final itemChanged = nextCoverLocalPath != item.coverLocalPath ||
+        final nextCustomCoverLocalPath =
+            result.customCoverLocalPath ?? item.customCoverLocalPath;
+        final itemChanged =
+            nextCoverLocalPath != item.coverLocalPath ||
             nextCustomCoverLocalPath != item.customCoverLocalPath;
         if (!itemChanged) {
           nextItems.add(item);
@@ -719,7 +771,9 @@ class UnifiedShelfController {
     }
     _setState(
       _state.copyWith(
-        itemsByCategory: Map<String, List<LibraryWorkItem>>.unmodifiable(nextItemsByCategory),
+        itemsByCategory: Map<String, List<LibraryWorkItem>>.unmodifiable(
+          nextItemsByCategory,
+        ),
       ),
     );
   }
@@ -740,13 +794,15 @@ class UnifiedShelfController {
   }) {
     final visibleMatchCountByCategory = <String, int>{
       for (final category in sourceCategories)
-        category.categoryId: (itemsByCategory[category.categoryId] ?? const <LibraryWorkItem>[]).length,
+        category.categoryId:
+            (itemsByCategory[category.categoryId] ?? const <LibraryWorkItem>[])
+                .length,
     };
 
-    final defaultCategory = sourceCategories.where((e) => e.isDefault).cast<LibraryCategory?>().firstWhere(
-          (e) => e != null,
-          orElse: () => null,
-        );
+    final defaultCategory = sourceCategories
+        .where((e) => e.isDefault)
+        .cast<LibraryCategory?>()
+        .firstWhere((e) => e != null, orElse: () => null);
 
     final defaultCount = defaultCategory == null
         ? (itemsByCategory['default'] ?? const <LibraryWorkItem>[]).length
@@ -764,7 +820,9 @@ class UnifiedShelfController {
 
     // 规则1：default 空且其它分类有内容时，隐藏 default。
     if (defaultCategory != null && defaultCount <= 0 && hasAnyNonDefaultItem) {
-      visibleCategories = visibleCategories.where((category) => !category.isDefault).toList(growable: false);
+      visibleCategories = visibleCategories
+          .where((category) => !category.isDefault)
+          .toList(growable: false);
     }
 
     // 规则2：若没有 default 但出现未分类作品，自动在最左补一个 default。

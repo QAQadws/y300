@@ -17,10 +17,7 @@ import 'package:y300/features/library_shared/presentation/selection/shelf_select
 ///
 /// 当前页面只负责注入漫画适配器和详情跳转，通用交互由 [UnifiedShelfPage] 统一承载。
 class ComicShelfPage extends ConsumerWidget {
-  const ComicShelfPage({
-    super.key,
-    this.isActive = true,
-  });
+  const ComicShelfPage({super.key, this.isActive = true});
 
   final bool isActive;
 
@@ -36,18 +33,13 @@ class ComicShelfPage extends ConsumerWidget {
       shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
       taskProgressHub: taskProgressHub,
       duplicateMergeService: ref.watch(comicDuplicateMergeServiceProvider),
-      categoryAssignUseCaseResolver: () => ref.read(
-        comicShelfCategoryAssignUseCaseProvider,
-      ),
-      readingStateBatchWriterResolver: () => ref.read(
-        readingStateBatchWriterProvider,
-      ),
-      bulkDownloadUseCaseResolver: () => ref.read(
-        bulkDownloadUseCaseProvider,
-      ),
-      unfavoriteWorkUseCaseResolver: () => ref.read(
-        unfavoriteWorkUseCaseProvider,
-      ),
+      categoryAssignUseCaseResolver: () =>
+          ref.read(comicShelfCategoryAssignUseCaseProvider),
+      readingStateBatchWriterResolver: () =>
+          ref.read(readingStateBatchWriterProvider),
+      bulkDownloadUseCaseResolver: () => ref.read(bulkDownloadUseCaseProvider),
+      unfavoriteWorkUseCaseResolver: () =>
+          ref.read(unfavoriteWorkUseCaseProvider),
     );
     return UnifiedShelfPage(
       adapter: adapter,
@@ -55,6 +47,7 @@ class ComicShelfPage extends ConsumerWidget {
       isActive: isActive,
       taskProgressHub: taskProgressHub,
       selectionHost: ref.watch(shelfSelectionHostControllerProvider),
+      coverPrecacheService: ref.watch(forumImagePrecacheServiceProvider),
       onOpenWork: (context, workId) async {
         await Navigator.of(context).push(
           MaterialPageRoute<void>(

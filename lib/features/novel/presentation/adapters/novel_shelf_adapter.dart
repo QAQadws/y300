@@ -2,7 +2,6 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/favorites/domain/use_cases/unfavorite_use_cases.dart';
@@ -13,6 +12,7 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
+import 'package:y300/features/library_shared/domain/services/library_cover_image_adapter.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
@@ -46,24 +46,27 @@ class NovelShelfAdapter
     ReadingStateBatchWriterResolver? readingStateBatchWriterResolver,
     UnfavoriteWorkUseCase? unfavoriteWorkUseCase,
     UnfavoriteWorkUseCaseResolver? unfavoriteWorkUseCaseResolver,
-  })  : _stateRepository = stateRepository,
-        _shelfRefreshBus = shelfRefreshBus,
-        _taskProgress = taskProgressHub?.progressFor(LibraryModuleKey.novel),
-        _categoryAssignUseCaseResolver =
-            categoryAssignUseCaseResolver ?? (() => categoryAssignUseCase),
-        _readingStateBatchWriterResolver =
-            readingStateBatchWriterResolver ?? (() => readingStateBatchWriter),
-        _unfavoriteWorkUseCaseResolver =
-            unfavoriteWorkUseCaseResolver ?? (() => unfavoriteWorkUseCase),
-        _supportsCategoryAssign =
-            categoryAssignUseCase != null || categoryAssignUseCaseResolver != null,
-        _supportsReadingStateBatch =
-            readingStateBatchWriter != null || readingStateBatchWriterResolver != null,
-        _supportsUnfavorite =
-            unfavoriteWorkUseCase != null || unfavoriteWorkUseCaseResolver != null,
-        _coverCacheService = imageCacheServiceResolver == null
-            ? LibraryCoverCacheService(imageCacheService)
-            : LibraryCoverCacheService.lazy(imageCacheServiceResolver);
+  }) : _stateRepository = stateRepository,
+       _shelfRefreshBus = shelfRefreshBus,
+       _taskProgress = taskProgressHub?.progressFor(LibraryModuleKey.novel),
+       _categoryAssignUseCaseResolver =
+           categoryAssignUseCaseResolver ?? (() => categoryAssignUseCase),
+       _readingStateBatchWriterResolver =
+           readingStateBatchWriterResolver ?? (() => readingStateBatchWriter),
+       _unfavoriteWorkUseCaseResolver =
+           unfavoriteWorkUseCaseResolver ?? (() => unfavoriteWorkUseCase),
+       _supportsCategoryAssign =
+           categoryAssignUseCase != null ||
+           categoryAssignUseCaseResolver != null,
+       _supportsReadingStateBatch =
+           readingStateBatchWriter != null ||
+           readingStateBatchWriterResolver != null,
+       _supportsUnfavorite =
+           unfavoriteWorkUseCase != null ||
+           unfavoriteWorkUseCaseResolver != null,
+       _coverCacheService = imageCacheServiceResolver == null
+           ? LibraryCoverCacheService(imageCacheService)
+           : LibraryCoverCacheService.lazy(imageCacheServiceResolver);
 
   final NovelRepository _repository;
   final LibraryStateRepository _stateRepository;
@@ -76,6 +79,8 @@ class NovelShelfAdapter
   final bool _supportsReadingStateBatch;
   final bool _supportsUnfavorite;
   final LibraryCoverCacheService _coverCacheService;
+  final LibraryCoverImageAdapter _coverImageAdapter =
+      const LibraryCoverImageAdapter();
 
   static const String _moduleTitle = '\u5c0f\u8bf4';
   static const String _assignLabel = '\u8bbe\u7f6e\u5206\u7c7b';
@@ -229,7 +234,8 @@ class NovelShelfAdapter
       visibleMatchCountByCategory: <String, int>{
         for (final category in categories)
           category.categoryId:
-              (itemsByCategory[category.categoryId] ?? const <LibraryWorkItem>[])
+              (itemsByCategory[category.categoryId] ??
+                      const <LibraryWorkItem>[])
                   .length,
       },
     );
@@ -253,10 +259,7 @@ class NovelShelfAdapter
     required String categoryId,
     required String newName,
   }) {
-    return _repository.renameCategory(
-      categoryId: categoryId,
-      newName: newName,
-    );
+    return _repository.renameCategory(categoryId: categoryId, newName: newName);
   }
 
   @override
@@ -480,28 +483,28 @@ class NovelShelfAdapter
       selectedCategoryId: selectedCategoryId,
     );
     for (final item in items) {
-      final customLocal = item.customCoverLocalPath?.trim();
-      if (customLocal != null && customLocal.isNotEmpty) {
+      final specRequest = _coverImageAdapter.buildCoverSpec(
+        moduleKey: LibraryModuleKey.novel,
+        item: item,
+      );
+      if (specRequest == null) {
         continue;
       }
-      final local = item.coverLocalPath?.trim();
-      final sourceUrl = item.coverImageUrl?.trim();
-      if ((local == null || local.isEmpty) &&
-          sourceUrl != null &&
-          sourceUrl.isNotEmpty) {
-        requests.add(
-          ShelfCoverWarmupRequest(
-            moduleKey: LibraryModuleKey.novel,
-            workId: item.workId,
-            cacheKey: ImageCacheKeys.novelCover(item.workId),
-            sourceUrl: sourceUrl,
-            ownerType: ImageCacheOwnerType.novel,
-            ownerId: item.workId,
-            role: ImageCacheRole.cover,
-            useCustomCover: false,
-          ),
-        );
-      }
+      requests.add(
+        ShelfCoverWarmupRequest(
+          moduleKey: LibraryModuleKey.novel,
+          workId: item.workId,
+          cacheKey: specRequest.imageSpec.cacheKey!,
+          sourceUrl: specRequest.imageSpec.sourceUrl,
+          ownerType: specRequest.imageSpec.ownerType!,
+          ownerId: specRequest.imageSpec.ownerId!,
+          role: specRequest.useCustomCover
+              ? ImageCacheRole.customCover
+              : ImageCacheRole.cover,
+          useCustomCover: specRequest.useCustomCover,
+          imageSpec: specRequest.imageSpec,
+        ),
+      );
     }
     return requests;
   }
@@ -521,6 +524,14 @@ class NovelShelfAdapter
     if (localPath == null || localPath.isEmpty) {
       return null;
     }
+    return applyWarmedCover(request: request, localPath: localPath);
+  }
+
+  @override
+  Future<ShelfCoverWarmupResult?> applyWarmedCover({
+    required ShelfCoverWarmupRequest request,
+    required String localPath,
+  }) async {
     if (_repository is NovelCoverCacheWriter) {
       await (_repository as NovelCoverCacheWriter).updateCoverCache(
         novelId: request.ownerId,

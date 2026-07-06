@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/comic/presentation/comic_detail_page.dart';
 import 'package:y300/features/favorites/data/providers/favorite_providers.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
@@ -15,10 +16,7 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
 class FavoriteShelfPage extends ConsumerStatefulWidget {
-  const FavoriteShelfPage({
-    super.key,
-    this.isActive = true,
-  });
+  const FavoriteShelfPage({super.key, this.isActive = true});
 
   final bool isActive;
 
@@ -28,23 +26,23 @@ class FavoriteShelfPage extends ConsumerStatefulWidget {
 
 class _FavoriteShelfPageState extends ConsumerState<FavoriteShelfPage> {
   ProviderSubscription<AsyncValue<AuthSessionViewState>>?
-      _authSessionSubscription;
+  _authSessionSubscription;
   var _bootstrapScheduled = false;
 
   @override
   void initState() {
     super.initState();
-    _authSessionSubscription =
-        ref.listenManual<AsyncValue<AuthSessionViewState>>(
-      authSessionControllerProvider,
-      (previous, next) {
-        final wasLoggedIn = previous?.asData?.value.isLoggedIn ?? false;
-        final isLoggedIn = next.asData?.value.isLoggedIn ?? false;
-        if (!wasLoggedIn && isLoggedIn) {
-          _scheduleBootstrapIfEligible();
-        }
-      },
-    );
+    _authSessionSubscription = ref
+        .listenManual<AsyncValue<AuthSessionViewState>>(
+          authSessionControllerProvider,
+          (previous, next) {
+            final wasLoggedIn = previous?.asData?.value.isLoggedIn ?? false;
+            final isLoggedIn = next.asData?.value.isLoggedIn ?? false;
+            if (!wasLoggedIn && isLoggedIn) {
+              _scheduleBootstrapIfEligible();
+            }
+          },
+        );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scheduleBootstrapIfEligible();
     });
@@ -103,6 +101,7 @@ class _FavoriteShelfPageState extends ConsumerState<FavoriteShelfPage> {
       isActive: widget.isActive,
       taskProgressHub: taskProgressHub,
       selectionHost: ref.watch(shelfSelectionHostControllerProvider),
+      coverPrecacheService: ref.watch(forumImagePrecacheServiceProvider),
       onOpenWork: (context, workId) async {
         final target = await repository.getRouteTargetByShelfWorkId(workId);
         if (!context.mounted || target == null) {
@@ -149,10 +148,8 @@ class _FavoriteShelfPageState extends ConsumerState<FavoriteShelfPage> {
   ) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => ThreadDetailPage(
-          tid: target.tid,
-          subject: target.title,
-        ),
+        builder: (_) =>
+            ThreadDetailPage(tid: target.tid, subject: target.title),
       ),
     );
   }

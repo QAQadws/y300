@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:y300/core/media/cover_focal_point.dart';
 import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
@@ -30,6 +31,7 @@ class UnifiedShelfPage extends StatefulWidget {
     this.isActive = true,
     this.taskProgressHub,
     this.selectionHost,
+    this.coverPrecacheService,
   });
 
   final ShelfModuleAdapter adapter;
@@ -39,6 +41,7 @@ class UnifiedShelfPage extends StatefulWidget {
   final bool isActive;
   final LibraryTaskProgressHub? taskProgressHub;
   final ShelfSelectionHostController? selectionHost;
+  final ForumImagePrecacheService? coverPrecacheService;
 
   @override
   State<UnifiedShelfPage> createState() => _UnifiedShelfPageState();
@@ -62,6 +65,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
       onStateChanged: _handleControllerStateChanged,
       backgroundReloadEnabled: widget.isActive,
       taskProgressHub: widget.taskProgressHub,
+      coverPrecacheService: widget.coverPrecacheService,
     );
     _pageController = PageController();
     _selectionController = ShelfSelectionController()
@@ -141,10 +145,14 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
           ),
         )
         .toList(growable: false);
-    final selectedIndex = _resolveSelectedIndex(categories, state.selectedCategoryId);
+    final selectedIndex = _resolveSelectedIndex(
+      categories,
+      state.selectedCategoryId,
+    );
     final selecting = _selectionController.isSelecting;
-    final shelfPalette =
-        const ShelfThemePaletteResolver().resolve(Theme.of(context));
+    final shelfPalette = const ShelfThemePaletteResolver().resolve(
+      Theme.of(context),
+    );
 
     return PopScope<void>(
       canPop: !selecting,
@@ -166,20 +174,24 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
               ? Column(
                   children: [
                     _buildTaskProgressBanner(),
-                    const Expanded(child: Center(child: CircularProgressIndicator())),
+                    const Expanded(
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
                   ],
                 )
               : Column(
                   children: [
                     _buildTaskProgressBanner(),
-                    if (state.errorMessage != null && state.errorMessage!.isNotEmpty)
+                    if (state.errorMessage != null &&
+                        state.errorMessage!.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
                         child: Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
                             '加载失败：${state.errorMessage}',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
                                   color: Theme.of(context).colorScheme.error,
                                 ),
                           ),
@@ -193,7 +205,9 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                           tabs: tabs,
                           selectedIndex: selectedIndex,
                           onTap: (index) async {
-                            await _controller.selectCategory(categories[index].categoryId);
+                            await _controller.selectCategory(
+                              categories[index].categoryId,
+                            );
                             if (!mounted) {
                               return;
                             }
@@ -206,15 +220,16 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                               curve: Curves.easeOutCubic,
                             );
                           },
-                          indicatorKey: const Key('unified-shelf-category-indicator'),
-                          tabKeyBuilder: (id) => ValueKey<String>('unified-shelf-category-tab-$id'),
+                          indicatorKey: const Key(
+                            'unified-shelf-category-indicator',
+                          ),
+                          tabKeyBuilder: (id) => ValueKey<String>(
+                            'unified-shelf-category-tab-$id',
+                          ),
                         ),
                       ),
                     if (categories.isNotEmpty)
-                      Divider(
-                        height: 1,
-                        color: shelfPalette.categoryDivider,
-                      ),
+                      Divider(height: 1, color: shelfPalette.categoryDivider),
                     Expanded(
                       child: categories.isEmpty
                           ? const _AlwaysScrollableEmptyState(message: '书架为空')
@@ -228,7 +243,9 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                                       : null,
                                   itemCount: categories.length,
                                   onPageChanged: (index) async {
-                                    await _controller.selectCategory(categories[index].categoryId);
+                                    await _controller.selectCategory(
+                                      categories[index].categoryId,
+                                    );
                                     if (!mounted) {
                                       return;
                                     }
@@ -238,7 +255,9 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                                   },
                                   itemBuilder: (context, index) {
                                     final category = categories[index];
-                                    final items = liveState.itemsByCategory[category.categoryId] ??
+                                    final items =
+                                        liveState.itemsByCategory[category
+                                            .categoryId] ??
                                         const <LibraryWorkItem>[];
                                     return _ShelfCategoryPage(
                                       key: PageStorageKey<String>(
@@ -249,33 +268,43 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                                       displayMode: liveState.displayMode,
                                       gridColumns: liveState.gridColumnCount,
                                       imageHeaderBuilder: imageHeaderBuilder,
-                                      useShelfCoverImage: widget.featureFlags.useShelfCoverImage,
-                                      selectedWorkIds: _selectionController.selectedWorkIds,
+                                      useShelfCoverImage: widget
+                                          .featureFlags
+                                          .useShelfCoverImage,
+                                      selectedWorkIds:
+                                          _selectionController.selectedWorkIds,
                                       selectionEnabled: _selectionEnabled,
                                       onTapItem: _handleItemTap,
                                       onLongPressItem: _handleItemLongPress,
-                                      onVisibleRangeChanged: ({
-                                        required firstIndex,
-                                        required lastIndex,
-                                      }) {
-                                        _controller.reportVisibleRange(
-                                          categoryId: category.categoryId,
-                                          firstIndex: firstIndex,
-                                          lastIndex: lastIndex,
-                                        );
-                                      },
+                                      onVisibleRangeChanged:
+                                          ({
+                                            required firstIndex,
+                                            required lastIndex,
+                                          }) {
+                                            _controller.reportVisibleRange(
+                                              categoryId: category.categoryId,
+                                              firstIndex: firstIndex,
+                                              lastIndex: lastIndex,
+                                            );
+                                          },
                                     );
                                   },
                                   findChildIndexCallback: (key) {
-                                    final valueKey = key is ValueKey<String> ? key.value : null;
+                                    final valueKey = key is ValueKey<String>
+                                        ? key.value
+                                        : null;
                                     if (valueKey == null ||
-                                        !valueKey.startsWith('unified-shelf-category-page-')) {
+                                        !valueKey.startsWith(
+                                          'unified-shelf-category-page-',
+                                        )) {
                                       return null;
                                     }
-                                    final categoryId =
-                                        valueKey.substring('unified-shelf-category-page-'.length);
+                                    final categoryId = valueKey.substring(
+                                      'unified-shelf-category-page-'.length,
+                                    );
                                     final index = categories.indexWhere(
-                                      (category) => category.categoryId == categoryId,
+                                      (category) =>
+                                          category.categoryId == categoryId,
                                     );
                                     return index < 0 ? null : index;
                                   },
@@ -314,7 +343,9 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
   }
 
   List<LibraryWorkItem> get _currentCategoryItems {
-    return _controller.state.itemsByCategory[_controller.state.selectedCategoryId] ??
+    return _controller.state.itemsByCategory[_controller
+            .state
+            .selectedCategoryId] ??
         const <LibraryWorkItem>[];
   }
 
@@ -476,16 +507,31 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
           PopupMenuButton<String>(
             onSelected: _handleMenuAction,
             itemBuilder: (context) => [
-              const PopupMenuItem<String>(value: 'add-category', child: Text('新建分类')),
-              const PopupMenuItem<String>(value: 'rename-category', child: Text('重命名当前分类')),
-              const PopupMenuItem<String>(value: 'delete-category', child: Text('删除当前分类')),
+              const PopupMenuItem<String>(
+                value: 'add-category',
+                child: Text('新建分类'),
+              ),
+              const PopupMenuItem<String>(
+                value: 'rename-category',
+                child: Text('重命名当前分类'),
+              ),
+              const PopupMenuItem<String>(
+                value: 'delete-category',
+                child: Text('删除当前分类'),
+              ),
               if (moduleActions.isNotEmpty) ...[
                 const PopupMenuDivider(),
                 ..._moduleActionItems(moduleActions),
               ],
               const PopupMenuDivider(),
-              const PopupMenuItem<String>(value: 'refresh-shelf', child: Text('更新书架')),
-              const PopupMenuItem<String>(value: 'random-open', child: Text('随机打开作品')),
+              const PopupMenuItem<String>(
+                value: 'refresh-shelf',
+                child: Text('更新书架'),
+              ),
+              const PopupMenuItem<String>(
+                value: 'random-open',
+                child: Text('随机打开作品'),
+              ),
             ],
           ),
         ],
@@ -533,8 +579,14 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
               ..._moduleActionItems(moduleActions),
               const PopupMenuDivider(),
             ],
-            const PopupMenuItem<String>(value: 'refresh-shelf', child: Text('更新书架')),
-            const PopupMenuItem<String>(value: 'random-open', child: Text('随机打开作品')),
+            const PopupMenuItem<String>(
+              value: 'refresh-shelf',
+              child: Text('更新书架'),
+            ),
+            const PopupMenuItem<String>(
+              value: 'random-open',
+              child: Text('随机打开作品'),
+            ),
           ],
         ),
       ],
@@ -567,11 +619,14 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                         final selected = tabIndex == index;
                         return Expanded(
                           child: TextButton(
-                            onPressed: () => setSheetState(() => tabIndex = index),
+                            onPressed: () =>
+                                setSheetState(() => tabIndex = index),
                             child: Text(
                               tabs[index],
                               style: TextStyle(
-                                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                                fontWeight: selected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
                               ),
                             ),
                           ),
@@ -582,19 +637,23 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                     if (tabIndex == 0)
                       _FilterTab(
                         filters: selectedFilter,
-                        onChanged: (next) => setSheetState(() => selectedFilter = next),
+                        onChanged: (next) =>
+                            setSheetState(() => selectedFilter = next),
                       ),
                     if (tabIndex == 1)
                       _SortTab(
                         sortOption: selectedSort,
-                        onChanged: (next) => setSheetState(() => selectedSort = next),
+                        onChanged: (next) =>
+                            setSheetState(() => selectedSort = next),
                       ),
                     if (tabIndex == 2)
                       _DisplayTab(
                         displayMode: selectedMode,
                         gridColumns: selectedColumns,
-                        onDisplayModeChanged: (mode) => setSheetState(() => selectedMode = mode),
-                        onGridColumnsChanged: (columns) => setSheetState(() => selectedColumns = columns),
+                        onDisplayModeChanged: (mode) =>
+                            setSheetState(() => selectedMode = mode),
+                        onGridColumnsChanged: (columns) =>
+                            setSheetState(() => selectedColumns = columns),
                       ),
                     const SizedBox(height: 10),
                     Row(
@@ -612,7 +671,9 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                               await _controller.updateFilters(selectedFilter);
                               await _controller.updateSortOption(selectedSort);
                               await _controller.updateDisplayMode(selectedMode);
-                              await _controller.updateGridColumnCount(selectedColumns.toInt());
+                              await _controller.updateGridColumnCount(
+                                selectedColumns.toInt(),
+                              );
                               if (!sheetContext.mounted || !mounted) {
                                 return;
                               }
@@ -700,9 +761,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
         return;
       }
       if (workId == null) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('当前分类没有可打开的作品')),
-        );
+        messenger.showSnackBar(const SnackBar(content: Text('当前分类没有可打开的作品')));
         return;
       }
       await _openWorkAndRefreshShelf(workId);
@@ -729,9 +788,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
 
     if (value == 'rename-category') {
       if (selectedCategory.isDefault) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('默认分类不支持重命名')),
-        );
+        messenger.showSnackBar(const SnackBar(content: Text('默认分类不支持重命名')));
         return;
       }
       final name = await _showCategoryNameDialog(
@@ -754,9 +811,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
 
     if (value == 'delete-category') {
       if (selectedCategory.isDefault) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('默认分类不支持删除')),
-        );
+        messenger.showSnackBar(const SnackBar(content: Text('默认分类不支持删除')));
         return;
       }
       final confirmed = await showDialog<bool>(
@@ -810,7 +865,8 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
               child: const Text('取消'),
             ),
             FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(textController.text),
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(textController.text),
               child: const Text('确定'),
             ),
           ],
@@ -830,7 +886,10 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
     }
   }
 
-  int _resolveSelectedIndex(List<LibraryCategory> categories, String selectedId) {
+  int _resolveSelectedIndex(
+    List<LibraryCategory> categories,
+    String selectedId,
+  ) {
     if (categories.isEmpty) {
       return 0;
     }
@@ -839,7 +898,8 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
   }
 
   String _buildCategoryLabel(LibraryCategory category) {
-    final count = _controller.state.visibleMatchCountByCategory[category.categoryId] ?? 0;
+    final count =
+        _controller.state.visibleMatchCountByCategory[category.categoryId] ?? 0;
     if (_controller.state.keyword.trim().isEmpty) {
       return category.name;
     }
@@ -873,16 +933,15 @@ class _ShelfCategoryPage extends StatefulWidget {
   final Future<void> Function(String workId) onLongPressItem;
   final bool selectionEnabled;
   final Set<String> selectedWorkIds;
-  final void Function({
-    required int firstIndex,
-    required int lastIndex,
-  }) onVisibleRangeChanged;
+  final void Function({required int firstIndex, required int lastIndex})
+  onVisibleRangeChanged;
 
   @override
   State<_ShelfCategoryPage> createState() => _ShelfCategoryPageState();
 }
 
-class _ShelfCategoryPageState extends State<_ShelfCategoryPage> with AutomaticKeepAliveClientMixin {
+class _ShelfCategoryPageState extends State<_ShelfCategoryPage>
+    with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -898,7 +957,9 @@ class _ShelfCategoryPageState extends State<_ShelfCategoryPage> with AutomaticKe
     if (oldWidget.items.length != widget.items.length ||
         oldWidget.displayMode != widget.displayMode ||
         oldWidget.gridColumns != widget.gridColumns) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _reportInitialRange());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _reportInitialRange(),
+      );
     }
   }
 
@@ -939,7 +1000,9 @@ class _ShelfCategoryPageState extends State<_ShelfCategoryPage> with AutomaticKe
           return false;
         },
         child: KeyedSubtree(
-          key: ValueKey<String>('unified-shelf-category-scroll-host-${widget.categoryId}'),
+          key: ValueKey<String>(
+            'unified-shelf-category-scroll-host-${widget.categoryId}',
+          ),
           child: child,
         ),
       ),
@@ -970,14 +1033,19 @@ class _ShelfCategoryPageState extends State<_ShelfCategoryPage> with AutomaticKe
 
   int _estimateFirstIndex(double scrollOffset) {
     if (widget.displayMode == LibraryDisplayMode.list) {
-      return (scrollOffset / 72).floor().clamp(0, widget.items.length - 1).toInt();
+      return (scrollOffset / 72)
+          .floor()
+          .clamp(0, widget.items.length - 1)
+          .toInt();
     }
     final columns = widget.gridColumns < 1 ? 1 : widget.gridColumns;
     final viewportWidth = MediaQuery.sizeOf(context).width;
     final tileWidth = (viewportWidth - 24 - ((columns - 1) * 10)) / columns;
     final tileHeight = tileWidth * 3 / 2;
     final rowExtent = tileHeight + 10;
-    return ((scrollOffset / rowExtent).floor() * columns).clamp(0, widget.items.length - 1).toInt();
+    return ((scrollOffset / rowExtent).floor() * columns)
+        .clamp(0, widget.items.length - 1)
+        .toInt();
   }
 
   int _estimateVisibleCount() {
@@ -1019,7 +1087,9 @@ class _WorkGrid extends StatelessWidget {
       child: GridView.builder(
         key: const Key('unified-shelf-grid-view'),
         // 保证短列表也能触发 RefreshIndicator 下拉手势。
-        physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: ClampingScrollPhysics(),
+        ),
         // 大书架场景预渲染适度前后缓存，降低滑动抖动。
         scrollCacheExtent: const ScrollCacheExtent.pixels(900),
         padding: const EdgeInsets.all(12),
@@ -1042,7 +1112,9 @@ class _WorkGrid extends StatelessWidget {
             customCoverFocusX: item.customCoverFocusX,
             customCoverFocusY: item.customCoverFocusY,
             imageHeaderBuilder: imageHeaderBuilder,
-            coverLayerBuilder: useShelfCoverImage ? null : _legacyCoverLayerBuilder,
+            coverLayerBuilder: useShelfCoverImage
+                ? null
+                : _legacyCoverLayerBuilder,
             onTap: () async => onTapItem(item.workId),
             onLongPress: selectionEnabled
                 ? () async => onLongPressItem(item.workId)
@@ -1072,17 +1144,16 @@ class _WorkGrid extends StatelessWidget {
 }
 
 class _ShelfTaskProgressBanner extends StatelessWidget {
-  const _ShelfTaskProgressBanner({
-    required this.progress,
-  });
+  const _ShelfTaskProgressBanner({required this.progress});
 
   final LibraryShelfTaskProgress progress;
 
   @override
   Widget build(BuildContext context) {
     final countText = _countText();
-    final shelfPalette =
-        const ShelfThemePaletteResolver().resolve(Theme.of(context));
+    final shelfPalette = const ShelfThemePaletteResolver().resolve(
+      Theme.of(context),
+    );
     return Material(
       color: shelfPalette.taskProgressBackground,
       child: Padding(
@@ -1160,7 +1231,9 @@ class _WorkList extends StatelessWidget {
       child: ListView.separated(
         key: const Key('unified-shelf-list-view'),
         // 保证短列表也能触发 RefreshIndicator 下拉手势。
-        physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: ClampingScrollPhysics(),
+        ),
         // 大书架场景预渲染适度前后缓存，降低滑动抖动。
         scrollCacheExtent: const ScrollCacheExtent.pixels(900),
         padding: const EdgeInsets.all(12),
@@ -1169,8 +1242,9 @@ class _WorkList extends StatelessWidget {
         itemBuilder: (context, index) {
           final item = items[index];
           final selected = selectedWorkIds.contains(item.workId);
-          final shelfPalette =
-              const ShelfThemePaletteResolver().resolve(Theme.of(context));
+          final shelfPalette = const ShelfThemePaletteResolver().resolve(
+            Theme.of(context),
+          );
           final leading = _hasCoverSource(item)
               ? ClipRRect(
                   borderRadius: BorderRadius.circular(8),
@@ -1188,8 +1262,9 @@ class _WorkList extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color:
-                    selected ? shelfPalette.selectedBorder : Colors.transparent,
+                color: selected
+                    ? shelfPalette.selectedBorder
+                    : Colors.transparent,
                 width: 2,
               ),
             ),
@@ -1198,7 +1273,9 @@ class _WorkList extends StatelessWidget {
               child: Material(
                 color: shelfPalette.listItemBackground,
                 child: ListTile(
-                  key: ValueKey<String>('unified-shelf-list-tile-${item.workId}'),
+                  key: ValueKey<String>(
+                    'unified-shelf-list-tile-${item.workId}',
+                  ),
                   minTileHeight: 72,
                   selected: selected,
                   onTap: () async => onTapItem(item.workId),
@@ -1222,15 +1299,19 @@ class _WorkList extends StatelessWidget {
   }
 
   Widget _buildLeadingCover(BuildContext context, LibraryWorkItem item) {
-    final shelfPalette =
-        const ShelfThemePaletteResolver().resolve(Theme.of(context));
+    final shelfPalette = const ShelfThemePaletteResolver().resolve(
+      Theme.of(context),
+    );
     final placeholder = Container(
       color: shelfPalette.coverPlaceholderBackground,
       child: const Icon(Icons.image_not_supported_outlined),
     );
     // 焦点仅作用于自定义封面；展示来源封面时保持居中。
     final alignment = _isShowingCustomCover(item)
-        ? coverAlignmentFromFocus(item.customCoverFocusX, item.customCoverFocusY)
+        ? coverAlignmentFromFocus(
+            item.customCoverFocusX,
+            item.customCoverFocusY,
+          )
         : Alignment.center;
     if (!useShelfCoverImage) {
       return LibraryCachedImage(
@@ -1261,7 +1342,8 @@ class _WorkList extends StatelessWidget {
   bool _hasCoverSource(LibraryWorkItem item) {
     // 区分“作品没有配置封面”和“封面配置存在但加载失败”：
     // 前者在列表模式不占 leading，后者仍交给图片组件显示兜底。
-    return _preferredLocalPath(item) != null || _preferredRemoteUrl(item) != null;
+    return _preferredLocalPath(item) != null ||
+        _preferredRemoteUrl(item) != null;
   }
 
   String? _preferredLocalPath(LibraryWorkItem item) {
@@ -1284,9 +1366,7 @@ class _WorkList extends StatelessWidget {
 }
 
 class _UnreadBadge extends StatelessWidget {
-  const _UnreadBadge({
-    required this.count,
-  });
+  const _UnreadBadge({required this.count});
 
   final int count;
 
@@ -1304,40 +1384,32 @@ class _UnreadBadge extends StatelessWidget {
       child: Text(
         '$count',
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: Theme.of(context).colorScheme.onPrimary,
-              fontWeight: FontWeight.w700,
-            ),
+          color: Theme.of(context).colorScheme.onPrimary,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
 }
 
 class _AlwaysScrollableEmptyState extends StatelessWidget {
-  const _AlwaysScrollableEmptyState({
-    required this.message,
-  });
+  const _AlwaysScrollableEmptyState({required this.message});
 
   final String message;
 
   @override
   Widget build(BuildContext context) {
     return ListView(
-      physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
-      children: [
-        SizedBox(
-          height: 320,
-          child: Center(child: Text(message)),
-        ),
-      ],
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: ClampingScrollPhysics(),
+      ),
+      children: [SizedBox(height: 320, child: Center(child: Text(message)))],
     );
   }
 }
 
 class _FilterTab extends StatelessWidget {
-  const _FilterTab({
-    required this.filters,
-    required this.onChanged,
-  });
+  const _FilterTab({required this.filters, required this.onChanged});
 
   final LibraryFilterSet filters;
   final ValueChanged<LibraryFilterSet> onChanged;
@@ -1372,10 +1444,7 @@ class _FilterTab extends StatelessWidget {
 }
 
 class _SortTab extends StatelessWidget {
-  const _SortTab({
-    required this.sortOption,
-    required this.onChanged,
-  });
+  const _SortTab({required this.sortOption, required this.onChanged});
 
   final LibraryShelfSortOption sortOption;
   final ValueChanged<LibraryShelfSortOption> onChanged;
@@ -1393,31 +1462,35 @@ class _SortTab extends StatelessWidget {
       LibraryShelfSortField.favoriteAddedAt: '收藏日期',
     };
     return Column(
-      children: options.entries.map((entry) {
-        final selected = entry.key == sortOption.field;
-        return ListTile(
-          dense: true,
-          leading: Icon(
-            selected && sortOption.direction == LibrarySortDirection.asc
-                ? Icons.arrow_upward
-                : Icons.arrow_downward,
-            size: 18,
-          ),
-          title: Text(entry.value),
-          trailing: selected ? const Icon(Icons.check, size: 18) : null,
-          onTap: () {
-            final nextDirection = selected && sortOption.direction == LibrarySortDirection.desc
-                ? LibrarySortDirection.asc
-                : LibrarySortDirection.desc;
-            onChanged(
-              LibraryShelfSortOption(
-                field: entry.key,
-                direction: nextDirection,
+      children: options.entries
+          .map((entry) {
+            final selected = entry.key == sortOption.field;
+            return ListTile(
+              dense: true,
+              leading: Icon(
+                selected && sortOption.direction == LibrarySortDirection.asc
+                    ? Icons.arrow_upward
+                    : Icons.arrow_downward,
+                size: 18,
               ),
+              title: Text(entry.value),
+              trailing: selected ? const Icon(Icons.check, size: 18) : null,
+              onTap: () {
+                final nextDirection =
+                    selected &&
+                        sortOption.direction == LibrarySortDirection.desc
+                    ? LibrarySortDirection.asc
+                    : LibrarySortDirection.desc;
+                onChanged(
+                  LibraryShelfSortOption(
+                    field: entry.key,
+                    direction: nextDirection,
+                  ),
+                );
+              },
             );
-          },
-        );
-      }).toList(growable: false),
+          })
+          .toList(growable: false),
     );
   }
 }
@@ -1450,11 +1523,15 @@ class _DisplayTab extends StatelessWidget {
             children: [
               ListTile(
                 title: const Text('网格'),
-                leading: Radio<LibraryDisplayMode>(value: LibraryDisplayMode.grid),
+                leading: Radio<LibraryDisplayMode>(
+                  value: LibraryDisplayMode.grid,
+                ),
               ),
               ListTile(
                 title: const Text('列表'),
-                leading: Radio<LibraryDisplayMode>(value: LibraryDisplayMode.list),
+                leading: Radio<LibraryDisplayMode>(
+                  value: LibraryDisplayMode.list,
+                ),
               ),
             ],
           ),

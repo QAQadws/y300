@@ -1,3 +1,4 @@
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 
@@ -20,6 +21,13 @@ abstract class ShelfCoverWarmupAdapter {
   });
 
   Future<ShelfCoverWarmupResult?> warmCover(ShelfCoverWarmupRequest request);
+
+  Future<ShelfCoverWarmupResult?> applyWarmedCover({
+    required ShelfCoverWarmupRequest request,
+    required String localPath,
+  }) {
+    return warmCover(request);
+  }
 }
 
 class ShelfCoverWarmupRequest {
@@ -32,6 +40,7 @@ class ShelfCoverWarmupRequest {
     required this.ownerId,
     required this.role,
     required this.useCustomCover,
+    required this.imageSpec,
     this.priority = ShelfCoverWarmupPriority.background,
   });
 
@@ -44,11 +53,18 @@ class ShelfCoverWarmupRequest {
   final String ownerId;
   final ImageCacheRole role;
   final bool useCustomCover;
+  final ForumImageLoadSpec imageSpec;
   final ShelfCoverWarmupPriority priority;
 
-  ShelfCoverWarmupRequest copyWith({
-    ShelfCoverWarmupPriority? priority,
-  }) {
+  String get dedupeKey {
+    final specKey = imageSpec.cacheKey?.trim();
+    if (specKey != null && specKey.isNotEmpty) {
+      return specKey;
+    }
+    return cacheKey;
+  }
+
+  ShelfCoverWarmupRequest copyWith({ShelfCoverWarmupPriority? priority}) {
     return ShelfCoverWarmupRequest(
       moduleKey: moduleKey,
       workId: workId,
@@ -58,6 +74,7 @@ class ShelfCoverWarmupRequest {
       ownerId: ownerId,
       role: role,
       useCustomCover: useCustomCover,
+      imageSpec: imageSpec,
       priority: priority ?? this.priority,
     );
   }
@@ -77,7 +94,8 @@ class ShelfCoverWarmupResult {
   bool get hasPath {
     final cover = coverLocalPath?.trim();
     final custom = customCoverLocalPath?.trim();
-    return (cover != null && cover.isNotEmpty) || (custom != null && custom.isNotEmpty);
+    return (cover != null && cover.isNotEmpty) ||
+        (custom != null && custom.isNotEmpty);
   }
 }
 
@@ -166,7 +184,9 @@ List<ShelfCoverWarmupRequest> prioritizeShelfCoverWarmupRequests({
   return requests
       .map(
         (request) => request.copyWith(
-          priority: priorityByWorkId[request.workId] ?? ShelfCoverWarmupPriority.background,
+          priority:
+              priorityByWorkId[request.workId] ??
+              ShelfCoverWarmupPriority.background,
         ),
       )
       .toList(growable: false);
@@ -181,8 +201,11 @@ Map<String, ShelfCoverWarmupPriority> _coverPriorityByWorkId({
   required int gridColumnCount,
 }) {
   final priorityByWorkId = <String, ShelfCoverWarmupPriority>{};
-  final selectedIndex = categories.indexWhere((category) => category.categoryId == selectedCategoryId);
-  final selectedItems = itemsByCategory[selectedCategoryId] ?? const <LibraryWorkItem>[];
+  final selectedIndex = categories.indexWhere(
+    (category) => category.categoryId == selectedCategoryId,
+  );
+  final selectedItems =
+      itemsByCategory[selectedCategoryId] ?? const <LibraryWorkItem>[];
   final firstScreenCount = _estimatedFirstScreenCount(
     displayMode: displayMode,
     gridColumnCount: gridColumnCount,
@@ -196,10 +219,13 @@ Map<String, ShelfCoverWarmupPriority> _coverPriorityByWorkId({
     }
   }
 
-  final visibleRange = visibleRangesByCategory[selectedCategoryId]?.normalized(selectedItems.length);
+  final visibleRange = visibleRangesByCategory[selectedCategoryId]?.normalized(
+    selectedItems.length,
+  );
   for (var index = 0; index < selectedItems.length; index++) {
     final item = selectedItems[index];
-    if (visibleRange != null && visibleRange.lastIndex >= visibleRange.firstIndex) {
+    if (visibleRange != null &&
+        visibleRange.lastIndex >= visibleRange.firstIndex) {
       if (visibleRange.contains(index)) {
         promote(item.workId, ShelfCoverWarmupPriority.currentViewport);
       } else if (visibleRange.isNearAfter(index, prefetchCount)) {
@@ -224,9 +250,17 @@ Map<String, ShelfCoverWarmupPriority> _coverPriorityByWorkId({
         continue;
       }
       final categoryId = categories[adjacentIndex].categoryId;
-      final adjacentItems = itemsByCategory[categoryId] ?? const <LibraryWorkItem>[];
-      for (var index = 0; index < adjacentItems.length && index < firstScreenCount; index++) {
-        promote(adjacentItems[index].workId, ShelfCoverWarmupPriority.adjacentCategory);
+      final adjacentItems =
+          itemsByCategory[categoryId] ?? const <LibraryWorkItem>[];
+      for (
+        var index = 0;
+        index < adjacentItems.length && index < firstScreenCount;
+        index++
+      ) {
+        promote(
+          adjacentItems[index].workId,
+          ShelfCoverWarmupPriority.adjacentCategory,
+        );
       }
     }
   }

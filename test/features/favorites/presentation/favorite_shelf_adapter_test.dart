@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
@@ -43,31 +44,34 @@ void main() {
     },
   );
 
-  test('FavoriteShelfAdapter querySnapshot stays pure read without maintenance', () async {
-    final local = _FakeLocalFavoriteRepository()
-      ..snapshot = FavoriteSyncSnapshot(
-        syncKey: favoriteSyncKey,
-        remoteCount: 1,
-        localActiveCount: 1,
-        lastSyncedAt: DateTime(2026, 1, 1),
+  test(
+    'FavoriteShelfAdapter querySnapshot stays pure read without maintenance',
+    () async {
+      final local = _FakeLocalFavoriteRepository()
+        ..snapshot = FavoriteSyncSnapshot(
+          syncKey: favoriteSyncKey,
+          remoteCount: 1,
+          localActiveCount: 1,
+          lastSyncedAt: DateTime(2026, 1, 1),
+        );
+      final sync = _FakeFavoriteSyncService();
+      final adapter = FavoriteShelfAdapter(
+        local,
+        syncService: sync,
+        stateRepository: _FakeLibraryStateRepository(),
       );
-    final sync = _FakeFavoriteSyncService();
-    final adapter = FavoriteShelfAdapter(
-      local,
-      syncService: sync,
-      stateRepository: _FakeLibraryStateRepository(),
-    );
 
-    final snapshot = await adapter.querySnapshot(
-      filters: LibraryFilterSet.defaults,
-      sortOption: LibraryShelfSortOption.defaults,
-      keyword: '',
-    );
+      final snapshot = await adapter.querySnapshot(
+        filters: LibraryFilterSet.defaults,
+        sortOption: LibraryShelfSortOption.defaults,
+        keyword: '',
+      );
 
-    expect(sync.syncCount, 0);
-    expect(sync.maintenanceCount, 0);
-    expect(snapshot.categories.single.categoryId, favoriteDefaultCategoryId);
-  });
+      expect(sync.syncCount, 0);
+      expect(sync.maintenanceCount, 0);
+      expect(snapshot.categories.single.categoryId, favoriteDefaultCategoryId);
+    },
+  );
 
   test(
     'FavoriteShelfAdapter returns metadata before warming comic cover, then writes local path back',
@@ -94,7 +98,9 @@ void main() {
           ),
         },
       );
-      final imageCache = _FakeImageCacheService(localPath: '/cache/comic-cover.jpg');
+      final imageCache = _FakeImageCacheService(
+        localPath: '/cache/comic-cover.jpg',
+      );
       final writer = _FakeComicCoverCacheWriter();
       final sync = _FakeFavoriteSyncService()..markSynced();
       final adapter = FavoriteShelfAdapter(
@@ -118,6 +124,10 @@ void main() {
           favoriteComicCategoryId: items,
         },
       );
+      expect(requests.single.imageSpec.kind, ForumImageKind.favoriteCover);
+      expect(requests.single.imageSpec.ownerType, ImageCacheOwnerType.comic);
+      expect(requests.single.imageSpec.ownerId, 'yamibo:100');
+      expect(requests.single.imageSpec.cacheKey, 'cover/comic/yamibo:100');
       final result = await adapter.warmCover(requests.single);
 
       expect(result?.coverLocalPath, '/cache/comic-cover.jpg');
@@ -151,7 +161,9 @@ void main() {
         ),
       },
     );
-    final imageCache = _FakeImageCacheService(localPath: '/cache/custom-cover.jpg');
+    final imageCache = _FakeImageCacheService(
+      localPath: '/cache/custom-cover.jpg',
+    );
     final writer = _FakeComicCoverCacheWriter();
     final sync = _FakeFavoriteSyncService()..markSynced();
     final adapter = FavoriteShelfAdapter(
@@ -176,6 +188,9 @@ void main() {
         favoriteComicCategoryId: items,
       },
     );
+    expect(requests.single.imageSpec.kind, ForumImageKind.customCover);
+    expect(requests.single.imageSpec.protected, isTrue);
+    expect(requests.single.imageSpec.ownerId, 'yamibo:101');
     final result = await adapter.warmCover(requests.single);
 
     expect(result?.coverLocalPath, isNull);
@@ -187,37 +202,82 @@ void main() {
     expect(writer.lastCustomCoverLocalPath, '/cache/custom-cover.jpg');
   });
 
-  test('FavoriteShelfAdapter exposes favorite progress from task progress hub', () {
-    final hub = DefaultLibraryTaskProgressHub();
-    final progress = ValueNotifier<LibraryShelfTaskProgress?>(
-      const LibraryShelfTaskProgress(
-        message: 'Parsing favorite thread',
-        current: 1,
-        total: 3,
-        source: LibraryMutationSource.favoriteSync,
-      ),
-    );
-    final registration = hub.registerSource(
-      modules: const <LibraryModuleKey>{LibraryModuleKey.favorite},
-      progress: progress,
-      priority: LibraryTaskProgressPriority.high,
-    );
-    addTearDown(progress.dispose);
-    addTearDown(registration.dispose);
-    addTearDown(hub.dispose);
-    final adapter = FavoriteShelfAdapter(
-      _FakeLocalFavoriteRepository(),
-      syncService: _FakeFavoriteSyncService(),
-      stateRepository: _FakeLibraryStateRepository(),
-      taskProgressHub: hub,
-    );
+  test(
+    'FavoriteShelfAdapter skips cover warmup when route target is missing',
+    () async {
+      final local = _FakeLocalFavoriteRepository(
+        items: <LibraryWorkItem>[
+          LibraryWorkItem(
+            workId: FavoriteShelfWorkId.fromTid('102'),
+            categoryId: favoriteComicCategoryId,
+            title: 'Missing Target',
+            coverImageUrl: 'https://img.test/missing.jpg',
+            unreadCount: 0,
+            totalChapterCount: 1,
+            readChapterCount: 0,
+            addedAt: DateTime(2026, 1, 1),
+          ),
+        ],
+      );
+      final sync = _FakeFavoriteSyncService()..markSynced();
+      final adapter = FavoriteShelfAdapter(
+        local,
+        syncService: sync,
+        stateRepository: _FakeLibraryStateRepository(),
+        imageCacheService: _FakeImageCacheService(
+          localPath: '/cache/missing.jpg',
+        ),
+        comicCoverCacheWriter: _FakeComicCoverCacheWriter(),
+      );
 
-    expect(adapter.taskProgress?.value?.message, 'Parsing favorite thread');
-    expect(
-      adapter.taskProgress?.value?.source,
-      LibraryMutationSource.favoriteSync,
-    );
-  });
+      final items = await adapter.loadCategoryItems(
+        categoryId: favoriteComicCategoryId,
+      );
+      final requests = await adapter.buildCoverWarmupRequests(
+        selectedCategoryId: favoriteComicCategoryId,
+        itemsByCategory: <String, List<LibraryWorkItem>>{
+          favoriteComicCategoryId: items,
+        },
+      );
+
+      expect(requests, isEmpty);
+    },
+  );
+
+  test(
+    'FavoriteShelfAdapter exposes favorite progress from task progress hub',
+    () {
+      final hub = DefaultLibraryTaskProgressHub();
+      final progress = ValueNotifier<LibraryShelfTaskProgress?>(
+        const LibraryShelfTaskProgress(
+          message: 'Parsing favorite thread',
+          current: 1,
+          total: 3,
+          source: LibraryMutationSource.favoriteSync,
+        ),
+      );
+      final registration = hub.registerSource(
+        modules: const <LibraryModuleKey>{LibraryModuleKey.favorite},
+        progress: progress,
+        priority: LibraryTaskProgressPriority.high,
+      );
+      addTearDown(progress.dispose);
+      addTearDown(registration.dispose);
+      addTearDown(hub.dispose);
+      final adapter = FavoriteShelfAdapter(
+        _FakeLocalFavoriteRepository(),
+        syncService: _FakeFavoriteSyncService(),
+        stateRepository: _FakeLibraryStateRepository(),
+        taskProgressHub: hub,
+      );
+
+      expect(adapter.taskProgress?.value?.message, 'Parsing favorite thread');
+      expect(
+        adapter.taskProgress?.value?.source,
+        LibraryMutationSource.favoriteSync,
+      );
+    },
+  );
 
   test('FavoriteShelfAdapter exposes selection actions in fixed order', () {
     final adapter = FavoriteShelfAdapter(
@@ -283,7 +343,9 @@ void main() {
 }
 
 class _FakeFavoriteSyncService implements FavoriteSyncService {
-  final _progress = ValueNotifier<FavoriteSyncProgress>(FavoriteSyncProgress.idle);
+  final _progress = ValueNotifier<FavoriteSyncProgress>(
+    FavoriteSyncProgress.idle,
+  );
   int syncCount = 0;
   int maintenanceCount = 0;
 
@@ -310,9 +372,7 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
   }
 
   @override
-  Future<FavoriteSyncResult> syncRecentlyAddedThread({
-    required String tid,
-  }) {
+  Future<FavoriteSyncResult> syncRecentlyAddedThread({required String tid}) {
     return sync();
   }
 
@@ -348,9 +408,9 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
 
   @override
   Future<List<LibraryWorkItem>> loadCategoryItems(String categoryId) async {
-    return items.where((item) => item.categoryId == categoryId).toList(
-      growable: false,
-    );
+    return items
+        .where((item) => item.categoryId == categoryId)
+        .toList(growable: false);
   }
 
   @override
@@ -369,7 +429,9 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   }
 
   @override
-  Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(String workId) async {
+  Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(
+    String workId,
+  ) async {
     return routeTargets[workId];
   }
 
