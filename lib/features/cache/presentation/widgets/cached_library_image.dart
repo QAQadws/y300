@@ -49,44 +49,36 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
 
 class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
   String? _localPath;
+  bool _allowRemoteFallback = false;
   bool _displayedRemoteImage = false;
   int _generation = 0;
 
   @override
   void initState() {
     super.initState();
-    if (widget.imageProviderOverride == null) {
-      _ensureCached();
-    }
+    _restartCacheFlow();
   }
 
   @override
   void didUpdateWidget(covariant CachedLibraryImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.imageProviderOverride != widget.imageProviderOverride) {
-      _localPath = null;
-      _displayedRemoteImage = false;
-      if (widget.imageProviderOverride == null) {
-        _ensureCached();
-      }
+      _restartCacheFlow();
       return;
     }
     if (oldWidget.request?.cacheKey != widget.request?.cacheKey ||
         oldWidget.request?.sourceUrl != widget.request?.sourceUrl) {
-      _localPath = null;
-      _displayedRemoteImage = false;
-      if (widget.imageProviderOverride == null) {
-        _ensureCached();
-      }
+      _restartCacheFlow();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final request = widget.request;
+    final generation = _generation;
     return LibraryCachedImage(
       localPath: _localPath,
-      imageUrl: request?.sourceUrl,
+      imageUrl: _allowRemoteFallback ? request?.sourceUrl : null,
       imageProviderOverride: widget.imageProviderOverride,
       remoteImageProviderOverride: widget.remoteImageProviderOverride,
       fit: widget.fit,
@@ -95,13 +87,21 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
       placeholder: widget.placeholder,
       errorPlaceholder: widget.errorPlaceholder,
       headerBuilder: widget.headerBuilder,
-      onImageResolved: (size) => _handleImageResolved(request, size),
-      onRemoteImageResolved: _handleRemoteImageResolved,
+      onImageResolved: (size) =>
+          _handleImageResolved(request, size, generation),
+      onRemoteImageResolved: () => _handleRemoteImageResolved(generation),
       onImageFailed: widget.onImageFailed,
     );
   }
 
-  void _handleImageResolved(ImageCacheRequest? request, Size size) {
+  void _handleImageResolved(
+    ImageCacheRequest? request,
+    Size size,
+    int generation,
+  ) {
+    if (generation != _generation) {
+      return;
+    }
     final cacheKey = request?.cacheKey.trim();
     if (cacheKey != null && cacheKey.isNotEmpty) {
       final service = ref.read(imageCacheServiceProvider);
@@ -113,7 +113,10 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     widget.onImageResolved?.call(size);
   }
 
-  void _handleRemoteImageResolved() {
+  void _handleRemoteImageResolved(int generation) {
+    if (generation != _generation) {
+      return;
+    }
     _displayedRemoteImage = true;
   }
 
@@ -130,38 +133,68 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     }
   }
 
-  void _ensureCached() {
+  void _restartCacheFlow() {
+    _generation += 1;
+    _localPath = null;
+    _allowRemoteFallback = false;
+    _displayedRemoteImage = false;
     if (widget.imageProviderOverride != null) {
       return;
     }
     final request = widget.request;
-    if (request == null || request.cacheKey.trim().isEmpty) {
+    if (request == null) {
       return;
     }
-    final generation = ++_generation;
-    unawaited(
-      _resolveCachedImage(request).then((result) {
-        if (!mounted || generation != _generation || !result.success) {
-          return;
-        }
-        if (_displayedRemoteImage) {
-          return;
-        }
-        setState(() {
-          _localPath = result.localPath;
-        });
-      }),
-    );
+    if (request.cacheKey.trim().isEmpty) {
+      _allowRemoteFallback = true;
+      return;
+    }
+    unawaited(_resolveCachedImage(request, _generation));
   }
 
-  Future<CachedImageResult> _resolveCachedImage(
+  Future<void> _resolveCachedImage(
     ImageCacheRequest request,
+    int generation,
   ) async {
     final service = ref.read(imageCacheServiceProvider);
     final cached = await service.getCached(request.cacheKey);
-    if (cached != null && cached.success) {
-      return cached;
+    if (!_isActive(generation)) {
+      return;
     }
-    return service.ensureCached(request);
+    if (_hasUsableLocalPath(cached)) {
+      setState(() {
+        _localPath = cached!.localPath;
+        _allowRemoteFallback = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _allowRemoteFallback = true;
+    });
+
+    final result = await service.ensureCached(request);
+    if (!_isActive(generation) || !_hasUsableLocalPath(result)) {
+      return;
+    }
+    if (_displayedRemoteImage) {
+      return;
+    }
+    setState(() {
+      _localPath = result.localPath;
+      _allowRemoteFallback = false;
+    });
+  }
+
+  bool _isActive(int generation) {
+    return mounted && generation == _generation;
+  }
+
+  bool _hasUsableLocalPath(CachedImageResult? result) {
+    final localPath = result?.localPath?.trim();
+    return result != null &&
+        result.success &&
+        localPath != null &&
+        localPath.isNotEmpty;
   }
 }
