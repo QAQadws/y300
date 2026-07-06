@@ -16,6 +16,7 @@ import 'package:y300/features/cache/data/services/storage_usage_adapters.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/cache_maintenance_models.dart';
 import 'package:y300/features/cache/domain/models/cache_diagnostic_models.dart';
+import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/domain/services/native_page_cache_invalidation_service.dart';
@@ -101,6 +102,15 @@ final forumImageRequestResolverProvider = Provider<ForumImageRequestResolver>((
   ref,
 ) {
   return const DefaultForumImageRequestResolver();
+});
+
+final forumImageDimensionIndexProvider = Provider<ForumImageDimensionIndex>((
+  ref,
+) {
+  return CacheRecordForumImageDimensionIndex(
+    imageCacheService: ref.watch(imageCacheServiceProvider),
+    imageRequestResolver: ref.watch(forumImageRequestResolverProvider),
+  );
 });
 
 final cacheDiagnosticRecorderProvider = Provider<CacheDiagnosticRecorder>((

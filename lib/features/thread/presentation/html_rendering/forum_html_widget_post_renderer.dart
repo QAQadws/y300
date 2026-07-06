@@ -5,6 +5,7 @@ import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_cached_image_widget_factory.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
@@ -24,6 +25,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     this.imageHeaderBuilder,
     this.imageCacheOwnerId,
     this.imageRequestResolver,
+    this.imageDimensionIndex,
   });
 
   static final Uri forumBaseUri = Uri.parse('https://bbs.yamibo.com/');
@@ -36,6 +38,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final String? imageCacheOwnerId;
   final ForumImageRequestResolver? imageRequestResolver;
+  final ForumImageDimensionIndex? imageDimensionIndex;
   static const _imageDeduplicator = ForumHtmlImageDeduplicator();
 
   @override
@@ -72,6 +75,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       imageHeaderBuilder: imageHeaderBuilder,
       imageCacheOwnerId: imageCacheOwnerId,
       imageRequestResolver: imageRequestResolver,
+      imageDimensionIndex: imageDimensionIndex,
     );
   }
 
@@ -102,6 +106,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           imageHeaderBuilder: imageHeaderBuilder,
           imageCacheOwnerId: imageCacheOwnerId,
           imageRequestResolver: imageRequestResolver,
+          imageDimensionIndex: imageDimensionIndex,
         );
       },
     );

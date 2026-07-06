@@ -5,8 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
+import 'package:y300/features/cache/domain/services/forum_image_layout_hint_resolver.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 
@@ -17,15 +20,20 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
     this.imageCacheOwnerId,
     this.onImageResolved,
     ForumImageRequestResolver? imageRequestResolver,
+    this.imageDimensionIndex,
+    ForumImageLayoutHintResolver? layoutHintResolver,
   }) : imageRequestResolver =
-           imageRequestResolver ?? const DefaultForumImageRequestResolver();
+           imageRequestResolver ?? const DefaultForumImageRequestResolver(),
+       layoutHintResolver =
+           layoutHintResolver ?? const ForumImageLayoutHintResolver();
 
   final String threadId;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final String? imageCacheOwnerId;
   final ValueChanged<Size>? onImageResolved;
   final ForumImageRequestResolver imageRequestResolver;
-  static const double _fallbackImageAspectRatio = 0.7;
+  final ForumImageDimensionIndex? imageDimensionIndex;
+  final ForumImageLayoutHintResolver layoutHintResolver;
   var _nextImageIndex = 0;
 
   @override
@@ -48,48 +56,40 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
     final isSticker = _isForumStickerImage(resolved);
     final imageIndex = isSticker ? null : _nextImageIndex++;
     final explicitSize = _explicitSize(src);
-    final request = imageRequestResolver.resolveCacheRequest(
-      ForumImageLoadSpec(
-        kind: isSticker
-            ? ForumImageKind.remoteSmiley
-            : ForumImageKind.threadInline,
-        url: uri,
-        ownerId: isSticker ? null : _cacheOwnerId(),
-        imageIndex: imageIndex,
-        htmlWidth: explicitSize?.width,
-        htmlHeight: explicitSize?.height,
-      ),
+    final spec = ForumImageLoadSpec(
+      kind: isSticker
+          ? ForumImageKind.remoteSmiley
+          : ForumImageKind.threadInline,
+      url: uri,
+      ownerId: isSticker ? null : _cacheOwnerId(),
+      imageIndex: imageIndex,
+      htmlWidth: explicitSize?.width,
+      htmlHeight: explicitSize?.height,
     );
+    final request = imageRequestResolver.resolveCacheRequest(spec);
     if (request == null) {
       return super.buildImageWidget(tree, src);
     }
     if (isSticker) {
       return _ForumHtmlCachedStickerImageView(
+        spec: spec,
         request: request,
-        explicitSize: explicitSize,
         imageHeaderBuilder: imageHeaderBuilder,
         onImageResolved: onImageResolved,
+        initialHint: layoutHintResolver.resolve(spec: spec),
+        dimensionIndex: imageDimensionIndex,
+        layoutHintResolver: layoutHintResolver,
       );
     }
 
-    final image = CachedLibraryImage(
+    return _ForumHtmlCachedBlockImageView(
+      spec: spec,
       request: request,
-      fit: BoxFit.fitWidth,
-      width: explicitSize?.width,
-      height: explicitSize?.height,
-      placeholder: const _ForumHtmlImageLoadingPlaceholder(
-        delay: Duration(milliseconds: 350),
-      ),
-      errorPlaceholder: const _ForumHtmlImageErrorPlaceholder(
-        icon: Icons.broken_image_outlined,
-      ),
-      headerBuilder: imageHeaderBuilder,
+      imageHeaderBuilder: imageHeaderBuilder,
       onImageResolved: onImageResolved,
-    );
-
-    return AspectRatio(
-      aspectRatio: _imageAspectRatio(explicitSize),
-      child: image,
+      initialHint: layoutHintResolver.resolve(spec: spec),
+      dimensionIndex: imageDimensionIndex,
+      layoutHintResolver: layoutHintResolver,
     );
   }
 
@@ -116,32 +116,125 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
     return null;
   }
 
-  double _imageAspectRatio(Size? explicitSize) {
-    if (explicitSize == null) {
-      return _fallbackImageAspectRatio;
-    }
-    final ratio = explicitSize.width / explicitSize.height;
-    return ratio.isFinite && ratio > 0 ? ratio : _fallbackImageAspectRatio;
-  }
-
   bool _isForumStickerImage(String url) {
     return url.contains('/static/image/smiley/') ||
         url.contains('static/image/smiley/');
   }
 }
 
-class _ForumHtmlCachedStickerImageView extends ConsumerStatefulWidget {
-  const _ForumHtmlCachedStickerImageView({
+class _ForumHtmlCachedBlockImageView extends ConsumerStatefulWidget {
+  const _ForumHtmlCachedBlockImageView({
+    required this.spec,
     required this.request,
-    required this.explicitSize,
     required this.imageHeaderBuilder,
     required this.onImageResolved,
+    required this.initialHint,
+    required this.dimensionIndex,
+    required this.layoutHintResolver,
   });
 
+  final ForumImageLoadSpec spec;
   final ImageCacheRequest request;
-  final Size? explicitSize;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<Size>? onImageResolved;
+  final ForumImageLayoutHint initialHint;
+  final ForumImageDimensionIndex? dimensionIndex;
+  final ForumImageLayoutHintResolver layoutHintResolver;
+
+  @override
+  ConsumerState<_ForumHtmlCachedBlockImageView> createState() =>
+      _ForumHtmlCachedBlockImageViewState();
+}
+
+class _ForumHtmlCachedBlockImageViewState
+    extends ConsumerState<_ForumHtmlCachedBlockImageView> {
+  ForumImageLayoutHint? _cachedHint;
+  String? _loadedCacheKey;
+
+  ForumImageLayoutHint get _hint => _cachedHint ?? widget.initialHint;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCachedDimensions();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ForumHtmlCachedBlockImageView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.request.cacheKey != widget.request.cacheKey ||
+        oldWidget.spec.htmlWidth != widget.spec.htmlWidth ||
+        oldWidget.spec.htmlHeight != widget.spec.htmlHeight) {
+      _cachedHint = null;
+      _loadedCacheKey = null;
+      _loadCachedDimensions();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hint = _hint;
+    final image = CachedLibraryImage(
+      request: widget.request,
+      fit: BoxFit.fitWidth,
+      placeholder: const _ForumHtmlImageLoadingPlaceholder(
+        delay: Duration(milliseconds: 350),
+      ),
+      errorPlaceholder: const _ForumHtmlImageErrorPlaceholder(
+        icon: Icons.broken_image_outlined,
+      ),
+      headerBuilder: widget.imageHeaderBuilder,
+      onImageResolved: widget.onImageResolved,
+    );
+    return AspectRatio(aspectRatio: hint.aspectRatio ?? 0.7, child: image);
+  }
+
+  Future<void> _loadCachedDimensions() async {
+    if (ForumImageDimensions.fromHtmlSpec(widget.spec) != null) {
+      return;
+    }
+    final cacheKey = widget.request.cacheKey.trim();
+    if (cacheKey.isEmpty || _loadedCacheKey == cacheKey) {
+      return;
+    }
+    _loadedCacheKey = cacheKey;
+    final ForumImageDimensionIndex index =
+        widget.dimensionIndex ?? ref.read(forumImageDimensionIndexProvider);
+    final dimensions = await index.getBySpec(widget.spec);
+    if (!mounted || _loadedCacheKey != cacheKey || dimensions == null) {
+      return;
+    }
+    final next = widget.layoutHintResolver.resolve(
+      spec: widget.spec,
+      cacheDimensions: dimensions,
+    );
+    if (_cachedHint == next) {
+      return;
+    }
+    setState(() {
+      _cachedHint = next;
+    });
+  }
+}
+
+class _ForumHtmlCachedStickerImageView extends ConsumerStatefulWidget {
+  const _ForumHtmlCachedStickerImageView({
+    required this.spec,
+    required this.request,
+    required this.imageHeaderBuilder,
+    required this.onImageResolved,
+    required this.initialHint,
+    required this.dimensionIndex,
+    required this.layoutHintResolver,
+  });
+
+  final ForumImageLoadSpec spec;
+  final ImageCacheRequest request;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final ValueChanged<Size>? onImageResolved;
+  final ForumImageLayoutHint initialHint;
+  final ForumImageDimensionIndex? dimensionIndex;
+  final ForumImageLayoutHintResolver layoutHintResolver;
 
   @override
   ConsumerState<_ForumHtmlCachedStickerImageView> createState() =>
@@ -150,8 +243,10 @@ class _ForumHtmlCachedStickerImageView extends ConsumerStatefulWidget {
 
 class _ForumHtmlCachedStickerImageViewState
     extends ConsumerState<_ForumHtmlCachedStickerImageView> {
-  Size? _cachedSize;
+  ForumImageLayoutHint? _cachedHint;
   String? _loadedCacheKey;
+
+  ForumImageLayoutHint get _hint => _cachedHint ?? widget.initialHint;
 
   @override
   void initState() {
@@ -163,8 +258,9 @@ class _ForumHtmlCachedStickerImageViewState
   void didUpdateWidget(covariant _ForumHtmlCachedStickerImageView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.request.cacheKey != widget.request.cacheKey ||
-        oldWidget.explicitSize != widget.explicitSize) {
-      _cachedSize = null;
+        oldWidget.spec.htmlWidth != widget.spec.htmlWidth ||
+        oldWidget.spec.htmlHeight != widget.spec.htmlHeight) {
+      _cachedHint = null;
       _loadedCacheKey = null;
       _loadCachedSize();
     }
@@ -172,7 +268,7 @@ class _ForumHtmlCachedStickerImageViewState
 
   @override
   Widget build(BuildContext context) {
-    final size = widget.explicitSize ?? _cachedSize;
+    final size = _hint.displaySize;
     final child = CachedLibraryImage(
       request: widget.request,
       fit: BoxFit.contain,
@@ -194,7 +290,7 @@ class _ForumHtmlCachedStickerImageViewState
   }
 
   Future<void> _loadCachedSize() async {
-    if (widget.explicitSize != null) {
+    if (ForumImageDimensions.fromHtmlSpec(widget.spec) != null) {
       return;
     }
     final cacheKey = widget.request.cacheKey.trim();
@@ -202,23 +298,21 @@ class _ForumHtmlCachedStickerImageViewState
       return;
     }
     _loadedCacheKey = cacheKey;
-    final result = await ref
-        .read(imageCacheServiceProvider)
-        .getCached(cacheKey);
-    if (!mounted || _loadedCacheKey != cacheKey || result == null) {
+    final ForumImageDimensionIndex index =
+        widget.dimensionIndex ?? ref.read(forumImageDimensionIndexProvider);
+    final dimensions = await index.getBySpec(widget.spec);
+    if (!mounted || _loadedCacheKey != cacheKey || dimensions == null) {
       return;
     }
-    final width = result.width;
-    final height = result.height;
-    if (width == null || height == null || width <= 0 || height <= 0) {
-      return;
-    }
-    final next = Size(width.toDouble(), height.toDouble());
-    if (_cachedSize == next || widget.explicitSize != null) {
+    final next = widget.layoutHintResolver.resolve(
+      spec: widget.spec,
+      cacheDimensions: dimensions,
+    );
+    if (_cachedHint == next) {
       return;
     }
     setState(() {
-      _cachedSize = next;
+      _cachedHint = next;
     });
   }
 }

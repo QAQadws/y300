@@ -563,6 +563,105 @@ void main() {
     expect(aspectRatio.aspectRatio, 0.7);
   });
 
+  testWidgets('uses cached aspect ratio for unsized thread images', (
+    tester,
+  ) async {
+    final cacheService = _RecordingImageCacheService();
+    final request = ForumImageCacheRequests.threadInline(
+      tid: '573279',
+      url: 'https://bbs.yamibo.com/data/attachment/forum/page-cached.jpg',
+      imageIndex: 0,
+    );
+    cacheService.cachedResults[request.cacheKey] = CachedImageResult(
+      success: true,
+      cacheKey: request.cacheKey,
+      width: 320,
+      height: 200,
+      fromCache: true,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: ForumHtmlWidgetPostRenderer(
+              sourceId: 'cached-ratio-image',
+              threadId: '573279',
+              html: '<img src="data/attachment/forum/page-cached.jpg">',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final aspectRatio = tester.widget<AspectRatio>(
+      find
+          .ancestor(
+            of: find.byType(CachedLibraryImage).first,
+            matching: find.byType(AspectRatio),
+          )
+          .first,
+    );
+    final image = tester.widget<CachedLibraryImage>(
+      find.byType(CachedLibraryImage).first,
+    );
+
+    expect(aspectRatio.aspectRatio, 1.6);
+    expect(image.width, isNull);
+    expect(image.height, isNull);
+  });
+
+  testWidgets('keeps html aspect ratio ahead of cached thread dimensions', (
+    tester,
+  ) async {
+    final cacheService = _RecordingImageCacheService();
+    final request = ForumImageCacheRequests.threadInline(
+      tid: '573279',
+      url: 'https://bbs.yamibo.com/data/attachment/forum/page-html.jpg',
+      imageIndex: 0,
+    );
+    cacheService.cachedResults[request.cacheKey] = CachedImageResult(
+      success: true,
+      cacheKey: request.cacheKey,
+      width: 320,
+      height: 200,
+      fromCache: true,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: ForumHtmlWidgetPostRenderer(
+              sourceId: 'html-ratio-image',
+              threadId: '573279',
+              html:
+                  '<img src="data/attachment/forum/page-html.jpg" '
+                  'width="640" height="480">',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final aspectRatio = tester.widget<AspectRatio>(
+      find
+          .ancestor(
+            of: find.byType(CachedLibraryImage).first,
+            matching: find.byType(AspectRatio),
+          )
+          .first,
+    );
+
+    expect(aspectRatio.aspectRatio, 640 / 480);
+  });
+
   testWidgets('keeps non-network data images on the html library default path', (
     tester,
   ) async {
