@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
@@ -233,6 +234,28 @@ class ComicReaderCapability extends ReaderCapability {
   }
 
   @override
+  ForumImageLoadSpec? imageLoadSpecFor(ContinuousImageItem item) {
+    final uri = Uri.tryParse(item.url.trim());
+    if (uri == null) {
+      return null;
+    }
+    final request = cacheRequestFor(item);
+    return ForumImageLoadSpec(
+      kind: ForumImageKind.comicReaderPage,
+      url: uri,
+      ownerId: viewState.comicId,
+      ownerType: ImageCacheOwnerType.comic,
+      episodeId: viewState.episodeId,
+      imageIndex: item.index,
+      cacheKey: request.cacheKey,
+      retentionClass: ImageRetentionClass.recentReader,
+      htmlWidth: item.knownWidth?.toDouble(),
+      htmlHeight: item.knownHeight?.toDouble(),
+      allowReaderOpen: true,
+    );
+  }
+
+  @override
   Widget buildImageContent(BuildContext context, ReaderImageBuildSpec spec) {
     final image = _imageForIndex(spec.index);
     if (image == null) {
@@ -386,4 +409,3 @@ class _ComicReaderImageErrorPlaceholder extends StatelessWidget {
     );
   }
 }
-

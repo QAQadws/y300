@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
@@ -168,4 +169,56 @@ abstract class ReaderCapability {
 
   /// 为某连续图片项构造缓存请求（供解码预热与图片加载）。
   ImageCacheRequest cacheRequestFor(ContinuousImageItem item);
+
+  /// 为阅读会话预热构造统一图片请求。
+  ///
+  /// 默认实现从旧的 [cacheRequestFor] 映射，业务阅读器可以覆写以保留更精确的
+  /// kind / owner / retention 语义。
+  ForumImageLoadSpec? imageLoadSpecFor(ContinuousImageItem item) {
+    final request = cacheRequestFor(item);
+    final uri = Uri.tryParse(request.sourceUrl.trim());
+    if (uri == null) {
+      return null;
+    }
+    return ForumImageLoadSpec(
+      kind: _kindForRole(request.role),
+      url: uri,
+      ownerId: request.ownerId,
+      ownerType: request.ownerType,
+      episodeId: request.episodeId,
+      imageIndex: request.imageIndex ?? item.index,
+      cacheKey: request.cacheKey,
+      retentionClass: request.retentionClass,
+      htmlWidth: item.knownWidth?.toDouble(),
+      htmlHeight: item.knownHeight?.toDouble(),
+      protected: request.protected,
+      allowReaderOpen: true,
+    );
+  }
+
+  ForumImageKind _kindForRole(ImageCacheRole role) {
+    switch (role) {
+      case ImageCacheRole.comicPage:
+        return ForumImageKind.comicReaderPage;
+      case ImageCacheRole.threadAttachment:
+        return ForumImageKind.threadAttachment;
+      case ImageCacheRole.blogInline:
+        return ForumImageKind.blogInline;
+      case ImageCacheRole.remoteSmiley:
+        return ForumImageKind.remoteSmiley;
+      case ImageCacheRole.avatar:
+        return ForumImageKind.avatar;
+      case ImageCacheRole.forumHeadImage:
+        return ForumImageKind.forumHeadImage;
+      case ImageCacheRole.forumIcon:
+        return ForumImageKind.forumIcon;
+      case ImageCacheRole.cover:
+        return ForumImageKind.cover;
+      case ImageCacheRole.customCover:
+        return ForumImageKind.customCover;
+      case ImageCacheRole.threadInline:
+      case ImageCacheRole.novelInline:
+        return ForumImageKind.threadInline;
+    }
+  }
 }

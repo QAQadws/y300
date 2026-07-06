@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_reader_view.dart';
@@ -31,24 +32,38 @@ void main() {
       // 无异常即通过：默认实现允许帖子图片阅读器只关心内容与缓存请求。
       expect(capability.content.length, 1);
     });
+
+    test('default imageLoadSpecFor maps cache request into load spec', () {
+      final capability = _MinimalCapability();
+      final item = capability.content.items.single;
+      final spec = capability.imageLoadSpecFor(item);
+
+      expect(spec, isNotNull);
+      expect(spec!.kind, ForumImageKind.threadInline);
+      expect(spec.url.toString(), item.url);
+      expect(spec.ownerId, item.ownerId);
+      expect(spec.ownerType, ImageCacheOwnerType.thread);
+      expect(spec.imageIndex, item.index);
+      expect(spec.cacheKey, item.cacheKey);
+    });
   });
 }
 
 class _MinimalCapability extends ReaderCapability {
   @override
   ReaderContent get content => ReaderContent(
+    ownerId: 'owner',
+    items: const <ContinuousImageItem>[
+      ContinuousImageItem(
         ownerId: 'owner',
-        items: const <ContinuousImageItem>[
-          ContinuousImageItem(
-            ownerId: 'owner',
-            id: 'owner:0:key',
-            url: 'https://example.com/0.jpg',
-            cacheKey: 'key',
-            index: 0,
-            sourceKind: ContinuousImageSourceKind.threadImageReader,
-          ),
-        ],
-      );
+        id: 'owner:0:key',
+        url: 'https://example.com/0.jpg',
+        cacheKey: 'key',
+        index: 0,
+        sourceKind: ContinuousImageSourceKind.threadImageReader,
+      ),
+    ],
+  );
 
   @override
   ImageRequestHeaderBuilder? get imageHeaderBuilder => null;

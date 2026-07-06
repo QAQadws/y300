@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
@@ -70,6 +71,27 @@ class ThreadImageReaderCapability extends ReaderCapability {
       role: ImageCacheRole.threadInline,
       imageIndex: item.index,
       retentionClass: ImageRetentionClass.recentReader,
+    );
+  }
+
+  @override
+  ForumImageLoadSpec? imageLoadSpecFor(ContinuousImageItem item) {
+    final uri = Uri.tryParse(item.url.trim());
+    if (uri == null) {
+      return null;
+    }
+    final request = cacheRequestFor(item);
+    return ForumImageLoadSpec(
+      kind: ForumImageKind.threadInline,
+      url: uri,
+      ownerId: request.ownerId,
+      ownerType: ImageCacheOwnerType.thread,
+      imageIndex: item.index,
+      cacheKey: request.cacheKey,
+      retentionClass: ImageRetentionClass.recentReader,
+      htmlWidth: item.knownWidth?.toDouble(),
+      htmlHeight: item.knownHeight?.toDouble(),
+      allowReaderOpen: true,
     );
   }
 

@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
+import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_presentation.dart';
@@ -97,6 +99,36 @@ void main() {
     );
     expect(prevButton.onPressed, isNull);
     expect(nextButton.onPressed, isNull);
+  });
+
+  testWidgets('ThreadImageReaderPage preloads reader session images', (
+    tester,
+  ) async {
+    final cacheService = _RecordingImageCacheService();
+    final precacheService = _RecordingForumImagePrecacheService();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(cacheService),
+          forumImagePrecacheServiceProvider.overrideWithValue(precacheService),
+        ],
+        child: MaterialApp(home: ThreadImageReaderPage(request: _request())),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(precacheService.decodedSpecs, isNotEmpty);
+    expect(
+      precacheService.decodedSpecs.map((spec) => spec.kind).toSet(),
+      <ForumImageKind>{ForumImageKind.threadInline},
+    );
+    expect(
+      precacheService.decodedSpecs.map((spec) => spec.retentionClass).toSet(),
+      <ImageRetentionClass>{ImageRetentionClass.recentReader},
+    );
+    expect(precacheService.decodedSpecs.first.ownerId, 'thread:100:post:p1');
+    expect(precacheService.decodedSpecs.first.cacheKey, 'thread/inline/page-1');
   });
 }
 
@@ -195,4 +227,36 @@ class _RecordingImageCacheService implements ImageCacheService {
 
   @override
   Future<void> clearUnprotected() async {}
+}
+
+class _RecordingForumImagePrecacheService implements ForumImagePrecacheService {
+  final decodedSpecs = <ForumImageLoadSpec>[];
+  final diskSpecs = <ForumImageLoadSpec>[];
+
+  @override
+  Future<ForumImagePrecacheResult> ensureDiskCached(
+    ForumImageLoadSpec spec,
+  ) async {
+    diskSpecs.add(spec);
+    return ForumImagePrecacheResult(
+      success: true,
+      cacheKey: spec.cacheKey,
+      localPath: '/cache/${spec.imageIndex}.jpg',
+    );
+  }
+
+  @override
+  Future<ForumImagePrecacheResult> precacheDecoded({
+    required BuildContext context,
+    required ForumImageLoadSpec spec,
+    Size? expectedDisplaySize,
+  }) async {
+    decodedSpecs.add(spec);
+    return ForumImagePrecacheResult(
+      success: true,
+      decoded: true,
+      cacheKey: spec.cacheKey,
+      localPath: '/cache/${spec.imageIndex}.jpg',
+    );
+  }
 }

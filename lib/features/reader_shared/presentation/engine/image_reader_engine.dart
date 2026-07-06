@@ -13,6 +13,7 @@ import 'package:y300/features/reader_shared/presentation/engine/reader_display_s
 import 'package:y300/features/reader_shared/presentation/engine/reader_page_indicator_overlay.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_zoomable_image.dart';
 import 'package:y300/features/reader_shared/presentation/reader_preferences/reader_preferences_provider.dart';
+import 'package:y300/features/reader_shared/presentation/services/reader_image_session_preload_coordinator.dart';
 
 /// 通用图片阅读壳：垂直/横向模式、缩放、overlay 工具栏、进度滑块、页码浮层、
 /// 显示设置、滚动锚定补偿、解码预热。
@@ -75,15 +76,14 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       ContinuousImageViewportTracker(layoutResolver: _layoutResolver);
   static const ContinuousImageScrollAnchorCoordinator _anchorCoordinator =
       ContinuousImageScrollAnchorCoordinator(layoutResolver: _layoutResolver);
-  static const ContinuousImageDecodePreheater _decodePreheater =
-      ContinuousImageDecodePreheater();
   final InMemoryContinuousImageExtentRegistry _extentRegistry =
       InMemoryContinuousImageExtentRegistry();
+  final ReaderImageSessionPreloadCoordinator _sessionPreloadCoordinator =
+      ReaderImageSessionPreloadCoordinator();
 
   List<ContinuousImageItem> _latestItems = const <ContinuousImageItem>[];
   double _pendingScrollCompensationDelta = 0;
   ScrollPosition? _observedScrollPosition;
-  final Set<String> _precacheWindowKeys = <String>{};
 
   ReaderCapability get _capability => widget.capability;
 
@@ -111,6 +111,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       ..removeListener(_onOverlayVisibilityChanged)
       ..dispose();
     _pageIndicatorDimTimer?.cancel();
+    _sessionPreloadCoordinator.dispose();
     super.dispose();
   }
   // ENGINE_BODY_PLACEHOLDER
@@ -142,12 +143,21 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
             bottomBar: _buildBottomBar(engineContext, preferences),
             onLeftTap: mode == ContinuousImageReaderMode.vertical
                 ? null
-                : () => _turnPageByTap(mode: preferences.readerMode, total: total, isLeftTap: true),
+                : () => _turnPageByTap(
+                    mode: preferences.readerMode,
+                    total: total,
+                    isLeftTap: true,
+                  ),
             onRightTap: mode == ContinuousImageReaderMode.vertical
                 ? null
-                : () => _turnPageByTap(mode: preferences.readerMode, total: total, isLeftTap: false),
-            bottomSafeFraction:
-                mode == ContinuousImageReaderMode.vertical ? 0.2 : 0,
+                : () => _turnPageByTap(
+                    mode: preferences.readerMode,
+                    total: total,
+                    isLeftTap: false,
+                  ),
+            bottomSafeFraction: mode == ContinuousImageReaderMode.vertical
+                ? 0.2
+                : 0,
             tapZonesEnabled: !_isAnyImageZoomed,
             child: _buildContentLayer(
               context: context,
@@ -180,6 +190,10 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _syncScrollPositionActivityListener();
+        _submitSessionPreloadWindow(
+          focusIndex: _lastKnownIndex,
+          scrollDirection: ContinuousImageScrollDirection.idle,
+        );
       }
     });
     return ContinuousImageReaderView(
@@ -194,8 +208,9 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       onExtentResolved: _recordExtent,
       verticalListKey: widget.listKey,
       slotKeyPrefix: widget.slotKeyPrefix,
-      verticalTrailingBuilder:
-          _capability.verticalTrailingBuilder(engineContext),
+      verticalTrailingBuilder: _capability.verticalTrailingBuilder(
+        engineContext,
+      ),
       itemBuilder: (context, item, index, {required paged}) {
         return _buildImage(item, index, preferences, paged: false);
       },
@@ -280,10 +295,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     }
   }
 
-  ReaderEngineContext _engineContext(
-    ReaderPreferences preferences,
-    int total,
-  ) {
+  ReaderEngineContext _engineContext(ReaderPreferences preferences, int total) {
     return ReaderEngineContext(
       currentIndex: _lastKnownIndex,
       totalCount: total,
@@ -307,10 +319,10 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _pendingScrollCompensationDelta = 0;
     _lastVerticalRestoreKey = null;
     _lastPagedRestoreKey = null;
-    _precacheWindowKeys.clear();
     _reportedVisibleImageIndexes.clear();
     _zoomedStateByIndex.clear();
     _lastKnownIndex = _capability.content.initialIndex;
+    _sessionPreloadCoordinator.resetSession();
   }
 
   void _syncPageControllerIfNeeded(
@@ -416,8 +428,9 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (total == 0) {
       return;
     }
-    final ratio =
-        (position.pixels / position.maxScrollExtent).clamp(0.0, 1.0).toDouble();
+    final ratio = (position.pixels / position.maxScrollExtent)
+        .clamp(0.0, 1.0)
+        .toDouble();
     final viewport = _viewportTracker.resolve(
       items: items,
       extentRegistry: _extentRegistry,
@@ -434,6 +447,10 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (index != _lastKnownIndex) {
       _lastKnownIndex = index;
       _capability.onScrollProgress(index: index, offset: position.pixels);
+      _submitSessionPreloadWindow(
+        focusIndex: index,
+        scrollDirection: viewport.userScrollDirection,
+      );
       if (mounted) {
         setState(() {});
       }
@@ -467,8 +484,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         minScrollExtent: position.minScrollExtent,
         maxScrollExtent: position.maxScrollExtent,
         viewportExtent: position.viewportDimension,
-        userScrollDirection:
-            _viewportTracker.directionFromPosition(position),
+        userScrollDirection: _viewportTracker.directionFromPosition(position),
         isScrollActivityInProgress: position.isScrollingNotifier.value,
       ),
     );
@@ -562,11 +578,18 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (pageIndex == _lastKnownIndex) {
       return;
     }
+    final previousIndex = _lastKnownIndex;
     _hideReaderMenuForContentMotion();
     _pulsePageIndicator();
     _lastKnownIndex = pageIndex;
     _reportedVisibleImageIndexes.add(pageIndex);
     _capability.onScrollProgress(index: pageIndex, offset: 0);
+    _submitSessionPreloadWindow(
+      focusIndex: pageIndex,
+      scrollDirection: pageIndex < previousIndex
+          ? ContinuousImageScrollDirection.reverse
+          : ContinuousImageScrollDirection.forward,
+    );
     _tryReleaseSliderCommitLock(pageIndex);
     if (mounted) {
       setState(() {});
@@ -593,7 +616,12 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (target == current) {
       return;
     }
-    _precachePagedWindow(target);
+    _submitSessionPreloadWindow(
+      focusIndex: target,
+      scrollDirection: delta < 0
+          ? ContinuousImageScrollDirection.reverse
+          : ContinuousImageScrollDirection.forward,
+    );
     pageController.animateToPage(
       target,
       duration: const Duration(milliseconds: 180),
@@ -626,6 +654,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     }
     _lastSliderCommitAt = now;
     final targetIndex = sliderValue.round().clamp(0, total - 1).toInt();
+    final previousIndex = _lastKnownIndex;
     _pulsePageIndicator();
 
     setState(() {
@@ -639,6 +668,12 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
 
     if (preferences.readerMode == ReaderModePreference.vertical) {
       await _jumpVerticalToIndex(targetIndex);
+      _submitSessionPreloadWindow(
+        focusIndex: targetIndex,
+        scrollDirection: targetIndex < previousIndex
+            ? ContinuousImageScrollDirection.reverse
+            : ContinuousImageScrollDirection.forward,
+      );
       await _capability.onSeek(
         index: targetIndex,
         offset: _scrollController.hasClients ? _scrollController.offset : 0,
@@ -649,7 +684,12 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
 
     final pageController = _pageController;
     if (pageController != null && pageController.hasClients) {
-      _precachePagedWindow(targetIndex);
+      _submitSessionPreloadWindow(
+        focusIndex: targetIndex,
+        scrollDirection: targetIndex < previousIndex
+            ? ContinuousImageScrollDirection.reverse
+            : ContinuousImageScrollDirection.forward,
+      );
       pageController.jumpToPage(targetIndex);
     }
     await _capability.onSeek(index: targetIndex, offset: 0);
@@ -688,11 +728,12 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     );
     final ratio = targetIndex / (totalImages - 1);
     final fallbackOffset = maxScroll * ratio;
-    final offset = (estimatedOffset.isFinite && estimatedOffset > 0
-            ? estimatedOffset
-            : fallbackOffset)
-        .clamp(0.0, maxScroll)
-        .toDouble();
+    final offset =
+        (estimatedOffset.isFinite && estimatedOffset > 0
+                ? estimatedOffset
+                : fallbackOffset)
+            .clamp(0.0, maxScroll)
+            .toDouble();
     _scrollController.jumpTo(offset);
     await WidgetsBinding.instance.endOfFrame;
     if (!_scrollController.hasClients) {
@@ -705,46 +746,56 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       crossAxisExtent: crossAxisExtent,
       resolver: _layoutResolver,
     );
-    final correctedOffset = (latestEstimatedOffset.isFinite &&
-                latestEstimatedOffset > 0
-            ? latestEstimatedOffset
-            : latestMax * ratio)
-        .clamp(0.0, latestMax)
-        .toDouble();
+    final correctedOffset =
+        (latestEstimatedOffset.isFinite && latestEstimatedOffset > 0
+                ? latestEstimatedOffset
+                : latestMax * ratio)
+            .clamp(0.0, latestMax)
+            .toDouble();
     if ((_scrollController.offset - correctedOffset).abs() > 1.5) {
       _scrollController.jumpTo(correctedOffset);
     }
   }
 
   void _precachePagedWindow(int centerIndex) {
+    _submitSessionPreloadWindow(
+      focusIndex: centerIndex,
+      scrollDirection: ContinuousImageScrollDirection.idle,
+    );
+  }
+
+  void _submitSessionPreloadWindow({
+    required int focusIndex,
+    required ContinuousImageScrollDirection scrollDirection,
+  }) {
     final items = _latestItems;
     if (!mounted || items.isEmpty) {
       return;
     }
-    _decodePreheater.precacheWindow(
+    _sessionPreloadCoordinator.submitWindow(
       context: context,
-      items: items,
-      centerIndex: centerIndex,
-      warmedKeys: _precacheWindowKeys,
-      imageHeaderBuilder: _capability.imageHeaderBuilder,
-      // 预热已缓存的本地文件而非重新拉网络（修复此前 (item) => null 导致的重复下载）。
-      localPathResolver: _cachedLocalPathFor,
-      radius: 1,
-      isMounted: () => mounted,
+      content: ReaderContent(
+        ownerId: _lastOwnerId ?? _capability.content.ownerId,
+        items: items,
+        initialIndex: _capability.content.initialIndex,
+      ),
+      focusIndex: focusIndex,
+      scrollDirection: scrollDirection,
+      capability: _capability,
+      precacheService: ref.read(forumImagePrecacheServiceProvider),
+      expectedDisplaySize: _expectedPreloadDisplaySize(),
     );
   }
 
-  /// 解析某图片项已缓存的本地文件路径；未命中返回 null（交由预热器回退到网络）。
-  Future<String?> _cachedLocalPathFor(ContinuousImageItem item) async {
-    final request = _capability.cacheRequestFor(item);
-    try {
-      final result = await ref
-          .read(imageCacheServiceProvider)
-          .getCached(request.cacheKey);
-      return result != null && result.success ? result.localPath : null;
-    } catch (_) {
+  Size? _expectedPreloadDisplaySize() {
+    if (!mounted) {
       return null;
     }
+    final mediaSize = MediaQuery.maybeSizeOf(context);
+    if (mediaSize == null || mediaSize.width <= 0) {
+      return null;
+    }
+    return Size(mediaSize.width, mediaSize.height);
   }
 
   // --- mode + display settings sheets ---
