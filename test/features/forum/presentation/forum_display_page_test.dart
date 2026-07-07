@@ -16,6 +16,8 @@ import 'package:y300/features/forum/data/models/forum_display_models.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_home_widgets.dart';
+import 'package:y300/features/search/data/models/discuz_search_models.dart';
+import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
@@ -1084,10 +1086,11 @@ void main() {
       expect(repository.lastQuery?.fid, '52');
     });
 
-    testWidgets('shows search-in-forum action when fid is 30', (tester) async {
+    testWidgets('opens search with the current forum fid', (tester) async {
       final repository = _FakeForumDisplayRepository((fid, page, query) async {
         return ApiSuccess(
           _displayData(
+            fid: fid,
             page: 1,
             total: 1,
             threads: const <ForumThreadSummary>[],
@@ -1107,10 +1110,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(
-        find.byKey(const Key('forum-display-search-button')),
-        findsOneWidget,
-      );
+      final searchButton = find.byKey(const Key('forum-display-search-button'));
+      expect(searchButton, findsOneWidget);
       expect(
         tester
             .getCenter(find.byKey(const Key('forum-display-compose-button')))
@@ -1120,6 +1121,81 @@ void main() {
               .getCenter(find.byKey(const Key('forum-display-search-button')))
               .dx,
         ),
+      );
+
+      await tester.tap(searchButton);
+      await tester.pumpAndSettle();
+
+      final searchPage = tester.widget<ForumSearchPage>(
+        find.byType(ForumSearchPage),
+      );
+      expect(searchPage.context.scope, DiscuzSearchScope.curForum);
+      expect(searchPage.context.srhfid, '30');
+    });
+
+    testWidgets('opens search with non-30 forum fid', (tester) async {
+      final repository = _FakeForumDisplayRepository((fid, page, query) async {
+        return ApiSuccess(
+          _displayData(
+            fid: fid,
+            page: 1,
+            total: 1,
+            threads: const <ForumThreadSummary>[],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            forumDisplayRepositoryProvider.overrideWithValue(repository),
+          ],
+          child: const MaterialApp(
+            home: ForumDisplayPage(fid: '33', title: '海域区'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final searchButton = find.byKey(const Key('forum-display-search-button'));
+      expect(searchButton, findsOneWidget);
+      await tester.tap(searchButton);
+      await tester.pumpAndSettle();
+
+      final searchPage = tester.widget<ForumSearchPage>(
+        find.byType(ForumSearchPage),
+      );
+      expect(searchPage.context.scope, DiscuzSearchScope.curForum);
+      expect(searchPage.context.srhfid, '33');
+    });
+
+    testWidgets('hides search action when forum fid is empty', (tester) async {
+      final repository = _FakeForumDisplayRepository((fid, page, query) async {
+        return ApiSuccess(
+          _displayData(
+            fid: '',
+            page: 1,
+            total: 1,
+            threads: const <ForumThreadSummary>[],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            forumDisplayRepositoryProvider.overrideWithValue(repository),
+          ],
+          child: const MaterialApp(
+            home: ForumDisplayPage(fid: '', title: ''),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('forum-display-search-button')),
+        findsNothing,
       );
     });
   });
@@ -1144,6 +1220,7 @@ Widget _buildTestApp(
 }
 
 ForumDisplayData _displayData({
+  String fid = '2',
   required int page,
   required int total,
   required List<ForumThreadSummary> threads,
@@ -1153,7 +1230,7 @@ ForumDisplayData _displayData({
   int? lastPage,
 }) {
   return ForumDisplayData(
-    fid: '2',
+    fid: fid,
     forumName: '公告区',
     currentPage: page,
     perPage: 1,

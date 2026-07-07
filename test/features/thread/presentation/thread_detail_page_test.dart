@@ -2759,7 +2759,7 @@ void main() {
       },
     );
 
-    testWidgets('shows search-in-forum action when thread fid is 30', (
+    testWidgets('hides search-in-forum action on thread detail page', (
       tester,
     ) async {
       final repository = _FakeThreadRepository((tid, page) async {
@@ -2793,8 +2793,17 @@ void main() {
 
       expect(
         find.byKey(const Key('thread-detail-search-button')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('thread-detail-favorite-button')),
         findsOneWidget,
       );
+      expect(
+        find.byKey(const Key('thread-detail-appbar-reply-button')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('thread-detail-more-menu')), findsOneWidget);
     });
 
     testWidgets('opens user profile from post author name', (tester) async {

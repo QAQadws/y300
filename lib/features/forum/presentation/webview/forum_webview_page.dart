@@ -579,7 +579,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
             ),
       title: Text(title),
       actions: [
-        if (state.pageKind != ForumWebViewPageKind.search)
+        if (_canShowSearchButton(state))
           IconButton(
             key: const Key('forum-webview-search-button'),
             tooltip: _searchTooltip(state),
@@ -763,12 +763,22 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   }
 
   String _searchTooltip(ForumWebViewState state) {
-    if ((state.pageKind == ForumWebViewPageKind.forumDisplay ||
-            state.pageKind == ForumWebViewPageKind.threadDetail) &&
-        state.fid != null) {
+    if (state.pageKind == ForumWebViewPageKind.forumDisplay &&
+        (state.fid ?? '').trim().isNotEmpty) {
       return '搜索本版';
     }
     return '搜索论坛';
+  }
+
+  bool _canShowSearchButton(ForumWebViewState state) {
+    if (state.pageKind == ForumWebViewPageKind.search ||
+        state.pageKind == ForumWebViewPageKind.threadDetail) {
+      return false;
+    }
+    if (state.pageKind == ForumWebViewPageKind.forumDisplay) {
+      return (state.fid ?? '').trim().isNotEmpty;
+    }
+    return true;
   }
 
   bool _canOpenThreadReply(ForumWebViewState state) {
@@ -893,11 +903,12 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     ForumWebViewState state,
   ) async {
     final navigator = ref.read(forumWebViewNavigatorProvider);
+    final fid = state.fid?.trim();
     final targetUri =
-        ((state.pageKind == ForumWebViewPageKind.forumDisplay ||
-                state.pageKind == ForumWebViewPageKind.threadDetail) &&
-            state.fid != null)
-        ? navigator.curForumSearchUri(fid: state.fid!)
+        (state.pageKind == ForumWebViewPageKind.forumDisplay &&
+            fid != null &&
+            fid.isNotEmpty)
+        ? navigator.curForumSearchUri(fid: fid)
         : navigator.forumSearchUri();
     await _loadManagedUri(driver, targetUri, referrerUri: state.currentUri);
   }

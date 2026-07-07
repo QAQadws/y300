@@ -20,8 +20,6 @@ import 'package:y300/features/library_shared/presentation/controllers/sync_diagn
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
-import 'package:y300/features/search/data/models/discuz_search_models.dart';
-import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/tags/presentation/yamibo_tag_thread_page.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_comment_repository.dart';
@@ -196,21 +194,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                   },
             icon: const Icon(Icons.reply),
           ),
-          if (state.fid == '30')
-            IconButton(
-              key: const Key('thread-detail-search-button'),
-              tooltip: '搜索本版',
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const ForumSearchPage(
-                      context: DiscuzSearchContext.curForum(srhfid: '30'),
-                    ),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.search),
-            ),
           _ThreadDetailMoreMenu(
             state: state,
             onOnlyAuthor: controller.openOnlyAuthor,

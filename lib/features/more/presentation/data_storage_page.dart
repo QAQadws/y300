@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/more/presentation/data_storage_controller.dart';
+import 'package:y300/features/more/presentation/data_storage_debug_overview_debug.dart'
+    if (dart.vm.product) 'package:y300/features/more/presentation/data_storage_debug_overview_stub.dart'
+    if (dart.vm.profile) 'package:y300/features/more/presentation/data_storage_debug_overview_stub.dart';
+import 'package:y300/features/more/presentation/data_storage_formatters.dart';
 
 class DataStoragePage extends ConsumerWidget {
   const DataStoragePage({super.key});
@@ -25,8 +28,6 @@ class DataStoragePage extends ConsumerWidget {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              _StorageUsageOverview(report: viewState.usageReport),
-              const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
@@ -74,6 +75,14 @@ class DataStoragePage extends ConsumerWidget {
                   child: const Text('清理'),
                 ),
               ),
+              const SizedBox(height: 4),
+              Text(
+                '总计：${formatDataStorageBytes(viewState.usageReport.totalBytes)}',
+                key: const Key('data-storage-usage-total'),
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+              buildDataStorageDebugOverview(viewState.usageReport),
               const SizedBox(height: 8),
               Text(
                 '最大缓存：$maxMb MB',
@@ -162,125 +171,4 @@ class DataStoragePage extends ConsumerWidget {
       ),
     );
   }
-}
-
-class _StorageUsageOverview extends StatelessWidget {
-  const _StorageUsageOverview({required this.report});
-
-  final StorageUsageReport report;
-
-  @override
-  Widget build(BuildContext context) {
-    return ExpansionTile(
-      key: const Key('data-storage-usage-overview'),
-      initiallyExpanded: false,
-      tilePadding: EdgeInsets.zero,
-      title: const Text(
-        '缓存与数据总览',
-        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
-      ),
-      subtitle: Text(
-        '总计：${formatDataStorageBytes(report.totalBytes)}',
-        key: const Key('data-storage-usage-total'),
-      ),
-      children: [
-        const SizedBox(height: 4),
-        for (final section in report.sections) ...[
-          _StorageUsageSectionTile(section: section),
-          const SizedBox(height: 8),
-        ],
-      ],
-    );
-  }
-}
-
-class _StorageUsageSectionTile extends StatelessWidget {
-  const _StorageUsageSectionTile({required this.section});
-
-  final StorageUsageSection section;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return Column(
-      key: Key('data-storage-usage-section-${section.bucket.id}'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                section.label,
-                style: textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            Text(
-              formatDataStorageBytes(section.bytes),
-              style: textTheme.bodyMedium,
-            ),
-          ],
-        ),
-        if (section.slices.isNotEmpty || section.categories.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          for (final category in section.categories)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Row(
-                key: Key('data-storage-image-cache-category-${category.id}'),
-                children: [
-                  Expanded(
-                    child: Text(
-                      category.label,
-                      style: textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Text(
-                    formatDataStorageBytes(category.bytes),
-                    style: textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-          for (final slice in section.slices.take(4))
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      slice.label,
-                      style: textTheme.bodySmall,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Text(
-                    slice.bytes > 0 ? formatDataStorageBytes(slice.bytes) : '',
-                    style: textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ],
-    );
-  }
-}
-
-String formatDataStorageBytes(int bytes) {
-  final normalized = bytes < 0 ? 0 : bytes;
-  final kb = normalized / 1024;
-  if (kb < 1024) {
-    return '${kb.toStringAsFixed(1)} KB';
-  }
-  final mb = kb / 1024;
-  if (mb < 1024) {
-    return '${mb.toStringAsFixed(1)} MB';
-  }
-  final gb = mb / 1024;
-  return '${gb.toStringAsFixed(1)} GB';
 }

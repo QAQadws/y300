@@ -1038,7 +1038,7 @@ void main() {
   );
 
   testWidgets(
-    'ForumWebViewPage thread detail falls back to forum search when fid is unknown',
+    'ForumWebViewPage thread detail hides search button when fid is unknown',
     (tester) async {
       final driver = _FakeForumWebViewDriver()..title = '主题标题';
 
@@ -1063,15 +1063,11 @@ void main() {
         find.byKey(const Key('forum-webview-thread-reply-button')),
         findsNothing,
       );
-
-      await tester.tap(find.byKey(const Key('forum-webview-search-button')));
-      await tester.pumpAndSettle();
-
-      expect(driver.loadedUris.length, 2);
       expect(
-        driver.loadedUris.last.toString(),
-        'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
+        find.byKey(const Key('forum-webview-search-button')),
+        findsNothing,
       );
+      expect(driver.loadedUris.length, 1);
     },
   );
 
@@ -1147,10 +1143,13 @@ void main() {
     expect(
       actionKeys,
       containsAllInOrder(const <Key>[
-        Key('forum-webview-search-button'),
         Key('forum-webview-thread-reply-button'),
         Key('forum-webview-more-button'),
       ]),
+    );
+    expect(
+      actionKeys,
+      isNot(contains(const Key('forum-webview-search-button'))),
     );
 
     await tester.tap(
@@ -1500,7 +1499,7 @@ void main() {
   });
 
   testWidgets(
-    'ForumWebViewPage thread detail uses curForum search when fid is known',
+    'ForumWebViewPage thread detail hides search button when fid is known',
     (tester) async {
       final driver = _FakeForumWebViewDriver()..title = '主题标题';
 
@@ -1521,19 +1520,11 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('综合区'), findsOneWidget);
-
-      await tester.tap(find.byKey(const Key('forum-webview-search-button')));
-      await tester.pumpAndSettle();
-
-      expect(driver.loadedUris.length, 2);
       expect(
-        driver.loadedUris.last.toString(),
-        'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
+        find.byKey(const Key('forum-webview-search-button')),
+        findsNothing,
       );
-      expect(
-        driver.loadRequests.last.headers['Referer'],
-        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&fid=55&mobile=2',
-      );
+      expect(driver.loadedUris.length, 1);
     },
   );
 

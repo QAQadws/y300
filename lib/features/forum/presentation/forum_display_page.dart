@@ -59,17 +59,18 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
     }
     final theme = Theme.of(context);
     final palette = ForumDisplayThemePalette.resolve(theme);
+    final searchFid = _searchFidFor(state);
 
     return Scaffold(
       backgroundColor: palette.background,
       appBar: AppBar(
         title: _ForumDisplayAppBarTitle(state: state),
         actions: [
-          if (widget.fid == '30')
+          if (searchFid != null)
             IconButton(
               key: const Key('forum-display-search-button'),
               tooltip: '搜索本版',
-              onPressed: () => _openSearch(context),
+              onPressed: () => _openSearch(context, searchFid),
               icon: const Icon(Icons.search),
             ),
           IconButton(
@@ -196,12 +197,20 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
     return viewport?.getOffsetToReveal(renderObject, 0).offset;
   }
 
-  void _openSearch(BuildContext context) {
+  String? _searchFidFor(ForumDisplayPageState state) {
+    final stateFid = state.fid.trim();
+    if (stateFid.isNotEmpty) {
+      return stateFid;
+    }
+    final widgetFid = widget.fid.trim();
+    return widgetFid.isEmpty ? null : widgetFid;
+  }
+
+  void _openSearch(BuildContext context, String fid) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => const ForumSearchPage(
-          context: DiscuzSearchContext.curForum(srhfid: '30'),
-        ),
+        builder: (_) =>
+            ForumSearchPage(context: DiscuzSearchContext.curForum(srhfid: fid)),
       ),
     );
   }

@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/services.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/core/config/app_config.dart';
@@ -11,15 +9,13 @@ import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dar
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
-import 'package:y300/features/library_shared/presentation/controllers/sync_diagnostic_mode_controller.dart';
 import 'package:y300/features/auth/presentation/login_webview_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/more/presentation/appearance_settings_page.dart';
 import 'package:y300/features/more/presentation/data_storage_page.dart';
-import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
-import 'package:y300/features/thread/presentation/thread_detail_html_first_render_mode_controller.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_page.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
+import 'package:y300/features/more/presentation/more_debug_tools_debug.dart'
+    if (dart.vm.product) 'package:y300/features/more/presentation/more_debug_tools_stub.dart'
+    if (dart.vm.profile) 'package:y300/features/more/presentation/more_debug_tools_stub.dart';
 
 class MorePage extends ConsumerStatefulWidget {
   const MorePage({super.key});
@@ -29,10 +25,7 @@ class MorePage extends ConsumerStatefulWidget {
 }
 
 class _MorePageState extends ConsumerState<MorePage> {
-  static const int _diagnosticTapThreshold = 5;
-  static const Duration _diagnosticTapWindow = Duration(seconds: 2);
-
-  final List<DateTime> _aboutTapTimes = <DateTime>[];
+  final MoreDebugTools _debugTools = MoreDebugTools();
 
   @override
   Widget build(BuildContext context) {
@@ -45,16 +38,6 @@ class _MorePageState extends ConsumerState<MorePage> {
     final appearanceSettings =
         ref.watch(appAppearanceControllerProvider).asData?.value ??
         AppAppearanceSettings.defaults();
-    final diagnosticMode = ref.watch(syncDiagnosticModeControllerProvider);
-    final diagnosticEnabled = diagnosticMode.asData?.value ?? false;
-    final threadDiagnosticEnabled =
-        ref.watch(threadDetailDiagnosticControllerProvider).asData?.value ??
-        false;
-    final htmlFirstRenderMode = ref
-        .watch(threadDetailHtmlFirstRenderModeControllerProvider)
-        .asData
-        ?.value;
-    final htmlFirstRendererEnabled = htmlFirstRenderMode?.isHtmlFirst ?? false;
 
     return Scaffold(
       appBar: AppBar(title: const Text('更多')),
@@ -119,158 +102,17 @@ class _MorePageState extends ConsumerState<MorePage> {
             title: Text('阅读设置（预留）'),
             subtitle: Text('后续阶段接入阅读器细项配置'),
           ),
-          if (kDebugMode) ...[
-            ListTile(
-              key: const Key('more-composer-quill-prototype-entry'),
-              leading: const Icon(Icons.edit_note_outlined),
-              title: const Text('Quill Composer 原型'),
-              subtitle: const Text('验证所见即所得到 Discuz BBCode 的转换'),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const ComposerQuillPrototypePage(),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              key: const Key('more-html-renderer-prototype-entry'),
-              leading: const Icon(Icons.article_outlined),
-              title: const Text('HTML 正文渲染原型'),
-              subtitle: const Text('验证复杂正文 HTML 的原生渲染'),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const ForumHtmlRendererPrototypePage(),
-                  ),
-                );
-              },
-            ),
-          ],
-          if (diagnosticEnabled) ...[
-            SwitchListTile(
-              key: const Key('more-thread-detail-diagnostic-switch'),
-              secondary: const Icon(Icons.bug_report_outlined),
-              title: const Text('帖子详情滚动诊断'),
-              subtitle: const Text('记录 entry 构建、render plan 和滚动操作'),
-              value: threadDiagnosticEnabled,
-              onChanged: (value) =>
-                  _setThreadDetailDiagnosticEnabled(context, ref, value),
-            ),
-            SwitchListTile(
-              key: const Key('thread-detail-html-first-renderer-switch'),
-              secondary: const Icon(Icons.article_outlined),
-              title: const Text('HTML-first 对照入口'),
-              subtitle: const Text('正文已默认使用 HTML-first；此开关仅显示旧渲染对照入口'),
-              value: htmlFirstRendererEnabled,
-              onChanged: (value) =>
-                  _setThreadDetailHtmlFirstRendererEnabled(context, ref, value),
-            ),
-            ListTile(
-              key: const Key('more-thread-detail-diagnostic-copy-entry'),
-              leading: const Icon(Icons.content_copy_outlined),
-              title: const Text('复制帖子详情诊断日志'),
-              subtitle: const Text('复制当前进程内最近的滚动诊断事件'),
-              onTap: () => _copyThreadDetailDiagnosticLog(context, ref),
-            ),
-          ],
+          ..._debugTools.buildTiles(context, ref),
           ListTile(
             key: const Key('more-about-placeholder'),
             leading: const Icon(Icons.info_outline),
             title: const Text('关于'),
-            subtitle: Text(
-              diagnosticEnabled
-                  ? '已开启诊断日志模式，连续快速点击 5 次可关闭'
-                  : '连续快速点击 5 次可开启诊断日志模式',
-            ),
-            onTap: _handleAboutTap,
+            subtitle: Text(_debugTools.aboutSubtitle(ref)),
+            onTap: () => _debugTools.handleAboutTap(context, ref),
           ),
         ],
       ),
     );
-  }
-
-  Future<void> _setThreadDetailDiagnosticEnabled(
-    BuildContext context,
-    WidgetRef ref,
-    bool enabled,
-  ) async {
-    try {
-      await ref
-          .read(threadDetailDiagnosticControllerProvider.notifier)
-          .setEnabled(enabled);
-    } catch (error) {
-      if (!context.mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('帖子详情诊断设置失败：$error')));
-    }
-  }
-
-  Future<void> _copyThreadDetailDiagnosticLog(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
-    final text = ref
-        .read(threadDetailDiagnosticControllerProvider.notifier)
-        .exportText();
-    await Clipboard.setData(ClipboardData(text: text));
-    if (!context.mounted) {
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(text.trim().isEmpty ? '暂无帖子详情诊断日志' : '帖子详情诊断日志已复制'),
-      ),
-    );
-  }
-
-  Future<void> _setThreadDetailHtmlFirstRendererEnabled(
-    BuildContext context,
-    WidgetRef ref,
-    bool enabled,
-  ) async {
-    try {
-      await ref
-          .read(threadDetailHtmlFirstRenderModeControllerProvider.notifier)
-          .setHtmlFirstEnabled(enabled);
-    } catch (error) {
-      if (!context.mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('HTML-first 对照设置失败：$error')));
-    }
-  }
-
-  Future<void> _handleAboutTap() async {
-    final now = DateTime.now();
-    _aboutTapTimes.add(now);
-    _aboutTapTimes.removeWhere(
-      (time) => now.difference(time) > _diagnosticTapWindow,
-    );
-    if (_aboutTapTimes.length < _diagnosticTapThreshold) {
-      return;
-    }
-    _aboutTapTimes.clear();
-    final enabled = await ref
-        .read(syncDiagnosticModeControllerProvider.notifier)
-        .toggle();
-    if (!mounted) {
-      return;
-    }
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            enabled ? '诊断日志模式已开启，后续会写入本地 diagnostics 日志' : '诊断日志模式已关闭',
-          ),
-        ),
-      );
   }
 
   Future<void> _showForumModeSheet(
