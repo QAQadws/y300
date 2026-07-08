@@ -62,19 +62,19 @@ class ComicSearchRefreshQueueService
     ComicSearchRefreshRetryPolicy retryPolicy =
         const ComicSearchRefreshRetryPolicy(),
     DateTime Function()? nowProvider,
-  })  : _queueRepository = queueRepository,
-        _refreshService = refreshService,
-        _refreshOutcomeApplier = refreshOutcomeApplier,
-        _diagnosticRecorder =
-            diagnosticRecorder ?? const NoopSyncDiagnosticRecorder(),
-        _retryPolicy = retryPolicy,
-        _nowProvider = nowProvider ?? DateTime.now,
-        _snapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
-          ComicSearchRefreshQueueSnapshot(
-            entries: const <ComicSearchRefreshQueueEntry>[],
-            cadence: cadence,
-          ),
-        );
+  }) : _queueRepository = queueRepository,
+       _refreshService = refreshService,
+       _refreshOutcomeApplier = refreshOutcomeApplier,
+       _diagnosticRecorder =
+           diagnosticRecorder ?? const NoopSyncDiagnosticRecorder(),
+       _retryPolicy = retryPolicy,
+       _nowProvider = nowProvider ?? DateTime.now,
+       _snapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+         ComicSearchRefreshQueueSnapshot(
+           entries: const <ComicSearchRefreshQueueEntry>[],
+           cadence: cadence,
+         ),
+       );
 
   final ComicSearchRefreshQueueRepository _queueRepository;
   final ComicEpisodeRefreshService _refreshService;
@@ -110,7 +110,9 @@ class ComicSearchRefreshQueueService
   }) async {
     final comicId = request.comicId?.trim();
     if (comicId == null || comicId.isEmpty) {
-      throw ArgumentError('Comic search refresh queue requires request.comicId');
+      throw ArgumentError(
+        'Comic search refresh queue requires request.comicId',
+      );
     }
 
     final result = await _queueRepository.enqueue(
@@ -150,7 +152,9 @@ class ComicSearchRefreshQueueService
     return ComicSearchRefreshEnqueueResult(
       entry: result.entry,
       position: position,
-      estimatedDuration: Duration(milliseconds: cadence.inMilliseconds * position),
+      estimatedDuration: Duration(
+        milliseconds: cadence.inMilliseconds * position,
+      ),
       deduplicated: result.deduplicated,
     );
   }
@@ -232,7 +236,9 @@ class ComicSearchRefreshQueueService
     _wakeTimer?.cancel();
     try {
       while (!_disposed) {
-        final task = await _queueRepository.claimNextPending(now: _nowProvider());
+        final task = await _queueRepository.claimNextPending(
+          now: _nowProvider(),
+        );
         if (task == null) {
           final entries = await _refreshSnapshot();
           _scheduleWakeFor(entries);
@@ -254,9 +260,11 @@ class ComicSearchRefreshQueueService
       // later external trigger.
       if (!_disposed && _snapshot.value.entries.isNotEmpty) {
         if (_hasDuePending(_snapshot.value.entries)) {
-          unawaited(Future<void>.microtask(() {
-            _schedulePump();
-          }));
+          unawaited(
+            Future<void>.microtask(() {
+              _schedulePump();
+            }),
+          );
         } else {
           _scheduleWakeFor(_snapshot.value.entries);
         }
@@ -294,6 +302,7 @@ class ComicSearchRefreshQueueService
             source: outcome.source,
             mutationSource: LibraryMutationSource.comicSearchQueue,
             reason: 'comic_search_refresh_completed',
+            catalogUrl: outcome.catalogUrl,
             // 队列任务在 bootstrap 之外执行，没有 governor；threadCache 仍然
             // 透传过去——可能省掉一次封面 viewthread。
             threadCache: outcome.threadCache,
@@ -318,9 +327,7 @@ class ComicSearchRefreshQueueService
           },
         );
       } else {
-        _logQueue(
-          'done task=${task.id} comicId=${task.comicId} links=0',
-        );
+        _logQueue('done task=${task.id} comicId=${task.comicId} links=0');
         _diagnosticRecorder.record(
           scope: 'comic_search_queue',
           event: 'done',
@@ -333,10 +340,7 @@ class ComicSearchRefreshQueueService
           },
         );
       }
-      await _queueRepository.markCompleted(
-        id: task.id,
-        now: _nowProvider(),
-      );
+      await _queueRepository.markCompleted(id: task.id, now: _nowProvider());
       _preloadedRootDetails.remove(task.id);
     } catch (error) {
       await _handleFailure(task, error);
@@ -436,7 +440,8 @@ class ComicSearchRefreshQueueService
       if (entry.status != ComicSearchRefreshQueueStatus.pending) {
         continue;
       }
-      if (nextAvailableAt == null || entry.availableAt.isBefore(nextAvailableAt)) {
+      if (nextAvailableAt == null ||
+          entry.availableAt.isBefore(nextAvailableAt)) {
         nextAvailableAt = entry.availableAt;
       }
     }

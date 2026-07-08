@@ -59,15 +59,15 @@ class ComicFavoriteAutoRefreshCoordinator {
     required ComicTitleAnalyzer titleAnalyzer,
     SyncDiagnosticRecorder? diagnosticRecorder,
     CatalogUrlUpdater? catalogUrlUpdater,
-  })  : _refreshService = refreshService,
-        _searchQueue = searchQueue,
-        _refreshOutcomeApplier = refreshOutcomeApplier,
-        _shelfRefreshBus = shelfRefreshBus,
-        _catalogMissPolicy = catalogMissPolicy,
-        _titleAnalyzer = titleAnalyzer,
-        _diagnosticRecorder =
-            diagnosticRecorder ?? const NoopSyncDiagnosticRecorder(),
-        _catalogUrlUpdater = catalogUrlUpdater;
+  }) : _refreshService = refreshService,
+       _searchQueue = searchQueue,
+       _refreshOutcomeApplier = refreshOutcomeApplier,
+       _shelfRefreshBus = shelfRefreshBus,
+       _catalogMissPolicy = catalogMissPolicy,
+       _titleAnalyzer = titleAnalyzer,
+       _diagnosticRecorder =
+           diagnosticRecorder ?? const NoopSyncDiagnosticRecorder(),
+       _catalogUrlUpdater = catalogUrlUpdater;
 
   final ComicEpisodeRefreshService _refreshService;
   final ComicSearchRefreshQueueEnqueuer _searchQueue;
@@ -82,6 +82,8 @@ class ComicFavoriteAutoRefreshCoordinator {
     required String comicId,
     required ThreadDetailData detail,
     required String favoriteTitle,
+    String? sourceFid,
+    String? sourceTypeId,
     String? sourceTagName,
     bool forceSearchOnCatalogMiss = false,
     String? catalogUrl,
@@ -93,6 +95,8 @@ class ComicFavoriteAutoRefreshCoordinator {
       sourceTid: detail.tid,
       favoriteTitle: favoriteTitle,
       sourceTitle: detail.subject,
+      sourceFid: sourceFid ?? detail.fid,
+      sourceTypeId: sourceTypeId ?? detail.typeid,
       sourceTagName: sourceTagName,
       forceSearchOnCatalogMiss: forceSearchOnCatalogMiss,
       catalogUrl: catalogUrl,
@@ -106,6 +110,8 @@ class ComicFavoriteAutoRefreshCoordinator {
     required String sourceTid,
     required String favoriteTitle,
     String? sourceTitle,
+    String? sourceFid,
+    String? sourceTypeId,
     String? sourceTagName,
     bool forceSearchOnCatalogMiss = false,
     String? catalogUrl,
@@ -130,6 +136,9 @@ class ComicFavoriteAutoRefreshCoordinator {
       fields: <String, Object?>{
         'comicId': comicId,
         'sourceTid': sourceTid,
+        'sourceFid': sourceFid,
+        'sourceTypeId': sourceTypeId,
+        'sourceTagName': sourceTagName,
         'hasCatalogUrl': catalogUrl != null && catalogUrl.isNotEmpty,
         'forceSearchOnCatalogMiss': forceSearchOnCatalogMiss,
         'bootstrapInitial': executionContext?.isBootstrapInitial == true,
@@ -228,6 +237,8 @@ class ComicFavoriteAutoRefreshCoordinator {
     }
 
     if (!_catalogMissPolicy.shouldQueueSearchOnCatalogMiss(
+      sourceFid: sourceFid,
+      sourceTypeId: sourceTypeId,
       sourceTagName: sourceTagName,
       forceSearchOnCatalogMiss: forceSearchOnCatalogMiss,
     )) {
@@ -237,6 +248,9 @@ class ComicFavoriteAutoRefreshCoordinator {
         fields: <String, Object?>{
           'comicId': comicId,
           'sourceTid': sourceTid,
+          'sourceFid': sourceFid,
+          'sourceTypeId': sourceTypeId,
+          'sourceTagName': sourceTagName,
         },
       );
       _shelfRefreshBus.notify(
@@ -317,7 +331,8 @@ class ComicFavoriteAutoRefreshCoordinator {
     // pass the analyzer clean book name here instead of the clipped
     // searchKeyword to avoid truncating a title mid-word before the search.
     // Source title keeps precedence, mirroring the previous behavior.
-    final searchTitle = _nonEmptyOrNull(sourceAnalysis?.cleanBookName) ??
+    final searchTitle =
+        _nonEmptyOrNull(sourceAnalysis?.cleanBookName) ??
         _nonEmptyOrNull(favoriteAnalysis?.cleanBookName) ??
         rawFavoriteTitle ??
         rawSourceTitle ??
@@ -326,7 +341,8 @@ class ComicFavoriteAutoRefreshCoordinator {
     // Queue title is user-facing progress text. It must no longer leak the raw
     // forum thread title, so it uses the cleaned book name (favorite first,
     // matching the historical preference for the favorite list title).
-    final queueTitle = _nonEmptyOrNull(favoriteAnalysis?.cleanBookName) ??
+    final queueTitle =
+        _nonEmptyOrNull(favoriteAnalysis?.cleanBookName) ??
         _nonEmptyOrNull(sourceAnalysis?.cleanBookName) ??
         searchTitle;
 

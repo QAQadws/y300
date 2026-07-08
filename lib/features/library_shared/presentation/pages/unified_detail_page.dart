@@ -7,6 +7,7 @@ import 'package:y300/features/library_shared/domain/contracts/detail_module_adap
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/presentation/controllers/unified_detail_controller.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_chapter_tile.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_filter_sheet.dart';
@@ -31,6 +32,7 @@ class UnifiedDetailPage extends StatefulWidget {
     required this.onOpenThread,
     this.imageHeaderBuilder,
     this.pickCoverImage,
+    this.shelfRefreshBus,
   });
 
   final DetailModuleAdapter adapter;
@@ -46,6 +48,7 @@ class UnifiedDetailPage extends StatefulWidget {
   /// 由具体模块外壳（如漫画详情页）用各自的图片选择器注入，使本共享页不直接
   /// 依赖 image_picker。仅当 adapter 实现 [DetailCoverEditor] 时才会被调用。
   final Future<String?> Function()? pickCoverImage;
+  final LibraryShelfRefreshBus? shelfRefreshBus;
 
   @override
   State<UnifiedDetailPage> createState() => _UnifiedDetailPageState();
@@ -61,6 +64,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
 
   bool _introExpanded = false;
   bool _showCollapsedTitle = false;
+  int _lastHandledRefreshSignalSequence = 0;
   final Set<String> _downloadingEpisodeIds = <String>{};
 
   @override
@@ -71,6 +75,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       workId: widget.workId,
     );
     _scrollController = ScrollController()..addListener(_handleScroll);
+    widget.shelfRefreshBus?.signal.addListener(_handleShelfRefreshSignal);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _controller.initialize();
@@ -83,10 +88,22 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
 
   @override
   void dispose() {
+    widget.shelfRefreshBus?.signal.removeListener(_handleShelfRefreshSignal);
     _scrollController
       ..removeListener(_handleScroll)
       ..dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant UnifiedDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.shelfRefreshBus, widget.shelfRefreshBus)) {
+      oldWidget.shelfRefreshBus?.signal.removeListener(
+        _handleShelfRefreshSignal,
+      );
+      widget.shelfRefreshBus?.signal.addListener(_handleShelfRefreshSignal);
+    }
   }
 
   void _handleScroll() {
@@ -96,6 +113,29 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     if (shouldShow != _showCollapsedTitle && mounted) {
       setState(() => _showCollapsedTitle = shouldShow);
     }
+  }
+
+  void _handleShelfRefreshSignal() {
+    final signal = widget.shelfRefreshBus?.signal.value;
+    if (signal == null ||
+        signal.sequence <= _lastHandledRefreshSignalSequence ||
+        !signal.modules.contains(widget.adapter.moduleKey)) {
+      return;
+    }
+    final workId = signal.workId?.trim();
+    if (workId == null || workId.isEmpty || workId != widget.workId) {
+      return;
+    }
+    _lastHandledRefreshSignalSequence = signal.sequence;
+    _reloadAfterExternalMutation();
+  }
+
+  Future<void> _reloadAfterExternalMutation() async {
+    await _controller.reload();
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
   }
 
   @override
@@ -835,10 +875,9 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     return custom != null && custom.isNotEmpty;
   }
 
-  DetailCoverEditor? get _coverEditor =>
-      widget.adapter is DetailCoverEditor
-          ? widget.adapter as DetailCoverEditor
-          : null;
+  DetailCoverEditor? get _coverEditor => widget.adapter is DetailCoverEditor
+      ? widget.adapter as DetailCoverEditor
+      : null;
 
   /// 自定义封面：选图 → 焦点选区 → 落盘保存 → 刷新。
   Future<void> _handleSetCustomCover() async {

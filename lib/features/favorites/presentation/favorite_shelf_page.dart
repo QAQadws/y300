@@ -101,7 +101,8 @@ class _FavoriteShelfPageState extends ConsumerState<FavoriteShelfPage> {
       isActive: widget.isActive,
       taskProgressHub: taskProgressHub,
       selectionHost: ref.watch(shelfSelectionHostControllerProvider),
-      coverPrecacheService: ref.watch(forumImagePrecacheServiceProvider),
+      coverPrecacheServiceResolver: () =>
+          ref.read(forumImagePrecacheServiceProvider),
       onOpenWork: (context, workId) async {
         final target = await repository.getRouteTargetByShelfWorkId(workId);
         if (!context.mounted || target == null) {

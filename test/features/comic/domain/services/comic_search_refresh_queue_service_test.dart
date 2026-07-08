@@ -49,10 +49,7 @@ void main() {
       expect(applier.requests, hasLength(1));
       expect(applier.requests.single.comicId, 'comic:1');
       expect(applier.requests.single.sourceTid, '100');
-      expect(
-        applier.requests.single.reason,
-        'comic_search_refresh_completed',
-      );
+      expect(applier.requests.single.reason, 'comic_search_refresh_completed');
       expect(applier.requests.single.source, ComicEpisodeRefreshSource.search);
       expect(
         applier.requests.single.mutationSource,
@@ -60,6 +57,48 @@ void main() {
       );
       expect(applier.requests.single.links, hasLength(1));
       expect(await queueRepository.loadActiveEntries(), isEmpty);
+
+      service.dispose();
+      final db = await dbFuture;
+      await db.close();
+      await deleteDatabase(dbName);
+    });
+
+    test('worker forwards discovered catalogUrl to refresh applier', () async {
+      const dbName = 'comic_search_refresh_queue_catalog_url_test.db';
+      await deleteDatabase(dbName);
+      final dbFuture = ComicLocalDb.open(databaseName: dbName);
+      final queueRepository = LocalComicSearchRefreshQueueRepository(dbFuture);
+      final refreshService = _FakeRefreshService(
+        outcome: const ComicEpisodeRefreshOutcome(
+          source: ComicEpisodeRefreshSource.search,
+          usedSearch: true,
+          links: <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: '第1话'),
+          ],
+          catalogUrl: 'https://bbs.yamibo.com/misc.php?mod=tag&id=18235',
+        ),
+      );
+      final applier = _RecordingRefreshOutcomeApplier();
+      final service = ComicSearchRefreshQueueService(
+        queueRepository: queueRepository,
+        refreshService: refreshService,
+        refreshOutcomeApplier: applier,
+      );
+
+      await service.start();
+      await service.enqueue(
+        request: _request(),
+        title: '测试漫画',
+        origin: ComicSearchRefreshOrigin.favoriteSync,
+      );
+      await service.drainForTest();
+
+      expect(applier.requests, hasLength(1));
+      expect(
+        applier.requests.single.catalogUrl,
+        'https://bbs.yamibo.com/misc.php?mod=tag&id=18235',
+      );
 
       service.dispose();
       final db = await dbFuture;
@@ -102,105 +141,113 @@ void main() {
       await deleteDatabase(dbName);
     });
 
-    test('worker forwards preloadedRootDetail captured at enqueue time',
-        () async {
-      const dbName = 'comic_search_refresh_queue_preloaded_test.db';
-      await deleteDatabase(dbName);
-      final dbFuture = ComicLocalDb.open(databaseName: dbName);
-      final queueRepository = LocalComicSearchRefreshQueueRepository(dbFuture);
-      final refreshService = _FakeRefreshService(
-        outcome: const ComicEpisodeRefreshOutcome(
-          source: ComicEpisodeRefreshSource.empty,
-          links: <ComicEpisodeLink>[],
-        ),
-      );
-      final service = ComicSearchRefreshQueueService(
-        queueRepository: queueRepository,
-        refreshService: refreshService,
-        refreshOutcomeApplier: _RecordingRefreshOutcomeApplier(),
-      );
+    test(
+      'worker forwards preloadedRootDetail captured at enqueue time',
+      () async {
+        const dbName = 'comic_search_refresh_queue_preloaded_test.db';
+        await deleteDatabase(dbName);
+        final dbFuture = ComicLocalDb.open(databaseName: dbName);
+        final queueRepository = LocalComicSearchRefreshQueueRepository(
+          dbFuture,
+        );
+        final refreshService = _FakeRefreshService(
+          outcome: const ComicEpisodeRefreshOutcome(
+            source: ComicEpisodeRefreshSource.empty,
+            links: <ComicEpisodeLink>[],
+          ),
+        );
+        final service = ComicSearchRefreshQueueService(
+          queueRepository: queueRepository,
+          refreshService: refreshService,
+          refreshOutcomeApplier: _RecordingRefreshOutcomeApplier(),
+        );
 
-      final detail = ThreadDetailData(
-        tid: '100',
-        fid: '5',
-        subject: '预加载主题',
-        author: 'tester',
-        replies: 0,
-        views: 0,
-        currentPage: 1,
-        perPage: 20,
-        posts: const <ThreadPost>[],
-      );
+        final detail = ThreadDetailData(
+          tid: '100',
+          fid: '5',
+          subject: '预加载主题',
+          author: 'tester',
+          replies: 0,
+          views: 0,
+          currentPage: 1,
+          perPage: 20,
+          posts: const <ThreadPost>[],
+        );
 
-      await service.start();
-      await service.enqueue(
-        request: _request(),
-        title: '测试漫画',
-        origin: ComicSearchRefreshOrigin.favoriteSync,
-        preloadedRootDetail: detail,
-      );
-      await service.drainForTest();
+        await service.start();
+        await service.enqueue(
+          request: _request(),
+          title: '测试漫画',
+          origin: ComicSearchRefreshOrigin.favoriteSync,
+          preloadedRootDetail: detail,
+        );
+        await service.drainForTest();
 
-      expect(refreshService.receivedPreloadedRootDetails, hasLength(1));
-      expect(refreshService.receivedPreloadedRootDetails.single?.tid, '100');
-      expect(
-        refreshService.receivedPreloadedRootDetails.single?.subject,
-        '预加载主题',
-      );
+        expect(refreshService.receivedPreloadedRootDetails, hasLength(1));
+        expect(refreshService.receivedPreloadedRootDetails.single?.tid, '100');
+        expect(
+          refreshService.receivedPreloadedRootDetails.single?.subject,
+          '预加载主题',
+        );
 
-      service.dispose();
-      final db = await dbFuture;
-      await db.close();
-      await deleteDatabase(dbName);
-    });
+        service.dispose();
+        final db = await dbFuture;
+        await db.close();
+        await deleteDatabase(dbName);
+      },
+    );
 
-    test('preloadedRootDetail is dropped when tid does not match request',
-        () async {
-      const dbName = 'comic_search_refresh_queue_preloaded_mismatch_test.db';
-      await deleteDatabase(dbName);
-      final dbFuture = ComicLocalDb.open(databaseName: dbName);
-      final queueRepository = LocalComicSearchRefreshQueueRepository(dbFuture);
-      final refreshService = _FakeRefreshService(
-        outcome: const ComicEpisodeRefreshOutcome(
-          source: ComicEpisodeRefreshSource.empty,
-          links: <ComicEpisodeLink>[],
-        ),
-      );
-      final service = ComicSearchRefreshQueueService(
-        queueRepository: queueRepository,
-        refreshService: refreshService,
-        refreshOutcomeApplier: _RecordingRefreshOutcomeApplier(),
-      );
+    test(
+      'preloadedRootDetail is dropped when tid does not match request',
+      () async {
+        const dbName = 'comic_search_refresh_queue_preloaded_mismatch_test.db';
+        await deleteDatabase(dbName);
+        final dbFuture = ComicLocalDb.open(databaseName: dbName);
+        final queueRepository = LocalComicSearchRefreshQueueRepository(
+          dbFuture,
+        );
+        final refreshService = _FakeRefreshService(
+          outcome: const ComicEpisodeRefreshOutcome(
+            source: ComicEpisodeRefreshSource.empty,
+            links: <ComicEpisodeLink>[],
+          ),
+        );
+        final service = ComicSearchRefreshQueueService(
+          queueRepository: queueRepository,
+          refreshService: refreshService,
+          refreshOutcomeApplier: _RecordingRefreshOutcomeApplier(),
+        );
 
-      final detail = ThreadDetailData(
-        tid: '999',
-        fid: '5',
-        subject: '不匹配主题',
-        author: 'tester',
-        replies: 0,
-        views: 0,
-        currentPage: 1,
-        perPage: 20,
-        posts: const <ThreadPost>[],
-      );
+        final detail = ThreadDetailData(
+          tid: '999',
+          fid: '5',
+          subject: '不匹配主题',
+          author: 'tester',
+          replies: 0,
+          views: 0,
+          currentPage: 1,
+          perPage: 20,
+          posts: const <ThreadPost>[],
+        );
 
-      await service.start();
-      await service.enqueue(
-        request: _request(),
-        title: '测试漫画',
-        origin: ComicSearchRefreshOrigin.favoriteSync,
-        preloadedRootDetail: detail,
-      );
-      await service.drainForTest();
+        await service.start();
+        await service.enqueue(
+          request: _request(),
+          title: '测试漫画',
+          origin: ComicSearchRefreshOrigin.favoriteSync,
+          preloadedRootDetail: detail,
+        );
+        await service.drainForTest();
 
-      expect(refreshService.receivedPreloadedRootDetails, hasLength(1));
-      expect(refreshService.receivedPreloadedRootDetails.single, isNull);
+        expect(refreshService.receivedPreloadedRootDetails, hasLength(1));
+        expect(refreshService.receivedPreloadedRootDetails.single, isNull);
 
-      service.dispose();
-      final db = await dbFuture;
-      await db.close();
-      await deleteDatabase(dbName);
-    });
+        service.dispose();
+        final db = await dbFuture;
+        await db.close();
+        await deleteDatabase(dbName);
+      },
+    );
 
     test('worker stores last_error and delays retry after failure', () async {
       const dbName = 'comic_search_refresh_queue_worker_retry_test.db';
@@ -253,7 +300,7 @@ ComicEpisodeRefreshRequest _request() {
 
 class _FakeRefreshService implements ComicEpisodeRefreshService {
   _FakeRefreshService({required ComicEpisodeRefreshOutcome outcome})
-      : _outcome = outcome;
+    : _outcome = outcome;
 
   final ComicEpisodeRefreshOutcome _outcome;
   final List<ThreadDetailData?> receivedPreloadedRootDetails =
@@ -265,8 +312,7 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
     FavoriteSyncExecutionContext? executionContext,
     ThreadDetailData? preloadedRootDetail,
     ComicThreadDetailCache? threadCache,
-  }
-  ) async {
+  }) async {
     return const ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.empty,
       links: <ComicEpisodeLink>[],
@@ -296,8 +342,7 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(
     String catalogUrl, {
     FavoriteSyncExecutionContext? executionContext,
-  }
-  ) async {
+  }) async {
     return const ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.empty,
       links: <ComicEpisodeLink>[],
@@ -310,8 +355,7 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
     FavoriteSyncExecutionContext? executionContext,
     ThreadDetailData? preloadedRootDetail,
     ComicThreadDetailCache? threadCache,
-  }
-  ) async {
+  }) async {
     receivedPreloadedRootDetails.add(preloadedRootDetail);
     return _outcome;
   }
@@ -319,12 +363,12 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
 
 class _ThrowingRefreshService extends _FakeRefreshService {
   _ThrowingRefreshService()
-      : super(
-          outcome: const ComicEpisodeRefreshOutcome(
-            source: ComicEpisodeRefreshSource.empty,
-            links: <ComicEpisodeLink>[],
-          ),
-        );
+    : super(
+        outcome: const ComicEpisodeRefreshOutcome(
+          source: ComicEpisodeRefreshSource.empty,
+          links: <ComicEpisodeLink>[],
+        ),
+      );
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchCatalogThenFallback(
@@ -339,8 +383,7 @@ class _ThrowingRefreshService extends _FakeRefreshService {
     FavoriteSyncExecutionContext? executionContext,
     ThreadDetailData? preloadedRootDetail,
     ComicThreadDetailCache? threadCache,
-  }
-  ) async {
+  }) async {
     throw StateError('boom');
   }
 }

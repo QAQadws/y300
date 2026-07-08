@@ -475,7 +475,7 @@ void main() {
         final controller = UnifiedShelfController(
           adapter: adapter,
           coverPrefetchConcurrency: 1,
-          coverPrecacheService: precache,
+          coverPrecacheServiceResolver: () => precache,
         );
         final patched = Completer<void>();
         controller.stateListenable.addListener(() {

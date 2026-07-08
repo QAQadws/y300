@@ -3,11 +3,13 @@ import 'package:y300/features/comic/domain/services/catalog_thread_html_parser.d
 
 void main() {
   group('CatalogThreadHtmlParser', () {
-    test('extracts thread tid and subject from table rows and deduplicates', () {
-      final parser = CatalogThreadHtmlParser();
-      final result = parser.parse(
-        pageUrl: 'https://bbs.yamibo.com/misc.php?mod=tag&id=21137',
-        html: '''
+    test(
+      'extracts thread tid and subject from table rows and deduplicates',
+      () {
+        final parser = CatalogThreadHtmlParser();
+        final result = parser.parse(
+          pageUrl: 'https://bbs.yamibo.com/misc.php?mod=tag&id=21137',
+          html: '''
 <div class="bm_c">
 <table cellspacing="0" cellpadding="0"><tr>
 <td class="icn"><a href="thread-558227-1-1.html"><i></i></a></td>
@@ -21,18 +23,20 @@ void main() {
 </tr></table>
 </div>
 ''',
-      );
+        );
 
-      expect(result.entries.length, 2);
-      expect(result.entries[0].tid, '558227');
-      expect(result.entries[0].subject.contains('第1.1话'), isTrue);
-      expect(result.entries[1].tid, '558976');
-    });
+        expect(result.entries.length, 2);
+        expect(result.entries[0].tid, '558227');
+        expect(result.entries[0].subject.contains('第1.1话'), isTrue);
+        expect(result.entries[1].tid, '558976');
+      },
+    );
 
     test('parses next page url from nxt class anchor', () {
       final parser = CatalogThreadHtmlParser();
       final result = parser.parse(
-        pageUrl: 'https://bbs.yamibo.com/misc.php?mod=tag&id=20452&type=thread&page=1',
+        pageUrl:
+            'https://bbs.yamibo.com/misc.php?mod=tag&id=20452&type=thread&page=1',
         html: '''
 <html><body>
 <a class="nxt" href="misc.php?mod=tag&id=20452&type=thread&page=2">下一页</a>
@@ -46,10 +50,30 @@ void main() {
       );
     });
 
+    test('falls back to page-wide anchors when tag page has no table rows', () {
+      final parser = CatalogThreadHtmlParser();
+      final result = parser.parse(
+        pageUrl:
+            'https://bbs.yamibo.com/misc.php?mod=tag&id=18235&type=thread&page=1',
+        html: '''
+<html><body>
+<ul class="thread-list">
+<li><a href="thread-501-1-1.html">好事多磨 第1话</a></li>
+<li><a href="forum.php?mod=viewthread&amp;tid=502">好事多磨 第2话</a></li>
+</ul>
+</body></html>
+''',
+      );
+
+      expect(result.entries.map((entry) => entry.tid), <String>['501', '502']);
+      expect(result.entries[1].subject, '好事多磨 第2话');
+    });
+
     test('extracts current and total pages from pagination block', () {
       final parser = CatalogThreadHtmlParser();
       final result = parser.parse(
-        pageUrl: 'https://bbs.yamibo.com/misc.php?mod=tag&id=21146&type=thread&page=1',
+        pageUrl:
+            'https://bbs.yamibo.com/misc.php?mod=tag&id=21146&type=thread&page=1',
         html: '''
 <div class="pgs mtm cl"><div class="pg">
 <strong>1</strong>

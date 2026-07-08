@@ -14,15 +14,13 @@ import 'package:y300/features/comic/presentation/comic_reader_page.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
 /// 漫画详情页（Phase 4）：统一详情页薄壳接入。
 class ComicDetailPage extends ConsumerWidget {
-  const ComicDetailPage({
-    super.key,
-    required this.comicId,
-  });
+  const ComicDetailPage({super.key, required this.comicId});
 
   final String comicId;
 
@@ -33,7 +31,9 @@ class ComicDetailPage extends ConsumerWidget {
       ref.watch(comicRepositoryProvider),
       refreshService: ref.watch(comicEpisodeRefreshServiceProvider),
       searchQueue: searchQueue,
-      firstEpisodeCoverService: ref.watch(comicFirstEpisodeCoverServiceProvider),
+      firstEpisodeCoverService: ref.watch(
+        comicFirstEpisodeCoverServiceProvider,
+      ),
       refreshOutcomeApplier: ref.watch(comicRefreshOutcomeApplierProvider),
       downloadService: ref.watch(comicDownloadServiceProvider),
       imageCacheService: ref.watch(imageCacheServiceProvider),
@@ -48,6 +48,7 @@ class ComicDetailPage extends ConsumerWidget {
     return UnifiedDetailPage(
       adapter: adapter,
       workId: comicId,
+      shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
       imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
       pickCoverImage: () async {
         // 用通用图片选择器选一张本地图作为自定义封面来源（仅取第一张）。

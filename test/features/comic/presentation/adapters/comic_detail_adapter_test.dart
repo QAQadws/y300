@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
@@ -28,31 +28,69 @@ import 'package:y300/features/library_shared/domain/models/library_state_models.
 import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
 
 void main() {
-  test('refreshWork uses catalog fast path when catalogUrl is persisted', () async {
-    final repository = _FakeComicRepository(catalogUrl: 'https://example.com/catalog');
-    final refreshService = _FakeComicEpisodeRefreshService();
-    final queue = _RecordingSearchQueue();
-    final applier = _RecordingRefreshOutcomeApplier();
-    final adapter = ComicDetailAdapter(
-      repository,
-      refreshService: refreshService,
-      searchQueue: queue,
-      refreshOutcomeApplier: applier,
-      stateRepository: _FakeLibraryStateRepository(),
-    );
+  test(
+    'refreshWork uses catalog fast path when catalogUrl is persisted',
+    () async {
+      final repository = _FakeComicRepository(
+        catalogUrl: 'https://example.com/catalog',
+      );
+      final refreshService = _FakeComicEpisodeRefreshService();
+      final queue = _RecordingSearchQueue();
+      final applier = _RecordingRefreshOutcomeApplier();
+      final adapter = ComicDetailAdapter(
+        repository,
+        refreshService: refreshService,
+        searchQueue: queue,
+        refreshOutcomeApplier: applier,
+        stateRepository: _FakeLibraryStateRepository(),
+      );
 
-    final result = await adapter.refreshWork(workId: 'comic:1');
+      final result = await adapter.refreshWork(workId: 'comic:1');
 
-    expect(result.status, DetailRefreshStatus.immediate);
-    expect(applier.requests, hasLength(1));
-    expect(applier.requests.single.comicId, 'comic:1');
-    expect(applier.requests.single.source, ComicEpisodeRefreshSource.catalog);
-    expect(
-      applier.requests.single.reason,
-      'comic_detail_catalog_direct_refresh',
-    );
-    expect(queue.enqueuedRequests, isEmpty);
-  });
+      expect(result.status, DetailRefreshStatus.immediate);
+      expect(applier.requests, hasLength(1));
+      expect(applier.requests.single.comicId, 'comic:1');
+      expect(applier.requests.single.source, ComicEpisodeRefreshSource.catalog);
+      expect(
+        applier.requests.single.reason,
+        'comic_detail_catalog_direct_refresh',
+      );
+      expect(queue.enqueuedRequests, isEmpty);
+    },
+  );
+
+  test(
+    'refreshWork uses catalog-only before current thread and search queue',
+    () async {
+      final repository = _FakeComicRepository();
+      final refreshService = _FakeComicEpisodeRefreshService();
+      final queue = _RecordingSearchQueue();
+      final applier = _RecordingRefreshOutcomeApplier();
+      final discovery = _FakeDiscoveryService(
+        threadResult: const ParsedThreadResult(
+          episodeLinks: <ComicEpisodeLink>[],
+          recursiveTidCandidates: <String>[],
+          catalogUrl: null,
+        ),
+      );
+      final adapter = ComicDetailAdapter(
+        repository,
+        refreshService: refreshService,
+        searchQueue: queue,
+        refreshOutcomeApplier: applier,
+        discoveryService: discovery,
+        stateRepository: _FakeLibraryStateRepository(),
+      );
+
+      final result = await adapter.refreshWork(workId: 'comic:1');
+
+      expect(result.status, DetailRefreshStatus.immediate);
+      expect(refreshService.catalogOnlyCalls, 1);
+      expect(discovery.fetchAndParseThreadCalls, 0);
+      expect(queue.enqueuedRequests, isEmpty);
+      expect(applier.requests.single.reason, 'comic_detail_catalog_refresh');
+    },
+  );
 
   test('refreshWork uses incremental discovery when no catalogUrl', () async {
     final repository = _FakeComicRepository();
@@ -94,78 +132,89 @@ void main() {
 
     expect(result.status, DetailRefreshStatus.immediate);
     expect(applier.requests, hasLength(1));
-    expect(
-      applier.requests.single.reason,
-      'comic_detail_incremental_refresh',
-    );
+    expect(applier.requests.single.reason, 'comic_detail_incremental_refresh');
     expect(applier.requests.single.links, hasLength(1));
     expect(discovery.fetchAndParseThreadCalls, 1);
+    expect(queue.enqueuedRequests, isEmpty);
   });
 
-  test('refreshWork enqueues and returns queued when no incremental links', () async {
-    final repository = _FakeComicRepository();
-    final refreshService = _FakeComicEpisodeRefreshService(
-      catalogOutcome: const ComicEpisodeRefreshOutcome(
-        source: ComicEpisodeRefreshSource.empty,
-        links: <ComicEpisodeLink>[],
-      ),
-    );
-    final queue = _RecordingSearchQueue();
-    final applier = _RecordingRefreshOutcomeApplier();
-    final adapter = ComicDetailAdapter(
-      repository,
-      refreshService: refreshService,
-      searchQueue: queue,
-      refreshOutcomeApplier: applier,
-      stateRepository: _FakeLibraryStateRepository(),
-    );
+  test(
+    'refreshWork enqueues and returns queued when no incremental links',
+    () async {
+      final repository = _FakeComicRepository();
+      final refreshService = _FakeComicEpisodeRefreshService(
+        catalogOutcome: const ComicEpisodeRefreshOutcome(
+          source: ComicEpisodeRefreshSource.empty,
+          links: <ComicEpisodeLink>[],
+        ),
+      );
+      final queue = _RecordingSearchQueue();
+      final applier = _RecordingRefreshOutcomeApplier();
+      final adapter = ComicDetailAdapter(
+        repository,
+        refreshService: refreshService,
+        searchQueue: queue,
+        refreshOutcomeApplier: applier,
+        stateRepository: _FakeLibraryStateRepository(),
+      );
 
-    final result = await adapter.refreshWork(workId: 'comic:1');
+      final result = await adapter.refreshWork(workId: 'comic:1');
 
-    // No discovery service → no incremental links → returns queued
-    expect(result.status, DetailRefreshStatus.queued);
-    expect(queue.enqueuedOrigins, <ComicSearchRefreshOrigin>[
-      ComicSearchRefreshOrigin.detailManual,
-    ]);
-    expect(queue.enqueuedRequests.single.comicId, 'comic:1');
-    expect(queue.enqueuedRequests.single.sourceTid, '100');
-    expect(queue.enqueuedRequests.single.customSearchTitle, 'Search Test Comic');
-    expect(queue.enqueuedTitles, <String>['Search Test Comic']);
-  });
+      // No discovery service → no incremental links → returns queued
+      expect(result.status, DetailRefreshStatus.queued);
+      expect(queue.enqueuedOrigins, <ComicSearchRefreshOrigin>[
+        ComicSearchRefreshOrigin.detailManual,
+      ]);
+      expect(queue.enqueuedRequests.single.comicId, 'comic:1');
+      expect(queue.enqueuedRequests.single.sourceTid, '100');
+      expect(
+        queue.enqueuedRequests.single.customSearchTitle,
+        'Search Test Comic',
+      );
+      expect(queue.enqueuedTitles, <String>['Search Test Comic']);
+    },
+  );
 
-  test('refreshWork enqueues cleaned display title when no custom search title is set', () async {
-    final repository = _FakeComicRepository(title: '[Scan] Noisy Title Vol.2');
-    final refreshService = _FakeComicEpisodeRefreshService(
-      catalogOutcome: const ComicEpisodeRefreshOutcome(
-        source: ComicEpisodeRefreshSource.empty,
-        links: <ComicEpisodeLink>[],
-      ),
-    );
-    final queue = _RecordingSearchQueue();
-    final adapter = ComicDetailAdapter(
-      repository,
-      refreshService: refreshService,
-      searchQueue: queue,
-      refreshOutcomeApplier: _RecordingRefreshOutcomeApplier(),
-      featureFlags: ComicReaderFeatureFlags.defaults.copyWith(
-        readerCustomMetadataEnabled: false,
-      ),
-      stateRepository: _FakeLibraryStateRepository(),
-    );
+  test(
+    'refreshWork enqueues cleaned display title when no custom search title is set',
+    () async {
+      final repository = _FakeComicRepository(
+        title: '[Scan] Noisy Title Vol.2',
+      );
+      final refreshService = _FakeComicEpisodeRefreshService(
+        catalogOutcome: const ComicEpisodeRefreshOutcome(
+          source: ComicEpisodeRefreshSource.empty,
+          links: <ComicEpisodeLink>[],
+        ),
+      );
+      final queue = _RecordingSearchQueue();
+      final adapter = ComicDetailAdapter(
+        repository,
+        refreshService: refreshService,
+        searchQueue: queue,
+        refreshOutcomeApplier: _RecordingRefreshOutcomeApplier(),
+        featureFlags: ComicReaderFeatureFlags.defaults.copyWith(
+          readerCustomMetadataEnabled: false,
+        ),
+        stateRepository: _FakeLibraryStateRepository(),
+      );
 
-    final result = await adapter.refreshWork(workId: 'comic:1');
+      final result = await adapter.refreshWork(workId: 'comic:1');
 
-    expect(result.status, DetailRefreshStatus.queued);
-    // Custom search title is suppressed, so the queue title is the analyzer's
-    // clean book name rather than the raw "[Scan] Noisy Title Vol.2" thread.
-    expect(queue.enqueuedTitles, <String>['Noisy Title']);
-  });
+      expect(result.status, DetailRefreshStatus.queued);
+      // Custom search title is suppressed, so the queue title is the analyzer's
+      // clean book name rather than the raw "[Scan] Noisy Title Vol.2" thread.
+      expect(queue.enqueuedTitles, <String>['Noisy Title']);
+    },
+  );
 
   test('custom metadata feature flag can fall back to source fields', () async {
     final repository = _FakeComicRepositoryWithCoverWriter(
       customCoverImageUrl: 'https://img.test/custom-cover.jpg',
     );
-    final cacheService = _FakeImageCacheService(localPath: '/cache/custom-cover.jpg');
+    final cacheService = _FakeImageCacheService(
+      localPath: '/cache/custom-cover.jpg',
+    );
     final refreshService = _FakeComicEpisodeRefreshService();
     final adapter = ComicDetailAdapter(
       repository,
@@ -196,17 +245,20 @@ void main() {
     expect(refreshService.lastRequest?.customSearchTitle, isNull);
   });
 
-  test('loadHeader falls back to first image of smallest tid episode', () async {
-    final repository = _FakeComicRepository();
-    final adapter = ComicDetailAdapter(
-      repository,
-      stateRepository: _FakeLibraryStateRepository(),
-    );
+  test(
+    'loadHeader falls back to first image of smallest tid episode',
+    () async {
+      final repository = _FakeComicRepository();
+      final adapter = ComicDetailAdapter(
+        repository,
+        stateRepository: _FakeLibraryStateRepository(),
+      );
 
-    final header = await adapter.loadHeader(workId: 'comic:1');
+      final header = await adapter.loadHeader(workId: 'comic:1');
 
-    expect(header.coverImageUrl, 'https://img.test/90-1.jpg');
-  });
+      expect(header.coverImageUrl, 'https://img.test/90-1.jpg');
+    },
+  );
 
   test('loadHeader caches first episode cover and writes local path', () async {
     final repository = _FakeComicRepositoryWithCoverWriter();
@@ -229,7 +281,9 @@ void main() {
     final repository = _FakeComicRepositoryWithCoverWriter(
       customCoverImageUrl: 'https://img.test/custom-cover.jpg',
     );
-    final cacheService = _FakeImageCacheService(localPath: '/cache/custom-cover.jpg');
+    final cacheService = _FakeImageCacheService(
+      localPath: '/cache/custom-cover.jpg',
+    );
     final adapter = ComicDetailAdapter(
       repository,
       imageCacheService: cacheService,
@@ -302,45 +356,51 @@ void main() {
     expect(target?.episodeId, 'comic:1:120');
   });
 
-  test('getReaderRouteTarget starts from first unread chapter without progress', () async {
-    final repository = _FakeComicRepository();
-    final adapter = ComicDetailAdapter(
-      repository,
-      stateRepository: _FakeLibraryStateRepository(
-        episodeStates: <String, LibraryEpisodeState>{
-          'comic:1:120': LibraryEpisodeState(
-            moduleKey: LibraryModuleKey.comic,
-            episodeId: 'comic:1:120',
-            workId: 'comic:1',
-            isRead: true,
-          ),
-        },
-      ),
-    );
+  test(
+    'getReaderRouteTarget starts from first unread chapter without progress',
+    () async {
+      final repository = _FakeComicRepository();
+      final adapter = ComicDetailAdapter(
+        repository,
+        stateRepository: _FakeLibraryStateRepository(
+          episodeStates: <String, LibraryEpisodeState>{
+            'comic:1:120': LibraryEpisodeState(
+              moduleKey: LibraryModuleKey.comic,
+              episodeId: 'comic:1:120',
+              workId: 'comic:1',
+              isRead: true,
+            ),
+          },
+        ),
+      );
 
-    final target = await adapter.getReaderRouteTarget(
-      workId: 'comic:1',
-      preferContinue: true,
-    );
+      final target = await adapter.getReaderRouteTarget(
+        workId: 'comic:1',
+        preferContinue: true,
+      );
 
-    expect(target?.episodeId, 'comic:1:90');
-  });
+      expect(target?.episodeId, 'comic:1:90');
+    },
+  );
 
-  test('clearAllReadState delegates to ReadingStateBatchWriter when injected', () async {
-    final writer = _RecordingReadingStateBatchWriter();
-    final adapter = ComicDetailAdapter(
-      _FakeComicRepository(),
-      readingStateBatchWriter: writer,
-      stateRepository: _FakeLibraryStateRepository(),
-    );
+  test(
+    'clearAllReadState delegates to ReadingStateBatchWriter when injected',
+    () async {
+      final writer = _RecordingReadingStateBatchWriter();
+      final adapter = ComicDetailAdapter(
+        _FakeComicRepository(),
+        readingStateBatchWriter: writer,
+        stateRepository: _FakeLibraryStateRepository(),
+      );
 
-    await adapter.clearAllReadState(workId: 'comic:1');
+      await adapter.clearAllReadState(workId: 'comic:1');
 
-    expect(writer.calls, hasLength(1));
-    expect(writer.calls.single.module, LibraryModuleKey.comic);
-    expect(writer.calls.single.workIds, <String>{'comic:1'});
-    expect(writer.calls.single.isRead, isFalse);
-  });
+      expect(writer.calls, hasLength(1));
+      expect(writer.calls.single.module, LibraryModuleKey.comic);
+      expect(writer.calls.single.workIds, <String>{'comic:1'});
+      expect(writer.calls.single.isRead, isFalse);
+    },
+  );
 
   test('downloadAll delegates to BulkDownloadUseCase when injected', () async {
     final bulkDownloadUseCase = _RecordingBulkDownloadUseCase();
@@ -378,93 +438,105 @@ void main() {
     expect(stateRepository.downloadedEpisodeIds, <String>['comic:1:90']);
   });
 
-  test('loadChapters maps current reading progress to chapter progress info', () async {
-    final repository = _FakeComicRepository(
-      progress: ComicReadingProgress(
-        comicId: 'comic:1',
-        episodeId: 'comic:1:90',
-        imageIndex: 2,
-        scrollOffset: 120,
-        updatedAt: DateTime(2026, 5, 12),
-      ),
-      imageCountByEpisodeId: const <String, int>{'comic:1:90': 5},
-    );
-    final adapter = ComicDetailAdapter(
-      repository,
-      stateRepository: _FakeLibraryStateRepository(),
-    );
+  test(
+    'loadChapters maps current reading progress to chapter progress info',
+    () async {
+      final repository = _FakeComicRepository(
+        progress: ComicReadingProgress(
+          comicId: 'comic:1',
+          episodeId: 'comic:1:90',
+          imageIndex: 2,
+          scrollOffset: 120,
+          updatedAt: DateTime(2026, 5, 12),
+        ),
+        imageCountByEpisodeId: const <String, int>{'comic:1:90': 5},
+      );
+      final adapter = ComicDetailAdapter(
+        repository,
+        stateRepository: _FakeLibraryStateRepository(),
+      );
 
-    final chapters = await adapter.loadChapters(
-      workId: 'comic:1',
-      filters: const LibraryFilterSet(),
-      sortOption: LibraryChapterSortOption.defaults,
-    );
-    final current = chapters.singleWhere((chapter) => chapter.episodeId == 'comic:1:90');
+      final chapters = await adapter.loadChapters(
+        workId: 'comic:1',
+        filters: const LibraryFilterSet(),
+        sortOption: LibraryChapterSortOption.defaults,
+      );
+      final current = chapters.singleWhere(
+        (chapter) => chapter.episodeId == 'comic:1:90',
+      );
 
-    expect(current.progressInfo?.label, '第 3 页');
-    expect(current.progressInfo?.isCurrent, isTrue);
-    expect(current.progressInfo?.fraction, closeTo(3 / 5, 0.0001));
-  });
+      expect(current.progressInfo?.label, '第 3 页');
+      expect(current.progressInfo?.isCurrent, isTrue);
+      expect(current.progressInfo?.fraction, closeTo(3 / 5, 0.0001));
+    },
+  );
 
-  test('loadChapters clamps comic progress and hides it for read chapters', () async {
-    final repository = _FakeComicRepository(
-      progress: ComicReadingProgress(
-        comicId: 'comic:1',
-        episodeId: 'comic:1:90',
-        imageIndex: 99,
-        scrollOffset: 120,
-        updatedAt: DateTime(2026, 5, 12),
-      ),
-      imageCountByEpisodeId: const <String, int>{'comic:1:90': 5},
-    );
-    final adapter = ComicDetailAdapter(
-      repository,
-      stateRepository: _FakeLibraryStateRepository(
-        episodeStates: <String, LibraryEpisodeState>{
-          'comic:1:120': LibraryEpisodeState(
-            moduleKey: LibraryModuleKey.comic,
-            episodeId: 'comic:1:120',
-            workId: 'comic:1',
-            isRead: false,
-          ),
-        },
-      ),
-    );
+  test(
+    'loadChapters clamps comic progress and hides it for read chapters',
+    () async {
+      final repository = _FakeComicRepository(
+        progress: ComicReadingProgress(
+          comicId: 'comic:1',
+          episodeId: 'comic:1:90',
+          imageIndex: 99,
+          scrollOffset: 120,
+          updatedAt: DateTime(2026, 5, 12),
+        ),
+        imageCountByEpisodeId: const <String, int>{'comic:1:90': 5},
+      );
+      final adapter = ComicDetailAdapter(
+        repository,
+        stateRepository: _FakeLibraryStateRepository(
+          episodeStates: <String, LibraryEpisodeState>{
+            'comic:1:120': LibraryEpisodeState(
+              moduleKey: LibraryModuleKey.comic,
+              episodeId: 'comic:1:120',
+              workId: 'comic:1',
+              isRead: false,
+            ),
+          },
+        ),
+      );
 
-    final chapters = await adapter.loadChapters(
-      workId: 'comic:1',
-      filters: const LibraryFilterSet(),
-      sortOption: LibraryChapterSortOption.defaults,
-    );
-    final current = chapters.singleWhere((chapter) => chapter.episodeId == 'comic:1:90');
+      final chapters = await adapter.loadChapters(
+        workId: 'comic:1',
+        filters: const LibraryFilterSet(),
+        sortOption: LibraryChapterSortOption.defaults,
+      );
+      final current = chapters.singleWhere(
+        (chapter) => chapter.episodeId == 'comic:1:90',
+      );
 
-    expect(current.progressInfo?.label, '第 5 页');
-    expect(current.progressInfo?.fraction, 1);
+      expect(current.progressInfo?.label, '第 5 页');
+      expect(current.progressInfo?.fraction, 1);
 
-    final readAdapter = ComicDetailAdapter(
-      repository,
-      stateRepository: _FakeLibraryStateRepository(
-        episodeStates: <String, LibraryEpisodeState>{
-          'comic:1:90': LibraryEpisodeState(
-            moduleKey: LibraryModuleKey.comic,
-            episodeId: 'comic:1:90',
-            workId: 'comic:1',
-            isRead: true,
-          ),
-        },
-      ),
-    );
-    final readChapters = await readAdapter.loadChapters(
-      workId: 'comic:1',
-      filters: const LibraryFilterSet(),
-      sortOption: LibraryChapterSortOption.defaults,
-    );
+      final readAdapter = ComicDetailAdapter(
+        repository,
+        stateRepository: _FakeLibraryStateRepository(
+          episodeStates: <String, LibraryEpisodeState>{
+            'comic:1:90': LibraryEpisodeState(
+              moduleKey: LibraryModuleKey.comic,
+              episodeId: 'comic:1:90',
+              workId: 'comic:1',
+              isRead: true,
+            ),
+          },
+        ),
+      );
+      final readChapters = await readAdapter.loadChapters(
+        workId: 'comic:1',
+        filters: const LibraryFilterSet(),
+        sortOption: LibraryChapterSortOption.defaults,
+      );
 
-    expect(
-      readChapters.singleWhere((chapter) => chapter.episodeId == 'comic:1:90').progressInfo,
-      isNull,
-    );
-  });
+      expect(
+        readChapters
+            .singleWhere((chapter) => chapter.episodeId == 'comic:1:90')
+            .progressInfo,
+        isNull,
+      );
+    },
+  );
 
   test('loadChapters ignores comic progress for missing episode', () async {
     final adapter = ComicDetailAdapter(
@@ -494,8 +566,8 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   _FakeComicEpisodeRefreshService({
     ComicEpisodeRefreshOutcome? catalogOutcome,
     ComicEpisodeRefreshOutcome? searchOutcome,
-  })  : _catalogOutcome = catalogOutcome,
-        _searchOutcome = searchOutcome;
+  }) : _catalogOutcome = catalogOutcome,
+       _searchOutcome = searchOutcome;
 
   String? requestedTid;
   ComicEpisodeRefreshRequest? lastRequest;
@@ -537,8 +609,7 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
     FavoriteSyncExecutionContext? executionContext,
     ThreadDetailData? preloadedRootDetail,
     ComicThreadDetailCache? threadCache,
-  }
-  ) async {
+  }) async {
     catalogOnlyCalls++;
     lastRequest = request;
     requestedTid = request.sourceTid;
@@ -562,8 +633,7 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
     FavoriteSyncExecutionContext? executionContext,
     ThreadDetailData? preloadedRootDetail,
     ComicThreadDetailCache? threadCache,
-  }
-  ) async {
+  }) async {
     searchAndCurrentOnlyCalls++;
     lastRequest = request;
     requestedTid = request.sourceTid;
@@ -588,8 +658,7 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(
     String catalogUrl, {
     FavoriteSyncExecutionContext? executionContext,
-  }
-  ) async {
+  }) async {
     return ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.catalog,
       links: const <ComicEpisodeLink>[
@@ -707,11 +776,23 @@ class _FakeComicRepository implements ComicRepository {
     mergeCalled = true;
     lastMergedLinks = episodeLinks;
     lastFallbackTid = fallbackSourceTid;
-    return const ComicEpisodeRefreshResult(insertedCount: 2, updatedCount: 0, totalCount: 2);
+    return const ComicEpisodeRefreshResult(
+      insertedCount: 2,
+      updatedCount: 0,
+      totalCount: 2,
+    );
   }
 
   @override
-  Future<void> addToShelf({required String comicId, required String tid, required String fid, String? sourceTypeId, String? sourceTagName, required String title, required ParsedComicPost parsedPost}) async {}
+  Future<void> addToShelf({
+    required String comicId,
+    required String tid,
+    required String fid,
+    String? sourceTypeId,
+    String? sourceTagName,
+    required String title,
+    required ParsedComicPost parsedPost,
+  }) async {}
   @override
   Future<void> removeFromShelf({required String comicId}) async {}
   @override
@@ -725,7 +806,8 @@ class _FakeComicRepository implements ComicRepository {
   @override
   Future<List<ComicShelfCategory>> getCategories() async => const [];
   @override
-  Future<ComicShelfDisplaySettings> getDisplaySettings() async => const ComicShelfDisplaySettings(gridColumnCount: 3);
+  Future<ComicShelfDisplaySettings> getDisplaySettings() async =>
+      const ComicShelfDisplaySettings(gridColumnCount: 3);
   @override
   Future<List<ComicEpisodeItem>> getComicEpisodes({
     required String comicId,
@@ -752,8 +834,11 @@ class _FakeComicRepository implements ComicRepository {
       ),
     ];
   }
+
   @override
-  Future<List<ComicEpisodeImageItem>> getEpisodeImages({required String episodeId}) async {
+  Future<List<ComicEpisodeImageItem>> getEpisodeImages({
+    required String episodeId,
+  }) async {
     final imageCount = imageCountByEpisodeId[episodeId] ?? 1;
     return List<ComicEpisodeImageItem>.generate(
       imageCount,
@@ -767,39 +852,95 @@ class _FakeComicRepository implements ComicRepository {
       ),
     );
   }
+
   @override
-  Future<ComicReadingProgress?> getLastReadProgress({required String comicId}) async => progress;
+  Future<ComicReadingProgress?> getLastReadProgress({
+    required String comicId,
+  }) async => progress;
   @override
-  Future<List<ComicShelfItem>> getShelfItems({String categoryId = 'default'}) async => const [];
+  Future<List<ComicShelfItem>> getShelfItems({
+    String categoryId = 'default',
+  }) async => const [];
   @override
   Future<bool> isInShelf({required String comicId}) async => true;
   @override
-  Future<void> moveComicToCategory({required String comicId, required String fromCategoryId, required String toCategoryId}) async {}
+  Future<void> moveComicToCategory({
+    required String comicId,
+    required String fromCategoryId,
+    required String toCategoryId,
+  }) async {}
   @override
-  Future<void> renameCategory({required String categoryId, required String newName}) async {}
+  Future<void> renameCategory({
+    required String categoryId,
+    required String newName,
+  }) async {}
   @override
-  Future<void> saveEpisodeImages({required String episodeId, required List<String> imageUrls}) async {}
+  Future<void> saveEpisodeImages({
+    required String episodeId,
+    required List<String> imageUrls,
+  }) async {}
   @override
-  Future<void> updateCustomCover({required String comicId, required String? customCoverImageUrl}) async {}
+  Future<void> updateCustomCover({
+    required String comicId,
+    required String? customCoverImageUrl,
+  }) async {}
   @override
-  Future<void> updateCustomCoverFromLocalFile({required String comicId, required String localCoverPath, String? sourceEpisodeId, int? sourceImageIndex, String? sourceImageUrl, double? focusX, double? focusY}) async {}
+  Future<void> updateCustomCoverFromLocalFile({
+    required String comicId,
+    required String localCoverPath,
+    String? sourceEpisodeId,
+    int? sourceImageIndex,
+    String? sourceImageUrl,
+    double? focusX,
+    double? focusY,
+  }) async {}
   @override
-  Future<void> updateCustomCoverFocus({required String comicId, required double? focusX, required double? focusY}) async {}
+  Future<void> updateCustomCoverFocus({
+    required String comicId,
+    required double? focusX,
+    required double? focusY,
+  }) async {}
   @override
-  Future<void> updateCustomMetadata({required String comicId, String? customTitle, String? customAuthor, String? customTranslationGroup, String? customSearchTitle}) async {}
+  Future<void> updateCustomMetadata({
+    required String comicId,
+    String? customTitle,
+    String? customAuthor,
+    String? customTranslationGroup,
+    String? customSearchTitle,
+  }) async {}
   @override
-  Future<void> clearCustomMetadata({required String comicId, bool title = false, bool author = false, bool translationGroup = false, bool searchTitle = false}) async {}
+  Future<void> clearCustomMetadata({
+    required String comicId,
+    bool title = false,
+    bool author = false,
+    bool translationGroup = false,
+    bool searchTitle = false,
+  }) async {}
   @override
-  Future<void> updateEpisodeImageCacheStatus({required String episodeId, required String imageUrl, required String cacheStatus, String? cacheLocalPath}) async {}
+  Future<void> updateEpisodeImageCacheStatus({
+    required String episodeId,
+    required String imageUrl,
+    required String cacheStatus,
+    String? cacheLocalPath,
+  }) async {}
   @override
   Future<void> updateGridColumnCount({required int columnCount}) async {}
   @override
-  Future<void> updateLastReadProgress({required String comicId, required String episodeId, required int imageIndex, required double scrollOffset}) async {}
+  Future<void> updateLastReadProgress({
+    required String comicId,
+    required String episodeId,
+    required int imageIndex,
+    required double scrollOffset,
+  }) async {}
   @override
-  Future<void> updateCatalogUrl({required String comicId, required String catalogUrl}) async {}
+  Future<void> updateCatalogUrl({
+    required String comicId,
+    required String catalogUrl,
+  }) async {}
 
   @override
-  Future<Set<String>> getKnownEpisodeTids({required String comicId}) async => <String>{};
+  Future<Set<String>> getKnownEpisodeTids({required String comicId}) async =>
+      <String>{};
 }
 
 class _FakeComicRepositoryWithCoverWriter extends _FakeComicRepository
@@ -918,13 +1059,26 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
   final Map<String, LibraryEpisodeState> episodeStates;
 
   @override
-  Future<void> bindTagToWork({required LibraryModuleKey moduleKey, required String workId, required String tagId}) async {}
+  Future<void> bindTagToWork({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    required String tagId,
+  }) async {}
   @override
-  Future<int> countDownloadedEpisodes({required LibraryModuleKey moduleKey, required String workId}) async => 0;
+  Future<int> countDownloadedEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async => 0;
   @override
-  Future<int> countReadEpisodes({required LibraryModuleKey moduleKey, required String workId}) async => 0;
+  Future<int> countReadEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async => 0;
   @override
-  Future<int> countUnreadEpisodes({required LibraryModuleKey moduleKey, required String workId}) async => 0;
+  Future<int> countUnreadEpisodes({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async => 0;
   @override
   Future<void> purgeWorkState({
     required LibraryModuleKey moduleKey,
@@ -942,34 +1096,79 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
   @override
   Future<void> deleteTag({required String tagId}) async {}
   @override
-  Future<LibraryModuleDisplaySettings> getDisplaySettings({required LibraryModuleKey moduleKey, required LibraryDisplayMode defaultDisplayMode}) async =>
-      LibraryModuleDisplaySettings(moduleKey: moduleKey, displayMode: defaultDisplayMode, gridColumns: 3, updatedAt: DateTime(2026, 1, 1));
+  Future<LibraryModuleDisplaySettings> getDisplaySettings({
+    required LibraryModuleKey moduleKey,
+    required LibraryDisplayMode defaultDisplayMode,
+  }) async => LibraryModuleDisplaySettings(
+    moduleKey: moduleKey,
+    displayMode: defaultDisplayMode,
+    gridColumns: 3,
+    updatedAt: DateTime(2026, 1, 1),
+  );
   @override
-  Future<LibraryEpisodeState?> getEpisodeState({required LibraryModuleKey moduleKey, required String episodeId}) async => episodeStates[episodeId];
+  Future<LibraryEpisodeState?> getEpisodeState({
+    required LibraryModuleKey moduleKey,
+    required String episodeId,
+  }) async => episodeStates[episodeId];
   @override
   Future<List<LibraryTag>> getTags() async => const [];
   @override
-  Future<LibraryWorkState?> getWorkState({required LibraryModuleKey moduleKey, required String workId}) async => workState;
+  Future<LibraryWorkState?> getWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async => workState;
   @override
-  Future<List<LibraryTag>> getWorkTags({required LibraryModuleKey moduleKey, required String workId}) async => const [];
+  Future<List<LibraryTag>> getWorkTags({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async => const [];
   @override
-  Future<bool> hasAnyTag({required LibraryModuleKey moduleKey, required String workId}) async => false;
+  Future<bool> hasAnyTag({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async => false;
   @override
-  Future<void> renameTag({required String tagId, required String newName}) async {}
+  Future<void> renameTag({
+    required String tagId,
+    required String newName,
+  }) async {}
   @override
-  Future<void> unbindTagFromWork({required LibraryModuleKey moduleKey, required String workId, required String tagId}) async {}
+  Future<void> unbindTagFromWork({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    required String tagId,
+  }) async {}
   @override
-  Future<void> upsertDisplaySettings({required LibraryModuleKey moduleKey, required LibraryDisplayMode displayMode, required int gridColumns}) async {}
+  Future<void> upsertDisplaySettings({
+    required LibraryModuleKey moduleKey,
+    required LibraryDisplayMode displayMode,
+    required int gridColumns,
+  }) async {}
   @override
-  Future<void> upsertEpisodeState({required LibraryModuleKey moduleKey, required String episodeId, required String workId, bool? isRead, bool? isDownloaded, bool? isBookmarked, DateTime? readAt, DateTime? downloadedAt}) async {}
+  Future<void> upsertEpisodeState({
+    required LibraryModuleKey moduleKey,
+    required String episodeId,
+    required String workId,
+    bool? isRead,
+    bool? isDownloaded,
+    bool? isBookmarked,
+    DateTime? readAt,
+    DateTime? downloadedAt,
+  }) async {}
   @override
-  Future<void> upsertWorkState({required LibraryModuleKey moduleKey, required String workId, String? lastReadEpisodeId, DateTime? lastReadAt, DateTime? checkUpdatedAt, DateTime? fetchedUpdatedAt, String? introText}) async {}
+  Future<void> upsertWorkState({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+    String? lastReadEpisodeId,
+    DateTime? lastReadAt,
+    DateTime? checkUpdatedAt,
+    DateTime? fetchedUpdatedAt,
+    String? introText,
+  }) async {}
 }
 
 class _RecordingLibraryStateRepository extends _FakeLibraryStateRepository {
-  _RecordingLibraryStateRepository({
-    super.episodeStates,
-  });
+  _RecordingLibraryStateRepository({super.episodeStates});
 
   final List<String> downloadedEpisodeIds = <String>[];
 
@@ -1015,11 +1214,7 @@ class _RecordingReadingStateBatchWriter implements ReadingStateBatchWriter {
     required bool isRead,
   }) async {
     calls.add(
-      _ReadingStateBatchCall(
-        module: module,
-        workIds: workIds,
-        isRead: isRead,
-      ),
+      _ReadingStateBatchCall(module: module, workIds: workIds, isRead: isRead),
     );
   }
 }
@@ -1053,11 +1248,13 @@ class _RecordingBulkDownloadUseCase implements BulkDownloadUseCase {
 
 class _FakeDiscoveryService extends ComicEpisodeDiscoveryService {
   _FakeDiscoveryService({this.threadResult})
-      : super(
-          fetchThreadDetail: (_) async => throw UnimplementedError(),
-          opPostParser: ComicConsecutiveOpPostParser(engine: ComicPostParsingEngine()),
-          catalogHtmlFetcher: _FakeCatalogHtmlFetcher(),
-        );
+    : super(
+        fetchThreadDetail: (_) async => throw UnimplementedError(),
+        opPostParser: ComicConsecutiveOpPostParser(
+          engine: ComicPostParsingEngine(),
+        ),
+        catalogHtmlFetcher: _FakeCatalogHtmlFetcher(),
+      );
 
   final ParsedThreadResult? threadResult;
   int fetchAndParseThreadCalls = 0;
@@ -1075,12 +1272,13 @@ class _FakeCatalogHtmlFetcher implements CatalogHtmlFetcher {
 }
 
 class _FakeIncrementalDiscovery extends ComicIncrementalEpisodeDiscovery {
-  _FakeIncrementalDiscovery({
-    this.directResult = const <ComicEpisodeLink>[],
-  }) : super(
-          fetchThreadDetail: (_) async => throw UnimplementedError(),
-          opPostParser: ComicConsecutiveOpPostParser(engine: ComicPostParsingEngine()),
-        );
+  _FakeIncrementalDiscovery({this.directResult = const <ComicEpisodeLink>[]})
+    : super(
+        fetchThreadDetail: (_) async => throw UnimplementedError(),
+        opPostParser: ComicConsecutiveOpPostParser(
+          engine: ComicPostParsingEngine(),
+        ),
+      );
 
   final List<ComicEpisodeLink> directResult;
 

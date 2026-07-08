@@ -33,6 +33,8 @@ class ComicFavoriteContentIngestHandler
         comicId: workId,
         detail: context.detail,
         favoriteTitle: context.record.title,
+        sourceFid: context.detail.fid,
+        sourceTypeId: context.detail.typeid,
         sourceTagName: context.tagName,
         forceSearchOnCatalogMiss: request.options.forceComicSearchOnCatalogMiss,
       ),
@@ -124,9 +126,9 @@ class DefaultFavoriteContentIngestRegistry
     required FavoriteContentIngestHandler comicHandler,
     required FavoriteContentIngestHandler novelHandler,
     required FavoriteContentIngestHandler forumHandler,
-  })  : _comicHandler = comicHandler,
-        _novelHandler = novelHandler,
-        _forumHandler = forumHandler;
+  }) : _comicHandler = comicHandler,
+       _novelHandler = novelHandler,
+       _forumHandler = forumHandler;
 
   final FavoriteContentIngestHandler _comicHandler;
   final FavoriteContentIngestHandler _novelHandler;

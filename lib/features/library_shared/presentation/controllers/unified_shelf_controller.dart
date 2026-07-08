@@ -124,14 +124,14 @@ class UnifiedShelfController {
     void Function()? onStateChanged,
     bool backgroundReloadEnabled = true,
     LibraryTaskProgressHub? taskProgressHub,
-    ForumImagePrecacheService? coverPrecacheService,
+    ForumImagePrecacheService Function()? coverPrecacheServiceResolver,
   }) : _adapter = adapter,
        _coverPrefetchConcurrency = coverPrefetchConcurrency,
        _coverPrefetcherFactory = coverPrefetcherFactory,
        _featureFlags = featureFlags,
        _onStateChanged = onStateChanged,
        _backgroundReloadEnabled = backgroundReloadEnabled,
-       _coverPrecacheService = coverPrecacheService,
+       _coverPrecacheServiceResolver = coverPrecacheServiceResolver,
        _taskProgressListenable = adapter.taskProgress,
        _shelfRefreshSignals = adapter.shelfRefreshSignals,
        _state = _initialState(adapter),
@@ -167,7 +167,7 @@ class UnifiedShelfController {
   final LibraryShelfSnapshotDiffer _snapshotDiffer =
       const LibraryShelfSnapshotDiffer();
   final void Function()? _onStateChanged;
-  final ForumImagePrecacheService? _coverPrecacheService;
+  final ForumImagePrecacheService Function()? _coverPrecacheServiceResolver;
   final ValueListenable<LibraryShelfTaskProgress?>? _taskProgressListenable;
   final ValueListenable<LibraryShelfRefreshSignal?>? _shelfRefreshSignals;
   UnifiedShelfState _state;
@@ -705,7 +705,7 @@ class UnifiedShelfController {
     required ShelfCoverWarmupAdapter warmupAdapter,
     required ShelfCoverWarmupRequest coverRequest,
   }) async {
-    final precacheService = _coverPrecacheService;
+    final precacheService = _coverPrecacheServiceResolver?.call();
     if (precacheService == null) {
       return warmupAdapter.warmCover(coverRequest);
     }

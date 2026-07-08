@@ -31,7 +31,7 @@ class UnifiedShelfPage extends StatefulWidget {
     this.isActive = true,
     this.taskProgressHub,
     this.selectionHost,
-    this.coverPrecacheService,
+    this.coverPrecacheServiceResolver,
   });
 
   final ShelfModuleAdapter adapter;
@@ -41,7 +41,7 @@ class UnifiedShelfPage extends StatefulWidget {
   final bool isActive;
   final LibraryTaskProgressHub? taskProgressHub;
   final ShelfSelectionHostController? selectionHost;
-  final ForumImagePrecacheService? coverPrecacheService;
+  final ForumImagePrecacheService Function()? coverPrecacheServiceResolver;
 
   @override
   State<UnifiedShelfPage> createState() => _UnifiedShelfPageState();
@@ -65,7 +65,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
       onStateChanged: _handleControllerStateChanged,
       backgroundReloadEnabled: widget.isActive,
       taskProgressHub: widget.taskProgressHub,
-      coverPrecacheService: widget.coverPrecacheService,
+      coverPrecacheServiceResolver: widget.coverPrecacheServiceResolver,
     );
     _pageController = PageController();
     _selectionController = ShelfSelectionController()

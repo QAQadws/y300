@@ -20,14 +20,15 @@ import 'package:y300/features/library_shared/domain/services/library_shelf_refre
 /// - `ComicDuplicateMergeTask` 命中合并时把目标 `comicId` 写入
 ///   [LibraryPostIngestTaskReport.resolvedWorkId]，由收藏同步写回
 ///   `favorite_thread_cache.work_id`。
-class DefaultLibraryPostIngestTaskRunner implements LibraryPostIngestTaskRunner {
+class DefaultLibraryPostIngestTaskRunner
+    implements LibraryPostIngestTaskRunner {
   const DefaultLibraryPostIngestTaskRunner({
     ComicFavoriteAutoRefreshCoordinator? comicAutoRefreshCoordinator,
     ComicDuplicateMergeService? comicDuplicateMergeService,
     LibraryShelfRefreshBus? shelfRefreshBus,
-  })  : _comicAutoRefreshCoordinator = comicAutoRefreshCoordinator,
-        _comicDuplicateMergeService = comicDuplicateMergeService,
-        _shelfRefreshBus = shelfRefreshBus;
+  }) : _comicAutoRefreshCoordinator = comicAutoRefreshCoordinator,
+       _comicDuplicateMergeService = comicDuplicateMergeService,
+       _shelfRefreshBus = shelfRefreshBus;
 
   final ComicFavoriteAutoRefreshCoordinator? _comicAutoRefreshCoordinator;
   final ComicDuplicateMergeService? _comicDuplicateMergeService;
@@ -49,11 +50,9 @@ class DefaultLibraryPostIngestTaskRunner implements LibraryPostIngestTaskRunner 
 
   @override
   Future<LibraryPostIngestTaskReport> runAll(
-    List<LibraryPostIngestTask> tasks,
-    {
+    List<LibraryPostIngestTask> tasks, {
     FavoriteSyncExecutionContext? executionContext,
-  }
-  ) async {
+  }) async {
     if (tasks.isEmpty) {
       return LibraryPostIngestTaskReport.empty;
     }
@@ -116,6 +115,8 @@ class DefaultLibraryPostIngestTaskRunner implements LibraryPostIngestTaskRunner 
       comicId: task.comicId,
       detail: task.detail,
       favoriteTitle: task.favoriteTitle,
+      sourceFid: task.sourceFid ?? task.detail.fid,
+      sourceTypeId: task.sourceTypeId ?? task.detail.typeid,
       sourceTagName: task.sourceTagName,
       forceSearchOnCatalogMiss: task.forceSearchOnCatalogMiss,
       executionContext: executionContext,
@@ -126,8 +127,7 @@ class DefaultLibraryPostIngestTaskRunner implements LibraryPostIngestTaskRunner 
   Future<void> _runComicAutoRefreshBackfill(
     ComicAutoRefreshBackfillTask task, {
     FavoriteSyncExecutionContext? executionContext,
-  }
-  ) async {
+  }) async {
     final coordinator = _comicAutoRefreshCoordinator;
     if (coordinator == null) {
       return;
@@ -137,6 +137,8 @@ class DefaultLibraryPostIngestTaskRunner implements LibraryPostIngestTaskRunner 
       sourceTid: task.sourceTid,
       favoriteTitle: task.favoriteTitle,
       sourceTitle: task.sourceTitle,
+      sourceFid: task.sourceFid,
+      sourceTypeId: task.sourceTypeId,
       sourceTagName: task.sourceTagName,
       executionContext: executionContext,
     );

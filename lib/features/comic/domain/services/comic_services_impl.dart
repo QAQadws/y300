@@ -278,7 +278,7 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
         source: ComicEpisodeRefreshSource.search,
         links: merged,
         usedSearch: true,
-        catalogUrl: current.catalogUrl,
+        catalogUrl: searchResult.catalogUrl ?? current.catalogUrl,
         threadCache: cache,
       );
     }
@@ -366,6 +366,7 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
       }
 
       var collectedLinks = const <ComicEpisodeLink>[];
+      String? collectedCatalogUrl;
       final sourceTid = request.sourceTid.trim();
       final candidateBatch = candidates
           .where((item) => item.item.tid.trim() != sourceTid)
@@ -379,6 +380,7 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
           threadCache: threadCache,
         );
         if (result.episodeLinks.isNotEmpty) {
+          collectedCatalogUrl ??= result.catalogUrl;
           collectedLinks = _episodeLinkMerger.merge(
             collectedLinks,
             result.episodeLinks,
@@ -411,11 +413,13 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
             ),
           ),
           usedSearch: true,
+          catalogUrl: collectedCatalogUrl,
         );
       }
       return _SearchFallbackResult(
         links: _episodeLinkMerger.sort(collectedLinks),
         usedSearch: true,
+        catalogUrl: collectedCatalogUrl,
       );
     }
     return _SearchFallbackResult(
@@ -484,14 +488,20 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
 }
 
 class _SearchFallbackResult {
-  const _SearchFallbackResult({required this.links, required this.usedSearch});
+  const _SearchFallbackResult({
+    required this.links,
+    required this.usedSearch,
+    this.catalogUrl,
+  });
 
   const _SearchFallbackResult.empty()
     : links = const <ComicEpisodeLink>[],
-      usedSearch = false;
+      usedSearch = false,
+      catalogUrl = null;
 
   final List<ComicEpisodeLink> links;
   final bool usedSearch;
+  final String? catalogUrl;
 }
 
 final comicEpisodeDiscoveryServiceProvider =

@@ -47,7 +47,8 @@ class ComicShelfPage extends ConsumerWidget {
       isActive: isActive,
       taskProgressHub: taskProgressHub,
       selectionHost: ref.watch(shelfSelectionHostControllerProvider),
-      coverPrecacheService: ref.watch(forumImagePrecacheServiceProvider),
+      coverPrecacheServiceResolver: () =>
+          ref.read(forumImagePrecacheServiceProvider),
       onOpenWork: (context, workId) async {
         await Navigator.of(context).push(
           MaterialPageRoute<void>(

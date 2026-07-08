@@ -2,15 +2,12 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 const String favoriteSyncKey = 'myfavthread';
 const String favoriteComicAutoRefreshBackfillSyncKey =
-    'favorite_comic_auto_refresh_backfill_v1';
+    'favorite_comic_auto_refresh_backfill_v2';
 const String favoriteDefaultCategoryId = 'default';
 const String favoriteComicCategoryId = 'favorite:comic';
 const String favoriteNovelCategoryId = 'favorite:novel';
 
-enum FavoriteSyncMode {
-  incremental,
-  fullDiff,
-}
+enum FavoriteSyncMode { incremental, fullDiff }
 
 class FavoriteSyncSnapshot {
   const FavoriteSyncSnapshot({

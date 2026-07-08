@@ -25,6 +25,8 @@ class ComicAutoRefreshTask extends LibraryPostIngestTask {
     required this.comicId,
     required this.detail,
     required this.favoriteTitle,
+    this.sourceFid,
+    this.sourceTypeId,
     this.sourceTagName,
     this.forceSearchOnCatalogMiss = false,
   });
@@ -32,6 +34,8 @@ class ComicAutoRefreshTask extends LibraryPostIngestTask {
   final String comicId;
   final ThreadDetailData detail;
   final String favoriteTitle;
+  final String? sourceFid;
+  final String? sourceTypeId;
   final String? sourceTagName;
   final bool forceSearchOnCatalogMiss;
 }
@@ -47,6 +51,8 @@ class ComicAutoRefreshBackfillTask extends LibraryPostIngestTask {
     required this.sourceTid,
     required this.favoriteTitle,
     this.sourceTitle,
+    this.sourceFid,
+    this.sourceTypeId,
     this.sourceTagName,
   });
 
@@ -54,6 +60,8 @@ class ComicAutoRefreshBackfillTask extends LibraryPostIngestTask {
   final String sourceTid;
   final String favoriteTitle;
   final String? sourceTitle;
+  final String? sourceFid;
+  final String? sourceTypeId;
   final String? sourceTagName;
 }
 

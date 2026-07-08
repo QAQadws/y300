@@ -27,7 +27,10 @@ void main() {
   test('NovelReaderViewState derives episode boundaries', () {
     final episodes = _episodes();
 
-    final first = _viewState(episodes: episodes, currentEpisode: episodes.first);
+    final first = _viewState(
+      episodes: episodes,
+      currentEpisode: episodes.first,
+    );
     expect(first.currentEpisodeIndex, 0);
     expect(first.previousEpisode, isNull);
     expect(first.nextEpisode?.episodeId, episodes[1].episodeId);
@@ -74,219 +77,258 @@ void main() {
     expect(state.currentOffset, 88);
   });
 
-  test('NovelReaderController previewPreferences only updates effective state', () async {
-    final repository = _ControllerNovelRepository();
-    final container = _buildContainer(repository: repository);
-    addTearDown(container.dispose);
-    const args = NovelReaderArgs(
-      novelId: 'novel:49:100',
-      episodeId: 'novel:49:100:5001',
-    );
-    final provider = novelReaderControllerProvider(args);
-    final subscription = _keepReaderAlive(container, args);
-    addTearDown(subscription.close);
+  test(
+    'NovelReaderController previewPreferences only updates effective state',
+    () async {
+      final repository = _ControllerNovelRepository();
+      final container = _buildContainer(repository: repository);
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
 
-    final initial = await container.read(provider.future);
-    final next = initial.persistedPreferences.copyWith(
-      themePreset: NovelReaderThemePreset.sepia,
-      flowMode: NovelReaderFlowMode.pagedLtr,
-    );
-
-    container.read(provider.notifier).previewPreferences(next);
-    final state = container.read(provider).value!;
-
-    expect(state.persistedPreferences, initial.persistedPreferences);
-    expect(state.effectivePreferences, next);
-    expect(state.progressSnapshot.flowMode, NovelReaderFlowMode.pagedLtr);
-    expect(repository.latestPreferences, isNull);
-    expect(repository.upsertPreferencesCallCount, 0);
-  });
-
-  test('NovelReaderController commitPreferences persists once and syncs state', () async {
-    final repository = _ControllerNovelRepository();
-    final container = _buildContainer(repository: repository);
-    addTearDown(container.dispose);
-    const args = NovelReaderArgs(
-      novelId: 'novel:49:100',
-      episodeId: 'novel:49:100:5001',
-    );
-    final provider = novelReaderControllerProvider(args);
-    final subscription = _keepReaderAlive(container, args);
-    addTearDown(subscription.close);
-
-    final initial = await container.read(provider.future);
-    final next = initial.persistedPreferences.copyWith(
-      themePreset: NovelReaderThemePreset.dark,
-    );
-
-    container.read(provider.notifier).previewPreferences(next);
-    await container.read(provider.notifier).commitPreferences(next);
-    final state = container.read(provider).value!;
-
-    expect(repository.latestPreferences, next);
-    expect(repository.upsertPreferencesCallCount, 1);
-    expect(state.persistedPreferences, next);
-    expect(state.effectivePreferences, next);
-  });
-
-  test('NovelReaderController revertPreferencePreview rolls back effective state', () async {
-    final repository = _ControllerNovelRepository();
-    final container = _buildContainer(repository: repository);
-    addTearDown(container.dispose);
-    const args = NovelReaderArgs(
-      novelId: 'novel:49:100',
-      episodeId: 'novel:49:100:5001',
-    );
-    final provider = novelReaderControllerProvider(args);
-    final subscription = _keepReaderAlive(container, args);
-    addTearDown(subscription.close);
-
-    final initial = await container.read(provider.future);
-    final next = initial.persistedPreferences.copyWith(
-      flowMode: NovelReaderFlowMode.pagedLtr,
-    );
-
-    container.read(provider.notifier).previewPreferences(next);
-    container.read(provider.notifier).revertPreferencePreview();
-    final state = container.read(provider).value!;
-
-    expect(state.persistedPreferences, initial.persistedPreferences);
-    expect(state.effectivePreferences, initial.persistedPreferences);
-    expect(state.progressSnapshot.flowMode, initial.persistedPreferences.flowMode);
-    expect(repository.upsertPreferencesCallCount, 0);
-  });
-
-  test('NovelReaderController preview and commit are no-op for equal preferences', () async {
-    final repository = _ControllerNovelRepository();
-    final container = _buildContainer(repository: repository);
-    addTearDown(container.dispose);
-    const args = NovelReaderArgs(
-      novelId: 'novel:49:100',
-      episodeId: 'novel:49:100:5001',
-    );
-    final provider = novelReaderControllerProvider(args);
-    final subscription = _keepReaderAlive(container, args);
-    addTearDown(subscription.close);
-
-    final initial = await container.read(provider.future);
-
-    container.read(provider.notifier).previewPreferences(initial.effectivePreferences);
-    await container
-        .read(provider.notifier)
-        .commitPreferences(initial.persistedPreferences);
-    final state = container.read(provider).value!;
-
-    expect(state.persistedPreferences, initial.persistedPreferences);
-    expect(state.effectivePreferences, initial.effectivePreferences);
-    expect(repository.upsertPreferencesCallCount, 0);
-  });
-
-  test('NovelReaderController schedules paged page progress without immediate persistence', () async {
-    final repository = _ControllerNovelRepository(
-      preferences: NovelReaderPreferences.defaults().copyWith(
+      final initial = await container.read(provider.future);
+      final next = initial.persistedPreferences.copyWith(
+        themePreset: NovelReaderThemePreset.sepia,
         flowMode: NovelReaderFlowMode.pagedLtr,
-      ),
-    );
-    final progressCommitter = _FakeNovelReaderProgressCommitter();
-    final container = _buildContainer(
-      repository: repository,
-      progressCommitter: progressCommitter,
-    );
-    addTearDown(container.dispose);
-    const args = NovelReaderArgs(
-      novelId: 'novel:49:100',
-      episodeId: 'novel:49:100:5001',
-    );
-    final provider = novelReaderControllerProvider(args);
-    final subscription = _keepReaderAlive(container, args);
-    addTearDown(subscription.close);
+      );
 
-    await container.read(provider.future);
-    final layout = NovelReaderPageLayout(
-      document: _document('novel:49:100:5001'),
-      pages: const <NovelReaderPageSlice>[
-        NovelReaderPageSlice(index: 0, blocks: <RichBlock>[], anchorNodeId: 'a'),
-        NovelReaderPageSlice(index: 1, blocks: <RichBlock>[], anchorNodeId: 'b'),
-      ],
-    );
-    await container.read(provider.notifier).onPagedPageChanged(1, layout);
+      container.read(provider.notifier).previewPreferences(next);
+      final state = container.read(provider).value!;
 
-    final state = await container.read(provider.future);
-    expect(state.progressSnapshot.pageIndex, 1);
-    expect(state.progressSnapshot.anchorNodeId, 'b');
-    expect(progressCommitter.scheduleCallCount, 1);
-    expect(progressCommitter.flushCallCount, 0);
-    expect(progressCommitter.latestScheduledSnapshot?.flowMode, NovelReaderFlowMode.pagedLtr);
-    expect(progressCommitter.latestScheduledSnapshot?.pageIndex, 1);
-    expect(repository.readingProgress, isNull);
-  });
+      expect(state.persistedPreferences, initial.persistedPreferences);
+      expect(
+        state.effectivePreferences,
+        next.copyWith(flowMode: NovelReaderFlowMode.vertical),
+      );
+      expect(state.progressSnapshot.flowMode, NovelReaderFlowMode.vertical);
+      expect(repository.latestPreferences, isNull);
+      expect(repository.upsertPreferencesCallCount, 0);
+    },
+  );
 
-  test('NovelReaderController saveCurrentProgressNow flushes and syncs readingProgress', () async {
-    final repository = _ControllerNovelRepository();
-    final progressCommitter = _FakeNovelReaderProgressCommitter();
-    final container = _buildContainer(
-      repository: repository,
-      progressCommitter: progressCommitter,
-    );
-    addTearDown(container.dispose);
-    const args = NovelReaderArgs(
-      novelId: 'novel:49:100',
-      episodeId: 'novel:49:100:5001',
-    );
-    final provider = novelReaderControllerProvider(args);
-    final subscription = _keepReaderAlive(container, args);
-    addTearDown(subscription.close);
+  test(
+    'NovelReaderController commitPreferences persists once and syncs state',
+    () async {
+      final repository = _ControllerNovelRepository();
+      final container = _buildContainer(repository: repository);
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
 
-    await container.read(provider.future);
-    const snapshot = NovelReaderProgressSnapshot(
-      novelId: 'novel:49:100',
-      episodeId: 'novel:49:100:5001',
-      flowMode: NovelReaderFlowMode.vertical,
-      scrollOffset: 42,
-      pageIndex: 0,
-      progressPercent: 0.5,
-    );
+      final initial = await container.read(provider.future);
+      final next = initial.persistedPreferences.copyWith(
+        themePreset: NovelReaderThemePreset.dark,
+      );
 
-    await container.read(provider.notifier).saveCurrentProgressNow(snapshot);
+      container.read(provider.notifier).previewPreferences(next);
+      await container.read(provider.notifier).commitPreferences(next);
+      final state = container.read(provider).value!;
 
-    final state = container.read(provider).value!;
-    expect(progressCommitter.flushCallCount, 1);
-    expect(progressCommitter.latestFlushedSnapshot, snapshot);
-    expect(state.progressSnapshot, snapshot);
-    expect(state.currentOffset, 42);
-    expect(state.readingProgress?.episodeId, 'novel:49:100:5001');
-    expect(state.readingProgress?.scrollOffset, 42);
-  });
+      expect(repository.latestPreferences, next);
+      expect(repository.upsertPreferencesCallCount, 1);
+      expect(state.persistedPreferences, next);
+      expect(state.effectivePreferences, next);
+    },
+  );
 
-  test('NovelReaderController onScrollOffsetChanged schedules progress update', () async {
-    final repository = _ControllerNovelRepository();
-    final progressCommitter = _FakeNovelReaderProgressCommitter();
-    final container = _buildContainer(
-      repository: repository,
-      progressCommitter: progressCommitter,
-    );
-    addTearDown(container.dispose);
-    const args = NovelReaderArgs(
-      novelId: 'novel:49:100',
-      episodeId: 'novel:49:100:5001',
-    );
-    final provider = novelReaderControllerProvider(args);
-    final subscription = _keepReaderAlive(container, args);
-    addTearDown(subscription.close);
+  test(
+    'NovelReaderController revertPreferencePreview rolls back effective state',
+    () async {
+      final repository = _ControllerNovelRepository();
+      final container = _buildContainer(repository: repository);
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
 
-    await container.read(provider.future);
-    await container.read(provider.notifier).onScrollOffsetChanged(
-      24,
-      maxScrollExtent: 120,
-    );
+      final initial = await container.read(provider.future);
+      final next = initial.persistedPreferences.copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+      );
 
-    final state = container.read(provider).value!;
-    expect(state.currentOffset, 24);
-    expect(state.progressSnapshot.scrollOffset, 24);
-    expect(progressCommitter.scheduleCallCount, 1);
-    expect(progressCommitter.flushCallCount, 0);
-    expect(repository.readingProgress, isNull);
-  });
+      container.read(provider.notifier).previewPreferences(next);
+      container.read(provider.notifier).revertPreferencePreview();
+      final state = container.read(provider).value!;
+
+      expect(state.persistedPreferences, initial.persistedPreferences);
+      expect(state.effectivePreferences, initial.persistedPreferences);
+      expect(
+        state.progressSnapshot.flowMode,
+        initial.persistedPreferences.flowMode,
+      );
+      expect(repository.upsertPreferencesCallCount, 0);
+    },
+  );
+
+  test(
+    'NovelReaderController preview and commit are no-op for equal preferences',
+    () async {
+      final repository = _ControllerNovelRepository();
+      final container = _buildContainer(repository: repository);
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+
+      final initial = await container.read(provider.future);
+
+      container
+          .read(provider.notifier)
+          .previewPreferences(initial.effectivePreferences);
+      await container
+          .read(provider.notifier)
+          .commitPreferences(initial.persistedPreferences);
+      final state = container.read(provider).value!;
+
+      expect(state.persistedPreferences, initial.persistedPreferences);
+      expect(state.effectivePreferences, initial.effectivePreferences);
+      expect(repository.upsertPreferencesCallCount, 0);
+    },
+  );
+
+  test(
+    'NovelReaderController schedules paged page progress without immediate persistence',
+    () async {
+      final repository = _ControllerNovelRepository(
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          flowMode: NovelReaderFlowMode.pagedLtr,
+        ),
+      );
+      final progressCommitter = _FakeNovelReaderProgressCommitter();
+      final container = _buildContainer(
+        repository: repository,
+        progressCommitter: progressCommitter,
+      );
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+
+      await container.read(provider.future);
+      final layout = NovelReaderPageLayout(
+        document: _document('novel:49:100:5001'),
+        pages: const <NovelReaderPageSlice>[
+          NovelReaderPageSlice(
+            index: 0,
+            blocks: <RichBlock>[],
+            anchorNodeId: 'a',
+          ),
+          NovelReaderPageSlice(
+            index: 1,
+            blocks: <RichBlock>[],
+            anchorNodeId: 'b',
+          ),
+        ],
+      );
+      await container.read(provider.notifier).onPagedPageChanged(1, layout);
+
+      final state = await container.read(provider.future);
+      expect(state.progressSnapshot.pageIndex, 1);
+      expect(state.progressSnapshot.anchorNodeId, 'b');
+      expect(progressCommitter.scheduleCallCount, 1);
+      expect(progressCommitter.flushCallCount, 0);
+      expect(
+        progressCommitter.latestScheduledSnapshot?.flowMode,
+        NovelReaderFlowMode.pagedLtr,
+      );
+      expect(progressCommitter.latestScheduledSnapshot?.pageIndex, 1);
+      expect(repository.readingProgress, isNull);
+    },
+  );
+
+  test(
+    'NovelReaderController saveCurrentProgressNow flushes and syncs readingProgress',
+    () async {
+      final repository = _ControllerNovelRepository();
+      final progressCommitter = _FakeNovelReaderProgressCommitter();
+      final container = _buildContainer(
+        repository: repository,
+        progressCommitter: progressCommitter,
+      );
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+
+      await container.read(provider.future);
+      const snapshot = NovelReaderProgressSnapshot(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+        flowMode: NovelReaderFlowMode.vertical,
+        scrollOffset: 42,
+        pageIndex: 0,
+        progressPercent: 0.5,
+      );
+
+      await container.read(provider.notifier).saveCurrentProgressNow(snapshot);
+
+      final state = container.read(provider).value!;
+      expect(progressCommitter.flushCallCount, 1);
+      expect(progressCommitter.latestFlushedSnapshot, snapshot);
+      expect(state.progressSnapshot, snapshot);
+      expect(state.currentOffset, 42);
+      expect(state.readingProgress?.episodeId, 'novel:49:100:5001');
+      expect(state.readingProgress?.scrollOffset, 42);
+    },
+  );
+
+  test(
+    'NovelReaderController onScrollOffsetChanged schedules progress update',
+    () async {
+      final repository = _ControllerNovelRepository();
+      final progressCommitter = _FakeNovelReaderProgressCommitter();
+      final container = _buildContainer(
+        repository: repository,
+        progressCommitter: progressCommitter,
+      );
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+
+      await container.read(provider.future);
+      await container
+          .read(provider.notifier)
+          .onScrollOffsetChanged(24, maxScrollExtent: 120);
+
+      final state = container.read(provider).value!;
+      expect(state.currentOffset, 24);
+      expect(state.progressSnapshot.scrollOffset, 24);
+      expect(progressCommitter.scheduleCallCount, 1);
+      expect(progressCommitter.flushCallCount, 0);
+      expect(repository.readingProgress, isNull);
+    },
+  );
 
   test('NovelReaderController dispose cancels progress committer', () async {
     final repository = _ControllerNovelRepository();
@@ -308,206 +350,210 @@ void main() {
     expect(progressCommitter.cancelCallCount, 1);
   });
 
-  test('openEpisodeFromCatalog loads target and preserves target progress', () async {
-    final targetProgress = NovelReadingProgress(
-      novelId: 'novel:49:100',
-      episodeId: 'novel:49:100:5002',
-      scrollOffset: 88,
-      updatedAt: DateTime(2026, 6, 1),
-    );
-    final repository = _ControllerNovelRepository(
-      readingProgress: targetProgress,
-    );
-    final container = _buildContainer(repository: repository);
-    addTearDown(container.dispose);
-    const args = NovelReaderArgs(
-      novelId: 'novel:49:100',
-      episodeId: 'novel:49:100:5001',
-    );
-    final provider = novelReaderControllerProvider(args);
-    final subscription = _keepReaderAlive(container, args);
-    addTearDown(subscription.close);
-
-    final initial = await container.read(provider.future);
-    expect(initial.currentEpisode.episodeId, 'novel:49:100:5001');
-    expect(initial.currentOffset, 0);
-
-    final controller = container.read(provider.notifier);
-    await controller.saveCurrentOffsetNow(12);
-    await controller.openEpisodeFromCatalog('novel:49:100:5002');
-
-    final state = await container.read(provider.future);
-    expect(state.currentEpisode.episodeId, 'novel:49:100:5002');
-    expect(state.currentOffset, 88);
-    expect(repository.savedProgressEpisodeIds, contains('novel:49:100:5001'));
-  });
-
-  test('initial build publishes critical state before supplemental completes', () async {
-    final repository = _ControllerNovelRepository();
-    final bootstrapService = _ControlledNovelReaderBootstrapService(
-      initialCritical: _criticalBootstrap(
-        episodeId: 'novel:49:100:5001',
-      ),
-    );
-    final hydrationService = _ControlledNovelReaderSupplementalHydrationService();
-    final container = _buildContainer(
-      repository: repository,
-      bootstrapService: bootstrapService,
-      supplementalHydrationService: hydrationService,
-    );
-    addTearDown(container.dispose);
-    const args = NovelReaderArgs(
-      novelId: 'novel:49:100',
-      episodeId: 'novel:49:100:5001',
-    );
-    final provider = novelReaderControllerProvider(args);
-    final subscription = _keepReaderAlive(container, args);
-    addTearDown(subscription.close);
-
-    final state = await container.read(provider.future);
-
-    expect(state.currentEpisode.episodeId, 'novel:49:100:5001');
-    expect(state.isHydratingSupplemental, isTrue);
-    expect(state.novel, isNull);
-    expect(state.bookmarks, isEmpty);
-
-    hydrationService.completeInitialBookmarks(
-      _supplementalBookmarks(episodeId: 'novel:49:100:5001'),
-    );
-    await Future<void>.delayed(Duration.zero);
-    var hydrated = container.read(provider).value!;
-    expect(hydrated.bookmarks, isNotEmpty);
-    expect(hydrated.currentEpisodeBookmarks, isNotEmpty);
-    expect(hydrated.downloadedEpisodeIds, isEmpty);
-    expect(hydrated.novel, isNull);
-
-    hydrationService.completeInitialDownloadedEpisodeIds(
-      const <String>{'novel:49:100:5001'},
-    );
-    await Future<void>.delayed(Duration.zero);
-    hydrated = container.read(provider).value!;
-    expect(hydrated.downloadedEpisodeIds, contains('novel:49:100:5001'));
-
-    hydrationService.completeInitialNovel(_supplementalNovel());
-    await Future<void>.delayed(Duration.zero);
-
-    hydrated = container.read(provider).value!;
-    expect(hydrated.isHydratingSupplemental, isFalse);
-    expect(hydrated.novel?.title, '测试小说');
-    expect(hydrated.downloadedEpisodeIds, contains('novel:49:100:5001'));
-  });
-
-  test('openEpisodeFromCatalog keeps old content and sets switching transition before critical resolves', () async {
-    final repository = _ControllerNovelRepository();
-    final bootstrapService = _ControlledNovelReaderBootstrapService(
-      initialCritical: _criticalBootstrap(
-        episodeId: 'novel:49:100:5001',
-      ),
-    );
-    final hydrationService = _ControlledNovelReaderSupplementalHydrationService();
-    final container = _buildContainer(
-      repository: repository,
-      bootstrapService: bootstrapService,
-      supplementalHydrationService: hydrationService,
-    );
-    addTearDown(container.dispose);
-    const args = NovelReaderArgs(
-      novelId: 'novel:49:100',
-      episodeId: 'novel:49:100:5001',
-    );
-    final provider = novelReaderControllerProvider(args);
-    final subscription = _keepReaderAlive(container, args);
-    addTearDown(subscription.close);
-
-    await container.read(provider.future);
-    hydrationService.completeInitialBookmarks(
-      _supplementalBookmarks(episodeId: 'novel:49:100:5001'),
-    );
-    hydrationService.completeInitialDownloadedEpisodeIds(
-      const <String>{'novel:49:100:5001'},
-    );
-    hydrationService.completeInitialNovel(_supplementalNovel());
-    await Future<void>.delayed(Duration.zero);
-
-    final future = container
-        .read(provider.notifier)
-        .openEpisodeFromCatalog('novel:49:100:5002');
-    final transitioning = container.read(provider).value!;
-
-    expect(container.read(provider).isLoading, isFalse);
-    expect(transitioning.currentEpisode.episodeId, 'novel:49:100:5001');
-    expect(
-      transitioning.transition?.kind,
-      NovelReaderTransitionKind.switchingEpisode,
-    );
-    expect(
-      transitioning.transition?.targetEpisodeId,
-      'novel:49:100:5002',
-    );
-
-    bootstrapService.completeEpisodeCritical(
-      'novel:49:100:5002',
-      _criticalBootstrap(
+  test(
+    'openEpisodeFromCatalog loads target and preserves target progress',
+    () async {
+      final targetProgress = NovelReadingProgress(
+        novelId: 'novel:49:100',
         episodeId: 'novel:49:100:5002',
-        paragraphText: '第二章正文。',
-      ),
-    );
-    final didSucceed = await future;
-
-    expect(didSucceed, isTrue);
-    final switched = container.read(provider).value!;
-    expect(switched.currentEpisode.episodeId, 'novel:49:100:5002');
-    expect(switched.transition, isNull);
-    expect(switched.searchKeyword, isEmpty);
-    expect(switched.searchResults, isEmpty);
-    expect(switched.currentSearchIndex, -1);
-    expect(switched.isHydratingSupplemental, isTrue);
-  });
-
-  test('openEpisodeFromCatalog failure keeps old chapter and clears transition', () async {
-    final repository = _ControllerNovelRepository();
-    final bootstrapService = _ControlledNovelReaderBootstrapService(
-      initialCritical: _criticalBootstrap(
+        scrollOffset: 88,
+        updatedAt: DateTime(2026, 6, 1),
+      );
+      final repository = _ControllerNovelRepository(
+        readingProgress: targetProgress,
+      );
+      final container = _buildContainer(repository: repository);
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
         episodeId: 'novel:49:100:5001',
-      ),
-    );
-    bootstrapService.failEpisodeCritical(
-      'novel:49:100:5002',
-      StateError('critical failed'),
-    );
-    final container = _buildContainer(
-      repository: repository,
-      bootstrapService: bootstrapService,
-    );
-    addTearDown(container.dispose);
-    const args = NovelReaderArgs(
-      novelId: 'novel:49:100',
-      episodeId: 'novel:49:100:5001',
-    );
-    final provider = novelReaderControllerProvider(args);
-    final subscription = _keepReaderAlive(container, args);
-    addTearDown(subscription.close);
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
 
-    await container.read(provider.future);
+      final initial = await container.read(provider.future);
+      expect(initial.currentEpisode.episodeId, 'novel:49:100:5001');
+      expect(initial.currentOffset, 0);
 
-    final didSucceed = await container
-        .read(provider.notifier)
-        .openEpisodeFromCatalog('novel:49:100:5002');
+      final controller = container.read(provider.notifier);
+      await controller.saveCurrentOffsetNow(12);
+      await controller.openEpisodeFromCatalog('novel:49:100:5002');
 
-    expect(didSucceed, isFalse);
-    final state = container.read(provider).value!;
-    expect(state.currentEpisode.episodeId, 'novel:49:100:5001');
-    expect(state.transition, isNull);
-  });
+      final state = await container.read(provider.future);
+      expect(state.currentEpisode.episodeId, 'novel:49:100:5002');
+      expect(state.currentOffset, 88);
+      expect(repository.savedProgressEpisodeIds, contains('novel:49:100:5001'));
+    },
+  );
+
+  test(
+    'initial build publishes critical state before supplemental completes',
+    () async {
+      final repository = _ControllerNovelRepository();
+      final bootstrapService = _ControlledNovelReaderBootstrapService(
+        initialCritical: _criticalBootstrap(episodeId: 'novel:49:100:5001'),
+      );
+      final hydrationService =
+          _ControlledNovelReaderSupplementalHydrationService();
+      final container = _buildContainer(
+        repository: repository,
+        bootstrapService: bootstrapService,
+        supplementalHydrationService: hydrationService,
+      );
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+
+      final state = await container.read(provider.future);
+
+      expect(state.currentEpisode.episodeId, 'novel:49:100:5001');
+      expect(state.isHydratingSupplemental, isTrue);
+      expect(state.novel, isNull);
+      expect(state.bookmarks, isEmpty);
+
+      hydrationService.completeInitialBookmarks(
+        _supplementalBookmarks(episodeId: 'novel:49:100:5001'),
+      );
+      await Future<void>.delayed(Duration.zero);
+      var hydrated = container.read(provider).value!;
+      expect(hydrated.bookmarks, isNotEmpty);
+      expect(hydrated.currentEpisodeBookmarks, isNotEmpty);
+      expect(hydrated.downloadedEpisodeIds, isEmpty);
+      expect(hydrated.novel, isNull);
+
+      hydrationService.completeInitialDownloadedEpisodeIds(const <String>{
+        'novel:49:100:5001',
+      });
+      await Future<void>.delayed(Duration.zero);
+      hydrated = container.read(provider).value!;
+      expect(hydrated.downloadedEpisodeIds, contains('novel:49:100:5001'));
+
+      hydrationService.completeInitialNovel(_supplementalNovel());
+      await Future<void>.delayed(Duration.zero);
+
+      hydrated = container.read(provider).value!;
+      expect(hydrated.isHydratingSupplemental, isFalse);
+      expect(hydrated.novel?.title, '测试小说');
+      expect(hydrated.downloadedEpisodeIds, contains('novel:49:100:5001'));
+    },
+  );
+
+  test(
+    'openEpisodeFromCatalog keeps old content and sets switching transition before critical resolves',
+    () async {
+      final repository = _ControllerNovelRepository();
+      final bootstrapService = _ControlledNovelReaderBootstrapService(
+        initialCritical: _criticalBootstrap(episodeId: 'novel:49:100:5001'),
+      );
+      final hydrationService =
+          _ControlledNovelReaderSupplementalHydrationService();
+      final container = _buildContainer(
+        repository: repository,
+        bootstrapService: bootstrapService,
+        supplementalHydrationService: hydrationService,
+      );
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+
+      await container.read(provider.future);
+      hydrationService.completeInitialBookmarks(
+        _supplementalBookmarks(episodeId: 'novel:49:100:5001'),
+      );
+      hydrationService.completeInitialDownloadedEpisodeIds(const <String>{
+        'novel:49:100:5001',
+      });
+      hydrationService.completeInitialNovel(_supplementalNovel());
+      await Future<void>.delayed(Duration.zero);
+
+      final future = container
+          .read(provider.notifier)
+          .openEpisodeFromCatalog('novel:49:100:5002');
+      final transitioning = container.read(provider).value!;
+
+      expect(container.read(provider).isLoading, isFalse);
+      expect(transitioning.currentEpisode.episodeId, 'novel:49:100:5001');
+      expect(
+        transitioning.transition?.kind,
+        NovelReaderTransitionKind.switchingEpisode,
+      );
+      expect(transitioning.transition?.targetEpisodeId, 'novel:49:100:5002');
+
+      bootstrapService.completeEpisodeCritical(
+        'novel:49:100:5002',
+        _criticalBootstrap(
+          episodeId: 'novel:49:100:5002',
+          paragraphText: '第二章正文。',
+        ),
+      );
+      final didSucceed = await future;
+
+      expect(didSucceed, isTrue);
+      final switched = container.read(provider).value!;
+      expect(switched.currentEpisode.episodeId, 'novel:49:100:5002');
+      expect(switched.transition, isNull);
+      expect(switched.searchKeyword, isEmpty);
+      expect(switched.searchResults, isEmpty);
+      expect(switched.currentSearchIndex, -1);
+      expect(switched.isHydratingSupplemental, isTrue);
+    },
+  );
+
+  test(
+    'openEpisodeFromCatalog failure keeps old chapter and clears transition',
+    () async {
+      final repository = _ControllerNovelRepository();
+      final bootstrapService = _ControlledNovelReaderBootstrapService(
+        initialCritical: _criticalBootstrap(episodeId: 'novel:49:100:5001'),
+      );
+      bootstrapService.failEpisodeCritical(
+        'novel:49:100:5002',
+        StateError('critical failed'),
+      );
+      final container = _buildContainer(
+        repository: repository,
+        bootstrapService: bootstrapService,
+      );
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+
+      await container.read(provider.future);
+
+      final didSucceed = await container
+          .read(provider.notifier)
+          .openEpisodeFromCatalog('novel:49:100:5002');
+
+      expect(didSucceed, isFalse);
+      final state = container.read(provider).value!;
+      expect(state.currentEpisode.episodeId, 'novel:49:100:5001');
+      expect(state.transition, isNull);
+    },
+  );
 
   test('stale supplemental does not override newer chapter state', () async {
     final repository = _ControllerNovelRepository();
     final bootstrapService = _ControlledNovelReaderBootstrapService(
-      initialCritical: _criticalBootstrap(
-        episodeId: 'novel:49:100:5001',
-      ),
+      initialCritical: _criticalBootstrap(episodeId: 'novel:49:100:5001'),
     );
-    final hydrationService = _ControlledNovelReaderSupplementalHydrationService();
+    final hydrationService =
+        _ControlledNovelReaderSupplementalHydrationService();
     final container = _buildContainer(
       repository: repository,
       bootstrapService: bootstrapService,
@@ -537,13 +583,11 @@ void main() {
     await switchFuture;
 
     hydrationService.completeInitialBookmarks(
-      _supplementalBookmarks(
-        episodeId: 'novel:49:100:5001',
-      ),
+      _supplementalBookmarks(episodeId: 'novel:49:100:5001'),
     );
-    hydrationService.completeInitialDownloadedEpisodeIds(
-      const <String>{'novel:49:100:5001'},
-    );
+    hydrationService.completeInitialDownloadedEpisodeIds(const <String>{
+      'novel:49:100:5001',
+    });
     hydrationService.completeInitialNovel(
       _supplementalNovel(novelTitle: '旧章节小说'),
     );
@@ -558,11 +602,10 @@ void main() {
   test('supplemental phase failure does not block later phases', () async {
     final repository = _ControllerNovelRepository();
     final bootstrapService = _ControlledNovelReaderBootstrapService(
-      initialCritical: _criticalBootstrap(
-        episodeId: 'novel:49:100:5001',
-      ),
+      initialCritical: _criticalBootstrap(episodeId: 'novel:49:100:5001'),
     );
-    final hydrationService = _ControlledNovelReaderSupplementalHydrationService();
+    final hydrationService =
+        _ControlledNovelReaderSupplementalHydrationService();
     hydrationService.failInitialBookmarks(StateError('bookmark failed'));
     final container = _buildContainer(
       repository: repository,
@@ -579,9 +622,9 @@ void main() {
     addTearDown(subscription.close);
 
     await container.read(provider.future);
-    hydrationService.completeInitialDownloadedEpisodeIds(
-      const <String>{'novel:49:100:5001'},
-    );
+    hydrationService.completeInitialDownloadedEpisodeIds(const <String>{
+      'novel:49:100:5001',
+    });
     hydrationService.completeInitialNovel(_supplementalNovel());
     await Future<void>.delayed(Duration.zero);
 
@@ -592,40 +635,43 @@ void main() {
     expect(state.isHydratingSupplemental, isFalse);
   });
 
-  test('refreshCurrentEpisode failure keeps old content and avoids AsyncError', () async {
-    final repository = _ControllerNovelRepository();
-    final bootstrapService = _ControlledNovelReaderBootstrapService(
-      initialCritical: _criticalBootstrap(
+  test(
+    'refreshCurrentEpisode failure keeps old content and avoids AsyncError',
+    () async {
+      final repository = _ControllerNovelRepository();
+      final bootstrapService = _ControlledNovelReaderBootstrapService(
+        initialCritical: _criticalBootstrap(episodeId: 'novel:49:100:5001'),
+      );
+      bootstrapService.failEpisodeCritical(
+        'novel:49:100:5001',
+        StateError('refresh failed'),
+      );
+      final container = _buildContainer(
+        repository: repository,
+        bootstrapService: bootstrapService,
+      );
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
         episodeId: 'novel:49:100:5001',
-      ),
-    );
-    bootstrapService.failEpisodeCritical(
-      'novel:49:100:5001',
-      StateError('refresh failed'),
-    );
-    final container = _buildContainer(
-      repository: repository,
-      bootstrapService: bootstrapService,
-    );
-    addTearDown(container.dispose);
-    const args = NovelReaderArgs(
-      novelId: 'novel:49:100',
-      episodeId: 'novel:49:100:5001',
-    );
-    final provider = novelReaderControllerProvider(args);
-    final subscription = _keepReaderAlive(container, args);
-    addTearDown(subscription.close);
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
 
-    await container.read(provider.future);
+      await container.read(provider.future);
 
-    final didSucceed = await container.read(provider.notifier).refreshCurrentEpisode();
+      final didSucceed = await container
+          .read(provider.notifier)
+          .refreshCurrentEpisode();
 
-    expect(didSucceed, isFalse);
-    expect(container.read(provider).hasError, isFalse);
-    final state = container.read(provider).value!;
-    expect(state.currentEpisode.episodeId, 'novel:49:100:5001');
-    expect(state.transition, isNull);
-  });
+      expect(didSucceed, isFalse);
+      expect(container.read(provider).hasError, isFalse);
+      final state = container.read(provider).value!;
+      expect(state.currentEpisode.episodeId, 'novel:49:100:5001');
+      expect(state.transition, isNull);
+    },
+  );
 
   test('searchInCurrentChapter updates search results and selection', () async {
     final repository = _ControllerNovelRepository();
@@ -671,7 +717,9 @@ void main() {
     await container.read(provider.notifier).toggleCurrentEpisodeBookmark();
     expect(container.read(provider).value!.hasCurrentEpisodeBookmark, isTrue);
 
-    await container.read(provider.notifier).addBookmarkAtCurrentPosition(
+    await container
+        .read(provider.notifier)
+        .addBookmarkAtCurrentPosition(
           const NovelReaderTextAnchor(
             episodeId: 'novel:49:100:5001',
             nodeId: 'node-0',
@@ -711,7 +759,9 @@ void main() {
     final initial = await container.read(provider.future);
     expect(initial.isHydratingSupplemental, isTrue);
     expect(initial.isCurrentEpisodeDownloaded, isFalse);
-    final result = await container.read(provider.notifier).cacheCurrentEpisode();
+    final result = await container
+        .read(provider.notifier)
+        .cacheCurrentEpisode();
     final state = container.read(provider).value!;
 
     expect(result.successCount, 1);
@@ -749,8 +799,9 @@ void main() {
     expect(initial.isHydratingSupplemental, isTrue);
     expect(initial.isCurrentEpisodeDownloaded, isFalse);
 
-    final result =
-        await container.read(provider.notifier).deleteCurrentEpisodeCache();
+    final result = await container
+        .read(provider.notifier)
+        .deleteCurrentEpisodeCache();
     final state = container.read(provider).value!;
 
     expect(result.successCount, 1);
@@ -798,7 +849,9 @@ ProviderContainer _buildContainer({
           documentBuildService,
         ),
       if (progressCommitter != null)
-        novelReaderProgressCommitterProvider.overrideWithValue(progressCommitter),
+        novelReaderProgressCommitterProvider.overrideWithValue(
+          progressCommitter,
+        ),
     ],
   );
 }
@@ -1020,7 +1073,10 @@ class _MemoryLibraryStateRepository implements LibraryStateRepository {
   Future<List<LibraryTag>> getTags() async => const <LibraryTag>[];
 
   @override
-  Future<void> renameTag({required String tagId, required String newName}) async {}
+  Future<void> renameTag({
+    required String tagId,
+    required String newName,
+  }) async {}
 
   @override
   Future<void> deleteTag({required String tagId}) async {}
@@ -1063,7 +1119,10 @@ class _ControllerNovelRepository implements NovelRepository {
   }) : preferences = preferences ?? NovelReaderPreferences.defaults() {
     contentsByEpisodeId = <String, NovelChapterContent>{
       for (final episode in episodes)
-        episode.episodeId: _content(episode.episodeId, '${episode.episodeTitle}正文。'),
+        episode.episodeId: _content(
+          episode.episodeId,
+          '${episode.episodeTitle}正文。',
+        ),
     };
   }
 
@@ -1088,7 +1147,9 @@ class _ControllerNovelRepository implements NovelRepository {
   }
 
   @override
-  Future<NovelChapterContent?> getChapterContent({required String episodeId}) async {
+  Future<NovelChapterContent?> getChapterContent({
+    required String episodeId,
+  }) async {
     return contentsByEpisodeId[episodeId];
   }
 
@@ -1118,7 +1179,9 @@ class _ControllerNovelRepository implements NovelRepository {
   }
 
   @override
-  Future<NovelReadingProgress?> getReadingProgress({required String novelId}) async {
+  Future<NovelReadingProgress?> getReadingProgress({
+    required String novelId,
+  }) async {
     return readingProgress;
   }
 
@@ -1189,7 +1252,9 @@ class _ControllerNovelRepository implements NovelRepository {
   }) async {}
 
   @override
-  Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {
+  Future<void> upsertReaderPreferences(
+    NovelReaderPreferences preferences,
+  ) async {
     upsertPreferencesCallCount += 1;
     latestPreferences = preferences;
     this.preferences = preferences;
@@ -1211,9 +1276,7 @@ class _ControllerNovelRepository implements NovelRepository {
   }
 
   @override
-  Future<void> removeReaderBookmark({
-    required String bookmarkId,
-  }) async {
+  Future<void> removeReaderBookmark({required String bookmarkId}) async {
     bookmarks.removeWhere((bookmark) => bookmark.bookmarkId == bookmarkId);
   }
 
@@ -1223,7 +1286,9 @@ class _ControllerNovelRepository implements NovelRepository {
     required String episodeId,
     required bool isBookmarked,
   }) async {
-    bookmarks.removeWhere((bookmark) => bookmark.bookmarkId == 'episode-bookmark:$episodeId');
+    bookmarks.removeWhere(
+      (bookmark) => bookmark.bookmarkId == 'episode-bookmark:$episodeId',
+    );
     if (isBookmarked) {
       bookmarks.add(
         NovelReaderBookmark(
@@ -1249,8 +1314,8 @@ class _ControlledNovelReaderBootstrapService
 
   final NovelReaderCriticalBootstrap _initialCritical;
   bool _hasServedInitialCritical = false;
-  final Map<String, Completer<NovelReaderCriticalBootstrap>> _criticalCompleters =
-      <String, Completer<NovelReaderCriticalBootstrap>>{};
+  final Map<String, Completer<NovelReaderCriticalBootstrap>>
+  _criticalCompleters = <String, Completer<NovelReaderCriticalBootstrap>>{};
   final Map<String, Object> _criticalFailures = <String, Object>{};
 
   @override
@@ -1258,7 +1323,8 @@ class _ControlledNovelReaderBootstrapService
     NovelReaderLoadContext context,
   ) {
     if (!_hasServedInitialCritical &&
-        context.requestedEpisodeId == _initialCritical.currentEpisode.episodeId) {
+        context.requestedEpisodeId ==
+            _initialCritical.currentEpisode.episodeId) {
       _hasServedInitialCritical = true;
       return Future<NovelReaderCriticalBootstrap>.value(_initialCritical);
     }
@@ -1393,9 +1459,7 @@ NovelReaderCriticalBootstrap _criticalBootstrap({
   );
 }
 
-List<NovelReaderBookmark> _supplementalBookmarks({
-  required String episodeId,
-}) {
+List<NovelReaderBookmark> _supplementalBookmarks({required String episodeId}) {
   return <NovelReaderBookmark>[
     NovelReaderBookmark(
       bookmarkId: 'episode-bookmark:$episodeId',
@@ -1410,9 +1474,7 @@ List<NovelReaderBookmark> _supplementalBookmarks({
   ];
 }
 
-NovelItem _supplementalNovel({
-  String novelTitle = '测试小说',
-}) {
+NovelItem _supplementalNovel({String novelTitle = '测试小说'}) {
   return NovelItem(
     novelId: 'novel:49:100',
     sourceTid: '100',
@@ -1433,9 +1495,7 @@ class _ControlledNovelReaderSupplementalHydrationService
       _HydrationSequence<NovelItem?>();
 
   @override
-  Future<List<NovelReaderBookmark>> loadBookmarks({
-    required String novelId,
-  }) {
+  Future<List<NovelReaderBookmark>> loadBookmarks({required String novelId}) {
     return _bookmarkSequence.take();
   }
 
@@ -1448,9 +1508,7 @@ class _ControlledNovelReaderSupplementalHydrationService
   }
 
   @override
-  Future<NovelItem?> loadNovel({
-    required String novelId,
-  }) {
+  Future<NovelItem?> loadNovel({required String novelId}) {
     return _novelSequence.take();
   }
 

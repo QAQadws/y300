@@ -42,12 +42,10 @@ class FavoriteSyncProgress {
       FavoriteSyncProgressPhase.fetchingList ||
       FavoriteSyncProgressPhase.savingList ||
       FavoriteSyncProgressPhase.loadingDetails ||
-      FavoriteSyncProgressPhase.finishing =>
-        true,
+      FavoriteSyncProgressPhase.finishing => true,
       FavoriteSyncProgressPhase.idle ||
       FavoriteSyncProgressPhase.completed ||
-      FavoriteSyncProgressPhase.failed =>
-        false,
+      FavoriteSyncProgressPhase.failed => false,
     };
   }
 
@@ -68,9 +66,7 @@ class FavoriteSyncProgress {
 abstract class FavoriteSyncService {
   Future<FavoriteSyncResult> sync();
 
-  Future<FavoriteSyncResult> syncRecentlyAddedThread({
-    required String tid,
-  });
+  Future<FavoriteSyncResult> syncRecentlyAddedThread({required String tid});
 
   Future<void> runBackgroundMaintenance();
 
@@ -89,18 +85,18 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     SyncDiagnosticRecorder? diagnosticRecorder,
     int detailBatchLimit = 20,
     FavoriteFirstSyncRequestGovernor Function()? governorFactory,
-  })  : _remoteRepository = remoteRepository,
-        _localRepository = localRepository,
-        _detailContextLoader = detailContextLoader,
-        _contentIngestRegistry = contentIngestRegistry,
-        _postIngestTaskRunner = postIngestTaskRunner,
-        _shelfRefreshBus = shelfRefreshBus,
-        _downloadStorageService = downloadStorageService,
-        _diagnosticRecorder =
-            diagnosticRecorder ?? const NoopSyncDiagnosticRecorder(),
-        _detailBatchLimit = detailBatchLimit,
-        _governorFactory =
-            governorFactory ?? (() => DefaultFavoriteFirstSyncRequestGovernor());
+  }) : _remoteRepository = remoteRepository,
+       _localRepository = localRepository,
+       _detailContextLoader = detailContextLoader,
+       _contentIngestRegistry = contentIngestRegistry,
+       _postIngestTaskRunner = postIngestTaskRunner,
+       _shelfRefreshBus = shelfRefreshBus,
+       _downloadStorageService = downloadStorageService,
+       _diagnosticRecorder =
+           diagnosticRecorder ?? const NoopSyncDiagnosticRecorder(),
+       _detailBatchLimit = detailBatchLimit,
+       _governorFactory =
+           governorFactory ?? (() => DefaultFavoriteFirstSyncRequestGovernor());
 
   final FavoriteRepository _remoteRepository;
   final LocalFavoriteRepository _localRepository;
@@ -112,9 +108,8 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   final SyncDiagnosticRecorder _diagnosticRecorder;
   final int _detailBatchLimit;
   final FavoriteFirstSyncRequestGovernor Function() _governorFactory;
-  final ValueNotifier<FavoriteSyncProgress> _progress = ValueNotifier<FavoriteSyncProgress>(
-    FavoriteSyncProgress.idle,
-  );
+  final ValueNotifier<FavoriteSyncProgress> _progress =
+      ValueNotifier<FavoriteSyncProgress>(FavoriteSyncProgress.idle);
   Future<FavoriteSyncResult>? _inflightSync;
 
   @override
@@ -138,30 +133,31 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       return existing;
     }
     late final Future<FavoriteSyncResult> future;
-    future = _runSync(() async {
-      final snapshot = await _localRepository.getSyncSnapshot();
-      if (snapshot == null) {
-        _diagnosticRecorder.activateFavoriteFirstSync();
-      }
-      final context = snapshot == null
-          ? FavoriteSyncExecutionContext.bootstrapInitial(
-              governor: _governorFactory(),
-            )
-          : const FavoriteSyncExecutionContext.automaticResume();
-      _diagnosticRecorder.record(
-        scope: 'favorites',
-        event: 'sync_requested',
-        fields: <String, Object?>{
-          'mode': context.mode.name,
-          'snapshotExists': snapshot != null,
-        },
-      );
-      return _syncInternal(context: context);
-    }).whenComplete(() {
-      if (identical(_inflightSync, future)) {
-        _inflightSync = null;
-      }
-    });
+    future =
+        _runSync(() async {
+          final snapshot = await _localRepository.getSyncSnapshot();
+          if (snapshot == null) {
+            _diagnosticRecorder.activateFavoriteFirstSync();
+          }
+          final context = snapshot == null
+              ? FavoriteSyncExecutionContext.bootstrapInitial(
+                  governor: _governorFactory(),
+                )
+              : const FavoriteSyncExecutionContext.automaticResume();
+          _diagnosticRecorder.record(
+            scope: 'favorites',
+            event: 'sync_requested',
+            fields: <String, Object?>{
+              'mode': context.mode.name,
+              'snapshotExists': snapshot != null,
+            },
+          );
+          return _syncInternal(context: context);
+        }).whenComplete(() {
+          if (identical(_inflightSync, future)) {
+            _inflightSync = null;
+          }
+        });
     _inflightSync = future;
     return future;
   }
@@ -194,10 +190,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   ) async {
     try {
       final result = await body();
-      _diagnosticRecorder.record(
-        scope: 'favorites',
-        event: 'sync_completed',
-      );
+      _diagnosticRecorder.record(scope: 'favorites', event: 'sync_completed');
       _emitProgress(
         const FavoriteSyncProgress(
           phase: FavoriteSyncProgressPhase.completed,
@@ -209,9 +202,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       _diagnosticRecorder.record(
         scope: 'favorites',
         event: 'sync_failed',
-        fields: <String, Object?>{
-          'error': error.message,
-        },
+        fields: <String, Object?>{'error': error.message},
       );
       _emitProgress(
         FavoriteSyncProgress(
@@ -225,9 +216,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       _diagnosticRecorder.record(
         scope: 'favorites',
         event: 'sync_failed',
-        fields: <String, Object?>{
-          'error': '$error',
-        },
+        fields: <String, Object?>{'error': '$error'},
       );
       _emitProgress(
         FavoriteSyncProgress(
@@ -311,7 +300,11 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
           total: pages.length,
         ),
       );
-      remoteTids.addAll(page.items.map((item) => item.tid.trim()).where((tid) => tid.isNotEmpty));
+      remoteTids.addAll(
+        page.items
+            .map((item) => item.tid.trim())
+            .where((tid) => tid.isNotEmpty),
+      );
       final pageStartOrder = (page.page - 1) * page.perPage;
       upsertedCount += await _localRepository.upsertRemotePage(
         page: page,
@@ -373,7 +366,9 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     );
   }
 
-  Future<FavoriteSyncResult> _syncRecentlyAddedThreadInternal(String tid) async {
+  Future<FavoriteSyncResult> _syncRecentlyAddedThreadInternal(
+    String tid,
+  ) async {
     const context = FavoriteSyncExecutionContext.manualRecentAdd();
     _emitProgress(
       const FavoriteSyncProgress(
@@ -398,7 +393,9 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     // A newly favorited thread is normally on page one. Keep a bounded
     // incremental scan for remote ordering drift without turning one button tap
     // into an unconditional full favorite sync.
-    while (!foundTid && current.hasMore && !_pageAllKnown(current, activeBefore)) {
+    while (!foundTid &&
+        current.hasMore &&
+        !_pageAllKnown(current, activeBefore)) {
       final nextPageNumber = current.page + 1;
       _emitProgress(
         FavoriteSyncProgress(
@@ -445,10 +442,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       // row. Seed the local cache from the thread detail so the shelf updates
       // immediately, then let later list syncs fill favid/remote ordering.
       try {
-        preloadedDetail = await _loadTargetDetailOrNull(
-          tid,
-          context: context,
-        );
+        preloadedDetail = await _loadTargetDetailOrNull(tid, context: context);
         if (preloadedDetail != null) {
           upsertedCount += await _upsertRecentlyFavoritedThreadFromDetail(
             tid: tid,
@@ -473,12 +467,12 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         ),
       );
       try {
-          final loaded = await _fillOneDetail(
-            record,
-            context: context,
-            mergeIngestedComics: true,
-            forceComicSearchOnCatalogMiss: true,
-            preloadedDetail: preloadedDetail,
+        final loaded = await _fillOneDetail(
+          record,
+          context: context,
+          mergeIngestedComics: true,
+          forceComicSearchOnCatalogMiss: true,
+          preloadedDetail: preloadedDetail,
         );
         if (loaded) {
           detailLoadedCount = 1;
@@ -527,7 +521,9 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       return FavoriteSyncMode.fullDiff;
     }
 
-    final pageOneTids = firstPage.items.map((item) => item.tid.trim()).where((tid) => tid.isNotEmpty);
+    final pageOneTids = firstPage.items
+        .map((item) => item.tid.trim())
+        .where((tid) => tid.isNotEmpty);
     final pageOneAllKnown = pageOneTids.every(activeBefore.contains);
     if (firstPage.totalCount == snapshot.localActiveCount && !pageOneAllKnown) {
       return FavoriteSyncMode.fullDiff;
@@ -537,11 +533,9 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   }
 
   Future<List<FavoriteThreadsPage>> _fetchRemainingPages(
-    FavoriteThreadsPage firstPage,
-    {
+    FavoriteThreadsPage firstPage, {
     required FavoriteSyncExecutionContext context,
-  }
-  ) async {
+  }) async {
     final pages = <FavoriteThreadsPage>[];
     var current = firstPage;
     final estimatedTotal = _estimatedPageCount(firstPage);
@@ -643,7 +637,9 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       return Future<int>.value(0);
     }
     final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final title = detail.subject.trim().isEmpty ? normalizedTid : detail.subject;
+    final title = detail.subject.trim().isEmpty
+        ? normalizedTid
+        : detail.subject;
     return _localRepository.upsertRemotePage(
       page: FavoriteThreadsPage(
         page: 1,
@@ -671,7 +667,8 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     bool mergeIngestedComics = true,
     Set<String> forceComicSearchOnCatalogMissTids = const <String>{},
   }) async {
-    final totalMissingDetails = await _localRepository.countMissingDetailRecords();
+    final totalMissingDetails = await _localRepository
+        .countMissingDetailRecords();
     final failedTids = <String>[];
     final failedTidSet = <String>{};
     final errors = <String, String>{};
@@ -703,8 +700,8 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
             record,
             context: context,
             mergeIngestedComics: mergeIngestedComics,
-            forceComicSearchOnCatalogMiss:
-                forceComicSearchOnCatalogMissTids.contains(record.tid),
+            forceComicSearchOnCatalogMiss: forceComicSearchOnCatalogMissTids
+                .contains(record.tid),
           );
           if (loaded) {
             loadedCount++;
@@ -750,7 +747,9 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     );
     return result.when(
       success: (detailContext) async {
-        final ingestHandler = _contentIngestRegistry.handlerFor(detailContext.kind);
+        final ingestHandler = _contentIngestRegistry.handlerFor(
+          detailContext.kind,
+        );
         final ingestResult = await ingestHandler.ingest(
           FavoriteContentIngestRequest(
             context: detailContext,
@@ -787,9 +786,9 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   Future<void> _mergeAllComicDuplicatesAfterFirstSync() async {
     // 首次全量同步收尾的全量去重交给 runner，与单条入库后的合并共用同一执行器，
     // 失败语义统一“不阻断收藏同步主结果”。
-    await _postIngestTaskRunner.runAll(
-      const <LibraryPostIngestTask>[ComicDuplicateMergeAllTask()],
-    );
+    await _postIngestTaskRunner.runAll(const <LibraryPostIngestTask>[
+      ComicDuplicateMergeAllTask(),
+    ]);
   }
 
   Future<void> _backfillExistingComicAutoRefreshIfNeeded({
@@ -810,15 +809,18 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     final checkedTids = <String>{};
     final failedTids = <String>[];
     var checkedCount = 0;
+    var sawAnyCandidate = false;
 
     while (true) {
-      final records = await _localRepository.getComicAutoRefreshBackfillCandidates(
-        limit: _detailBatchLimit,
-        excludedTids: checkedTids,
-      );
+      final records = await _localRepository
+          .getComicAutoRefreshBackfillCandidates(
+            limit: _detailBatchLimit,
+            excludedTids: checkedTids,
+          );
       if (records.isEmpty) {
         break;
       }
+      sawAnyCandidate = true;
 
       final checkedBefore = checkedTids.length;
       for (final record in records) {
@@ -828,18 +830,18 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
           failedTids.add(record.tid);
           continue;
         }
-        final report = await _postIngestTaskRunner.runAll(
-          <LibraryPostIngestTask>[
-            ComicAutoRefreshBackfillTask(
-              comicId: comicId,
-              sourceTid: record.tid,
-              favoriteTitle: record.title,
-              sourceTitle: record.title,
-              sourceTagName: record.sourceTagName,
-            ),
-          ],
-          executionContext: context,
-        );
+        final report = await _postIngestTaskRunner
+            .runAll(<LibraryPostIngestTask>[
+              ComicAutoRefreshBackfillTask(
+                comicId: comicId,
+                sourceTid: record.tid,
+                favoriteTitle: record.title,
+                sourceTitle: record.title,
+                sourceFid: record.sourceFid,
+                sourceTypeId: record.sourceTypeid,
+                sourceTagName: record.sourceTagName,
+              ),
+            ], executionContext: context);
         if (report.failures.isNotEmpty) {
           failedTids.add(record.tid);
         } else {
@@ -852,6 +854,10 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       if (checkedTids.length == checkedBefore) {
         break;
       }
+    }
+
+    if (!sawAnyCandidate) {
+      return;
     }
 
     await _localRepository.markComicAutoRefreshBackfillCompleted(
@@ -870,13 +876,17 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       if (workId == null || workId.isEmpty) {
         continue;
       }
-      final ingestHandler = _contentIngestRegistry.handlerFor(record.contentKind);
+      final ingestHandler = _contentIngestRegistry.handlerFor(
+        record.contentKind,
+      );
       await ingestHandler.removeFromShelf(workId: workId);
     }
   }
 
   String _buildPartialFailureMessage(Map<String, String> errors) {
-    final details = errors.entries.map((entry) => '${entry.key}:${entry.value}').join(',');
+    final details = errors.entries
+        .map((entry) => '${entry.key}:${entry.value}')
+        .join(',');
     return '部分收藏详情补全失败：$details';
   }
 
@@ -952,14 +962,12 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       return;
     }
     final records = await _localRepository.getActiveThreadsForSnapshot();
-    await storage.writeFavoritesSnapshot(
-      <String, Object?>{
-        'schemaVersion': 1,
-        'remoteCount': remoteCount,
-        'syncedAt': DateTime.now().toUtc().toIso8601String(),
-        'threads': records.map(_favoriteSnapshotRow).toList(growable: false),
-      },
-    );
+    await storage.writeFavoritesSnapshot(<String, Object?>{
+      'schemaVersion': 1,
+      'remoteCount': remoteCount,
+      'syncedAt': DateTime.now().toUtc().toIso8601String(),
+      'threads': records.map(_favoriteSnapshotRow).toList(growable: false),
+    });
   }
 
   Map<String, Object?> _favoriteSnapshotRow(FavoriteThreadCacheRecord record) {

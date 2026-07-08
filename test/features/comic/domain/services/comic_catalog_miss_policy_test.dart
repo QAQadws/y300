@@ -12,6 +12,26 @@ void main() {
       );
     });
 
+    test('allows long-running comic type id even when tag name is missing', () {
+      expect(
+        policy.shouldQueueSearchOnCatalogMiss(
+          sourceFid: '30',
+          sourceTypeId: '69',
+        ),
+        isTrue,
+      );
+    });
+
+    test('rejects long-running type id outside comic forum', () {
+      expect(
+        policy.shouldQueueSearchOnCatalogMiss(
+          sourceFid: '49',
+          sourceTypeId: '69',
+        ),
+        isFalse,
+      );
+    });
+
     test('rejects non long-running tag', () {
       expect(
         policy.shouldQueueSearchOnCatalogMiss(sourceTagName: '韩国漫画'),

@@ -1,3 +1,4 @@
+import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/tags/domain/services/yamibo_tag_page_parsing.dart';
 
@@ -47,37 +48,24 @@ class CatalogThreadHtmlParser {
 
     for (final row in document.querySelectorAll('tr')) {
       for (final anchor in row.querySelectorAll('a')) {
-        final href = (anchor.attributes['href'] ?? '').trim();
-        if (href.isEmpty) {
-          continue;
-        }
-
-        final normalizedUrl = _tagPageParsing.resolveUrl(href, pageUrl);
-        if (normalizedUrl == null) {
-          continue;
-        }
-        final tid = _tagPageParsing.extractTidFromThreadUrl(normalizedUrl);
-        if (tid == null) {
-          continue;
-        }
-
-        final subject = anchor.text.trim();
-        final score = _scoreAnchor(
-          anchorText: subject,
-          isInsideTh: anchor.parent?.localName == 'th',
+        _collectCandidate(
+          candidates: candidates,
+          anchor: anchor,
+          pageUrl: pageUrl,
         );
-        final current = candidates[tid];
-        if (current == null ||
-            score > current.score ||
-            (score == current.score &&
-                subject.length > current.subject.length)) {
-          candidates[tid] = _EntryCandidate(
-            tid: tid,
-            url: normalizedUrl,
-            subject: subject,
-            score: score,
-          );
-        }
+      }
+    }
+
+    // Mobile/newer tag pages may render thread lists without table rows. Keep
+    // the table pass first for the desktop parser's scoring, then scan anchors
+    // only when that structure produced no thread entries.
+    if (candidates.isEmpty) {
+      for (final anchor in document.querySelectorAll('a')) {
+        _collectCandidate(
+          candidates: candidates,
+          anchor: anchor,
+          pageUrl: pageUrl,
+        );
       }
     }
 
@@ -101,6 +89,43 @@ class CatalogThreadHtmlParser {
       currentPage: paginationInfo.currentPage,
       totalPages: paginationInfo.totalPages,
     );
+  }
+
+  void _collectCandidate({
+    required Map<String, _EntryCandidate> candidates,
+    required html_dom.Element anchor,
+    required String pageUrl,
+  }) {
+    final href = (anchor.attributes['href'] ?? '').trim();
+    if (href.isEmpty) {
+      return;
+    }
+
+    final normalizedUrl = _tagPageParsing.resolveUrl(href, pageUrl);
+    if (normalizedUrl == null) {
+      return;
+    }
+    final tid = _tagPageParsing.extractTidFromThreadUrl(normalizedUrl);
+    if (tid == null) {
+      return;
+    }
+
+    final subject = anchor.text.trim();
+    final score = _scoreAnchor(
+      anchorText: subject,
+      isInsideTh: anchor.parent?.localName == 'th',
+    );
+    final current = candidates[tid];
+    if (current == null ||
+        score > current.score ||
+        (score == current.score && subject.length > current.subject.length)) {
+      candidates[tid] = _EntryCandidate(
+        tid: tid,
+        url: normalizedUrl,
+        subject: subject,
+        score: score,
+      );
+    }
   }
 
   int _scoreAnchor({required String anchorText, required bool isInsideTh}) {

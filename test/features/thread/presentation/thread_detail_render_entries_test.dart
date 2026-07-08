@@ -48,6 +48,7 @@ void main() {
     test('builds segment entries for long text posts', () {
       final parser = _CountingThreadPostBodyParser();
       final planner = ThreadDetailRenderEntryPlanner(
+        renderMode: ThreadDetailHtmlFirstRenderMode.legacy,
         bodyRenderPlanner: ThreadPostBodyRenderPlanner(
           parser: parser,
           maxSegmentTextLength: 6,
@@ -122,7 +123,9 @@ void main() {
     });
 
     test('builds segment entries for image bodies', () {
-      final planner = ThreadDetailRenderEntryPlanner();
+      final planner = ThreadDetailRenderEntryPlanner(
+        renderMode: ThreadDetailHtmlFirstRenderMode.legacy,
+      );
 
       final entries = planner.buildEntries(
         posts: <ThreadPost>[

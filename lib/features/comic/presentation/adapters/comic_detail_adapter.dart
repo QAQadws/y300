@@ -579,10 +579,27 @@ class ComicDetailAdapter
       }
     }
 
-    // Step 2: 获取当前帖详情（为增量发现提供解析数据）
+    // Step 2: catalog-only 目录路径。没有持久化 catalogUrl 时也必须先
+    // 让统一 discovery 跑完整目录判断，再考虑当前帖增量和搜索队列。
+    final catalog = await refreshService.fetchCatalogOnly(request);
+    if (catalog.catalogMatched && catalog.hasLinks) {
+      await _applyRefreshOutcome(
+        applier: refreshOutcomeApplier,
+        comicId: workId,
+        sourceTid: detail.sourceTid,
+        links: catalog.links,
+        source: catalog.source,
+        reason: 'comic_detail_catalog_refresh',
+        catalogUrl: catalog.catalogUrl,
+      );
+      return DetailRefreshResult.immediate;
+    }
+
+    // Step 3: 获取当前帖详情（为增量发现提供解析数据）
     final parsedRoot = await _fetchAndParseCurrentThread(detail.sourceTid);
 
-    // Step 2.5: catalogUrl 动态补全
+    // Step 3.5: catalogUrl 动态补全。fetchCatalogOnly 正常会覆盖这条路径；
+    // 保留它是为了兼容测试/特殊 discovery service 只暴露 fetchAndParseThread。
     final discoveredCatalogUrl = parsedRoot?.catalogUrl;
     if (discoveredCatalogUrl != null && discoveredCatalogUrl.isNotEmpty) {
       // 持久化新发现的 catalogUrl，下次刷新可直接走快速路径
@@ -608,20 +625,6 @@ class ComicDetailAdapter
       }
     }
 
-    // Step 3: 入搜索队列（异步，不阻塞后续步骤）
-    final searchQueue = _searchQueue;
-    int? enqueuedPosition;
-    Duration? enqueuedDuration;
-    if (searchQueue != null) {
-      final queued = await searchQueue.enqueue(
-        request: request,
-        title: _queueTitle(detail),
-        origin: ComicSearchRefreshOrigin.detailManual,
-      );
-      enqueuedPosition = queued.position;
-      enqueuedDuration = queued.estimatedDuration;
-    }
-
     // Step 4: 增量章节发现
     final knownTids = await _getKnownEpisodeTids(workId);
     final incrementalLinks = await _runIncrementalDiscovery(
@@ -642,11 +645,17 @@ class ComicDetailAdapter
       return DetailRefreshResult.immediate;
     }
 
-    // 无增量结果：返回队列状态
-    if (enqueuedPosition != null) {
+    // Step 6: catalog 和增量都无结果时才入搜索队列。
+    final searchQueue = _searchQueue;
+    if (searchQueue != null) {
+      final queued = await searchQueue.enqueue(
+        request: request,
+        title: _queueTitle(detail),
+        origin: ComicSearchRefreshOrigin.detailManual,
+      );
       return DetailRefreshResult.queued(
-        queuePosition: enqueuedPosition,
-        estimatedDuration: enqueuedDuration ?? Duration.zero,
+        queuePosition: queued.position,
+        estimatedDuration: queued.estimatedDuration,
       );
     }
     return const DetailRefreshResult(
