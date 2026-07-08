@@ -73,9 +73,9 @@ class CookieStore {
 
   /// 将一批已解析好的 name=value cookie 合并写入指定 host。
   ///
-  /// 用于 WebView → dio 的反向同步：WebView 里由真实浏览器赢得的
-  /// WAF 通行证（acw_sc__v2）和登录态 cookie，通过此方法灌回 dio 的
-  /// cookie 存储，从而让原生 API 请求也带上这些凭证。
+  /// 用于 WebView → dio 的反向同步：WebView 里由真实浏览器赢得的登录态
+  /// 及站点前置层下发的 cookie，通过此方法灌回 dio 的 cookie 存储，从而让
+  /// 原生 API 请求也带上这些凭证。
   ///
   /// 采用合并语义而非整体覆盖：只更新传入的键，保留该 host 下其它已有
   /// cookie；空值视为删除，避免把已有有效 cookie 清空。

@@ -2,8 +2,14 @@ import 'dart:async';
 
 import 'package:y300/features/library_shared/domain/services/sync_diagnostic_recorder.dart';
 
-// Adjust this single constant when tuning favorite first-sync request pacing.
-const Duration favoriteFirstSyncGovernorCooldown = Duration(milliseconds: 500);
+// Adjust this single constant when tuning favorite sync request pacing.
+// Applies to ALL favorite sync modes (first / automatic-resume / manual
+// recent-add) — every governed parse request waits this long after the
+// previous one completes, to avoid tripping the site's temporary IP ban.
+const Duration favoriteSyncGovernorCooldown = Duration(milliseconds: 700);
+
+@Deprecated('Renamed to favoriteSyncGovernorCooldown (now covers all sync modes).')
+const Duration favoriteFirstSyncGovernorCooldown = favoriteSyncGovernorCooldown;
 
 enum FavoriteSyncExecutionMode {
   bootstrapInitial,
@@ -36,11 +42,21 @@ class FavoriteSyncExecutionContext {
          governor: governor,
        );
 
-  const FavoriteSyncExecutionContext.automaticResume()
-      : this(mode: FavoriteSyncExecutionMode.automaticResume);
+  // Subsequent syncs are governed too: the same request pacing must apply so a
+  // resume / manual add can't burst-fire parse requests and trip an IP ban.
+  const FavoriteSyncExecutionContext.automaticResume({
+    FavoriteFirstSyncRequestGovernor? governor,
+  }) : this(
+         mode: FavoriteSyncExecutionMode.automaticResume,
+         governor: governor,
+       );
 
-  const FavoriteSyncExecutionContext.manualRecentAdd()
-      : this(mode: FavoriteSyncExecutionMode.manualRecentAdd);
+  const FavoriteSyncExecutionContext.manualRecentAdd({
+    FavoriteFirstSyncRequestGovernor? governor,
+  }) : this(
+         mode: FavoriteSyncExecutionMode.manualRecentAdd,
+         governor: governor,
+       );
 
   final FavoriteSyncExecutionMode mode;
   final FavoriteFirstSyncRequestGovernor? governor;
@@ -59,7 +75,7 @@ abstract interface class FavoriteFirstSyncRequestGovernor {
 class DefaultFavoriteFirstSyncRequestGovernor
     implements FavoriteFirstSyncRequestGovernor {
   DefaultFavoriteFirstSyncRequestGovernor({
-    this.cooldown = favoriteFirstSyncGovernorCooldown,
+    this.cooldown = favoriteSyncGovernorCooldown,
     DateTime Function()? nowProvider,
     Future<void> Function(Duration duration)? delay,
     SyncDiagnosticRecorder? diagnosticRecorder,

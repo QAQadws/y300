@@ -513,7 +513,7 @@ final comicEpisodeDiscoveryServiceProvider =
       );
       return ComicEpisodeDiscoveryService(
         fetchThreadDetail: (tid) => ref
-            .read(threadRepositoryProvider)
+            .read(threadJsonRepositoryProvider)
             .getThreadDetail(tid: tid, page: 1),
         opPostParser: opPostParser,
         catalogHtmlFetcher: YamiboCatalogHtmlFetcher(
@@ -527,7 +527,7 @@ final comicIncrementalEpisodeDiscoveryProvider =
     Provider<ComicIncrementalEpisodeDiscovery>((ref) {
       return ComicIncrementalEpisodeDiscovery(
         fetchThreadDetail: (tid) => ref
-            .read(threadRepositoryProvider)
+            .read(threadJsonRepositoryProvider)
             .getThreadDetail(tid: tid, page: 1),
         opPostParser: ComicConsecutiveOpPostParser(
           engine: ComicPostParsingEngine(),
@@ -571,7 +571,7 @@ final comicEpisodeRefreshServiceProvider = Provider<ComicEpisodeRefreshService>(
       diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),
       threadSeedFetcher: (tid) async {
         final result = await ref
-            .read(threadRepositoryProvider)
+            .read(threadJsonRepositoryProvider)
             .getThreadDetail(tid: tid, page: 1);
         return result.when(
           success: (data) => ThreadSeed(subject: data.subject),

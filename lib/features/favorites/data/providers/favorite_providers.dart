@@ -35,10 +35,11 @@ final localFavoriteRepositoryProvider = Provider<LocalFavoriteRepository>((ref) 
 final favoriteDetailContextLoaderProvider =
     Provider<FavoriteDetailContextLoader>((ref) {
   return DefaultFavoriteDetailContextLoader(
-    loadThreadDetail: (tid) => ref.read(threadRepositoryProvider).getThreadDetail(
-          tid: tid,
-          page: 1,
-        ),
+    loadThreadDetail: (tid) =>
+        ref.read(threadJsonRepositoryProvider).getThreadDetail(
+              tid: tid,
+              page: 1,
+            ),
     loadTagLookup: () => ref.read(forumTagLookupProvider.future),
     classifier: ref.watch(threadContentClassifierProvider),
     diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),

@@ -8,9 +8,6 @@ abstract final class YamiboAuthCookie {
   /// 登录 cookie 名的统一后缀。
   static const String authSuffix = '_auth';
 
-  /// WebView 赢得的阿里云 WAF 通行证 cookie 名，需随登录 cookie 一并回灌 dio。
-  static const String wafPassName = 'acw_sc__v2';
-
   /// 判断一批 cookie 是否已包含有效的登录态。
   ///
   /// 有效条件：存在名字以 `_auth` 结尾、值非空且非删除占位符的 cookie。

@@ -56,11 +56,10 @@ class InAppWebViewCookieJar implements WebViewCookieJar {
 
 /// 把 WebView 赢得的 cookie 同步进 dio 的 [CookieStore]（WebView → dio 方向）。
 ///
-/// 这是原有架构缺失的一环：真实浏览器（WebView）在手机蜂窝网络下解开阿里云
-/// WAF 挑战、并完成登录后，相关 cookie（WAF 通行证 `acw_sc__v2` + 登录态
-/// `*_auth`）只存在于 WebView 平台 jar 里；原生 dio 请求拿不到它们就会被 WAF
-/// 拦截或视为未登录。此 service 在 WebView 页面加载完成后，把这些 cookie 回灌
-/// 到 dio 的存储，使收藏、回复、搜索等 API 功能得以正常工作。
+/// 这是原有架构缺失的一环：真实浏览器（WebView）完成登录后，登录态 cookie
+/// （`*_auth` 等）只存在于 WebView 平台 jar 里；原生 dio 请求拿不到它们就会
+/// 被视为未登录。此 service 在 WebView 页面加载完成后，把这些 cookie 回灌到
+/// dio 的存储，使收藏、回复、搜索等 API 功能得以正常工作。
 class WebViewCookieSyncService {
   WebViewCookieSyncService({
     required WebViewCookieJar cookieJar,

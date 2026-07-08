@@ -118,7 +118,9 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   @override
   Future<void> runBackgroundMaintenance() async {
     await runBackgroundMaintenanceWithContext(
-      context: const FavoriteSyncExecutionContext.automaticResume(),
+      context: FavoriteSyncExecutionContext.automaticResume(
+        governor: _governorFactory(),
+      ),
     );
   }
 
@@ -143,7 +145,9 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
               ? FavoriteSyncExecutionContext.bootstrapInitial(
                   governor: _governorFactory(),
                 )
-              : const FavoriteSyncExecutionContext.automaticResume();
+              : FavoriteSyncExecutionContext.automaticResume(
+                  governor: _governorFactory(),
+                );
           _diagnosticRecorder.record(
             scope: 'favorites',
             event: 'sync_requested',
@@ -172,16 +176,19 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     }
     return _runSync(() async {
       final snapshot = await _localRepository.getSyncSnapshot();
+      final context = FavoriteSyncExecutionContext.manualRecentAdd(
+        governor: _governorFactory(),
+      );
       if (snapshot == null) {
         // No baseline exists yet, so keep correctness by doing the regular
         // first sync while still forcing the just-favorited comic through the
         // search queue if catalog discovery misses.
         return _syncInternal(
-          context: const FavoriteSyncExecutionContext.manualRecentAdd(),
+          context: context,
           forceComicSearchOnCatalogMissTids: <String>{normalizedTid},
         );
       }
-      return _syncRecentlyAddedThreadInternal(normalizedTid);
+      return _syncRecentlyAddedThreadInternal(normalizedTid, context: context);
     });
   }
 
@@ -367,9 +374,9 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   }
 
   Future<FavoriteSyncResult> _syncRecentlyAddedThreadInternal(
-    String tid,
-  ) async {
-    const context = FavoriteSyncExecutionContext.manualRecentAdd();
+    String tid, {
+    required FavoriteSyncExecutionContext context,
+  }) async {
     _emitProgress(
       const FavoriteSyncProgress(
         phase: FavoriteSyncProgressPhase.fetchingList,

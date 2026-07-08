@@ -4,6 +4,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 
 void main() {
+  test('default favorite sync cooldown is 700ms (all sync modes)', () {
+    expect(favoriteSyncGovernorCooldown, const Duration(milliseconds: 700));
+    // Default governor (used by the provider) inherits the 700ms pacing.
+    expect(
+      DefaultFavoriteFirstSyncRequestGovernor().cooldown,
+      const Duration(milliseconds: 700),
+    );
+  });
+
   test('governor runs requests strictly serially across kinds', () async {
     final governor = DefaultFavoriteFirstSyncRequestGovernor(
       cooldown: Duration.zero,

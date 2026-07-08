@@ -319,6 +319,7 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
   }
 }
 
+/// 阅读页专用：HTML-first 渲染需要完整 DOM，走移动端 HTML 数据源。
 final threadRepositoryProvider = Provider<ThreadRepository>((ref) {
   return ThreadDetailHtmlRepository(
     htmlClient: ref.watch(yamiboHtmlClientProvider),
@@ -326,6 +327,13 @@ final threadRepositoryProvider = Provider<ThreadRepository>((ref) {
     snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
     diagnosticRecorder: ref.watch(cacheDiagnosticRecorderProvider),
   );
+});
+
+/// 收藏同步 / 漫画发现专用：走 JSON viewthread，带 typeid 等结构化字段。
+/// HTML 正文 == JSON message，但 JSON 更轻且无需复杂 DOM 解析。
+/// 阅读页仍用 [threadRepositoryProvider]（HTML-first）。
+final threadJsonRepositoryProvider = Provider<ThreadRepository>((ref) {
+  return ApiThreadRepository(ref.watch(apiClientProvider));
 });
 
 final threadPostLocatorProvider = Provider<ThreadPostLocator>((ref) {

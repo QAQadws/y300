@@ -6,9 +6,6 @@ import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_diagnostic_recorder.dart';
-import 'package:y300/core/network/waf/waf_challenge_passer.dart';
-import 'package:y300/core/network/waf/waf_challenge_resolver.dart';
-import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_extractor.dart';
@@ -245,120 +242,6 @@ void main() {
     });
 
     test(
-      'detects WAF challenge, refreshes pass, and retries the request once',
-      () async {
-        final adapter = _GatewayTestAdapter.scripted(
-          responses: const <_ScriptedResponse>[
-            _ScriptedResponse(
-              textBody: "<html><script>var arg1='DEADBEEF';</script></html>",
-            ),
-            _ScriptedResponse(textBody: '<html>ok</html>'),
-          ],
-        );
-        final passer = _RecordingWafPasser();
-        final cookieStore = CookieStore();
-        final resolver = WafChallengeResolver(
-          challengePasser: passer,
-          cookieSyncService: WebViewCookieSyncService(
-            cookieJar: _StubWebViewCookieJar(<String, String>{
-              'acw_sc__v2': 'wafpass',
-            }),
-            cookieStore: cookieStore,
-          ),
-          siteUri: Uri.parse('https://bbs.yamibo.com'),
-        );
-        final diagnostics = _RecordingNetworkDiagnosticRecorder();
-        final gateway = _buildGateway(
-          adapter: adapter,
-          cookieStore: cookieStore,
-          resolver: resolver,
-          diagnostics: diagnostics,
-        );
-
-        final result = await gateway.getText(
-          Uri.parse('https://bbs.yamibo.com/search.php?mod=forum'),
-          context: const YamiboRequestContext(
-            kind: YamiboRequestKind.html,
-            operation: 'search.forum',
-          ),
-        );
-
-        expect(result.isSuccess, isTrue);
-        expect(result.dataOrNull?.body, '<html>ok</html>');
-        expect(
-          passer.calls,
-          1,
-          reason: 'challenge must trigger exactly one refresh',
-        );
-        expect(
-          adapter.fetchCount,
-          2,
-          reason: 'gateway must retry the original request after refresh',
-        );
-        expect(
-          await cookieStore.readCookieMap(Uri.parse('https://bbs.yamibo.com/')),
-          containsPair('acw_sc__v2', 'wafpass'),
-        );
-        // First (challenged) response is not counted as a success; only the
-        // retry emits a success diagnostic.
-        expect(diagnostics.records.where((r) => r.succeeded).length, 1);
-      },
-    );
-
-    test(
-      'surfaces ApiFailure when resolver skips (in-window) and does not retry',
-      () async {
-        final adapter = _GatewayTestAdapter.scripted(
-          responses: const <_ScriptedResponse>[
-            _ScriptedResponse(
-              textBody: "<html><script>var arg1='DEAD';</script></html>",
-            ),
-          ],
-        );
-        final passer = _RecordingWafPasser();
-        var now = DateTime(2026, 7, 1, 12, 0, 0);
-        final resolver = WafChallengeResolver(
-          challengePasser: passer,
-          cookieSyncService: WebViewCookieSyncService(
-            cookieJar: _StubWebViewCookieJar(const <String, String>{}),
-            cookieStore: CookieStore(),
-          ),
-          siteUri: Uri.parse('https://bbs.yamibo.com'),
-          passWindow: const Duration(minutes: 30),
-          clock: () => now,
-        );
-        // Prime a successful refresh so subsequent challenges fall inside the
-        // pass window and the resolver refuses to spawn another WebView.
-        await resolver.ensureFreshPass(
-          triggeringUri: Uri.parse('https://bbs.yamibo.com/'),
-        );
-        expect(passer.calls, 1);
-        final gateway = _buildGateway(adapter: adapter, resolver: resolver);
-
-        final result = await gateway.getText(
-          Uri.parse('https://bbs.yamibo.com/search.php?mod=forum'),
-          context: const YamiboRequestContext(
-            kind: YamiboRequestKind.html,
-            operation: 'search.forum',
-          ),
-        );
-
-        expect(result.isFailure, isTrue);
-        expect(result.errorOrNull?.message, contains('WAF'));
-        expect(
-          adapter.fetchCount,
-          1,
-          reason: 'no retry when resolver refuses to refresh',
-        );
-        expect(
-          passer.calls,
-          1,
-          reason: 'resolver must skip refresh within the pass window',
-        );
-      },
-    );
-
-    test(
       'getJson stores session snapshot extracted from API variables',
       () async {
         final sessionStore = YamiboSessionStore();
@@ -408,7 +291,6 @@ YamiboHttpGateway _buildGateway({
   _MemoryLogOutput? logOutput,
   YamiboSessionStore? sessionStore,
   YamiboSessionExtractor? sessionExtractor,
-  WafChallengeResolver? resolver,
 }) {
   final dio = Dio(
     BaseOptions(
@@ -428,7 +310,6 @@ YamiboHttpGateway _buildGateway({
     diagnosticRecorder: diagnostics,
     sessionStore: sessionStore,
     sessionExtractor: sessionExtractor,
-    wafChallengeResolver: resolver,
     dio: dio,
   );
 }
@@ -464,14 +345,6 @@ class _GatewayTestAdapter implements HttpClientAdapter {
          ),
        ],
        _replayLastForever = true;
-
-  /// Scripted-response ctor: emits [responses] in order across successive
-  /// fetches. The last entry is replayed once the script is exhausted, which
-  /// makes writing retry tests less finicky.
-  _GatewayTestAdapter.scripted({required List<_ScriptedResponse> responses})
-    : assert(responses.isNotEmpty),
-      _responses = List<_ScriptedResponse>.of(responses),
-      _replayLastForever = true;
 
   final List<_ScriptedResponse> _responses;
   final bool _replayLastForever;
@@ -535,29 +408,6 @@ class _GatewayTestAdapter implements HttpClientAdapter {
     }
     return String.fromCharCodes(bytes);
   }
-}
-
-class _RecordingWafPasser implements WafChallengePasser {
-  int calls = 0;
-
-  @override
-  Future<void> pass(Uri uri) async {
-    calls += 1;
-  }
-}
-
-class _StubWebViewCookieJar implements WebViewCookieJar {
-  _StubWebViewCookieJar(this._cookies);
-
-  final Map<String, String> _cookies;
-
-  @override
-  Future<Map<String, String>> readCookies(Uri uri) async {
-    return Map<String, String>.from(_cookies);
-  }
-
-  @override
-  Future<void> clear() async {}
 }
 
 class _RecordingNetworkDiagnosticRecorder implements NetworkDiagnosticRecorder {

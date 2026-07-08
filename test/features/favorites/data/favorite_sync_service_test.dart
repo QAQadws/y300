@@ -117,7 +117,7 @@ void main() {
   );
 
   test(
-    'incremental sync does not create governor when snapshot exists',
+    'incremental sync is also governed when snapshot exists',
     () async {
       final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
         1: _page(
@@ -156,12 +156,14 @@ void main() {
 
       await service.sync();
 
-      expect(created, 0);
+      // Subsequent (incremental) sync must be paced too, to avoid IP bans:
+      // it creates a governor and routes the favorite list request through it.
+      expect(created, 1);
     },
   );
 
   test(
-    'syncRecentlyAddedThread does not use bootstrap governor when snapshot is null',
+    'syncRecentlyAddedThread is governed (paced) even when snapshot is null',
     () async {
       final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
         1: _page(
@@ -180,7 +182,14 @@ void main() {
 
       await service.syncRecentlyAddedThread(tid: '100');
 
-      expect(governor.kinds, isEmpty);
+      // Manual recent-add must also be paced through the governor.
+      expect(
+        governor.kinds,
+        containsAll(<FavoriteFirstSyncRequestKind>[
+          FavoriteFirstSyncRequestKind.favoriteListPage,
+          FavoriteFirstSyncRequestKind.favoriteThreadDetail,
+        ]),
+      );
     },
   );
 
