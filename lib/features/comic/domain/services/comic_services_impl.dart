@@ -517,7 +517,7 @@ final comicEpisodeDiscoveryServiceProvider =
             .getThreadDetail(tid: tid, page: 1),
         opPostParser: opPostParser,
         catalogHtmlFetcher: YamiboCatalogHtmlFetcher(
-          gateway: ref.watch(yamiboHttpGatewayProvider),
+          htmlClient: ref.watch(yamiboHtmlClientProvider),
         ),
         diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),
       );

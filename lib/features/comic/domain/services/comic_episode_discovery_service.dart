@@ -2,7 +2,7 @@ import 'dart:collection';
 
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
+import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/catalog_thread_html_parser.dart';
@@ -50,30 +50,33 @@ abstract class CatalogHtmlFetcher {
 }
 
 class YamiboCatalogHtmlFetcher implements CatalogHtmlFetcher {
-  YamiboCatalogHtmlFetcher({required YamiboHttpGateway gateway})
-    : _gateway = gateway;
+  YamiboCatalogHtmlFetcher({
+    required YamiboHtmlClient htmlClient,
+    YamiboTagPageParsing tagPageParsing = const YamiboTagPageParsing(),
+  }) : _htmlClient = htmlClient,
+       _tagPageParsing = tagPageParsing;
 
-  final YamiboHttpGateway _gateway;
+  final YamiboHtmlClient _htmlClient;
+  final YamiboTagPageParsing _tagPageParsing;
 
   @override
   Future<String?> fetchHtml(String url) async {
     try {
-      final uri = Uri.tryParse(url);
+      final normalized = _tagPageParsing.normalizeCatalogEntryUrl(url);
+      final uri = Uri.tryParse(normalized);
       if (uri == null || !uri.hasScheme) {
         return null;
       }
-      final response = await _gateway.getText(
-        uri,
+      final response = await _htmlClient.getDesktopPage(
+        path: uri.path.isEmpty ? '/misc.php' : uri.path,
+        queryParameters: uri.queryParameters,
         context: const YamiboRequestContext(
           kind: YamiboRequestKind.html,
           operation: 'comic.catalog.fetch',
           pageKind: 'comic.catalog',
         ),
-        followRedirects: true,
-        validateStatus: (status) =>
-            status != null && status >= 200 && status < 400,
       );
-      return response.dataOrNull?.body;
+      return response.dataOrNull;
     } catch (_) {
       return null;
     }
@@ -346,7 +349,11 @@ class ComicEpisodeDiscoveryService {
       _diagnosticRecorder.record(
         scope: 'comic_discovery',
         event: 'fetch_catalog_page',
-        fields: <String, Object?>{'url': pageUrl, 'governed': governor != null},
+        fields: <String, Object?>{
+          'url': pageUrl,
+          'governed': governor != null,
+          'fetcher': 'desktopHtmlClient',
+        },
       );
 
       final html = await _runCatalogRequest(
