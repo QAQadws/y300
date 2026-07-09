@@ -6,6 +6,7 @@ import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_cached_image_widget_factory.dart';
@@ -28,6 +29,8 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     this.imageCacheOwnerId,
     this.imageRequestResolver,
     this.imageDimensionIndex,
+    this.imageFallbackAspectRatioFor,
+    this.onBlockImageResolved,
     this.preparedDocument,
     this.contentImageKind = ForumImageKind.threadInline,
   });
@@ -43,6 +46,14 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   final String? imageCacheOwnerId;
   final ForumImageRequestResolver? imageRequestResolver;
   final ForumImageDimensionIndex? imageDimensionIndex;
+  final double? Function(ForumImageLoadSpec spec, ImageCacheRequest request)?
+  imageFallbackAspectRatioFor;
+  final void Function(
+    ForumImageLoadSpec spec,
+    ImageCacheRequest request,
+    Size size,
+  )?
+  onBlockImageResolved;
   final ForumHtmlPreparedRenderDocument? preparedDocument;
   final ForumImageKind contentImageKind;
   static const _imageDeduplicator = ForumHtmlImageDeduplicator();
@@ -96,6 +107,8 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       contentImageKind: contentImageKind,
       imageRequestResolver: imageRequestResolver,
       imageDimensionIndex: imageDimensionIndex,
+      fallbackAspectRatioFor: imageFallbackAspectRatioFor,
+      onBlockImageResolved: onBlockImageResolved,
     );
   }
 
@@ -133,6 +146,8 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           imageCacheOwnerId: imageCacheOwnerId,
           imageRequestResolver: imageRequestResolver,
           imageDimensionIndex: imageDimensionIndex,
+          imageFallbackAspectRatioFor: imageFallbackAspectRatioFor,
+          onBlockImageResolved: onBlockImageResolved,
           contentImageKind: contentImageKind,
           preparedDocument: preparedDocument?.copyWith(preparedHtml: html),
         );

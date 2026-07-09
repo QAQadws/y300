@@ -40,27 +40,13 @@ class ThreadDetailRenderEntryPlanner {
     final entries = <ThreadDetailRenderEntry>[];
     for (var index = 0; index < posts.length; index++) {
       final post = posts[index];
-      entries.add(
-        ThreadDetailRenderEntry.postHeader(
-          key: 'thread-post-header-${post.pid}',
-          post: post,
-          postIndex: index,
-        ),
-      );
       final plan = planFor(post);
       entries.add(
-        ThreadDetailRenderEntry.postBody(
-          key: 'thread-post-body-${post.pid}',
+        ThreadDetailRenderEntry.postCard(
+          key: 'thread-post-card-entry-${post.pid}',
           post: post,
           postIndex: index,
           resolvePlan: () => plan,
-        ),
-      );
-      entries.add(
-        ThreadDetailRenderEntry.postFooter(
-          key: 'thread-post-footer-${post.pid}',
-          post: post,
-          postIndex: index,
         ),
       );
     }
@@ -127,6 +113,7 @@ class ThreadDetailRenderEntryPlanner {
 }
 
 enum ThreadDetailRenderEntryKind {
+  postCard,
   postHeader,
   postBody,
   postFooter,
@@ -143,6 +130,19 @@ class ThreadDetailRenderEntry {
     this.plan,
     this.resolvePlan,
   });
+
+  ThreadDetailRenderEntry.postCard({
+    required String key,
+    required ThreadPost post,
+    required int postIndex,
+    required ThreadPostBodyRenderPlan Function() resolvePlan,
+  }) : this._(
+         kind: ThreadDetailRenderEntryKind.postCard,
+         key: key,
+         post: post,
+         postIndex: postIndex,
+         resolvePlan: resolvePlan,
+       );
 
   ThreadDetailRenderEntry.postHeader({
     required String key,

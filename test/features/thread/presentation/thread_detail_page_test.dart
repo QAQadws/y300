@@ -1025,7 +1025,7 @@ void main() {
         events.any(
           (event) =>
               event.type == ThreadDetailDiagnosticEventType.entryBuild &&
-              event.entryKey == 'thread-post-header-p1',
+              event.entryKey == 'thread-post-card-entry-p1',
         ),
         isTrue,
       );
@@ -1039,6 +1039,69 @@ void main() {
         isTrue,
       );
       expect(recorder.exportText(), contains('html-first-preload'));
+    });
+
+    testWidgets('stretches whole post card segments to the same width', (
+      tester,
+    ) async {
+      final state = ThreadDetailPageState.initial(tid: '100', subject: '测试主题')
+          .copyWith(
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>短正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            imageCacheServiceProvider.overrideWithValue(
+              _NoopImageCacheService(),
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: ThreadDetailContent(
+                state: state,
+                imageHeaderBuilder: null,
+                imageReferer:
+                    'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
+                onLoadPreviousPage: () {},
+                onLoadNextPage: () {},
+                onLoadPageNumber: (_) {},
+                onOpenAuthorProfile: (_) {},
+                onOpenCommentAuthorProfile: (_) {},
+                onCopyActionUrl: (_, _) {},
+                onOpenPostLink: (_) {},
+                onOpenPostActions: (_, _) {},
+                onTogglePollOption: (_, _) {},
+                onSubmitPollVote: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final headerWidth = tester
+          .getSize(find.byKey(const Key('thread-post-card-p1')))
+          .width;
+      final bodyWidth = tester
+          .getSize(find.byKey(const Key('thread-post-body-p1')))
+          .width;
+      final footerWidth = tester
+          .getSize(find.byKey(const Key('thread-post-footer-p1')))
+          .width;
+
+      expect(bodyWidth, headerWidth);
+      expect(footerWidth, headerWidth);
     });
 
     testWidgets('collapsing comments reduces post card height', (tester) async {

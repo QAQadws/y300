@@ -34,13 +34,11 @@ void main() {
       );
 
       expect(entries.map((entry) => entry.kind), <ThreadDetailRenderEntryKind>[
-        ThreadDetailRenderEntryKind.postHeader,
-        ThreadDetailRenderEntryKind.postBody,
-        ThreadDetailRenderEntryKind.postFooter,
+        ThreadDetailRenderEntryKind.postCard,
         ThreadDetailRenderEntryKind.pagination,
       ]);
-      expect(entries[1].key, 'thread-post-body-p1');
-      expect(entries[1].requirePlan().usesListSegments, isFalse);
+      expect(entries[0].key, 'thread-post-card-entry-p1');
+      expect(entries[0].requirePlan().usesListSegments, isFalse);
       expect(parser.parseCount, 1);
     });
 
@@ -68,13 +66,11 @@ void main() {
       );
 
       expect(entries.map((entry) => entry.kind), <ThreadDetailRenderEntryKind>[
-        ThreadDetailRenderEntryKind.postHeader,
-        ThreadDetailRenderEntryKind.postBody,
-        ThreadDetailRenderEntryKind.postFooter,
+        ThreadDetailRenderEntryKind.postCard,
         ThreadDetailRenderEntryKind.pagination,
       ]);
-      expect(entries[1].key, 'thread-post-body-p-long');
-      expect(entries[1].requirePlan().usesListSegments, isTrue);
+      expect(entries[0].key, 'thread-post-card-entry-p-long');
+      expect(entries[0].requirePlan().usesListSegments, isTrue);
       expect(parser.parseCount, 1);
     });
 
@@ -100,12 +96,10 @@ void main() {
       );
 
       expect(entries.map((entry) => entry.kind), <ThreadDetailRenderEntryKind>[
-        ThreadDetailRenderEntryKind.postHeader,
-        ThreadDetailRenderEntryKind.postBody,
-        ThreadDetailRenderEntryKind.postFooter,
+        ThreadDetailRenderEntryKind.postCard,
         ThreadDetailRenderEntryKind.pagination,
       ]);
-      expect(entries[1].requirePlan().usesListSegments, isTrue);
+      expect(entries[0].requirePlan().usesListSegments, isTrue);
     });
 
     test('keeps image bodies as one production body entry', () {
@@ -131,14 +125,12 @@ void main() {
       );
 
       expect(entries.map((entry) => entry.kind), <ThreadDetailRenderEntryKind>[
-        ThreadDetailRenderEntryKind.postHeader,
-        ThreadDetailRenderEntryKind.postBody,
-        ThreadDetailRenderEntryKind.postFooter,
+        ThreadDetailRenderEntryKind.postCard,
         ThreadDetailRenderEntryKind.pagination,
         ThreadDetailRenderEntryKind.targetSpacer,
       ]);
-      expect(entries[1].key, 'thread-post-body-p2');
-      expect(entries[1].requirePlan().usesListSegments, isTrue);
+      expect(entries[0].key, 'thread-post-card-entry-p2');
+      expect(entries[0].requirePlan().usesListSegments, isTrue);
       expect(entries.last.kind, ThreadDetailRenderEntryKind.targetSpacer);
     });
 
@@ -209,12 +201,10 @@ void main() {
       );
 
       expect(entries.map((entry) => entry.kind), <ThreadDetailRenderEntryKind>[
-        ThreadDetailRenderEntryKind.postHeader,
-        ThreadDetailRenderEntryKind.postBody,
-        ThreadDetailRenderEntryKind.postFooter,
+        ThreadDetailRenderEntryKind.postCard,
         ThreadDetailRenderEntryKind.pagination,
       ]);
-      expect(entries[1].requirePlan().usesListSegments, isFalse);
+      expect(entries[0].requirePlan().usesListSegments, isFalse);
       expect(parser.parseCount, 1);
     });
 

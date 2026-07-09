@@ -7,13 +7,17 @@ class ForumHtmlSampleDocument {
     required this.title,
     required this.assetPath,
     required this.sourceDocPath,
+    this.renderMode = ForumHtmlSampleRenderMode.fragment,
   });
 
   final String id;
   final String title;
   final String assetPath;
   final String sourceDocPath;
+  final ForumHtmlSampleRenderMode renderMode;
 }
+
+enum ForumHtmlSampleRenderMode { fragment, threadDetail }
 
 const List<ForumHtmlSampleDocument> forumHtmlPrototypeSamples =
     <ForumHtmlSampleDocument>[
@@ -40,5 +44,12 @@ const List<ForumHtmlSampleDocument> forumHtmlPrototypeSamples =
         title: '字颜色字号',
         assetPath: 'assets/prototypes/forum_html/text_color_size.html',
         sourceDocPath: 'docs/html/特殊格式/字颜色字号.html',
+      ),
+      ForumHtmlSampleDocument(
+        id: 'jitter_test',
+        title: '抖动测试',
+        assetPath: 'assets/prototypes/forum_html/jitter_test.html',
+        sourceDocPath: 'docs/html/特殊格式/抖动测试.html',
+        renderMode: ForumHtmlSampleRenderMode.threadDetail,
       ),
     ];

@@ -29,6 +29,8 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
     this.contentImageKind = ForumImageKind.threadInline,
     ForumImageRequestResolver? imageRequestResolver,
     this.imageDimensionIndex,
+    this.fallbackAspectRatioFor,
+    this.onBlockImageResolved,
     ForumImageLayoutHintResolver? layoutHintResolver,
   }) : imageRequestResolver =
            imageRequestResolver ?? const DefaultForumImageRequestResolver(),
@@ -45,6 +47,14 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
   final ForumImageKind contentImageKind;
   final ForumImageRequestResolver imageRequestResolver;
   final ForumImageDimensionIndex? imageDimensionIndex;
+  final double? Function(ForumImageLoadSpec spec, ImageCacheRequest request)?
+  fallbackAspectRatioFor;
+  final void Function(
+    ForumImageLoadSpec spec,
+    ImageCacheRequest request,
+    Size size,
+  )?
+  onBlockImageResolved;
   final ForumImageLayoutHintResolver layoutHintResolver;
   var _nextImageIndex = 0;
 
@@ -107,8 +117,9 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
         request: request,
         imageHeaderBuilder: imageHeaderBuilder,
         onImageResolved: onImageResolved,
+        onBlockImageResolved: onBlockImageResolved,
         onImageLayoutShift: onImageLayoutShift,
-        initialHint: layoutHintResolver.resolve(spec: spec),
+        initialHint: _resolveInitialBlockHint(spec, request),
         dimensionIndex: imageDimensionIndex,
         layoutHintResolver: layoutHintResolver,
       ),
@@ -118,6 +129,26 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
       element: tree.element,
       readableIndex: readableIndex,
       isSticker: false,
+    );
+  }
+
+  ForumImageLayoutHint _resolveInitialBlockHint(
+    ForumImageLoadSpec spec,
+    ImageCacheRequest request,
+  ) {
+    final base = layoutHintResolver.resolve(spec: spec);
+    if (base.layoutMode != ForumImageLayoutMode.blockWithFallbackAspectRatio) {
+      return base;
+    }
+    final learnedAspectRatio = fallbackAspectRatioFor?.call(spec, request);
+    if (learnedAspectRatio == null ||
+        !learnedAspectRatio.isFinite ||
+        learnedAspectRatio <= 0) {
+      return base;
+    }
+    return ForumImageLayoutHint(
+      layoutMode: ForumImageLayoutMode.blockWithFallbackAspectRatio,
+      aspectRatio: learnedAspectRatio,
     );
   }
 
@@ -237,6 +268,7 @@ class _ForumHtmlCachedBlockImageView extends ConsumerStatefulWidget {
     required this.request,
     required this.imageHeaderBuilder,
     required this.onImageResolved,
+    required this.onBlockImageResolved,
     required this.onImageLayoutShift,
     required this.initialHint,
     required this.dimensionIndex,
@@ -247,6 +279,12 @@ class _ForumHtmlCachedBlockImageView extends ConsumerStatefulWidget {
   final ImageCacheRequest request;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<Size>? onImageResolved;
+  final void Function(
+    ForumImageLoadSpec spec,
+    ImageCacheRequest request,
+    Size size,
+  )?
+  onBlockImageResolved;
   final void Function(ForumHtmlImageLayoutShift shift)? onImageLayoutShift;
   final ForumImageLayoutHint initialHint;
   final ForumImageDimensionIndex? dimensionIndex;
@@ -304,6 +342,7 @@ class _ForumHtmlCachedBlockImageViewState
 
   void _handleImageResolved(Size size) {
     widget.onImageResolved?.call(size);
+    widget.onBlockImageResolved?.call(widget.spec, widget.request, size);
     _promoteFallbackLayoutFromDecodedSize(size);
   }
 

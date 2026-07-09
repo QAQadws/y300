@@ -710,6 +710,63 @@ void main() {
     expect(aspectRatio.aspectRatio, 0.7);
   });
 
+  testWidgets('uses learned fallback ratio and reports decoded block size', (
+    tester,
+  ) async {
+    final resolvedSizes = <Size>[];
+    final resolvedCacheKeys = <String>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(
+            _RecordingImageCacheService(),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: ForumHtmlWidgetPostRenderer(
+              sourceId: 'learned-ratio-image',
+              threadId: '573279',
+              html: '<img src="data/attachment/forum/page-learned.jpg">',
+              imageFallbackAspectRatioFor: (spec, request) {
+                expect(spec.htmlWidth, isNull);
+                expect(spec.htmlHeight, isNull);
+                resolvedCacheKeys.add(request.cacheKey);
+                return 1.6;
+              },
+              onBlockImageResolved: (spec, request, size) {
+                resolvedSizes.add(size);
+                resolvedCacheKeys.add(request.cacheKey);
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final aspectRatio = tester.widget<AspectRatio>(
+      find
+          .ancestor(
+            of: find.byType(CachedLibraryImage).first,
+            matching: find.byType(AspectRatio),
+          )
+          .first,
+    );
+
+    expect(aspectRatio.aspectRatio, 1.6);
+
+    tester
+        .widget<CachedLibraryImage>(find.byType(CachedLibraryImage).first)
+        .onImageResolved
+        ?.call(const Size(800, 400));
+    await tester.pump();
+
+    expect(resolvedSizes, <Size>[const Size(800, 400)]);
+    expect(resolvedCacheKeys, hasLength(2));
+    expect(resolvedCacheKeys.toSet(), hasLength(1));
+  });
+
   testWidgets('promotes fallback thread image layout after decoded size', (
     tester,
   ) async {

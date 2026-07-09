@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/material.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
@@ -59,6 +60,7 @@ class ThreadDetailContent extends StatefulWidget {
     this.htmlImagePrecacheService,
     this.onPostBuilt,
     this.imageDimensionStore,
+    this.onScrollStabilizerEvent,
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
   });
@@ -88,6 +90,8 @@ class ThreadDetailContent extends StatefulWidget {
   /// 持久化图片尺寸快照（来自缓存预热）。提供时 render plan 会用可信尺寸锁定
   /// 首帧高度，避免滚动中异步改高。为空则退化为既有行为。
   final ThreadPostImageDimensionStore? imageDimensionStore;
+  final ValueChanged<ThreadDetailScrollStabilizerEvent>?
+  onScrollStabilizerEvent;
   final void Function(ThreadPoll poll, ThreadPollOption option)
   onTogglePollOption;
   final ValueChanged<ThreadPoll> onSubmitPollVote;
@@ -102,6 +106,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   late ThreadDetailScrollStabilizer _scrollStabilizer;
   ThreadHtmlImagePreloadCoordinator? _htmlImagePreloadCoordinator;
   String? _htmlImagePreloadSignature;
+  final _imageAspectRatioTracker = _ThreadDetailImageAspectRatioTracker();
 
   @override
   void initState() {
@@ -110,6 +115,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
     _scrollStabilizer = ThreadDetailScrollStabilizer(
       scrollController: widget.scrollController,
       viewportKey: _viewportKey,
+      onEvent: widget.onScrollStabilizerEvent,
     );
     widget.imageDimensionStore?.addListener(_onImageDimensionsChanged);
   }
@@ -126,11 +132,16 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         oldWidget.htmlFirstRenderMode != widget.htmlFirstRenderMode) {
       _entryPlanner = _createEntryPlanner();
     }
-    if (!identical(oldWidget.scrollController, widget.scrollController)) {
+    if (!identical(oldWidget.scrollController, widget.scrollController) ||
+        !identical(
+          oldWidget.onScrollStabilizerEvent,
+          widget.onScrollStabilizerEvent,
+        )) {
       _scrollStabilizer.dispose();
       _scrollStabilizer = ThreadDetailScrollStabilizer(
         scrollController: widget.scrollController,
         viewportKey: _viewportKey,
+        onEvent: widget.onScrollStabilizerEvent,
       );
     }
     if (!identical(
@@ -186,6 +197,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       posts: widget.state.posts,
       targetPid: widget.targetPid,
     );
+    _imageAspectRatioTracker.resetFor(_imageAspectRatioSignature());
     _scheduleHtmlImageFirstWindowPreload(context);
     return SizedBox.expand(
       key: _viewportKey,
@@ -295,6 +307,32 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
     ThreadDetailNativePalette palette,
   ) {
     switch (entry.kind) {
+      case ThreadDetailRenderEntryKind.postCard:
+        return _ThreadPostCardEntry(
+          key: Key(entry.key),
+          post: entry.post!,
+          postIndex: entry.postIndex,
+          state: widget.state,
+          plan: entry.requirePlan(),
+          highlighted: entry.post!.pid == widget.highlightPostPid,
+          imageHeaderBuilder: widget.imageHeaderBuilder,
+          imageReferer: widget.imageReferer,
+          palette: palette,
+          onOpenAuthorProfile: widget.onOpenAuthorProfile,
+          onOpenPostLink: widget.onOpenPostLink,
+          onOpenPostImages: widget.onOpenPostImages,
+          onHtmlFirstImageFallback: _copyHtmlFirstImageUrl,
+          onHtmlFirstImageLayoutShift: _scrollStabilizer.handleLayoutShift,
+          onHtmlFirstImageFallbackAspectRatio:
+              _fallbackAspectRatioForBlockImage,
+          onHtmlFirstBlockImageResolved: _handleBlockImageResolved,
+          onOpenPostActions: widget.onOpenPostActions,
+          onCopyActionUrl: widget.onCopyActionUrl,
+          onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,
+          onTogglePollOption: widget.onTogglePollOption,
+          onSubmitPollVote: widget.onSubmitPollVote,
+          onPostBuilt: _handlePostBuilt,
+        );
       case ThreadDetailRenderEntryKind.postHeader:
         final plan = _entryPlanner.planFor(entry.post!);
         final header = _ThreadPostCardHeaderEntry(
@@ -328,6 +366,9 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           onOpenPostImages: widget.onOpenPostImages,
           onHtmlFirstImageFallback: _copyHtmlFirstImageUrl,
           onHtmlFirstImageLayoutShift: _scrollStabilizer.handleLayoutShift,
+          onHtmlFirstImageFallbackAspectRatio:
+              _fallbackAspectRatioForBlockImage,
+          onHtmlFirstBlockImageResolved: _handleBlockImageResolved,
           onOpenPostActions: widget.onOpenPostActions,
         );
       case ThreadDetailRenderEntryKind.postFooter:
@@ -373,16 +414,202 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   void _copyHtmlFirstImageUrl(ThreadPost post, ForumHtmlImageRequest request) {
     widget.onCopyActionUrl('${post.number}# 图片', request.url);
   }
+
+  String _imageAspectRatioSignature() {
+    final postIds = widget.state.posts.map((post) => post.pid).join(',');
+    return '${widget.state.tid}:${widget.state.currentPage}:$postIds';
+  }
+
+  double? _fallbackAspectRatioForBlockImage(
+    ThreadPost post,
+    ForumImageLoadSpec spec,
+    ImageCacheRequest request,
+  ) {
+    return _imageAspectRatioTracker.fallbackAspectRatioFor(
+      post: post,
+      spec: spec,
+      request: request,
+    );
+  }
+
+  void _handleBlockImageResolved(
+    ThreadPost post,
+    ForumImageLoadSpec spec,
+    ImageCacheRequest request,
+    Size size,
+  ) {
+    _imageAspectRatioTracker.record(
+      post: post,
+      spec: spec,
+      request: request,
+      size: size,
+    );
+  }
+}
+
+class _ThreadDetailImageAspectRatioTracker {
+  static const double _minAspectRatio = 0.25;
+  static const double _maxAspectRatio = 4.0;
+
+  final Map<String, double> _imageAspectRatios = <String, double>{};
+  final Map<String, Map<String, double>> _postImageAspectRatios =
+      <String, Map<String, double>>{};
+  String? _signature;
+
+  void resetFor(String signature) {
+    if (_signature == signature) {
+      return;
+    }
+    _signature = signature;
+    _imageAspectRatios.clear();
+    _postImageAspectRatios.clear();
+  }
+
+  double? fallbackAspectRatioFor({
+    required ThreadPost post,
+    required ForumImageLoadSpec spec,
+    required ImageCacheRequest request,
+  }) {
+    final imageKey = _imageKey(spec, request);
+    final direct = _imageAspectRatios[imageKey];
+    if (_isUsable(direct)) {
+      return direct;
+    }
+    final postAverage = _average(_postImageAspectRatios[post.pid]?.values);
+    if (_isUsable(postAverage)) {
+      return postAverage;
+    }
+    return _average(_imageAspectRatios.values);
+  }
+
+  bool record({
+    required ThreadPost post,
+    required ForumImageLoadSpec spec,
+    required ImageCacheRequest request,
+    required Size size,
+  }) {
+    if (!size.width.isFinite ||
+        !size.height.isFinite ||
+        size.width <= 0 ||
+        size.height <= 0) {
+      return false;
+    }
+    final imageKey = _imageKey(spec, request);
+    if (imageKey.isEmpty) {
+      return false;
+    }
+    final aspectRatio = _normalize(size.width / size.height);
+    if (aspectRatio == null) {
+      return false;
+    }
+    final previous = _imageAspectRatios[imageKey];
+    if (previous == aspectRatio) {
+      return false;
+    }
+    _imageAspectRatios[imageKey] = aspectRatio;
+    (_postImageAspectRatios[post.pid] ??= <String, double>{})[imageKey] =
+        aspectRatio;
+    return true;
+  }
+
+  String _imageKey(ForumImageLoadSpec spec, ImageCacheRequest request) {
+    final cacheKey = request.cacheKey.trim();
+    if (cacheKey.isNotEmpty) {
+      return cacheKey;
+    }
+    return spec.sourceUrl.trim();
+  }
+
+  double? _average(Iterable<double>? values) {
+    if (values == null) {
+      return null;
+    }
+    var total = 0.0;
+    var count = 0;
+    for (final value in values) {
+      if (!_isUsable(value)) {
+        continue;
+      }
+      total += value;
+      count += 1;
+    }
+    if (count == 0) {
+      return null;
+    }
+    return _normalize(total / count);
+  }
+
+  bool _isUsable(double? value) {
+    return value != null && value.isFinite && value > 0;
+  }
+
+  double? _normalize(double value) {
+    if (!_isUsable(value)) {
+      return null;
+    }
+    return value.clamp(_minAspectRatio, _maxAspectRatio).toDouble();
+  }
+}
+
+enum ThreadDetailScrollStabilizerEventType {
+  ignored,
+  queued,
+  merged,
+  skipped,
+  applied,
+}
+
+@immutable
+class ThreadDetailScrollStabilizerEvent {
+  const ThreadDetailScrollStabilizerEvent({
+    required this.type,
+    required this.reason,
+    required this.sourceUrl,
+    required this.cacheKey,
+    required this.deltaHeight,
+    required this.oldAspectRatio,
+    required this.newAspectRatio,
+    this.scrollPixels,
+    this.minScrollExtent,
+    this.maxScrollExtent,
+    this.viewportDimension,
+    this.viewportTop,
+    this.imageBottom,
+    this.pendingDelta,
+    this.targetPixels,
+    this.userScrollDirection,
+    this.isScrolling,
+  });
+
+  final ThreadDetailScrollStabilizerEventType type;
+  final String reason;
+  final String sourceUrl;
+  final String cacheKey;
+  final double deltaHeight;
+  final double oldAspectRatio;
+  final double newAspectRatio;
+  final double? scrollPixels;
+  final double? minScrollExtent;
+  final double? maxScrollExtent;
+  final double? viewportDimension;
+  final double? viewportTop;
+  final double? imageBottom;
+  final double? pendingDelta;
+  final double? targetPixels;
+  final String? userScrollDirection;
+  final bool? isScrolling;
 }
 
 class ThreadDetailScrollStabilizer {
   ThreadDetailScrollStabilizer({
     required this.scrollController,
     required this.viewportKey,
+    this.onEvent,
   });
 
   final ScrollController? scrollController;
   final GlobalKey viewportKey;
+  final ValueChanged<ThreadDetailScrollStabilizerEvent>? onEvent;
   double _pendingDelta = 0;
   bool _scheduled = false;
   bool _disposed = false;
@@ -392,22 +619,54 @@ class ThreadDetailScrollStabilizer {
 
   void handleLayoutShift(ForumHtmlImageLayoutShift shift) {
     if (_disposed || shift.deltaHeight.abs() < 0.5) {
+      _emit(
+        shift,
+        type: ThreadDetailScrollStabilizerEventType.ignored,
+        reason: _disposed ? 'disposed' : 'delta-too-small',
+      );
       return;
     }
     final controller = scrollController;
     if (controller == null || !controller.hasClients) {
+      _emit(
+        shift,
+        type: ThreadDetailScrollStabilizerEventType.ignored,
+        reason: controller == null ? 'no-controller' : 'no-scroll-clients',
+      );
       return;
     }
     final viewportContext = viewportKey.currentContext;
     final viewportRenderObject = viewportContext?.findRenderObject();
     if (viewportRenderObject is! RenderBox || !viewportRenderObject.hasSize) {
+      _emit(
+        shift,
+        type: ThreadDetailScrollStabilizerEventType.ignored,
+        reason: 'viewport-unavailable',
+      );
       return;
     }
     final viewportTop = viewportRenderObject.localToGlobal(Offset.zero).dy;
     if (shift.oldGlobalRect.bottom > viewportTop + 0.5) {
+      _emit(
+        shift,
+        type: ThreadDetailScrollStabilizerEventType.ignored,
+        reason: 'image-intersects-or-below-viewport',
+        viewportTop: viewportTop,
+        imageBottom: shift.oldGlobalRect.bottom,
+      );
       return;
     }
     _pendingDelta += shift.deltaHeight;
+    _emit(
+      shift,
+      type: _scheduled
+          ? ThreadDetailScrollStabilizerEventType.merged
+          : ThreadDetailScrollStabilizerEventType.queued,
+      reason: _scheduled ? 'merged-with-pending-frame' : 'above-viewport',
+      viewportTop: viewportTop,
+      imageBottom: shift.oldGlobalRect.bottom,
+      pendingDelta: _pendingDelta,
+    );
     if (_scheduled) {
       return;
     }
@@ -417,10 +676,26 @@ class ThreadDetailScrollStabilizer {
       final delta = _pendingDelta;
       _pendingDelta = 0;
       if (_disposed || delta.abs() < 0.5) {
+        _emit(
+          shift,
+          type: ThreadDetailScrollStabilizerEventType.skipped,
+          reason: _disposed
+              ? 'disposed-before-apply'
+              : 'pending-delta-too-small',
+          pendingDelta: delta,
+        );
         return;
       }
       final controller = scrollController;
       if (controller == null || !controller.hasClients) {
+        _emit(
+          shift,
+          type: ThreadDetailScrollStabilizerEventType.skipped,
+          reason: controller == null
+              ? 'no-controller-before-apply'
+              : 'no-clients-before-apply',
+          pendingDelta: delta,
+        );
         return;
       }
       final position = controller.position;
@@ -428,11 +703,64 @@ class ThreadDetailScrollStabilizer {
           .clamp(position.minScrollExtent, position.maxScrollExtent)
           .toDouble();
       if ((target - position.pixels).abs() < 0.5) {
+        _emit(
+          shift,
+          type: ThreadDetailScrollStabilizerEventType.skipped,
+          reason: 'target-unchanged-after-clamp',
+          pendingDelta: delta,
+          targetPixels: target,
+        );
         return;
       }
+      _emit(
+        shift,
+        type: ThreadDetailScrollStabilizerEventType.applied,
+        reason: 'jump-to-compensate-above-viewport',
+        pendingDelta: delta,
+        targetPixels: target,
+      );
       controller.jumpTo(target);
     });
     WidgetsBinding.instance.scheduleFrame();
+  }
+
+  void _emit(
+    ForumHtmlImageLayoutShift shift, {
+    required ThreadDetailScrollStabilizerEventType type,
+    required String reason,
+    double? viewportTop,
+    double? imageBottom,
+    double? pendingDelta,
+    double? targetPixels,
+  }) {
+    final callback = onEvent;
+    if (callback == null) {
+      return;
+    }
+    final position = scrollController?.hasClients == true
+        ? scrollController!.position
+        : null;
+    callback(
+      ThreadDetailScrollStabilizerEvent(
+        type: type,
+        reason: reason,
+        sourceUrl: shift.sourceUrl,
+        cacheKey: shift.cacheKey,
+        deltaHeight: shift.deltaHeight,
+        oldAspectRatio: shift.oldAspectRatio,
+        newAspectRatio: shift.newAspectRatio,
+        scrollPixels: position?.pixels,
+        minScrollExtent: position?.minScrollExtent,
+        maxScrollExtent: position?.maxScrollExtent,
+        viewportDimension: position?.viewportDimension,
+        viewportTop: viewportTop,
+        imageBottom: imageBottom,
+        pendingDelta: pendingDelta,
+        targetPixels: targetPixels,
+        userScrollDirection: position?.userScrollDirection.name,
+        isScrolling: position?.isScrollingNotifier.value,
+      ),
+    );
   }
 
   void dispose() {

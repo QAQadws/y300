@@ -73,17 +73,49 @@ void main() {
 
     expect(harness.controller.offset, 0);
   });
+
+  testWidgets('reports queued and applied stabilizer events', (tester) async {
+    final events = <ThreadDetailScrollStabilizerEvent>[];
+    final harness = await _pumpHarness(
+      tester,
+      initialOffset: 300,
+      onEvent: events.add,
+    );
+
+    harness.stabilizer.handleLayoutShift(
+      _shift(oldTop: harness.viewportTop - 510, oldHeight: 500, newHeight: 300),
+    );
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 16));
+
+    expect(
+      events.map((event) => event.type),
+      contains(ThreadDetailScrollStabilizerEventType.queued),
+    );
+    expect(
+      events.map((event) => event.type),
+      contains(ThreadDetailScrollStabilizerEventType.applied),
+    );
+    final applied = events.lastWhere(
+      (event) => event.type == ThreadDetailScrollStabilizerEventType.applied,
+    );
+    expect(applied.reason, 'jump-to-compensate-above-viewport');
+    expect(applied.pendingDelta, -200);
+    expect(applied.targetPixels, closeTo(100, 0.1));
+  });
 }
 
 Future<_Harness> _pumpHarness(
   WidgetTester tester, {
   required double initialOffset,
+  ValueChanged<ThreadDetailScrollStabilizerEvent>? onEvent,
 }) async {
   final controller = ScrollController(initialScrollOffset: initialOffset);
   final viewportKey = GlobalKey(debugLabel: 'test-thread-detail-viewport');
   final stabilizer = ThreadDetailScrollStabilizer(
     scrollController: controller,
     viewportKey: viewportKey,
+    onEvent: onEvent,
   );
   addTearDown(() {
     stabilizer.dispose();

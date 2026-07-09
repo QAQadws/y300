@@ -1,15 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
+import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/html_text_node_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
+import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/data/services/thread_detail_html_parser.dart';
 import 'package:y300/features/thread/domain/html_rendering/forum_html_fragment_extractor.dart';
 import 'package:y300/features/thread/domain/html_rendering/forum_html_render_input.dart';
 import 'package:y300/features/thread/domain/html_rendering/forum_html_sample_document.dart';
+import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
+import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_settings_sheet.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
+import 'package:y300/features/thread/presentation/thread_detail_state.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 
 class ForumHtmlRendererPrototypePage extends ConsumerStatefulWidget {
   const ForumHtmlRendererPrototypePage({
@@ -190,6 +198,14 @@ class _ForumHtmlRendererPrototypePageState
     final conversionMode = preferences.conversionMode;
     try {
       final rawHtml = await bundle.loadString(_selectedSample.assetPath);
+      if (_selectedSample.renderMode ==
+          ForumHtmlSampleRenderMode.threadDetail) {
+        return _loadThreadDetailSample(
+          rawHtml: rawHtml,
+          preferences: preferences,
+          conversionMode: conversionMode,
+        );
+      }
       final input = widget.extractor.extract(
         sourceId: _selectedSample.id,
         rawHtml: rawHtml,
@@ -211,6 +227,94 @@ class _ForumHtmlRendererPrototypePageState
       }
       rethrow;
     }
+  }
+
+  Future<_ForumHtmlPrototypeLoadResult> _loadThreadDetailSample({
+    required String rawHtml,
+    required ForumHtmlReaderPreferences preferences,
+    required TextConversionMode conversionMode,
+  }) async {
+    final parsed = const ThreadDetailHtmlParser().parse(
+      rawHtml,
+      fallbackTid: _selectedSample.id,
+      fallbackPage: 1,
+      fallbackSubject: _selectedSample.title,
+    );
+    final converter = ref.read(textConverterProvider(conversionMode));
+    final conversionService = ref.read(htmlTextNodeConversionServiceProvider);
+    var convertedTextNodeCount = 0;
+    final convertedPosts = <ThreadPost>[];
+    for (final post in parsed.posts) {
+      final converted = await conversionService.convert(
+        html: post.message,
+        converter: converter,
+      );
+      convertedTextNodeCount += converted.convertedTextNodeCount;
+      convertedPosts.add(_copyPostWithMessage(post, converted.html));
+    }
+
+    return _ForumHtmlPrototypeLoadResult.loadedThreadDetail(
+      threadData: _copyThreadDataWithPosts(parsed, convertedPosts),
+      preferences: preferences,
+      conversionMode: conversionMode,
+      conversionResult: HtmlTextNodeConversionResult(
+        html: '',
+        convertedTextNodeCount: convertedTextNodeCount,
+        converterId: converter.id,
+      ),
+    );
+  }
+
+  ThreadPost _copyPostWithMessage(ThreadPost post, String message) {
+    return ThreadPost(
+      pid: post.pid,
+      author: post.author,
+      authorId: post.authorId,
+      message: message,
+      number: post.number,
+      isFirst: post.isFirst,
+      dateline: post.dateline,
+      avatarUrl: post.avatarUrl,
+      replyUrl: post.replyUrl,
+      rateUrl: post.rateUrl,
+      commentUrl: post.commentUrl,
+      rateSummary: post.rateSummary,
+      ratingSummary: post.ratingSummary,
+      poll: post.poll,
+      tagLinks: post.tagLinks,
+      comments: post.comments,
+      attachmentImages: post.attachmentImages,
+    );
+  }
+
+  ThreadDetailData _copyThreadDataWithPosts(
+    ThreadDetailData data,
+    List<ThreadPost> posts,
+  ) {
+    return ThreadDetailData(
+      tid: data.tid,
+      fid: data.fid,
+      typeid: data.typeid,
+      typeName: data.typeName,
+      forumName: data.forumName,
+      forumUrl: data.forumUrl,
+      subject: data.subject,
+      author: data.author,
+      replies: data.replies,
+      views: data.views,
+      currentPage: data.currentPage,
+      perPage: data.perPage,
+      posts: List<ThreadPost>.unmodifiable(posts),
+      lastPage: data.lastPage,
+      previousPageUrl: data.previousPageUrl,
+      nextPageUrl: data.nextPageUrl,
+      reverseOrderUrl: data.reverseOrderUrl,
+      onlyAuthorUrl: data.onlyAuthorUrl,
+      favoriteUrl: data.favoriteUrl,
+      shareUrl: data.shareUrl,
+      homeUrl: data.homeUrl,
+      desktopUrl: data.desktopUrl,
+    );
   }
 }
 
@@ -301,6 +405,15 @@ class _LoadedSampleView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final threadData = result.threadData;
+    if (threadData != null) {
+      return _LoadedThreadDetailSampleView(
+        sample: sample,
+        result: result,
+        threadData: threadData,
+        onTapUrl: onTapUrl,
+      );
+    }
     final input = result.input!;
     final conversionResult = result.conversionResult!;
     final preferences = result.preferences!;
@@ -324,6 +437,442 @@ class _LoadedSampleView extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+class _LoadedThreadDetailSampleView extends StatefulWidget {
+  const _LoadedThreadDetailSampleView({
+    required this.sample,
+    required this.result,
+    required this.threadData,
+    required this.onTapUrl,
+  });
+
+  final ForumHtmlSampleDocument sample;
+  final _ForumHtmlPrototypeLoadResult result;
+  final ThreadDetailData threadData;
+  final Future<bool> Function(String url) onTapUrl;
+
+  @override
+  State<_LoadedThreadDetailSampleView> createState() =>
+      _LoadedThreadDetailSampleViewState();
+}
+
+class _LoadedThreadDetailSampleViewState
+    extends State<_LoadedThreadDetailSampleView> {
+  static const int _maxJitterLogEntries = 2000;
+
+  late final ScrollController _scrollController;
+  final List<String> _jitterLog = <String>[];
+  bool _jitterRecording = false;
+  DateTime? _jitterRecordingStartedAt;
+  DateTime? _lastScrollLogAt;
+  double? _lastScrollLogPixels;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    _scrollController.addListener(_recordScrollSample);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_recordScrollSample);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final threadState = _threadStateFromData(widget.threadData);
+    final showJitterDiagnostics = widget.sample.id == 'jitter_test';
+    return Column(
+      key: const Key('forum-html-prototype-thread-loaded-view'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+          child: _ThreadDebugSummary(
+            sample: widget.sample,
+            threadData: widget.threadData,
+            preferences: widget.result.preferences!,
+            conversionMode: widget.result.conversionMode!,
+            conversionResult: widget.result.conversionResult!,
+          ),
+        ),
+        if (showJitterDiagnostics)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: _JitterDiagnosticsControls(
+              recording: _jitterRecording,
+              logCount: _jitterLog.length,
+              onRecordingChanged: _setJitterRecording,
+              onCopy: _copyJitterLog,
+              onClear: _clearJitterLog,
+            ),
+          ),
+        Expanded(
+          child: ThreadDetailContent(
+            state: threadState,
+            scrollController: _scrollController,
+            imageHeaderBuilder: null,
+            imageReferer: widget.threadData.desktopUrl ?? '',
+            onLoadPreviousPage: _showUnsupportedAction,
+            onLoadNextPage: _showUnsupportedAction,
+            onLoadPageNumber: (_) => _showUnsupportedAction(),
+            onOpenAuthorProfile: (_) => _showUnsupportedAction(),
+            onOpenCommentAuthorProfile: (_) => _showUnsupportedAction(),
+            onCopyActionUrl: (_, url) => widget.onTapUrl(url),
+            onOpenPostLink: (url) => widget.onTapUrl(url),
+            onOpenPostImages: _handleOpenPostImages,
+            onOpenPostActions: (_, _) => _showUnsupportedAction(),
+            onPostBuilt: _recordPostBuilt,
+            onScrollStabilizerEvent: _recordScrollStabilizerEvent,
+            onTogglePollOption: (_, _) {},
+            onSubmitPollVote: (_) => _showUnsupportedAction(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  ThreadDetailPageState _threadStateFromData(ThreadDetailData data) {
+    return ThreadDetailPageState(
+      tid: data.tid,
+      fid: data.fid,
+      typeid: data.typeid,
+      typeName: data.typeName,
+      forumName: data.forumName,
+      forumUrl: data.forumUrl,
+      sourceTagName: null,
+      contentKind: ThreadContentKind.forum,
+      subject: data.subject,
+      views: data.views,
+      replies: data.replies,
+      currentPage: data.currentPage,
+      lastPage: data.lastPage,
+      previousPageUrl: data.previousPageUrl,
+      nextPageUrl: data.nextPageUrl,
+      reverseOrderUrl: data.reverseOrderUrl,
+      onlyAuthorUrl: data.onlyAuthorUrl,
+      favoriteUrl: data.favoriteUrl,
+      shareUrl: data.shareUrl,
+      homeUrl: data.homeUrl,
+      desktopUrl: data.desktopUrl,
+      hasMore: data.hasMore,
+      queryParameters: const <String, String>{},
+      isLoadingInitial: false,
+      isLoadingMore: false,
+      posts: data.posts,
+      comicCandidateInfo: ComicCandidateInfo.notCandidate,
+      parsedComicPost: ParsedComicPost.empty,
+      isThreadFavorited: false,
+      isThreadFavoriteActionLoading: false,
+      threadFavoriteHint: null,
+      selectedPollOptionIds: const <String>{},
+      isPollVoteSubmitting: false,
+      pollVoteHint: null,
+      replyText: '',
+      isReplySubmitting: false,
+      replyHint: null,
+    );
+  }
+
+  void _setJitterRecording(bool value) {
+    if (value == _jitterRecording) {
+      return;
+    }
+    if (value) {
+      setState(() {
+        _jitterLog.clear();
+        _jitterRecordingStartedAt = DateTime.now();
+        _lastScrollLogAt = null;
+        _lastScrollLogPixels = null;
+        _jitterRecording = true;
+        _appendJitterLog(
+          'session-start sample=${widget.sample.id} '
+          'tid=${widget.threadData.tid} page=${widget.threadData.currentPage} '
+          'posts=${widget.threadData.posts.length}',
+        );
+        _recordScrollSample(force: true);
+      });
+      return;
+    }
+    setState(() {
+      _appendJitterLog('session-stop entries=${_jitterLog.length + 1}');
+      _jitterRecording = false;
+    });
+  }
+
+  Future<void> _copyJitterLog() async {
+    final text = _jitterLog.isEmpty
+        ? 'No jitter diagnostics were recorded.'
+        : _jitterLog.join('\n');
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        key: const Key('forum-html-prototype-jitter-log-copied-snackbar'),
+        content: Text('已复制 ${_jitterLog.length} 条抖动日志'),
+      ),
+    );
+  }
+
+  void _clearJitterLog() {
+    setState(() {
+      _jitterLog.clear();
+      _jitterRecordingStartedAt = _jitterRecording ? DateTime.now() : null;
+      _lastScrollLogAt = null;
+      _lastScrollLogPixels = null;
+      if (_jitterRecording) {
+        _appendJitterLog('session-reset');
+        _recordScrollSample(force: true);
+      }
+    });
+  }
+
+  void _recordPostBuilt(int index) {
+    _appendJitterLog('post-built index=$index');
+  }
+
+  void _recordScrollSample({bool force = false}) {
+    if (!_jitterRecording) {
+      return;
+    }
+    if (!_scrollController.hasClients) {
+      _appendJitterLog('scroll unavailable=no-clients');
+      return;
+    }
+    final now = DateTime.now();
+    final position = _scrollController.position;
+    final previousPixels = _lastScrollLogPixels;
+    final delta = previousPixels == null
+        ? 0.0
+        : position.pixels - previousPixels;
+    if (!force &&
+        _lastScrollLogAt != null &&
+        now.difference(_lastScrollLogAt!).inMilliseconds < 80 &&
+        delta.abs() < 12) {
+      return;
+    }
+    _lastScrollLogAt = now;
+    _lastScrollLogPixels = position.pixels;
+    _appendJitterLog(
+      'scroll pixels=${_fmt(position.pixels)} delta=${_fmt(delta)} '
+      'min=${_fmt(position.minScrollExtent)} '
+      'max=${_fmt(position.maxScrollExtent)} '
+      'viewport=${_fmt(position.viewportDimension)} '
+      'dir=${position.userScrollDirection.name} '
+      'scrolling=${position.isScrollingNotifier.value}',
+    );
+  }
+
+  void _recordScrollStabilizerEvent(ThreadDetailScrollStabilizerEvent event) {
+    _appendJitterLog(
+      'stabilizer type=${event.type.name} reason=${event.reason} '
+      'pixels=${_fmtNullable(event.scrollPixels)} '
+      'target=${_fmtNullable(event.targetPixels)} '
+      'pending=${_fmtNullable(event.pendingDelta)} '
+      'deltaH=${_fmt(event.deltaHeight)} '
+      'oldAR=${_fmt(event.oldAspectRatio)} newAR=${_fmt(event.newAspectRatio)} '
+      'viewportTop=${_fmtNullable(event.viewportTop)} '
+      'imageBottom=${_fmtNullable(event.imageBottom)} '
+      'dir=${event.userScrollDirection ?? 'unknown'} '
+      'scrolling=${event.isScrolling ?? false} '
+      'key=${event.cacheKey} url=${_shortUrl(event.sourceUrl)}',
+    );
+  }
+
+  void _appendJitterLog(String message) {
+    if (!_jitterRecording) {
+      return;
+    }
+    final start = _jitterRecordingStartedAt;
+    final elapsed = start == null
+        ? 0
+        : DateTime.now().difference(start).inMilliseconds;
+    _jitterLog.add('${elapsed.toString().padLeft(6)}ms $message');
+    if (_jitterLog.length > _maxJitterLogEntries) {
+      _jitterLog.removeRange(0, _jitterLog.length - _maxJitterLogEntries);
+    }
+  }
+
+  String _fmt(double value) => value.toStringAsFixed(1);
+
+  String _fmtNullable(double? value) => value == null ? 'null' : _fmt(value);
+
+  String _shortUrl(String url) {
+    final value = url.trim();
+    if (value.length <= 96) {
+      return value;
+    }
+    return '${value.substring(0, 48)}...${value.substring(value.length - 32)}';
+  }
+
+  void _handleOpenPostImages(
+    ThreadPost post,
+    ThreadPostImageOpenRequest request,
+  ) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        key: const Key('forum-html-prototype-image-reader-snackbar'),
+        content: Text('${post.number}# 图片：${request.initialIndex + 1}'),
+      ),
+    );
+  }
+
+  void _showUnsupportedAction() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        key: Key('forum-html-prototype-thread-action-snackbar'),
+        content: Text('原型页暂不执行该帖子操作'),
+      ),
+    );
+  }
+}
+
+class _JitterDiagnosticsControls extends StatelessWidget {
+  const _JitterDiagnosticsControls({
+    required this.recording,
+    required this.logCount,
+    required this.onRecordingChanged,
+    required this.onCopy,
+    required this.onClear,
+  });
+
+  final bool recording;
+  final int logCount;
+  final ValueChanged<bool> onRecordingChanged;
+  final VoidCallback onCopy;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      key: const Key('forum-html-prototype-jitter-log-panel'),
+      decoration: BoxDecoration(
+        color: colors.secondaryContainer.withValues(alpha: 0.34),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '记录抖动日志',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        recording ? '记录中，关闭后复制日志' : '已记录 $logCount 条',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch.adaptive(
+                  key: const Key('forum-html-prototype-jitter-log-switch'),
+                  value: recording,
+                  onChanged: onRecordingChanged,
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                TextButton.icon(
+                  key: const Key('forum-html-prototype-jitter-log-copy'),
+                  onPressed: recording || logCount == 0 ? null : onCopy,
+                  icon: const Icon(Icons.copy_all_outlined),
+                  label: const Text('复制日志'),
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  key: const Key('forum-html-prototype-jitter-log-clear'),
+                  onPressed: logCount == 0 ? null : onClear,
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('清空'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ThreadDebugSummary extends StatelessWidget {
+  const _ThreadDebugSummary({
+    required this.sample,
+    required this.threadData,
+    required this.preferences,
+    required this.conversionMode,
+    required this.conversionResult,
+  });
+
+  final ForumHtmlSampleDocument sample;
+  final ThreadDetailData threadData;
+  final ForumHtmlReaderPreferences preferences;
+  final TextConversionMode conversionMode;
+  final HtmlTextNodeConversionResult conversionResult;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Semantics(
+      label: 'HTML 原型帖子样例摘要',
+      child: DecoratedBox(
+        key: const Key('forum-html-prototype-thread-debug-summary'),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: DefaultTextStyle.merge(
+            style: textTheme.bodySmall,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('样例：${sample.title}'),
+                Text('帖子：${threadData.subject}'),
+                Text(
+                  '页码：${threadData.currentPage}/${threadData.lastPage ?? '?'}',
+                ),
+                Text('楼层：${threadData.posts.length} 个'),
+                Text('转换模式：${_conversionModeLabel(conversionMode)}'),
+                Text('转换器：${conversionResult.converterId}'),
+                Text('转换文本节点：${conversionResult.convertedTextNodeCount} 个'),
+                Text(preferences.typographyDebugLabel),
+                Text(preferences.authorStyleDebugLabel),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _conversionModeLabel(TextConversionMode mode) {
+    return switch (mode) {
+      TextConversionMode.none => '原文',
+      TextConversionMode.toSimplified => '转简',
+      TextConversionMode.toTraditional => '转繁',
+    };
   }
 }
 
@@ -423,6 +972,7 @@ class _ErrorState extends StatelessWidget {
 class _ForumHtmlPrototypeLoadResult {
   const _ForumHtmlPrototypeLoadResult._({
     required this.input,
+    required this.threadData,
     required this.preferences,
     required this.conversionMode,
     required this.conversionResult,
@@ -436,6 +986,21 @@ class _ForumHtmlPrototypeLoadResult {
     required HtmlTextNodeConversionResult conversionResult,
   }) : this._(
          input: input,
+         threadData: null,
+         preferences: preferences,
+         conversionMode: conversionMode,
+         conversionResult: conversionResult,
+         isMissingLocalAsset: false,
+       );
+
+  const _ForumHtmlPrototypeLoadResult.loadedThreadDetail({
+    required ThreadDetailData threadData,
+    required ForumHtmlReaderPreferences preferences,
+    required TextConversionMode conversionMode,
+    required HtmlTextNodeConversionResult conversionResult,
+  }) : this._(
+         input: null,
+         threadData: threadData,
          preferences: preferences,
          conversionMode: conversionMode,
          conversionResult: conversionResult,
@@ -445,6 +1010,7 @@ class _ForumHtmlPrototypeLoadResult {
   const _ForumHtmlPrototypeLoadResult.missingLocalAsset()
     : this._(
         input: null,
+        threadData: null,
         preferences: null,
         conversionMode: null,
         conversionResult: null,
@@ -452,6 +1018,7 @@ class _ForumHtmlPrototypeLoadResult {
       );
 
   final ForumHtmlRenderInput? input;
+  final ThreadDetailData? threadData;
   final ForumHtmlReaderPreferences? preferences;
   final TextConversionMode? conversionMode;
   final HtmlTextNodeConversionResult? conversionResult;

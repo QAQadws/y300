@@ -8,7 +8,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('forum HTML prototype sample manifest is stable', () {
-    expect(forumHtmlPrototypeSamples, hasLength(4));
+    expect(forumHtmlPrototypeSamples, hasLength(5));
 
     expect(
       forumHtmlPrototypeSamples.map((sample) => sample.id),
@@ -17,6 +17,7 @@ void main() {
         'background_color',
         'collapse_directory',
         'text_color_size',
+        'jitter_test',
       ]),
     );
 
@@ -36,7 +37,14 @@ void main() {
         'docs/html/特殊格式/文字背景色.html',
         'docs/html/特殊格式/折叠目录.html',
         'docs/html/特殊格式/字颜色字号.html',
+        'docs/html/特殊格式/抖动测试.html',
       ]),
+    );
+    expect(
+      forumHtmlPrototypeSamples
+          .singleWhere((sample) => sample.id == 'jitter_test')
+          .renderMode,
+      ForumHtmlSampleRenderMode.threadDetail,
     );
   });
 

@@ -122,6 +122,109 @@ void main() {
     expect(find.textContaining('第二个样例', findRichText: true), findsOneWidget);
   });
 
+  testWidgets('renders thread detail samples as full post lists', (
+    tester,
+  ) async {
+    const threadSample = ForumHtmlSampleDocument(
+      id: 'thread',
+      title: '完整帖子',
+      assetPath: 'assets/prototypes/forum_html/thread.html',
+      sourceDocPath: 'docs/html/特殊格式/thread.html',
+      renderMode: ForumHtmlSampleRenderMode.threadDetail,
+    );
+
+    await tester.pumpWidget(
+      _wrapWithProviders(
+        ForumHtmlRendererPrototypePage(
+          samples: const <ForumHtmlSampleDocument>[threadSample],
+          assetBundle: _FakeAssetBundle(
+            assets: const <String, String>{
+              'assets/prototypes/forum_html/thread.html': _mobileThreadHtml,
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('forum-html-prototype-thread-loaded-view')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('forum-html-prototype-thread-debug-summary')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('帖子：完整帖子标题'), findsOneWidget);
+    expect(find.textContaining('楼层：2 个'), findsOneWidget);
+    expect(find.byKey(const Key('thread-detail-list')), findsOneWidget);
+    expect(find.textContaining('第一层正文', findRichText: true), findsOneWidget);
+    expect(find.textContaining('第二层正文', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('jitter sample records and copies scroll diagnostics', (
+    tester,
+  ) async {
+    const jitterSample = ForumHtmlSampleDocument(
+      id: 'jitter_test',
+      title: '抖动测试',
+      assetPath: 'assets/prototypes/forum_html/jitter.html',
+      sourceDocPath: 'docs/html/特殊格式/抖动测试.html',
+      renderMode: ForumHtmlSampleRenderMode.threadDetail,
+    );
+    String? copiedText;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copiedText =
+                (call.arguments as Map<Object?, Object?>)['text']! as String;
+          }
+          return null;
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null);
+    });
+
+    await tester.pumpWidget(
+      _wrapWithProviders(
+        ForumHtmlRendererPrototypePage(
+          samples: const <ForumHtmlSampleDocument>[jitterSample],
+          assetBundle: _FakeAssetBundle(
+            assets: const <String, String>{
+              'assets/prototypes/forum_html/jitter.html': _mobileThreadHtml,
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('forum-html-prototype-jitter-log-panel')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const Key('forum-html-prototype-jitter-log-switch')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('forum-html-prototype-jitter-log-switch')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const Key('forum-html-prototype-jitter-log-copy')),
+    );
+    await tester.pump();
+
+    expect(copiedText, isNotNull);
+    expect(copiedText, contains('session-start sample=jitter_test'));
+    expect(copiedText, contains('scroll'));
+    expect(copiedText, contains('session-stop'));
+  });
+
   testWidgets('renders and expands collapse directory sample content', (
     tester,
   ) async {
@@ -293,6 +396,41 @@ void main() {
     expect(find.textContaining(samples.first.assetPath), findsOneWidget);
   });
 }
+
+const _mobileThreadHtml = '''
+<!DOCTYPE html>
+<html>
+<body id="forum" class="pg_viewthread">
+  <div class="viewthread">
+    <div class="view_tit">完整帖子标题</div>
+    <div class="plc cl" id="pid1001">
+      <div class="display pione">
+        <ul class="authi">
+          <li class="mtit">
+            <span class="z"><a href="home.php?mod=space&uid=11">Alice</a></span>
+            <span class="y">1#</span>
+          </li>
+          <li class="mtime">发表于 2026-7-9 10:00</li>
+        </ul>
+      </div>
+      <div class="message"><p>第一层正文</p></div>
+    </div>
+    <div class="plc cl" id="pid1002">
+      <div class="display">
+        <ul class="authi">
+          <li class="mtit">
+            <span class="z"><a href="home.php?mod=space&uid=12">Bob</a></span>
+            <span class="y">2#</span>
+          </li>
+          <li class="mtime">发表于 2026-7-9 10:01</li>
+        </ul>
+      </div>
+      <div class="message"><p>第二层正文</p></div>
+    </div>
+  </div>
+</body>
+</html>
+''';
 
 Widget _wrapWithProviders(
   Widget child, {

@@ -99,6 +99,8 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
     required this.onOpenPostImages,
     required this.onHtmlFirstImageFallback,
     required this.onHtmlFirstImageLayoutShift,
+    required this.onHtmlFirstImageFallbackAspectRatio,
+    required this.onHtmlFirstBlockImageResolved,
     required this.onOpenPostActions,
   });
 
@@ -115,6 +117,19 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
   final ThreadPostHtmlFirstImageFallback onHtmlFirstImageFallback;
   final void Function(ForumHtmlImageLayoutShift shift)
   onHtmlFirstImageLayoutShift;
+  final double? Function(
+    ThreadPost post,
+    ForumImageLoadSpec spec,
+    ImageCacheRequest request,
+  )
+  onHtmlFirstImageFallbackAspectRatio;
+  final void Function(
+    ThreadPost post,
+    ForumImageLoadSpec spec,
+    ImageCacheRequest request,
+    Size size,
+  )
+  onHtmlFirstBlockImageResolved;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
   onOpenPostActions;
 
@@ -147,6 +162,10 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
                 : (post, request) => onOpenPostImages!.call(post, request),
             onImageFallback: onHtmlFirstImageFallback,
             onImageLayoutShift: onHtmlFirstImageLayoutShift,
+            imageFallbackAspectRatioFor: (spec, request) =>
+                onHtmlFirstImageFallbackAspectRatio(post, spec, request),
+            onBlockImageResolved: (spec, request, size) =>
+                onHtmlFirstBlockImageResolved(post, spec, request, size),
           ),
         ),
       ),
@@ -243,6 +262,161 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
   }
 }
 
+class _ThreadPostCardEntry extends StatefulWidget {
+  const _ThreadPostCardEntry({
+    super.key,
+    required this.post,
+    required this.postIndex,
+    required this.state,
+    required this.plan,
+    required this.highlighted,
+    required this.imageHeaderBuilder,
+    required this.imageReferer,
+    required this.palette,
+    required this.onOpenAuthorProfile,
+    required this.onOpenPostLink,
+    required this.onOpenPostImages,
+    required this.onHtmlFirstImageFallback,
+    required this.onHtmlFirstImageLayoutShift,
+    required this.onHtmlFirstImageFallbackAspectRatio,
+    required this.onHtmlFirstBlockImageResolved,
+    required this.onOpenPostActions,
+    required this.onCopyActionUrl,
+    required this.onOpenCommentAuthorProfile,
+    required this.onTogglePollOption,
+    required this.onSubmitPollVote,
+    required this.onPostBuilt,
+  });
+
+  final ThreadPost post;
+  final int postIndex;
+  final ThreadDetailPageState state;
+  final ThreadPostBodyRenderPlan plan;
+  final bool highlighted;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String imageReferer;
+  final ThreadDetailNativePalette palette;
+  final ValueChanged<ThreadPost> onOpenAuthorProfile;
+  final ValueChanged<String> onOpenPostLink;
+  final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
+  onOpenPostImages;
+  final ThreadPostHtmlFirstImageFallback onHtmlFirstImageFallback;
+  final void Function(ForumHtmlImageLayoutShift shift)
+  onHtmlFirstImageLayoutShift;
+  final double? Function(
+    ThreadPost post,
+    ForumImageLoadSpec spec,
+    ImageCacheRequest request,
+  )
+  onHtmlFirstImageFallbackAspectRatio;
+  final void Function(
+    ThreadPost post,
+    ForumImageLoadSpec spec,
+    ImageCacheRequest request,
+    Size size,
+  )
+  onHtmlFirstBlockImageResolved;
+  final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
+  onOpenPostActions;
+  final void Function(String label, String url) onCopyActionUrl;
+  final ValueChanged<ThreadPostCommentEntry> onOpenCommentAuthorProfile;
+  final void Function(ThreadPoll poll, ThreadPollOption option)
+  onTogglePollOption;
+  final ValueChanged<ThreadPoll> onSubmitPollVote;
+  final ValueChanged<int>? onPostBuilt;
+
+  @override
+  State<_ThreadPostCardEntry> createState() => _ThreadPostCardEntryState();
+}
+
+class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  void initState() {
+    super.initState();
+    _scheduleNotify();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ThreadPostCardEntry oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.post.pid != widget.post.pid ||
+        oldWidget.postIndex != widget.postIndex ||
+        oldWidget.onPostBuilt != widget.onPostBuilt) {
+      _scheduleNotify();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _ThreadPostCardHeaderEntry(
+          key: Key('thread-post-header-${widget.post.pid}'),
+          post: widget.post,
+          state: widget.state,
+          plan: widget.plan,
+          highlighted: widget.highlighted,
+          palette: widget.palette,
+          imageHeaderBuilder: widget.imageHeaderBuilder,
+          onOpenAuthorProfile: widget.onOpenAuthorProfile,
+          onOpenPostActions: widget.onOpenPostActions,
+        ),
+        _ThreadPostCardBodyEntry(
+          key: Key('thread-post-body-${widget.post.pid}'),
+          post: widget.post,
+          threadId: widget.state.tid,
+          plan: widget.plan,
+          highlighted: widget.highlighted,
+          imageHeaderBuilder: widget.imageHeaderBuilder,
+          imageReferer: widget.imageReferer,
+          palette: widget.palette,
+          onOpenPostLink: widget.onOpenPostLink,
+          onOpenPostImages: widget.onOpenPostImages,
+          onHtmlFirstImageFallback: widget.onHtmlFirstImageFallback,
+          onHtmlFirstImageLayoutShift: widget.onHtmlFirstImageLayoutShift,
+          onHtmlFirstImageFallbackAspectRatio:
+              widget.onHtmlFirstImageFallbackAspectRatio,
+          onHtmlFirstBlockImageResolved: widget.onHtmlFirstBlockImageResolved,
+          onOpenPostActions: widget.onOpenPostActions,
+        ),
+        _ThreadPostCardFooterEntry(
+          key: Key('thread-post-footer-${widget.post.pid}'),
+          post: widget.post,
+          state: widget.state,
+          plan: widget.plan,
+          highlighted: widget.highlighted,
+          imageHeaderBuilder: widget.imageHeaderBuilder,
+          onOpenPostActions: widget.onOpenPostActions,
+          onCopyActionUrl: widget.onCopyActionUrl,
+          onOpenPostLink: widget.onOpenPostLink,
+          onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,
+          onTogglePollOption: widget.onTogglePollOption,
+          onSubmitPollVote: widget.onSubmitPollVote,
+          palette: widget.palette,
+        ),
+      ],
+    );
+  }
+
+  @override
+  bool get wantKeepAlive => true;
+
+  void _scheduleNotify() {
+    final callback = widget.onPostBuilt;
+    if (callback == null) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        callback(widget.postIndex);
+      }
+    });
+  }
+}
+
 class _PostBuildObserver extends StatefulWidget {
   const _PostBuildObserver({
     required this.index,
@@ -292,8 +466,8 @@ class _PostBuildObserverState extends State<_PostBuildObserver> {
 
 /// Single-card preview/compat renderer.
 ///
-/// The production native thread detail page uses [ThreadDetailContent], which
-/// renders post header/body/footer entries separately to keep long posts lazy.
+/// The production native thread detail page uses [_ThreadPostCardEntry] so it
+/// can reuse the shared render plan cache and HTML-first image callbacks.
 class ThreadPostCard extends StatelessWidget {
   const ThreadPostCard({
     super.key,

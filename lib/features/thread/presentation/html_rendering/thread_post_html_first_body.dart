@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
@@ -33,6 +35,8 @@ class ThreadPostHtmlFirstBody extends ConsumerWidget {
     this.onImageFallback,
     this.onImageDiagnostics,
     this.onImageLayoutShift,
+    this.imageFallbackAspectRatioFor,
+    this.onBlockImageResolved,
     this.fallback,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
     this.imageReaderBridge = const ThreadHtmlImageReaderBridge(),
@@ -49,6 +53,14 @@ class ThreadPostHtmlFirstBody extends ConsumerWidget {
   final ThreadPostHtmlFirstImageFallback? onImageFallback;
   final ThreadPostHtmlFirstImageDiagnostics? onImageDiagnostics;
   final void Function(ForumHtmlImageLayoutShift shift)? onImageLayoutShift;
+  final double? Function(ForumImageLoadSpec spec, ImageCacheRequest request)?
+  imageFallbackAspectRatioFor;
+  final void Function(
+    ForumImageLoadSpec spec,
+    ImageCacheRequest request,
+    Size size,
+  )?
+  onBlockImageResolved;
   final Widget? fallback;
   final ForumHtmlRenderPreparer renderPreparer;
   final ThreadHtmlImageReaderBridge imageReaderBridge;
@@ -80,6 +92,8 @@ class ThreadPostHtmlFirstBody extends ConsumerWidget {
           threadId: threadId,
           imageHeaderBuilder: imageHeaderBuilder,
           imageCacheOwnerId: threadId,
+          imageFallbackAspectRatioFor: imageFallbackAspectRatioFor,
+          onBlockImageResolved: onBlockImageResolved,
           preferences: preferences,
           callbacks: ForumHtmlRenderCallbacks(
             onTapUrl: (url) {
@@ -145,6 +159,8 @@ class ThreadPostHtmlBody extends StatelessWidget {
     this.onImageFallback,
     this.onImageDiagnostics,
     this.onImageLayoutShift,
+    this.imageFallbackAspectRatioFor,
+    this.onBlockImageResolved,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
     this.imageReaderBridge = const ThreadHtmlImageReaderBridge(),
   });
@@ -160,6 +176,14 @@ class ThreadPostHtmlBody extends StatelessWidget {
   final ThreadPostHtmlFirstImageFallback? onImageFallback;
   final ThreadPostHtmlFirstImageDiagnostics? onImageDiagnostics;
   final void Function(ForumHtmlImageLayoutShift shift)? onImageLayoutShift;
+  final double? Function(ForumImageLoadSpec spec, ImageCacheRequest request)?
+  imageFallbackAspectRatioFor;
+  final void Function(
+    ForumImageLoadSpec spec,
+    ImageCacheRequest request,
+    Size size,
+  )?
+  onBlockImageResolved;
   final ForumHtmlRenderPreparer renderPreparer;
   final ThreadHtmlImageReaderBridge imageReaderBridge;
 
@@ -176,6 +200,8 @@ class ThreadPostHtmlBody extends StatelessWidget {
       onImageFallback: onImageFallback,
       onImageDiagnostics: onImageDiagnostics,
       onImageLayoutShift: onImageLayoutShift,
+      imageFallbackAspectRatioFor: imageFallbackAspectRatioFor,
+      onBlockImageResolved: onBlockImageResolved,
       renderPreparer: renderPreparer,
       imageReaderBridge: imageReaderBridge,
     );
