@@ -164,7 +164,7 @@ void main() {
     await tester.pump();
     expect(
       controller.getSelectionStyle().attributes[Attribute.size.key]?.value,
-      '16',
+      '18',
     );
     await tester.ensureVisible(
       find.byKey(const Key('test-quill-format-color-swatch-d32f2f')),
@@ -271,7 +271,7 @@ void main() {
     expect(latest, '[size=4]文字[/size]');
     expect(
       controller.getSelectionStyle().attributes[Attribute.size.key]?.value,
-      '16',
+      '18',
     );
 
     await tester.tap(find.byKey(const Key('test-quill-format-size-4')));
@@ -354,7 +354,7 @@ void main() {
     expect(latest, '[size=3]文字[/size]');
     expect(
       controller.getSelectionStyle().attributes[Attribute.size.key]?.value,
-      '14',
+      '16',
     );
   });
 

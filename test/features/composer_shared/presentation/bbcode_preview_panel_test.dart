@@ -57,7 +57,19 @@ void main() {
       tester.widgetList<RichText>(find.byType(RichText)),
       '大字',
     );
-    expect(span?.style?.fontSize, 18);
+    expect(span?.style?.fontSize, 17.5);
+  });
+
+  testWidgets('BbCodePreviewPanel renders Discuz size 3 as body size', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildPanel(source: '普通[size=3]默认字[/size]'));
+
+    final richTexts = tester.widgetList<RichText>(find.byType(RichText));
+    final ordinaryFontSize = _resolvedFontSizeForText(richTexts, '普通');
+    final sizeThreeFontSize = _resolvedFontSizeForText(richTexts, '默认字');
+
+    expect(sizeThreeFontSize, ordinaryFontSize);
   });
 
   testWidgets('BbCodePreviewPanel falls back invalid Discuz size to 3', (
@@ -540,6 +552,45 @@ TextSpan? _findTextSpanInInlineSpan(InlineSpan span, String text) {
   }
   for (final child in children) {
     final match = _findTextSpanInInlineSpan(child, text);
+    if (match != null) {
+      return match;
+    }
+  }
+  return null;
+}
+
+double? _resolvedFontSizeForText(Iterable<RichText> richTexts, String text) {
+  for (final richText in richTexts) {
+    final fontSize = _resolvedFontSizeInInlineSpan(
+      richText.text,
+      text,
+      richText.text.style?.fontSize,
+    );
+    if (fontSize != null) {
+      return fontSize;
+    }
+  }
+  return null;
+}
+
+double? _resolvedFontSizeInInlineSpan(
+  InlineSpan span,
+  String text,
+  double? inheritedFontSize,
+) {
+  if (span is! TextSpan) {
+    return null;
+  }
+  final currentFontSize = span.style?.fontSize ?? inheritedFontSize;
+  if (span.text == text) {
+    return currentFontSize;
+  }
+  final children = span.children;
+  if (children == null) {
+    return null;
+  }
+  for (final child in children) {
+    final match = _resolvedFontSizeInInlineSpan(child, text, currentFontSize);
     if (match != null) {
       return match;
     }

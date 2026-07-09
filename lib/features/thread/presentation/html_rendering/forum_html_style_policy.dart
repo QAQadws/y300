@@ -4,21 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
+import 'package:y300/features/reader_shared/domain/rich_text/typography/discuz_font_size_policy.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 
 class ForumHtmlStylePolicy {
   const ForumHtmlStylePolicy(this.preferences);
 
   final ForumHtmlReaderPreferences preferences;
-  static const Map<String, String> _discuzFontSizePercent = <String, String>{
-    '1': '75%',
-    '2': '87.5%',
-    '3': '100%',
-    '4': '112.5%',
-    '5': '125%',
-    '6': '150%',
-    '7': '175%',
-  };
 
   TextStyle baseTextStyle(BuildContext context) {
     final fallback = Theme.of(context).textTheme.bodyMedium;
@@ -159,7 +151,7 @@ class ForumHtmlStylePolicy {
       return;
     }
     element.attributes.remove('size');
-    final percent = _discuzFontSizePercent[size];
+    final percent = DiscuzFontSizePolicy.cssPercentFor(size);
     if (percent == null) {
       return;
     }

@@ -1,11 +1,14 @@
+import 'package:y300/features/reader_shared/domain/rich_text/typography/discuz_font_size_policy.dart';
+
+/// Flutter Quill's paragraph default is 16px, so Discuz size 3 must map to 16.
 const Map<int, String> composerDiscuzSizeToQuillSize = {
-  1: '10',
-  2: '12',
-  3: '14',
-  4: '16',
-  5: '18',
-  6: '20',
-  7: '24',
+  1: '12',
+  2: '14',
+  3: '16',
+  4: '18',
+  5: '20',
+  6: '24',
+  7: '28',
 };
 
 String? composerQuillSizeForDiscuzSize(int discuzSize) {
@@ -24,16 +27,10 @@ String? composerDiscuzSizeForQuillSize(Object? value) {
 
   for (final entry in composerDiscuzSizeToQuillSize.entries) {
     final quillSize = double.parse(entry.value);
-    if (parsed == quillSize) {
+    if ((parsed - quillSize).abs() < 0.001) {
       return entry.key.toString();
     }
   }
 
-  final legacyDiscuzSize = int.tryParse(raw);
-  if (legacyDiscuzSize == null ||
-      legacyDiscuzSize < 1 ||
-      legacyDiscuzSize > 7) {
-    return null;
-  }
-  return legacyDiscuzSize.toString();
+  return DiscuzFontSizePolicy.normalize(raw)?.toString();
 }

@@ -14,7 +14,7 @@ void main() {
         Attribute.italic.key: true,
         Attribute.underline.key: true,
         Attribute.strikeThrough.key: true,
-        Attribute.size.key: '16',
+        Attribute.size.key: '18',
         Attribute.color.key: '#ff0000',
         Attribute.background.key: '#fff3b0',
       })
@@ -155,13 +155,13 @@ void main() {
 
   test('maps Quill visual sizes to Discuz sizes and keeps legacy raw sizes', () {
     final delta = Delta()
-      ..insert('一', {Attribute.size.key: '10'})
-      ..insert('二', {Attribute.size.key: '12'})
-      ..insert('三', {Attribute.size.key: '14'})
-      ..insert('四', {Attribute.size.key: '16'})
-      ..insert('五', {Attribute.size.key: '18'})
-      ..insert('六', {Attribute.size.key: '20'})
-      ..insert('七', {Attribute.size.key: '24'})
+      ..insert('一', {Attribute.size.key: '12'})
+      ..insert('二', {Attribute.size.key: '14'})
+      ..insert('三', {Attribute.size.key: '16'})
+      ..insert('四', {Attribute.size.key: '18'})
+      ..insert('五', {Attribute.size.key: '20'})
+      ..insert('六', {Attribute.size.key: '24'})
+      ..insert('七', {Attribute.size.key: '28'})
       ..insert('旧', {Attribute.size.key: '4'})
       ..insert('\n');
 
@@ -177,7 +177,7 @@ void main() {
       (operation) => operation['insert'] == '文字',
     );
 
-    expect(textOperation['attributes'], containsPair('size', '16'));
+    expect(textOperation['attributes'], containsPair('size', '18'));
   });
 
   test('ignores invalid size and color values', () {

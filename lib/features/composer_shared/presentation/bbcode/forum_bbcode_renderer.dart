@@ -7,6 +7,7 @@ import 'package:y300/features/composer_shared/domain/models/sticker_models.dart'
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_tokenizer.dart';
 import 'package:y300/features/composer_shared/domain/services/sticker_bbcode_tokenizer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/typography/discuz_font_size_policy.dart';
 
 typedef ForumAttachPreviewImageBuilder = Widget Function(File file, Key key);
 typedef ForumAttachPreviewFileExists = bool Function(File file);
@@ -93,7 +94,7 @@ class FlutterBbCodeForumRenderer extends ForumBbCodeRenderer {
         final stylesheet = defaultBBStylesheet(textStyle: textStyle);
         stylesheet.removeTag('img');
         stylesheet.addTag(_BackColorTag());
-        stylesheet.addTag(_DiscuzSizeTag());
+        stylesheet.addTag(_DiscuzSizeTag(textStyle.fontSize ?? 14));
         stylesheet.addTag(_DiscuzCodeTag(colorScheme, textStyle));
         stylesheet.addTag(_DiscuzAlignTag());
         stylesheet.addTag(_StickerPreviewTag(stickers, stickerImageBuilder));
@@ -131,7 +132,9 @@ class _BackColorTag extends StyleTag {
 }
 
 class _DiscuzSizeTag extends StyleTag {
-  _DiscuzSizeTag() : super('size');
+  _DiscuzSizeTag(this.baseFontSize) : super('size');
+
+  final double baseFontSize;
 
   @override
   TextStyle transformStyle(
@@ -139,8 +142,14 @@ class _DiscuzSizeTag extends StyleTag {
     Map<String, String>? attributes,
   ) {
     final rawSize = int.tryParse(_firstAttributeValue(attributes) ?? '');
-    final size = rawSize == null || rawSize < 1 || rawSize > 7 ? 3 : rawSize;
-    return oldStyle.copyWith(fontSize: _discuzSizeToFontSize(size));
+    final size =
+        DiscuzFontSizePolicy.normalize(rawSize) ??
+        DiscuzFontSizePolicy.normalSize;
+    final fontSize = DiscuzFontSizePolicy.fontSizeForBase(
+      size,
+      baseFontSize: baseFontSize,
+    );
+    return fontSize == null ? oldStyle : oldStyle.copyWith(fontSize: fontSize);
   }
 }
 
@@ -348,18 +357,6 @@ Color? _parseBbCodeColor(String? rawColor) {
       ? hex.split('').map((digit) => '$digit$digit').join()
       : hex;
   return Color(int.parse('ff$expanded', radix: 16));
-}
-
-double _discuzSizeToFontSize(int size) {
-  return switch (size.clamp(1, 7).toInt()) {
-    1 => 10,
-    2 => 12,
-    3 => 14,
-    4 => 16,
-    5 => 18,
-    6 => 20,
-    _ => 24,
-  };
 }
 
 class _AttachSourceFallbackTag extends WrappedStyleTag {
