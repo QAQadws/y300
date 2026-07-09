@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/html_text_node_conversion_service.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
@@ -22,7 +26,7 @@ typedef ThreadPostHtmlFirstImageDiagnostics =
       ThreadHtmlImageReaderBridgeResult result,
     );
 
-class ThreadPostHtmlFirstBody extends ConsumerWidget {
+class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
   const ThreadPostHtmlFirstBody({
     super.key,
     required this.post,
@@ -66,77 +70,212 @@ class ThreadPostHtmlFirstBody extends ConsumerWidget {
   final ThreadHtmlImageReaderBridge imageReaderBridge;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final html = post.message.trim();
+  ConsumerState<ThreadPostHtmlFirstBody> createState() =>
+      _ThreadPostHtmlFirstBodyState();
+}
+
+class _ThreadPostHtmlFirstBodyState
+    extends ConsumerState<ThreadPostHtmlFirstBody> {
+  String? _conversionHtml;
+  TextConversionMode? _conversionMode;
+  Future<HtmlTextNodeConversionResult>? _conversionFuture;
+  bool _loggedEmptyBody = false;
+  String? _lastPreparedLogKey;
+  String? _lastRenderFailureLogKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final html = widget.post.message.trim();
     if (html.isEmpty) {
-      return fallback ?? const SizedBox.shrink();
+      if (!_loggedEmptyBody) {
+        _loggedEmptyBody = true;
+        _logNative(
+          'render_empty_body',
+          'tid=${widget.threadId} pid=${widget.post.pid} '
+              'postNo=${widget.post.number} authorId=${widget.post.authorId}',
+        );
+      }
+      return widget.fallback ?? const SizedBox.shrink();
     }
     final preferences =
         ref.watch(forumHtmlReaderPreferencesControllerProvider).value ??
         ForumHtmlReaderPreferences.defaults();
+
+    if (preferences.conversionMode == TextConversionMode.none) {
+      return _buildHtmlBody(html, preferences);
+    }
+
+    return FutureBuilder<HtmlTextNodeConversionResult>(
+      future: _conversionFutureFor(html, preferences.conversionMode),
+      builder: (context, snapshot) {
+        final renderedHtml = snapshot.hasData ? snapshot.data!.html : html;
+        return _buildHtmlBody(renderedHtml, preferences);
+      },
+    );
+  }
+
+  Future<HtmlTextNodeConversionResult> _conversionFutureFor(
+    String html,
+    TextConversionMode mode,
+  ) {
+    if (_conversionHtml != html ||
+        _conversionMode != mode ||
+        _conversionFuture == null) {
+      _conversionHtml = html;
+      _conversionMode = mode;
+      final converter = ref.read(textConverterProvider(mode));
+      _conversionFuture = ref
+          .read(htmlTextNodeConversionServiceProvider)
+          .convert(html: html, converter: converter);
+    }
+    return _conversionFuture!;
+  }
+
+  Widget _buildHtmlBody(String html, ForumHtmlReaderPreferences preferences) {
     try {
-      final sourceId = post.pid.trim().isEmpty ? 'post' : post.pid.trim();
-      final preparedDocument = renderPreparer.prepare(
+      final sourceId = widget.post.pid.trim().isEmpty
+          ? 'post'
+          : widget.post.pid.trim();
+      final preparedDocument = widget.renderPreparer.prepare(
         html: html,
         preferences: preferences,
         sourceId: sourceId,
-        threadId: threadId,
-        imageCacheOwnerId: threadId,
+        threadId: widget.threadId,
+        imageCacheOwnerId: widget.threadId,
+      );
+      _logPreparedDocument(
+        sourceId: sourceId,
+        htmlLength: html.length,
+        preparedDocument: preparedDocument,
       );
       return KeyedSubtree(
-        key: Key('thread-post-html-first-body-${post.pid}'),
+        key: Key('thread-post-html-first-body-${widget.post.pid}'),
         child: ForumHtmlWidgetPostRenderer(
           html: html,
           preparedDocument: preparedDocument,
           sourceId: sourceId,
-          threadId: threadId,
-          imageHeaderBuilder: imageHeaderBuilder,
-          imageCacheOwnerId: threadId,
-          imageFallbackAspectRatioFor: imageFallbackAspectRatioFor,
-          onBlockImageResolved: onBlockImageResolved,
+          threadId: widget.threadId,
+          imageHeaderBuilder: widget.imageHeaderBuilder,
+          imageCacheOwnerId: widget.threadId,
+          imageFallbackAspectRatioFor: widget.imageFallbackAspectRatioFor,
+          onBlockImageResolved: widget.onBlockImageResolved,
           preferences: preferences,
           callbacks: ForumHtmlRenderCallbacks(
             onTapUrl: (url) {
-              onOpenPostLink(url);
+              widget.onOpenPostLink(url);
               return true;
             },
             onTapImage: (request) =>
                 _handleTapImage(request, preparedDocument.sequence),
-            onImageLayoutShift: onImageLayoutShift,
+            onImageLayoutShift: widget.onImageLayoutShift,
           ),
         ),
       );
-    } catch (_) {
-      return fallback ?? const ThreadPostHtmlBodyError();
+    } catch (error, stackTrace) {
+      _logRenderFailure(
+        htmlLength: html.length,
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return widget.fallback ?? const ThreadPostHtmlBodyError();
     }
+  }
+
+  void _logPreparedDocument({
+    required String sourceId,
+    required int htmlLength,
+    required ForumHtmlPreparedRenderDocument preparedDocument,
+  }) {
+    if (!kDebugMode) {
+      return;
+    }
+    final key = [
+      sourceId,
+      htmlLength,
+      preparedDocument.preparedHtml.length,
+      preparedDocument.sequence.entries.length,
+      preparedDocument.totalImageCount,
+    ].join(':');
+    if (_lastPreparedLogKey == key) {
+      return;
+    }
+    _lastPreparedLogKey = key;
+    _logNative(
+      'render_prepare_success',
+      'tid=${widget.threadId} pid=${widget.post.pid} postNo=${widget.post.number} '
+          'rawLength=$htmlLength preparedLength=${preparedDocument.preparedHtml.length} '
+          'totalImages=${preparedDocument.totalImageCount} '
+          'readableImages=${preparedDocument.sequence.entries.length} '
+          'stickers=${preparedDocument.skippedStickerCount} '
+          'nonNetwork=${preparedDocument.skippedNonNetworkCount} '
+          'duplicates=${preparedDocument.duplicatedReadableUrlCount} '
+          'attachments=${preparedDocument.attachmentTaggedCount}',
+    );
+  }
+
+  void _logRenderFailure({
+    required int htmlLength,
+    required Object error,
+    required StackTrace stackTrace,
+  }) {
+    if (!kDebugMode) {
+      return;
+    }
+    final key = '${widget.post.pid}:$htmlLength:$error';
+    if (_lastRenderFailureLogKey == key) {
+      return;
+    }
+    _lastRenderFailureLogKey = key;
+    _logNative(
+      'render_failure',
+      'tid=${widget.threadId} pid=${widget.post.pid} postNo=${widget.post.number} '
+          'rawLength=$htmlLength error=${_oneLine(error.toString())} '
+          'stack=${_stackHead(stackTrace)}',
+    );
   }
 
   void _handleTapImage(
     ForumHtmlImageRequest request,
     ForumHtmlReadableImageSequence sequence,
   ) {
-    final result = imageReaderBridge.buildOpenRequest(
-      post: post,
-      threadId: threadId,
-      imageReferer: imageReferer,
-      legacyPlan: plan,
+    final result = widget.imageReaderBridge.buildOpenRequest(
+      post: widget.post,
+      threadId: widget.threadId,
+      imageReferer: widget.imageReferer,
+      legacyPlan: widget.plan,
       sequence: sequence,
       imageRequest: request,
     );
-    onImageDiagnostics?.call(post, request, result);
+    widget.onImageDiagnostics?.call(widget.post, request, result);
     final openRequest = result.request;
     if (openRequest == null) {
       if (!request.isSticker) {
-        onImageFallback?.call(post, request);
+        widget.onImageFallback?.call(widget.post, request);
       }
       return;
     }
-    final imageOpenHandler = onOpenPostImage;
+    final imageOpenHandler = widget.onOpenPostImage;
     if (imageOpenHandler == null) {
-      onImageFallback?.call(post, request);
+      widget.onImageFallback?.call(widget.post, request);
       return;
     }
-    imageOpenHandler(post, openRequest);
+    imageOpenHandler(widget.post, openRequest);
+  }
+
+  void _logNative(String stage, String message) {
+    debugPrint('[ThreadDetail][native][$stage] $message');
+  }
+
+  String _oneLine(String value) {
+    return value.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  String _stackHead(StackTrace stackTrace) {
+    final text = stackTrace.toString().trim();
+    if (text.isEmpty) {
+      return '-';
+    }
+    return _oneLine(text.split('\n').first);
   }
 }
 

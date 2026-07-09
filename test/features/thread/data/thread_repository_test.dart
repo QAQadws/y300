@@ -125,7 +125,17 @@ void main() {
           views: 0,
           currentPage: 1,
           perPage: 20,
-          posts: const <ThreadPost>[],
+          posts: <ThreadPost>[
+            ThreadPost(
+              pid: 'cached-1',
+              author: 'cached',
+              authorId: '10',
+              message: '缓存正文',
+              number: 1,
+              isFirst: true,
+              dateline: 'today',
+            ),
+          ],
         ),
       );
       final repository = _buildRepository(
@@ -138,6 +148,86 @@ void main() {
       expect(result.isSuccess, isTrue);
       expect(result.dataOrNull!.subject, '缓存帖子');
       expect(adapter.requestedUris, isEmpty);
+    },
+  );
+
+  test(
+    'ThreadDetailHtmlRepository ignores empty fresh snapshot before network request',
+    () async {
+      final adapter = _ThreadDetailHtmlTestAdapter();
+      final snapshotCache = _FakeParsedSnapshotCacheService<ThreadDetailData>();
+      final descriptor = const CacheKeyCanonicalizer().threadDetailSnapshot(
+        tid: '572529',
+        page: 1,
+      );
+      snapshotCache.seed(
+        descriptor,
+        ThreadDetailData(
+          tid: '572529',
+          fid: '33',
+          subject: '空缓存帖子',
+          author: '',
+          replies: 0,
+          views: 0,
+          currentPage: 1,
+          perPage: 20,
+          posts: const <ThreadPost>[],
+        ),
+      );
+      final repository = _buildRepository(
+        adapter,
+        snapshotCacheService: snapshotCache,
+      );
+
+      final result = await repository.getThreadDetail(tid: '572529');
+
+      expect(result.isSuccess, isTrue);
+      expect(result.dataOrNull!.subject, '测试帖子');
+      expect(result.dataOrNull!.posts.single.author, 'alice');
+      expect(adapter.requestedUris, hasLength(1));
+      expect(snapshotCache.putValues, hasLength(1));
+      expect(snapshotCache.putValues.single.posts, isNotEmpty);
+    },
+  );
+
+  test(
+    'ThreadDetailHtmlRepository rejects parsed HTML without post entries',
+    () async {
+      final adapter = _ThreadDetailHtmlTestAdapter(body: _emptyThreadHtml);
+      final snapshotCache = _FakeParsedSnapshotCacheService<ThreadDetailData>();
+      final debugLogs = <String>[];
+      final repository = _buildRepository(
+        adapter,
+        snapshotCacheService: snapshotCache,
+        debugLog: debugLogs.add,
+      );
+
+      final result = await repository.getThreadDetail(tid: '572529');
+
+      expect(result.isFailure, isTrue);
+      expect(result.errorOrNull?.message, contains('未解析到任何楼层'));
+      expect(result.errorOrNull?.message, contains('bodyLength='));
+      expect(
+        result.errorOrNull?.message,
+        contains('template=mobile-thread-shell'),
+      );
+      expect(result.errorOrNull?.message, contains('mobilePosts=0'));
+      expect(
+        debugLogs.any(
+          (line) =>
+              line.contains('[ThreadDetail][native][html_received] tid=572529'),
+        ),
+        isTrue,
+      );
+      expect(debugLogs.any((line) => line.contains('mobilePosts=0')), isTrue);
+      expect(
+        debugLogs.any(
+          (line) =>
+              line.contains('[ThreadDetail][native][parse_failure] tid=572529'),
+        ),
+        isTrue,
+      );
+      expect(snapshotCache.putValues, isEmpty);
     },
   );
 
@@ -182,6 +272,7 @@ ThreadDetailHtmlRepository _buildRepository(
   _ThreadDetailHtmlTestAdapter adapter, {
   DocumentCacheService? documentCacheService,
   ParsedSnapshotCacheService? snapshotCacheService,
+  ThreadDetailNativeDebugLog? debugLog,
   DateTime Function()? now,
 }) {
   final gateway = YamiboHttpGateway(
@@ -200,14 +291,16 @@ ThreadDetailHtmlRepository _buildRepository(
     htmlClient: YamiboHtmlClient(gateway: gateway),
     documentCacheService: documentCacheService,
     snapshotCacheService: snapshotCacheService,
+    debugLog: debugLog,
     now: now,
   );
 }
 
 class _ThreadDetailHtmlTestAdapter implements HttpClientAdapter {
-  _ThreadDetailHtmlTestAdapter({this.statusCode = 200});
+  _ThreadDetailHtmlTestAdapter({this.statusCode = 200, this.body = _html});
 
   final int statusCode;
+  final String body;
   final requestedUris = <String>[];
   final userAgents = <String>[];
 
@@ -223,7 +316,7 @@ class _ThreadDetailHtmlTestAdapter implements HttpClientAdapter {
     requestedUris.add(options.uri.toString());
     userAgents.add(options.headers['User-Agent']?.toString() ?? '');
     return ResponseBody.fromString(
-      statusCode == 200 ? _html : 'unavailable',
+      statusCode == 200 ? body : 'unavailable',
       statusCode,
     );
   }
@@ -417,6 +510,16 @@ const _html = '''
         </tr>
       </table>
     </div>
+  </div>
+</body>
+</html>
+''';
+
+const _emptyThreadHtml = '''
+<html>
+<body id="forum" class="pg_viewthread">
+  <div class="viewthread">
+    <div class="view_tit">空帖子</div>
   </div>
 </body>
 </html>

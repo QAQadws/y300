@@ -58,7 +58,7 @@ class _NovelReaderDisplaySettingsSheetState
                   ),
                   _SettingsSlider(
                     key: const Key('novel-reader-line-height-slider'),
-                    label: '行高',
+                    label: '间隔',
                     value: _draft.lineHeight,
                     min: 1.2,
                     max: 2.4,
@@ -66,68 +66,6 @@ class _NovelReaderDisplaySettingsSheetState
                     onChanged: (value) => _applyPreferences(
                       _draft.copyWith(lineHeight: _snap(value, 0.05)),
                     ),
-                  ),
-                  _SettingsSlider(
-                    key: const Key('novel-reader-paragraph-spacing-slider'),
-                    label: '段距',
-                    value: _draft.paragraphSpacing,
-                    min: 0,
-                    max: 28,
-                    displayValue: _draft.paragraphSpacing.toStringAsFixed(0),
-                    onChanged: (value) => _applyPreferences(
-                      _draft.copyWith(paragraphSpacing: _snap(value, 1)),
-                    ),
-                  ),
-                  _SettingsSlider(
-                    key: const Key('novel-reader-page-padding-slider'),
-                    label: '边距',
-                    value: _draft.pagePadding,
-                    min: 8,
-                    max: 40,
-                    displayValue: _draft.pagePadding.toStringAsFixed(0),
-                    onChanged: (value) => _applyPreferences(
-                      _draft.copyWith(pagePadding: _snap(value, 1)),
-                    ),
-                  ),
-                  _SettingsSlider(
-                    key: const Key('novel-reader-first-line-indent-slider'),
-                    label: '首行缩进',
-                    value: _draft.firstLineIndent,
-                    min: 0,
-                    max: 48,
-                    displayValue: _draft.firstLineIndent.toStringAsFixed(0),
-                    onChanged: (value) => _applyPreferences(
-                      _draft.copyWith(firstLineIndent: _snap(value, 1)),
-                    ),
-                  ),
-                  _SettingsSlider(
-                    key: const Key('novel-reader-content-width-slider'),
-                    label: '正文宽度',
-                    value: _draft.contentMaxWidth,
-                    min: 320,
-                    max: 900,
-                    displayValue: _draft.contentMaxWidth.toStringAsFixed(0),
-                    onChanged: (value) => _applyPreferences(
-                      _draft.copyWith(contentMaxWidth: _snap(value, 10)),
-                    ),
-                  ),
-                  ReaderSegmentControl<int>(
-                    key: const Key('novel-reader-font-weight-control'),
-                    label: '字重',
-                    value: _supportedFontWeight(_draft.fontWeight),
-                    values: const <int>[400, 500, 700],
-                    labelBuilder: _fontWeightLabel,
-                    onChanged: (value) =>
-                        _applyPreferences(_draft.copyWith(fontWeight: value)),
-                  ),
-                  ReaderSegmentControl<NovelReaderTextAlignMode>(
-                    key: const Key('novel-reader-text-align-control'),
-                    label: '对齐',
-                    value: _draft.textAlign,
-                    values: NovelReaderTextAlignMode.values,
-                    labelBuilder: _textAlignLabel,
-                    onChanged: (value) =>
-                        _applyPreferences(_draft.copyWith(textAlign: value)),
                   ),
                 ],
               ),
@@ -260,40 +198,6 @@ class _NovelReaderDisplaySettingsSheetState
 
   double _snap(double value, double step) {
     return (value / step).roundToDouble() * step;
-  }
-
-  String _fontWeightLabel(int value) {
-    switch (value) {
-      case 500:
-        return '中等';
-      case 700:
-        return '加粗';
-      case 400:
-      default:
-        return '常规';
-    }
-  }
-
-  int _supportedFontWeight(int value) {
-    switch (value) {
-      case 500:
-      case 700:
-        return value;
-      case 400:
-      default:
-        return 400;
-    }
-  }
-
-  String _textAlignLabel(NovelReaderTextAlignMode value) {
-    switch (value) {
-      case NovelReaderTextAlignMode.justify:
-        return '两端';
-      case NovelReaderTextAlignMode.center:
-        return '居中';
-      case NovelReaderTextAlignMode.start:
-        return '默认';
-    }
   }
 
   String _flowModeLabel(NovelReaderFlowMode value) {

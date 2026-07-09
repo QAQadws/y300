@@ -37,6 +37,9 @@ import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/reply/data/providers/reply_providers.dart';
 import 'package:y300/features/reply/data/repositories/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
@@ -63,6 +66,7 @@ import 'package:y300/features/thread/domain/services/thread_detail_diagnostic_re
 import 'package:y300/features/thread/domain/services/thread_favorite_action_service.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_html_first_render_mode_controller.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
@@ -2836,6 +2840,163 @@ void main() {
       expect(find.byKey(const Key('thread-detail-more-menu')), findsOneWidget);
     });
 
+    testWidgets('opens compact display settings from more menu', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            subject: '测试主题',
+            author: 'alice',
+            replies: 0,
+            views: 1,
+            currentPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('thread-detail-more-menu')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('thread-detail-display-settings-menu-item')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('显示设置'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('thread-detail-display-settings-sheet')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('forum-html-reader-conversion-mode-control')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('forum-html-reader-conversion-none')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('forum-html-reader-conversion-simplified')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('forum-html-reader-conversion-traditional')),
+        findsOneWidget,
+      );
+      expect(find.text('字号'), findsOneWidget);
+      expect(find.text('间隔'), findsOneWidget);
+      expect(
+        find.byKey(const Key('forum-html-reader-font-scale-slider')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('forum-html-reader-line-height-slider')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('forum-html-reader-paragraph-spacing-slider')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('forum-html-reader-preserve-font-size-switch')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('forum-html-reader-preserve-color-switch')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('forum-html-reader-preserve-background-switch')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('forum-html-reader-reset-button')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('display settings conversion only updates post body text', (
+      tester,
+    ) async {
+      final preferencesRepository = _FakeForumHtmlReaderPreferencesRepository(
+        ForumHtmlReaderPreferences.defaults(),
+      );
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            subject: '測試主题',
+            author: 'alice樣',
+            replies: 0,
+            views: 1,
+            currentPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice樣',
+                authorId: '1',
+                message: '<p>正文樣本</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          forumHtmlReaderPreferencesRepository: preferencesRepository,
+          textConverterFactory: _FakeTextConverter.new,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(_richTextContaining('正文樣本'), findsOneWidget);
+      expect(find.textContaining('alice樣'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('thread-detail-more-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('显示设置'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('forum-html-reader-conversion-simplified')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        preferencesRepository.current.conversionMode,
+        TextConversionMode.toSimplified,
+      );
+      expect(_richTextContaining('正文样本'), findsOneWidget);
+      expect(_richTextContaining('正文樣本'), findsNothing);
+      expect(find.textContaining('alice樣'), findsOneWidget);
+      expect(find.textContaining('alice样'), findsNothing);
+    });
+
     testWidgets('opens user profile from post author name', (tester) async {
       final webViewDriver = _FakeForumWebViewDriver();
       final repository = _FakeThreadRepository((tid, page) async {
@@ -3422,6 +3583,8 @@ Widget _buildTestApp(
   ImageCacheService? imageCacheService,
   ForumImagePrecacheService? forumImagePrecacheService,
   ForumWebViewDriverFactory? forumWebViewDriverFactory,
+  ForumHtmlReaderPreferencesRepository? forumHtmlReaderPreferencesRepository,
+  TextConverter Function(TextConversionMode mode)? textConverterFactory,
   bool diagnosticModeEnabled = false,
   ThreadDetailHtmlFirstRenderMode htmlFirstRenderMode =
       ThreadDetailHtmlFirstRenderMode.legacy,
@@ -3441,6 +3604,9 @@ Widget _buildTestApp(
       imageCacheService: imageCacheService,
       forumImagePrecacheService: forumImagePrecacheService,
       forumWebViewDriverFactory: forumWebViewDriverFactory,
+      forumHtmlReaderPreferencesRepository:
+          forumHtmlReaderPreferencesRepository,
+      textConverterFactory: textConverterFactory,
       diagnosticModeEnabled: diagnosticModeEnabled,
       htmlFirstRenderMode: htmlFirstRenderMode,
     ),
@@ -3464,12 +3630,22 @@ List<riverpod_misc.Override> _threadDetailOverrides(
   ImageCacheService? imageCacheService,
   ForumImagePrecacheService? forumImagePrecacheService,
   ForumWebViewDriverFactory? forumWebViewDriverFactory,
+  ForumHtmlReaderPreferencesRepository? forumHtmlReaderPreferencesRepository,
+  TextConverter Function(TextConversionMode mode)? textConverterFactory,
   bool diagnosticModeEnabled = false,
   ThreadDetailHtmlFirstRenderMode htmlFirstRenderMode =
       ThreadDetailHtmlFirstRenderMode.legacy,
 }) {
   return [
     threadRepositoryProvider.overrideWithValue(repository),
+    if (forumHtmlReaderPreferencesRepository != null)
+      forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
+        forumHtmlReaderPreferencesRepository,
+      ),
+    if (textConverterFactory != null)
+      textConverterProvider.overrideWith(
+        (ref, mode) => textConverterFactory(mode),
+      ),
     imageCacheServiceProvider.overrideWithValue(
       imageCacheService ?? _NoopImageCacheService(),
     ),
@@ -3552,6 +3728,40 @@ ThreadDetailData _threadDetailData({
     perPage: posts.length,
     posts: posts,
   );
+}
+
+class _FakeForumHtmlReaderPreferencesRepository
+    implements ForumHtmlReaderPreferencesRepository {
+  _FakeForumHtmlReaderPreferencesRepository(this.current);
+
+  ForumHtmlReaderPreferences current;
+
+  @override
+  Future<ForumHtmlReaderPreferences> load() async => current;
+
+  @override
+  Future<void> save(ForumHtmlReaderPreferences preferences) async {
+    current = preferences;
+  }
+}
+
+class _FakeTextConverter implements TextConverter {
+  const _FakeTextConverter(this.mode);
+
+  @override
+  final TextConversionMode mode;
+
+  @override
+  String get id => 'fake:${mode.name}';
+
+  @override
+  Future<String> convertHtml(String html) async {
+    return switch (mode) {
+      TextConversionMode.none => html,
+      TextConversionMode.toSimplified => html.replaceAll('樣', '样'),
+      TextConversionMode.toTraditional => html.replaceAll('样', '樣'),
+    };
+  }
 }
 
 class _FakeSyncDiagnosticModeController extends SyncDiagnosticModeController {

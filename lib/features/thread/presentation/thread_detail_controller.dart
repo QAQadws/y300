@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -576,6 +577,11 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     required List<ThreadPost> previous,
     required Map<String, String> queryParameters,
   }) async {
+    _logNative(
+      'controller_load',
+      'tid=${_args.tid} page=$page previous=${previous.length} '
+          'query=${_formatQuery(queryParameters)}',
+    );
     final result = await _readRepository().getThreadDetail(
       tid: _args.tid,
       page: page,
@@ -583,69 +589,214 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     );
 
     if (result case ApiSuccess<ThreadDetailData>(:final data)) {
-      final merged = _preparePostsForView(
-        page == 1 ? data.posts : <ThreadPost>[...previous, ...data.posts],
-        queryParameters,
+      _logNative(
+        'controller_repository_success',
+        'tid=${_args.tid} requestedPage=$page parsedPage=${data.currentPage} '
+            'fid=${data.fid} typeid=${data.typeid} posts=${data.posts.length} '
+            'previous=${previous.length} subjectLength=${data.subject.length} '
+            'firstPid=${data.posts.isEmpty ? '-' : data.posts.first.pid} '
+            'firstMessageLength=${data.posts.isEmpty ? 0 : data.posts.first.message.length}',
       );
-      final aggregation = ref
-          .read(comicPostAggregationServiceProvider)
-          .build(merged);
-      final subject = data.subject.isNotEmpty ? data.subject : _args.subject;
-      final sourceTagName = await _findSourceTagName(
-        fid: data.fid,
-        typeid: data.typeid,
-      );
-      final contentKind = ref
-          .read(threadContentClassifierProvider)
-          .classify(fid: data.fid, typeid: data.typeid, tagName: sourceTagName);
-      final comicMeta = _parseComicWhenTagged(
-        isComic: contentKind == ThreadContentKind.comic,
-        subject: data.subject.isNotEmpty ? data.subject : _args.subject,
-        parseMessage: aggregation.parseMessage,
-        attachmentImageUrls: aggregation.attachmentImageUrls,
-      );
-      return ThreadDetailPageState(
-        tid: _args.tid,
-        fid: data.fid,
-        typeid: data.typeid,
-        typeName: data.typeName,
-        forumName: data.forumName,
-        forumUrl: data.forumUrl,
-        sourceTagName: sourceTagName,
-        contentKind: contentKind,
-        subject: subject,
-        views: data.views,
-        replies: data.replies,
-        currentPage: data.currentPage,
-        lastPage: data.lastPage,
-        previousPageUrl: data.previousPageUrl,
-        nextPageUrl: data.nextPageUrl,
-        reverseOrderUrl: data.reverseOrderUrl,
-        onlyAuthorUrl: data.onlyAuthorUrl,
-        favoriteUrl: data.favoriteUrl,
-        shareUrl: data.shareUrl,
-        homeUrl: data.homeUrl,
-        desktopUrl: data.desktopUrl,
-        hasMore: data.hasMore,
-        queryParameters: Map<String, String>.unmodifiable(queryParameters),
-        isLoadingInitial: false,
-        isLoadingMore: false,
-        posts: merged,
-        comicCandidateInfo: comicMeta.$1,
-        parsedComicPost: comicMeta.$2,
-        isThreadFavorited: false,
-        isThreadFavoriteActionLoading: false,
-        threadFavoriteHint: null,
-        selectedPollOptionIds: const <String>{},
-        isPollVoteSubmitting: false,
-        pollVoteHint: null,
-        replyText: '',
-        isReplySubmitting: false,
-        replyHint: null,
-      );
+      var stage = 'merge';
+      try {
+        _logNative(
+          'controller_merge_start',
+          'tid=${_args.tid} requestedPage=$page incoming=${data.posts.length} '
+              'previous=${previous.length} query=${_formatQuery(queryParameters)}',
+        );
+        final merged = _preparePostsForView(
+          page == 1 ? data.posts : <ThreadPost>[...previous, ...data.posts],
+          queryParameters,
+        );
+        _logNative(
+          'controller_merge_done',
+          'tid=${_args.tid} posts=${merged.length} '
+              'firstPid=${merged.isEmpty ? '-' : merged.first.pid} '
+              'firstNo=${merged.isEmpty ? '-' : merged.first.number}',
+        );
+
+        stage = 'aggregation';
+        final aggregationStopwatch = Stopwatch()..start();
+        _logNative(
+          'controller_aggregation_start',
+          'tid=${_args.tid} posts=${merged.length} '
+              'totalMessageLength=${_totalMessageLength(merged)} '
+              'firstMessageLength=${merged.isEmpty ? 0 : merged.first.message.length} '
+              'rawAttachmentImages=${_totalAttachmentImages(merged)}',
+        );
+        final aggregation = ref
+            .read(comicPostAggregationServiceProvider)
+            .build(merged);
+        aggregationStopwatch.stop();
+        _logNative(
+          'controller_aggregation_done',
+          'tid=${_args.tid} elapsedMs=${aggregationStopwatch.elapsedMilliseconds} '
+              'detectionLength=${aggregation.detectionMessage.length} '
+              'parseMessageLength=${aggregation.parseMessage.length} '
+              'attachmentImageUrls=${aggregation.attachmentImageUrls.length} '
+              'usedSecondFloor=${aggregation.usedSecondFloor} '
+              'secondFloorPid=${aggregation.secondFloorPid ?? '-'}',
+        );
+
+        final subject = data.subject.isNotEmpty ? data.subject : _args.subject;
+        stage = 'tag_lookup';
+        final tagLookupStopwatch = Stopwatch()..start();
+        _logNative(
+          'controller_tag_lookup_start',
+          'tid=${_args.tid} fid=${data.fid} typeid=${data.typeid}',
+        );
+        final sourceTagName = await _findSourceTagName(
+          fid: data.fid,
+          typeid: data.typeid,
+        );
+        tagLookupStopwatch.stop();
+        _logNative(
+          'controller_tag_lookup_done',
+          'tid=${_args.tid} elapsedMs=${tagLookupStopwatch.elapsedMilliseconds} '
+              'tag=${sourceTagName ?? '-'}',
+        );
+
+        stage = 'classify';
+        _logNative(
+          'controller_classify_start',
+          'tid=${_args.tid} fid=${data.fid} typeid=${data.typeid} '
+              'tag=${sourceTagName ?? '-'}',
+        );
+        final contentKind = ref
+            .read(threadContentClassifierProvider)
+            .classify(
+              fid: data.fid,
+              typeid: data.typeid,
+              tagName: sourceTagName,
+            );
+        _logNative(
+          'controller_classify_done',
+          'tid=${_args.tid} kind=${contentKind.name}',
+        );
+
+        stage = 'comic_parse';
+        if (contentKind == ThreadContentKind.comic) {
+          _logNative(
+            'controller_comic_parse_start',
+            'tid=${_args.tid} subjectLength=${subject.length} '
+                'parseMessageLength=${aggregation.parseMessage.length} '
+                'attachmentImageUrls=${aggregation.attachmentImageUrls.length}',
+          );
+        } else {
+          _logNative(
+            'controller_comic_parse_skipped',
+            'tid=${_args.tid} kind=${contentKind.name}',
+          );
+        }
+        final comicParseStopwatch = Stopwatch()..start();
+        final comicMeta = _parseComicWhenTagged(
+          isComic: contentKind == ThreadContentKind.comic,
+          subject: subject,
+          parseMessage: aggregation.parseMessage,
+          attachmentImageUrls: aggregation.attachmentImageUrls,
+        );
+        comicParseStopwatch.stop();
+        _logNative(
+          'controller_comic_parse_done',
+          'tid=${_args.tid} elapsedMs=${comicParseStopwatch.elapsedMilliseconds} '
+              'candidate=${comicMeta.$1.isCandidate} '
+              'score=${comicMeta.$1.score} '
+              'imageUrls=${comicMeta.$2.imageUrls.length} '
+              'episodeLinks=${comicMeta.$2.episodeLinks.length} '
+              'catalog=${comicMeta.$2.catalogUrl?.trim().isNotEmpty == true}',
+        );
+
+        stage = 'state_build';
+        _logNative(
+          'controller_state_build_start',
+          'tid=${_args.tid} posts=${merged.length} kind=${contentKind.name}',
+        );
+        final viewState = ThreadDetailPageState(
+          tid: _args.tid,
+          fid: data.fid,
+          typeid: data.typeid,
+          typeName: data.typeName,
+          forumName: data.forumName,
+          forumUrl: data.forumUrl,
+          sourceTagName: sourceTagName,
+          contentKind: contentKind,
+          subject: subject,
+          views: data.views,
+          replies: data.replies,
+          currentPage: data.currentPage,
+          lastPage: data.lastPage,
+          previousPageUrl: data.previousPageUrl,
+          nextPageUrl: data.nextPageUrl,
+          reverseOrderUrl: data.reverseOrderUrl,
+          onlyAuthorUrl: data.onlyAuthorUrl,
+          favoriteUrl: data.favoriteUrl,
+          shareUrl: data.shareUrl,
+          homeUrl: data.homeUrl,
+          desktopUrl: data.desktopUrl,
+          hasMore: data.hasMore,
+          queryParameters: Map<String, String>.unmodifiable(queryParameters),
+          isLoadingInitial: false,
+          isLoadingMore: false,
+          posts: merged,
+          comicCandidateInfo: comicMeta.$1,
+          parsedComicPost: comicMeta.$2,
+          isThreadFavorited: false,
+          isThreadFavoriteActionLoading: false,
+          threadFavoriteHint: null,
+          selectedPollOptionIds: const <String>{},
+          isPollVoteSubmitting: false,
+          pollVoteHint: null,
+          replyText: '',
+          isReplySubmitting: false,
+          replyHint: null,
+        );
+        _logNative(
+          'controller_success',
+          'tid=${_args.tid} requestedPage=$page parsedPage=${data.currentPage} '
+              'posts=${merged.length} previous=${previous.length} fid=${data.fid} '
+              'typeid=${data.typeid} tag=${sourceTagName ?? '-'} '
+              'kind=${contentKind.name} subjectLength=${subject.length} '
+              'firstPid=${merged.isEmpty ? '-' : merged.first.pid} '
+              'firstMessageLength=${merged.isEmpty ? 0 : merged.first.message.length}',
+        );
+        return viewState;
+      } catch (error, stackTrace) {
+        _logNative(
+          'controller_processing_failure',
+          'tid=${_args.tid} page=$page stage=$stage '
+              'error=${_oneLine(error.toString())} '
+              'stack=${_stackHead(stackTrace)}',
+        );
+        return _failureState(
+          page: page,
+          previous: previous,
+          queryParameters: queryParameters,
+          message: '帖子详情处理失败（$stage）：${_oneLine(error.toString())}',
+        );
+      }
     }
 
     final error = (result as ApiFailure<ThreadDetailData>).error;
+    _logNative(
+      'controller_failure',
+      'tid=${_args.tid} page=$page previous=${previous.length} '
+          'type=${error.type.name} status=${error.statusCode ?? '-'} '
+          'message=${_oneLine(error.message)}',
+    );
+    return _failureState(
+      page: page,
+      previous: previous,
+      queryParameters: queryParameters,
+      message: error.message,
+    );
+  }
+
+  ThreadDetailPageState _failureState({
+    required int page,
+    required List<ThreadPost> previous,
+    required Map<String, String> queryParameters,
+    required String message,
+  }) {
     return ThreadDetailPageState(
       tid: _args.tid,
       fid: '',
@@ -684,7 +835,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       replyText: '',
       isReplySubmitting: false,
       replyHint: null,
-      errorMessage: error.message,
+      errorMessage: message,
     );
   }
 
@@ -892,5 +1043,44 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       // 标签 asset 失败不应阻断帖子正文；分类服务仍会用公告 typeid 兜底。
       return null;
     }
+  }
+
+  void _logNative(String stage, String message) {
+    if (!kDebugMode) {
+      return;
+    }
+    debugPrint('[ThreadDetail][native][$stage] $message');
+  }
+
+  String _formatQuery(Map<String, String> queryParameters) {
+    if (queryParameters.isEmpty) {
+      return '-';
+    }
+    return queryParameters.entries
+        .map((entry) => '${entry.key}=${entry.value}')
+        .join('&');
+  }
+
+  String _oneLine(String value) {
+    return value.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  int _totalMessageLength(List<ThreadPost> posts) {
+    return posts.fold<int>(0, (total, post) => total + post.message.length);
+  }
+
+  int _totalAttachmentImages(List<ThreadPost> posts) {
+    return posts.fold<int>(
+      0,
+      (total, post) => total + post.attachmentImages.length,
+    );
+  }
+
+  String _stackHead(StackTrace stackTrace) {
+    final text = stackTrace.toString().trim();
+    if (text.isEmpty) {
+      return '-';
+    }
+    return _oneLine(text.split('\n').first);
   }
 }

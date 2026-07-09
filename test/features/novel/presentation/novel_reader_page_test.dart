@@ -474,7 +474,27 @@ void main() {
       );
       expect(
         find.byKey(const Key('novel-reader-content-width-slider')),
-        findsOneWidget,
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('novel-reader-paragraph-spacing-slider')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('novel-reader-page-padding-slider')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('novel-reader-first-line-indent-slider')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('novel-reader-font-weight-control')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('novel-reader-text-align-control')),
+        findsNothing,
       );
       expect(
         find.byKey(const Key('novel-reader-display-settings-save')),

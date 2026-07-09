@@ -52,4 +52,11 @@ const List<ForumHtmlSampleDocument> forumHtmlPrototypeSamples =
         sourceDocPath: 'docs/html/特殊格式/抖动测试.html',
         renderMode: ForumHtmlSampleRenderMode.threadDetail,
       ),
+      ForumHtmlSampleDocument(
+        id: 'thread_527325_blank_body',
+        title: '空白帖子 527325',
+        assetPath: 'assets/prototypes/forum_html/thread_527325_blank_body.html',
+        sourceDocPath: 'docs/html/特殊格式/无法进入帖子_527325.html',
+        renderMode: ForumHtmlSampleRenderMode.threadDetail,
+      ),
     ];

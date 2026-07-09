@@ -29,6 +29,20 @@ void main() {
     ),
   ];
 
+  test('default samples include full thread blank-body regression case', () {
+    final blankBodySample = forumHtmlPrototypeSamples.singleWhere(
+      (sample) => sample.id == 'thread_527325_blank_body',
+    );
+
+    expect(blankBodySample.title, '空白帖子 527325');
+    expect(
+      blankBodySample.assetPath,
+      'assets/prototypes/forum_html/thread_527325_blank_body.html',
+    );
+    expect(blankBodySample.sourceDocPath, 'docs/html/特殊格式/无法进入帖子_527325.html');
+    expect(blankBodySample.renderMode, ForumHtmlSampleRenderMode.threadDetail);
+  });
+
   testWidgets('shows sample choices and renders loaded fragment', (
     tester,
   ) async {
@@ -346,16 +360,16 @@ void main() {
     );
     expect(
       find.byKey(const Key('forum-html-reader-paragraph-spacing-slider')),
-      findsOneWidget,
+      findsNothing,
     );
 
     final slider = tester.widget<Slider>(
       find.descendant(
-        of: find.byKey(const Key('forum-html-reader-paragraph-spacing-slider')),
+        of: find.byKey(const Key('forum-html-reader-line-height-slider')),
         matching: find.byType(Slider),
       ),
     );
-    slider.onChanged?.call(24);
+    slider.onChanged?.call(2);
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -372,7 +386,7 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('段距 24px'), findsOneWidget);
+    expect(find.textContaining('间隔 2.0'), findsOneWidget);
     expect(find.textContaining('作者样式：字号忽略 / 颜色忽略 / 背景忽略'), findsOneWidget);
   });
 

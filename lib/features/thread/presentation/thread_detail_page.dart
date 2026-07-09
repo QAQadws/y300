@@ -30,6 +30,7 @@ import 'package:y300/features/thread/domain/models/thread_image_open_models.dart
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_plain_text_extractor.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_settings_sheet.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
@@ -196,6 +197,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
             onReverseOrder: controller.openReverseOrder,
             onNormalOrder: controller.openNormalOrder,
             onCopyUrl: _copyUrl,
+            onDisplaySettings: _openDisplaySettings,
           ),
         ],
       ),
@@ -492,6 +494,21 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
 
   Future<void> _copyThreadUrl(ThreadDetailPageState state) {
     return _copyUrl('帖子链接', _threadUrlForCopy(state));
+  }
+
+  void _openDisplaySettings() {
+    unawaited(
+      showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (context) => const ForumHtmlReaderSettingsSheet(
+          key: Key('thread-detail-display-settings-sheet'),
+          showConversionControls: true,
+          showAuthorStyleControls: false,
+          showResetButton: false,
+        ),
+      ),
+    );
   }
 
   String _threadUrlForCopy(ThreadDetailPageState state) {
@@ -1004,6 +1021,7 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
     required this.onReverseOrder,
     required this.onNormalOrder,
     required this.onCopyUrl,
+    required this.onDisplaySettings,
   });
 
   final ThreadDetailPageState state;
@@ -1012,6 +1030,7 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
   final VoidCallback onReverseOrder;
   final VoidCallback onNormalOrder;
   final void Function(String label, String url) onCopyUrl;
+  final VoidCallback onDisplaySettings;
 
   @override
   Widget build(BuildContext context) {
@@ -1026,6 +1045,11 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
         PopupMenuItem<String>(
           value: state.isReverseOrderView ? 'normal-order' : 'reverse-order',
           child: Text(state.isReverseOrderView ? '正序浏览' : '倒序浏览'),
+        ),
+        const PopupMenuItem<String>(
+          key: Key('thread-detail-display-settings-menu-item'),
+          value: 'display-settings',
+          child: Text('显示设置'),
         ),
         if (state.homeUrl?.trim().isNotEmpty == true)
           const PopupMenuItem<String>(value: 'home', child: Text('返回首页')),
@@ -1043,6 +1067,9 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
             return;
           case 'normal-order':
             onNormalOrder();
+            return;
+          case 'display-settings':
+            onDisplaySettings();
             return;
           case 'home':
             onCopyUrl('首页链接', state.homeUrl!);

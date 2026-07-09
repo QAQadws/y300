@@ -329,6 +329,75 @@ void main() {
       );
     });
 
+    test('parses current mobile touch template post containers', () {
+      final result = parser.parse(
+        _currentMobileTouchThreadHtml,
+        fallbackTid: '527284',
+        fallbackPage: 1,
+      );
+
+      expect(result.tid, '527284');
+      expect(result.fid, '30');
+      expect(result.typeName, '長篇連載');
+      expect(result.subject, '【个人汉化】[あらた伊里] 也无风雨也无晴 16话后篇');
+      expect(result.posts, hasLength(2));
+
+      final firstPost = result.posts.first;
+      expect(firstPost.pid, '40425885');
+      expect(firstPost.author, 'radish');
+      expect(firstPost.authorId, '351176');
+      expect(firstPost.number, 1);
+      expect(firstPost.isFirst, isTrue);
+      expect(firstPost.dateline, '2022-6-18 13:20');
+      expect(firstPost.avatarUrl, contains('351176_avatar_small.jpg'));
+      expect(firstPost.message, contains('浅填一下坑'));
+      expect(firstPost.message, contains('id="aimg_1026928"'));
+      expect(
+        firstPost.message,
+        contains('data/attachment/forum/202206/18/131111zu3tuvtrzqa0dd97.png'),
+      );
+
+      final fragment = html_parser.parseFragment(firstPost.message);
+      expect(fragment.querySelectorAll('img[id^="aimg_"]'), hasLength(2));
+    });
+
+    test(
+      'parses full mobile thread sample that previously showed blank body',
+      () {
+        final html = File(
+          'docs/html/特殊格式/无法进入帖子_527325.html',
+        ).readAsStringSync();
+
+        final result = parser.parse(
+          html,
+          fallbackTid: '527325',
+          fallbackPage: 1,
+        );
+
+        expect(result.tid, '527325');
+        expect(result.fid, '30');
+        expect(result.typeName, '長篇連載');
+        expect(result.subject, '【个人汉化】[あらた伊里] 也无风雨也无晴 19话（完结）');
+        expect(result.posts.length, greaterThanOrEqualTo(20));
+
+        final firstPost = result.posts.first;
+        expect(firstPost.pid, '40427723');
+        expect(firstPost.author, 'radish');
+        expect(firstPost.authorId, '351176');
+        expect(firstPost.number, 1);
+        expect(firstPost.isFirst, isTrue);
+        expect(firstPost.dateline, '2022-6-20 16:13');
+        expect(firstPost.message, contains('完结撒花'));
+        expect(firstPost.message, contains('id="aimg_1027477"'));
+
+        final fragment = html_parser.parseFragment(firstPost.message);
+        expect(
+          fragment.querySelectorAll('img[id^="aimg_"]'),
+          hasLength(greaterThanOrEqualTo(18)),
+        );
+      },
+    );
+
     test('parses older mobile comic thread with large inline image set', () {
       final html = File('docs/html/移动端html/漫画帖2.html').readAsStringSync();
 
@@ -576,6 +645,70 @@ const _alreadyVotedPollThreadHtml = '''
       </div>
     </div>
   </body>
+</html>
+''';
+
+const _currentMobileTouchThreadHtml = '''
+<!DOCTYPE html>
+<html>
+<head>
+  <title>【个人汉化】[あらた伊里] 也无风雨也无晴 16话后篇 - 中文百合漫画区 - 手机版</title>
+  <link href="https://bbs.yamibo.com/thread-527284-1-1.html" rel="canonical" />
+  <base href="https://bbs.yamibo.com/" />
+</head>
+<body id="forum" class="pg_viewthread">
+  <div class="header cl">
+    <h2><a href="forum.php?mod=forumdisplay&amp;fid=30&amp;mobile=2">中文百合漫画区</a></h2>
+  </div>
+  <div id="nav-more-menu">
+    <a class="nav-more-item" href="forum.php?mod=viewthread&amp;tid=527284&amp;page=1&amp;authorid=351176&amp;mobile=2">只看楼主</a>
+    <a class="nav-more-item" href="forum.php?mod=viewthread&amp;tid=527284&amp;extra=&amp;ordertype=1&amp;mobile=2">倒序浏览</a>
+  </div>
+  <div class="viewthread">
+    <div class="view_tit">
+      <em>[長篇連載]</em>
+      【个人汉化】[あらた伊里] 也无风雨也无晴 16话后篇
+    </div>
+    <div class="plc cl" id="pid40425885">
+      <div class="avatar"><img src="https://bbs.yamibo.com/uc_server/data/avatar/351176_avatar_small.jpg" /></div>
+      <div class="display pi pione" href="#replybtn_40425885">
+        <ul class="authi">
+          <li class="mtit">
+            <span class="y">1<sup>#</sup></span>
+            <span class="z"><a href="home.php?mod=space&amp;uid=351176&amp;mobile=2">radish</a></span>
+          </li>
+          <li class="mtime">
+            <span class="y"><i class="dm-eye"></i><em>9921</em><i class="dm-chat-s"></i><em>35</em></span>
+            2022-6-18 13:20
+          </li>
+        </ul>
+        <div class="message">
+          浅填一下坑<br />
+          <a href="data/attachment/forum/202206/18/131111zu3tuvtrzqa0dd97.png" class="orange" />
+          <img id="aimg_1026928" src="data/attachment/forum/202206/18/131111zu3tuvtrzqa0dd97.png" alt="翻译16.1.png" loading="lazy" />
+          </a>
+          <br />
+          <a href="data/attachment/forum/202206/18/131023gi09pa9ge290erzr.png" class="orange" />
+          <img id="aimg_1026910" src="data/attachment/forum/202206/18/131023gi09pa9ge290erzr.png" alt="翻译16.2.png" loading="lazy" />
+          </a>
+        </div>
+      </div>
+    </div>
+    <div class="plc cl" id="pid40425899">
+      <div class="avatar"><img src="https://bbs.yamibo.com/uc_server/data/avatar/234989_avatar_small.jpg" /></div>
+      <div class="display pi" href="#replybtn_40425899">
+        <ul class="authi">
+          <li class="mtit">
+            <span class="y">2<sup>#</sup></span>
+            <span class="z"><a href="home.php?mod=space&amp;uid=234989&amp;mobile=2">a20010102</a></span>
+          </li>
+          <li class="mtime">2022-6-18 13:25</li>
+        </ul>
+        <div class="message">终于555</div>
+      </div>
+    </div>
+  </div>
+</body>
 </html>
 ''';
 

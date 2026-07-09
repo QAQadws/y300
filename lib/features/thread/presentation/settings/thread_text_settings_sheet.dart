@@ -11,9 +11,11 @@ class ThreadTextSettingsSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final prefsAsync = ref.watch(threadTextPreferencesControllerProvider);
-    final typography = prefsAsync.value?.typography ?? RichTextTypography.standard;
-    final controller =
-        ref.read(threadTextPreferencesControllerProvider.notifier);
+    final typography =
+        prefsAsync.value?.typography ?? RichTextTypography.standard;
+    final controller = ref.read(
+      threadTextPreferencesControllerProvider.notifier,
+    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -42,7 +44,7 @@ class ThreadTextSettingsSheet extends ConsumerWidget {
             onChanged: controller.setFontScale,
           ),
           _TypographySlider(
-            label: '行距',
+            label: '间隔',
             value: typography.lineHeightScale,
             min: 1.0,
             max: 2.5,
@@ -50,19 +52,11 @@ class ThreadTextSettingsSheet extends ConsumerWidget {
             display: '${typography.lineHeightScale.toStringAsFixed(1)}×',
             onChanged: controller.setLineHeightScale,
           ),
-          _TypographySlider(
-            label: '段距',
-            value: typography.paragraphSpacing,
-            min: 0.0,
-            max: 40.0,
-            divisions: 40,
-            display: '${typography.paragraphSpacing.round()}px',
-            onChanged: controller.setParagraphSpacing,
-          ),
           const SizedBox(height: 8),
           Center(
             child: TextButton(
-              onPressed: () => controller.setTypography(RichTextTypography.standard),
+              onPressed: () =>
+                  controller.setTypography(RichTextTypography.standard),
               child: const Text('恢复默认'),
             ),
           ),

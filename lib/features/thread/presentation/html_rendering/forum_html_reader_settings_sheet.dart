@@ -1,9 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 
 class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
-  const ForumHtmlReaderSettingsSheet({super.key});
+  const ForumHtmlReaderSettingsSheet({
+    super.key,
+    this.showConversionControls = false,
+    this.showAuthorStyleControls = true,
+    this.showResetButton = true,
+  });
+
+  final bool showConversionControls;
+  final bool showAuthorStyleControls;
+  final bool showResetButton;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -33,6 +45,13 @@ class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
                 ),
               ),
             ),
+            if (showConversionControls) ...[
+              _ConversionModeSegmentedControl(
+                mode: preferences.conversionMode,
+                onChanged: controller.setConversionMode,
+              ),
+              const SizedBox(height: 8),
+            ],
             _TypographySlider(
               key: const Key('forum-html-reader-font-scale-slider'),
               label: '字号',
@@ -45,7 +64,7 @@ class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
             ),
             _TypographySlider(
               key: const Key('forum-html-reader-line-height-slider'),
-              label: '行距',
+              label: '间隔',
               value: typography.lineHeightScale,
               min: 1.0,
               max: 2.5,
@@ -53,48 +72,86 @@ class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
               display: '${typography.lineHeightScale.toStringAsFixed(1)}×',
               onChanged: controller.setLineHeightScale,
             ),
-            _TypographySlider(
-              key: const Key('forum-html-reader-paragraph-spacing-slider'),
-              label: '段距',
-              value: typography.paragraphSpacing,
-              min: 0,
-              max: 40,
-              divisions: 40,
-              display: '${typography.paragraphSpacing.round()}px',
-              onChanged: controller.setParagraphSpacing,
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              key: const Key('forum-html-reader-preserve-font-size-switch'),
-              contentPadding: EdgeInsets.zero,
-              title: const Text('保留作者字号'),
-              value: preferences.preserveAuthorFontSize,
-              onChanged: controller.setPreserveAuthorFontSize,
-            ),
-            SwitchListTile(
-              key: const Key('forum-html-reader-preserve-color-switch'),
-              contentPadding: EdgeInsets.zero,
-              title: const Text('保留作者颜色'),
-              value: preferences.preserveAuthorColor,
-              onChanged: controller.setPreserveAuthorColor,
-            ),
-            SwitchListTile(
-              key: const Key('forum-html-reader-preserve-background-switch'),
-              contentPadding: EdgeInsets.zero,
-              title: const Text('保留作者背景'),
-              value: preferences.preserveAuthorBackground,
-              onChanged: controller.setPreserveAuthorBackground,
-            ),
-            const SizedBox(height: 8),
-            Center(
-              child: TextButton(
-                key: const Key('forum-html-reader-reset-button'),
-                onPressed: () => controller.reset(),
-                child: const Text('恢复默认'),
+            if (showAuthorStyleControls) ...[
+              const SizedBox(height: 8),
+              SwitchListTile(
+                key: const Key('forum-html-reader-preserve-font-size-switch'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('保留作者字号'),
+                value: preferences.preserveAuthorFontSize,
+                onChanged: controller.setPreserveAuthorFontSize,
               ),
-            ),
+              SwitchListTile(
+                key: const Key('forum-html-reader-preserve-color-switch'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('保留作者颜色'),
+                value: preferences.preserveAuthorColor,
+                onChanged: controller.setPreserveAuthorColor,
+              ),
+              SwitchListTile(
+                key: const Key('forum-html-reader-preserve-background-switch'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('保留作者背景'),
+                value: preferences.preserveAuthorBackground,
+                onChanged: controller.setPreserveAuthorBackground,
+              ),
+            ],
+            if (showResetButton) ...[
+              const SizedBox(height: 8),
+              Center(
+                child: TextButton(
+                  key: const Key('forum-html-reader-reset-button'),
+                  onPressed: () => controller.reset(),
+                  child: const Text('恢复默认'),
+                ),
+              ),
+            ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ConversionModeSegmentedControl extends StatelessWidget {
+  const _ConversionModeSegmentedControl({
+    required this.mode,
+    required this.onChanged,
+  });
+
+  final TextConversionMode mode;
+  final Future<void> Function(TextConversionMode mode) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: SegmentedButton<TextConversionMode>(
+        key: const Key('forum-html-reader-conversion-mode-control'),
+        segments: const [
+          ButtonSegment(
+            value: TextConversionMode.none,
+            label: Text('原文', key: Key('forum-html-reader-conversion-none')),
+          ),
+          ButtonSegment(
+            value: TextConversionMode.toSimplified,
+            label: Text(
+              '简体',
+              key: Key('forum-html-reader-conversion-simplified'),
+            ),
+          ),
+          ButtonSegment(
+            value: TextConversionMode.toTraditional,
+            label: Text(
+              '繁体',
+              key: Key('forum-html-reader-conversion-traditional'),
+            ),
+          ),
+        ],
+        selected: {mode},
+        onSelectionChanged: (selection) {
+          unawaited(onChanged(selection.single));
+        },
       ),
     );
   }
@@ -154,8 +211,7 @@ class _TypographySlider extends StatelessWidget {
 extension ForumHtmlReaderPreferencesDebugLabel on ForumHtmlReaderPreferences {
   String get typographyDebugLabel {
     return '字号 ${(typography.fontScale * 100).round()}% / '
-        '行距 ${typography.lineHeightScale.toStringAsFixed(1)}× / '
-        '段距 ${typography.paragraphSpacing.round()}px';
+        '间隔 ${typography.lineHeightScale.toStringAsFixed(1)}×';
   }
 
   String get authorStyleDebugLabel {
