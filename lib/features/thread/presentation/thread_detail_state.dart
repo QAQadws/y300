@@ -1,5 +1,4 @@
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
-import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 class ThreadDetailPageState {
@@ -30,8 +29,6 @@ class ThreadDetailPageState {
     required this.isLoadingInitial,
     required this.isLoadingMore,
     required this.posts,
-    required this.comicCandidateInfo,
-    required this.parsedComicPost,
     required this.isThreadFavorited,
     required this.isThreadFavoriteActionLoading,
     required this.threadFavoriteHint,
@@ -70,8 +67,6 @@ class ThreadDetailPageState {
   final bool isLoadingInitial;
   final bool isLoadingMore;
   final List<ThreadPost> posts;
-  final ComicCandidateInfo comicCandidateInfo;
-  final ParsedComicPost parsedComicPost;
   final bool isThreadFavorited;
   final bool isThreadFavoriteActionLoading;
   final String? threadFavoriteHint;
@@ -119,8 +114,6 @@ class ThreadDetailPageState {
       isLoadingInitial: true,
       isLoadingMore: false,
       posts: const <ThreadPost>[],
-      comicCandidateInfo: ComicCandidateInfo.notCandidate,
-      parsedComicPost: ParsedComicPost.empty,
       isThreadFavorited: false,
       isThreadFavoriteActionLoading: false,
       threadFavoriteHint: null,
@@ -161,8 +154,6 @@ class ThreadDetailPageState {
     bool? isLoadingInitial,
     bool? isLoadingMore,
     List<ThreadPost>? posts,
-    ComicCandidateInfo? comicCandidateInfo,
-    ParsedComicPost? parsedComicPost,
     bool? isThreadFavorited,
     bool? isThreadFavoriteActionLoading,
     String? threadFavoriteHint,
@@ -226,8 +217,6 @@ class ThreadDetailPageState {
       isLoadingInitial: isLoadingInitial ?? this.isLoadingInitial,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       posts: posts ?? this.posts,
-      comicCandidateInfo: comicCandidateInfo ?? this.comicCandidateInfo,
-      parsedComicPost: parsedComicPost ?? this.parsedComicPost,
       isThreadFavorited: isThreadFavorited ?? this.isThreadFavorited,
       isThreadFavoriteActionLoading:
           isThreadFavoriteActionLoading ?? this.isThreadFavoriteActionLoading,

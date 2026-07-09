@@ -35,4 +35,11 @@ void main() {
       expect(fromHtml, endsWith('/2.gif'));
     },
   );
+
+  test('malformed percent encoded paths still produce safe cache keys', () {
+    final key = ImageCacheKeys.threadInline('https://img.test/forum/%E3.jpg');
+
+    expect(key, startsWith('thread/inline/'));
+    expect(key, endsWith('/_E3.jpg'));
+  });
 }

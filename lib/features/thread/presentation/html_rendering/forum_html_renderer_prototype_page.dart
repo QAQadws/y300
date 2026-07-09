@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
-import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/html_text_node_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
@@ -565,8 +564,6 @@ class _LoadedThreadDetailSampleViewState
       isLoadingInitial: false,
       isLoadingMore: false,
       posts: data.posts,
-      comicCandidateInfo: ComicCandidateInfo.notCandidate,
-      parsedComicPost: ParsedComicPost.empty,
       isThreadFavorited: false,
       isThreadFavoriteActionLoading: false,
       threadFavoriteHint: null,

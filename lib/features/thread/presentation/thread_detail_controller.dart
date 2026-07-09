@@ -5,10 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
-import 'package:y300/features/comic/data/services/comic_parser_service.dart';
-import 'package:y300/features/comic/domain/models/comic_models.dart';
-import 'package:y300/features/comic/domain/services/comic_post_aggregation_service.dart';
-import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/reply/data/providers/reply_providers.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/tags/data/providers/tag_providers.dart';
@@ -615,29 +611,6 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
               'firstNo=${merged.isEmpty ? '-' : merged.first.number}',
         );
 
-        stage = 'aggregation';
-        final aggregationStopwatch = Stopwatch()..start();
-        _logNative(
-          'controller_aggregation_start',
-          'tid=${_args.tid} posts=${merged.length} '
-              'totalMessageLength=${_totalMessageLength(merged)} '
-              'firstMessageLength=${merged.isEmpty ? 0 : merged.first.message.length} '
-              'rawAttachmentImages=${_totalAttachmentImages(merged)}',
-        );
-        final aggregation = ref
-            .read(comicPostAggregationServiceProvider)
-            .build(merged);
-        aggregationStopwatch.stop();
-        _logNative(
-          'controller_aggregation_done',
-          'tid=${_args.tid} elapsedMs=${aggregationStopwatch.elapsedMilliseconds} '
-              'detectionLength=${aggregation.detectionMessage.length} '
-              'parseMessageLength=${aggregation.parseMessage.length} '
-              'attachmentImageUrls=${aggregation.attachmentImageUrls.length} '
-              'usedSecondFloor=${aggregation.usedSecondFloor} '
-              'secondFloorPid=${aggregation.secondFloorPid ?? '-'}',
-        );
-
         final subject = data.subject.isNotEmpty ? data.subject : _args.subject;
         stage = 'tag_lookup';
         final tagLookupStopwatch = Stopwatch()..start();
@@ -674,38 +647,6 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
           'tid=${_args.tid} kind=${contentKind.name}',
         );
 
-        stage = 'comic_parse';
-        if (contentKind == ThreadContentKind.comic) {
-          _logNative(
-            'controller_comic_parse_start',
-            'tid=${_args.tid} subjectLength=${subject.length} '
-                'parseMessageLength=${aggregation.parseMessage.length} '
-                'attachmentImageUrls=${aggregation.attachmentImageUrls.length}',
-          );
-        } else {
-          _logNative(
-            'controller_comic_parse_skipped',
-            'tid=${_args.tid} kind=${contentKind.name}',
-          );
-        }
-        final comicParseStopwatch = Stopwatch()..start();
-        final comicMeta = _parseComicWhenTagged(
-          isComic: contentKind == ThreadContentKind.comic,
-          subject: subject,
-          parseMessage: aggregation.parseMessage,
-          attachmentImageUrls: aggregation.attachmentImageUrls,
-        );
-        comicParseStopwatch.stop();
-        _logNative(
-          'controller_comic_parse_done',
-          'tid=${_args.tid} elapsedMs=${comicParseStopwatch.elapsedMilliseconds} '
-              'candidate=${comicMeta.$1.isCandidate} '
-              'score=${comicMeta.$1.score} '
-              'imageUrls=${comicMeta.$2.imageUrls.length} '
-              'episodeLinks=${comicMeta.$2.episodeLinks.length} '
-              'catalog=${comicMeta.$2.catalogUrl?.trim().isNotEmpty == true}',
-        );
-
         stage = 'state_build';
         _logNative(
           'controller_state_build_start',
@@ -738,8 +679,6 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
           isLoadingInitial: false,
           isLoadingMore: false,
           posts: merged,
-          comicCandidateInfo: comicMeta.$1,
-          parsedComicPost: comicMeta.$2,
           isThreadFavorited: false,
           isThreadFavoriteActionLoading: false,
           threadFavoriteHint: null,
@@ -824,8 +763,6 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       isLoadingInitial: false,
       isLoadingMore: false,
       posts: previous,
-      comicCandidateInfo: ComicCandidateInfo.notCandidate,
-      parsedComicPost: ParsedComicPost.empty,
       isThreadFavorited: false,
       isThreadFavoriteActionLoading: false,
       threadFavoriteHint: null,
@@ -999,36 +936,6 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     }
   }
 
-  (ComicCandidateInfo, ParsedComicPost) _parseComicWhenTagged({
-    required bool isComic,
-    required String subject,
-    required String parseMessage,
-    required List<String> attachmentImageUrls,
-  }) {
-    if (!isComic || (parseMessage.isEmpty && attachmentImageUrls.isEmpty)) {
-      return (ComicCandidateInfo.notCandidate, ParsedComicPost.empty);
-    }
-
-    final parser = ref.read(comicParserServiceProvider);
-    final subjectParser = ref.read(comicSubjectParserProvider);
-    final parsed = parser
-        .parseInput(
-          ComicPostParseInput(
-            messageHtml: parseMessage,
-            attachmentImageUrls: attachmentImageUrls,
-          ),
-        )
-        .copyWith(subjectMetadata: subjectParser.parse(subject));
-    return (
-      const ComicCandidateInfo(
-        isCandidate: true,
-        score: 100,
-        reasons: <String>['tag-rule'],
-      ),
-      parsed,
-    );
-  }
-
   Future<String?> _findSourceTagName({
     required String fid,
     required String typeid,
@@ -1063,17 +970,6 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
   String _oneLine(String value) {
     return value.replaceAll(RegExp(r'\s+'), ' ').trim();
-  }
-
-  int _totalMessageLength(List<ThreadPost> posts) {
-    return posts.fold<int>(0, (total, post) => total + post.message.length);
-  }
-
-  int _totalAttachmentImages(List<ThreadPost> posts) {
-    return posts.fold<int>(
-      0,
-      (total, post) => total + post.attachmentImages.length,
-    );
   }
 
   String _stackHead(StackTrace stackTrace) {

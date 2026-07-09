@@ -2656,7 +2656,7 @@ void main() {
       );
     });
 
-    testWidgets('hides local shelf entry for comic candidate post', (
+    testWidgets('renders comic forum posts without eager shelf parsing', (
       tester,
     ) async {
       final repository = _FakeThreadRepository((tid, page) async {
@@ -2677,7 +2677,7 @@ void main() {
                 author: 'alice',
                 authorId: '1',
                 message:
-                    '<img src="https://img.test/1.jpg"/><img src="https://img.test/2.jpg"/><a href="thread-100-1-1.html">1</a><a href="thread-101-1-1.html">2</a>',
+                    '<p>漫画正文</p><img src="https://img.test/1.jpg"/><img src="https://img.test/%E3.jpg"/><a href="thread-100-1-1.html">1</a><a href="thread-101-1-1.html">2</a>',
                 number: 1,
                 isFirst: true,
                 dateline: 'today',
@@ -2691,6 +2691,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
+      expect(find.byKey(const Key('thread-post-card-p1')), findsOneWidget);
+      expect(
+        find.byKey(const Key('thread-post-html-first-body-p1')),
+        findsOneWidget,
+      );
       expect(find.byKey(const Key('comic-add-to-shelf-button')), findsNothing);
       expect(find.byKey(const Key('comic-in-shelf-button')), findsNothing);
       expect(find.text('漫画 · 韩国漫画'), findsNothing);
@@ -2743,7 +2748,7 @@ void main() {
     });
 
     testWidgets(
-      'includes second floor images when floor2 is same author and image-dominant',
+      'keeps comic second-floor content as normal post detail content',
       (tester) async {
         final repository = _FakeThreadRepository((tid, page) async {
           return ApiSuccess(
@@ -2786,6 +2791,11 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 120));
 
+        expect(find.byKey(const Key('thread-post-card-p1')), findsOneWidget);
+        expect(
+          find.byKey(const Key('thread-post-html-first-body-p1')),
+          findsOneWidget,
+        );
         expect(
           find.byKey(const Key('comic-add-to-shelf-button')),
           findsNothing,

@@ -159,10 +159,18 @@ abstract final class ImageCacheKeys {
         .replaceAll('\\', '/')
         .split('/')
         .where((segment) => segment.isNotEmpty)
-        .map(Uri.decodeComponent)
+        .map(_safeDecodeComponent)
         .map(Uri.encodeComponent)
         .toList(growable: false);
     return '/${segments.join('/')}';
+  }
+
+  static String _safeDecodeComponent(String value) {
+    try {
+      return Uri.decodeComponent(value);
+    } on FormatException {
+      return value;
+    }
   }
 
   static String _shortHash(String value) {
@@ -183,7 +191,7 @@ abstract final class ImageCacheKeys {
     if (segments.isEmpty) {
       return 'image';
     }
-    final segment = Uri.decodeComponent(segments.last).trim();
+    final segment = _safeDecodeComponent(segments.last).trim();
     return segment.isEmpty
         ? 'image'
         : segment.replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
