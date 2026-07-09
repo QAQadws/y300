@@ -8,7 +8,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('forum HTML prototype sample manifest is stable', () {
-    expect(forumHtmlPrototypeSamples, hasLength(5));
+    expect(forumHtmlPrototypeSamples, hasLength(6));
 
     expect(
       forumHtmlPrototypeSamples.map((sample) => sample.id),
@@ -18,6 +18,7 @@ void main() {
         'collapse_directory',
         'text_color_size',
         'jitter_test',
+        'thread_527325_blank_body',
       ]),
     );
 
@@ -38,11 +39,18 @@ void main() {
         'docs/html/特殊格式/折叠目录.html',
         'docs/html/特殊格式/字颜色字号.html',
         'docs/html/特殊格式/抖动测试.html',
+        'docs/html/特殊格式/无法进入帖子_527325.html',
       ]),
     );
     expect(
       forumHtmlPrototypeSamples
           .singleWhere((sample) => sample.id == 'jitter_test')
+          .renderMode,
+      ForumHtmlSampleRenderMode.threadDetail,
+    );
+    expect(
+      forumHtmlPrototypeSamples
+          .singleWhere((sample) => sample.id == 'thread_527325_blank_body')
           .renderMode,
       ForumHtmlSampleRenderMode.threadDetail,
     );
