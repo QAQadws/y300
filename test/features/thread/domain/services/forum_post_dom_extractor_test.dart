@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
+import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
 
 void main() {
   group('ForumPostDomExtractor', () {
@@ -13,33 +14,30 @@ void main() {
 <img file="https://img.test/4.jpg">
 ''');
 
-      expect(
-        images,
-        <String>[
-          'https://img.test/1.jpg',
-          'https://img.test/2.jpg',
-          'https://img.test/3.jpg',
-          'https://img.test/4.jpg',
-        ],
-      );
+      expect(images, <String>[
+        'https://img.test/1.jpg',
+        'https://img.test/2.jpg',
+        'https://img.test/3.jpg',
+        'https://img.test/4.jpg',
+      ]);
     });
 
-    test('normalizes relative and protocol-relative image sources to site urls', () {
-      final images = extractor.extractImageSources('''
+    test(
+      'normalizes relative and protocol-relative image sources to site urls',
+      () {
+        final images = extractor.extractImageSources('''
 <img src="data/attachment/forum/a.jpg">
 <img data-src="//bbs.yamibo.com/data/attachment/forum/b.jpg">
 <img file="/data/attachment/forum/c.jpg">
 ''');
 
-      expect(
-        images,
-        <String>[
+        expect(images, <String>[
           'https://bbs.yamibo.com/data/attachment/forum/a.jpg',
           'https://bbs.yamibo.com/data/attachment/forum/b.jpg',
           'https://bbs.yamibo.com/data/attachment/forum/c.jpg',
-        ],
-      );
-    });
+        ]);
+      },
+    );
 
     test('filters forum chrome images by default', () {
       final images = extractor.extractImageSources('''
@@ -91,7 +89,35 @@ plain text thread-999-1-1.html should not count
       final anchors = extractor.extractAnchors('<a href=";tid=123">上一话</a>');
 
       expect(anchors.single.tid, '123');
-      expect(anchors.single.normalizedUrl, 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123');
+      expect(
+        anchors.single.normalizedUrl,
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123',
+      );
+    });
+
+    test('drops legacy encoded highlight from viewthread links', () {
+      final anchors = extractor.extractAnchors('''
+<a href="https://bbs.yamibo.com/forum.php?mod=viewthread&amp;amp;tid=524596&amp;amp;highlight=%D2%B2%CE%DE%B7%E7%D3%EA">图源</a>
+''');
+
+      expect(anchors.single.tid, '524596');
+      expect(
+        anchors.single.normalizedUrl,
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=524596',
+      );
+      expect(anchors.single.normalizedUrl, isNot(contains('highlight')));
+    });
+
+    test('skips one malformed href without dropping valid anchors', () {
+      final safeExtractor = ForumPostDomExtractor(
+        urlParser: _ThrowingThreadUrlParser(),
+      );
+      final anchors = safeExtractor.extractAnchors('''
+<a href="bad://boom">坏链接</a>
+<a href="thread-123-1-1.html">第1话</a>
+''');
+
+      expect(anchors.map((anchor) => anchor.tid).toList(), <String?>['123']);
     });
 
     test('preserves br breaks in plain text', () {
@@ -102,4 +128,16 @@ plain text thread-999-1-1.html should not count
       expect(text, contains('\n正文继续。'));
     });
   });
+}
+
+class _ThrowingThreadUrlParser extends ForumThreadUrlParser {
+  const _ThrowingThreadUrlParser();
+
+  @override
+  String? normalizeHref(String href) {
+    if (href.contains('bad://boom')) {
+      throw const FormatException('bad href');
+    }
+    return super.normalizeHref(href);
+  }
 }

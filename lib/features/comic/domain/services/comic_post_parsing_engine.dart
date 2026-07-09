@@ -14,16 +14,23 @@ class ComicPostParsingEngine {
     List<ComicPostParsingRule>? rules,
     ForumPostDomExtractor? domExtractor,
   }) : _domExtractor = domExtractor ?? const ForumPostDomExtractor(),
-       _rules = rules ??
-            <ComicPostParsingRule>[
-              CatalogRule(),
-              EpisodeStrongRule(),
-              EpisodeClusterRule(),
-              RejectRule(),
-            ];
+       _rules =
+           rules ??
+           <ComicPostParsingRule>[
+             CatalogRule(),
+             EpisodeStrongRule(),
+             EpisodeClusterRule(),
+             RejectRule(),
+           ];
 
-  static final RegExp _ordinalPattern = RegExp(r'(^\d+(\.\d+)?$|第\s*.+\s*话)', caseSensitive: false);
-  static final RegExp _specialPattern = RegExp(r'(特典|附录|番外)', caseSensitive: false);
+  static final RegExp _ordinalPattern = RegExp(
+    r'(^\d+(\.\d+)?\s*[话話].*|^\d+(\.\d+)?$|第\s*.+\s*[话話])',
+    caseSensitive: false,
+  );
+  static final RegExp _specialPattern = RegExp(
+    r'(特典|附录|番外)',
+    caseSensitive: false,
+  );
   static final RegExp _catalogTextPattern = RegExp(
     r'(目录|目錄|电梯|電梯|catalog|contents)',
     caseSensitive: false,
@@ -32,11 +39,12 @@ class ComicPostParsingEngine {
   final ForumPostDomExtractor _domExtractor;
   final List<ComicPostParsingRule> _rules;
 
-  EpisodeExtractionResult parse({
-    required String messageHtml,
-  }) {
+  EpisodeExtractionResult parse({required String messageHtml}) {
     final debugSignals = <ComicParsingSignal>[];
-    final anchors = _extractAnchors(messageHtml: messageHtml, debugSignals: debugSignals);
+    final anchors = _extractAnchors(
+      messageHtml: messageHtml,
+      debugSignals: debugSignals,
+    );
     final clusteredGroupIds = _detectSequentialGroups(anchors);
     final drafts = <_EpisodeDraft>[];
     final catalogLinks = <String>{};
@@ -55,7 +63,9 @@ class ComicPostParsingEngine {
         if (decision == null) {
           continue;
         }
-        debugSignals.add(ComicParsingSignal(stage: 'rule', message: decision.debugMessage));
+        debugSignals.add(
+          ComicParsingSignal(stage: 'rule', message: decision.debugMessage),
+        );
         switch (decision.action) {
           case RuleAction.addCatalog:
             catalogLinks.add(anchor.normalizedUrl);
@@ -102,7 +112,12 @@ class ComicPostParsingEngine {
     required List<ComicParsingSignal> debugSignals,
   }) {
     final extracted = _domExtractor.extractAnchors(messageHtml);
-    debugSignals.add(ComicParsingSignal(stage: 'anchor', message: 'raw anchors=${extracted.length}'));
+    debugSignals.add(
+      ComicParsingSignal(
+        stage: 'anchor',
+        message: 'raw anchors=${extracted.length}',
+      ),
+    );
     final anchors = <ParsedAnchor>[];
 
     for (final anchor in extracted) {
@@ -131,10 +146,7 @@ class ComicPostParsingEngine {
     return anchors;
   }
 
-  bool _isCatalogAnchor({
-    required String text,
-    required String normalizedUrl,
-  }) {
+  bool _isCatalogAnchor({required String text, required String normalizedUrl}) {
     if (_catalogTextPattern.hasMatch(text.trim())) {
       return true;
     }
@@ -146,8 +158,27 @@ class ComicPostParsingEngine {
     // Yamibo comic posts often label tag catalog links as "电梯/電梯".
     // Treat tag pages as catalog candidates even if the visible text is terse.
     return uri.path.toLowerCase().endsWith('misc.php') &&
-        uri.queryParameters['mod']?.toLowerCase() == 'tag' &&
-        (uri.queryParameters['id']?.trim().isNotEmpty ?? false);
+        _rawQueryValue(uri.query, 'mod')?.toLowerCase() == 'tag' &&
+        (_rawQueryValue(uri.query, 'id')?.trim().isNotEmpty ?? false);
+  }
+
+  String? _rawQueryValue(String rawQuery, String key) {
+    if (rawQuery.isEmpty) {
+      return null;
+    }
+    final lowerKey = key.toLowerCase();
+    for (final part in rawQuery.split(RegExp(r'[&;]'))) {
+      final separatorIndex = part.indexOf('=');
+      if (separatorIndex <= 0) {
+        continue;
+      }
+      final rawKey = part.substring(0, separatorIndex).trim().toLowerCase();
+      if (rawKey != lowerKey) {
+        continue;
+      }
+      return part.substring(separatorIndex + 1);
+    }
+    return null;
   }
 
   List<int?> _detectSequentialGroups(List<ParsedAnchor> anchors) {
@@ -157,7 +188,8 @@ class ComicPostParsingEngine {
 
     while (runStart < anchors.length) {
       int runEnd = runStart;
-      while (runEnd + 1 < anchors.length && _isLikelySequentialLink(anchors[runEnd], anchors[runEnd + 1])) {
+      while (runEnd + 1 < anchors.length &&
+          _isLikelySequentialLink(anchors[runEnd], anchors[runEnd + 1])) {
         runEnd += 1;
       }
       final runLength = runEnd - runStart + 1;
@@ -206,7 +238,8 @@ class ComicPostParsingEngine {
       }
     }
 
-    final list = bestByTid.values.toList()..sort((a, b) => a.position.compareTo(b.position));
+    final list = bestByTid.values.toList()
+      ..sort((a, b) => a.position.compareTo(b.position));
 
     return list
         .map(
@@ -224,7 +257,11 @@ class ComicPostParsingEngine {
         .toList(growable: false);
   }
 
-  ParsedLinkKind _inferKind(String url, ParsedAnchorFeatures features, String? tid) {
+  ParsedLinkKind _inferKind(
+    String url,
+    ParsedAnchorFeatures features,
+    String? tid,
+  ) {
     if (features.containsCatalog) {
       return ParsedLinkKind.catalog;
     }
@@ -258,12 +295,7 @@ class _EpisodeDraft {
   final int? groupId;
 }
 
-enum RuleAction {
-  addCatalog,
-  addEpisode,
-  addNextHop,
-  reject,
-}
+enum RuleAction { addCatalog, addEpisode, addNextHop, reject }
 
 class RuleDecision {
   const RuleDecision({
@@ -320,7 +352,8 @@ class EpisodeStrongRule implements ComicPostParsingRule {
       return RuleDecision(
         action: RuleAction.addEpisode,
         confidence: 0.8,
-        debugMessage: 'EpisodeStrongRule catalog-compatible tid=${anchor.tidCandidate}',
+        debugMessage:
+            'EpisodeStrongRule catalog-compatible tid=${anchor.tidCandidate}',
       );
     }
     if (anchor.features.containsOrdinal || anchor.features.containsSpecial) {
@@ -343,7 +376,8 @@ class EpisodeClusterRule implements ComicPostParsingRule {
     return RuleDecision(
       action: RuleAction.addEpisode,
       confidence: 0.85,
-      debugMessage: 'EpisodeClusterRule hit group=${context.groupId} tid=${context.anchor.tidCandidate}',
+      debugMessage:
+          'EpisodeClusterRule hit group=${context.groupId} tid=${context.anchor.tidCandidate}',
     );
   }
 }

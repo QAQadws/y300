@@ -75,6 +75,75 @@ void main() {
       );
     });
 
+    test('ignores legacy GBK highlight while parsing old comic post links', () {
+      final parser = HtmlComicParserService();
+      final result = parser.parse(
+        message: '''
+图源：<a href="https://bbs.yamibo.com/forum.php?mod=viewthread&amp;amp;tid=524596&amp;amp;highlight=%D2%B2%CE%DE%B7%E7%D3%EA">旧编码图源</a><br />
+<a href="https://bbs.yamibo.com/thread-527284-1-1.html">16话后篇</a>
+<a href="https://bbs.yamibo.com/thread-527285-1-1.html">17话</a>
+<a href="https://bbs.yamibo.com/thread-527287-1-1.html">18话前篇</a>
+<a href="https://bbs.yamibo.com/thread-527288-1-1.html">18话后篇</a>
+<div class="img"><img src="https://bbs.yamibo.com/data/attachment/forum/202206/20/160615ywmwwnu65hzcp615.png" /></div>
+<div class="img"><img src="https://bbs.yamibo.com/data/attachment/forum/202206/20/160617ttbvz48qiwntyx88.png" /></div>
+''',
+      );
+
+      expect(result.imageUrls, hasLength(2));
+      expect(result.episodeLinks.map((link) => link.url).toList(), <String>[
+        'https://bbs.yamibo.com/thread-527284-1-1.html',
+        'https://bbs.yamibo.com/thread-527285-1-1.html',
+        'https://bbs.yamibo.com/thread-527287-1-1.html',
+        'https://bbs.yamibo.com/thread-527288-1-1.html',
+      ]);
+      expect(result.episodeLinks.first.episodeTitle, '16话后篇');
+    });
+
+    test('parses dense chapter list with mixed legacy highlight links', () {
+      final parser = HtmlComicParserService();
+      final result = parser.parse(
+        message: '''
+<a href="https://bbs.yamibo.com/thread-528734-1-1.html">第01话</a>
+<a href="https://bbs.yamibo.com/thread-529668-1-1.html">第02话</a>
+<a href="https://bbs.yamibo.com/thread-530370-1-1.html">第03话</a>
+<a href="https://bbs.yamibo.com/forum.php?mod=viewthread&amp;amp;tid=533386&amp;amp;highlight=%BC%AB%CF%DEOL%CF%EB%D2%AA%B7%FE%CA%CC%B7%B4%C5%C9%C7%A7%BD%F0%B4%F3%D0%A1%BD%E3">第01卷番外</a>
+<a href="https://bbs.yamibo.com/forum.php?mod=viewthread&amp;amp;tid=550267&amp;amp;highlight=%E6%9E%81%E9%99%90OL">第22话</a>
+<a href="https://bbs.yamibo.com/thread-569740-1-1.html">第36话</a>
+<div class="img"><img src="https://bbs.yamibo.com/data/attachment/forum/202606/10/201004y9mlrlmmzyuikck4.jpg" /></div>
+''',
+      );
+
+      expect(result.episodeLinks.map((link) => link.url).toList(), <String>[
+        'https://bbs.yamibo.com/thread-528734-1-1.html',
+        'https://bbs.yamibo.com/thread-529668-1-1.html',
+        'https://bbs.yamibo.com/thread-530370-1-1.html',
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=533386',
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=550267',
+        'https://bbs.yamibo.com/thread-569740-1-1.html',
+      ]);
+      expect(
+        result.episodeLinks
+            .where((link) => link.url.contains('tid=533386'))
+            .single
+            .url,
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=533386',
+      );
+      expect(result.imageUrls, hasLength(1));
+    });
+
+    test('keeps image-only single thread comic parseable', () {
+      final parser = HtmlComicParserService();
+      final result = parser.parse(
+        message: '''
+<div class="img"><img src="https://bbs.yamibo.com/data/attachment/forum/202606/10/page1.jpg" /></div>
+<div class="img"><img src="https://bbs.yamibo.com/data/attachment/forum/202606/10/page2.jpg" /></div>
+''',
+      );
+
+      expect(result.imageUrls, hasLength(2));
+      expect(result.episodeLinks, isEmpty);
+    });
+
     test('supports damaged href with leading semicolon tid form', () {
       final parser = HtmlComicParserService();
       final result = parser.parse(

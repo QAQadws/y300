@@ -29,8 +29,8 @@ class ForumPostDomExtractor {
   const ForumPostDomExtractor({
     ForumThreadUrlParser? urlParser,
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
-  })  : _urlParser = urlParser ?? const ForumThreadUrlParser(),
-        _urlResolver = urlResolver;
+  }) : _urlParser = urlParser ?? const ForumThreadUrlParser(),
+       _urlResolver = urlResolver;
 
   final ForumThreadUrlParser _urlParser;
   final SiteUrlResolver _urlResolver;
@@ -53,8 +53,19 @@ class ForumPostDomExtractor {
       if (rawHref.isEmpty) {
         continue;
       }
-      final normalizedUrl = _urlParser.normalizeHref(rawHref);
+      final String? normalizedUrl;
+      try {
+        normalizedUrl = _urlParser.normalizeHref(rawHref);
+      } on FormatException {
+        continue;
+      }
       if (normalizedUrl == null) {
+        continue;
+      }
+      final String? tid;
+      try {
+        tid = _urlParser.extractTid(normalizedUrl);
+      } on FormatException {
         continue;
       }
       anchors.add(
@@ -63,7 +74,7 @@ class ForumPostDomExtractor {
           normalizedUrl: normalizedUrl,
           text: _normalizeText(node.text),
           position: index,
-          tid: _urlParser.extractTid(normalizedUrl),
+          tid: tid,
         ),
       );
     }
@@ -106,7 +117,9 @@ class ForumPostDomExtractor {
 
   List<String> extractParagraphTexts(String html) {
     final fragment = html_parser.parseFragment(html);
-    final paragraphNodes = fragment.querySelectorAll('p, div, section, article, li');
+    final paragraphNodes = fragment.querySelectorAll(
+      'p, div, section, article, li',
+    );
     final paragraphs = <String>[];
     final seen = <String>{};
     for (final node in paragraphNodes) {
@@ -124,7 +137,11 @@ class ForumPostDomExtractor {
     final plainText = extractPlainText(html);
     return plainText.isEmpty
         ? const <String>[]
-        : plainText.split(RegExp(r'\n{1,}')).map((line) => line.trim()).where((line) => line.isNotEmpty).toList();
+        : plainText
+              .split(RegExp(r'\n{1,}'))
+              .map((line) => line.trim())
+              .where((line) => line.isNotEmpty)
+              .toList();
   }
 
   List<String> extractHeadingTexts(String html) {

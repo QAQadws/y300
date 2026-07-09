@@ -883,7 +883,7 @@ class RuleBasedComicDetector implements ComicDetector {
 
 class HtmlComicParserService implements ComicParserService {
   static final RegExp _episodeTextPattern = RegExp(
-    r'^(\d+(\.\d+)?|\u7b2c\s*.+\s*\u8bdd|.*\u7279\u5178.*)$',
+    r'^(\d+(\.\d+)?\s*[\u8bdd\u8a71].*|\d+(\.\d+)?|\u7b2c\s*.+\s*[\u8bdd\u8a71]|.*\u7279\u5178.*)$',
   );
   final ComicPostParsingEngine _engine;
   final ForumPostDomExtractor _domExtractor;

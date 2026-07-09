@@ -4,9 +4,7 @@ import 'package:y300/core/config/app_config.dart';
 /// link shapes. Keep this focused on URLs; callers decide whether a link is
 /// semantically useful for comic, novel, or favorite parsing.
 class ForumThreadUrlParser {
-  const ForumThreadUrlParser({
-    this.siteOrigin = '${AppConfig.siteBaseUrl}/',
-  });
+  const ForumThreadUrlParser({this.siteOrigin = '${AppConfig.siteBaseUrl}/'});
 
   final String siteOrigin;
 
@@ -29,7 +27,8 @@ class ForumThreadUrlParser {
     }
 
     final damagedTid = _extractTidFromDamagedHref(decoded);
-    if ((decoded.startsWith(';tid=') || decoded.startsWith('tid=')) && damagedTid != null) {
+    if ((decoded.startsWith(';tid=') || decoded.startsWith('tid=')) &&
+        damagedTid != null) {
       return _viewThreadUrl(damagedTid);
     }
 
@@ -38,17 +37,23 @@ class ForumThreadUrlParser {
       return null;
     }
 
-    final origin = Uri.tryParse(siteOrigin) ?? Uri.parse('${AppConfig.siteBaseUrl}/');
+    final origin =
+        Uri.tryParse(siteOrigin) ?? Uri.parse('${AppConfig.siteBaseUrl}/');
     final effectiveUri = uri.hasScheme ? uri : origin.resolveUri(uri);
     final isThreadHtml = _threadPathPattern.hasMatch(effectiveUri.path);
-    final isForumViewThread = effectiveUri.path.toLowerCase().endsWith('forum.php') &&
-        effectiveUri.queryParameters['mod']?.toLowerCase() == 'viewthread' &&
-        (effectiveUri.queryParameters['tid']?.trim().isNotEmpty ?? false);
+    final rawQuery = effectiveUri.query;
+    final rawMod = _rawQueryValue(rawQuery, 'mod');
+    final rawTid = _rawQueryValue(rawQuery, 'tid');
+    final rawFromuid = _rawQueryValue(rawQuery, 'fromuid');
+    final isForumViewThread =
+        effectiveUri.path.toLowerCase().endsWith('forum.php') &&
+        rawMod?.toLowerCase() == 'viewthread' &&
+        (rawTid?.trim().isNotEmpty ?? false);
 
     String? normalizedQuery;
     if (isForumViewThread) {
-      final tid = effectiveUri.queryParameters['tid'];
-      final fromuid = effectiveUri.queryParameters['fromuid'];
+      final tid = rawTid?.trim();
+      final fromuid = rawFromuid?.trim();
       normalizedQuery = <String>[
         'mod=viewthread',
         if (tid != null) 'tid=$tid',
@@ -79,8 +84,8 @@ class ForumThreadUrlParser {
     final uri = Uri.tryParse(normalizedUrl);
     if (uri != null &&
         uri.path.toLowerCase().endsWith('forum.php') &&
-        uri.queryParameters['mod']?.toLowerCase() == 'viewthread') {
-      final tid = uri.queryParameters['tid']?.trim();
+        _rawQueryValue(uri.query, 'mod')?.toLowerCase() == 'viewthread') {
+      final tid = _rawQueryValue(uri.query, 'tid')?.trim();
       if (tid != null && tid.isNotEmpty) {
         return tid;
       }
@@ -92,8 +97,28 @@ class ForumThreadUrlParser {
   bool isThreadUrl(String normalizedUrl) => extractTid(normalizedUrl) != null;
 
   String _viewThreadUrl(String tid) {
-    final origin = Uri.tryParse(siteOrigin) ?? Uri.parse('${AppConfig.siteBaseUrl}/');
+    final origin =
+        Uri.tryParse(siteOrigin) ?? Uri.parse('${AppConfig.siteBaseUrl}/');
     return origin.resolve('forum.php?mod=viewthread&tid=$tid').toString();
+  }
+
+  String? _rawQueryValue(String rawQuery, String key) {
+    if (rawQuery.isEmpty) {
+      return null;
+    }
+    final lowerKey = key.toLowerCase();
+    for (final part in rawQuery.split(RegExp(r'[&;]'))) {
+      final separatorIndex = part.indexOf('=');
+      if (separatorIndex <= 0) {
+        continue;
+      }
+      final rawKey = part.substring(0, separatorIndex).trim().toLowerCase();
+      if (rawKey != lowerKey) {
+        continue;
+      }
+      return part.substring(separatorIndex + 1);
+    }
+    return null;
   }
 
   String? _extractTidFromDamagedHref(String href) {
