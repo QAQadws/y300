@@ -287,10 +287,10 @@ void main() {
   );
 
   testWidgets(
-    'ForumWebViewPage hides loading mask as soon as the first cleanChrome runs',
+    'ForumWebViewPage renders the WebView surface without loading masks',
     (tester) async {
-      final driver = _FakeForumWebViewDriver()
-        ..capabilityProfile = const ForumWebViewCapabilityProfile(
+      for (final profile in <ForumWebViewCapabilityProfile>[
+        const ForumWebViewCapabilityProfile(
           engine: ForumWebViewEngine.advanced,
           documentStartMode: ForumWebViewDocumentStartMode.bestEffort,
           supportsContentBlockers: false,
@@ -298,48 +298,8 @@ void main() {
           supportsPlatformScrollTuning: true,
           supportsCookieHooks: true,
           supportsPageCommitVisible: true,
-        );
-
-      await tester.pumpWidget(_buildTestApp(driver: driver));
-      await tester.pump();
-
-      expect(
-        find.byKey(const Key('forum-webview-loading-mask')),
-        findsOneWidget,
-      );
-      expect(find.byType(CircularProgressIndicator), findsNothing);
-      expect(
-        find.byKey(const Key('forum-webview-bootstrap-placeholder-list')),
-        findsNothing,
-      );
-
-      await driver.dispatchPageStarted(
-        'https://bbs.yamibo.com/index.php?mobile=2',
-      );
-      await driver.dispatchPageFinished(
-        'https://bbs.yamibo.com/index.php?mobile=2',
-      );
-      await tester.pump();
-
-      // 蒙版应当在 pageFinished 的首次 cleanChrome 完成后立即关闭，
-      // 不等 300ms 二次清理 —— 这是连续盲点不再卡住蒙版的关键。
-      expect(find.byKey(const Key('forum-webview-loading-mask')), findsNothing);
-      expect(driver.scripts.length, 1);
-
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump();
-
-      // 300ms 二次清理仍会跑（chrome 残留兜底），但不影响蒙版状态。
-      expect(driver.scripts.length, 2);
-      expect(find.byKey(const Key('forum-webview-loading-mask')), findsNothing);
-    },
-  );
-
-  testWidgets(
-    'ForumWebViewPage hides loading mask immediately on legacy engine too',
-    (tester) async {
-      final driver = _FakeForumWebViewDriver()
-        ..capabilityProfile = const ForumWebViewCapabilityProfile(
+        ),
+        const ForumWebViewCapabilityProfile(
           engine: ForumWebViewEngine.legacy,
           documentStartMode: ForumWebViewDocumentStartMode.unavailable,
           supportsContentBlockers: false,
@@ -347,88 +307,37 @@ void main() {
           supportsPlatformScrollTuning: false,
           supportsCookieHooks: false,
           supportsPageCommitVisible: false,
+        ),
+      ]) {
+        final driver = _FakeForumWebViewDriver()..capabilityProfile = profile;
+
+        await tester.pumpWidget(_buildTestApp(driver: driver));
+        await tester.pump();
+
+        expect(find.byKey(const Key('forum-webview-surface')), findsOneWidget);
+        expect(
+          find.byKey(const Key('forum-webview-loading-mask')),
+          findsNothing,
         );
+        expect(find.byType(LinearProgressIndicator), findsNothing);
 
-      await tester.pumpWidget(_buildTestApp(driver: driver));
-      await tester.pump();
-
-      expect(
-        find.byKey(const Key('forum-webview-loading-mask')),
-        findsOneWidget,
-      );
-
-      await driver.dispatchPageStarted(
-        'https://bbs.yamibo.com/index.php?mobile=2',
-      );
-      await driver.dispatchPageFinished(
-        'https://bbs.yamibo.com/index.php?mobile=2',
-      );
-      await tester.pump();
-
-      expect(find.byKey(const Key('forum-webview-loading-mask')), findsNothing);
-      expect(driver.scripts.length, 1);
-
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump();
-
-      expect(driver.scripts.length, 2);
-      expect(find.byKey(const Key('forum-webview-loading-mask')), findsNothing);
-    },
-  );
-
-  testWidgets(
-    'ForumWebViewPage keeps mask hidden across rapid blind-tap navigation',
-    (tester) async {
-      // Regression: 用户能从蒙版穿透点击 (IgnorePointer)，连续触发新导航。
-      // 旧实现每次 pageStarted 都把 _didCompleteInitialManagedPageLateRepair
-      // 复位 + cancel 300ms 定时器 → 节奏快于 (页面加载 + 300ms) 时蒙版永远不消失。
-      final driver = _FakeForumWebViewDriver()
-        ..capabilityProfile = const ForumWebViewCapabilityProfile(
-          engine: ForumWebViewEngine.advanced,
-          documentStartMode: ForumWebViewDocumentStartMode.bestEffort,
-          supportsContentBlockers: false,
-          supportsTransparentBackground: true,
-          supportsPlatformScrollTuning: true,
-          supportsCookieHooks: true,
-          supportsPageCommitVisible: true,
+        await driver.dispatchPageStarted(
+          'https://bbs.yamibo.com/index.php?mobile=2',
         );
+        await driver.dispatchPageFinished(
+          'https://bbs.yamibo.com/index.php?mobile=2',
+        );
+        await tester.pump();
 
-      await tester.pumpWidget(_buildTestApp(driver: driver));
-      await tester.pump();
+        expect(
+          find.byKey(const Key('forum-webview-loading-mask')),
+          findsNothing,
+        );
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+        expect(driver.scripts.length, 1);
 
-      expect(
-        find.byKey(const Key('forum-webview-loading-mask')),
-        findsOneWidget,
-      );
-
-      // 首次 pageFinished 完成 → 蒙版应当落下。
-      await driver.dispatchPageStarted(
-        'https://bbs.yamibo.com/index.php?mobile=2',
-      );
-      await driver.dispatchPageFinished(
-        'https://bbs.yamibo.com/index.php?mobile=2',
-      );
-      await tester.pump();
-      expect(find.byKey(const Key('forum-webview-loading-mask')), findsNothing);
-
-      // 用户盲点版块 A：300ms 二次清理还没跑就被新导航中断。
-      await driver.dispatchPageStarted(
-        'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=49&mobile=2',
-      );
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // 用户继续盲点版块 B：再次中断。
-      await driver.dispatchPageStarted(
-        'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
-      );
-      await tester.pump(const Duration(milliseconds: 100));
-      await driver.dispatchPageFinished(
-        'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
-      );
-      await tester.pump();
-
-      // 整个连续盲点过程中蒙版必须保持隐藏，不允许"重新长出来"。
-      expect(find.byKey(const Key('forum-webview-loading-mask')), findsNothing);
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
     },
   );
 

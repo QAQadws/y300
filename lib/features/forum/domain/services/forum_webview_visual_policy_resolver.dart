@@ -78,7 +78,6 @@ class DefaultForumWebViewVisualPolicyResolver
       earlyHiddenSelectors: earlySelectors,
       lateRemovedSelectors: lateSelectors,
       extraCss: _sharedExtraCss,
-      useLoadingMaskUntilStable: true,
       disableHorizontalOverflow: true,
     );
   }

@@ -20,7 +20,6 @@ void main() {
       '.foot-pwa',
     },
     extraCss: '',
-    useLoadingMaskUntilStable: true,
     disableHorizontalOverflow: true,
   );
   const threadDetailVisualPolicy = ForumWebViewVisualPolicy(
@@ -41,43 +40,44 @@ void main() {
       '.foot_height_view',
     },
     extraCss: '',
-    useLoadingMaskUntilStable: true,
     disableHorizontalOverflow: true,
   );
 
-  test('cleanupScriptForPolicy contains forum list/search selectors and late-repair css', () {
-    final script = injector.cleanupScriptForPolicy(pwaLateOnlyVisualPolicy);
+  test(
+    'cleanupScriptForPolicy contains forum list/search selectors and late-repair css',
+    () {
+      final script = injector.cleanupScriptForPolicy(pwaLateOnlyVisualPolicy);
 
-    expect(script, contains('#header-padding'));
-    expect(script, contains('.header.cl'));
-    expect(script, contains('.footer.mt10.cl'));
-    expect(script, contains('.foot.flex-box'));
-    expect(script, contains('.foot_height'));
-    expect(script, contains('.foot-pwa'));
-    expect(script, contains('overscroll-behavior-x: none !important;'));
-    expect(script, contains('querySelectorAll'));
-  });
+      expect(script, contains('#header-padding'));
+      expect(script, contains('.header.cl'));
+      expect(script, contains('.footer.mt10.cl'));
+      expect(script, contains('.foot.flex-box'));
+      expect(script, contains('.foot_height'));
+      expect(script, contains('.foot-pwa'));
+      expect(script, contains('overscroll-behavior-x: none !important;'));
+      expect(script, contains('querySelectorAll'));
+    },
+  );
 
-  test('cleanupScriptForPolicy contains thread-detail reply footer selectors', () {
-    final script = injector.cleanupScriptForPolicy(threadDetailVisualPolicy);
+  test(
+    'cleanupScriptForPolicy contains thread-detail reply footer selectors',
+    () {
+      final script = injector.cleanupScriptForPolicy(threadDetailVisualPolicy);
 
-    expect(script, contains('.foot.foot_reply.flex-box.cl'));
-    expect(script, contains('.foot_height_view'));
-    expect(script, contains('querySelectorAll'));
-  });
+      expect(script, contains('.foot.foot_reply.flex-box.cl'));
+      expect(script, contains('.foot_height_view'));
+      expect(script, contains('querySelectorAll'));
+    },
+  );
 
   test('cleanChrome runs late-repair script once', () async {
     final target = _FakeScriptTarget();
 
-    await injector.cleanChrome(
-      target,
-      visualPolicy: threadDetailVisualPolicy,
-    );
+    await injector.cleanChrome(target, visualPolicy: threadDetailVisualPolicy);
 
-    expect(
-      target.scripts,
-      <String>[injector.cleanupScriptForPolicy(threadDetailVisualPolicy)],
-    );
+    expect(target.scripts, <String>[
+      injector.cleanupScriptForPolicy(threadDetailVisualPolicy),
+    ]);
   });
 }
 

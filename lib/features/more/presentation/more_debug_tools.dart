@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_page.dart';
@@ -15,11 +16,17 @@ class MoreDebugTools {
   final List<DateTime> _aboutTapTimes = <DateTime>[];
 
   bool watchDiagnosticEnabled(WidgetRef ref) {
+    if (!kDebugMode) {
+      return false;
+    }
     return ref.watch(syncDiagnosticModeControllerProvider).asData?.value ??
         false;
   }
 
   String aboutSubtitle(WidgetRef ref) {
+    if (!kDebugMode) {
+      return '应用信息';
+    }
     final diagnosticEnabled = watchDiagnosticEnabled(ref);
     return diagnosticEnabled
         ? '已开启诊断日志模式，连续快速点击 5 次可关闭'
@@ -27,6 +34,9 @@ class MoreDebugTools {
   }
 
   Future<void> handleAboutTap(BuildContext context, WidgetRef ref) async {
+    if (!kDebugMode) {
+      return;
+    }
     final now = DateTime.now();
     _aboutTapTimes.add(now);
     _aboutTapTimes.removeWhere(
@@ -54,6 +64,9 @@ class MoreDebugTools {
   }
 
   List<Widget> buildTiles(BuildContext context, WidgetRef ref) {
+    if (!kDebugMode) {
+      return const <Widget>[];
+    }
     final diagnosticEnabled = watchDiagnosticEnabled(ref);
     final threadDiagnosticEnabled = diagnosticEnabled
         ? ref.watch(threadDetailDiagnosticControllerProvider).asData?.value ??

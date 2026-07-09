@@ -21,8 +21,6 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_driver.da
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
 import 'package:y300/features/library_shared/presentation/controllers/sync_diagnostic_mode_controller.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
-import 'package:y300/features/more/presentation/more_debug_tools_stub.dart'
-    as more_stub;
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
 
@@ -103,67 +101,6 @@ void main() {
     );
     expect(find.byKey(const Key('more-about-placeholder')), findsOneWidget);
     expect(find.textContaining('连续快速点击 5 次可开启诊断日志模式'), findsOneWidget);
-  });
-
-  testWidgets('More debug tools stub exposes no debug entries or tap toggle', (
-    tester,
-  ) async {
-    final tools = more_stub.MoreDebugTools();
-    final controller = _FakeSyncDiagnosticModeController();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          syncDiagnosticModeControllerProvider.overrideWith(() => controller),
-        ],
-        child: MaterialApp(
-          home: Consumer(
-            builder: (context, ref, _) {
-              final tiles = tools.buildTiles(context, ref);
-              return Scaffold(
-                body: Column(
-                  children: [
-                    Text(
-                      tools.aboutSubtitle(ref),
-                      key: const Key('more-debug-stub-about-subtitle'),
-                    ),
-                    Text(
-                      'debug tiles: ${tiles.length}',
-                      key: const Key('more-debug-stub-tile-count'),
-                    ),
-                    TextButton(
-                      key: const Key('more-debug-stub-about-tap'),
-                      onPressed: () => tools.handleAboutTap(context, ref),
-                      child: const Text('about'),
-                    ),
-                    ...tiles,
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
-      ),
-    );
-
-    expect(find.text('应用信息'), findsOneWidget);
-    expect(find.text('debug tiles: 0'), findsOneWidget);
-    expect(
-      find.byKey(const Key('more-composer-quill-prototype-entry')),
-      findsNothing,
-    );
-    expect(
-      find.byKey(const Key('more-html-renderer-prototype-entry')),
-      findsNothing,
-    );
-
-    final aboutTap = find.byKey(const Key('more-debug-stub-about-tap'));
-    for (var i = 0; i < 5; i++) {
-      await tester.tap(aboutTap);
-      await tester.pump();
-    }
-
-    expect(controller.toggleCount, 0);
-    expect(find.textContaining('诊断日志模式已开启'), findsNothing);
   });
 
   testWidgets('MorePage opens the HTML renderer prototype in debug builds', (

@@ -27,7 +27,6 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_driver.da
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_resource_diagnostic_recorder.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_state.dart';
-import 'package:y300/features/forum/presentation/webview/runtime/forum_webview_loading_mask.dart';
 import 'package:y300/features/posting/domain/models/posting_target.dart';
 import 'package:y300/features/posting/presentation/posting_composer_page.dart';
 import 'package:y300/features/posting/presentation/posting_composer_state.dart';
@@ -69,9 +68,6 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   int _navigationGeneration = 0;
   Timer? _delayedCleanupTimer;
   ForumWebViewBootstrapConfig? _bootstrapConfig;
-  bool _showLoadingMask = false;
-  bool _isAwaitingInitialManagedPageStable = false;
-  bool _didCompleteInitialManagedPageLateRepair = false;
 
   @override
   void dispose() {
@@ -138,17 +134,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
             overlayStyle: overlayStyle,
             popOnRootBack: popOnRootBack,
           ),
-          body: Stack(
-            fit: StackFit.expand,
-            children: [
-              _buildWebViewSurface(context: context, driver: driver),
-              if (_showLoadingMask) const ForumWebViewLoadingMask(),
-              if (state.isLoading && state.loadingProgress < 100)
-                _ForumWebViewProgressOverlay(
-                  progress: state.loadingProgress.clamp(0, 99).toDouble() / 100,
-                ),
-            ],
-          ),
+          body: _buildWebViewSurface(context: context, driver: driver),
         ),
       ),
     );
@@ -208,15 +194,8 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       return;
     }
 
-    final shouldUseMask =
-        capabilityProfile.documentStartMode !=
-            ForumWebViewDocumentStartMode.reliable &&
-        visualPolicy.useLoadingMaskUntilStable;
     setState(() {
       _bootstrapConfig = bootstrapConfig;
-      _showLoadingMask = shouldUseMask;
-      _isAwaitingInitialManagedPageStable = shouldUseMask;
-      _didCompleteInitialManagedPageLateRepair = false;
     });
 
     // API 登录/退出会通过 auth-scoped ProviderScope 重建整个 WebView 壳；
@@ -249,10 +228,6 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     }
     _delayedCleanupTimer?.cancel();
     _delayedCleanupTimer = null;
-    // 注意：这里**不**复位 _didCompleteInitialManagedPageLateRepair。
-    // 蒙版是 bootstrap 一次性使命；一旦初次 cleanChrome 跑完就关掉。
-    // 旧实现每次 pageStarted 都把它复位 → 用户在 300ms 内连续盲点
-    // (IgnorePointer 让点击穿透蒙版) 会让蒙版永远卡住。
     _navigationGeneration += 1;
     ref.read(forumWebViewControllerProvider.notifier).onPageStarted(url);
   }
@@ -272,21 +247,6 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     final pageKind = navigator.classify(uri);
     final visualPolicy = visualPolicyResolver.resolve(pageKind);
     final generation = _navigationGeneration;
-
-    // 蒙版关闭必须放在所有 await 之前。后面的 _readPageTitle / _readCanGoBack /
-    // _readThreadMenuSnapshot / controller.onPageFinished 任何一处一旦 await，
-    // 用户在此期间盲点（IgnorePointer 让 tap 穿透到 WebView）就会触发新的
-    // pageStarted → _navigationGeneration += 1 → 后续早退 (`generation !=
-    // _navigationGeneration` 命中)，于是这一轮 pageFinished 永远走不到关蒙版的
-    // 那一行。一旦连续盲点的节奏足够快，蒙版会被彻底卡死。
-    //
-    // pageFinished 触发本身就证明 WebView 已经过了 bootstrap 闪烁阶段，
-    // 这里同步关蒙版安全且必要。后续 chrome 清理 / title 抓取等异步工作
-    // 仍按原有 generation 检查节流，与蒙版生命周期解耦。
-    if (navigator.isManagedSite(uri) && _isAwaitingInitialManagedPageStable) {
-      _didCompleteInitialManagedPageLateRepair = true;
-      _tryHideInitialLoadingMask();
-    }
 
     final pageTitle = await _readPageTitle(driver);
     final canGoBack = await _readCanGoBack(driver);
@@ -324,9 +284,6 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     unawaited(_syncWebViewCookiesToDio(uri));
 
     await injector.cleanChrome(driver, visualPolicy: visualPolicy);
-
-    // 蒙版关闭已经在方法顶部同步完成；这里保留 300ms 二次清理作为 chrome
-    // 残留的兜底，但与蒙版生命周期完全解耦。
 
     _delayedCleanupTimer?.cancel();
     _delayedCleanupTimer = Timer(const Duration(milliseconds: 300), () async {
@@ -963,19 +920,6 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     return driver.buildWidget(key: const Key('forum-webview-surface'));
   }
 
-  void _tryHideInitialLoadingMask() {
-    if (!mounted || !_isAwaitingInitialManagedPageStable) {
-      return;
-    }
-    if (!_didCompleteInitialManagedPageLateRepair) {
-      return;
-    }
-    setState(() {
-      _showLoadingMask = false;
-      _isAwaitingInitialManagedPageStable = false;
-    });
-  }
-
   SystemUiOverlayStyle _resolveSystemUiOverlayStyle(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return (isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
@@ -1243,9 +1187,6 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       extraCss: _mergeCssBlocks(
         collectedPolicies.map((policy) => policy.extraCss),
       ),
-      useLoadingMaskUntilStable: collectedPolicies.any(
-        (policy) => policy.useLoadingMaskUntilStable,
-      ),
       disableHorizontalOverflow: collectedPolicies.any(
         (policy) => policy.disableHorizontalOverflow,
       ),
@@ -1411,27 +1352,6 @@ class _FavoriteForumPickerErrorView extends StatelessWidget {
               child: const Text('重试'),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ForumWebViewProgressOverlay extends StatelessWidget {
-  const _ForumWebViewProgressOverlay({required this.progress});
-
-  final double progress;
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned(
-      top: 0,
-      left: 12,
-      right: 12,
-      child: IgnorePointer(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(999),
-          child: LinearProgressIndicator(minHeight: 2, value: progress),
         ),
       ),
     );

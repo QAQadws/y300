@@ -13,9 +13,7 @@ import 'package:y300/features/auth/presentation/login_webview_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/more/presentation/appearance_settings_page.dart';
 import 'package:y300/features/more/presentation/data_storage_page.dart';
-import 'package:y300/features/more/presentation/more_debug_tools_debug.dart'
-    if (dart.vm.product) 'package:y300/features/more/presentation/more_debug_tools_stub.dart'
-    if (dart.vm.profile) 'package:y300/features/more/presentation/more_debug_tools_stub.dart';
+import 'package:y300/features/more/presentation/more_debug_tools.dart';
 
 class MorePage extends ConsumerStatefulWidget {
   const MorePage({super.key});

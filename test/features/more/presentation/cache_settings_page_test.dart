@@ -16,8 +16,6 @@ import 'package:y300/features/more/presentation/data_storage_page.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
-import 'package:y300/features/more/presentation/data_storage_debug_overview_stub.dart'
-    as overview_stub;
 import 'package:y300/features/more/presentation/data_storage_formatters.dart';
 
 void main() {
@@ -248,45 +246,6 @@ void main() {
     expect(
       find.byKey(const Key('data-storage-image-cache-category-protected')),
       findsOneWidget,
-    );
-  });
-
-  testWidgets('Data storage debug overview stub renders no overview details', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: overview_stub.buildDataStorageDebugOverview(
-            _usageReport(
-              sections: const <StorageUsageSection>[
-                StorageUsageSection(
-                  bucket: StorageBucket.imageCache,
-                  label: '图片缓存',
-                  bytes: 4096,
-                  clearable: true,
-                  categories: <StorageUsageCategory>[
-                    StorageUsageCategory(
-                      id: 'clearable',
-                      label: '可清缓存',
-                      bytes: 1024,
-                      clearable: true,
-                      protected: false,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-
-    expect(find.byKey(const Key('data-storage-usage-overview')), findsNothing);
-    expect(find.text('缓存与数据总览'), findsNothing);
-    expect(
-      find.byKey(const Key('data-storage-image-cache-category-clearable')),
-      findsNothing,
     );
   });
 

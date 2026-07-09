@@ -76,7 +76,6 @@ ForumWebViewBootstrapConfig _advancedBootstrapConfig() {
       earlyHiddenSelectors: <String>{'#header-padding'},
       lateRemovedSelectors: <String>{'#header-padding'},
       extraCss: '',
-      useLoadingMaskUntilStable: true,
       disableHorizontalOverflow: true,
     ),
     initialUserScripts: const <ForumWebViewInitialUserScript>[],

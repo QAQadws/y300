@@ -1,8 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/more/presentation/data_storage_formatters.dart';
 
 Widget buildDataStorageDebugOverview(StorageUsageReport report) {
+  if (!kDebugMode) {
+    return const SizedBox.shrink();
+  }
   return _StorageUsageOverview(report: report);
 }
 

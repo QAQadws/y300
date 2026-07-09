@@ -19,7 +19,6 @@ void main() {
   void expectSharedPolicyShape(ForumWebViewPageKind pageKind) {
     final policy = resolver.resolve(pageKind);
     expect(policy.disableHorizontalOverflow, isTrue);
-    expect(policy.useLoadingMaskUntilStable, isTrue);
     expect(policy.extraCss, isNotEmpty);
     expect(
       policy.extraCss,

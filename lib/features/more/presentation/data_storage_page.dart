@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/more/presentation/data_storage_controller.dart';
-import 'package:y300/features/more/presentation/data_storage_debug_overview_debug.dart'
-    if (dart.vm.product) 'package:y300/features/more/presentation/data_storage_debug_overview_stub.dart'
-    if (dart.vm.profile) 'package:y300/features/more/presentation/data_storage_debug_overview_stub.dart';
+import 'package:y300/features/more/presentation/data_storage_debug_actions.dart';
+import 'package:y300/features/more/presentation/data_storage_debug_overview.dart';
 import 'package:y300/features/more/presentation/data_storage_formatters.dart';
 
 class DataStoragePage extends ConsumerWidget {
@@ -28,36 +27,15 @@ class DataStoragePage extends ConsumerWidget {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      key: const Key('data-storage-reload-usage-button'),
-                      onPressed: viewState.isUpdating
-                          ? null
-                          : () => ref
-                                .read(dataStorageControllerProvider.notifier)
-                                .reloadUsage(),
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('重新统计'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      key: const Key('data-storage-export-diagnostics-button'),
-                      onPressed: viewState.isUpdating
-                          ? null
-                          : () => ref
-                                .read(dataStorageControllerProvider.notifier)
-                                .exportCacheDiagnostics(),
-                      icon: const Icon(Icons.file_download_outlined),
-                      label: const Text('缓存诊断导出'),
-                    ),
-                  ),
-                ],
+              ...buildDataStorageDebugActionWidgets(
+                enabled: !viewState.isUpdating,
+                onReloadUsage: () => ref
+                    .read(dataStorageControllerProvider.notifier)
+                    .reloadUsage(),
+                onExportDiagnostics: () => ref
+                    .read(dataStorageControllerProvider.notifier)
+                    .exportCacheDiagnostics(),
               ),
-              const Divider(height: 32),
               ListTile(
                 key: const Key('data-storage-cache-usage'),
                 contentPadding: EdgeInsets.zero,
