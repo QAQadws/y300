@@ -7,7 +7,6 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_prep
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 import 'package:y300/features/thread/presentation/services/thread_image_reader_continuous_image_adapter.dart';
-import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 
 enum ThreadHtmlImageReaderBridgeFailureReason {
   sticker,

@@ -4,9 +4,10 @@ import 'package:y300/app/theme/app_theme_tokens.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/profile/data/models/my_message_models.dart';
 import 'package:y300/features/profile/data/repositories/my_message_repository.dart';
-import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
 
 final myMessageCenterProvider = FutureProvider.autoDispose<MyMessageCenterData>(
   (ref) async {
@@ -138,8 +139,11 @@ class _NotificationList extends StatelessWidget {
             style: Theme.of(
               context,
             ).textTheme.bodyMedium?.copyWith(color: palette.body, height: 1.45),
-            child: ThreadPostHtml(
-              data: item.noteHtml,
+            child: ForumHtmlContentView(
+              html: item.noteHtml,
+              sourceId: 'my-notification-${item.id}',
+              imageCacheOwnerId: item.id,
+              contentImageKind: ForumImageKind.blogInline,
               imageHeaderBuilder: imageHeaderBuilder,
               onOpenLink: (url) => ScaffoldMessenger.of(
                 context,

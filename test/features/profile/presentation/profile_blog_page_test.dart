@@ -11,7 +11,6 @@ import 'package:y300/features/cache/presentation/widgets/cached_library_image.da
 import 'package:y300/features/profile/data/models/profile_blog_models.dart';
 import 'package:y300/features/profile/data/repositories/profile_blog_repository.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
-import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 
 void main() {
   testWidgets('ProfileBlogPage switches blog tabs and opens detail', (
@@ -66,7 +65,6 @@ void main() {
     expect(_richTextContaining('一直对着电脑屏幕'), findsOneWidget);
     expect(find.text('日志评论'), findsOneWidget);
     expect(_richTextContaining('探险的感觉'), findsOneWidget);
-    expect(find.byType(ThreadPostQuoteBlockView), findsOneWidget);
     expect(_richTextContaining('thessky: 引用正文'), findsOneWidget);
     expect(
       find.byWidgetPredicate(

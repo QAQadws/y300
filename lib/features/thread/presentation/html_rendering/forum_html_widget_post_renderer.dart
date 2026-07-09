@@ -29,6 +29,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     this.imageRequestResolver,
     this.imageDimensionIndex,
     this.preparedDocument,
+    this.contentImageKind = ForumImageKind.threadInline,
   });
 
   static final Uri forumBaseUri = Uri.parse('https://bbs.yamibo.com/');
@@ -43,6 +44,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   final ForumImageRequestResolver? imageRequestResolver;
   final ForumImageDimensionIndex? imageDimensionIndex;
   final ForumHtmlPreparedRenderDocument? preparedDocument;
+  final ForumImageKind contentImageKind;
   static const _imageDeduplicator = ForumHtmlImageDeduplicator();
 
   @override
@@ -87,9 +89,11 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       imageHeaderBuilder: imageHeaderBuilder,
       imageCacheOwnerId: imageCacheOwnerId,
       onTapImageRequest: callbacks.onTapImage,
+      onImageLayoutShift: callbacks.onImageLayoutShift,
       readableImageKeyPrefix: sourceId == null
           ? null
           : 'thread-post-html-first-readable-image-$sourceId',
+      contentImageKind: contentImageKind,
       imageRequestResolver: imageRequestResolver,
       imageDimensionIndex: imageDimensionIndex,
     );
@@ -129,6 +133,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           imageCacheOwnerId: imageCacheOwnerId,
           imageRequestResolver: imageRequestResolver,
           imageDimensionIndex: imageDimensionIndex,
+          contentImageKind: contentImageKind,
           preparedDocument: preparedDocument?.copyWith(preparedHtml: html),
         );
       },

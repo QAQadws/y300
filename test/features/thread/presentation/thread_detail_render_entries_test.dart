@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_html_first_render_mode.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
@@ -45,10 +44,9 @@ void main() {
       expect(parser.parseCount, 1);
     });
 
-    test('builds segment entries for long text posts', () {
+    test('keeps long text posts as one production body entry', () {
       final parser = _CountingThreadPostBodyParser();
       final planner = ThreadDetailRenderEntryPlanner(
-        renderMode: ThreadDetailHtmlFirstRenderMode.legacy,
         bodyRenderPlanner: ThreadPostBodyRenderPlanner(
           parser: parser,
           maxSegmentTextLength: 6,
@@ -69,25 +67,19 @@ void main() {
         ],
       );
 
-      final bodyEntries = entries
-          .where(
-            (entry) =>
-                entry.kind == ThreadDetailRenderEntryKind.postBodySegment,
-          )
-          .toList();
-
-      expect(bodyEntries.map((entry) => entry.key), <String>[
-        'thread-post-body-p-long-0',
-        'thread-post-body-p-long-1',
-        'thread-post-body-p-long-2',
+      expect(entries.map((entry) => entry.kind), <ThreadDetailRenderEntryKind>[
+        ThreadDetailRenderEntryKind.postHeader,
+        ThreadDetailRenderEntryKind.postBody,
+        ThreadDetailRenderEntryKind.postFooter,
+        ThreadDetailRenderEntryKind.pagination,
       ]);
-      expect(bodyEntries.first.plan!.usesListSegments, isTrue);
+      expect(entries[1].key, 'thread-post-body-p-long');
+      expect(entries[1].requirePlan().usesListSegments, isTrue);
       expect(parser.parseCount, 1);
     });
 
-    test('keeps long posts as a single body entry in HTML-first mode', () {
+    test('keeps legacy render mode argument from re-enabling old segments', () {
       final planner = ThreadDetailRenderEntryPlanner(
-        renderMode: ThreadDetailHtmlFirstRenderMode.htmlFirst,
         bodyRenderPlanner: const ThreadPostBodyRenderPlanner(
           maxSegmentTextLength: 6,
         ),
@@ -107,12 +99,6 @@ void main() {
         ],
       );
 
-      expect(
-        entries.where(
-          (entry) => entry.kind == ThreadDetailRenderEntryKind.postBodySegment,
-        ),
-        isEmpty,
-      );
       expect(entries.map((entry) => entry.kind), <ThreadDetailRenderEntryKind>[
         ThreadDetailRenderEntryKind.postHeader,
         ThreadDetailRenderEntryKind.postBody,
@@ -122,10 +108,8 @@ void main() {
       expect(entries[1].requirePlan().usesListSegments, isTrue);
     });
 
-    test('builds segment entries for image bodies', () {
-      final planner = ThreadDetailRenderEntryPlanner(
-        renderMode: ThreadDetailHtmlFirstRenderMode.legacy,
-      );
+    test('keeps image bodies as one production body entry', () {
+      final planner = ThreadDetailRenderEntryPlanner();
 
       final entries = planner.buildEntries(
         posts: <ThreadPost>[
@@ -146,21 +130,15 @@ void main() {
         targetPid: 'p2',
       );
 
-      final bodyEntries = entries
-          .where(
-            (entry) =>
-                entry.kind == ThreadDetailRenderEntryKind.postBodySegment,
-          )
-          .toList();
-
-      expect(bodyEntries, hasLength(4));
-      expect(bodyEntries.map((entry) => entry.key), <String>[
-        'thread-post-body-p2-0',
-        'thread-post-body-p2-1',
-        'thread-post-body-p2-2',
-        'thread-post-body-p2-3',
+      expect(entries.map((entry) => entry.kind), <ThreadDetailRenderEntryKind>[
+        ThreadDetailRenderEntryKind.postHeader,
+        ThreadDetailRenderEntryKind.postBody,
+        ThreadDetailRenderEntryKind.postFooter,
+        ThreadDetailRenderEntryKind.pagination,
+        ThreadDetailRenderEntryKind.targetSpacer,
       ]);
-      expect(bodyEntries.first.plan!.usesListSegments, isTrue);
+      expect(entries[1].key, 'thread-post-body-p2');
+      expect(entries[1].requirePlan().usesListSegments, isTrue);
       expect(entries.last.kind, ThreadDetailRenderEntryKind.targetSpacer);
     });
 

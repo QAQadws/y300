@@ -16,18 +16,18 @@ class ThreadDetailRenderEntryPlanner {
         const ThreadPostBodyRenderPlanner(),
     ThreadPostBodyRenderSettings renderSettings =
         ThreadPostBodyRenderSettings.defaults,
+    // Kept temporarily so older tests and callers compile while the production
+    // path is permanently HTML-first.
     ThreadDetailHtmlFirstRenderMode renderMode =
         ThreadDetailHtmlFirstRenderMode.htmlFirst,
     ThreadDetailDiagnosticRecorder diagnosticRecorder =
         const NoopThreadDetailDiagnosticRecorder(),
   }) : _bodyRenderPlanner = bodyRenderPlanner,
        _renderSettings = renderSettings,
-       _renderMode = renderMode,
        _diagnosticRecorder = diagnosticRecorder;
 
   final ThreadPostBodyRenderPlanner _bodyRenderPlanner;
   final ThreadPostBodyRenderSettings _renderSettings;
-  final ThreadDetailHtmlFirstRenderMode _renderMode;
   final ThreadDetailDiagnosticRecorder _diagnosticRecorder;
   final Map<ThreadDetailPostBodyRenderPlanCacheKey, ThreadPostBodyRenderPlan>
   _bodyRenderPlanCache =
@@ -48,28 +48,14 @@ class ThreadDetailRenderEntryPlanner {
         ),
       );
       final plan = planFor(post);
-      if (!_renderMode.isHtmlFirst && plan.usesListSegments) {
-        for (final segment in plan.segments) {
-          entries.add(
-            ThreadDetailRenderEntry.postBodySegment(
-              key: 'thread-post-body-${post.pid}-${segment.index}',
-              post: post,
-              postIndex: index,
-              plan: plan,
-              segment: segment,
-            ),
-          );
-        }
-      } else {
-        entries.add(
-          ThreadDetailRenderEntry.postBody(
-            key: 'thread-post-body-${post.pid}',
-            post: post,
-            postIndex: index,
-            resolvePlan: () => planFor(post),
-          ),
-        );
-      }
+      entries.add(
+        ThreadDetailRenderEntry.postBody(
+          key: 'thread-post-body-${post.pid}',
+          post: post,
+          postIndex: index,
+          resolvePlan: () => plan,
+        ),
+      );
       entries.add(
         ThreadDetailRenderEntry.postFooter(
           key: 'thread-post-footer-${post.pid}',
@@ -143,7 +129,6 @@ class ThreadDetailRenderEntryPlanner {
 enum ThreadDetailRenderEntryKind {
   postHeader,
   postBody,
-  postBodySegment,
   postFooter,
   pagination,
   targetSpacer,
@@ -156,7 +141,6 @@ class ThreadDetailRenderEntry {
     this.post,
     required this.postIndex,
     this.plan,
-    this.segment,
     this.resolvePlan,
   });
 
@@ -182,21 +166,6 @@ class ThreadDetailRenderEntry {
          post: post,
          postIndex: postIndex,
          resolvePlan: resolvePlan,
-       );
-
-  ThreadDetailRenderEntry.postBodySegment({
-    required String key,
-    required ThreadPost post,
-    required int postIndex,
-    required ThreadPostBodyRenderPlan plan,
-    required ThreadPostBodySegment segment,
-  }) : this._(
-         kind: ThreadDetailRenderEntryKind.postBodySegment,
-         key: key,
-         post: post,
-         postIndex: postIndex,
-         plan: plan,
-         segment: segment,
        );
 
   ThreadDetailRenderEntry.postFooter({
@@ -229,7 +198,6 @@ class ThreadDetailRenderEntry {
   final ThreadPost? post;
   final int postIndex;
   final ThreadPostBodyRenderPlan? plan;
-  final ThreadPostBodySegment? segment;
   final ThreadPostBodyRenderPlan Function()? resolvePlan;
 
   ThreadPostBodyRenderPlan requirePlan() {

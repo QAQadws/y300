@@ -713,6 +713,7 @@ void main() {
   testWidgets('promotes fallback thread image layout after decoded size', (
     tester,
   ) async {
+    final shifts = <ForumHtmlImageLayoutShift>[];
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -720,12 +721,15 @@ void main() {
             _RecordingImageCacheService(),
           ),
         ],
-        child: const MaterialApp(
+        child: MaterialApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
               sourceId: 'decoded-size-image',
               threadId: '573279',
               html: '<img src="data/attachment/forum/page-decoded.jpg">',
+              callbacks: ForumHtmlRenderCallbacks(
+                onImageLayoutShift: shifts.add,
+              ),
             ),
           ),
         ),
@@ -753,6 +757,10 @@ void main() {
     await tester.pump();
 
     expect(currentAspectRatio().aspectRatio, 1600 / 900);
+    expect(shifts, hasLength(1));
+    expect(shifts.single.oldAspectRatio, 0.7);
+    expect(shifts.single.newAspectRatio, 1600 / 900);
+    expect(shifts.single.deltaHeight, lessThan(0));
   });
 
   testWidgets('keeps fallback layout for decoded sizes near the comic ratio', (

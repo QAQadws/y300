@@ -12,7 +12,7 @@ import 'package:y300/features/profile/data/models/user_profile_models.dart';
 import 'package:y300/features/profile/data/repositories/user_profile_repository.dart';
 import 'package:y300/features/profile/presentation/my_message_center_page.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
-import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 
@@ -523,8 +523,12 @@ class _SignatureSection extends StatelessWidget {
         style: Theme.of(
           context,
         ).textTheme.bodyMedium?.copyWith(color: palette.body, height: 1.45),
-        child: ThreadPostHtml(
-          data: profile.signatureHtml ?? '',
+        child: ForumHtmlContentView(
+          html: profile.signatureHtml ?? '',
+          sourceId: 'user-profile-signature-${profile.uid}',
+          imageCacheOwnerId: profile.uid.trim().isEmpty
+              ? profile.username
+              : profile.uid,
           imageHeaderBuilder: imageHeaderBuilder,
           onOpenLink: (url) => ScaffoldMessenger.of(
             context,

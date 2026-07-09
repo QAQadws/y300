@@ -58,18 +58,17 @@ import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_html_first_render_mode.dart';
+import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/services/thread_detail_diagnostic_recorder.dart';
 import 'package:y300/features/thread/domain/services/thread_favorite_action_service.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_html_first_render_mode_controller.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
-import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_comparison_page.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
-import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
@@ -473,7 +472,6 @@ void main() {
       expect(find.byKey(const Key('thread-post-body-p1')), findsOneWidget);
       expect(find.byType(ThreadPostHtmlBody), findsOneWidget);
       expect(find.byType(ThreadPostHtmlFirstBody), findsOneWidget);
-      expect(find.byType(ThreadPostBodyView), findsNothing);
       expect(_richTextContaining('默认旧正文'), findsOneWidget);
     });
 
@@ -2547,80 +2545,49 @@ void main() {
       expect(commentRepository.loadedUrl, isNull);
     });
 
-    testWidgets(
-      'opens HTML-first comparison page from diagnostic post actions',
-      (tester) async {
-        final repository = _FakeThreadRepository((tid, page) async {
-          return ApiSuccess(
-            _threadDetailData(
-              tid: tid,
-              posts: [
-                ThreadPost(
-                  pid: 'p1',
-                  author: 'alice',
-                  authorId: '1',
-                  message: '<p>对照正文</p>',
-                  number: 1,
-                  isFirst: true,
-                  dateline: 'today',
-                ),
-              ],
-            ),
-          );
-        });
-
-        await tester.pumpWidget(
-          _buildTestApp(repository, diagnosticModeEnabled: true),
-        );
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 120));
-
-        await _longPressVisibleTop(
-          tester,
-          find.byKey(const Key('thread-post-body-p1')),
-        );
-        await tester.pumpAndSettle();
-
-        expect(
-          find.byKey(const Key('thread-post-html-first-compare-action')),
-          findsOneWidget,
-        );
-        await tester.tap(
-          find.byKey(const Key('thread-post-html-first-compare-action')),
-        );
-        await tester.pumpAndSettle();
-
-        expect(find.byType(ThreadPostHtmlFirstComparisonPage), findsOneWidget);
-        expect(
-          find.byKey(const Key('thread-post-html-first-comparison-page')),
-          findsOneWidget,
-        );
-        await tester.tap(find.text('调试信息'));
-        await tester.pumpAndSettle();
-
-        expect(
-          find.byKey(const Key('thread-post-html-first-debug-summary')),
-          findsOneWidget,
-        );
-        expect(
-          find.byKey(
-            const Key('thread-post-html-first-image-diagnostics-summary'),
+    testWidgets('diagnostic post actions do not expose HTML-first comparison', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          _threadDetailData(
+            tid: tid,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>对照正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
           ),
-          findsOneWidget,
         );
-        expect(
-          find.byKey(const Key('thread-post-html-first-image-sequence-diff')),
-          findsOneWidget,
-        );
-        expect(
-          find.byKey(
-            const Key('thread-post-html-first-image-failure-breakdown'),
-          ),
-          findsOneWidget,
-        );
-        expect(find.text('HTML 长度'), findsOneWidget);
-      },
-    );
+      });
+
+      await tester.pumpWidget(
+        _buildTestApp(repository, diagnosticModeEnabled: true),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      await _longPressVisibleTop(
+        tester,
+        find.byKey(const Key('thread-post-body-p1')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('thread-post-html-first-compare-action')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('thread-post-select-copy-action')),
+        findsOneWidget,
+      );
+    });
 
     testWidgets('hides local shelf entry for comic candidate post', (
       tester,

@@ -5,7 +5,6 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_quil
 import 'package:y300/features/library_shared/presentation/controllers/sync_diagnostic_mode_controller.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
-import 'package:y300/features/thread/presentation/thread_detail_html_first_render_mode_controller.dart';
 
 class MoreDebugTools {
   MoreDebugTools();
@@ -60,14 +59,6 @@ class MoreDebugTools {
         ? ref.watch(threadDetailDiagnosticControllerProvider).asData?.value ??
               false
         : false;
-    final htmlFirstRenderMode = diagnosticEnabled
-        ? ref
-              .watch(threadDetailHtmlFirstRenderModeControllerProvider)
-              .asData
-              ?.value
-        : null;
-    final htmlFirstRendererEnabled = htmlFirstRenderMode?.isHtmlFirst ?? false;
-
     return <Widget>[
       ListTile(
         key: const Key('more-composer-quill-prototype-entry'),
@@ -104,15 +95,6 @@ class MoreDebugTools {
           value: threadDiagnosticEnabled,
           onChanged: (value) =>
               _setThreadDetailDiagnosticEnabled(context, ref, value),
-        ),
-        SwitchListTile(
-          key: const Key('thread-detail-html-first-renderer-switch'),
-          secondary: const Icon(Icons.article_outlined),
-          title: const Text('HTML-first 对照入口'),
-          subtitle: const Text('正文已默认使用 HTML-first；此开关仅显示旧渲染对照入口'),
-          value: htmlFirstRendererEnabled,
-          onChanged: (value) =>
-              _setThreadDetailHtmlFirstRendererEnabled(context, ref, value),
         ),
         ListTile(
           key: const Key('more-thread-detail-diagnostic-copy-entry'),
@@ -160,24 +142,5 @@ class MoreDebugTools {
         content: Text(text.trim().isEmpty ? '暂无帖子详情诊断日志' : '帖子详情诊断日志已复制'),
       ),
     );
-  }
-
-  Future<void> _setThreadDetailHtmlFirstRendererEnabled(
-    BuildContext context,
-    WidgetRef ref,
-    bool enabled,
-  ) async {
-    try {
-      await ref
-          .read(threadDetailHtmlFirstRenderModeControllerProvider.notifier)
-          .setHtmlFirstEnabled(enabled);
-    } catch (error) {
-      if (!context.mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('HTML-first 对照设置失败：$error')));
-    }
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
@@ -9,7 +10,6 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_read
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_html_image_reader_bridge.dart';
-import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 
 typedef ThreadPostHtmlFirstImageFallback =
     void Function(ThreadPost post, ForumHtmlImageRequest request);
@@ -32,6 +32,7 @@ class ThreadPostHtmlFirstBody extends ConsumerWidget {
     required this.onOpenPostImage,
     this.onImageFallback,
     this.onImageDiagnostics,
+    this.onImageLayoutShift,
     this.fallback,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
     this.imageReaderBridge = const ThreadHtmlImageReaderBridge(),
@@ -47,6 +48,7 @@ class ThreadPostHtmlFirstBody extends ConsumerWidget {
   onOpenPostImage;
   final ThreadPostHtmlFirstImageFallback? onImageFallback;
   final ThreadPostHtmlFirstImageDiagnostics? onImageDiagnostics;
+  final void Function(ForumHtmlImageLayoutShift shift)? onImageLayoutShift;
   final Widget? fallback;
   final ForumHtmlRenderPreparer renderPreparer;
   final ThreadHtmlImageReaderBridge imageReaderBridge;
@@ -86,6 +88,7 @@ class ThreadPostHtmlFirstBody extends ConsumerWidget {
             },
             onTapImage: (request) =>
                 _handleTapImage(request, preparedDocument.sequence),
+            onImageLayoutShift: onImageLayoutShift,
           ),
         ),
       );
@@ -141,6 +144,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
     required this.onOpenPostImage,
     this.onImageFallback,
     this.onImageDiagnostics,
+    this.onImageLayoutShift,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
     this.imageReaderBridge = const ThreadHtmlImageReaderBridge(),
   });
@@ -155,6 +159,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
   onOpenPostImage;
   final ThreadPostHtmlFirstImageFallback? onImageFallback;
   final ThreadPostHtmlFirstImageDiagnostics? onImageDiagnostics;
+  final void Function(ForumHtmlImageLayoutShift shift)? onImageLayoutShift;
   final ForumHtmlRenderPreparer renderPreparer;
   final ThreadHtmlImageReaderBridge imageReaderBridge;
 
@@ -170,6 +175,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
       onOpenPostImage: onOpenPostImage,
       onImageFallback: onImageFallback,
       onImageDiagnostics: onImageDiagnostics,
+      onImageLayoutShift: onImageLayoutShift,
       renderPreparer: renderPreparer,
       imageReaderBridge: imageReaderBridge,
     );

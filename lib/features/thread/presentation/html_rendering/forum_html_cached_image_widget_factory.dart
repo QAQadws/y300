@@ -24,7 +24,9 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
     this.imageCacheOwnerId,
     this.onImageResolved,
     this.onTapImageRequest,
+    this.onImageLayoutShift,
     this.readableImageKeyPrefix,
+    this.contentImageKind = ForumImageKind.threadInline,
     ForumImageRequestResolver? imageRequestResolver,
     this.imageDimensionIndex,
     ForumImageLayoutHintResolver? layoutHintResolver,
@@ -38,7 +40,9 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
   final String? imageCacheOwnerId;
   final ValueChanged<Size>? onImageResolved;
   final void Function(ForumHtmlImageRequest request)? onTapImageRequest;
+  final void Function(ForumHtmlImageLayoutShift shift)? onImageLayoutShift;
   final String? readableImageKeyPrefix;
+  final ForumImageKind contentImageKind;
   final ForumImageRequestResolver imageRequestResolver;
   final ForumImageDimensionIndex? imageDimensionIndex;
   final ForumImageLayoutHintResolver layoutHintResolver;
@@ -66,9 +70,7 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
     final imageIndex = isSticker ? null : readableIndex ?? _nextImageIndex++;
     final explicitSize = _explicitSize(src);
     final spec = ForumImageLoadSpec(
-      kind: isSticker
-          ? ForumImageKind.remoteSmiley
-          : ForumImageKind.threadInline,
+      kind: isSticker ? ForumImageKind.remoteSmiley : contentImageKind,
       url: uri,
       ownerId: isSticker ? null : _cacheOwnerId(),
       imageIndex: imageIndex,
@@ -105,6 +107,7 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
         request: request,
         imageHeaderBuilder: imageHeaderBuilder,
         onImageResolved: onImageResolved,
+        onImageLayoutShift: onImageLayoutShift,
         initialHint: layoutHintResolver.resolve(spec: spec),
         dimensionIndex: imageDimensionIndex,
         layoutHintResolver: layoutHintResolver,
@@ -234,6 +237,7 @@ class _ForumHtmlCachedBlockImageView extends ConsumerStatefulWidget {
     required this.request,
     required this.imageHeaderBuilder,
     required this.onImageResolved,
+    required this.onImageLayoutShift,
     required this.initialHint,
     required this.dimensionIndex,
     required this.layoutHintResolver,
@@ -243,6 +247,7 @@ class _ForumHtmlCachedBlockImageView extends ConsumerStatefulWidget {
   final ImageCacheRequest request;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<Size>? onImageResolved;
+  final void Function(ForumHtmlImageLayoutShift shift)? onImageLayoutShift;
   final ForumImageLayoutHint initialHint;
   final ForumImageDimensionIndex? dimensionIndex;
   final ForumImageLayoutHintResolver layoutHintResolver;
@@ -331,6 +336,13 @@ class _ForumHtmlCachedBlockImageViewState
     if (relativeDelta < _decodedAspectRatioPromotionThreshold) {
       return;
     }
+    final shift = _layoutShiftFromDecodedAspectRatio(
+      decodedAspectRatio: decodedAspectRatio,
+      currentAspectRatio: currentAspectRatio,
+    );
+    if (shift != null) {
+      widget.onImageLayoutShift?.call(shift);
+    }
     setState(() {
       _cachedHint = ForumImageLayoutHint(
         layoutMode: ForumImageLayoutMode.blockWithKnownAspectRatio,
@@ -338,6 +350,37 @@ class _ForumHtmlCachedBlockImageViewState
         aspectRatio: decodedAspectRatio,
       );
     });
+  }
+
+  ForumHtmlImageLayoutShift? _layoutShiftFromDecodedAspectRatio({
+    required double decodedAspectRatio,
+    required double currentAspectRatio,
+  }) {
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) {
+      return null;
+    }
+    final oldSize = renderObject.size;
+    if (!oldSize.width.isFinite ||
+        !oldSize.height.isFinite ||
+        oldSize.width <= 0 ||
+        oldSize.height <= 0) {
+      return null;
+    }
+    final newHeight = oldSize.width / decodedAspectRatio;
+    if (!newHeight.isFinite || newHeight <= 0) {
+      return null;
+    }
+    final oldTopLeft = renderObject.localToGlobal(Offset.zero);
+    return ForumHtmlImageLayoutShift(
+      sourceUrl: widget.spec.sourceUrl,
+      cacheKey: widget.request.cacheKey,
+      oldGlobalRect: oldTopLeft & oldSize,
+      oldSize: oldSize,
+      newSize: Size(oldSize.width, newHeight),
+      oldAspectRatio: currentAspectRatio,
+      newAspectRatio: decodedAspectRatio,
+    );
   }
 
   Future<void> _loadCachedDimensions() async {

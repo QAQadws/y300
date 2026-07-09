@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
-import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
@@ -23,7 +22,6 @@ import 'package:y300/features/thread/presentation/services/thread_post_image_dim
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
-import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
@@ -100,6 +98,8 @@ class ThreadDetailContent extends StatefulWidget {
 
 class _ThreadDetailContentState extends State<ThreadDetailContent> {
   late ThreadDetailRenderEntryPlanner _entryPlanner;
+  final GlobalKey _viewportKey = GlobalKey(debugLabel: 'thread-detail-list');
+  late ThreadDetailScrollStabilizer _scrollStabilizer;
   ThreadHtmlImagePreloadCoordinator? _htmlImagePreloadCoordinator;
   String? _htmlImagePreloadSignature;
 
@@ -107,6 +107,10 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   void initState() {
     super.initState();
     _entryPlanner = _createEntryPlanner();
+    _scrollStabilizer = ThreadDetailScrollStabilizer(
+      scrollController: widget.scrollController,
+      viewportKey: _viewportKey,
+    );
     widget.imageDimensionStore?.addListener(_onImageDimensionsChanged);
   }
 
@@ -121,6 +125,13 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         !identical(oldWidget.imageDimensionStore, widget.imageDimensionStore) ||
         oldWidget.htmlFirstRenderMode != widget.htmlFirstRenderMode) {
       _entryPlanner = _createEntryPlanner();
+    }
+    if (!identical(oldWidget.scrollController, widget.scrollController)) {
+      _scrollStabilizer.dispose();
+      _scrollStabilizer = ThreadDetailScrollStabilizer(
+        scrollController: widget.scrollController,
+        viewportKey: _viewportKey,
+      );
     }
     if (!identical(
           oldWidget.htmlImagePrecacheService,
@@ -140,6 +151,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   void dispose() {
     widget.imageDimensionStore?.removeListener(_onImageDimensionsChanged);
     _htmlImagePreloadCoordinator?.dispose();
+    _scrollStabilizer.dispose();
     super.dispose();
   }
 
@@ -152,7 +164,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   ThreadDetailRenderEntryPlanner _createEntryPlanner() {
     return ThreadDetailRenderEntryPlanner(
       diagnosticRecorder: widget.diagnosticRecorder,
-      renderMode: widget.htmlFirstRenderMode,
       bodyRenderPlanner: ThreadPostBodyRenderPlanner(
         resourceLayoutHintResolver: ThreadPostResourceLayoutHintResolver(
           lockTrustedDimensions: true,
@@ -176,17 +187,20 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       targetPid: widget.targetPid,
     );
     _scheduleHtmlImageFirstWindowPreload(context);
-    return ListView.builder(
-      key: const Key('thread-detail-list'),
-      controller: widget.scrollController,
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
-      scrollCacheExtent: const ScrollCacheExtent.pixels(900),
-      itemCount: entries.length,
-      itemBuilder: (context, index) {
-        final entry = entries[index];
-        _recordEntryBuild(entry);
-        return _buildEntry(context, entry, palette);
-      },
+    return SizedBox.expand(
+      key: _viewportKey,
+      child: ListView.builder(
+        key: const Key('thread-detail-list'),
+        controller: widget.scrollController,
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+        scrollCacheExtent: const ScrollCacheExtent.pixels(900),
+        itemCount: entries.length,
+        itemBuilder: (context, index) {
+          final entry = entries[index];
+          _recordEntryBuild(entry);
+          return _buildEntry(context, entry, palette);
+        },
+      ),
     );
   }
 
@@ -211,9 +225,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
 
   void _handlePostBuilt(int index) {
     widget.onPostBuilt?.call(index);
-    if (!widget.htmlFirstRenderMode.isHtmlFirst) {
-      return;
-    }
     final coordinator = _htmlImageCoordinator();
     if (coordinator == null || widget.state.posts.isEmpty) {
       return;
@@ -231,7 +242,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   }
 
   void _scheduleHtmlImageFirstWindowPreload(BuildContext context) {
-    if (!widget.htmlFirstRenderMode.isHtmlFirst || widget.state.posts.isEmpty) {
+    if (widget.state.posts.isEmpty) {
       return;
     }
     final coordinator = _htmlImageCoordinator();
@@ -316,31 +327,9 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           onOpenPostLink: widget.onOpenPostLink,
           onOpenPostImages: widget.onOpenPostImages,
           onHtmlFirstImageFallback: _copyHtmlFirstImageUrl,
+          onHtmlFirstImageLayoutShift: _scrollStabilizer.handleLayoutShift,
           onOpenPostActions: widget.onOpenPostActions,
         );
-      case ThreadDetailRenderEntryKind.postBodySegment:
-        final segmentEntry = _ThreadPostCardBodySegmentEntry(
-          key: Key(entry.key),
-          post: entry.post!,
-          threadId: widget.state.tid,
-          plan: entry.plan!,
-          segment: entry.segment!,
-          highlighted: entry.post!.pid == widget.highlightPostPid,
-          imageHeaderBuilder: widget.imageHeaderBuilder,
-          imageOpenContext: _imageOpenContext(entry.post!),
-          palette: palette,
-          onOpenPostLink: widget.onOpenPostLink,
-          onOpenPostImages: widget.onOpenPostImages,
-          onOpenPostActions: widget.onOpenPostActions,
-          diagnosticRecorder: widget.diagnosticRecorder,
-        );
-        if (entry.segment!.index == 0) {
-          return KeyedSubtree(
-            key: Key('thread-post-body-${entry.post!.pid}'),
-            child: segmentEntry,
-          );
-        }
-        return segmentEntry;
       case ThreadDetailRenderEntryKind.postFooter:
         final plan = _entryPlanner.planFor(entry.post!);
         return _ThreadPostCardFooterEntry(
@@ -381,23 +370,73 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
     }
   }
 
-  ThreadImageOpenContext _imageOpenContext(ThreadPost post) {
-    return ThreadImageOpenContext(
-      tid: widget.state.tid,
-      pid: post.pid,
-      postNumber: post.number,
-      referer: widget.imageReferer,
-      cacheKeyForImage: (image) {
-        return ForumImageCacheRequests.threadInline(
-          tid: widget.state.tid,
-          url: image.url,
-          imageIndex: image.index,
-        ).cacheKey;
-      },
-    );
-  }
-
   void _copyHtmlFirstImageUrl(ThreadPost post, ForumHtmlImageRequest request) {
     widget.onCopyActionUrl('${post.number}# 图片', request.url);
+  }
+}
+
+class ThreadDetailScrollStabilizer {
+  ThreadDetailScrollStabilizer({
+    required this.scrollController,
+    required this.viewportKey,
+  });
+
+  final ScrollController? scrollController;
+  final GlobalKey viewportKey;
+  double _pendingDelta = 0;
+  bool _scheduled = false;
+  bool _disposed = false;
+
+  @visibleForTesting
+  double get debugPendingDelta => _pendingDelta;
+
+  void handleLayoutShift(ForumHtmlImageLayoutShift shift) {
+    if (_disposed || shift.deltaHeight.abs() < 0.5) {
+      return;
+    }
+    final controller = scrollController;
+    if (controller == null || !controller.hasClients) {
+      return;
+    }
+    final viewportContext = viewportKey.currentContext;
+    final viewportRenderObject = viewportContext?.findRenderObject();
+    if (viewportRenderObject is! RenderBox || !viewportRenderObject.hasSize) {
+      return;
+    }
+    final viewportTop = viewportRenderObject.localToGlobal(Offset.zero).dy;
+    if (shift.oldGlobalRect.bottom > viewportTop + 0.5) {
+      return;
+    }
+    _pendingDelta += shift.deltaHeight;
+    if (_scheduled) {
+      return;
+    }
+    _scheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scheduled = false;
+      final delta = _pendingDelta;
+      _pendingDelta = 0;
+      if (_disposed || delta.abs() < 0.5) {
+        return;
+      }
+      final controller = scrollController;
+      if (controller == null || !controller.hasClients) {
+        return;
+      }
+      final position = controller.position;
+      final target = (position.pixels + delta)
+          .clamp(position.minScrollExtent, position.maxScrollExtent)
+          .toDouble();
+      if ((target - position.pixels).abs() < 0.5) {
+        return;
+      }
+      controller.jumpTo(target);
+    });
+    WidgetsBinding.instance.scheduleFrame();
+  }
+
+  void dispose() {
+    _disposed = true;
+    _pendingDelta = 0;
   }
 }

@@ -79,3 +79,22 @@ class ThreadImageOpenContext {
   final String referer;
   final String Function(ThreadPostImageBlock image) cacheKeyForImage;
 }
+
+class ThreadPostImageOpenRequest {
+  const ThreadPostImageOpenRequest({
+    required this.document,
+    required this.images,
+    required this.image,
+    required this.initialIndex,
+    this.readerRequest,
+  });
+
+  final ThreadPostBodyDocument document;
+  final List<ThreadPostImageBlock> images;
+  final ThreadPostImageBlock image;
+  final int initialIndex;
+  final ThreadImageOpenRequest? readerRequest;
+
+  List<String> get imageUrls =>
+      images.map((image) => image.url).toList(growable: false);
+}

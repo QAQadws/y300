@@ -4,12 +4,11 @@ import 'package:y300/app/theme/app_theme_tokens.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/profile/data/models/profile_blog_models.dart';
 import 'package:y300/features/profile/data/repositories/profile_blog_repository.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
-import 'package:y300/features/thread/presentation/widgets/thread_post_html.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 
 @immutable
@@ -631,12 +630,12 @@ class _BlogDetailCard extends StatelessWidget {
             style: Theme.of(
               context,
             ).textTheme.bodyMedium?.copyWith(color: palette.body, height: 1.55),
-            child: ThreadPostHtml(
-              data: data.messageHtml,
+            child: ForumHtmlContentView(
+              html: data.messageHtml,
+              sourceId: 'profile-blog-${data.id}',
               imageHeaderBuilder: imageHeaderBuilder,
               imageCacheOwnerId: data.id,
-              blockImageCacheRequestBuilder: (image) =>
-                  _blogInlineImageRequest(data.id, image),
+              contentImageKind: ForumImageKind.blogInline,
               onOpenLink: (url) => ScaffoldMessenger.of(
                 context,
               ).showSnackBar(SnackBar(content: Text(url))),
@@ -706,12 +705,12 @@ class _CommentCard extends StatelessWidget {
             style: Theme.of(
               context,
             ).textTheme.bodyMedium?.copyWith(color: palette.body, height: 1.45),
-            child: ThreadPostHtml(
-              data: comment.messageHtml,
+            child: ForumHtmlContentView(
+              html: comment.messageHtml,
+              sourceId: 'profile-blog-comment-${comment.id}',
               imageHeaderBuilder: imageHeaderBuilder,
               imageCacheOwnerId: comment.id,
-              blockImageCacheRequestBuilder: (image) =>
-                  _blogInlineImageRequest(comment.id, image),
+              contentImageKind: ForumImageKind.blogInline,
               onOpenLink: (url) => ScaffoldMessenger.of(
                 context,
               ).showSnackBar(SnackBar(content: Text(url))),
@@ -890,16 +889,5 @@ BoxDecoration _cardDecoration(_ProfileBlogPalette palette) {
         offset: const Offset(0, 3),
       ),
     ],
-  );
-}
-
-ImageCacheRequest _blogInlineImageRequest(
-  String blogId,
-  ThreadPostImageBlock image,
-) {
-  return ForumImageCacheRequests.blogInline(
-    blogId: blogId,
-    url: image.url,
-    imageIndex: image.index,
   );
 }

@@ -98,6 +98,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
     required this.onOpenPostLink,
     required this.onOpenPostImages,
     required this.onHtmlFirstImageFallback,
+    required this.onHtmlFirstImageLayoutShift,
     required this.onOpenPostActions,
   });
 
@@ -112,6 +113,8 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
   onOpenPostImages;
   final ThreadPostHtmlFirstImageFallback onHtmlFirstImageFallback;
+  final void Function(ForumHtmlImageLayoutShift shift)
+  onHtmlFirstImageLayoutShift;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
   onOpenPostActions;
 
@@ -143,91 +146,11 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
                 ? null
                 : (post, request) => onOpenPostImages!.call(post, request),
             onImageFallback: onHtmlFirstImageFallback,
+            onImageLayoutShift: onHtmlFirstImageLayoutShift,
           ),
         ),
       ),
     );
-  }
-}
-
-class _ThreadPostCardBodySegmentEntry extends StatelessWidget {
-  const _ThreadPostCardBodySegmentEntry({
-    super.key,
-    required this.post,
-    required this.threadId,
-    required this.plan,
-    required this.segment,
-    required this.highlighted,
-    required this.imageHeaderBuilder,
-    required this.imageOpenContext,
-    required this.palette,
-    required this.onOpenPostLink,
-    required this.onOpenPostImages,
-    required this.onOpenPostActions,
-    required this.diagnosticRecorder,
-  });
-
-  final ThreadPost post;
-  final String threadId;
-  final ThreadPostBodyRenderPlan plan;
-  final ThreadPostBodySegment segment;
-  final bool highlighted;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
-  final ThreadImageOpenContext imageOpenContext;
-  final ThreadDetailNativePalette palette;
-  final ValueChanged<String> onOpenPostLink;
-  final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
-  onOpenPostImages;
-  final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
-  onOpenPostActions;
-  final ThreadDetailDiagnosticRecorder diagnosticRecorder;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onLongPress: () => onOpenPostActions(post, plan),
-      child: Container(
-        padding: EdgeInsets.fromLTRB(10, _segmentTopPadding(segment), 10, 0),
-        decoration: _cardSegmentDecoration(
-          palette: palette,
-          highlighted: highlighted,
-          position: _ThreadPostCardSegmentPosition.middle,
-        ),
-        child: DefaultTextStyle.merge(
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: palette.bodyText,
-            height: 1.5,
-          ),
-          child: ThreadPostBodySegmentView(
-            document: plan.document,
-            segment: segment,
-            images: plan.images,
-            imageHeaderBuilder: imageHeaderBuilder,
-            imageCacheOwnerId: threadId,
-            imageOpenContext: imageOpenContext,
-            resourceLayoutHints: plan.resourceLayoutHints,
-            resourceLayoutPolicy:
-                ThreadPostResourceLayoutPolicy.adaptiveBlockImagesForReading,
-            selectionEnabled: false,
-            diagnosticRecorder: diagnosticRecorder,
-            onOpenLink: onOpenPostLink,
-            onOpenImage: (request) => onOpenPostImages?.call(post, request),
-          ),
-        ),
-      ),
-    );
-  }
-
-  double _segmentTopPadding(ThreadPostBodySegment segment) {
-    if (segment.index == 0) {
-      return 8;
-    }
-    final blocks = segment.blocks;
-    if (blocks.isNotEmpty && blocks.first.continuesPrevious) {
-      return 0;
-    }
-    return ThreadPostBodyStyle.defaults.blockSpacing;
   }
 }
 
