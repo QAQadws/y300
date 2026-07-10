@@ -45,10 +45,6 @@ class NovelDetailAdapter implements DetailModuleAdapter {
       moduleKey: LibraryModuleKey.novel,
       workId: workId,
     );
-    final customTags = await _stateRepository.getWorkTags(
-      moduleKey: LibraryModuleKey.novel,
-      workId: workId,
-    );
     final coverImageUrl = detail.coverImageUrl;
     var coverLocalPath = detail.coverLocalPath;
     if ((coverLocalPath == null || coverLocalPath.trim().isEmpty) &&
@@ -85,7 +81,6 @@ class NovelDetailAdapter implements DetailModuleAdapter {
       sourceTid: detail.sourceTid,
       sourceTypeId: detail.sourceTypeId,
       sourceTagName: detail.sourceTagName,
-      customTags: customTags,
       inShelf: true,
       intro: workState?.introText,
     );
@@ -399,56 +394,6 @@ class NovelDetailAdapter implements DetailModuleAdapter {
           ),
         )
         .toList(growable: false);
-  }
-
-  @override
-  Future<List<LibraryTag>> getWorkTags({required String workId}) {
-    return _stateRepository.getWorkTags(
-      moduleKey: LibraryModuleKey.novel,
-      workId: workId,
-    );
-  }
-
-  @override
-  Future<List<LibraryTag>> getAllTags() {
-    return _stateRepository.getTags();
-  }
-
-  @override
-  Future<void> addExistingTagToWork({
-    required String workId,
-    required String tagId,
-  }) {
-    return _stateRepository.bindTagToWork(
-      moduleKey: LibraryModuleKey.novel,
-      workId: workId,
-      tagId: tagId,
-    );
-  }
-
-  @override
-  Future<void> addNewTagToWork({
-    required String workId,
-    required String tagName,
-  }) async {
-    final tagId = await _stateRepository.createTag(name: tagName);
-    await _stateRepository.bindTagToWork(
-      moduleKey: LibraryModuleKey.novel,
-      workId: workId,
-      tagId: tagId,
-    );
-  }
-
-  @override
-  Future<void> removeTagFromWork({
-    required String workId,
-    required String tagId,
-  }) {
-    return _stateRepository.unbindTagFromWork(
-      moduleKey: LibraryModuleKey.novel,
-      workId: workId,
-      tagId: tagId,
-    );
   }
 
   Future<String?> _findCurrentCategoryId(String workId) async {

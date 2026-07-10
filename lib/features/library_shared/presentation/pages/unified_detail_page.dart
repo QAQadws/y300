@@ -220,8 +220,6 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                   ),
               ],
               const PopupMenuItem(value: 'edit-intro', child: Text('编辑简介')),
-              const PopupMenuItem(value: 'add-tag', child: Text('添加标签')),
-              const PopupMenuItem(value: 'remove-tag', child: Text('移除标签')),
             ],
             onSelected: (value) async {
               await _handleMoreAction(value);
@@ -290,7 +288,6 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                       child: UnifiedDetailTagStrip(
                         sourceTagName: header.sourceTagName,
                         sourceTypeId: header.sourceTypeId,
-                        customTags: header.customTags,
                       ),
                     ),
                   SliverToBoxAdapter(
@@ -718,14 +715,6 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     }
     if (value == 'edit-intro') {
       await _showEditIntroDialog();
-      return;
-    }
-    if (value == 'add-tag') {
-      await _showAddTagSheet();
-      return;
-    }
-    if (value == 'remove-tag') {
-      await _showRemoveTagSheet();
     }
   }
 
@@ -1003,128 +992,6 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
               child: const Text('保存'),
             ),
           ],
-        );
-      },
-    );
-  }
-
-  Future<void> _showAddTagSheet() async {
-    final tags = await widget.adapter.getAllTags();
-    if (!mounted) {
-      return;
-    }
-    final inputController = TextEditingController();
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: 12,
-              right: 12,
-              top: 12,
-              bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 12,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: inputController,
-                  decoration: const InputDecoration(hintText: '新建标签名'),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: () async {
-                          final name = inputController.text.trim();
-                          if (name.isEmpty) {
-                            return;
-                          }
-                          await widget.adapter.addNewTagToWork(
-                            workId: widget.workId,
-                            tagName: name,
-                          );
-                          await _controller.reload();
-                          if (!mounted || !sheetContext.mounted) {
-                            return;
-                          }
-                          Navigator.of(sheetContext).pop();
-                          setState(() {});
-                        },
-                        child: const Text('新建并添加'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ...tags.map(
-                  (tag) => ListTile(
-                    title: Text(tag.name),
-                    onTap: () async {
-                      await widget.adapter.addExistingTagToWork(
-                        workId: widget.workId,
-                        tagId: tag.tagId,
-                      );
-                      await _controller.reload();
-                      if (!mounted || !sheetContext.mounted) {
-                        return;
-                      }
-                      Navigator.of(sheetContext).pop();
-                      setState(() {});
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _showRemoveTagSheet() async {
-    final tags = await widget.adapter.getWorkTags(workId: widget.workId);
-    if (!mounted) {
-      return;
-    }
-    await showModalBottomSheet<void>(
-      context: context,
-      builder: (sheetContext) {
-        if (tags.isEmpty) {
-          return const SafeArea(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('当前作品暂无标签'),
-            ),
-          );
-        }
-        return SafeArea(
-          child: ListView(
-            shrinkWrap: true,
-            children: tags
-                .map(
-                  (tag) => ListTile(
-                    title: Text(tag.name),
-                    trailing: const Icon(Icons.remove_circle_outline),
-                    onTap: () async {
-                      await widget.adapter.removeTagFromWork(
-                        workId: widget.workId,
-                        tagId: tag.tagId,
-                      );
-                      await _controller.reload();
-                      if (!mounted || !sheetContext.mounted) {
-                        return;
-                      }
-                      Navigator.of(sheetContext).pop();
-                      setState(() {});
-                    },
-                  ),
-                )
-                .toList(growable: false),
-          ),
         );
       },
     );

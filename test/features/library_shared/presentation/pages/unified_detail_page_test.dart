@@ -88,7 +88,6 @@ void main() {
     expect(find.byIcon(Icons.filter_list), findsAtLeastNWidgets(1));
     expect(find.byKey(const Key('unified-detail-tag-strip')), findsOneWidget);
     expect(find.text('韩国漫画'), findsOneWidget);
-    expect(find.text('自定义标签'), findsOneWidget);
 
     await tester.tap(
       find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
@@ -185,6 +184,31 @@ void main() {
       expect(find.text('新标题'), findsWidgets);
     },
   );
+
+  testWidgets('UnifiedDetailPage only exposes parsed source tag', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: _FakeDetailAdapter(),
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(find.text('韩国漫画'), findsOneWidget);
+    expect(find.text('自定义标签'), findsNothing);
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    expect(find.text('管理标签'), findsNothing);
+    expect(find.text('添加标签'), findsNothing);
+    expect(find.text('移除标签'), findsNothing);
+  });
 
   testWidgets(
     'UnifiedDetailPage shows cover-edit menu only when editor + picker present',
@@ -1431,13 +1455,6 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
       intro: '这是一段简介',
       sourceTypeId: '398',
       sourceTagName: '韩国漫画',
-      customTags: <LibraryTag>[
-        LibraryTag(
-          tagId: 'tag-1',
-          name: '自定义标签',
-          createdAt: DateTime(2026, 1, 1),
-        ),
-      ],
     );
   }
 
@@ -1498,34 +1515,6 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
   Future<List<LibraryCategory>> loadCategories() async {
     return const [];
   }
-
-  @override
-  Future<List<LibraryTag>> getWorkTags({required String workId}) async {
-    return const [];
-  }
-
-  @override
-  Future<List<LibraryTag>> getAllTags() async {
-    return const [];
-  }
-
-  @override
-  Future<void> addExistingTagToWork({
-    required String workId,
-    required String tagId,
-  }) async {}
-
-  @override
-  Future<void> addNewTagToWork({
-    required String workId,
-    required String tagName,
-  }) async {}
-
-  @override
-  Future<void> removeTagFromWork({
-    required String workId,
-    required String tagId,
-  }) async {}
 }
 
 class _EditableDetailAdapter extends _FakeDetailAdapter

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:y300/features/library_shared/domain/models/library_models.dart';
 
 class UnifiedDetailErrorPanel extends StatelessWidget {
   const UnifiedDetailErrorPanel({
@@ -192,23 +191,15 @@ class UnifiedDetailTagStrip extends StatelessWidget {
     super.key,
     required this.sourceTagName,
     required this.sourceTypeId,
-    required this.customTags,
   });
 
   final String? sourceTagName;
   final String? sourceTypeId;
-  final List<LibraryTag> customTags;
 
   @override
   Widget build(BuildContext context) {
     final sourceLabel = _sourceLabel();
-    final labels = <String>[
-      ?sourceLabel,
-      ...customTags
-          .map((tag) => tag.name.trim())
-          .where((name) => name.isNotEmpty),
-    ];
-    if (labels.isEmpty) {
+    if (sourceLabel == null) {
       return const SizedBox.shrink();
     }
 
@@ -216,14 +207,7 @@ class UnifiedDetailTagStrip extends StatelessWidget {
       key: const Key('unified-detail-tag-strip'),
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
-      child: Row(
-        children: [
-          for (var i = 0; i < labels.length; i++) ...[
-            _TagChip(label: labels[i]),
-            if (i != labels.length - 1) const SizedBox(width: 8),
-          ],
-        ],
-      ),
+      child: Row(children: [_TagChip(label: sourceLabel)]),
     );
   }
 

@@ -207,7 +207,6 @@ class LibraryDetailHeader {
     this.sourceTid,
     this.sourceTypeId,
     this.sourceTagName,
-    this.customTags = const <LibraryTag>[],
     required this.inShelf,
   });
 
@@ -234,7 +233,6 @@ class LibraryDetailHeader {
   final String? sourceTid;
   final String? sourceTypeId;
   final String? sourceTagName;
-  final List<LibraryTag> customTags;
   final bool inShelf;
 }
 

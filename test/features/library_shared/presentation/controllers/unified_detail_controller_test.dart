@@ -289,32 +289,4 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
   Future<List<LibraryCategory>> loadCategories() async {
     return const [];
   }
-
-  @override
-  Future<List<LibraryTag>> getWorkTags({required String workId}) async {
-    return const [];
-  }
-
-  @override
-  Future<List<LibraryTag>> getAllTags() async {
-    return const [];
-  }
-
-  @override
-  Future<void> addExistingTagToWork({
-    required String workId,
-    required String tagId,
-  }) async {}
-
-  @override
-  Future<void> addNewTagToWork({
-    required String workId,
-    required String tagName,
-  }) async {}
-
-  @override
-  Future<void> removeTagFromWork({
-    required String workId,
-    required String tagId,
-  }) async {}
 }

@@ -99,7 +99,7 @@ class _UnifiedDetailMetadataSheetState extends State<UnifiedDetailMetadataSheet>
                 fieldKey: const Key('unified-detail-custom-search-title-input'),
                 controller: _searchController,
                 label: '更新搜索关键词',
-                sourceText: '留空时依次使用自定义标题、展示标题和来源标题',
+                sourceText: '留空时优先使用自定义标题，否则使用当前作品标题',
               ),
               const SizedBox(height: 14),
               Row(

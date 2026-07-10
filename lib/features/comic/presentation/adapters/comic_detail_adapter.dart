@@ -89,10 +89,6 @@ class ComicDetailAdapter
       moduleKey: LibraryModuleKey.comic,
       workId: workId,
     );
-    final customTags = await _stateRepository.getWorkTags(
-      moduleKey: LibraryModuleKey.comic,
-      workId: workId,
-    );
     final inShelf = await _repository.isInShelf(comicId: workId);
     final useCustomMetadata = _featureFlags.readerCustomMetadataEnabled;
     final customCoverImageUrl = useCustomMetadata
@@ -208,7 +204,6 @@ class ComicDetailAdapter
       sourceTid: detail.sourceTid,
       sourceTypeId: detail.sourceTypeId,
       sourceTagName: detail.sourceTagName,
-      customTags: customTags,
       inShelf: inShelf,
       intro: workState?.introText,
     );
@@ -866,56 +861,6 @@ class ComicDetailAdapter
           ),
         )
         .toList(growable: false);
-  }
-
-  @override
-  Future<List<LibraryTag>> getWorkTags({required String workId}) {
-    return _stateRepository.getWorkTags(
-      moduleKey: LibraryModuleKey.comic,
-      workId: workId,
-    );
-  }
-
-  @override
-  Future<List<LibraryTag>> getAllTags() {
-    return _stateRepository.getTags();
-  }
-
-  @override
-  Future<void> addExistingTagToWork({
-    required String workId,
-    required String tagId,
-  }) {
-    return _stateRepository.bindTagToWork(
-      moduleKey: LibraryModuleKey.comic,
-      workId: workId,
-      tagId: tagId,
-    );
-  }
-
-  @override
-  Future<void> addNewTagToWork({
-    required String workId,
-    required String tagName,
-  }) async {
-    final tagId = await _stateRepository.createTag(name: tagName);
-    await _stateRepository.bindTagToWork(
-      moduleKey: LibraryModuleKey.comic,
-      workId: workId,
-      tagId: tagId,
-    );
-  }
-
-  @override
-  Future<void> removeTagFromWork({
-    required String workId,
-    required String tagId,
-  }) {
-    return _stateRepository.unbindTagFromWork(
-      moduleKey: LibraryModuleKey.comic,
-      workId: workId,
-      tagId: tagId,
-    );
   }
 
   Future<String?> _findCurrentCategoryId(String workId) async {

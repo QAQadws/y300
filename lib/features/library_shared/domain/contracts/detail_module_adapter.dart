@@ -111,30 +111,6 @@ abstract class DetailModuleAdapter {
   /// 读取当前模块可选分类列表。
   Future<List<LibraryCategory>> loadCategories();
 
-  /// 读取当前作品绑定标签。
-  Future<List<LibraryTag>> getWorkTags({required String workId});
-
-  /// 读取可用标签池。
-  Future<List<LibraryTag>> getAllTags();
-
-  /// 绑定已存在标签到作品。
-  Future<void> addExistingTagToWork({
-    required String workId,
-    required String tagId,
-  });
-
-  /// 新建标签并绑定到作品。
-  Future<void> addNewTagToWork({
-    required String workId,
-    required String tagName,
-  });
-
-  /// 从作品上移除标签。
-  Future<void> removeTagFromWork({
-    required String workId,
-    required String tagId,
-  });
-
   /// 原帖路由参数。
   Future<ThreadRouteTarget?> getThreadRouteTarget({required String workId});
 
