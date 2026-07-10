@@ -40,6 +40,21 @@ void main() {
     expect(introText().maxLines, 3);
     expect(find.byKey(const Key('unified-detail-intro-fade')), findsOneWidget);
     expect(arrow().turns, 0);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('unified-detail-intro-section')),
+        matching: find.byType(InkWell),
+      ),
+      findsNothing,
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const Key('unified-detail-intro-arrow'))).dy,
+      greaterThanOrEqualTo(
+        tester
+            .getBottomLeft(find.byKey(const Key('unified-detail-intro-text')))
+            .dy,
+      ),
+    );
     final collapsedHeight = tester
         .getSize(find.byKey(const Key('unified-detail-intro-section')))
         .height;

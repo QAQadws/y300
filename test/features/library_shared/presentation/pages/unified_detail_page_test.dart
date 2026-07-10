@@ -452,10 +452,11 @@ void main() {
     expect(find.text('更新预计耗时10.5s'), findsOneWidget);
   });
 
-  testWidgets('UnifiedDetailPage renders chapter progress badge', (
+  testWidgets('UnifiedDetailPage renders comic progress beside source id', (
     tester,
   ) async {
     final adapter = _FakeDetailAdapter(
+      module: LibraryModuleKey.comic,
       progressInfo: const LibraryChapterProgressInfo(
         label: '第 3 页',
         isCurrent: true,
@@ -483,16 +484,71 @@ void main() {
     );
 
     expect(
+      find.byKey(
+        const ValueKey<String>('unified-detail-chapter-inline-progress-e1'),
+      ),
+      findsOneWidget,
+    );
+    final progressLine = tester.widget<RichText>(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey<String>('unified-detail-chapter-inline-progress-e1'),
+        ),
+        matching: find.byType(RichText),
+      ),
+    );
+    expect(progressLine.text.toPlainText(), contains('  ·  第 3 页'));
+    expect(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-progress-e1')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('UnifiedDetailPage keeps novel progress as a status badge', (
+    tester,
+  ) async {
+    final adapter = _FakeDetailAdapter(
+      progressInfo: const LibraryChapterProgressInfo(
+        label: '已读 42%',
+        isCurrent: true,
+        fraction: 0.42,
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(
       find.byKey(const ValueKey<String>('unified-detail-chapter-progress-e1')),
       findsOneWidget,
     );
-    expect(find.text('第 3 页'), findsOneWidget);
+    expect(
+      find.byKey(
+        const ValueKey<String>('unified-detail-chapter-inline-progress-e1'),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('UnifiedDetailPage renders explicit chapter status badges', (
     tester,
   ) async {
     final adapter = _FakeDetailAdapter(
+      module: LibraryModuleKey.comic,
       progressInfo: const LibraryChapterProgressInfo(
         label: '已读 42%',
         isCurrent: true,
@@ -522,12 +578,14 @@ void main() {
     );
 
     expect(
-      find.byKey(const ValueKey<String>('unified-detail-chapter-progress-e1')),
+      find.byKey(
+        const ValueKey<String>('unified-detail-chapter-inline-progress-e1'),
+      ),
       findsOneWidget,
     );
     expect(
       find.byKey(
-        const ValueKey<String>('unified-detail-chapter-bookmark-badge-e1'),
+        const ValueKey<String>('unified-detail-chapter-bookmark-indicator-e1'),
       ),
       findsOneWidget,
     );
@@ -543,7 +601,13 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.text('书签'), findsOneWidget);
+    expect(find.text('书签'), findsNothing);
+    expect(
+      find.byKey(
+        const ValueKey<String>('unified-detail-chapter-bookmark-button-e1'),
+      ),
+      findsNothing,
+    );
     expect(find.text('已下载'), findsOneWidget);
     expect(find.text('已读'), findsOneWidget);
   });
@@ -783,7 +847,7 @@ void main() {
     },
   );
 
-  testWidgets('UnifiedDetailPage toggles chapter bookmark from row button', (
+  testWidgets('UnifiedDetailPage toggles chapter bookmark from long press', (
     tester,
   ) async {
     final adapter = _FakeDetailAdapter();
@@ -801,9 +865,7 @@ void main() {
 
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.byKey(
-        const ValueKey<String>('unified-detail-chapter-bookmark-button-e1'),
-      ),
+      find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
       300,
       scrollable: find.byType(Scrollable).first,
     );
@@ -812,14 +874,25 @@ void main() {
 
     expect(
       find.byKey(
-        const ValueKey<String>('unified-detail-chapter-bookmark-badge-e1'),
+        const ValueKey<String>('unified-detail-chapter-bookmark-indicator-e1'),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.byKey(
+        const ValueKey<String>('unified-detail-chapter-bookmark-button-e1'),
       ),
       findsNothing,
     );
 
+    await tester.longPress(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('添加书签'), findsOneWidget);
     await tester.tap(
       find.byKey(
-        const ValueKey<String>('unified-detail-chapter-bookmark-button-e1'),
+        const ValueKey<String>('unified-detail-chapter-bookmark-action-e1'),
       ),
     );
     await tester.pumpAndSettle();
@@ -829,9 +902,29 @@ void main() {
     expect(adapter.loadChaptersCallCount, greaterThanOrEqualTo(2));
     expect(
       find.byKey(
-        const ValueKey<String>('unified-detail-chapter-bookmark-badge-e1'),
+        const ValueKey<String>('unified-detail-chapter-bookmark-indicator-e1'),
       ),
       findsOneWidget,
+    );
+
+    await tester.longPress(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('移除书签'), findsOneWidget);
+    await tester.tap(
+      find.byKey(
+        const ValueKey<String>('unified-detail-chapter-bookmark-action-e1'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(adapter.isBookmarked, isFalse);
+    expect(
+      find.byKey(
+        const ValueKey<String>('unified-detail-chapter-bookmark-indicator-e1'),
+      ),
+      findsNothing,
     );
   });
 
@@ -1059,9 +1152,7 @@ void main() {
 
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.byKey(
-          const ValueKey<String>('unified-detail-chapter-bookmark-button-e1'),
-        ),
+        find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
         300,
         scrollable: find.byType(Scrollable).first,
       );
@@ -1069,9 +1160,13 @@ void main() {
       await tester.pumpAndSettle();
 
       adapter.failLoadChaptersOnce = true;
+      await tester.longPress(
+        find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(
         find.byKey(
-          const ValueKey<String>('unified-detail-chapter-bookmark-button-e1'),
+          const ValueKey<String>('unified-detail-chapter-bookmark-action-e1'),
         ),
       );
       await tester.pumpAndSettle();
@@ -1173,6 +1268,7 @@ void main() {
 
 class _FakeDetailAdapter implements DetailModuleAdapter {
   _FakeDetailAdapter({
+    this.module = LibraryModuleKey.novel,
     this.coverLocalPath,
     this.progressInfo,
     this.isBookmarked = false,
@@ -1197,6 +1293,7 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
   bool failMarkDownload = false;
   bool failDeleteDownload = false;
   final String? coverLocalPath;
+  final LibraryModuleKey module;
   final LibraryChapterProgressInfo? progressInfo;
   bool isBookmarked;
   bool isDownloaded;
@@ -1378,7 +1475,7 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
   }
 
   @override
-  LibraryModuleKey get moduleKey => LibraryModuleKey.novel;
+  LibraryModuleKey get moduleKey => module;
 
   @override
   Future<DetailRefreshResult> refreshWork({required String workId}) async {

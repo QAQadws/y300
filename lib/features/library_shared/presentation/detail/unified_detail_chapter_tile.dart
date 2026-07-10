@@ -7,33 +7,36 @@ class UnifiedDetailChapterTile extends StatelessWidget {
     required this.tileKey,
     required this.chapter,
     required this.subtitle,
+    required this.showInlineProgress,
     required this.isDownloading,
     required this.downloadIconSize,
     required this.onTap,
     required this.onLongPress,
-    required this.onToggleBookmark,
     required this.onToggleDownload,
   });
 
   final Key tileKey;
   final LibraryChapterItem chapter;
   final String subtitle;
+  final bool showInlineProgress;
   final bool isDownloading;
   final double downloadIconSize;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
-  final VoidCallback onToggleBookmark;
   final VoidCallback onToggleDownload;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final titleColor = chapter.isRead ? scheme.onSurfaceVariant : scheme.onSurface;
-    final subtitleColor =
-        chapter.isRead ? scheme.onSurfaceVariant.withAlpha(170) : scheme.onSurfaceVariant;
-    final hasStatus = chapter.progressInfo != null ||
-        chapter.isBookmarked ||
+    final titleColor = chapter.isRead
+        ? scheme.onSurfaceVariant
+        : scheme.onSurface;
+    final subtitleColor = chapter.isRead
+        ? scheme.onSurfaceVariant.withAlpha(170)
+        : scheme.onSurfaceVariant;
+    final hasStatus =
+        (chapter.progressInfo != null && !showInlineProgress) ||
         chapter.isDownloaded ||
         chapter.isRead;
 
@@ -53,35 +56,60 @@ class UnifiedDetailChapterTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      chapter.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: titleColor,
-                        fontWeight: chapter.isRead ? FontWeight.w500 : FontWeight.w600,
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        if (chapter.isBookmarked) ...[
+                          Icon(
+                            Icons.bookmark,
+                            key: ValueKey<String>(
+                              'unified-detail-chapter-bookmark-indicator-${chapter.episodeId}',
+                            ),
+                            size: 20,
+                            color: scheme.primary,
+                            semanticLabel: '已添加书签',
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          child: Text(
+                            chapter.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              color: titleColor,
+                              fontWeight: chapter.isRead
+                                  ? FontWeight.w500
+                                  : FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
-                    Text(
+                    _ChapterSubtitle(
                       subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(color: subtitleColor),
+                      episodeId: chapter.episodeId,
+                      progress: showInlineProgress
+                          ? chapter.progressInfo
+                          : null,
+                      style:
+                          theme.textTheme.bodySmall?.copyWith(
+                            color: subtitleColor,
+                          ) ??
+                          TextStyle(color: subtitleColor),
                     ),
                     if (hasStatus) ...[
                       const SizedBox(height: 7),
-                      _ChapterStatusRow(chapter: chapter),
+                      _ChapterStatusRow(
+                        chapter: chapter,
+                        showProgress: !showInlineProgress,
+                      ),
                     ],
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              _ChapterBookmarkButton(
-                episodeId: chapter.episodeId,
-                isBookmarked: chapter.isBookmarked,
-                onPressed: onToggleBookmark,
-              ),
               IconButton(
                 tooltip: chapter.isDownloaded ? '已下载，点击删除下载' : '下载该章节',
                 iconSize: downloadIconSize,
@@ -90,7 +118,9 @@ class UnifiedDetailChapterTile extends StatelessWidget {
                     ? SizedBox(
                         width: downloadIconSize,
                         height: downloadIconSize,
-                        child: const CircularProgressIndicator(strokeWidth: 2.2),
+                        child: const CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                        ),
                       )
                     : Icon(
                         chapter.isDownloaded
@@ -108,37 +138,35 @@ class UnifiedDetailChapterTile extends StatelessWidget {
 }
 
 class _ChapterStatusRow extends StatelessWidget {
-  const _ChapterStatusRow({
-    required this.chapter,
-  });
+  const _ChapterStatusRow({required this.chapter, required this.showProgress});
 
   final LibraryChapterItem chapter;
+  final bool showProgress;
 
   @override
   Widget build(BuildContext context) {
     final badges = <Widget>[
-      if (chapter.progressInfo != null)
+      if (showProgress && chapter.progressInfo != null)
         _ChapterProgressBadge(
-          key: ValueKey<String>('unified-detail-chapter-progress-${chapter.episodeId}'),
+          key: ValueKey<String>(
+            'unified-detail-chapter-progress-${chapter.episodeId}',
+          ),
           progress: chapter.progressInfo!,
-        ),
-      if (chapter.isBookmarked)
-        _DetailStatusBadge(
-          key: ValueKey<String>('unified-detail-chapter-bookmark-badge-${chapter.episodeId}'),
-          icon: Icons.bookmark,
-          label: '书签',
-          tone: _DetailStatusBadgeTone.accent,
         ),
       if (chapter.isDownloaded)
         _DetailStatusBadge(
-          key: ValueKey<String>('unified-detail-chapter-downloaded-badge-${chapter.episodeId}'),
+          key: ValueKey<String>(
+            'unified-detail-chapter-downloaded-badge-${chapter.episodeId}',
+          ),
           icon: Icons.check_circle_outline,
           label: '已下载',
           tone: _DetailStatusBadgeTone.success,
         ),
       if (chapter.isRead)
         _DetailStatusBadge(
-          key: ValueKey<String>('unified-detail-chapter-read-badge-${chapter.episodeId}'),
+          key: ValueKey<String>(
+            'unified-detail-chapter-read-badge-${chapter.episodeId}',
+          ),
           icon: Icons.done,
           label: '已读',
           tone: _DetailStatusBadgeTone.muted,
@@ -149,46 +177,63 @@ class _ChapterStatusRow extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    return Wrap(
-      spacing: 6,
-      runSpacing: 5,
-      children: badges,
-    );
+    return Wrap(spacing: 6, runSpacing: 5, children: badges);
   }
 }
 
-class _ChapterBookmarkButton extends StatelessWidget {
-  const _ChapterBookmarkButton({
+class _ChapterSubtitle extends StatelessWidget {
+  const _ChapterSubtitle(
+    this.subtitle, {
     required this.episodeId,
-    required this.isBookmarked,
-    required this.onPressed,
+    required this.progress,
+    required this.style,
   });
 
   final String episodeId;
-  final bool isBookmarked;
-  final VoidCallback onPressed;
+  final String subtitle;
+  final LibraryChapterProgressInfo? progress;
+  final TextStyle style;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return IconButton(
-      key: ValueKey<String>('unified-detail-chapter-bookmark-button-$episodeId'),
-      tooltip: isBookmarked ? '移除书签' : '添加书签',
-      visualDensity: VisualDensity.compact,
-      onPressed: onPressed,
-      icon: Icon(
-        isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-        color: isBookmarked ? scheme.primary : scheme.onSurfaceVariant,
+    final progress = this.progress;
+    if (progress == null) {
+      return Text(
+        subtitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: style,
+      );
+    }
+
+    final progressStyle = style.copyWith(
+      color: (style.color ?? Theme.of(context).colorScheme.onSurfaceVariant)
+          .withAlpha(150),
+    );
+    final text = RichText(
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      text: TextSpan(
+        style: style,
+        children: [
+          TextSpan(text: subtitle),
+          const TextSpan(text: '  ·  '),
+          TextSpan(text: progress.label, style: progressStyle),
+        ],
       ),
+    );
+    return Semantics(
+      key: ValueKey<String>(
+        'unified-detail-chapter-inline-progress-$episodeId',
+      ),
+      label: '$subtitle，${progress.semanticLabel ?? progress.label}',
+      child: ExcludeSemantics(child: text),
     );
   }
 }
 
 class _ChapterProgressBadge extends StatelessWidget {
-  const _ChapterProgressBadge({
-    super.key,
-    required this.progress,
-  });
+  const _ChapterProgressBadge({super.key, required this.progress});
 
   final LibraryChapterProgressInfo progress;
 
@@ -200,9 +245,9 @@ class _ChapterProgressBadge extends StatelessWidget {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: scheme.primary,
-            fontWeight: FontWeight.w600,
-          ),
+        color: scheme.primary,
+        fontWeight: FontWeight.w600,
+      ),
     );
     final badge = Container(
       constraints: const BoxConstraints(maxWidth: 120),
@@ -219,18 +264,11 @@ class _ChapterProgressBadge extends StatelessWidget {
     if (semanticLabel == null || semanticLabel.isEmpty) {
       return badge;
     }
-    return Semantics(
-      label: semanticLabel,
-      child: badge,
-    );
+    return Semantics(label: semanticLabel, child: badge);
   }
 }
 
-enum _DetailStatusBadgeTone {
-  accent,
-  success,
-  muted,
-}
+enum _DetailStatusBadgeTone { success, muted }
 
 class _DetailStatusBadge extends StatelessWidget {
   const _DetailStatusBadge({
@@ -248,7 +286,6 @@ class _DetailStatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final foreground = switch (tone) {
-      _DetailStatusBadgeTone.accent => scheme.primary,
       _DetailStatusBadgeTone.success => scheme.tertiary,
       _DetailStatusBadgeTone.muted => scheme.onSurfaceVariant,
     };
@@ -272,9 +309,9 @@ class _DetailStatusBadge extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: foreground,
-                    fontWeight: FontWeight.w600,
-                  ),
+                color: foreground,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],

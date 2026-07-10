@@ -85,8 +85,10 @@ class UnifiedDetailIntroSection extends StatelessWidget {
           return Semantics(
             button: expandable,
             onTap: expandable ? onToggle : null,
-            child: InkWell(
+            child: GestureDetector(
               key: const Key('unified-detail-intro-toggle'),
+              behavior: HitTestBehavior.opaque,
+              excludeFromSemantics: true,
               onTap: expandable ? onToggle : null,
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 2),
@@ -97,28 +99,20 @@ class UnifiedDetailIntroSection extends StatelessWidget {
                     const SizedBox(height: 6),
                     SizedBox(
                       width: double.infinity,
-                      child: Stack(
-                        children: [
-                          AnimatedSize(
-                            duration: const Duration(milliseconds: 220),
-                            curve: Curves.easeInOutCubic,
-                            alignment: Alignment.topCenter,
-                            child: Padding(
-                              padding: EdgeInsets.only(
-                                bottom: expanded && expandable ? 22 : 0,
-                              ),
-                              child: _buildIntroText(
-                                style: textStyle,
-                                expandable: expandable,
-                              ),
+                      child: AnimatedSize(
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeInOutCubic,
+                        alignment: Alignment.topCenter,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildIntroText(
+                              style: textStyle,
+                              expandable: expandable,
                             ),
-                          ),
-                          if (expandable)
-                            Positioned(
-                              left: 0,
-                              right: 0,
-                              bottom: -2,
-                              child: IgnorePointer(
+                            if (expandable) ...[
+                              const SizedBox(height: 2),
+                              IgnorePointer(
                                 child: Center(
                                   child: AnimatedRotation(
                                     key: const Key(
@@ -135,8 +129,9 @@ class UnifiedDetailIntroSection extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                            ),
-                        ],
+                            ],
+                          ],
+                        ),
                       ),
                     ),
                   ],

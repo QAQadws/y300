@@ -312,13 +312,14 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         ),
                         chapter: chapter,
                         subtitle: _chapterSubtitle(chapter),
+                        showInlineProgress:
+                            widget.adapter.moduleKey == LibraryModuleKey.comic,
                         isDownloading: _downloadingEpisodeIds.contains(
                           chapter.episodeId,
                         ),
                         downloadIconSize: _chapterDownloadIconSize,
                         onTap: () => _openChapter(chapter),
                         onLongPress: () => _showChapterActions(chapter),
-                        onToggleBookmark: () => _toggleChapterBookmark(chapter),
                         onToggleDownload: () => _toggleChapterDownload(chapter),
                       );
                     },
@@ -362,16 +363,6 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       return;
     }
     await _controller.reload();
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  Future<void> _toggleChapterBookmark(LibraryChapterItem chapter) async {
-    await _controller.markChapterBookmarked(
-      episodeId: chapter.episodeId,
-      isBookmarked: !chapter.isBookmarked,
-    );
     if (mounted) {
       setState(() {});
     }
@@ -649,7 +640,14 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 ListTile(
-                  leading: const Icon(Icons.bookmark_add_outlined),
+                  key: ValueKey<String>(
+                    'unified-detail-chapter-bookmark-action-${chapter.episodeId}',
+                  ),
+                  leading: Icon(
+                    chapter.isBookmarked
+                        ? Icons.bookmark_remove_outlined
+                        : Icons.bookmark_add_outlined,
+                  ),
                   title: Text(chapter.isBookmarked ? '移除书签' : '添加书签'),
                   onTap: () async {
                     await _controller.markChapterBookmarked(
