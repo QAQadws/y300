@@ -60,8 +60,9 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   bool _isPageIndicatorHighlighted = false;
   Timer? _pageIndicatorDimTimer;
 
-  // 逐图缩放标记，用于协调 page/scroll 手势，而不把手势逻辑耦合进图片渲染。
-  final Map<int, bool> _zoomedStateByIndex = <int, bool>{};
+  // 纵向模式缩放整条连续图片流；分页模式才按当前图片记录缩放状态。
+  bool _isVerticalReaderZoomed = false;
+  final Map<int, bool> _pagedZoomedStateByIndex = <int, bool>{};
   final Set<int> _reportedVisibleImageIndexes = <int>{};
 
   String? _lastVerticalRestoreKey;
@@ -158,7 +159,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
             bottomSafeFraction: mode == ContinuousImageReaderMode.vertical
                 ? 0.2
                 : 0,
-            tapZonesEnabled: !_isAnyImageZoomed,
+            tapZonesEnabled: !_isAnyReaderZoomed,
             child: _buildContentLayer(
               context: context,
               content: content,
@@ -196,7 +197,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         );
       }
     });
-    return ContinuousImageReaderView(
+    final reader = ContinuousImageReaderView(
       items: items,
       mode: ContinuousImageReaderMode.vertical,
       scrollController: _scrollController,
@@ -215,6 +216,12 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         return _buildImage(item, index, preferences, paged: false);
       },
     );
+    return ReaderZoomableImage(
+      key: const Key('image-reader-engine-vertical-zoom-surface'),
+      behavior: ReaderZoomBehavior.continuousVertical,
+      onZoomStateChanged: _onVerticalReaderZoomStateChanged,
+      child: reader,
+    );
   }
 
   Widget _buildPaged(ReaderContent content, ReaderPreferences preferences) {
@@ -229,7 +236,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       items: items,
       mode: ContinuousImageReaderMode.horizontal,
       pageController: _pageController,
-      horizontalPhysics: _isAnyImageZoomed
+      horizontalPhysics: _isPagedImageZoomed
           ? const NeverScrollableScrollPhysics()
           : const PageScrollPhysics(),
       reverse: preferences.readerMode == ReaderModePreference.rtl,
@@ -253,18 +260,22 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     required bool paged,
   }) {
     _notifyCurrentImageVisible(index);
+    final image = _capability.buildImageContent(
+      context,
+      ReaderImageBuildSpec(
+        item: item,
+        index: index,
+        paged: paged,
+        fit: _imageFitFor(preferences.pageFit, paged: paged),
+      ),
+    );
+    if (!paged) {
+      return image;
+    }
     return ReaderZoomableImage(
       onZoomStateChanged: (isZoomed) =>
-          _onImageZoomStateChanged(index, isZoomed),
-      child: _capability.buildImageContent(
-        context,
-        ReaderImageBuildSpec(
-          item: item,
-          index: index,
-          paged: paged,
-          fit: _imageFitFor(preferences.pageFit, paged: paged),
-        ),
-      ),
+          _onPagedImageZoomStateChanged(index, isZoomed),
+      child: image,
     );
   }
 
@@ -320,7 +331,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _lastVerticalRestoreKey = null;
     _lastPagedRestoreKey = null;
     _reportedVisibleImageIndexes.clear();
-    _zoomedStateByIndex.clear();
+    _isVerticalReaderZoomed = false;
+    _pagedZoomedStateByIndex.clear();
     _lastKnownIndex = _capability.content.initialIndex;
     _sessionPreloadCoordinator.resetSession();
   }
@@ -601,7 +613,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     required int total,
     required bool isLeftTap,
   }) {
-    if (_isAnyImageZoomed) {
+    if (_isPagedImageZoomed) {
       return;
     }
     final pageController = _pageController;
@@ -893,6 +905,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _lastVerticalRestoreKey = null;
     _lastPagedRestoreKey = null;
     _lastKnownIndex = targetIndex;
+    _isVerticalReaderZoomed = false;
+    _pagedZoomedStateByIndex.clear();
     if (nextMode == ReaderModePreference.vertical) {
       _pageController?.dispose();
       _pageController = null;
@@ -1021,8 +1035,10 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     );
   }
 
-  bool get _isAnyImageZoomed =>
-      _zoomedStateByIndex.values.any((isZoomed) => isZoomed);
+  bool get _isPagedImageZoomed =>
+      _pagedZoomedStateByIndex.values.any((isZoomed) => isZoomed);
+
+  bool get _isAnyReaderZoomed => _isVerticalReaderZoomed || _isPagedImageZoomed;
 
   void _onOverlayVisibilityChanged() {
     if (mounted) {
@@ -1030,16 +1046,25 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     }
   }
 
-  void _onImageZoomStateChanged(int imageIndex, bool isZoomed) {
-    final current = _zoomedStateByIndex[imageIndex] ?? false;
+  void _onVerticalReaderZoomStateChanged(bool isZoomed) {
+    if (_isVerticalReaderZoomed == isZoomed) {
+      return;
+    }
+    setState(() {
+      _isVerticalReaderZoomed = isZoomed;
+    });
+  }
+
+  void _onPagedImageZoomStateChanged(int imageIndex, bool isZoomed) {
+    final current = _pagedZoomedStateByIndex[imageIndex] ?? false;
     if (current == isZoomed) {
       return;
     }
     setState(() {
       if (isZoomed) {
-        _zoomedStateByIndex[imageIndex] = true;
+        _pagedZoomedStateByIndex[imageIndex] = true;
       } else {
-        _zoomedStateByIndex.remove(imageIndex);
+        _pagedZoomedStateByIndex.remove(imageIndex);
       }
     });
   }

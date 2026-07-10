@@ -128,10 +128,7 @@ void main() {
       find.byKey(const Key('comic-reader-image-list')),
     );
     // viewportCacheExtentFactor 1.5 × 测试视口高度。
-    expect(
-      listView.scrollCacheExtent,
-      const ScrollCacheExtent.pixels(4800),
-    );
+    expect(listView.scrollCacheExtent, const ScrollCacheExtent.pixels(4800));
     expect(
       find.byKey(const Key('shared-reader-center-tap-zone')),
       findsOneWidget,
@@ -317,6 +314,7 @@ void main() {
 
       expect(find.byKey(const Key('comic-reader-page-view')), findsOneWidget);
       expect(find.byKey(const Key('comic-reader-image-list')), findsNothing);
+      expect(find.byType(ReaderZoomableImage), findsWidgets);
     },
   );
 
@@ -610,41 +608,83 @@ void main() {
     },
   );
 
-  testWidgets(
-    'ComicReaderPage renders zoomable image wrapper in reader content',
-    (tester) async {
-      await prepareLargeViewport(tester);
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
-            comicReadingStateWriterProvider.overrideWithValue(
-              _NoopReadingStateWriter(),
-            ),
-            comicReaderServiceProvider.overrideWith(
-              (ref) async => _ReaderFakeService(),
-            ),
-            comicDownloadServiceProvider.overrideWithValue(
-              _NoopComicDownloadService(),
-            ),
-            imageCacheServiceProvider.overrideWithValue(
-              _FakeImageCacheService(),
-            ),
-          ],
-          child: const MaterialApp(
-            home: ComicReaderPage(
-              comicId: 'yamibo:100',
-              episodeId: 'yamibo:100:101',
-            ),
+  testWidgets('ComicReaderPage coordinates vertical scrolling with zoom', (
+    tester,
+  ) async {
+    await prepareLargeViewport(tester);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+          comicReadingStateWriterProvider.overrideWithValue(
+            _NoopReadingStateWriter(),
+          ),
+          comicReaderServiceProvider.overrideWith(
+            (ref) async => _ReaderFakeService(),
+          ),
+          comicDownloadServiceProvider.overrideWithValue(
+            _NoopComicDownloadService(),
+          ),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+        ],
+        child: const MaterialApp(
+          home: ComicReaderPage(
+            comicId: 'yamibo:100',
+            episodeId: 'yamibo:100:101',
           ),
         ),
-      );
+      ),
+    );
 
-      await tester.pumpAndSettle();
+    await tester.pumpAndSettle();
 
-      expect(find.byType(ReaderZoomableImage), findsWidgets);
-    },
-  );
+    final zoomSurface = find.byKey(
+      const Key('image-reader-engine-vertical-zoom-surface'),
+    );
+    final readerListFinder = find.byKey(const Key('comic-reader-image-list'));
+    expect(find.byType(ReaderZoomableImage), findsOneWidget);
+    expect(zoomSurface, findsOneWidget);
+    expect(
+      find.ancestor(
+        of: readerListFinder,
+        matching: find.byType(ReaderZoomableImage),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byType(InteractiveViewer), findsNothing);
+
+    ListView readerList() => tester.widget<ListView>(readerListFinder);
+    Transform zoomTransform() => tester.widget<Transform>(
+      find.byKey(const Key('reader-continuous-zoom-transform')),
+    );
+
+    expect(readerList().physics, isNull);
+    expect(zoomTransform().transform.getMaxScaleOnAxis(), closeTo(1, 0.001));
+
+    final surfaceCenter = tester.getCenter(zoomSurface);
+    await tester.tapAt(surfaceCenter);
+    await tester.pump(const Duration(milliseconds: 40));
+    await tester.tapAt(surfaceCenter);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(InteractiveViewer), findsNothing);
+    expect(zoomTransform().transform.getMaxScaleOnAxis(), greaterThan(1));
+    expect(readerList().physics, isNull);
+
+    final previousOffset = readerList().controller!.offset;
+    await tester.dragFrom(surfaceCenter, const Offset(0, -160));
+    await tester.pumpAndSettle();
+    expect(readerList().controller!.offset, greaterThan(previousOffset));
+
+    await tester.tapAt(surfaceCenter);
+    await tester.pump(const Duration(milliseconds: 40));
+    await tester.tapAt(surfaceCenter);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(InteractiveViewer), findsNothing);
+    expect(readerList().physics, isNull);
+    expect(zoomTransform().transform.getMaxScaleOnAxis(), closeTo(1, 0.001));
+  });
 
   testWidgets('ComicReaderPage reserves stable slots for vertical images', (
     tester,
