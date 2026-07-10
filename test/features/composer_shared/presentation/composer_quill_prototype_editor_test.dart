@@ -177,6 +177,103 @@ void main() {
     expect(latest, '[b][u][size=4][color=#d32f2f]文字[/color][/size][/u][/b]');
   });
 
+  testWidgets('format options do not refocus the editor until tool closes', (
+    tester,
+  ) async {
+    final controller = QuillController.basic();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(_buildEditor(controller: controller));
+    controller.replaceText(
+      0,
+      0,
+      '文字',
+      const TextSelection(baseOffset: 0, extentOffset: 2),
+    );
+    await tester.pump();
+
+    final editorFocusNode = _editorFocusNode(tester);
+    editorFocusNode.requestFocus();
+    await tester.pump();
+    expect(editorFocusNode.hasFocus, isTrue);
+
+    await tester.tap(find.byKey(const Key('test-quill-format-button')));
+    await tester.pumpAndSettle();
+    expect(editorFocusNode.hasFocus, isFalse);
+
+    await tester.tap(find.byKey(const Key('test-quill-format-bold-toggle')));
+    await tester.pump();
+    expect(editorFocusNode.hasFocus, isFalse);
+    await tester.tap(find.byKey(const Key('test-quill-format-italic-toggle')));
+    await tester.pump();
+    expect(editorFocusNode.hasFocus, isFalse);
+    await tester.ensureVisible(
+      find.byKey(const Key('test-quill-format-size-4')),
+    );
+    await tester.tap(find.byKey(const Key('test-quill-format-size-4')));
+    await tester.pump();
+    expect(editorFocusNode.hasFocus, isFalse);
+    await tester.ensureVisible(
+      find.byKey(const Key('test-quill-format-color-swatch-d32f2f')),
+    );
+    await tester.tap(
+      find.byKey(const Key('test-quill-format-color-swatch-d32f2f')),
+    );
+    await tester.pump();
+    expect(editorFocusNode.hasFocus, isFalse);
+
+    await tester.ensureVisible(
+      find.byKey(const Key('test-quill-format-button')),
+    );
+    await tester.tap(find.byKey(const Key('test-quill-format-button')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('test-quill-tool-panel')), findsNothing);
+    expect(editorFocusNode.hasFocus, isTrue);
+  });
+
+  testWidgets(
+    'align and sticker tools mutate content without refocusing editor',
+    (tester) async {
+      final controller = QuillController.basic();
+      addTearDown(controller.dispose);
+      String latest = '';
+
+      await tester.pumpWidget(
+        _buildEditor(
+          controller: controller,
+          onBbCodeChanged: (value) => latest = value,
+          stickerGroups: _stickerGroups(),
+        ),
+      );
+      final editorFocusNode = _editorFocusNode(tester);
+      editorFocusNode.requestFocus();
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('test-quill-align-button')));
+      await tester.pumpAndSettle();
+      expect(editorFocusNode.hasFocus, isFalse);
+      await tester.tap(find.byKey(const Key('test-quill-align-center')));
+      await tester.pump();
+      expect(editorFocusNode.hasFocus, isFalse);
+      expect(
+        _currentLineAlignment(controller),
+        Attribute.centerAlignment.value,
+      );
+
+      await tester.tap(find.byKey(const Key('test-quill-sticker-button')));
+      await tester.pumpAndSettle();
+      expect(editorFocusNode.hasFocus, isFalse);
+      await tester.tap(
+        find.byKey(const Key('test-quill-sticker-item-{:9_656:}')),
+      );
+      await tester.pump();
+
+      expect(editorFocusNode.hasFocus, isFalse);
+      expect(latest, '[align=center]{:9_656:}[/align]');
+    },
+  );
+
   testWidgets('format toggles affect future input and can be turned off', (
     tester,
   ) async {
@@ -675,6 +772,22 @@ bool _currentLineIsQuoted(QuillController controller) {
                   .attributes[Attribute.blockQuote.key]
                   ?.value ==
               true;
+}
+
+Object? _currentLineAlignment(QuillController controller) {
+  final index = controller.selection.start
+      .clamp(0, controller.document.length)
+      .toInt();
+  final query = controller.document.queryChild(index);
+  final line = query.node;
+  if (line is! Line) {
+    return null;
+  }
+  return line.style.attributes[Attribute.align.key]?.value;
+}
+
+FocusNode _editorFocusNode(WidgetTester tester) {
+  return tester.widget<QuillEditor>(find.byType(QuillEditor)).focusNode;
 }
 
 double _toolbarBottomGap(WidgetTester tester) {

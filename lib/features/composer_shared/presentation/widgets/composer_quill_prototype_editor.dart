@@ -280,17 +280,11 @@ class _ComposerQuillEditorSurfaceState
       ),
       ComposerQuillToolPanel.align => _AlignPanel(
         keyPrefix: widget.keyPrefix,
-        onSelected: (align) {
-          _applyAlign(align);
-          _focusNode.requestFocus();
-        },
+        onSelected: _applyAlign,
       ),
       ComposerQuillToolPanel.link => _LinkPanel(
         keyPrefix: widget.keyPrefix,
-        onSubmitted: (link) {
-          _applyLink(link);
-          _focusNode.requestFocus();
-        },
+        onSubmitted: _applyLink,
       ),
       ComposerQuillToolPanel.sticker => _StickerToolPanel(
         keyPrefix: widget.keyPrefix,
@@ -393,7 +387,9 @@ class _ComposerQuillEditorSurfaceState
       _ => null,
     };
     if (attribute != null) {
-      _controller.formatSelection(attribute);
+      _runQuillMutationWithoutKeyboard(() {
+        _controller.formatSelection(attribute);
+      });
     }
   }
 
@@ -401,38 +397,61 @@ class _ComposerQuillEditorSurfaceState
     if (!widget.enabled) {
       return;
     }
-    final selection = _controller.selection;
-    if (selection.isCollapsed) {
-      final offset = selection.start;
-      final restoredStyle = _controller.toggledStyle.removeAll({
-        Attribute.link,
-      });
-      _controller.toggledStyle = const Style();
-      _controller.replaceText(
-        offset,
-        0,
-        link.label,
-        TextSelection(
-          baseOffset: offset,
-          extentOffset: offset + link.label.length,
-        ),
-      );
-      _controller.formatSelection(Attribute.clone(Attribute.link, link.url));
-      _controller.updateSelection(
-        TextSelection.collapsed(offset: offset + link.label.length),
-        ChangeSource.local,
-      );
-      _controller.toggledStyle = restoredStyle;
-    } else {
-      _controller.formatSelection(Attribute.clone(Attribute.link, link.url));
-    }
+    _runQuillMutationWithoutKeyboard(() {
+      final selection = _controller.selection;
+      if (selection.isCollapsed) {
+        final offset = selection.start;
+        final restoredStyle = _controller.toggledStyle.removeAll({
+          Attribute.link,
+        });
+        _controller.toggledStyle = const Style();
+        _controller.replaceText(
+          offset,
+          0,
+          link.label,
+          TextSelection(
+            baseOffset: offset,
+            extentOffset: offset + link.label.length,
+          ),
+        );
+        _controller.formatSelection(Attribute.clone(Attribute.link, link.url));
+        _controller.updateSelection(
+          TextSelection.collapsed(offset: offset + link.label.length),
+          ChangeSource.local,
+        );
+        _controller.toggledStyle = restoredStyle;
+      } else {
+        _controller.formatSelection(Attribute.clone(Attribute.link, link.url));
+      }
+    });
   }
 
   void _insertStickerItem(StickerItem sticker) {
     if (!widget.enabled) {
       return;
     }
-    _insertEmbed(composerQuillStickerEmbed(sticker.code), requestFocus: false);
+    _runQuillMutationWithoutKeyboard(() {
+      _insertEmbed(
+        composerQuillStickerEmbed(sticker.code),
+        requestFocus: false,
+      );
+    });
+  }
+
+  void _runQuillMutationWithoutKeyboard(VoidCallback mutation) {
+    _controller.skipRequestKeyboard = true;
+    try {
+      mutation();
+    } finally {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        if (_controller.skipRequestKeyboard) {
+          _controller.skipRequestKeyboard = false;
+        }
+      });
+    }
   }
 
   @override
@@ -1269,11 +1288,13 @@ class _FormatSheetState extends State<_FormatSheet> {
   }
 
   void _toggleAttribute(Attribute attribute) {
-    widget.controller.formatSelection(
-      _isAttributeActive(attribute)
-          ? Attribute.clone(attribute, null)
-          : attribute,
-    );
+    _runQuillMutationWithoutKeyboard(() {
+      widget.controller.formatSelection(
+        _isAttributeActive(attribute)
+            ? Attribute.clone(attribute, null)
+            : attribute,
+      );
+    });
   }
 
   void _toggleSize(int size) {
@@ -1290,11 +1311,31 @@ class _FormatSheetState extends State<_FormatSheet> {
   }
 
   void _setAttribute(Attribute attribute, Object value) {
-    widget.controller.formatSelection(Attribute.clone(attribute, value));
+    _runQuillMutationWithoutKeyboard(() {
+      widget.controller.formatSelection(Attribute.clone(attribute, value));
+    });
   }
 
   void _clearAttribute(Attribute attribute) {
-    widget.controller.formatSelection(Attribute.clone(attribute, null));
+    _runQuillMutationWithoutKeyboard(() {
+      widget.controller.formatSelection(Attribute.clone(attribute, null));
+    });
+  }
+
+  void _runQuillMutationWithoutKeyboard(VoidCallback mutation) {
+    widget.controller.skipRequestKeyboard = true;
+    try {
+      mutation();
+    } finally {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        if (widget.controller.skipRequestKeyboard) {
+          widget.controller.skipRequestKeyboard = false;
+        }
+      });
+    }
   }
 }
 
