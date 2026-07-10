@@ -38,8 +38,8 @@ class UnifiedDetailErrorPanel extends StatelessWidget {
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: scheme.onErrorContainer,
-                      ),
+                    color: scheme.onErrorContainer,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -70,30 +70,125 @@ class UnifiedDetailIntroSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textStyle = theme.textTheme.bodyMedium ?? const TextStyle();
     return Padding(
+      key: const Key('unified-detail-intro-section'),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('简介', style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 6),
-          GestureDetector(
-            onTap: onToggle,
-            child: Text(
-              intro,
-              maxLines: expanded ? null : 3,
-              overflow: expanded ? TextOverflow.visible : TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodyMedium,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final expandable = _exceedsCollapsedLines(
+            context: context,
+            maxWidth: constraints.maxWidth,
+            style: textStyle,
+          );
+          return Semantics(
+            button: expandable,
+            onTap: expandable ? onToggle : null,
+            child: InkWell(
+              key: const Key('unified-detail-intro-toggle'),
+              onTap: expandable ? onToggle : null,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('简介', style: theme.textTheme.titleSmall),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      width: double.infinity,
+                      child: Stack(
+                        children: [
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 220),
+                            curve: Curves.easeInOutCubic,
+                            alignment: Alignment.topCenter,
+                            child: Padding(
+                              padding: EdgeInsets.only(
+                                bottom: expanded && expandable ? 22 : 0,
+                              ),
+                              child: _buildIntroText(
+                                style: textStyle,
+                                expandable: expandable,
+                              ),
+                            ),
+                          ),
+                          if (expandable)
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: -2,
+                              child: IgnorePointer(
+                                child: Center(
+                                  child: AnimatedRotation(
+                                    key: const Key(
+                                      'unified-detail-intro-arrow',
+                                    ),
+                                    turns: expanded ? 0.5 : 0,
+                                    duration: const Duration(milliseconds: 220),
+                                    curve: Curves.easeInOutCubic,
+                                    child: Icon(
+                                      Icons.keyboard_arrow_down,
+                                      size: 24,
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            expanded ? '收起' : '展开',
-            style: TextStyle(color: Theme.of(context).colorScheme.primary),
-          ),
-        ],
+          );
+        },
       ),
     );
+  }
+
+  Widget _buildIntroText({required TextStyle style, required bool expandable}) {
+    final text = Text(
+      intro,
+      key: const Key('unified-detail-intro-text'),
+      maxLines: expanded ? null : 3,
+      overflow: TextOverflow.clip,
+      style: style,
+    );
+    if (expanded || !expandable) {
+      return text;
+    }
+    return ShaderMask(
+      key: const Key('unified-detail-intro-fade'),
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (bounds) => const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Colors.white, Colors.white, Colors.transparent],
+        stops: [0, 0.66, 1],
+      ).createShader(bounds),
+      child: text,
+    );
+  }
+
+  bool _exceedsCollapsedLines({
+    required BuildContext context,
+    required double maxWidth,
+    required TextStyle style,
+  }) {
+    if (!maxWidth.isFinite || maxWidth <= 0) {
+      return false;
+    }
+    final painter = TextPainter(
+      text: TextSpan(text: intro, style: style),
+      maxLines: 3,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+    )..layout(maxWidth: maxWidth);
+    return painter.didExceedMaxLines;
   }
 }
 
@@ -114,7 +209,9 @@ class UnifiedDetailTagStrip extends StatelessWidget {
     final sourceLabel = _sourceLabel();
     final labels = <String>[
       ?sourceLabel,
-      ...customTags.map((tag) => tag.name.trim()).where((name) => name.isNotEmpty),
+      ...customTags
+          .map((tag) => tag.name.trim())
+          .where((name) => name.isNotEmpty),
     ];
     if (labels.isEmpty) {
       return const SizedBox.shrink();

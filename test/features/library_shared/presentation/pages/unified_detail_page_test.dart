@@ -549,7 +549,7 @@ void main() {
   });
 
   testWidgets(
-    'UnifiedDetailPage chapter toolbar opens filter sheet and filters unread',
+    'UnifiedDetailPage AppBar filter opens sheet and filters unread',
     (tester) async {
       final adapter = _FakeDetailAdapter(
         secondIsRead: true,
@@ -580,9 +580,8 @@ void main() {
       );
       expect(find.text('共 2 章'), findsOneWidget);
       expect(find.text('全部章节'), findsOneWidget);
-      expect(find.text('章节升序'), findsOneWidget);
 
-      await tester.tap(find.text('筛选').last);
+      await tester.tap(find.byKey(const Key('unified-detail-appbar-filter')));
       await tester.pumpAndSettle();
 
       expect(
@@ -655,7 +654,7 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
 
-    await tester.tap(find.text('筛选').last);
+    await tester.tap(find.byKey(const Key('unified-detail-appbar-filter')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('unified-detail-filter-bookmarked')));
     await tester.ensureVisible(
@@ -676,7 +675,7 @@ void main() {
     expect(adapter.lastFilters.bookmarked, TriStateFilterValue.include);
   });
 
-  testWidgets('UnifiedDetailPage chapter toolbar toggles sort direction', (
+  testWidgets('UnifiedDetailPage chapter toolbar omits duplicate actions', (
     tester,
   ) async {
     final adapter = _FakeDetailAdapter(includeSecondChapter: true);
@@ -699,45 +698,29 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
 
-    expect(find.text('章节升序'), findsOneWidget);
-    var chapterTiles = tester
-        .widgetList<Material>(
-          find.byWidgetPredicate(
-            (widget) =>
-                widget is Material &&
-                widget.key is ValueKey<String> &&
-                (widget.key! as ValueKey<String>).value.startsWith(
-                  'unified-detail-chapter-',
-                ),
-          ),
-        )
-        .toList();
+    final toolbar = find.byKey(const Key('unified-detail-chapter-toolbar'));
+    expect(find.text('共 2 章'), findsOneWidget);
+    expect(find.text('全部章节'), findsOneWidget);
     expect(
-      (chapterTiles.first.key! as ValueKey<String>).value,
-      'unified-detail-chapter-e1',
+      find.descendant(of: toolbar, matching: find.byIcon(Icons.filter_list)),
+      findsNothing,
     );
-
-    await tester.tap(find.text('章节升序'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('章节降序'), findsOneWidget);
-    chapterTiles = tester
-        .widgetList<Material>(
-          find.byWidgetPredicate(
-            (widget) =>
-                widget is Material &&
-                widget.key is ValueKey<String> &&
-                (widget.key! as ValueKey<String>).value.startsWith(
-                  'unified-detail-chapter-',
-                ),
-          ),
-        )
-        .toList();
     expect(
-      (chapterTiles.first.key! as ValueKey<String>).value,
-      'unified-detail-chapter-e2',
+      find.descendant(of: toolbar, matching: find.byIcon(Icons.arrow_upward)),
+      findsNothing,
     );
-    expect(adapter.lastSortOption.direction, LibrarySortDirection.desc);
+    expect(
+      find.descendant(of: toolbar, matching: find.byIcon(Icons.file_download)),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('unified-detail-appbar-download')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('unified-detail-appbar-filter')),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
@@ -763,7 +746,7 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
 
-      await tester.tap(find.text('筛选').last);
+      await tester.tap(find.byKey(const Key('unified-detail-appbar-filter')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('unified-detail-sort-field')));
       await tester.pumpAndSettle();
@@ -778,7 +761,6 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('名称降序'), findsOneWidget);
       expect(adapter.lastSortOption.field, LibraryChapterSortField.name);
       expect(adapter.lastSortOption.direction, LibrarySortDirection.desc);
 

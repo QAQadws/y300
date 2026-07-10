@@ -180,12 +180,15 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
         ),
         actions: [
           PopupMenuButton<String>(
+            key: const Key('unified-detail-appbar-download'),
             tooltip: '下载',
             icon: const Icon(Icons.file_download),
             onSelected: _handleDownloadMenuAction,
             itemBuilder: _downloadMenuItems,
           ),
           IconButton(
+            key: const Key('unified-detail-appbar-filter'),
+            tooltip: '筛选与排序',
             icon: const Icon(Icons.filter_list),
             onPressed: _showChapterFilterSheet,
           ),
@@ -294,13 +297,6 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                     child: UnifiedDetailChapterToolbar(
                       chapterCount: state.chapters.length,
                       filterSummary: _chapterFilterSummary(state.filters),
-                      sortSummary: _chapterSortSummary(state.chapterSortOption),
-                      sortAscending:
-                          state.chapterSortOption.direction ==
-                          LibrarySortDirection.asc,
-                      onFilterTap: _showChapterFilterSheet,
-                      onSortTap: _toggleChapterSortDirection,
-                      onDownloadSelected: _handleDownloadMenuAction,
                     ),
                   ),
                   SliverList.builder(
@@ -455,13 +451,6 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     }
   }
 
-  Future<void> _toggleChapterSortDirection() async {
-    await _controller.toggleSortDirection();
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
   String _chapterFilterSummary(LibraryFilterSet filters) {
     if (filters.isDefault) {
       return '全部章节';
@@ -480,19 +469,6 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       TriStateFilterValue.include => label,
       TriStateFilterValue.exclude => '排除$label',
     };
-  }
-
-  String _chapterSortSummary(LibraryChapterSortOption option) {
-    final field = switch (option.field) {
-      LibraryChapterSortField.chapterIndex => '章节',
-      LibraryChapterSortField.date => '日期',
-      LibraryChapterSortField.name => '名称',
-      LibraryChapterSortField.tid => '来源',
-    };
-    final direction = option.direction == LibrarySortDirection.asc
-        ? '升序'
-        : '降序';
-    return '$field$direction';
   }
 
   Future<void> _showChapterFilterSheet() async {
