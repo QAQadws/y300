@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 27;
+  static const int dbVersion = 28;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -51,12 +51,26 @@ class ComicLocalDb {
         await _createTables(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
-        await _rebuildLatestSchema(db);
+        await _upgradeSchema(db, oldVersion, newVersion);
       },
       onDowngrade: (db, oldVersion, newVersion) async {
         await _rebuildLatestSchema(db);
       },
     );
+  }
+
+  static Future<void> _upgradeSchema(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    if (oldVersion == 27 && newVersion == 28) {
+      await db.execute(
+        'ALTER TABLE $comicsTable ADD COLUMN custom_catalog_url TEXT',
+      );
+      return;
+    }
+    await _rebuildLatestSchema(db);
   }
 
   static Future<void> _createTables(Database db) async {
@@ -90,7 +104,8 @@ class ComicLocalDb {
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         last_read_episode_id TEXT,
-        catalog_url TEXT
+        catalog_url TEXT,
+        custom_catalog_url TEXT
       )
     ''');
 

@@ -1,4 +1,4 @@
-﻿import 'package:y300/features/comic/data/services/comic_favorite_auto_refresh_coordinator.dart';
+import 'package:y300/features/comic/data/services/comic_favorite_auto_refresh_coordinator.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
@@ -157,6 +157,16 @@ abstract class ComicRepository implements CatalogUrlUpdater {
   /// 用于增量章节发现：与帖子内解析出的链接做差集，
   /// 快速识别新增章节而无需全量比对。
   Future<Set<String>> getKnownEpisodeTids({required String comicId});
+}
+
+/// 用户目录覆盖值的可选持久化能力。
+///
+/// 与解析发现的 [CatalogUrlUpdater] 分离，避免自动来源更新覆盖用户配置。
+abstract class ComicCatalogOverrideRepository {
+  Future<void> updateCustomCatalogUrl({
+    required String comicId,
+    required String? catalogUrl,
+  });
 }
 
 abstract class ComicShelfSnapshotRepository {

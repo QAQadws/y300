@@ -21,6 +21,7 @@ import 'package:y300/features/library_shared/domain/models/library_sort_models.d
 class LocalComicRepository
     implements
         ComicRepository,
+        ComicCatalogOverrideRepository,
         ComicShelfSnapshotRepository,
         ComicShelfStatsRepository,
         ComicCoverCacheWriter,
@@ -399,6 +400,17 @@ class LocalComicRepository
     required String catalogUrl,
   }) {
     return _detailStore.updateCatalogUrl(
+      comicId: comicId,
+      catalogUrl: catalogUrl,
+    );
+  }
+
+  @override
+  Future<void> updateCustomCatalogUrl({
+    required String comicId,
+    required String? catalogUrl,
+  }) {
+    return _detailStore.updateCustomCatalogUrl(
       comicId: comicId,
       catalogUrl: catalogUrl,
     );

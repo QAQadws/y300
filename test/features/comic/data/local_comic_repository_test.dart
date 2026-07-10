@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_repository.dart';
@@ -20,6 +20,44 @@ void main() {
       await deleteDatabase(ComicLocalDb.dbName);
       dbFuture = ComicLocalDb.open();
       repository = LocalComicRepository(dbFuture);
+    });
+
+    test('database v27 upgrade adds catalog override without rebuilding', () async {
+      final initializedDb = await dbFuture;
+      await initializedDb.close();
+      await deleteDatabase(ComicLocalDb.dbName);
+      final legacyDb = await openDatabase(
+        ComicLocalDb.dbName,
+        version: 27,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE ${ComicLocalDb.comicsTable} (
+              comic_id TEXT PRIMARY KEY,
+              catalog_url TEXT
+            )
+          ''');
+        },
+      );
+      await legacyDb.insert(ComicLocalDb.comicsTable, <String, Object?>{
+        'comic_id': 'yamibo:legacy',
+        'catalog_url': 'https://bbs.yamibo.com/misc.php?mod=tag&id=1',
+      });
+      await legacyDb.close();
+
+      final upgradedDb = await ComicLocalDb.open();
+      addTearDown(upgradedDb.close);
+      final columns = await upgradedDb.rawQuery(
+        'PRAGMA table_info(${ComicLocalDb.comicsTable})',
+      );
+      final rows = await upgradedDb.query(ComicLocalDb.comicsTable);
+
+      expect(columns.map((column) => column['name']), contains('custom_catalog_url'));
+      expect(rows.single['comic_id'], 'yamibo:legacy');
+      expect(
+        rows.single['catalog_url'],
+        'https://bbs.yamibo.com/misc.php?mod=tag&id=1',
+      );
+      expect(rows.single['custom_catalog_url'], isNull);
     });
 
     test('adds comic to shelf and can query shelf state', () async {
@@ -77,6 +115,59 @@ void main() {
 
       final items = await repository.getShelfItems();
       expect(items.length, 1);
+    });
+
+    test('custom catalog overrides source without being replaced by ingest', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:catalog-config',
+        tid: '100',
+        fid: '30',
+        title: '目录配置漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>[],
+          episodeLinks: <ComicEpisodeLink>[],
+          plainTextSummary: '摘要',
+          catalogUrl: 'https://bbs.yamibo.com/misc.php?mod=tag&id=1',
+        ),
+      );
+      await repository.updateCustomCatalogUrl(
+        comicId: 'yamibo:catalog-config',
+        catalogUrl: 'https://bbs.yamibo.com/misc.php?mod=tag&id=2',
+      );
+
+      await repository.addToShelf(
+        comicId: 'yamibo:catalog-config',
+        tid: '100',
+        fid: '30',
+        title: '目录配置漫画',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>[],
+          episodeLinks: <ComicEpisodeLink>[],
+          plainTextSummary: '摘要',
+          catalogUrl: 'https://bbs.yamibo.com/misc.php?mod=tag&id=3',
+        ),
+      );
+
+      var detail = await repository.getComicDetail(comicId: 'yamibo:catalog-config');
+      expect(detail?.catalogUrl, 'https://bbs.yamibo.com/misc.php?mod=tag&id=3');
+      expect(
+        detail?.customCatalogUrl,
+        'https://bbs.yamibo.com/misc.php?mod=tag&id=2',
+      );
+      expect(
+        detail?.effectiveCatalogUrl,
+        'https://bbs.yamibo.com/misc.php?mod=tag&id=2',
+      );
+
+      await repository.updateCustomCatalogUrl(
+        comicId: 'yamibo:catalog-config',
+        catalogUrl: null,
+      );
+      detail = await repository.getComicDetail(comicId: 'yamibo:catalog-config');
+      expect(
+        detail?.effectiveCatalogUrl,
+        'https://bbs.yamibo.com/misc.php?mod=tag&id=3',
+      );
     });
 
     test(

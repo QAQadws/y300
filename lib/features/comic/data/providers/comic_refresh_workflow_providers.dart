@@ -20,7 +20,6 @@ final comicRefreshOutcomeApplierProvider =
     shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
   );
 });
-
 final comicSearchRefreshQueueRepositoryProvider =
     Provider<ComicSearchRefreshQueueRepository>((ref) {
   return LocalComicSearchRefreshQueueRepository.lazy(() => ComicLocalDb.open());
@@ -45,6 +44,7 @@ final comicSearchRefreshQueueSnapshotProvider =
 
 final comicFavoriteAutoRefreshCoordinatorProvider =
     Provider<ComicFavoriteAutoRefreshCoordinator>((ref) {
+  final repository = ref.watch(comicRepositoryProvider);
   return ComicFavoriteAutoRefreshCoordinator(
     refreshService: ref.watch(comicEpisodeRefreshServiceProvider),
     searchQueue: ref.watch(comicSearchRefreshQueueServiceProvider),
@@ -53,6 +53,9 @@ final comicFavoriteAutoRefreshCoordinatorProvider =
     catalogMissPolicy: ref.watch(comicCatalogMissPolicyProvider),
     titleAnalyzer: ref.watch(comicTitleAnalyzerProvider),
     diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),
-    catalogUrlUpdater: ref.watch(comicRepositoryProvider),
+    catalogUrlUpdater: repository,
+    comicDetailLoader: (comicId) {
+      return repository.getComicDetail(comicId: comicId);
+    },
   );
 });

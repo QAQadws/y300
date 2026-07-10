@@ -260,6 +260,7 @@ class ComicDetailStore {
         c.custom_cover_focus_x,
         c.custom_cover_focus_y,
         c.catalog_url,
+        c.custom_catalog_url,
         c.updated_at,
         COUNT(e.episode_id) AS episode_count
       FROM ${ComicLocalDb.comicsTable} c
@@ -308,6 +309,7 @@ class ComicDetailStore {
       customCoverFocusX: (row['custom_cover_focus_x'] as num?)?.toDouble(),
       customCoverFocusY: (row['custom_cover_focus_y'] as num?)?.toDouble(),
       catalogUrl: row['catalog_url'] as String?,
+      customCatalogUrl: row['custom_catalog_url'] as String?,
       updatedAt: DateTime.fromMillisecondsSinceEpoch(
         row['updated_at'] as int,
       ),
@@ -393,6 +395,7 @@ class ComicDetailStore {
       updatedAt: now,
       lastReadEpisodeId: existing?.lastReadEpisodeId,
       catalogUrl: parsedPost.catalogUrl ?? existing?.catalogUrl,
+      customCatalogUrl: existing?.customCatalogUrl,
     );
 
     await executor.insert(
@@ -463,6 +466,22 @@ class ComicDetailStore {
       ComicLocalDb.comicsTable,
       <String, Object?>{
         'catalog_url': catalogUrl,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'comic_id = ?',
+      whereArgs: <Object>[comicId],
+    );
+  }
+
+  Future<void> updateCustomCatalogUrl({
+    required String comicId,
+    required String? catalogUrl,
+  }) async {
+    final db = await _dbFuture;
+    await db.update(
+      ComicLocalDb.comicsTable,
+      <String, Object?>{
+        'custom_catalog_url': normalizeNullable(catalogUrl),
         'updated_at': DateTime.now().millisecondsSinceEpoch,
       },
       where: 'comic_id = ?',

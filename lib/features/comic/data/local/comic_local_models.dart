@@ -1,4 +1,4 @@
-﻿class ComicRecord {
+class ComicRecord {
   const ComicRecord({
     required this.comicId,
     required this.sourceTid,
@@ -27,6 +27,7 @@
     required this.updatedAt,
     required this.lastReadEpisodeId,
     this.catalogUrl,
+    this.customCatalogUrl,
   });
 
   final String comicId;
@@ -56,6 +57,7 @@
   final int updatedAt;
   final String? lastReadEpisodeId;
   final String? catalogUrl;
+  final String? customCatalogUrl;
 
   Map<String, Object?> toMap() {
     return <String, Object?>{
@@ -86,6 +88,7 @@
       'updated_at': updatedAt,
       'last_read_episode_id': lastReadEpisodeId,
       'catalog_url': catalogUrl,
+      'custom_catalog_url': customCatalogUrl,
     };
   }
 
@@ -118,6 +121,7 @@
       updatedAt: map['updated_at'] as int,
       lastReadEpisodeId: map['last_read_episode_id'] as String?,
       catalogUrl: map['catalog_url'] as String?,
+      customCatalogUrl: map['custom_catalog_url'] as String?,
     );
   }
 }

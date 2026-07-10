@@ -208,6 +208,60 @@ void main() {
     expect(find.text('管理标签'), findsNothing);
     expect(find.text('添加标签'), findsNothing);
     expect(find.text('移除标签'), findsNothing);
+    expect(find.text('配置目录'), findsNothing);
+  });
+
+  testWidgets('UnifiedDetailPage configures catalog through optional adapter', (
+    tester,
+  ) async {
+    final adapter = _CatalogEditableDetailAdapter();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('unified-detail-configure-catalog')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('unified-detail-catalog-sheet')),
+      findsOneWidget,
+    );
+    expect(
+      find.text('来源目录：https://bbs.yamibo.com/misc.php?mod=tag&id=1'),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const Key('unified-detail-catalog-url-input')),
+          )
+          .controller
+          ?.text,
+      'https://bbs.yamibo.com/misc.php?mod=tag&id=1',
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('unified-detail-catalog-url-input')),
+      'https://bbs.yamibo.com/misc.php?mod=tag&id=2',
+    );
+    await tester.tap(find.byKey(const Key('unified-detail-save-catalog')));
+    await tester.pumpAndSettle();
+
+    expect(
+      adapter.lastCatalogUrl,
+      'https://bbs.yamibo.com/misc.php?mod=tag&id=2',
+    );
+    expect(find.byKey(const Key('unified-detail-catalog-sheet')), findsNothing);
   });
 
   testWidgets(
@@ -1564,6 +1618,32 @@ class _EditableDetailAdapter extends _FakeDetailAdapter
     title = customTitle ?? '来源标题';
     author = customAuthor ?? '来源作者';
     translationGroup = customTranslationGroup ?? '来源汉化组';
+  }
+}
+
+class _CatalogEditableDetailAdapter extends _FakeDetailAdapter
+    implements DetailCatalogEditor {
+  String? lastCatalogUrl;
+
+  @override
+  LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
+
+  @override
+  Future<DetailCatalogConfiguration> loadCatalogConfiguration({
+    required String workId,
+  }) async {
+    return const DetailCatalogConfiguration(
+      sourceCatalogUrl: 'https://bbs.yamibo.com/misc.php?mod=tag&id=1',
+      customCatalogUrl: null,
+    );
+  }
+
+  @override
+  Future<void> updateCatalogOverride({
+    required String workId,
+    String? catalogUrl,
+  }) async {
+    lastCatalogUrl = catalogUrl;
   }
 }
 

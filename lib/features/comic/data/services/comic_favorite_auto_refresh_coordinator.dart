@@ -1,3 +1,4 @@
+import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/services/comic_catalog_miss_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
@@ -22,6 +23,13 @@ abstract class CatalogUrlUpdater {
     required String catalogUrl,
   });
 }
+
+String? _normalized(String? value) {
+  final normalized = value?.trim();
+  return normalized == null || normalized.isEmpty ? null : normalized;
+}
+
+typedef ComicDetailLoader = Future<ComicDetail?> Function(String comicId);
 
 enum ComicFavoriteAutoRefreshStatus {
   catalogMerged,
@@ -59,6 +67,7 @@ class ComicFavoriteAutoRefreshCoordinator {
     required ComicTitleAnalyzer titleAnalyzer,
     SyncDiagnosticRecorder? diagnosticRecorder,
     CatalogUrlUpdater? catalogUrlUpdater,
+    ComicDetailLoader? comicDetailLoader,
   }) : _refreshService = refreshService,
        _searchQueue = searchQueue,
        _refreshOutcomeApplier = refreshOutcomeApplier,
@@ -67,7 +76,8 @@ class ComicFavoriteAutoRefreshCoordinator {
        _titleAnalyzer = titleAnalyzer,
        _diagnosticRecorder =
            diagnosticRecorder ?? const NoopSyncDiagnosticRecorder(),
-       _catalogUrlUpdater = catalogUrlUpdater;
+       _catalogUrlUpdater = catalogUrlUpdater,
+       _comicDetailLoader = comicDetailLoader;
 
   final ComicEpisodeRefreshService _refreshService;
   final ComicSearchRefreshQueueEnqueuer _searchQueue;
@@ -77,6 +87,7 @@ class ComicFavoriteAutoRefreshCoordinator {
   final ComicTitleAnalyzer _titleAnalyzer;
   final SyncDiagnosticRecorder _diagnosticRecorder;
   final CatalogUrlUpdater? _catalogUrlUpdater;
+  final ComicDetailLoader? _comicDetailLoader;
 
   Future<ComicFavoriteAutoRefreshResult> refreshAfterFavoriteIngest({
     required String comicId,
@@ -118,6 +129,11 @@ class ComicFavoriteAutoRefreshCoordinator {
     FavoriteSyncExecutionContext? executionContext,
     ThreadDetailData? preloadedRootDetail,
   }) async {
+    final storedDetail = await _comicDetailLoader?.call(comicId);
+    final customCatalogUrl = _normalized(storedDetail?.customCatalogUrl);
+    final sourceCatalogUrl = _normalized(storedDetail?.catalogUrl);
+    final effectiveCatalogUrl =
+        customCatalogUrl ?? _normalized(catalogUrl) ?? sourceCatalogUrl;
     final titles = _resolveTitles(
       favoriteTitle: favoriteTitle,
       sourceTitle: sourceTitle,
@@ -128,7 +144,7 @@ class ComicFavoriteAutoRefreshCoordinator {
       sourceTid: sourceTid,
       displayTitle: titles.searchTitle,
       sourceTitle: titles.sourceTitle,
-      catalogUrl: catalogUrl,
+      catalogUrl: effectiveCatalogUrl,
     );
     _diagnosticRecorder.record(
       scope: 'favorite_comic_refresh',
@@ -139,16 +155,17 @@ class ComicFavoriteAutoRefreshCoordinator {
         'sourceFid': sourceFid,
         'sourceTypeId': sourceTypeId,
         'sourceTagName': sourceTagName,
-        'hasCatalogUrl': catalogUrl != null && catalogUrl.isNotEmpty,
+        'hasCatalogUrl': effectiveCatalogUrl != null,
+        'usesCustomCatalogUrl': customCatalogUrl != null,
         'forceSearchOnCatalogMiss': forceSearchOnCatalogMiss,
         'bootstrapInitial': executionContext?.isBootstrapInitial == true,
       },
     );
 
     // 优先 catalog 快速路径
-    if (catalogUrl != null && catalogUrl.isNotEmpty) {
+    if (effectiveCatalogUrl != null) {
       final catalogDirect = await _refreshService.fetchCatalogDirect(
-        catalogUrl,
+        effectiveCatalogUrl,
         executionContext: executionContext,
       );
       if (catalogDirect.catalogMatched && catalogDirect.hasLinks) {
@@ -169,7 +186,9 @@ class ComicFavoriteAutoRefreshCoordinator {
             source: catalogDirect.source,
             mutationSource: LibraryMutationSource.favoriteSync,
             reason: 'favorite_comic_catalog_direct_refresh',
-            catalogUrl: catalogDirect.catalogUrl,
+            catalogUrl: customCatalogUrl == null
+                ? catalogDirect.catalogUrl
+                : null,
             // catalog-direct 没有发起任何 viewthread，threadCache 必为空，
             // 这条路径下封面提升仍然会经 governor 拉一次，是预期行为。
             threadCache: catalogDirect.threadCache,
@@ -202,12 +221,13 @@ class ComicFavoriteAutoRefreshCoordinator {
           'sourceTid': sourceTid,
           'links': catalog.links.length,
           'catalogUrlChanged':
-              catalog.catalogUrl != null && catalog.catalogUrl != catalogUrl,
+              catalog.catalogUrl != null &&
+              catalog.catalogUrl != sourceCatalogUrl,
         },
       );
       // 如果本次发现了新的 catalogUrl（之前为 null 或不同），持久化
       if (catalog.catalogUrl != null &&
-          catalog.catalogUrl != catalogUrl &&
+          catalog.catalogUrl != sourceCatalogUrl &&
           catalog.catalogUrl!.isNotEmpty) {
         final updater = _catalogUrlUpdater;
         if (updater != null) {
@@ -225,7 +245,9 @@ class ComicFavoriteAutoRefreshCoordinator {
           source: catalog.source,
           mutationSource: LibraryMutationSource.favoriteSync,
           reason: 'favorite_comic_catalog_refresh_completed',
-          catalogUrl: catalog.catalogUrl,
+          catalogUrl: catalog.catalogUrl == customCatalogUrl
+              ? null
+              : catalog.catalogUrl,
           threadCache: catalog.threadCache ?? sharedCache,
           governor: executionContext?.governor,
         ),

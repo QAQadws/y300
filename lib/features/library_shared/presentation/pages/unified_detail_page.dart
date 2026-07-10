@@ -9,6 +9,7 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/presentation/controllers/unified_detail_controller.dart';
+import 'package:y300/features/library_shared/presentation/detail/unified_detail_catalog_sheet.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_chapter_tile.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_filter_sheet.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_header.dart';
@@ -205,6 +206,12 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                   key: Key('unified-detail-edit-metadata'),
                   value: 'edit-metadata',
                   child: Text('编辑作品信息'),
+                ),
+              if (widget.adapter is DetailCatalogEditor)
+                const PopupMenuItem(
+                  key: Key('unified-detail-configure-catalog'),
+                  value: 'configure-catalog',
+                  child: Text('配置目录'),
                 ),
               if (_supportsCoverEditing) ...[
                 const PopupMenuItem(
@@ -705,6 +712,10 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       await _showEditMetadataSheet();
       return;
     }
+    if (value == 'configure-catalog') {
+      await _showCatalogConfigurationSheet();
+      return;
+    }
     if (value == 'set-custom-cover') {
       await _handleSetCustomCover();
       return;
@@ -824,6 +835,51 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                 }
                 setState(() {});
               },
+        );
+      },
+    );
+  }
+
+  Future<void> _showCatalogConfigurationSheet() async {
+    final editor = widget.adapter is DetailCatalogEditor
+        ? widget.adapter as DetailCatalogEditor
+        : null;
+    if (editor == null) {
+      return;
+    }
+
+    late final DetailCatalogConfiguration configuration;
+    try {
+      configuration = await editor.loadCatalogConfiguration(
+        workId: widget.workId,
+      );
+    } catch (error) {
+      if (mounted) {
+        _showDetailSnackBar('读取目录配置失败：$error');
+      }
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return UnifiedDetailCatalogSheet(
+          initialCatalogUrl: configuration.initialInputValue,
+          sourceCatalogUrl: configuration.sourceCatalogUrl,
+          onSave: (catalogUrl) async {
+            await editor.updateCatalogOverride(
+              workId: widget.workId,
+              catalogUrl: catalogUrl,
+            );
+            await _controller.reload();
+            if (mounted) {
+              setState(() {});
+            }
+          },
         );
       },
     );

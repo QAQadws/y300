@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/data/services/comic_favorite_auto_refresh_coordinator.dart';
+import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_catalog_miss_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
@@ -127,6 +128,66 @@ void main() {
       expect(refreshService.catalogRequests, isEmpty);
       expect(searchQueue.enqueuedTitles, isEmpty);
     });
+
+    test(
+      'stored custom catalog is preferred without replacing source',
+      () async {
+        const customCatalogUrl = 'https://bbs.yamibo.com/misc.php?mod=tag&id=2';
+        final refreshService = _FakeRefreshService(
+          catalogOutcome: const ComicEpisodeRefreshOutcome(
+            source: ComicEpisodeRefreshSource.empty,
+            links: <ComicEpisodeLink>[],
+          ),
+          directOutcome: const ComicEpisodeRefreshOutcome(
+            source: ComicEpisodeRefreshSource.catalog,
+            links: <ComicEpisodeLink>[
+              ComicEpisodeLink(
+                url: 'thread-301-1-1.html',
+                rawText: 'Episode 1',
+              ),
+            ],
+            catalogMatched: true,
+            catalogUrl: customCatalogUrl,
+          ),
+        );
+        final applier = _RecordingRefreshOutcomeApplier();
+        final bus = LibraryShelfRefreshBus();
+        addTearDown(bus.dispose);
+        final coordinator = ComicFavoriteAutoRefreshCoordinator(
+          refreshService: refreshService,
+          searchQueue: _RecordingSearchQueue(),
+          refreshOutcomeApplier: applier,
+          shelfRefreshBus: bus,
+          catalogMissPolicy: const DefaultComicCatalogMissPolicy(
+            longRunningTagName: longRunningTagName,
+          ),
+          titleAnalyzer: const PetitComicTitleAnalyzer(),
+          comicDetailLoader: (_) async => ComicDetail(
+            comicId: 'comic:custom-catalog',
+            sourceTid: '100',
+            sourceFid: '30',
+            title: 'Custom Catalog Comic',
+            author: null,
+            translationGroup: null,
+            coverImageUrl: null,
+            updatedAt: DateTime(2026, 1, 1),
+            episodeCount: 1,
+            catalogUrl: 'https://bbs.yamibo.com/misc.php?mod=tag&id=1',
+            customCatalogUrl: customCatalogUrl,
+          ),
+        );
+
+        final result = await coordinator.refreshFavoriteComic(
+          comicId: 'comic:custom-catalog',
+          sourceTid: '100',
+          favoriteTitle: 'Custom Catalog Comic',
+        );
+
+        expect(result.status, ComicFavoriteAutoRefreshStatus.catalogMerged);
+        expect(refreshService.directCatalogUrls, <String>[customCatalogUrl]);
+        expect(applier.requests.single.catalogUrl, isNull);
+      },
+    );
 
     test(
       'catalogUrl persistence when fetchCatalogOnly discovers new catalogUrl',
@@ -474,6 +535,7 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
   final List<ThreadDetailData?> searchPreloadedRootDetails =
       <ThreadDetailData?>[];
   int directCalls = 0;
+  final List<String> directCatalogUrls = <String>[];
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
@@ -513,6 +575,7 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
     FavoriteSyncExecutionContext? executionContext,
   }) async {
     directCalls++;
+    directCatalogUrls.add(catalogUrl);
     return _directOutcome ??
         const ComicEpisodeRefreshOutcome(
           source: ComicEpisodeRefreshSource.empty,

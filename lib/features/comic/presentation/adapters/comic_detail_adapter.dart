@@ -7,6 +7,7 @@ import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/bulk_download_use_case.dart';
 import 'package:y300/features/comic/domain/services/comic_incremental_episode_discovery.dart';
+import 'package:y300/features/comic/domain/services/comic_catalog_url_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
 import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
@@ -31,7 +32,11 @@ import 'package:y300/features/library_shared/domain/services/reading_state_batch
 /// 而“合并章节/提升封面/通知书架”则统一交给 ComicRefreshOutcomeApplier，
 /// 保证统一详情页只保留编排，不耦合漫画刷新策略细节。
 class ComicDetailAdapter
-    implements DetailModuleAdapter, DetailMetadataEditor, DetailCoverEditor {
+    implements
+        DetailModuleAdapter,
+        DetailMetadataEditor,
+        DetailCatalogEditor,
+        DetailCoverEditor {
   ComicDetailAdapter(
     this._repository, {
     ComicEpisodeRefreshService? refreshService,
@@ -46,6 +51,7 @@ class ComicDetailAdapter
     ComicEpisodeDiscoveryService? discoveryService,
     ComicReaderFeatureFlags featureFlags = ComicReaderFeatureFlags.defaults,
     ComicTitleAnalyzer titleAnalyzer = const PetitComicTitleAnalyzer(),
+    ComicCatalogUrlPolicy catalogUrlPolicy = const ComicCatalogUrlPolicy(),
     required LibraryStateRepository stateRepository,
   }) : _refreshService = refreshService,
        _searchQueue = searchQueue,
@@ -59,6 +65,7 @@ class ComicDetailAdapter
        _discoveryService = discoveryService,
        _featureFlags = featureFlags,
        _titleAnalyzer = titleAnalyzer,
+       _catalogUrlPolicy = catalogUrlPolicy,
        _stateRepository = stateRepository;
 
   final ComicRepository _repository;
@@ -74,6 +81,7 @@ class ComicDetailAdapter
   final ComicEpisodeDiscoveryService? _discoveryService;
   final ComicReaderFeatureFlags _featureFlags;
   final ComicTitleAnalyzer _titleAnalyzer;
+  final ComicCatalogUrlPolicy _catalogUrlPolicy;
   final LibraryStateRepository _stateRepository;
 
   @override
@@ -557,7 +565,7 @@ class ComicDetailAdapter
     final request = _buildRefreshRequest(detail);
 
     // Step 1: Catalog 快速路径（有持久化 catalogUrl 时跳过帖子详情请求）
-    final catalogUrl = detail.catalogUrl;
+    final catalogUrl = detail.effectiveCatalogUrl;
     if (catalogUrl != null && catalogUrl.isNotEmpty) {
       final direct = await refreshService.fetchCatalogDirect(catalogUrl);
       if (direct.catalogMatched && direct.hasLinks) {
@@ -568,7 +576,9 @@ class ComicDetailAdapter
           links: direct.links,
           source: direct.source,
           reason: 'comic_detail_catalog_direct_refresh',
-          catalogUrl: direct.catalogUrl,
+          catalogUrl: _isBlank(detail.customCatalogUrl)
+              ? direct.catalogUrl
+              : null,
         );
         return DetailRefreshResult.immediate;
       }
@@ -733,7 +743,7 @@ class ComicDetailAdapter
       customSearchTitle: _featureFlags.readerCustomMetadataEnabled
           ? detail.customSearchTitle
           : null,
-      catalogUrl: detail.catalogUrl,
+      catalogUrl: detail.effectiveCatalogUrl,
     );
   }
 
@@ -787,6 +797,42 @@ class ComicDetailAdapter
       customAuthor: customAuthor,
       customTranslationGroup: customTranslationGroup,
       customSearchTitle: customSearchTitle,
+    );
+  }
+
+  @override
+  Future<DetailCatalogConfiguration> loadCatalogConfiguration({
+    required String workId,
+  }) async {
+    final detail = await _repository.getComicDetail(comicId: workId);
+    if (detail == null) {
+      throw StateError('漫画不存在或已删除');
+    }
+    return DetailCatalogConfiguration(
+      sourceCatalogUrl: detail.catalogUrl,
+      customCatalogUrl: detail.customCatalogUrl,
+    );
+  }
+
+  @override
+  Future<void> updateCatalogOverride({
+    required String workId,
+    String? catalogUrl,
+  }) async {
+    final detail = await _repository.getComicDetail(comicId: workId);
+    if (detail == null) {
+      throw StateError('漫画不存在或已删除');
+    }
+    final normalized = _catalogUrlPolicy.normalizeOverride(catalogUrl);
+    final source = _catalogUrlPolicy.normalizeOverride(detail.catalogUrl);
+    final repository = _repository;
+    if (repository is! ComicCatalogOverrideRepository) {
+      throw StateError('当前漫画仓储不支持配置目录');
+    }
+    final catalogRepository = repository as ComicCatalogOverrideRepository;
+    await catalogRepository.updateCustomCatalogUrl(
+      comicId: workId,
+      catalogUrl: normalized == source ? null : normalized,
     );
   }
 
@@ -946,3 +992,5 @@ class ComicDetailAdapter
     };
   }
 }
+
+bool _isBlank(String? value) => value == null || value.trim().isEmpty;

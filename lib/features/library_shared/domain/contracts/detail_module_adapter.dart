@@ -135,6 +135,36 @@ abstract class DetailMetadataEditor {
   });
 }
 
+/// 作品目录 URL 编辑能力。
+///
+/// 仅需要目录发现策略的模块实现该合同。统一详情页据此显示“配置目录”，
+/// 并保持来源解析值与用户覆盖值相互独立。
+abstract class DetailCatalogEditor {
+  Future<DetailCatalogConfiguration> loadCatalogConfiguration({
+    required String workId,
+  });
+
+  /// 保存用户目录覆盖值。传入 null 或空白表示恢复使用来源目录。
+  Future<void> updateCatalogOverride({
+    required String workId,
+    String? catalogUrl,
+  });
+}
+
+class DetailCatalogConfiguration {
+  const DetailCatalogConfiguration({
+    required this.sourceCatalogUrl,
+    required this.customCatalogUrl,
+  });
+
+  final String? sourceCatalogUrl;
+  final String? customCatalogUrl;
+
+  String get initialInputValue {
+    return _firstNonBlank(customCatalogUrl, sourceCatalogUrl) ?? '';
+  }
+}
+
 /// 自定义封面编辑可选合同。
 ///
 /// 仅漫画详情页需要：从本地图片设自定义封面、调整已有自定义封面的焦点。
@@ -174,4 +204,13 @@ class ReaderRouteTarget {
 
   final String workId;
   final String episodeId;
+}
+
+String? _firstNonBlank(String? preferred, String? fallback) {
+  final first = preferred?.trim();
+  if (first != null && first.isNotEmpty) {
+    return first;
+  }
+  final second = fallback?.trim();
+  return second == null || second.isEmpty ? null : second;
 }

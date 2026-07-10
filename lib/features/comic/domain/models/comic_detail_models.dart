@@ -1,4 +1,4 @@
-﻿class ComicDetail {
+class ComicDetail {
   const ComicDetail({
     required this.comicId,
     required this.sourceTid,
@@ -27,6 +27,7 @@
     required this.updatedAt,
     required this.episodeCount,
     this.catalogUrl,
+    this.customCatalogUrl,
   });
 
   final String comicId;
@@ -34,19 +35,24 @@
   final String sourceFid;
   final String? sourceTypeId;
   final String? sourceTagName;
+
   /// 最终展示标题。用户自定义标题存在时由仓储提前合成为该值。
   final String title;
+
   /// 来源解析标题与用户覆盖标题分开保存，刷新来源信息时不能覆盖用户值。
   final String? sourceTitle;
   final String? customTitle;
+
   /// 最终展示作者。用户自定义作者存在时由仓储提前合成为该值。
   final String? author;
   final String? sourceAuthor;
   final String? customAuthor;
+
   /// 最终展示汉化组。用户自定义汉化组存在时由仓储提前合成为该值。
   final String? translationGroup;
   final String? sourceTranslationGroup;
   final String? customTranslationGroup;
+
   /// 更新搜索关键词的用户覆盖值；为空时刷新链路按标题优先级兜底。
   final String? customSearchTitle;
   final String? coverImageUrl;
@@ -56,13 +62,23 @@
   final String? customCoverSourceEpisodeId;
   final int? customCoverSourceImageIndex;
   final String? customCoverSourceImageUrl;
+
   /// 自定义封面焦点（归一化到 [-1,1]，对齐 Flutter [Alignment]；null 表示居中）。
   /// 非破坏性：原图保持不变，仅记录裁剪/对齐焦点，由显示层按 cover 对齐应用。
   final double? customCoverFocusX;
   final double? customCoverFocusY;
   final DateTime updatedAt;
   final int episodeCount;
+
+  /// 帖子解析或搜索发现的来源目录 URL。
   final String? catalogUrl;
+
+  /// 用户手动配置的目录 URL；存在时刷新策略优先使用该值。
+  final String? customCatalogUrl;
+
+  String? get effectiveCatalogUrl {
+    return _firstNonBlank(customCatalogUrl, catalogUrl);
+  }
 
   String get displayTitle => title;
   String? get displayAuthor => author;

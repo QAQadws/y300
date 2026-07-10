@@ -29,6 +29,62 @@ import 'package:y300/features/library_shared/domain/services/reading_state_batch
 
 void main() {
   test(
+    'catalog configuration keeps source and custom values separate',
+    () async {
+      final repository = _FakeComicRepository(
+        catalogUrl: 'https://bbs.yamibo.com/misc.php?mod=tag&id=1',
+        customCatalogUrl: 'https://bbs.yamibo.com/misc.php?mod=tag&id=2',
+      );
+      final adapter = ComicDetailAdapter(
+        repository,
+        stateRepository: _FakeLibraryStateRepository(),
+      );
+
+      final configuration = await adapter.loadCatalogConfiguration(
+        workId: 'comic:1',
+      );
+      expect(
+        configuration.sourceCatalogUrl,
+        'https://bbs.yamibo.com/misc.php?mod=tag&id=1',
+      );
+      expect(
+        configuration.customCatalogUrl,
+        'https://bbs.yamibo.com/misc.php?mod=tag&id=2',
+      );
+
+      await adapter.updateCatalogOverride(
+        workId: 'comic:1',
+        catalogUrl: 'misc.php?mod=tag&id=3',
+      );
+      expect(
+        repository.lastCustomCatalogUrl,
+        'https://bbs.yamibo.com/misc.php?mod=tag&id=3&type=thread&page=1',
+      );
+
+      await adapter.updateCatalogOverride(
+        workId: 'comic:1',
+        catalogUrl: 'https://bbs.yamibo.com/misc.php?mod=tag&id=1',
+      );
+      expect(repository.lastCustomCatalogUrl, isNull);
+    },
+  );
+
+  test('catalog configuration rejects a non-Yamibo URL', () async {
+    final adapter = ComicDetailAdapter(
+      _FakeComicRepository(),
+      stateRepository: _FakeLibraryStateRepository(),
+    );
+
+    expect(
+      () => adapter.updateCatalogOverride(
+        workId: 'comic:1',
+        catalogUrl: 'https://example.com/catalog',
+      ),
+      throwsFormatException,
+    );
+  });
+
+  test(
     'refreshWork uses catalog fast path when catalogUrl is persisted',
     () async {
       final repository = _FakeComicRepository(
@@ -726,18 +782,22 @@ class _RecordingSearchQueue implements ComicSearchRefreshQueueEnqueuer {
   }
 }
 
-class _FakeComicRepository implements ComicRepository {
+class _FakeComicRepository
+    implements ComicRepository, ComicCatalogOverrideRepository {
   _FakeComicRepository({
     this.progress,
     this.title = 'Test Comic',
     this.imageCountByEpisodeId = const <String, int>{},
     this.catalogUrl,
+    this.customCatalogUrl,
   });
 
   final ComicReadingProgress? progress;
   final String title;
   final Map<String, int> imageCountByEpisodeId;
   final String? catalogUrl;
+  final String? customCatalogUrl;
+  String? lastCustomCatalogUrl;
   bool mergeCalled = false;
   List<ComicEpisodeLink> lastMergedLinks = const [];
   String? lastFallbackTid;
@@ -764,6 +824,7 @@ class _FakeComicRepository implements ComicRepository {
       updatedAt: DateTime(2026, 1, 1),
       episodeCount: 0,
       catalogUrl: catalogUrl,
+      customCatalogUrl: customCatalogUrl,
     );
   }
 
@@ -937,6 +998,14 @@ class _FakeComicRepository implements ComicRepository {
     required String comicId,
     required String catalogUrl,
   }) async {}
+
+  @override
+  Future<void> updateCustomCatalogUrl({
+    required String comicId,
+    required String? catalogUrl,
+  }) async {
+    lastCustomCatalogUrl = catalogUrl;
+  }
 
   @override
   Future<Set<String>> getKnownEpisodeTids({required String comicId}) async =>
