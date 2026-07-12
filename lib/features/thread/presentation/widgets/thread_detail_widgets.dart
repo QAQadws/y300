@@ -26,6 +26,7 @@ import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.da
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
+import 'package:y300/shared/widgets/native_page_dropdown_button.dart';
 
 // File split (Phase 5b): cohesive widget groups live in part files under the
 // same library so private members and shared helpers remain accessible without

@@ -1360,7 +1360,7 @@ void main() {
       expect(_appBarTitleText('公告区'), findsOneWidget);
     });
 
-    testWidgets('current page button opens quick jump dialog and returns top', (
+    testWidgets('current page button opens page menu and returns top', (
       tester,
     ) async {
       final requestedPages = <int>[];
@@ -1413,34 +1413,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(find.byKey(const Key('thread-detail-page-list')), findsOneWidget);
+      expect(find.byKey(const Key('thread-detail-page-input')), findsNothing);
       expect(
-        find.byKey(const Key('thread-detail-page-picker-dialog')),
+        find.byKey(const Key('thread-detail-page-option-1')),
         findsOneWidget,
       );
-      expect(
-        find.byKey(const Key('thread-detail-page-plus-5-button')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const Key('thread-detail-page-plus-10-button')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const Key('thread-detail-page-plus-50-button')),
-        findsOneWidget,
-      );
-      final plus50 = tester.widget<OutlinedButton>(
-        find.byKey(const Key('thread-detail-page-plus-50-button')),
-      );
-      expect(plus50.onPressed, isNull);
-
-      await tester.enterText(
-        find.byKey(const Key('thread-detail-page-input')),
-        '3',
-      );
-      await tester.tap(
-        find.byKey(const Key('thread-detail-page-confirm-button')),
-      );
+      await tester.tap(find.byKey(const Key('thread-detail-page-option-3')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 260));
 
@@ -1461,9 +1440,7 @@ void main() {
         find.byKey(const Key('thread-detail-current-page-button')),
       );
       await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const Key('thread-detail-page-plus-5-button')),
-      );
+      await tester.tap(find.byKey(const Key('thread-detail-page-option-8')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 260));
 

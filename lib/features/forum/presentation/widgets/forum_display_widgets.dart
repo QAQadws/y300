@@ -11,6 +11,7 @@ import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dar
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
+import 'package:y300/shared/widgets/native_page_dropdown_button.dart';
 
 class ForumDisplayContent extends StatefulWidget {
   const ForumDisplayContent({
@@ -1738,6 +1739,7 @@ class _LoadMoreSection extends StatelessWidget {
           _CurrentPageButton(
             currentPage: currentPage > 0 ? currentPage : 1,
             lastPage: lastPage,
+            hasMore: hasMore,
             enabled: !isLoadingMore,
             onSelected: onSelectPage,
             palette: palette,
@@ -1774,6 +1776,7 @@ class _CurrentPageButton extends StatelessWidget {
   const _CurrentPageButton({
     required this.currentPage,
     required this.lastPage,
+    required this.hasMore,
     required this.enabled,
     required this.onSelected,
     required this.palette,
@@ -1781,166 +1784,23 @@ class _CurrentPageButton extends StatelessWidget {
 
   final int currentPage;
   final int? lastPage;
+  final bool hasMore;
   final bool enabled;
   final ValueChanged<int> onSelected;
   final ForumDisplayThemePalette palette;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 34,
-      child: TextButton(
-        key: const Key('forum-display-current-page-button'),
-        onPressed: enabled ? () => _showPagePicker(context) : null,
-        style: _pageButtonStyle(context, enabled, palette, emphasized: true),
-        child: Text('第$currentPage页'),
-      ),
-    );
-  }
-
-  Future<void> _showPagePicker(BuildContext context) async {
-    final selected = await showDialog<int>(
-      context: context,
-      builder: (context) => _ForumDisplayPagePickerDialog(
-        currentPage: currentPage,
-        lastPage: lastPage,
-      ),
-    );
-    if (selected != null) {
-      onSelected(selected);
-    }
-  }
-}
-
-class _ForumDisplayPagePickerDialog extends StatefulWidget {
-  const _ForumDisplayPagePickerDialog({
-    required this.currentPage,
-    required this.lastPage,
-  });
-
-  final int currentPage;
-  final int? lastPage;
-
-  @override
-  State<_ForumDisplayPagePickerDialog> createState() =>
-      _ForumDisplayPagePickerDialogState();
-}
-
-class _ForumDisplayPagePickerDialogState
-    extends State<_ForumDisplayPagePickerDialog> {
-  late final TextEditingController _controller;
-  String? _errorText;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.currentPage.toString());
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final lastPage = widget.lastPage;
-    return AlertDialog(
-      title: const Text('选择页码'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextField(
-            key: const Key('forum-display-page-input'),
-            controller: _controller,
-            autofocus: true,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              labelText: lastPage == null ? '页码' : '页码（1-$lastPage）',
-              errorText: _errorText,
-            ),
-            onSubmitted: (_) => _submit(context),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _ForumDisplayPageIncrementButton(
-                buttonKey: const Key('forum-display-page-plus-5-button'),
-                increment: 5,
-                currentPage: widget.currentPage,
-                lastPage: lastPage,
-              ),
-              _ForumDisplayPageIncrementButton(
-                buttonKey: const Key('forum-display-page-plus-10-button'),
-                increment: 10,
-                currentPage: widget.currentPage,
-                lastPage: lastPage,
-              ),
-              _ForumDisplayPageIncrementButton(
-                buttonKey: const Key('forum-display-page-plus-50-button'),
-                increment: 50,
-                currentPage: widget.currentPage,
-                lastPage: lastPage,
-              ),
-            ],
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          key: const Key('forum-display-page-confirm-button'),
-          onPressed: () => _submit(context),
-          child: const Text('跳转'),
-        ),
-      ],
-    );
-  }
-
-  void _submit(BuildContext context) {
-    final page = int.tryParse(_controller.text.trim());
-    final lastPage = widget.lastPage;
-    if (page == null || page < 1) {
-      setState(() => _errorText = '请输入有效页码');
-      return;
-    }
-    if (lastPage != null && page > lastPage) {
-      setState(() => _errorText = '不能超过第$lastPage页');
-      return;
-    }
-    Navigator.of(context).pop(page);
-  }
-}
-
-class _ForumDisplayPageIncrementButton extends StatelessWidget {
-  const _ForumDisplayPageIncrementButton({
-    required this.buttonKey,
-    required this.increment,
-    required this.currentPage,
-    required this.lastPage,
-  });
-
-  final Key buttonKey;
-  final int increment;
-  final int currentPage;
-  final int? lastPage;
-
-  @override
-  Widget build(BuildContext context) {
-    final targetPage = currentPage + increment;
-    final maxPage = lastPage;
-    final enabled = maxPage == null || targetPage <= maxPage;
-    return OutlinedButton(
-      key: buttonKey,
-      onPressed: enabled ? () => Navigator.of(context).pop(targetPage) : null,
-      child: Text('+$increment'),
+    return NativePageDropdownButton(
+      buttonKey: const Key('forum-display-current-page-button'),
+      menuKeyPrefix: 'forum-display',
+      currentPage: currentPage,
+      lastPage: lastPage,
+      hasMore: hasMore,
+      enabled: enabled,
+      label: '第$currentPage页',
+      style: _pageButtonStyle(context, enabled, palette, emphasized: true),
+      onSelected: onSelected,
     );
   }
 }

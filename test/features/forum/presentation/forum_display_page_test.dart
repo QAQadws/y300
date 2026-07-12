@@ -646,13 +646,7 @@ void main() {
           find.byKey(const Key('forum-display-current-page-button')),
         );
         await tester.pumpAndSettle();
-        await tester.enterText(
-          find.byKey(const Key('forum-display-page-input')),
-          '3',
-        );
-        await tester.tap(
-          find.byKey(const Key('forum-display-page-confirm-button')),
-        );
+        await tester.tap(find.byKey(const Key('forum-display-page-option-3')));
         await tester.pumpAndSettle();
 
         _expectReturnedToFilterStart(tester, filterStartOffset);
@@ -729,7 +723,7 @@ void main() {
       expect(navigator.canPop(), isTrue);
     });
 
-    testWidgets('current page button opens picker and loads selected page', (
+    testWidgets('current page button opens page menu and loads selected page', (
       tester,
     ) async {
       final repository = _FakeForumDisplayRepository((_, page, query) async {
@@ -760,25 +754,17 @@ void main() {
         find.byKey(const Key('forum-display-current-page-button')),
       );
       await tester.pumpAndSettle();
+      expect(find.byKey(const Key('forum-display-page-list')), findsOneWidget);
+      expect(find.byKey(const Key('forum-display-page-input')), findsNothing);
       expect(
-        find.byKey(const Key('forum-display-page-plus-5-button')),
+        find.byKey(const Key('forum-display-page-option-1')),
         findsOneWidget,
       );
-      final plus10 = tester.widget<OutlinedButton>(
-        find.byKey(const Key('forum-display-page-plus-10-button')),
+      expect(
+        find.byKey(const Key('forum-display-page-option-8')),
+        findsOneWidget,
       );
-      final plus50 = tester.widget<OutlinedButton>(
-        find.byKey(const Key('forum-display-page-plus-50-button')),
-      );
-      expect(plus10.onPressed, isNull);
-      expect(plus50.onPressed, isNull);
-      await tester.enterText(
-        find.byKey(const Key('forum-display-page-input')),
-        '3',
-      );
-      await tester.tap(
-        find.byKey(const Key('forum-display-page-confirm-button')),
-      );
+      await tester.tap(find.byKey(const Key('forum-display-page-option-3')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
@@ -789,9 +775,7 @@ void main() {
         find.byKey(const Key('forum-display-current-page-button')),
       );
       await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const Key('forum-display-page-plus-5-button')),
-      );
+      await tester.tap(find.byKey(const Key('forum-display-page-option-8')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
