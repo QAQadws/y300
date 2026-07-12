@@ -48,6 +48,12 @@ class ForumHtmlStylePolicy {
         'vertical-align': 'top',
       };
     }
+    if (_isContentImage(element)) {
+      return {'display': 'block', 'max-width': '100%'};
+    }
+    if (_isContentImageOnlyAnchor(element)) {
+      return {'display': 'block'};
+    }
     if (_isParagraphLike(element)) {
       return {'margin': '0 0 ${preferences.typography.paragraphSpacing}px'};
     }
@@ -98,6 +104,31 @@ class ForumHtmlStylePolicy {
   bool _isTableCell(html_dom.Element element) {
     final tagName = element.localName?.toLowerCase();
     return tagName == 'td' || tagName == 'th';
+  }
+
+  bool _isContentImage(html_dom.Element element) {
+    return element.localName?.toLowerCase() == 'img' &&
+        !_isForumStickerImage(element);
+  }
+
+  bool _isContentImageOnlyAnchor(html_dom.Element element) {
+    if (element.localName?.toLowerCase() != 'a' ||
+        element.text.trim().isNotEmpty ||
+        element.children.isEmpty) {
+      return false;
+    }
+    return element.children.every(_isContentImage);
+  }
+
+  bool _isForumStickerImage(html_dom.Element element) {
+    final source = [
+      element.attributes['src'],
+      element.attributes['data-src'],
+      element.attributes['data-original'],
+      element.attributes['file'],
+      element.attributes['zoomfile'],
+    ].whereType<String>().join(' ').toLowerCase();
+    return source.contains('static/image/smiley/');
   }
 
   void _sanitizeStyle(html_dom.Element element) {

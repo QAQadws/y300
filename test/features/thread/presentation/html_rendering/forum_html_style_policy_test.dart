@@ -98,6 +98,36 @@ void main() {
     });
   });
 
+  test('renders content images and image-only links as block content', () {
+    final policy = ForumHtmlStylePolicy(ForumHtmlReaderPreferences.defaults());
+    final fragment = html_parser.parseFragment(
+      '<a href="page.jpg" class="orange" />'
+      '<img src="data/attachment/forum/page.jpg">'
+      '</a>',
+    );
+    final anchor = fragment.querySelector('a')!;
+    final image = fragment.querySelector('img')!;
+
+    expect(policy.customStylesFor(anchor), {'display': 'block'});
+    expect(policy.customStylesFor(image), {
+      'display': 'block',
+      'max-width': '100%',
+    });
+  });
+
+  test('keeps smileys and mixed text links in inline flow', () {
+    final policy = ForumHtmlStylePolicy(ForumHtmlReaderPreferences.defaults());
+    final fragment = html_parser.parseFragment(
+      '<span>正文<img src="static/image/smiley/gexing/008.gif"></span>'
+      '<a href="page.jpg">图片说明'
+      '<img src="data/attachment/forum/page.jpg">'
+      '</a>',
+    );
+
+    expect(policy.customStylesFor(fragment.querySelector('span img')!), isNull);
+    expect(policy.customStylesFor(fragment.querySelector('a')!), isNull);
+  });
+
   test(
     'hides collapse wrappers as a fallback when custom widget is unavailable',
     () {

@@ -820,6 +820,82 @@ void main() {
     expect(shifts.single.deltaHeight, lessThan(0));
   });
 
+  testWidgets(
+    'does not retain a tall trailing line box after consecutive attachment images',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            imageCacheServiceProvider.overrideWithValue(
+              _RecordingImageCacheService(),
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: SizedBox(
+                    width: 320,
+                    child: ForumHtmlWidgetPostRenderer(
+                      sourceId: 'consecutive-attachment-images',
+                      threadId: '573549',
+                      html:
+                          '<i class="pstatus">本帖最后编辑</i><br><br>'
+                          '7月12日是辉夜的生日哦<br>辉夜生日快乐<br>'
+                          '<a href="data/attachment/forum/first.jpg" '
+                          'class="orange" />'
+                          '<img src="data/attachment/forum/first.jpg">'
+                          '</a>'
+                          '<a href="data/attachment/forum/second.jpg" '
+                          'class="orange" />'
+                          '<img src="data/attachment/forum/second.jpg">'
+                          '</a>'
+                          '<a href="data/attachment/forum/third.jpg" '
+                          'class="orange" />'
+                          '<img src="data/attachment/forum/third.jpg">'
+                          '</a><br><br>',
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      const decodedSizes = <Size>[
+        Size(1600, 1550),
+        Size(1880, 3008),
+        Size(1880, 3002),
+      ];
+      final imageWidgets = tester
+          .widgetList<CachedLibraryImage>(find.byType(CachedLibraryImage))
+          .toList(growable: false);
+      expect(imageWidgets, hasLength(decodedSizes.length));
+      for (var index = 0; index < imageWidgets.length; index++) {
+        imageWidgets[index].onImageResolved?.call(decodedSizes[index]);
+      }
+      await tester.pump();
+
+      final imageHeight = find
+          .byType(AspectRatio)
+          .evaluate()
+          .map((element) => (element.renderObject! as RenderBox).size.height)
+          .fold<double>(0, (sum, height) => sum + height);
+      final rendererHeight = tester
+          .getSize(
+            find.byKey(
+              const Key('forum-html-renderer-consecutive-attachment-images'),
+            ),
+          )
+          .height;
+
+      expect(rendererHeight - imageHeight, lessThan(160));
+    },
+  );
+
   testWidgets('keeps fallback layout for decoded sizes near the comic ratio', (
     tester,
   ) async {
