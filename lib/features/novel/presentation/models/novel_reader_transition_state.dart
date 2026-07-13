@@ -8,7 +8,4 @@ class NovelReaderTransitionState {
   final String targetEpisodeId;
 }
 
-enum NovelReaderTransitionKind {
-  switchingEpisode,
-  refreshingEpisode,
-}
+enum NovelReaderTransitionKind { switchingEpisode, updatingWork }

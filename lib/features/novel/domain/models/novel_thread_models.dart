@@ -53,7 +53,7 @@ class NovelRefreshPlan {
   final NovelParsingDebugInfo? debugInfo;
 }
 
-/// 小说刷新模式 —— 控制 [NovelRepository.refreshEpisodes] 的拉取策略。
+/// Legacy refresh mode retained for historical repository tests only.
 enum NovelEpisodeRefreshMode {
   /// 从第 1 页开始全量爬取并重建章节、封面、简介。
   ///
@@ -114,7 +114,7 @@ abstract interface class NovelThreadGateway {
   });
 }
 
-/// Temporary compatibility port for the pre-hydration repository flow.
+/// Test-only compatibility port for the pre-hydration repository flow.
 ///
 /// New synchronization services must depend on [NovelThreadGateway], whose
 /// contract cannot issue an unfiltered chapter request.

@@ -1,11 +1,9 @@
-﻿import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/data/models/novel_models.dart';
 
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
-import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
-import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 
 /// 小说仓储：封装小说书架、章节、正文、阅读偏好与阅读进度。
 abstract class NovelRepository {
@@ -41,17 +39,6 @@ abstract class NovelRepository {
 
   Future<NovelReaderPreferences> getReaderPreferences();
 
-  Future<void> upsertNovelBySeed({
-    required NovelRefreshSeed seed,
-    FavoriteSyncExecutionContext? executionContext,
-  });
-
-  Future<NovelEpisodeRefreshResult> refreshEpisodes({
-    required String novelId,
-    NovelEpisodeRefreshMode mode = NovelEpisodeRefreshMode.full,
-    FavoriteSyncExecutionContext? executionContext,
-  });
-
   /// 从小说书架移除作品，但保留作品数据和已缓存章节正文。
   Future<void> removeFromShelf({required String novelId});
 
@@ -79,13 +66,9 @@ abstract class NovelRepository {
     required String novelId,
   });
 
-  Future<void> addReaderBookmark({
-    required NovelReaderBookmark bookmark,
-  });
+  Future<void> addReaderBookmark({required NovelReaderBookmark bookmark});
 
-  Future<void> removeReaderBookmark({
-    required String bookmarkId,
-  });
+  Future<void> removeReaderBookmark({required String bookmarkId});
 
   Future<void> toggleEpisodeBookmark({
     required String novelId,

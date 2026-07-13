@@ -896,7 +896,6 @@ class _FakeNovelRepository implements NovelRepository {
   @override
   Future<NovelReadingProgress?> getReadingProgress({required String novelId}) async => null;
 
-  @override
   Future<NovelEpisodeRefreshResult> refreshEpisodes({
     required String novelId,
     NovelEpisodeRefreshMode mode = NovelEpisodeRefreshMode.full,
@@ -925,7 +924,6 @@ class _FakeNovelRepository implements NovelRepository {
     double progressPercent = 0,
   }) async {}
 
-  @override
   Future<void> upsertNovelBySeed({
     required NovelRefreshSeed seed,
     FavoriteSyncExecutionContext? executionContext,

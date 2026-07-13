@@ -29,12 +29,11 @@ class LocalNovelRepository
         NovelCoverCacheWriter {
   LocalNovelRepository(
     this._dbFuture, {
-    required LegacyNovelThreadGateway threadGateway,
-    required NovelEpisodeDiscoveryService discoveryService,
+    LegacyNovelThreadGateway? threadGateway,
+    NovelEpisodeDiscoveryService? discoveryService,
     ImageCacheService? imageCacheService,
-    NovelTitleSanitizer titleSanitizer = const DefaultNovelTitleSanitizer(),
-    NovelIntroSectionExtractor introExtractor =
-        const DefaultNovelIntroSectionExtractor(),
+    NovelTitleSanitizer? titleSanitizer,
+    NovelIntroSectionExtractor? introExtractor,
     LibraryStateRepository? stateRepository,
   }) : _threadGateway = threadGateway,
        _discoveryService = discoveryService,
@@ -45,11 +44,11 @@ class LocalNovelRepository
            stateRepository ?? LocalLibraryStateRepository(_dbFuture);
 
   final Future<Database> _dbFuture;
-  final LegacyNovelThreadGateway _threadGateway;
-  final NovelEpisodeDiscoveryService _discoveryService;
+  final LegacyNovelThreadGateway? _threadGateway;
+  final NovelEpisodeDiscoveryService? _discoveryService;
   final ImageCacheService? _imageCacheService;
-  final NovelTitleSanitizer _titleSanitizer;
-  final NovelIntroSectionExtractor _introExtractor;
+  final NovelTitleSanitizer? _titleSanitizer;
+  final NovelIntroSectionExtractor? _introExtractor;
   final LibraryStateRepository _stateRepository;
 
   static const String _contentType = 'novel';
@@ -592,15 +591,16 @@ class LocalNovelRepository
     return value != 0;
   }
 
-  @override
+  /// Legacy fixture helper. Production ingest uses source metadata services.
   Future<void> upsertNovelBySeed({
     required NovelRefreshSeed seed,
     FavoriteSyncExecutionContext? executionContext,
   }) async {
+    final threadGateway = _requireLegacyThreadGateway();
     final detail = await _runThreadRequest(
       executionContext: executionContext,
       kind: FavoriteFirstSyncRequestKind.novelSeedDetail,
-      action: () => _threadGateway.getThreadDetail(tid: seed.tid, page: 1),
+      action: () => threadGateway.getThreadDetail(tid: seed.tid, page: 1),
     );
     final db = await _dbFuture;
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -644,7 +644,7 @@ class LocalNovelRepository
     });
   }
 
-  @override
+  /// Legacy fixture helper. Production updates use NovelChapterUpdateService.
   Future<NovelEpisodeRefreshResult> refreshEpisodes({
     required String novelId,
     NovelEpisodeRefreshMode mode = NovelEpisodeRefreshMode.full,
@@ -688,7 +688,10 @@ class LocalNovelRepository
       tid: detail.sourceTid,
       executionContext: executionContext,
     );
-    final plan = _discoveryService.buildPlan(novelId: novelId, pages: pages);
+    final plan = _requireLegacyDiscoveryService().buildPlan(
+      novelId: novelId,
+      pages: pages,
+    );
     final db = await _dbFuture;
     var inserted = 0;
     var updated = 0;
@@ -847,7 +850,7 @@ class LocalNovelRepository
       );
     }
 
-    final plan = _discoveryService.buildPlan(
+    final plan = _requireLegacyDiscoveryService().buildPlan(
       novelId: novelId,
       pages: pages,
       options: NovelDiscoveryOptions(
@@ -1333,13 +1336,14 @@ class LocalNovelRepository
     int startPage = 1,
     FavoriteSyncExecutionContext? executionContext,
   }) async {
+    final threadGateway = _requireLegacyThreadGateway();
     final pages = <ThreadDetailData>[];
     final endPage = startPage + _maxRefreshPages - 1;
     for (var page = startPage; page <= endPage; page++) {
       final detail = await _runThreadRequest(
         executionContext: executionContext,
         kind: FavoriteFirstSyncRequestKind.novelEpisodePage,
-        action: () => _threadGateway.getThreadDetail(tid: tid, page: page),
+        action: () => threadGateway.getThreadDetail(tid: tid, page: page),
       );
       if (detail.posts.isEmpty) {
         break;
@@ -1383,7 +1387,8 @@ class LocalNovelRepository
   /// `fallback` 用于 `refreshEpisodes` 路径 —— 解析后的 plan.subject
   /// 偶尔为空，此时不能把已存的 title 抹成"未命名小说"。
   String _sanitizeTitleForStorage(String rawTitle, {String? fallback}) {
-    final sanitized = _titleSanitizer.sanitize(rawTitle);
+    final sanitized = (_titleSanitizer ?? const DefaultNovelTitleSanitizer())
+        .sanitize(rawTitle);
     if (sanitized.isNotEmpty) {
       return sanitized;
     }
@@ -1425,7 +1430,10 @@ class LocalNovelRepository
     if (firstPostHtml == null) {
       return;
     }
-    final parsed = _introExtractor.extract(firstPostHtml: firstPostHtml);
+    final parsed =
+        (_introExtractor ?? const DefaultNovelIntroSectionExtractor()).extract(
+          firstPostHtml: firstPostHtml,
+        );
     if (parsed == null || parsed.isEmpty) {
       return;
     }
@@ -1454,6 +1462,16 @@ class LocalNovelRepository
       return action();
     }
     return governor.run(kind: kind, action: action);
+  }
+
+  LegacyNovelThreadGateway _requireLegacyThreadGateway() {
+    return _threadGateway ??
+        (throw UnsupportedError('Legacy novel thread refresh is disabled.'));
+  }
+
+  NovelEpisodeDiscoveryService _requireLegacyDiscoveryService() {
+    return _discoveryService ??
+        (throw UnsupportedError('Legacy novel discovery is disabled.'));
   }
 
   DateTime? _toDateTime(Object? value) {

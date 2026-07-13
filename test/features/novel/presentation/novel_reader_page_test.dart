@@ -21,9 +21,11 @@ import 'package:y300/features/novel/data/services/novel_download_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
+import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
+import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
@@ -1512,22 +1514,25 @@ void main() {
     expect(find.text('已缓存 2/2 章'), findsOneWidget);
   });
 
-  testWidgets('NovelReaderPage error view can refresh chapters', (
-    tester,
-  ) async {
+  testWidgets('NovelReaderPage error view can update the work', (tester) async {
     final repository = _FakeNovelRepository(
       contentsByEpisodeId: const <String, NovelChapterContent>{},
     );
-    await tester.pumpWidget(_buildReaderApp(repository: repository));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('novel-reader-error-view')), findsOneWidget);
-    await tester.tap(
-      find.byKey(const Key('novel-reader-error-refresh-episodes')),
+    final updateService = _RecordingNovelChapterUpdateService();
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        chapterUpdateService: updateService,
+      ),
     );
     await tester.pumpAndSettle();
 
-    expect(repository.refreshCount, 1);
+    expect(find.byKey(const Key('novel-reader-error-view')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('novel-reader-error-update-work')));
+    await tester.pumpAndSettle();
+
+    expect(updateService.novelIds, <String>['novel:49:100']);
+    expect(find.text('更新作品'), findsOneWidget);
   });
 
   testWidgets(
@@ -1702,12 +1707,16 @@ Widget _buildReaderApp({
   NovelReaderLayoutService? layoutService,
   NovelReaderDocumentBuildService? documentBuildService,
   NovelReaderSupplementalHydrationService? supplementalHydrationService,
+  NovelChapterUpdateService? chapterUpdateService,
   ThemeData? theme,
   String initialEpisodeId = 'novel:49:100:5001',
 }) {
   return ProviderScope(
     overrides: [
       novelRepositoryProvider.overrideWithValue(repository),
+      novelChapterUpdateServiceProvider.overrideWithValue(
+        chapterUpdateService ?? _RecordingNovelChapterUpdateService(),
+      ),
       forumWebViewExternalLauncherProvider.overrideWithValue(
         _FakeForumWebViewExternalLauncher(),
       ),
@@ -1742,6 +1751,29 @@ Widget _buildReaderApp({
       ),
     ),
   );
+}
+
+class _RecordingNovelChapterUpdateService implements NovelChapterUpdateService {
+  final List<String> novelIds = <String>[];
+
+  @override
+  Future<NovelChapterSyncResult> update(String novelId) async {
+    novelIds.add(novelId);
+    return NovelChapterSyncResult(
+      mode: NovelChapterSyncMode.incremental,
+      fetchedPages: 1,
+      insertedCount: 0,
+      updatedCount: 1,
+      totalCount: 2,
+      checkpoint: NovelChapterSyncCheckpoint(
+        novelId: novelId,
+        publisherId: '406769',
+        lastCompletedAuthorPage: 1,
+        lastSeenPid: '5002',
+        completedAt: DateTime(2026, 7, 14),
+      ),
+    );
+  }
 }
 
 class _FakeForumWebViewExternalLauncher
@@ -2221,7 +2253,6 @@ class _FakeNovelRepository implements NovelRepository {
     return readingProgress;
   }
 
-  @override
   Future<NovelEpisodeRefreshResult> refreshEpisodes({
     required String novelId,
     NovelEpisodeRefreshMode mode = NovelEpisodeRefreshMode.full,
@@ -2271,7 +2302,6 @@ class _FakeNovelRepository implements NovelRepository {
     );
   }
 
-  @override
   Future<void> upsertNovelBySeed({
     required NovelRefreshSeed seed,
     FavoriteSyncExecutionContext? executionContext,

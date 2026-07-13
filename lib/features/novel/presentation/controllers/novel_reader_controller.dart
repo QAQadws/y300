@@ -583,21 +583,20 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     );
   }
 
-  Future<bool> refreshCurrentEpisode() async {
+  Future<bool> updateWork() async {
     final current = state.value;
-    final repository = ref.read(novelRepositoryProvider);
     if (current == null) {
       state = const AsyncLoading();
       state = await AsyncValue.guard(() async {
-        await repository.refreshEpisodes(novelId: _args.novelId);
+        await ref.read(novelChapterUpdateServiceProvider).update(_args.novelId);
         return _loadInitialCriticalState(_args.episodeId);
       });
       return state.hasValue;
     }
     return _runEpisodeTransition(
       episodeId: current.currentEpisode.episodeId,
-      kind: NovelReaderTransitionKind.refreshingEpisode,
-      refreshEpisodes: true,
+      kind: NovelReaderTransitionKind.updatingWork,
+      updateWork: true,
     );
   }
 
@@ -634,7 +633,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   Future<bool> _runEpisodeTransition({
     required String episodeId,
     required NovelReaderTransitionKind kind,
-    bool refreshEpisodes = false,
+    bool updateWork = false,
   }) async {
     final current = state.value;
     if (current == null) {
@@ -658,10 +657,8 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       ),
     );
     try {
-      if (refreshEpisodes) {
-        await ref
-            .read(novelRepositoryProvider)
-            .refreshEpisodes(novelId: _args.novelId);
+      if (updateWork) {
+        await ref.read(novelChapterUpdateServiceProvider).update(_args.novelId);
         if (!ref.mounted) {
           return false;
         }

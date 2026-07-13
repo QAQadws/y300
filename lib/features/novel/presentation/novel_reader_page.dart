@@ -117,7 +117,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           error: (error, _) => NovelReaderErrorView(
             error: error,
             onRetry: () => ref.invalidate(novelReaderControllerProvider(_args)),
-            onRefreshEpisodes: () => _refreshFromErrorView(),
+            onUpdateWork: () => _updateWorkFromErrorView(),
             onOpenThread: () => _openFallbackSourceThread(),
           ),
           data: (viewState) {
@@ -1130,14 +1130,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       );
   }
 
-  Future<void> _refreshFromErrorView() async {
+  Future<void> _updateWorkFromErrorView() async {
     final didSucceed = await ref
         .read(novelReaderControllerProvider(_args).notifier)
-        .refreshCurrentEpisode();
+        .updateWork();
     if (!mounted || didSucceed) {
       return;
     }
-    _showReaderSnackBar('章节刷新失败，已保留当前章节');
+    _showReaderSnackBar('作品更新失败，已保留当前章节');
   }
 
   String _novelTitle(NovelReaderViewState viewState) {
@@ -1393,13 +1393,13 @@ class NovelReaderErrorView extends StatelessWidget {
     super.key,
     required this.error,
     required this.onRetry,
-    required this.onRefreshEpisodes,
+    required this.onUpdateWork,
     required this.onOpenThread,
   });
 
   final Object error;
   final VoidCallback onRetry;
-  final VoidCallback onRefreshEpisodes;
+  final VoidCallback onUpdateWork;
   final VoidCallback onOpenThread;
 
   @override
@@ -1440,10 +1440,10 @@ class NovelReaderErrorView extends StatelessWidget {
                         label: const Text('重试'),
                       ),
                       OutlinedButton.icon(
-                        key: const Key('novel-reader-error-refresh-episodes'),
-                        onPressed: onRefreshEpisodes,
+                        key: const Key('novel-reader-error-update-work'),
+                        onPressed: onUpdateWork,
                         icon: const Icon(Icons.sync),
-                        label: const Text('刷新章节'),
+                        label: const Text('更新作品'),
                       ),
                       OutlinedButton.icon(
                         key: const Key('novel-reader-error-open-thread'),

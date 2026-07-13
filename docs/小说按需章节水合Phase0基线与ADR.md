@@ -167,4 +167,6 @@ Phase 4 已完成：小说详情提供全局持久化的阅读器/原帖楼层�
 
 Phase 5 已完成：小说详情下拉刷新、header 更新和更多菜单刷新统一调用新章节同步服务。ready 状态只从持久化 checkpoint 的最后成功 author-filtered 页重叠抓取，不再从正式章节表猜测起点；增量事务保留旧 PID 顺序和用户状态、追加新 PID、不删除缺席历史 PID，并在所有页面成功后才推进 checkpoint。中间失败保留正式章节、原 checkpoint 与 ready 状态。
 
-下一阶段是 Phase 6：统一阅读器刷新语义，并删除或委托 catalog-first、旧全量刷新 controller 等 legacy 生产路径。
+Phase 6 已完成：小说详情与阅读器统一经 `NovelChapterUpdateService` 更新作品，阅读器不再调用旧全量刷新；正式 `NovelRepository` 合同移除旧 seed/refresh API，无调用者的 detail/shelf controller 和 legacy/discovery 生产 provider 已删除。catalog-first、heading/正则和旧 fallback 标题不再进入生产依赖图，来源目录仍只作 metadata，HTML-first 阅读链保持不变。
+
+Phase 0-6 目标链已经闭环。后续小说功能应扩展 metadata ingest、chapter update/sync 或 reader 各自的明确端口，不得重新把旧 catalog-first 全量抓取接回收藏、详情或阅读器。

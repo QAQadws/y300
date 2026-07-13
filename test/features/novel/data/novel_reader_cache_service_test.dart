@@ -291,7 +291,6 @@ class _NovelCacheRepositoryFake implements NovelRepository {
     required String newName,
   }) async {}
 
-  @override
   Future<NovelEpisodeRefreshResult> refreshEpisodes({
     required String novelId,
     NovelEpisodeRefreshMode mode = NovelEpisodeRefreshMode.full,
@@ -315,7 +314,6 @@ class _NovelCacheRepositoryFake implements NovelRepository {
     double progressPercent = 0,
   }) async {}
 
-  @override
   Future<void> upsertNovelBySeed({
     required NovelRefreshSeed seed,
     FavoriteSyncExecutionContext? executionContext,

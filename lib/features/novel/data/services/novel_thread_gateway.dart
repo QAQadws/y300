@@ -51,42 +51,6 @@ class ApiNovelThreadGateway implements NovelThreadGateway {
   }
 }
 
-class ApiLegacyNovelThreadGateway implements LegacyNovelThreadGateway {
-  const ApiLegacyNovelThreadGateway(this._apiClient);
-
-  final ApiClient _apiClient;
-
-  @override
-  Future<ThreadDetailData> getThreadDetail({
-    required String tid,
-    required int page,
-  }) async {
-    final result = await _apiClient.getParsed<ThreadDetailData>(
-      module: 'viewthread',
-      queryParameters: <String, dynamic>{
-        'tid': tid,
-        'page': page,
-        'version': 1,
-        'ppp': 200,
-      },
-      parser: (response) =>
-          ThreadDetailData.fromVariables(response.variables, page: page),
-    );
-    final data = result.dataOrNull;
-    if (!result.isSuccess || data == null) {
-      final message = result.errorOrNull?.message ?? '加载帖子详情失败';
-      throw StateError(message);
-    }
-    return data;
-  }
-}
-
 final novelThreadGatewayProvider = Provider<NovelThreadGateway>((ref) {
   return ApiNovelThreadGateway(ref.watch(apiClientProvider));
-});
-
-final legacyNovelThreadGatewayProvider = Provider<LegacyNovelThreadGateway>((
-  ref,
-) {
-  return ApiLegacyNovelThreadGateway(ref.watch(apiClientProvider));
 });

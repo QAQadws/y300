@@ -60,10 +60,8 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
       readingStateBatchWriter: ref.watch(readingStateBatchWriterProvider),
       stateRepository: ref.watch(libraryStateRepositoryProvider),
       sourceStateRepository: ref.watch(novelSourceStateRepositoryProvider),
-      chapterSyncServiceFactory: () =>
-          ref.read(novelChapterSyncServiceProvider),
-      sourceMetadataRecoveryServiceFactory: () =>
-          ref.read(novelSourceMetadataRecoveryServiceProvider),
+      chapterUpdateServiceFactory: () =>
+          ref.read(novelChapterUpdateServiceProvider),
     );
     final hydrationPanel = hydration.when<Widget?>(
       data: (value) => value.isReady

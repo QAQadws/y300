@@ -25,6 +25,7 @@ import 'package:y300/features/novel/domain/repositories/novel_source_state_repos
 import 'package:y300/features/novel/domain/repositories/novel_interaction_preferences_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_source_route_resolver.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_sync_service.dart';
+import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 import 'package:y300/features/novel/presentation/novel_detail_page.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
@@ -296,14 +297,14 @@ void main() {
   });
 
   testWidgets(
-    'pull refresh and refresh menu use the same incremental service',
+    'pull refresh and refresh menu use the same chapter update service',
     (tester) async {
-      final syncService = _RecordingImmediateNovelChapterSyncService();
+      final updateService = _RecordingNovelChapterUpdateService();
       await _pumpNovelDetail(
         tester,
         preferences: _MemoryNovelInteractionPreferencesRepository(),
         routeResolver: _FakeNovelChapterSourceRouteResolver.success(),
-        chapterSyncService: syncService,
+        chapterUpdateService: updateService,
       );
 
       final refreshIndicator = tester.widget<RefreshIndicator>(
@@ -312,26 +313,14 @@ void main() {
       await refreshIndicator.onRefresh();
       await tester.pumpAndSettle();
 
-      expect(syncService.requests, hasLength(1));
-      expect(
-        syncService.requests.single.mode,
-        NovelChapterSyncMode.incremental,
-      );
-      expect(
-        syncService.requests.single.checkpoint?.lastCompletedAuthorPage,
-        1,
-      );
+      expect(updateService.novelIds, <String>['novel:1']);
 
       await tester.tap(find.byIcon(Icons.more_vert));
       await tester.pumpAndSettle();
       await tester.tap(find.text('刷新'));
       await tester.pumpAndSettle();
 
-      expect(syncService.requests, hasLength(2));
-      expect(
-        syncService.requests.map((request) => request.mode),
-        everyElement(NovelChapterSyncMode.incremental),
-      );
+      expect(updateService.novelIds, <String>['novel:1', 'novel:1']);
     },
   );
 }
@@ -342,7 +331,7 @@ Future<void> _pumpNovelDetail(
   required _FakeNovelChapterSourceRouteResolver routeResolver,
   _FakeLibraryStateRepository? libraryStateRepository,
   ThreadRepository? threadRepository,
-  NovelChapterSyncService? chapterSyncService,
+  NovelChapterUpdateService? chapterUpdateService,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -364,8 +353,10 @@ Future<void> _pumpNovelDetail(
           routeResolver,
         ),
         imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
-        if (chapterSyncService != null)
-          novelChapterSyncServiceProvider.overrideWithValue(chapterSyncService),
+        if (chapterUpdateService != null)
+          novelChapterUpdateServiceProvider.overrideWithValue(
+            chapterUpdateService,
+          ),
         if (threadRepository != null)
           threadRepositoryProvider.overrideWithValue(threadRepository),
       ],
@@ -598,39 +589,26 @@ class _ControlledNovelChapterSyncService implements NovelChapterSyncService {
   Future<void> dispose() => _progress.close();
 }
 
-class _RecordingImmediateNovelChapterSyncService
-    implements NovelChapterSyncService {
-  final List<NovelChapterSyncRequest> requests = <NovelChapterSyncRequest>[];
+class _RecordingNovelChapterUpdateService implements NovelChapterUpdateService {
+  final List<String> novelIds = <String>[];
 
   @override
-  bool hasActiveRun(String novelId) => false;
-
-  @override
-  Future<NovelChapterSyncResult> synchronize(
-    NovelChapterSyncRequest request,
-  ) async {
-    requests.add(request);
+  Future<NovelChapterSyncResult> update(String novelId) async {
+    novelIds.add(novelId);
     return NovelChapterSyncResult(
-      mode: request.mode,
+      mode: NovelChapterSyncMode.incremental,
       fetchedPages: 1,
       insertedCount: 0,
       updatedCount: 1,
       totalCount: 1,
-      checkpoint:
-          request.checkpoint ??
-          NovelChapterSyncCheckpoint(
-            novelId: request.novelId,
-            publisherId: request.publisherId,
-            lastCompletedAuthorPage: 1,
-            lastSeenPid: '5001',
-            completedAt: DateTime(2026, 7, 14),
-          ),
+      checkpoint: NovelChapterSyncCheckpoint(
+        novelId: novelId,
+        publisherId: '406769',
+        lastCompletedAuthorPage: 1,
+        lastSeenPid: '5001',
+        completedAt: DateTime(2026, 7, 14),
+      ),
     );
-  }
-
-  @override
-  Stream<NovelChapterSyncProgress> watchProgress(String novelId) {
-    return const Stream<NovelChapterSyncProgress>.empty();
   }
 }
 
@@ -814,7 +792,6 @@ class _FakeNovelRepository implements NovelRepository {
     required String toCategoryId,
   }) async {}
 
-  @override
   Future<NovelEpisodeRefreshResult> refreshEpisodes({
     required String novelId,
     NovelEpisodeRefreshMode mode = NovelEpisodeRefreshMode.full,
@@ -850,7 +827,6 @@ class _FakeNovelRepository implements NovelRepository {
     double progressPercent = 0,
   }) async {}
 
-  @override
   Future<void> upsertNovelBySeed({
     required NovelRefreshSeed seed,
     FavoriteSyncExecutionContext? executionContext,

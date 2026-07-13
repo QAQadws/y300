@@ -11,9 +11,11 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/services/novel_download_service.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
+import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
+import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_transition_state.dart';
@@ -635,43 +637,41 @@ void main() {
     expect(state.isHydratingSupplemental, isFalse);
   });
 
-  test(
-    'refreshCurrentEpisode failure keeps old content and avoids AsyncError',
-    () async {
-      final repository = _ControllerNovelRepository();
-      final bootstrapService = _ControlledNovelReaderBootstrapService(
-        initialCritical: _criticalBootstrap(episodeId: 'novel:49:100:5001'),
-      );
-      bootstrapService.failEpisodeCritical(
-        'novel:49:100:5001',
-        StateError('refresh failed'),
-      );
-      final container = _buildContainer(
-        repository: repository,
-        bootstrapService: bootstrapService,
-      );
-      addTearDown(container.dispose);
-      const args = NovelReaderArgs(
-        novelId: 'novel:49:100',
-        episodeId: 'novel:49:100:5001',
-      );
-      final provider = novelReaderControllerProvider(args);
-      final subscription = _keepReaderAlive(container, args);
-      addTearDown(subscription.close);
+  test('updateWork failure keeps old content and avoids AsyncError', () async {
+    final repository = _ControllerNovelRepository();
+    final updateService = _RecordingNovelChapterUpdateService();
+    final bootstrapService = _ControlledNovelReaderBootstrapService(
+      initialCritical: _criticalBootstrap(episodeId: 'novel:49:100:5001'),
+    );
+    bootstrapService.failEpisodeCritical(
+      'novel:49:100:5001',
+      StateError('refresh failed'),
+    );
+    final container = _buildContainer(
+      repository: repository,
+      bootstrapService: bootstrapService,
+      chapterUpdateService: updateService,
+    );
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
 
-      await container.read(provider.future);
+    await container.read(provider.future);
 
-      final didSucceed = await container
-          .read(provider.notifier)
-          .refreshCurrentEpisode();
+    final didSucceed = await container.read(provider.notifier).updateWork();
 
-      expect(didSucceed, isFalse);
-      expect(container.read(provider).hasError, isFalse);
-      final state = container.read(provider).value!;
-      expect(state.currentEpisode.episodeId, 'novel:49:100:5001');
-      expect(state.transition, isNull);
-    },
-  );
+    expect(didSucceed, isFalse);
+    expect(updateService.novelIds, <String>['novel:49:100']);
+    expect(container.read(provider).hasError, isFalse);
+    final state = container.read(provider).value!;
+    expect(state.currentEpisode.episodeId, 'novel:49:100:5001');
+    expect(state.transition, isNull);
+  });
 
   test('searchInCurrentChapter updates search results and selection', () async {
     final repository = _ControllerNovelRepository();
@@ -828,10 +828,14 @@ ProviderContainer _buildContainer({
   NovelReaderSupplementalHydrationService? supplementalHydrationService,
   NovelReaderDocumentBuildService? documentBuildService,
   NovelReaderProgressCommitter? progressCommitter,
+  NovelChapterUpdateService? chapterUpdateService,
 }) {
   return ProviderContainer(
     overrides: [
       novelRepositoryProvider.overrideWithValue(repository),
+      novelChapterUpdateServiceProvider.overrideWithValue(
+        chapterUpdateService ?? _RecordingNovelChapterUpdateService(),
+      ),
       novelDownloadServiceProvider.overrideWithValue(
         downloadService ?? _NoopNovelDownloadService(),
       ),
@@ -854,6 +858,29 @@ ProviderContainer _buildContainer({
         ),
     ],
   );
+}
+
+class _RecordingNovelChapterUpdateService implements NovelChapterUpdateService {
+  final List<String> novelIds = <String>[];
+
+  @override
+  Future<NovelChapterSyncResult> update(String novelId) async {
+    novelIds.add(novelId);
+    return NovelChapterSyncResult(
+      mode: NovelChapterSyncMode.incremental,
+      fetchedPages: 1,
+      insertedCount: 0,
+      updatedCount: 1,
+      totalCount: 2,
+      checkpoint: NovelChapterSyncCheckpoint(
+        novelId: novelId,
+        publisherId: '406769',
+        lastCompletedAuthorPage: 1,
+        lastSeenPid: '5002',
+        completedAt: DateTime(2026, 7, 14),
+      ),
+    );
+  }
 }
 
 NovelReaderViewState _viewState({
@@ -1209,7 +1236,6 @@ class _ControllerNovelRepository implements NovelRepository {
     required String newName,
   }) async {}
 
-  @override
   Future<NovelEpisodeRefreshResult> refreshEpisodes({
     required String novelId,
     NovelEpisodeRefreshMode mode = NovelEpisodeRefreshMode.full,
@@ -1245,7 +1271,6 @@ class _ControllerNovelRepository implements NovelRepository {
     );
   }
 
-  @override
   Future<void> upsertNovelBySeed({
     required NovelRefreshSeed seed,
     FavoriteSyncExecutionContext? executionContext,
