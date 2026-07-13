@@ -67,18 +67,30 @@ class ComicLocalDb {
     int oldVersion,
     int newVersion,
   ) async {
-    if (oldVersion == 28 && newVersion == 29) {
-      await _createNovelHydrationTables(db);
-      await _backfillLegacyNovelSourceState(db);
+    if (oldVersion < 27) {
+      await _rebuildLatestSchema(db);
       return;
     }
-    if (oldVersion == 27 && newVersion == 28) {
-      await db.execute(
-        'ALTER TABLE $comicsTable ADD COLUMN custom_catalog_url TEXT',
-      );
-      return;
+
+    // Sqflite invokes onUpgrade once with the installed and target versions.
+    // Apply every intervening migration so skipping an app release stays safe.
+    if (oldVersion < 28 && newVersion >= 28) {
+      await _upgradeFrom27To28(db);
     }
-    await _rebuildLatestSchema(db);
+    if (oldVersion < 29 && newVersion >= 29) {
+      await _upgradeFrom28To29(db);
+    }
+  }
+
+  static Future<void> _upgradeFrom27To28(Database db) async {
+    await db.execute(
+      'ALTER TABLE $comicsTable ADD COLUMN custom_catalog_url TEXT',
+    );
+  }
+
+  static Future<void> _upgradeFrom28To29(Database db) async {
+    await _createNovelHydrationTables(db);
+    await _backfillLegacyNovelSourceState(db);
   }
 
   static Future<void> _createTables(Database db) async {

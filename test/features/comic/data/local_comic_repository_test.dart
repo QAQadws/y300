@@ -22,26 +22,28 @@ void main() {
       repository = LocalComicRepository(dbFuture);
     });
 
-    test('database v27 upgrade adds catalog override without rebuilding', () async {
-      final initializedDb = await dbFuture;
-      await initializedDb.close();
-      await deleteDatabase(ComicLocalDb.dbName);
-      final legacyDb = await openDatabase(
-        ComicLocalDb.dbName,
-        version: 27,
-        onCreate: (db, version) async {
-          await db.execute('''
-            CREATE TABLE ${ComicLocalDb.comicsTable} (
-              comic_id TEXT PRIMARY KEY,
-              catalog_url TEXT
-            )
-          ''');
-        },
-      );
+    test('database v27 upgrades through v29 without rebuilding', () async {
+      final legacyDb = await dbFuture;
       await legacyDb.insert(ComicLocalDb.comicsTable, <String, Object?>{
         'comic_id': 'yamibo:legacy',
+        'source_tid': 'legacy',
+        'source_fid': '30',
+        'title': '迁移前漫画',
         'catalog_url': 'https://bbs.yamibo.com/misc.php?mod=tag&id=1',
+        'created_at': 1783900800000,
+        'updated_at': 1783900800000,
       });
+      await legacyDb.execute(
+        'DROP TABLE ${ComicLocalDb.novelEpisodeSyncStagingTable}',
+      );
+      await legacyDb.execute(
+        'DROP TABLE ${ComicLocalDb.novelSourceStateTable}',
+      );
+      await legacyDb.execute(
+        'ALTER TABLE ${ComicLocalDb.comicsTable} '
+        'DROP COLUMN custom_catalog_url',
+      );
+      await legacyDb.setVersion(27);
       await legacyDb.close();
 
       final upgradedDb = await ComicLocalDb.open();
@@ -51,13 +53,21 @@ void main() {
       );
       final rows = await upgradedDb.query(ComicLocalDb.comicsTable);
 
-      expect(columns.map((column) => column['name']), contains('custom_catalog_url'));
+      expect(
+        columns.map((column) => column['name']),
+        contains('custom_catalog_url'),
+      );
       expect(rows.single['comic_id'], 'yamibo:legacy');
       expect(
         rows.single['catalog_url'],
         'https://bbs.yamibo.com/misc.php?mod=tag&id=1',
       );
       expect(rows.single['custom_catalog_url'], isNull);
+      final tableNames = (await upgradedDb.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type = 'table'",
+      )).map((row) => row['name']).toSet();
+      expect(tableNames, contains(ComicLocalDb.novelSourceStateTable));
+      expect(tableNames, contains(ComicLocalDb.novelEpisodeSyncStagingTable));
     });
 
     test('adds comic to shelf and can query shelf state', () async {
