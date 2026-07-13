@@ -89,6 +89,8 @@ class ComicDetailPage extends ConsumerWidget {
             builder: (_) => ThreadDetailPage(
               tid: target.tid,
               subject: target.subject ?? '',
+              initialPage: target.initialPage,
+              targetPid: target.targetPid,
             ),
           ),
         );

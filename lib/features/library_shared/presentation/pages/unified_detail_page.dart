@@ -35,6 +35,8 @@ class UnifiedDetailPage extends StatefulWidget {
     this.pickCoverImage,
     this.shelfRefreshBus,
     this.chapterStatus,
+    this.chapterModeControl,
+    this.onOpenChapter,
   });
 
   final DetailModuleAdapter adapter;
@@ -52,6 +54,9 @@ class UnifiedDetailPage extends StatefulWidget {
   final Future<String?> Function()? pickCoverImage;
   final LibraryShelfRefreshBus? shelfRefreshBus;
   final Widget? chapterStatus;
+  final Widget? chapterModeControl;
+  final Future<void> Function(BuildContext context, LibraryChapterItem chapter)?
+  onOpenChapter;
 
   @override
   State<UnifiedDetailPage> createState() => _UnifiedDetailPageState();
@@ -305,6 +310,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                     child: UnifiedDetailChapterToolbar(
                       chapterCount: state.chapters.length,
                       filterSummary: _chapterFilterSummary(state.filters),
+                      modeControl: widget.chapterModeControl,
                     ),
                   ),
                   SliverList.builder(
@@ -362,11 +368,16 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   }
 
   Future<void> _openChapter(LibraryChapterItem chapter) async {
-    final target = ReaderRouteTarget(
-      workId: widget.workId,
-      episodeId: chapter.episodeId,
-    );
-    await widget.onOpenReader(context, target);
+    final customHandler = widget.onOpenChapter;
+    if (customHandler != null) {
+      await customHandler(context, chapter);
+    } else {
+      final target = ReaderRouteTarget(
+        workId: widget.workId,
+        episodeId: chapter.episodeId,
+      );
+      await widget.onOpenReader(context, target);
+    }
     if (!mounted) {
       return;
     }

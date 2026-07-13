@@ -5,6 +5,7 @@ import 'package:y300/features/library_shared/data/providers/library_state_provid
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/novel/data/repositories/local_novel_repository.dart';
+import 'package:y300/features/novel/data/repositories/sqflite_novel_interaction_preferences_repository.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_chapter_sync_repository.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_source_metadata_repository.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_source_state_repository.dart';
@@ -18,6 +19,7 @@ import 'package:y300/features/novel/data/services/novel_source_metadata_recovery
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/data/use_cases/novel_shelf_category_assign_use_case_impl.dart';
 import 'package:y300/features/novel/data/services/novel_thread_gateway.dart';
+import 'package:y300/features/novel/data/services/thread_post_locator_novel_chapter_source_route_resolver.dart';
 import 'package:y300/features/novel/domain/services/novel_episode_discovery_service.dart';
 import 'package:y300/features/novel/domain/services/novel_author_post_episode_builder.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_sync_service.dart';
@@ -27,9 +29,11 @@ import 'package:y300/features/novel/domain/services/novel_reader_document_parser
 import 'package:y300/features/novel/domain/services/novel_reader_search_service.dart';
 import 'package:y300/features/novel/domain/services/novel_title_sanitizer.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
+import 'package:y300/features/novel/domain/repositories/novel_interaction_preferences_repository.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_metadata_repository.dart';
 import 'package:y300/features/novel/domain/repositories/novel_chapter_sync_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_post_attach_html_resolver.dart';
+import 'package:y300/features/novel/domain/services/novel_chapter_source_route_resolver.dart';
 import 'package:y300/features/novel/domain/services/novel_source_metadata_parser.dart';
 import 'package:y300/features/novel/domain/services/novel_source_metadata_recovery_service.dart';
 import 'package:y300/features/novel/domain/services/novel_sync_request_governor.dart';
@@ -41,6 +45,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_supplemen
 import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 import 'package:y300/features/thread/domain/services/forum_post_image_source_collector.dart';
+import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 
 final novelEpisodeDiscoveryServiceProvider =
     Provider<NovelEpisodeDiscoveryService>((ref) {
@@ -97,6 +102,18 @@ final novelSyncRequestGovernorProvider = Provider<NovelSyncRequestGovernor>((
 ) {
   return DefaultNovelSyncRequestGovernor();
 });
+
+final novelInteractionPreferencesRepositoryProvider =
+    Provider<NovelInteractionPreferencesRepository>((ref) {
+      return SqfliteNovelInteractionPreferencesRepository(ComicLocalDb.open());
+    });
+
+final novelChapterSourceRouteResolverProvider =
+    Provider<NovelChapterSourceRouteResolver>((ref) {
+      return ThreadPostLocatorNovelChapterSourceRouteResolver(
+        locator: ref.watch(threadPostLocatorProvider),
+      );
+    });
 
 final novelAuthorPostEpisodeBuilderProvider =
     Provider<NovelAuthorPostEpisodeBuilder>((ref) {

@@ -163,4 +163,6 @@ Phase 2 也已完成：小说收藏 ingest 现在只消费预加载 `version=4` 
 
 Phase 3 已完成：首次进入小说详情页时使用 Phase 1 的 `version=1 + ppp=200 + authorid` gateway 和共享 700ms governor 水合全部楼主章节；多页结果逐页写 staging，全部成功后原子提升，失败不暴露半成品。旧小说缺少 publisherId 时会通过独立 recovery 用例读取一次 `version=4` 首楼，再按新策略重建。来源目录仍只作为元数据，不参与章节标题、顺序或集合。
 
-下一阶段是 Phase 4：增加阅读器/原帖楼层双打开模式，并严格通过 `tid + pid` 定位普通帖子页码。
+Phase 4 已完成：小说详情提供全局持久化的阅读器/原帖楼层模式；原帖模式严格通过 `tid + pid` 和 `ThreadPostLocator` 定位普通帖子页码，`sourcePage` 仍只属于 author-filtered 同步坐标。定位成功会把真实 page 与 target PID 传给原生帖子详情，定位失败提供明确错误和打开帖子首页的显式备选；“继续”始终进入阅读器。
+
+下一阶段是 Phase 5：将小说详情下拉刷新和更新菜单统一切换到基于持久化 checkpoint 的增量同步。

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
@@ -17,12 +18,19 @@ import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
+import 'package:y300/features/novel/domain/models/novel_interaction_models.dart';
 import 'package:y300/features/novel/domain/models/novel_source_models.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
+import 'package:y300/features/novel/domain/repositories/novel_interaction_preferences_repository.dart';
+import 'package:y300/features/novel/domain/services/novel_chapter_source_route_resolver.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_sync_service.dart';
 import 'package:y300/features/novel/presentation/novel_detail_page.dart';
+import 'package:y300/features/novel/presentation/novel_reader_page.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
+import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/data/repositories/thread_repository.dart';
+import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
 void main() {
   testWidgets(
@@ -40,6 +48,9 @@ void main() {
             ),
             novelSourceStateRepositoryProvider.overrideWithValue(
               const _EmptyNovelSourceStateRepository(),
+            ),
+            novelInteractionPreferencesRepositoryProvider.overrideWithValue(
+              _MemoryNovelInteractionPreferencesRepository(),
             ),
             imageCacheServiceProvider.overrideWithValue(
               _NoopImageCacheService(),
@@ -82,6 +93,9 @@ void main() {
           novelSourceStateRepositoryProvider.overrideWithValue(
             const _EmptyNovelSourceStateRepository(),
           ),
+          novelInteractionPreferencesRepositoryProvider.overrideWithValue(
+            _MemoryNovelInteractionPreferencesRepository(),
+          ),
           imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
         ],
         child: const MaterialApp(home: NovelDetailPage(novelId: 'novel:1')),
@@ -118,6 +132,9 @@ void main() {
             sourceRepository,
           ),
           novelChapterSyncServiceProvider.overrideWithValue(syncService),
+          novelInteractionPreferencesRepositoryProvider.overrideWithValue(
+            _MemoryNovelInteractionPreferencesRepository(),
+          ),
           imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
         ],
         child: const MaterialApp(home: NovelDetailPage(novelId: 'novel:1')),
@@ -144,6 +161,278 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets('chapter open mode selection is persisted globally', (
+    tester,
+  ) async {
+    final preferences = _MemoryNovelInteractionPreferencesRepository();
+    await _pumpNovelDetail(
+      tester,
+      preferences: preferences,
+      routeResolver: _FakeNovelChapterSourceRouteResolver.success(),
+    );
+
+    final control = find.byKey(const Key('novel-chapter-open-mode-control'));
+    await tester.scrollUntilVisible(
+      control,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.descendant(of: control, matching: find.text('原帖')));
+    await tester.pumpAndSettle();
+
+    expect(preferences.mode, NovelChapterOpenMode.sourcePost);
+  });
+
+  testWidgets('source-post mode opens located ordinary page and target PID', (
+    tester,
+  ) async {
+    final preferences = _MemoryNovelInteractionPreferencesRepository(
+      NovelChapterOpenMode.sourcePost,
+    );
+    final resolver = _FakeNovelChapterSourceRouteResolver.success(page: 7);
+    final libraryState = _FakeLibraryStateRepository();
+    await _pumpNovelDetail(
+      tester,
+      preferences: preferences,
+      routeResolver: resolver,
+      libraryStateRepository: libraryState,
+      threadRepository: _FakeThreadRepository(),
+    );
+
+    await _scrollNovelChapterIntoTapArea(tester);
+    await tester.tap(find.text('Chapter 1'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final threadPage = tester.widget<ThreadDetailPage>(
+      find.byType(ThreadDetailPage),
+    );
+    expect(threadPage.tid, '100');
+    expect(threadPage.initialPage, 7);
+    expect(threadPage.targetPid, '5001');
+    expect(resolver.lastReference?.tid, '100');
+    expect(resolver.lastReference?.pid, '5001');
+    expect(libraryState.readMutationCount, 0);
+  });
+
+  testWidgets('reader mode keeps opening chapters in NovelReaderPage', (
+    tester,
+  ) async {
+    final resolver = _FakeNovelChapterSourceRouteResolver.success();
+    await _pumpNovelDetail(
+      tester,
+      preferences: _MemoryNovelInteractionPreferencesRepository(),
+      routeResolver: resolver,
+    );
+
+    await _scrollNovelChapterIntoTapArea(tester);
+    await tester.tap(find.text('Chapter 1'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byType(NovelReaderPage), findsOneWidget);
+    expect(resolver.callCount, 0);
+  });
+
+  testWidgets('source route failure offers opening the thread home', (
+    tester,
+  ) async {
+    final resolver = _FakeNovelChapterSourceRouteResolver.failure();
+    await _pumpNovelDetail(
+      tester,
+      preferences: _MemoryNovelInteractionPreferencesRepository(
+        NovelChapterOpenMode.sourcePost,
+      ),
+      routeResolver: resolver,
+      threadRepository: _FakeThreadRepository(),
+    );
+
+    await _scrollNovelChapterIntoTapArea(tester);
+    await tester.tap(find.text('Chapter 1'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('novel-source-route-failure-dialog')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('测试定位失败'), findsOneWidget);
+    expect(
+      find.byKey(const Key('novel-source-route-open-thread-home')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const Key('novel-source-route-open-thread-home')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final threadPage = tester.widget<ThreadDetailPage>(
+      find.byType(ThreadDetailPage),
+    );
+    expect(threadPage.tid, '100');
+    expect(threadPage.initialPage, isNull);
+    expect(threadPage.targetPid, isNull);
+  });
+
+  testWidgets('continue always opens the reader in source-post mode', (
+    tester,
+  ) async {
+    final resolver = _FakeNovelChapterSourceRouteResolver.success();
+    await _pumpNovelDetail(
+      tester,
+      preferences: _MemoryNovelInteractionPreferencesRepository(
+        NovelChapterOpenMode.sourcePost,
+      ),
+      routeResolver: resolver,
+    );
+
+    await tester.tap(find.text('继续'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byType(NovelReaderPage), findsOneWidget);
+    expect(resolver.callCount, 0);
+  });
+}
+
+Future<void> _pumpNovelDetail(
+  WidgetTester tester, {
+  required _MemoryNovelInteractionPreferencesRepository preferences,
+  required _FakeNovelChapterSourceRouteResolver routeResolver,
+  _FakeLibraryStateRepository? libraryStateRepository,
+  ThreadRepository? threadRepository,
+}) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+        novelDownloadServiceProvider.overrideWithValue(
+          _NoopNovelDownloadService(),
+        ),
+        libraryStateRepositoryProvider.overrideWithValue(
+          libraryStateRepository ?? _FakeLibraryStateRepository(),
+        ),
+        novelSourceStateRepositoryProvider.overrideWithValue(
+          const _EmptyNovelSourceStateRepository(),
+        ),
+        novelInteractionPreferencesRepositoryProvider.overrideWithValue(
+          preferences,
+        ),
+        novelChapterSourceRouteResolverProvider.overrideWithValue(
+          routeResolver,
+        ),
+        imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
+        if (threadRepository != null)
+          threadRepositoryProvider.overrideWithValue(threadRepository),
+      ],
+      child: const MaterialApp(home: NovelDetailPage(novelId: 'novel:1')),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+Future<void> _scrollNovelChapterIntoTapArea(WidgetTester tester) async {
+  final chapter = find.byKey(
+    const ValueKey<String>('unified-detail-chapter-novel:1:e1'),
+  );
+  await tester.scrollUntilVisible(
+    chapter,
+    300,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.drag(find.byType(CustomScrollView), const Offset(0, -120));
+  await tester.pumpAndSettle();
+}
+
+class _MemoryNovelInteractionPreferencesRepository
+    implements NovelInteractionPreferencesRepository {
+  _MemoryNovelInteractionPreferencesRepository([
+    this.mode = NovelChapterOpenMode.reader,
+  ]);
+
+  NovelChapterOpenMode mode;
+
+  @override
+  Future<NovelChapterOpenMode> loadChapterOpenMode() async => mode;
+
+  @override
+  Future<void> saveChapterOpenMode(NovelChapterOpenMode mode) async {
+    this.mode = mode;
+  }
+}
+
+class _FakeNovelChapterSourceRouteResolver
+    implements NovelChapterSourceRouteResolver {
+  _FakeNovelChapterSourceRouteResolver._({this.route, this.error});
+
+  factory _FakeNovelChapterSourceRouteResolver.success({int page = 7}) {
+    return _FakeNovelChapterSourceRouteResolver._(
+      route: NovelChapterSourceRoute(
+        tid: '100',
+        pid: '5001',
+        page: page,
+        url: 'https://bbs.yamibo.com/thread-100-$page-1.html#pid5001',
+      ),
+    );
+  }
+
+  factory _FakeNovelChapterSourceRouteResolver.failure() {
+    return _FakeNovelChapterSourceRouteResolver._(
+      error: const NovelChapterSourceRouteException('测试定位失败'),
+    );
+  }
+
+  final NovelChapterSourceRoute? route;
+  final NovelChapterSourceRouteException? error;
+  NovelChapterSourceReference? lastReference;
+  int callCount = 0;
+
+  @override
+  Future<NovelChapterSourceRoute> resolve(
+    NovelChapterSourceReference reference,
+  ) async {
+    callCount++;
+    lastReference = reference;
+    final failure = error;
+    if (failure != null) {
+      throw failure;
+    }
+    return route!;
+  }
+}
+
+class _FakeThreadRepository implements ThreadRepository {
+  @override
+  Future<ApiResult<ThreadDetailData>> getThreadDetail({
+    required String tid,
+    int page = 1,
+    Map<String, String> queryParameters = const <String, String>{},
+  }) async {
+    return ApiSuccess<ThreadDetailData>(
+      ThreadDetailData(
+        tid: tid,
+        fid: '49',
+        subject: '来源帖子',
+        author: 'Author A',
+        replies: 1,
+        views: 1,
+        currentPage: page,
+        perPage: 20,
+        posts: <ThreadPost>[
+          ThreadPost(
+            pid: '5001',
+            author: 'Author A',
+            authorId: '406769',
+            message: '<p>来源正文</p>',
+            number: 1,
+            isFirst: false,
+            dateline: '2026-01-01',
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _EmptyNovelSourceStateRepository implements NovelSourceStateRepository {
@@ -517,6 +806,8 @@ class _FakeNovelRepository implements NovelRepository {
 }
 
 class _FakeLibraryStateRepository implements LibraryStateRepository {
+  int readMutationCount = 0;
+
   @override
   Future<void> bindTagToWork({
     required LibraryModuleKey moduleKey,
@@ -646,7 +937,11 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
     bool? isBookmarked,
     DateTime? readAt,
     DateTime? downloadedAt,
-  }) async {}
+  }) async {
+    if (isRead != null) {
+      readMutationCount++;
+    }
+  }
 
   @override
   Future<void> upsertWorkState({

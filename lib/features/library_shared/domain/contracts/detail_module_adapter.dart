@@ -192,10 +192,17 @@ abstract class DetailCoverEditor {
 
 /// 原帖跳转目标。
 class ThreadRouteTarget {
-  const ThreadRouteTarget({required this.tid, this.subject});
+  const ThreadRouteTarget({
+    required this.tid,
+    this.subject,
+    this.initialPage,
+    this.targetPid,
+  });
 
   final String tid;
   final String? subject;
+  final int? initialPage;
+  final String? targetPid;
 }
 
 /// 阅读器跳转目标。

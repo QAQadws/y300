@@ -52,6 +52,10 @@ void main() {
     );
     expect(find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')), findsOneWidget);
     expect(find.byIcon(Icons.file_download), findsAtLeastNWidgets(1));
+    expect(
+      find.byKey(const Key('novel-chapter-open-mode-control')),
+      findsNothing,
+    );
   });
 
   testWidgets('ComicDetailPage can open reader from chapter row', (tester) async {

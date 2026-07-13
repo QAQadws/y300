@@ -6,10 +6,12 @@ class UnifiedDetailChapterToolbar extends StatelessWidget {
     super.key,
     required this.chapterCount,
     required this.filterSummary,
+    this.modeControl,
   });
 
   final int chapterCount;
   final String filterSummary;
+  final Widget? modeControl;
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +34,10 @@ class UnifiedDetailChapterToolbar extends StatelessWidget {
                   ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
                 ),
               ),
+              if (modeControl != null) ...[
+                const SizedBox(width: 12),
+                modeControl!,
+              ],
             ],
           ),
           const SizedBox(height: 6),
