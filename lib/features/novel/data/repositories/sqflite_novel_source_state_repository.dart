@@ -1,15 +1,19 @@
-import 'dart:convert';
-
 import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/features/novel/data/models/novel_source_catalog_json_codec.dart';
 import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
 import 'package:y300/features/novel/domain/models/novel_source_models.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
 
 class SqfliteNovelSourceStateRepository implements NovelSourceStateRepository {
-  const SqfliteNovelSourceStateRepository(this._dbFuture);
+  const SqfliteNovelSourceStateRepository(
+    this._dbFuture, {
+    NovelSourceCatalogJsonCodec catalogCodec =
+        const NovelSourceCatalogJsonCodec(),
+  }) : _catalogCodec = catalogCodec;
 
   final Future<Database> _dbFuture;
+  final NovelSourceCatalogJsonCodec _catalogCodec;
 
   @override
   Future<NovelSourceState?> getSourceState({required String novelId}) async {
@@ -49,10 +53,20 @@ class SqfliteNovelSourceStateRepository implements NovelSourceStateRepository {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(novel_id) DO UPDATE SET
         publisher_id = excluded.publisher_id,
-        publisher_name = excluded.publisher_name,
+        publisher_name = COALESCE(
+          excluded.publisher_name,
+          ${ComicLocalDb.novelSourceStateTable}.publisher_name
+        ),
         first_post_pid = excluded.first_post_pid,
-        source_intro = excluded.source_intro,
-        source_catalog_json = excluded.source_catalog_json,
+        source_intro = COALESCE(
+          excluded.source_intro,
+          ${ComicLocalDb.novelSourceStateTable}.source_intro
+        ),
+        source_catalog_json = CASE
+          WHEN excluded.source_catalog_json <> '[]'
+            THEN excluded.source_catalog_json
+          ELSE ${ComicLocalDb.novelSourceStateTable}.source_catalog_json
+        END,
         metadata_source_version = excluded.metadata_source_version,
         metadata_ingested_at = excluded.metadata_ingested_at
       ''',
@@ -62,7 +76,7 @@ class SqfliteNovelSourceStateRepository implements NovelSourceStateRepository {
         _trimToNull(metadata.publisherName),
         _trimToNull(metadata.firstPostPid),
         _trimToNull(metadata.sourceIntro),
-        _encodeCatalog(metadata.catalogEntries),
+        _catalogCodec.encode(metadata.catalogEntries),
         metadata.sourceApiVersion,
         NovelChapterHydrationState.metadataOnly.storageValue,
         metadata.ingestedAt.millisecondsSinceEpoch,
@@ -150,7 +164,9 @@ class SqfliteNovelSourceStateRepository implements NovelSourceStateRepository {
       publisherName: _trimToNull(row['publisher_name'] as String?),
       firstPostPid: _trimToNull(row['first_post_pid'] as String?),
       sourceIntro: _trimToNull(row['source_intro'] as String?),
-      catalogEntries: _decodeCatalog(row['source_catalog_json'] as String),
+      catalogEntries: _catalogCodec.decode(
+        row['source_catalog_json'] as String,
+      ),
       metadataSourceVersion: (row['metadata_source_version'] as num?)?.toInt(),
       hydrationState: NovelChapterHydrationStateCodec.fromStorage(
         row['hydration_state'] as String,
@@ -163,43 +179,6 @@ class SqfliteNovelSourceStateRepository implements NovelSourceStateRepository {
       lastSyncAt: _dateFromEpoch(row['last_sync_at']),
       lastError: _trimToNull(row['last_error'] as String?),
     );
-  }
-
-  String _encodeCatalog(List<NovelSourceCatalogEntry> entries) {
-    return jsonEncode(
-      entries
-          .map(
-            (entry) => <String, Object?>{
-              'position': entry.position,
-              'pid': entry.pid,
-              'title': entry.title,
-              'url': entry.url,
-            },
-          )
-          .toList(growable: false),
-    );
-  }
-
-  List<NovelSourceCatalogEntry> _decodeCatalog(String source) {
-    final decoded = jsonDecode(source);
-    if (decoded is! List) {
-      throw const FormatException('Novel source catalog must be a JSON list.');
-    }
-    return decoded
-        .map((value) {
-          if (value is! Map) {
-            throw const FormatException(
-              'Novel source catalog entry must be a map.',
-            );
-          }
-          return NovelSourceCatalogEntry(
-            position: (value['position'] as num?)?.toInt() ?? 0,
-            pid: value['pid']?.toString() ?? '',
-            title: value['title']?.toString() ?? '',
-            url: value['url']?.toString() ?? '',
-          );
-        })
-        .toList(growable: false);
   }
 
   DateTime? _dateFromEpoch(Object? value) {

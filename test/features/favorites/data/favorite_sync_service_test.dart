@@ -116,51 +116,48 @@ void main() {
     },
   );
 
-  test(
-    'incremental sync is also governed when snapshot exists',
-    () async {
-      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
-        1: _page(
-          page: 1,
-          totalCount: 1,
-          items: <FavoriteThread>[_favoriteThread(tid: '100', title: '漫画')],
+  test('incremental sync is also governed when snapshot exists', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(
+        page: 1,
+        totalCount: 1,
+        items: <FavoriteThread>[_favoriteThread(tid: '100', title: '漫画')],
+      ),
+    });
+    final local = _MemoryLocalFavoriteRepository(
+      snapshot: FavoriteSyncSnapshot(
+        syncKey: favoriteSyncKey,
+        remoteCount: 1,
+        localActiveCount: 1,
+        lastSyncedAt: DateTime(2026, 1, 1),
+      ),
+      seedRecords: <FavoriteThreadCacheRecord>[
+        _cacheRecord(
+          tid: '100',
+          title: '漫画',
+          contentKind: ThreadContentKind.comic,
+          workId: 'yamibo:100',
+          detailLoadedAt: DateTime(2026, 1, 1),
         ),
-      });
-      final local = _MemoryLocalFavoriteRepository(
-        snapshot: FavoriteSyncSnapshot(
-          syncKey: favoriteSyncKey,
-          remoteCount: 1,
-          localActiveCount: 1,
-          lastSyncedAt: DateTime(2026, 1, 1),
-        ),
-        seedRecords: <FavoriteThreadCacheRecord>[
-          _cacheRecord(
-            tid: '100',
-            title: '漫画',
-            contentKind: ThreadContentKind.comic,
-            workId: 'yamibo:100',
-            detailLoadedAt: DateTime(2026, 1, 1),
-          ),
-        ],
-      );
-      var created = 0;
-      final service = _service(
-        remoteRepository: remote,
-        localRepository: local,
-        governorFactory: () {
-          created++;
-          return _RecordingGovernor();
-        },
-        detailBatchLimit: 10,
-      );
+      ],
+    );
+    var created = 0;
+    final service = _service(
+      remoteRepository: remote,
+      localRepository: local,
+      governorFactory: () {
+        created++;
+        return _RecordingGovernor();
+      },
+      detailBatchLimit: 10,
+    );
 
-      await service.sync();
+    await service.sync();
 
-      // Subsequent (incremental) sync must be paced too, to avoid IP bans:
-      // it creates a governor and routes the favorite list request through it.
-      expect(created, 1);
-    },
-  );
+    // Subsequent (incremental) sync must be paced too, to avoid IP bans:
+    // it creates a governor and routes the favorite list request through it.
+    expect(created, 1);
+  });
 
   test(
     'syncRecentlyAddedThread is governed (paced) even when snapshot is null',
@@ -472,6 +469,36 @@ void main() {
     },
   );
 
+  test(
+    'novel metadata ingest failure remains missing and retries next sync',
+    () async {
+      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+        1: _page(
+          page: 1,
+          totalCount: 1,
+          items: <FavoriteThread>[_favoriteThread(tid: '200', title: '小说')],
+        ),
+      });
+      final local = _MemoryLocalFavoriteRepository();
+      final novelIngest = _FakeNovelIngestService(
+        error: const FormatException('publisher id missing'),
+      );
+      final service = _service(
+        remoteRepository: remote,
+        localRepository: local,
+        novelIngestService: novelIngest,
+      );
+
+      final first = await service.sync();
+      final second = await service.sync();
+
+      expect(first.failedDetailTids, <String>['200']);
+      expect(second.failedDetailTids, <String>['200']);
+      expect(local.records['200']?.detailLoadedAt, isNull);
+      expect(novelIngest.upsertedTids, <String>['200', '200']);
+    },
+  );
+
   test('emits list and detail progress during first full sync', () async {
     final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
       1: _page(
@@ -536,58 +563,55 @@ void main() {
     expect(service.progress.value.isActive, isFalse);
   });
 
-  test(
-    'novel detail ingest notifies novel and favorite shelves after existing refresh path',
-    () async {
-      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
-        1: _page(
-          page: 1,
-          totalCount: 1,
-          items: <FavoriteThread>[_favoriteThread(tid: '200', title: '小说')],
-        ),
-      });
-      final novelIngest = _FakeNovelIngestService();
-      final bus = LibraryShelfRefreshBus();
-      addTearDown(bus.dispose);
-      final signals = <LibraryShelfRefreshSignal>[];
-      bus.signal.addListener(() {
-        final signal = bus.signal.value;
-        if (signal != null) {
-          signals.add(signal);
-        }
-      });
-      final service = _service(
-        remoteRepository: remote,
-        localRepository: _MemoryLocalFavoriteRepository(),
-        detailContextLoader: _contextLoader(),
-        comicIngestService: _FakeComicIngestService(),
-        novelIngestService: novelIngest,
-        shelfRefreshBus: bus,
-        detailBatchLimit: 10,
-      );
+  test('novel metadata ingest notifies novel and favorite shelves', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(
+        page: 1,
+        totalCount: 1,
+        items: <FavoriteThread>[_favoriteThread(tid: '200', title: '小说')],
+      ),
+    });
+    final novelIngest = _FakeNovelIngestService();
+    final bus = LibraryShelfRefreshBus();
+    addTearDown(bus.dispose);
+    final signals = <LibraryShelfRefreshSignal>[];
+    bus.signal.addListener(() {
+      final signal = bus.signal.value;
+      if (signal != null) {
+        signals.add(signal);
+      }
+    });
+    final service = _service(
+      remoteRepository: remote,
+      localRepository: _MemoryLocalFavoriteRepository(),
+      detailContextLoader: _contextLoader(),
+      comicIngestService: _FakeComicIngestService(),
+      novelIngestService: novelIngest,
+      shelfRefreshBus: bus,
+      detailBatchLimit: 10,
+    );
 
-      await service.sync();
+    await service.sync();
 
-      expect(novelIngest.upsertedTids, <String>['200']);
-      expect(
-        signals.any(
-          (signal) =>
-              signal.reason == 'favorite_novel_refresh_completed' &&
-              signal.modules.contains(LibraryModuleKey.novel) &&
-              signal.modules.contains(LibraryModuleKey.favorite) &&
-              signal.source == LibraryMutationSource.novelRefresh &&
-              signal.workId == 'novel:49:200' &&
-              signal.tid == '200',
-        ),
-        isTrue,
-      );
-      expect(bus.signal.value?.reason, 'favorite_sync_completed');
-      expect(bus.signal.value?.source, LibraryMutationSource.favoriteSync);
-      expect(bus.signal.value?.payload['upsertedCount'], 1);
-      expect(bus.signal.value?.payload['removedCount'], 0);
-      expect(bus.signal.value?.payload['detailLoadedCount'], 1);
-    },
-  );
+    expect(novelIngest.upsertedTids, <String>['200']);
+    expect(
+      signals.any(
+        (signal) =>
+            signal.reason == 'favorite_novel_refresh_completed' &&
+            signal.modules.contains(LibraryModuleKey.novel) &&
+            signal.modules.contains(LibraryModuleKey.favorite) &&
+            signal.source == LibraryMutationSource.novelRefresh &&
+            signal.workId == 'novel:49:200' &&
+            signal.tid == '200',
+      ),
+      isTrue,
+    );
+    expect(bus.signal.value?.reason, 'favorite_sync_completed');
+    expect(bus.signal.value?.source, LibraryMutationSource.favoriteSync);
+    expect(bus.signal.value?.payload['upsertedCount'], 1);
+    expect(bus.signal.value?.payload['removedCount'], 0);
+    expect(bus.signal.value?.payload['detailLoadedCount'], 1);
+  });
 
   test(
     'first sync queues catalog miss search when comic tag is long-running',
@@ -1542,6 +1566,9 @@ class _SpyFavoriteContentIngestHandler implements FavoriteContentIngestHandler {
 }
 
 class _FakeNovelIngestService implements NovelFavoriteIngestService {
+  _FakeNovelIngestService({this.error});
+
+  final Object? error;
   final List<String> upsertedTids = <String>[];
   final List<String> removedWorkIds = <String>[];
 
@@ -1549,9 +1576,12 @@ class _FakeNovelIngestService implements NovelFavoriteIngestService {
   Future<String> upsertFromThreadDetail({
     required ThreadDetailData detail,
     String? sourceTagName,
-    FavoriteSyncExecutionContext? executionContext,
   }) async {
     upsertedTids.add(detail.tid);
+    final failure = error;
+    if (failure != null) {
+      throw failure;
+    }
     return 'novel:${detail.fid}:${detail.tid}';
   }
 

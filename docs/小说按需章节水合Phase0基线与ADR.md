@@ -159,4 +159,6 @@ flutter test test/features/novel/data/novel_download_service_test.dart
 
 Phase 1 已按这些基线完成：新增领域状态、DB 29 增量迁移、语义化 author-page gateway、独立 metadata recovery gateway 和 provider-scoped 700ms governor。迁移测试复用了本文件定义的 DB 28 seed/read helper，并逐字段验证用户数据保持不变。
 
-收藏同步的生产切换仍留在 Phase 2：届时小说 ingest 才会只消费预加载 `version=4` 详情的首楼并停止立即全量抓取。Phase 1 的完成不代表“收藏分类为小说后零个额外请求”已经上线。
+Phase 2 也已完成：小说收藏 ingest 现在只消费预加载 `version=4` 详情的首楼，以一个本地事务写入作品、书架关系和来源状态，并停止立即全量抓取。首楼缺失或发布者 UID 无效时收藏详情不会标记完成；后续同步会重新使用新的通用详情重试。
+
+下一阶段是 Phase 3：首次进入小说详情页时，才使用 Phase 1 的 `version=1 + ppp=200 + authorid` gateway 和共享 700ms governor 水合全部楼主章节。Phase 2 不应提前实现该触发器，也不应恢复来源目录作为章节权威。

@@ -156,6 +156,31 @@ void main() {
         isTrue,
       );
     });
+
+    test(
+      'does not use favorite request governor after classification',
+      () async {
+        final governor = _RecordingGovernor();
+        final handler = NovelFavoriteContentIngestHandler(
+          ingestService: _FakeNovelIngestService(),
+        );
+
+        await handler.ingest(
+          _request(
+            tid: '200',
+            fid: '49',
+            kind: ThreadContentKind.novel,
+            options: FavoriteIngestOptions(
+              executionContext: FavoriteSyncExecutionContext.bootstrapInitial(
+                governor: governor,
+              ),
+            ),
+          ),
+        );
+
+        expect(governor.kinds, isEmpty);
+      },
+    );
   });
 
   group('ForumFavoriteContentIngestHandler', () {
@@ -245,7 +270,6 @@ class _FakeNovelIngestService implements NovelFavoriteIngestService {
   Future<String> upsertFromThreadDetail({
     required ThreadDetailData detail,
     String? sourceTagName,
-    FavoriteSyncExecutionContext? executionContext,
   }) async {
     upsertedTids.add(detail.tid);
     receivedDetails.add(detail);
@@ -255,5 +279,19 @@ class _FakeNovelIngestService implements NovelFavoriteIngestService {
   @override
   Future<void> removeFromShelf({required String workId}) async {
     removedWorkIds.add(workId);
+  }
+}
+
+class _RecordingGovernor implements FavoriteFirstSyncRequestGovernor {
+  final List<FavoriteFirstSyncRequestKind> kinds =
+      <FavoriteFirstSyncRequestKind>[];
+
+  @override
+  Future<T> run<T>({
+    required FavoriteFirstSyncRequestKind kind,
+    required Future<T> Function() action,
+  }) async {
+    kinds.add(kind);
+    return action();
   }
 }

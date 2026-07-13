@@ -73,7 +73,6 @@ class NovelFavoriteContentIngestHandler
     final workId = await _ingestService.upsertFromThreadDetail(
       detail: context.detail,
       sourceTagName: context.tagName,
-      executionContext: request.options.executionContext,
     );
     return FavoriteContentIngestResult(
       kind: kind,
