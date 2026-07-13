@@ -11,7 +11,10 @@ import 'package:y300/features/library_shared/domain/services/reading_state_batch
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
+import 'package:y300/features/novel/domain/models/novel_source_models.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
+import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
 import 'package:y300/features/novel/presentation/adapters/novel_detail_adapter.dart';
 
 void main() {
@@ -199,6 +202,61 @@ void main() {
       expect(repository.lastCoverLocalPath, '/cache/novel-cover.jpg');
     },
   );
+
+  test('loadHeader exposes source author id and source intro', () async {
+    final adapter = NovelDetailAdapter(
+      _FakeNovelRepository(),
+      stateRepository: _RecordingLibraryStateRepository(),
+      sourceStateRepository: _FakeNovelSourceStateRepository(
+        NovelSourceState(
+          novelId: 'novel:1',
+          publisherId: '406769',
+          publisherName: 'Novel Author',
+          firstPostPid: '5001',
+          sourceIntro: '来源简介',
+          catalogEntries: const <NovelSourceCatalogEntry>[],
+          metadataSourceVersion: 4,
+          hydrationState: NovelChapterHydrationState.metadataOnly,
+          metadataIngestedAt: DateTime(2026, 7, 13),
+          chaptersHydratedAt: null,
+          lastCompletedAuthorPage: 0,
+          lastSeenPid: null,
+          lastSyncAt: null,
+          lastError: null,
+        ),
+      ),
+    );
+
+    final header = await adapter.loadHeader(workId: 'novel:1');
+
+    expect(header.sourceAuthorId, '406769');
+    expect(header.intro, '来源简介');
+  });
+}
+
+class _FakeNovelSourceStateRepository implements NovelSourceStateRepository {
+  const _FakeNovelSourceStateRepository(this.state);
+
+  final NovelSourceState? state;
+
+  @override
+  Future<NovelSourceState?> getSourceState({required String novelId}) async {
+    return state;
+  }
+
+  @override
+  Future<void> saveMetadata(NovelSourceMetadata metadata) async {}
+
+  @override
+  Future<void> saveCheckpoint(NovelChapterSyncCheckpoint checkpoint) async {}
+
+  @override
+  Future<void> setHydrationState({
+    required String novelId,
+    required NovelChapterHydrationState state,
+    String? lastError,
+    DateTime? chaptersHydratedAt,
+  }) async {}
 }
 
 class _FakeNovelRepository implements NovelRepository {

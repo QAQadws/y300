@@ -196,6 +196,7 @@ class LibraryDetailHeader {
     this.customCoverFocusY,
     this.author,
     this.sourceAuthor,
+    this.sourceAuthorId,
     this.customAuthor,
     this.translationGroup,
     this.sourceTitle,
@@ -222,6 +223,7 @@ class LibraryDetailHeader {
   final double? customCoverFocusY;
   final String? author;
   final String? sourceAuthor;
+  final String? sourceAuthorId;
   final String? customAuthor;
   final String? translationGroup;
   final String? sourceTitle;

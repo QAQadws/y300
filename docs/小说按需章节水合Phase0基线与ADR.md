@@ -14,7 +14,7 @@ Phase 0 已建立后续改造需要的输入样本、请求契约和数据保护
 - 当前收藏详情通过共享 `ApiThreadRepository` 加载，未显式传版本时由 API client 使用默认 `version=4`。
 - `FavoriteDetailContext` 已经持有这份 `ThreadDetailData`，`NovelFavoriteContentIngestHandler` 也会把同一个对象实例传给小说 ingest service。
 - 当前 `RepositoryNovelFavoriteIngestService` 仍会调用 `upsertNovelBySeed()` 和 `refreshEpisodes()`，因此“分类为小说后零个额外请求”尚未成为生产事实；该切换属于 Phase 2。
-- 当前 `ApiNovelThreadGateway` 已固定 `version=1` 和 `ppp=200`，但尚未携带 `authorid`；语义化 gateway 和生产调用切换属于 Phase 1。
+- Phase 1 已将生产 `NovelThreadGateway` 收窄为必须携带 `authorid` 的语义化 author-page gateway，并固定显式 `version=1 + ppp=200`；旧刷新链暂时隔离在 `LegacyNovelThreadGateway`。
 - Phase 0 通过共享 API client 请求探针固定目标 query，防止 Phase 1 对参数语义继续猜测。
 
 因此，Phase 0 的完成含义是“后续改造有可执行护栏”，不是“目标小说同步链路已经上线”。
@@ -157,4 +157,6 @@ flutter test test/features/novel/data/novel_download_service_test.dart
 
 ## 9. 下一阶段入口条件
 
-Phase 1 开始前不得改写这些基线。Phase 1 应先新增领域状态和 DB 29 增量迁移，再建立语义化 author-page gateway 和 700ms governor。收藏同步的生产切换留在 Phase 2，以便每一阶段都能独立回退和 review。
+Phase 1 已按这些基线完成：新增领域状态、DB 29 增量迁移、语义化 author-page gateway、独立 metadata recovery gateway 和 provider-scoped 700ms governor。迁移测试复用了本文件定义的 DB 28 seed/read helper，并逐字段验证用户数据保持不变。
+
+收藏同步的生产切换仍留在 Phase 2：届时小说 ingest 才会只消费预加载 `version=4` 详情的首楼并停止立即全量抓取。Phase 1 的完成不代表“收藏分类为小说后零个额外请求”已经上线。

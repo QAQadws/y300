@@ -23,6 +23,7 @@ class NovelDetailPage extends ConsumerWidget {
       imageCacheService: ref.watch(imageCacheServiceProvider),
       readingStateBatchWriter: ref.watch(readingStateBatchWriterProvider),
       stateRepository: ref.watch(libraryStateRepositoryProvider),
+      sourceStateRepository: ref.watch(novelSourceStateRepositoryProvider),
     );
     return UnifiedDetailPage(
       adapter: adapter,

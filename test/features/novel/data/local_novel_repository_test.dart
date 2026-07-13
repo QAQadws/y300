@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/library_shared/data/repositories/local_library_state_repository.dart';
@@ -35,37 +35,46 @@ void main() {
       await deleteDatabase(testDbName);
     });
 
-    test('upsertNovelBySeed + refreshEpisodes builds readable shelf and episodes', () async {
-      await repository.upsertNovelBySeed(
-        seed: const NovelRefreshSeed(
-          fid: '49',
-          tid: '200',
-          typeid: '293',
-          tagName: '原创',
-        ),
-      );
-      final result = await repository.refreshEpisodes(novelId: 'novel:49:200');
+    test(
+      'upsertNovelBySeed + refreshEpisodes builds readable shelf and episodes',
+      () async {
+        await repository.upsertNovelBySeed(
+          seed: const NovelRefreshSeed(
+            fid: '49',
+            tid: '200',
+            typeid: '293',
+            tagName: '原创',
+          ),
+        );
+        final result = await repository.refreshEpisodes(
+          novelId: 'novel:49:200',
+        );
 
-      final shelf = await repository.getShelfItems();
-      final episodes = await repository.getEpisodes(novelId: 'novel:49:200');
-      final content = await repository.getChapterContent(episodeId: episodes.first.episodeId);
+        final shelf = await repository.getShelfItems();
+        final episodes = await repository.getEpisodes(novelId: 'novel:49:200');
+        final content = await repository.getChapterContent(
+          episodeId: episodes.first.episodeId,
+        );
 
-      expect(result.totalCount, greaterThan(0));
-      expect(shelf.length, 1);
-      expect(shelf.first.sourceFid, '49');
-      expect(shelf.first.sourceTypeId, '293');
-      expect(shelf.first.sourceTagName, '原创');
-      expect(shelf.first.coverImageUrl, 'https://img.test/novel-cover.jpg');
-      expect(shelf.first.categoryId, 'default');
-      expect(episodes.length, greaterThan(0));
-      expect(episodes.first.sourceTid, '200');
-      expect(episodes.first.sourcePid, '5001');
-      expect(content, isNotNull);
-      expect(content!.paragraphs, isNotEmpty);
-    });
+        expect(result.totalCount, greaterThan(0));
+        expect(shelf.length, 1);
+        expect(shelf.first.sourceFid, '49');
+        expect(shelf.first.sourceTypeId, '293');
+        expect(shelf.first.sourceTagName, '原创');
+        expect(shelf.first.coverImageUrl, 'https://img.test/novel-cover.jpg');
+        expect(shelf.first.categoryId, 'default');
+        expect(episodes.length, greaterThan(0));
+        expect(episodes.first.sourceTid, '200');
+        expect(episodes.first.sourcePid, '5001');
+        expect(content, isNotNull);
+        expect(content!.paragraphs, isNotEmpty);
+      },
+    );
 
     test('reader preferences and reading progress can persist', () async {
-      await repository.upsertNovelBySeed(seed: const NovelRefreshSeed(fid: '55', tid: '300'));
+      await repository.upsertNovelBySeed(
+        seed: const NovelRefreshSeed(fid: '55', tid: '300'),
+      );
       await repository.refreshEpisodes(novelId: 'novel:55:300');
       final episodes = await repository.getEpisodes(novelId: 'novel:55:300');
 
@@ -97,7 +106,9 @@ void main() {
       );
 
       final preferences = await repository.getReaderPreferences();
-      final progress = await repository.getReadingProgress(novelId: 'novel:55:300');
+      final progress = await repository.getReadingProgress(
+        novelId: 'novel:55:300',
+      );
 
       expect(preferences.themeMode, 'sepia');
       expect(preferences.themePreset, NovelReaderThemePreset.sepia);
@@ -120,15 +131,12 @@ void main() {
 
     test('reading progress reads old rows with defaults', () async {
       final db = await dbFuture;
-      await db.insert(
-        ComicLocalDb.novelReadingProgressTable,
-        <String, Object?>{
-          'novel_id': 'novel:old:progress',
-          'episode_id': 'episode-old',
-          'scroll_offset': 128.0,
-          'updated_at': DateTime(2026, 6, 1).millisecondsSinceEpoch,
-        },
-      );
+      await db.insert(ComicLocalDb.novelReadingProgressTable, <String, Object?>{
+        'novel_id': 'novel:old:progress',
+        'episode_id': 'episode-old',
+        'scroll_offset': 128.0,
+        'updated_at': DateTime(2026, 6, 1).millisecondsSinceEpoch,
+      });
 
       final progress = await repository.getReadingProgress(
         novelId: 'novel:old:progress',
@@ -144,7 +152,9 @@ void main() {
     });
 
     test('reader bookmarks can persist and are purged with work', () async {
-      await repository.upsertNovelBySeed(seed: const NovelRefreshSeed(fid: '49', tid: '200'));
+      await repository.upsertNovelBySeed(
+        seed: const NovelRefreshSeed(fid: '49', tid: '200'),
+      );
       await repository.refreshEpisodes(novelId: 'novel:49:200');
       final episodes = await repository.getEpisodes(novelId: 'novel:49:200');
       final now = DateTime(2026, 6, 8);
@@ -167,7 +177,9 @@ void main() {
       );
 
       await repository.addReaderBookmark(bookmark: bookmark);
-      var bookmarks = await repository.listReaderBookmarks(novelId: 'novel:49:200');
+      var bookmarks = await repository.listReaderBookmarks(
+        novelId: 'novel:49:200',
+      );
 
       expect(bookmarks, hasLength(1));
       expect(bookmarks.single.bookmarkId, 'bookmark-1');
@@ -175,7 +187,10 @@ void main() {
       expect(bookmarks.single.anchor.pageIndex, 2);
 
       await repository.removeReaderBookmark(bookmarkId: 'bookmark-1');
-      expect(await repository.listReaderBookmarks(novelId: 'novel:49:200'), isEmpty);
+      expect(
+        await repository.listReaderBookmarks(novelId: 'novel:49:200'),
+        isEmpty,
+      );
 
       await repository.addReaderBookmark(bookmark: bookmark);
       await repository.purgeWork(novelId: 'novel:49:200');
@@ -183,49 +198,56 @@ void main() {
       expect(bookmarks, isEmpty);
     });
 
-    test('toggleEpisodeBookmark exposes existing episode bookmark state', () async {
-      await repository.upsertNovelBySeed(seed: const NovelRefreshSeed(fid: '49', tid: '200'));
-      await repository.refreshEpisodes(novelId: 'novel:49:200');
-      final episodes = await repository.getEpisodes(novelId: 'novel:49:200');
+    test(
+      'toggleEpisodeBookmark exposes existing episode bookmark state',
+      () async {
+        await repository.upsertNovelBySeed(
+          seed: const NovelRefreshSeed(fid: '49', tid: '200'),
+        );
+        await repository.refreshEpisodes(novelId: 'novel:49:200');
+        final episodes = await repository.getEpisodes(novelId: 'novel:49:200');
 
-      await repository.toggleEpisodeBookmark(
-        novelId: 'novel:49:200',
-        episodeId: episodes.first.episodeId,
-        isBookmarked: true,
-      );
+        await repository.toggleEpisodeBookmark(
+          novelId: 'novel:49:200',
+          episodeId: episodes.first.episodeId,
+          isBookmarked: true,
+        );
 
-      var bookmarks = await repository.listReaderBookmarks(novelId: 'novel:49:200');
-      expect(
-        bookmarks.map((bookmark) => bookmark.bookmarkId),
-        contains('episode-bookmark:${episodes.first.episodeId}'),
-      );
+        var bookmarks = await repository.listReaderBookmarks(
+          novelId: 'novel:49:200',
+        );
+        expect(
+          bookmarks.map((bookmark) => bookmark.bookmarkId),
+          contains('episode-bookmark:${episodes.first.episodeId}'),
+        );
 
-      await repository.toggleEpisodeBookmark(
-        novelId: 'novel:49:200',
-        episodeId: episodes.first.episodeId,
-        isBookmarked: false,
-      );
-      bookmarks = await repository.listReaderBookmarks(novelId: 'novel:49:200');
-      expect(
-        bookmarks.map((bookmark) => bookmark.bookmarkId),
-        isNot(contains('episode-bookmark:${episodes.first.episodeId}')),
-      );
-    });
+        await repository.toggleEpisodeBookmark(
+          novelId: 'novel:49:200',
+          episodeId: episodes.first.episodeId,
+          isBookmarked: false,
+        );
+        bookmarks = await repository.listReaderBookmarks(
+          novelId: 'novel:49:200',
+        );
+        expect(
+          bookmarks.map((bookmark) => bookmark.bookmarkId),
+          isNot(contains('episode-bookmark:${episodes.first.episodeId}')),
+        );
+      },
+    );
 
     test('reader preferences read old rows with defaults', () async {
       final db = await dbFuture;
-      await db.insert(
-        ComicLocalDb.readerPreferencesTable,
-        const <String, Object?>{
-          'content_type': 'novel',
-          'font_size': 19.0,
-          'line_height': 1.9,
-          'paragraph_spacing': 8.0,
-          'page_padding': 20.0,
-          'theme_mode': 'dark',
-          'font_family': 'system',
-        },
-      );
+      await db
+          .insert(ComicLocalDb.readerPreferencesTable, const <String, Object?>{
+            'content_type': 'novel',
+            'font_size': 19.0,
+            'line_height': 1.9,
+            'paragraph_spacing': 8.0,
+            'page_padding': 20.0,
+            'theme_mode': 'dark',
+            'font_family': 'system',
+          });
 
       final preferences = await repository.getReaderPreferences();
 
@@ -241,72 +263,90 @@ void main() {
       expect(preferences.showChapterTitle, isTrue);
     });
 
-    test('purgeWork deletes only target novel data and reading progress', () async {
-      await repository.upsertNovelBySeed(seed: const NovelRefreshSeed(fid: '49', tid: '200'));
-      await repository.upsertNovelBySeed(seed: const NovelRefreshSeed(fid: '55', tid: '300'));
-      await repository.refreshEpisodes(novelId: 'novel:49:200');
-      await repository.refreshEpisodes(novelId: 'novel:55:300');
+    test(
+      'purgeWork deletes only target novel data and reading progress',
+      () async {
+        await repository.upsertNovelBySeed(
+          seed: const NovelRefreshSeed(fid: '49', tid: '200'),
+        );
+        await repository.upsertNovelBySeed(
+          seed: const NovelRefreshSeed(fid: '55', tid: '300'),
+        );
+        await repository.refreshEpisodes(novelId: 'novel:49:200');
+        await repository.refreshEpisodes(novelId: 'novel:55:300');
 
-      final purgeEpisodes = await repository.getEpisodes(novelId: 'novel:49:200');
-      final keepEpisodes = await repository.getEpisodes(novelId: 'novel:55:300');
-      await repository.saveReadingProgress(
-        novelId: 'novel:49:200',
-        episodeId: purgeEpisodes.first.episodeId,
-        scrollOffset: 88,
-      );
+        final purgeEpisodes = await repository.getEpisodes(
+          novelId: 'novel:49:200',
+        );
+        final keepEpisodes = await repository.getEpisodes(
+          novelId: 'novel:55:300',
+        );
+        await repository.saveReadingProgress(
+          novelId: 'novel:49:200',
+          episodeId: purgeEpisodes.first.episodeId,
+          scrollOffset: 88,
+        );
 
-      await repository.purgeWork(novelId: 'novel:49:200');
+        await repository.purgeWork(novelId: 'novel:49:200');
 
-      final db = await dbFuture;
-      expect(await repository.getDetail(novelId: 'novel:49:200'), isNull);
-      expect(await repository.getEpisodes(novelId: 'novel:49:200'), isEmpty);
-      expect(
-        await repository.getChapterContent(episodeId: purgeEpisodes.first.episodeId),
-        isNull,
-      );
-      expect(
-        await repository.getReadingProgress(novelId: 'novel:49:200'),
-        isNull,
-      );
-      expect(
-        await db.query(
-          ComicLocalDb.worksTable,
-          where: 'work_id = ? AND content_type = ?',
-          whereArgs: const <Object>['novel:49:200', 'novel'],
-        ),
-        isEmpty,
-      );
-      expect(
-        await db.query(
-          ComicLocalDb.workEpisodesTable,
-          where: 'work_id = ? AND content_type = ?',
-          whereArgs: const <Object>['novel:49:200', 'novel'],
-        ),
-        isEmpty,
-      );
-      expect(
-        await db.query(
-          ComicLocalDb.novelShelfItemsTable,
-          where: 'novel_id = ?',
-          whereArgs: const <Object>['novel:49:200'],
-        ),
-        isEmpty,
-      );
-      expect(
-        await db.query(
-          ComicLocalDb.novelReadingProgressTable,
-          where: 'novel_id = ?',
-          whereArgs: const <Object>['novel:49:200'],
-        ),
-        isEmpty,
-      );
-      expect(await repository.getDetail(novelId: 'novel:55:300'), isNotNull);
-      expect(keepEpisodes, isNotEmpty);
-      expect(await repository.getEpisodes(novelId: 'novel:55:300'), hasLength(keepEpisodes.length));
-    });
+        final db = await dbFuture;
+        expect(await repository.getDetail(novelId: 'novel:49:200'), isNull);
+        expect(await repository.getEpisodes(novelId: 'novel:49:200'), isEmpty);
+        expect(
+          await repository.getChapterContent(
+            episodeId: purgeEpisodes.first.episodeId,
+          ),
+          isNull,
+        );
+        expect(
+          await repository.getReadingProgress(novelId: 'novel:49:200'),
+          isNull,
+        );
+        expect(
+          await db.query(
+            ComicLocalDb.worksTable,
+            where: 'work_id = ? AND content_type = ?',
+            whereArgs: const <Object>['novel:49:200', 'novel'],
+          ),
+          isEmpty,
+        );
+        expect(
+          await db.query(
+            ComicLocalDb.workEpisodesTable,
+            where: 'work_id = ? AND content_type = ?',
+            whereArgs: const <Object>['novel:49:200', 'novel'],
+          ),
+          isEmpty,
+        );
+        expect(
+          await db.query(
+            ComicLocalDb.novelShelfItemsTable,
+            where: 'novel_id = ?',
+            whereArgs: const <Object>['novel:49:200'],
+          ),
+          isEmpty,
+        );
+        expect(
+          await db.query(
+            ComicLocalDb.novelReadingProgressTable,
+            where: 'novel_id = ?',
+            whereArgs: const <Object>['novel:49:200'],
+          ),
+          isEmpty,
+        );
+        expect(await repository.getDetail(novelId: 'novel:55:300'), isNotNull);
+        expect(keepEpisodes, isNotEmpty);
+        expect(
+          await repository.getEpisodes(novelId: 'novel:55:300'),
+          hasLength(keepEpisodes.length),
+        );
+      },
+    );
 
     test('queryShelfSnapshot aggregates episode state and tags', () async {
-      await repository.upsertNovelBySeed(seed: const NovelRefreshSeed(fid: '49', tid: '200'));
+      await repository.upsertNovelBySeed(
+        seed: const NovelRefreshSeed(fid: '49', tid: '200'),
+      );
       await repository.refreshEpisodes(novelId: 'novel:49:200');
       final episodes = await repository.getEpisodes(novelId: 'novel:49:200');
       final stateRepository = LocalLibraryStateRepository(dbFuture);
@@ -347,56 +387,60 @@ void main() {
     });
 
     test('refreshEpisodes removes stale parsed episode rows', () async {
-      await repository.upsertNovelBySeed(seed: const NovelRefreshSeed(fid: '49', tid: '200'));
+      await repository.upsertNovelBySeed(
+        seed: const NovelRefreshSeed(fid: '49', tid: '200'),
+      );
       final db = await dbFuture;
-      await db.insert(
-        ComicLocalDb.workEpisodesTable,
-        <String, Object?>{
-          'episode_id': 'novel:49:200:stale-tid',
-          'work_id': 'novel:49:200',
-          'content_type': 'novel',
-          'source_tid': '200',
-          'source_pid': '200',
-          'source_page': 1,
-          'episode_title': '错误旧章节',
-          'order_index': 99,
-          'dateline_text': '',
-        },
-      );
-      await db.insert(
-        ComicLocalDb.novelEpisodeContentTable,
-        <String, Object?>{
-          'episode_id': 'novel:49:200:stale-tid',
-          'raw_html': '',
-          'plain_text': '',
-          'paragraph_json': '[]',
-          'updated_at': 0,
-        },
-      );
+      await db.insert(ComicLocalDb.workEpisodesTable, <String, Object?>{
+        'episode_id': 'novel:49:200:stale-tid',
+        'work_id': 'novel:49:200',
+        'content_type': 'novel',
+        'source_tid': '200',
+        'source_pid': '200',
+        'source_page': 1,
+        'episode_title': '错误旧章节',
+        'order_index': 99,
+        'dateline_text': '',
+      });
+      await db.insert(ComicLocalDb.novelEpisodeContentTable, <String, Object?>{
+        'episode_id': 'novel:49:200:stale-tid',
+        'raw_html': '',
+        'plain_text': '',
+        'paragraph_json': '[]',
+        'updated_at': 0,
+      });
 
       await repository.refreshEpisodes(novelId: 'novel:49:200');
 
       final episodes = await repository.getEpisodes(novelId: 'novel:49:200');
-      final staleContent = await repository.getChapterContent(episodeId: 'novel:49:200:stale-tid');
-      expect(episodes.map((episode) => episode.episodeId), isNot(contains('novel:49:200:stale-tid')));
+      final staleContent = await repository.getChapterContent(
+        episodeId: 'novel:49:200:stale-tid',
+      );
+      expect(
+        episodes.map((episode) => episode.episodeId),
+        isNot(contains('novel:49:200:stale-tid')),
+      );
       expect(staleContent, isNull);
     });
 
-    test('upsertNovelBySeed strips leading brackets and decodes &amp; in title', () async {
-      final dirtyRepo = LocalNovelRepository(
-        dbFuture,
-        threadGateway: _DirtyTitleGateway(),
-        discoveryService: const NovelEpisodeDiscoveryService(),
-      );
+    test(
+      'upsertNovelBySeed strips leading brackets and decodes &amp; in title',
+      () async {
+        final dirtyRepo = LocalNovelRepository(
+          dbFuture,
+          threadGateway: _DirtyTitleGateway(),
+          discoveryService: const NovelEpisodeDiscoveryService(),
+        );
 
-      await dirtyRepo.upsertNovelBySeed(
-        seed: const NovelRefreshSeed(fid: '49', tid: '700'),
-      );
+        await dirtyRepo.upsertNovelBySeed(
+          seed: const NovelRefreshSeed(fid: '49', tid: '700'),
+        );
 
-      final detail = await dirtyRepo.getDetail(novelId: 'novel:49:700');
-      expect(detail, isNotNull);
-      expect(detail!.title, '一周一次买下同班同学的那些事 A & B');
-    });
+        final detail = await dirtyRepo.getDetail(novelId: 'novel:49:700');
+        expect(detail, isNotNull);
+        expect(detail!.title, '一周一次买下同班同学的那些事 A & B');
+      },
+    );
 
     test(
       'refreshEpisodes auto-fills parsed intro when work state is empty',
@@ -477,7 +521,9 @@ void main() {
         expect(gateway.requestedPages, contains(2));
         expect(gateway.requestedPages, contains(3));
         expect(result.insertedCount, 1);
-        final episodes = await incrementalRepo.getEpisodes(novelId: 'novel:49:900');
+        final episodes = await incrementalRepo.getEpisodes(
+          novelId: 'novel:49:900',
+        );
         // page=1 的旧章节仍在；新章节追加在末尾。
         expect(episodes.length, 3);
         expect(
@@ -485,40 +531,36 @@ void main() {
           containsAllInOrder(<String>['9101', '9201', '9301']),
         );
         // 新章节 orderIndex 从 maxOrder + 1 开始。
-        final newEpisode =
-            episodes.firstWhere((episode) => episode.sourcePid == '9301');
+        final newEpisode = episodes.firstWhere(
+          (episode) => episode.sourcePid == '9301',
+        );
         expect(newEpisode.orderIndex, 2);
       },
     );
 
-    test(
-      'refreshEpisodes incremental updates title via sanitizer',
-      () async {
-        final gateway = _IncrementalGateway();
-        final incrementalRepo = LocalNovelRepository(
-          dbFuture,
-          threadGateway: gateway,
-          discoveryService: const NovelEpisodeDiscoveryService(),
-        );
-        await incrementalRepo.upsertNovelBySeed(
-          seed: const NovelRefreshSeed(fid: '49', tid: '900'),
-        );
-        await incrementalRepo.refreshEpisodes(novelId: 'novel:49:900');
-        final initial =
-            await incrementalRepo.getDetail(novelId: 'novel:49:900');
-        expect(initial!.title, '小说标题 6.20更新番外5');
+    test('refreshEpisodes incremental updates title via sanitizer', () async {
+      final gateway = _IncrementalGateway();
+      final incrementalRepo = LocalNovelRepository(
+        dbFuture,
+        threadGateway: gateway,
+        discoveryService: const NovelEpisodeDiscoveryService(),
+      );
+      await incrementalRepo.upsertNovelBySeed(
+        seed: const NovelRefreshSeed(fid: '49', tid: '900'),
+      );
+      await incrementalRepo.refreshEpisodes(novelId: 'novel:49:900');
+      final initial = await incrementalRepo.getDetail(novelId: 'novel:49:900');
+      expect(initial!.title, '小说标题 6.20更新番外5');
 
-        gateway.advanceTitleAndAddChapter();
-        await incrementalRepo.refreshEpisodes(
-          novelId: 'novel:49:900',
-          mode: NovelEpisodeRefreshMode.incremental,
-        );
-        final after =
-            await incrementalRepo.getDetail(novelId: 'novel:49:900');
-        // sanitizer 把前导 `[搬运]` 剥掉、保留更新时间标记。
-        expect(after!.title, '小说标题 7.1更新番外6');
-      },
-    );
+      gateway.advanceTitleAndAddChapter();
+      await incrementalRepo.refreshEpisodes(
+        novelId: 'novel:49:900',
+        mode: NovelEpisodeRefreshMode.incremental,
+      );
+      final after = await incrementalRepo.getDetail(novelId: 'novel:49:900');
+      // sanitizer 把前导 `[搬运]` 剥掉、保留更新时间标记。
+      expect(after!.title, '小说标题 7.1更新番外6');
+    });
 
     test(
       'refreshEpisodes incremental falls back to full when no episodes exist',
@@ -562,10 +604,12 @@ void main() {
         );
         await catalogRepo.refreshEpisodes(novelId: 'novel:49:901');
         // catalog 路径下，pid 9601 应该拿到目录链接文本「第3章 远方」作为标题。
-        final beforeEpisodes =
-            await catalogRepo.getEpisodes(novelId: 'novel:49:901');
-        final beforeChapter3 =
-            beforeEpisodes.firstWhere((e) => e.sourcePid == '9601');
+        final beforeEpisodes = await catalogRepo.getEpisodes(
+          novelId: 'novel:49:901',
+        );
+        final beforeChapter3 = beforeEpisodes.firstWhere(
+          (e) => e.sourcePid == '9601',
+        );
         expect(beforeChapter3.episodeTitle, '第3章 远方');
 
         gateway.requestedPages.clear();
@@ -579,10 +623,12 @@ void main() {
         expect(gateway.requestedPages, contains(2));
         // 关键不变量：rule 链对 9601 帖文规则化抽出的标题是「第3章」（去掉了「远方」），
         // 但既有章节的 episode_title 在写入时被锁定，DB 里的标题保持原样。
-        final afterEpisodes =
-            await catalogRepo.getEpisodes(novelId: 'novel:49:901');
-        final afterChapter3 =
-            afterEpisodes.firstWhere((e) => e.sourcePid == '9601');
+        final afterEpisodes = await catalogRepo.getEpisodes(
+          novelId: 'novel:49:901',
+        );
+        final afterChapter3 = afterEpisodes.firstWhere(
+          (e) => e.sourcePid == '9601',
+        );
         expect(afterChapter3.episodeTitle, '第3章 远方');
       },
     );
@@ -625,9 +671,12 @@ void main() {
   });
 }
 
-class _DirtyTitleGateway implements NovelThreadGateway {
+class _DirtyTitleGateway implements LegacyNovelThreadGateway {
   @override
-  Future<ThreadDetailData> getThreadDetail({required String tid, required int page}) async {
+  Future<ThreadDetailData> getThreadDetail({
+    required String tid,
+    required int page,
+  }) async {
     if (page > 1) {
       return ThreadDetailData(
         tid: tid,
@@ -666,9 +715,12 @@ class _DirtyTitleGateway implements NovelThreadGateway {
   }
 }
 
-class _IntroGateway implements NovelThreadGateway {
+class _IntroGateway implements LegacyNovelThreadGateway {
   @override
-  Future<ThreadDetailData> getThreadDetail({required String tid, required int page}) async {
+  Future<ThreadDetailData> getThreadDetail({
+    required String tid,
+    required int page,
+  }) async {
     if (page > 1) {
       return ThreadDetailData(
         tid: tid,
@@ -696,7 +748,8 @@ class _IntroGateway implements NovelThreadGateway {
           pid: '8001',
           author: '楼主A',
           authorId: '1',
-          message: '<p>简介：本文讲述</p>'
+          message:
+              '<p>简介：本文讲述</p>'
               '<p>一段感人的故事。</p>'
               '<p>目录</p>'
               '<p>第1章 开始</p>',
@@ -718,9 +771,12 @@ class _IntroGateway implements NovelThreadGateway {
   }
 }
 
-class _FakeGateway implements NovelThreadGateway {
+class _FakeGateway implements LegacyNovelThreadGateway {
   @override
-  Future<ThreadDetailData> getThreadDetail({required String tid, required int page}) async {
+  Future<ThreadDetailData> getThreadDetail({
+    required String tid,
+    required int page,
+  }) async {
     if (page > 1) {
       return ThreadDetailData(
         tid: tid,
@@ -749,7 +805,8 @@ class _FakeGateway implements NovelThreadGateway {
           pid: '5001',
           author: '楼主A',
           authorId: '1',
-          message: '<p>第1章 开始</p><p>这是第一段。</p><img data-src="https://img.test/novel-cover.jpg" />',
+          message:
+              '<p>第1章 开始</p><p>这是第一段。</p><img data-src="https://img.test/novel-cover.jpg" />',
           number: 1,
           isFirst: true,
           dateline: '2026-05-03',
@@ -782,7 +839,7 @@ class _FakeGateway implements NovelThreadGateway {
 /// 第一次刷新（_baseline）：page1 (2 楼：1 楼 OP 章节 + 1 楼路人) + page2 (1 楼 OP 章节)；
 /// `advanceToWithExtraChapter` 后：page2 仍有 1 楼，page3 新增 1 楼章节；
 /// `advanceTitleAndAddChapter` 同时把 subject 换成新版本以验证 sanitizer 复跑。
-class _IncrementalGateway implements NovelThreadGateway {
+class _IncrementalGateway implements LegacyNovelThreadGateway {
   final List<int> requestedPages = <int>[];
   String _subject = '[搬运] 小说标题 6.20更新番外5';
   bool _hasExtraChapter = false;
@@ -910,7 +967,7 @@ class _IncrementalGateway implements NovelThreadGateway {
 /// 模拟 catalog 模式：page=1 楼主帖子里有 ≥ 2 个跳到不同 pid 的目录链接，
 /// 对应章节散落在多页。增量从 page=2 开始的话会丢失目录上下文，
 /// 仓库要正确降级到 full。
-class _CatalogModeGateway implements NovelThreadGateway {
+class _CatalogModeGateway implements LegacyNovelThreadGateway {
   final List<int> requestedPages = <int>[];
 
   @override
@@ -994,4 +1051,3 @@ class _CatalogModeGateway implements NovelThreadGateway {
     );
   }
 }
-

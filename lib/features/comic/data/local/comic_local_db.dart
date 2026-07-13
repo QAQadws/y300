@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 28;
+  static const int dbVersion = 29;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -36,6 +36,9 @@ class ComicLocalDb {
   static const String cachedSnapshotsTable = 'cached_snapshots';
   static const String comicSearchRefreshQueueTable =
       'comic_search_refresh_queue';
+  static const String novelSourceStateTable = 'novel_source_state';
+  static const String novelEpisodeSyncStagingTable =
+      'novel_episode_sync_staging';
 
   static Future<Database> open({String? databaseName}) {
     final targetDbName = databaseName ?? dbName;
@@ -64,6 +67,11 @@ class ComicLocalDb {
     int oldVersion,
     int newVersion,
   ) async {
+    if (oldVersion == 28 && newVersion == 29) {
+      await _createNovelHydrationTables(db);
+      await _backfillLegacyNovelSourceState(db);
+      return;
+    }
     if (oldVersion == 27 && newVersion == 28) {
       await db.execute(
         'ALTER TABLE $comicsTable ADD COLUMN custom_catalog_url TEXT',
@@ -187,6 +195,7 @@ class ComicLocalDb {
     await _seedDefaultSettings(db);
     await _createReadingProgressTable(db);
     await _createNovelTables(db);
+    await _createNovelHydrationTables(db);
     await _createNovelReadingProgressTable(db);
     await _createReaderBookmarksTable(db);
     await _createNovelShelfTables(db);
@@ -320,6 +329,80 @@ class ComicLocalDb {
         progress_percent REAL,
         updated_at INTEGER NOT NULL
       )
+    ''');
+  }
+
+  static Future<void> _createNovelHydrationTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $novelSourceStateTable (
+        novel_id TEXT PRIMARY KEY,
+        publisher_id TEXT,
+        publisher_name TEXT,
+        first_post_pid TEXT,
+        source_intro TEXT,
+        source_catalog_json TEXT NOT NULL DEFAULT '[]',
+        metadata_source_version INTEGER,
+        hydration_state TEXT NOT NULL DEFAULT 'metadataOnly',
+        metadata_ingested_at INTEGER,
+        chapters_hydrated_at INTEGER,
+        last_completed_author_page INTEGER NOT NULL DEFAULT 0,
+        last_seen_pid TEXT,
+        last_sync_at INTEGER,
+        last_error TEXT,
+        FOREIGN KEY (novel_id) REFERENCES $worksTable(work_id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $novelEpisodeSyncStagingTable (
+        run_id TEXT NOT NULL,
+        novel_id TEXT NOT NULL,
+        episode_id TEXT NOT NULL,
+        source_tid TEXT NOT NULL,
+        source_pid TEXT NOT NULL,
+        author_filtered_page INTEGER NOT NULL,
+        episode_title TEXT NOT NULL,
+        order_index INTEGER NOT NULL,
+        dateline_text TEXT,
+        raw_html TEXT NOT NULL,
+        plain_text TEXT NOT NULL,
+        paragraph_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (run_id, episode_id)
+      )
+    ''');
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_novel_episode_stage_run ON '
+      '$novelEpisodeSyncStagingTable(run_id, order_index)',
+    );
+  }
+
+  static Future<void> _backfillLegacyNovelSourceState(Database db) async {
+    await db.execute('''
+      INSERT OR IGNORE INTO $novelSourceStateTable (
+        novel_id,
+        publisher_name,
+        source_catalog_json,
+        hydration_state,
+        last_completed_author_page
+      )
+      SELECT
+        work.work_id,
+        NULLIF(TRIM(work.author), ''),
+        '[]',
+        CASE
+          WHEN EXISTS (
+            SELECT 1
+            FROM $workEpisodesTable episode
+            WHERE episode.work_id = work.work_id
+              AND episode.content_type = 'novel'
+          ) THEN 'legacyNeedsRebuild'
+          ELSE 'metadataOnly'
+        END,
+        0
+      FROM $worksTable work
+      WHERE work.content_type = 'novel'
     ''');
   }
 
@@ -722,6 +805,8 @@ class ComicLocalDb {
   }
 
   static const List<String> _managedTablesInDropOrder = <String>[
+    novelEpisodeSyncStagingTable,
+    novelSourceStateTable,
     comicSearchRefreshQueueTable,
     cachedSnapshotsTable,
     cachedDocumentsTable,

@@ -24,11 +24,15 @@ void main() {
     });
 
     var db = await ComicLocalDb.open(databaseName: dbPath);
+    await prepareNovelPhase0DatabaseVersion28(db);
     expect(await db.getVersion(), 28);
     await seedNovelPhase0PersistenceBaseline(db);
     await db.close();
 
-    db = await ComicLocalDb.open(databaseName: dbPath);
+    db = await databaseFactory.openDatabase(
+      dbPath,
+      options: OpenDatabaseOptions(version: 28),
+    );
     addTearDown(db.close);
     final snapshot = await readNovelPhase0PersistenceBaseline(db);
 

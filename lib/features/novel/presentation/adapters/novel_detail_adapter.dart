@@ -12,6 +12,7 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/services/novel_download_service.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
+import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
 
 /// 小说详情适配器（Phase 6）。
 class NovelDetailAdapter implements DetailModuleAdapter {
@@ -21,16 +22,19 @@ class NovelDetailAdapter implements DetailModuleAdapter {
     ImageCacheService? imageCacheService,
     ReadingStateBatchWriter? readingStateBatchWriter,
     required LibraryStateRepository stateRepository,
+    NovelSourceStateRepository? sourceStateRepository,
   }) : _downloadService = downloadService,
        _coverCacheService = LibraryCoverCacheService(imageCacheService),
        _readingStateBatchWriter = readingStateBatchWriter,
-       _stateRepository = stateRepository;
+       _stateRepository = stateRepository,
+       _sourceStateRepository = sourceStateRepository;
 
   final NovelRepository _repository;
   final NovelDownloadService? _downloadService;
   final LibraryCoverCacheService _coverCacheService;
   final ReadingStateBatchWriter? _readingStateBatchWriter;
   final LibraryStateRepository _stateRepository;
+  final NovelSourceStateRepository? _sourceStateRepository;
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.novel;
@@ -44,6 +48,9 @@ class NovelDetailAdapter implements DetailModuleAdapter {
     final workState = await _stateRepository.getWorkState(
       moduleKey: LibraryModuleKey.novel,
       workId: workId,
+    );
+    final sourceState = await _sourceStateRepository?.getSourceState(
+      novelId: workId,
     );
     final coverImageUrl = detail.coverImageUrl;
     var coverLocalPath = detail.coverLocalPath;
@@ -78,11 +85,12 @@ class NovelDetailAdapter implements DetailModuleAdapter {
       author: detail.author,
       sourceTitle: detail.sourceTitle,
       sourceAuthor: detail.sourceAuthor,
+      sourceAuthorId: sourceState?.publisherId,
       sourceTid: detail.sourceTid,
       sourceTypeId: detail.sourceTypeId,
       sourceTagName: detail.sourceTagName,
       inShelf: true,
-      intro: workState?.introText,
+      intro: workState?.introText ?? sourceState?.sourceIntro,
     );
   }
 

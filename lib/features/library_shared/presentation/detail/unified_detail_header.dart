@@ -148,6 +148,7 @@ class _HeroInfoSection extends StatelessWidget {
                       moduleKey: moduleKey,
                       title: title,
                       author: author,
+                      sourceAuthorId: header.sourceAuthorId,
                       translationGroup: group,
                       foregroundColor: palette.onHeader,
                     ),
@@ -208,6 +209,7 @@ class _HeroMetaColumn extends StatelessWidget {
     required this.moduleKey,
     required this.title,
     required this.author,
+    required this.sourceAuthorId,
     required this.translationGroup,
     required this.foregroundColor,
   });
@@ -215,6 +217,7 @@ class _HeroMetaColumn extends StatelessWidget {
   final LibraryModuleKey moduleKey;
   final String title;
   final String author;
+  final String? sourceAuthorId;
   final String translationGroup;
   final Color foregroundColor;
 
@@ -224,6 +227,7 @@ class _HeroMetaColumn extends StatelessWidget {
     // 只保留发布者本身（person 行）即可；group 行专属漫画。
     final showGroupRow = moduleKey == LibraryModuleKey.comic;
     final groupLabel = translationGroup;
+    final normalizedSourceAuthorId = sourceAuthorId?.trim();
 
     return DefaultTextStyle(
       style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: foregroundColor),
@@ -257,6 +261,19 @@ class _HeroMetaColumn extends StatelessWidget {
               ),
             ],
           ),
+          if (normalizedSourceAuthorId != null &&
+              normalizedSourceAuthorId.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'UID: $normalizedSourceAuthorId',
+              key: const Key('unified-detail-source-author-id'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: foregroundColor.withValues(alpha: 0.82),
+              ),
+            ),
+          ],
           if (showGroupRow) ...[
             const SizedBox(height: 6),
             Row(

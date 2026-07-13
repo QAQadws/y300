@@ -4,6 +4,8 @@ import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
 import 'package:y300/features/novel/data/repositories/local_novel_repository.dart';
+import 'package:y300/features/novel/data/repositories/sqflite_novel_source_state_repository.dart';
+import 'package:y300/features/novel/data/services/default_novel_sync_request_governor.dart';
 import 'package:y300/features/novel/data/services/novel_download_service.dart';
 import 'package:y300/features/novel/data/services/novel_reader_cache_service.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
@@ -14,6 +16,8 @@ import 'package:y300/features/novel/domain/services/novel_intro_section_extracto
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_search_service.dart';
 import 'package:y300/features/novel/domain/services/novel_title_sanitizer.dart';
+import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
+import 'package:y300/features/novel/domain/services/novel_sync_request_governor.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_layout_service.dart';
@@ -33,16 +37,33 @@ final novelTitleSanitizerProvider = Provider<NovelTitleSanitizer>((ref) {
   return const DefaultNovelTitleSanitizer();
 });
 
-final novelIntroSectionExtractorProvider =
-    Provider<NovelIntroSectionExtractor>((ref) {
-      return const DefaultNovelIntroSectionExtractor();
-    });
+final novelSourceStateRepositoryProvider = Provider<NovelSourceStateRepository>(
+  (ref) {
+    return SqfliteNovelSourceStateRepository(ComicLocalDb.open());
+  },
+);
 
-final novelReaderDocumentParserProvider = Provider<NovelReaderDocumentParser>((ref) {
+final novelSyncRequestGovernorProvider = Provider<NovelSyncRequestGovernor>((
+  ref,
+) {
+  return DefaultNovelSyncRequestGovernor();
+});
+
+final novelIntroSectionExtractorProvider = Provider<NovelIntroSectionExtractor>(
+  (ref) {
+    return const DefaultNovelIntroSectionExtractor();
+  },
+);
+
+final novelReaderDocumentParserProvider = Provider<NovelReaderDocumentParser>((
+  ref,
+) {
   return const DiscuzNovelReaderDocumentParser();
 });
 
-final novelReaderSearchServiceProvider = Provider<NovelReaderSearchService>((ref) {
+final novelReaderSearchServiceProvider = Provider<NovelReaderSearchService>((
+  ref,
+) {
   return const NovelReaderSearchService();
 });
 
@@ -61,7 +82,9 @@ final novelDownloadServiceProvider = Provider<NovelDownloadService>((ref) {
   );
 });
 
-final novelReaderCacheServiceProvider = Provider<NovelReaderCacheService>((ref) {
+final novelReaderCacheServiceProvider = Provider<NovelReaderCacheService>((
+  ref,
+) {
   return DefaultNovelReaderCacheService(
     downloadService: ref.watch(novelDownloadServiceProvider),
     repository: ref.watch(novelRepositoryProvider),
@@ -77,17 +100,20 @@ final novelReaderSupplementalHydrationServiceProvider =
       );
     });
 
-final novelReaderBootstrapServiceProvider = Provider<NovelReaderBootstrapService>((
+final novelReaderBootstrapServiceProvider =
+    Provider<NovelReaderBootstrapService>((ref) {
+      return DefaultNovelReaderBootstrapService(
+        repository: ref.watch(novelRepositoryProvider),
+        downloadService: ref.watch(novelDownloadServiceProvider),
+        documentBuildService: ref.watch(
+          novelReaderDocumentBuildServiceProvider,
+        ),
+      );
+    });
+
+final novelReaderLayoutServiceProvider = Provider<NovelReaderLayoutService>((
   ref,
 ) {
-  return DefaultNovelReaderBootstrapService(
-    repository: ref.watch(novelRepositoryProvider),
-    downloadService: ref.watch(novelDownloadServiceProvider),
-    documentBuildService: ref.watch(novelReaderDocumentBuildServiceProvider),
-  );
-});
-
-final novelReaderLayoutServiceProvider = Provider<NovelReaderLayoutService>((ref) {
   return CachedNovelReaderLayoutService();
 });
 
@@ -101,7 +127,7 @@ final novelReaderProgressCommitterProvider =
 final novelRepositoryProvider = Provider<NovelRepository>((ref) {
   return LocalNovelRepository(
     ComicLocalDb.open(),
-    threadGateway: ref.watch(novelThreadGatewayProvider),
+    threadGateway: ref.watch(legacyNovelThreadGatewayProvider),
     discoveryService: ref.watch(novelEpisodeDiscoveryServiceProvider),
     imageCacheService: ref.watch(imageCacheServiceProvider),
     titleSanitizer: ref.watch(novelTitleSanitizerProvider),

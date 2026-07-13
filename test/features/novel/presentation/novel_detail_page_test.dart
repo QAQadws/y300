@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
@@ -14,44 +14,71 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
+import 'package:y300/features/novel/domain/models/novel_source_models.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
+import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
 import 'package:y300/features/novel/presentation/novel_detail_page.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 
 void main() {
-  testWidgets('NovelDetailPage renders unified detail header and chapter list', (tester) async {
+  testWidgets(
+    'NovelDetailPage renders unified detail header and chapter list',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+            novelDownloadServiceProvider.overrideWithValue(
+              _NoopNovelDownloadService(),
+            ),
+            libraryStateRepositoryProvider.overrideWithValue(
+              _FakeLibraryStateRepository(),
+            ),
+            novelSourceStateRepositoryProvider.overrideWithValue(
+              const _EmptyNovelSourceStateRepository(),
+            ),
+            imageCacheServiceProvider.overrideWithValue(
+              _NoopImageCacheService(),
+            ),
+          ],
+          child: const MaterialApp(home: NovelDetailPage(novelId: 'novel:1')),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('Test Novel'), findsAtLeastNWidgets(1));
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey<String>('unified-detail-chapter-novel:1:e1')),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('unified-detail-chapter-novel:1:e1')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Pid:5001'), findsOneWidget);
+      expect(find.byIcon(Icons.file_download), findsAtLeastNWidgets(1));
+    },
+  );
+
+  testWidgets('NovelDetailPage hides group row but keeps author row', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
-          novelDownloadServiceProvider.overrideWithValue(_NoopNovelDownloadService()),
-          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
-          imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
-        ],
-        child: const MaterialApp(home: NovelDetailPage(novelId: 'novel:1')),
-      ),
-    );
-
-    await tester.pumpAndSettle();
-
-    expect(find.text('Test Novel'), findsAtLeastNWidgets(1));
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey<String>('unified-detail-chapter-novel:1:e1')),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-novel:1:e1')), findsOneWidget);
-    expect(find.textContaining('Pid:5001'), findsOneWidget);
-    expect(find.byIcon(Icons.file_download), findsAtLeastNWidgets(1));
-  });
-
-  testWidgets('NovelDetailPage hides group row but keeps author row', (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
-          novelDownloadServiceProvider.overrideWithValue(_NoopNovelDownloadService()),
-          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+          novelDownloadServiceProvider.overrideWithValue(
+            _NoopNovelDownloadService(),
+          ),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
+          novelSourceStateRepositoryProvider.overrideWithValue(
+            const _EmptyNovelSourceStateRepository(),
+          ),
           imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
         ],
         child: const MaterialApp(home: NovelDetailPage(novelId: 'novel:1')),
@@ -67,6 +94,29 @@ void main() {
     expect(find.byKey(const Key('unified-detail-author-row')), findsOneWidget);
     expect(find.byIcon(Icons.person_outlined), findsOneWidget);
   });
+}
+
+class _EmptyNovelSourceStateRepository implements NovelSourceStateRepository {
+  const _EmptyNovelSourceStateRepository();
+
+  @override
+  Future<NovelSourceState?> getSourceState({required String novelId}) async {
+    return null;
+  }
+
+  @override
+  Future<void> saveMetadata(NovelSourceMetadata metadata) async {}
+
+  @override
+  Future<void> saveCheckpoint(NovelChapterSyncCheckpoint checkpoint) async {}
+
+  @override
+  Future<void> setHydrationState({
+    required String novelId,
+    required NovelChapterHydrationState state,
+    String? lastError,
+    DateTime? chaptersHydratedAt,
+  }) async {}
 }
 
 class _NoopImageCacheService implements ImageCacheService {
@@ -120,10 +170,16 @@ class _NoopImageCacheService implements ImageCacheService {
 
 class _NoopNovelDownloadService implements NovelDownloadService {
   @override
-  Future<void> deleteChapterDownload({required String novelId, required String episodeId}) async {}
+  Future<void> deleteChapterDownload({
+    required String novelId,
+    required String episodeId,
+  }) async {}
 
   @override
-  Future<DownloadedNovelChapter> downloadChapter({required String novelId, required String episodeId}) {
+  Future<DownloadedNovelChapter> downloadChapter({
+    required String novelId,
+    required String episodeId,
+  }) {
     throw UnimplementedError();
   }
 
@@ -156,7 +212,9 @@ class _FakeNovelRepository implements NovelRepository {
   }
 
   @override
-  Future<NovelChapterContent?> getChapterContent({required String episodeId}) async => null;
+  Future<NovelChapterContent?> getChapterContent({
+    required String episodeId,
+  }) async => null;
 
   @override
   Future<NovelItem?> getDetail({required String novelId}) async {
@@ -193,13 +251,18 @@ class _FakeNovelRepository implements NovelRepository {
   }
 
   @override
-  Future<NovelReaderPreferences> getReaderPreferences() async => NovelReaderPreferences.defaults();
+  Future<NovelReaderPreferences> getReaderPreferences() async =>
+      NovelReaderPreferences.defaults();
 
   @override
-  Future<NovelReadingProgress?> getReadingProgress({required String novelId}) async => null;
+  Future<NovelReadingProgress?> getReadingProgress({
+    required String novelId,
+  }) async => null;
 
   @override
-  Future<List<NovelItem>> getShelfItems({String categoryId = 'default'}) async => const [];
+  Future<List<NovelItem>> getShelfItems({
+    String categoryId = 'default',
+  }) async => const [];
 
   @override
   Future<void> moveNovelToCategory({
@@ -214,7 +277,11 @@ class _FakeNovelRepository implements NovelRepository {
     NovelEpisodeRefreshMode mode = NovelEpisodeRefreshMode.full,
     FavoriteSyncExecutionContext? executionContext,
   }) async {
-    return const NovelEpisodeRefreshResult(insertedCount: 0, updatedCount: 0, totalCount: 1);
+    return const NovelEpisodeRefreshResult(
+      insertedCount: 0,
+      updatedCount: 0,
+      totalCount: 1,
+    );
   }
 
   @override
@@ -247,10 +314,14 @@ class _FakeNovelRepository implements NovelRepository {
   }) async {}
 
   @override
-  Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {}
+  Future<void> upsertReaderPreferences(
+    NovelReaderPreferences preferences,
+  ) async {}
 
   @override
-  Future<void> addReaderBookmark({required NovelReaderBookmark bookmark}) async {}
+  Future<void> addReaderBookmark({
+    required NovelReaderBookmark bookmark,
+  }) async {}
 
   @override
   Future<List<NovelReaderBookmark>> listReaderBookmarks({

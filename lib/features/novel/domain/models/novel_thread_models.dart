@@ -105,6 +105,26 @@ class NovelDiscoveryOptions {
   static const NovelDiscoveryOptions defaults = NovelDiscoveryOptions();
 }
 
-abstract class NovelThreadGateway {
-  Future<ThreadDetailData> getThreadDetail({required String tid, required int page});
+abstract interface class NovelThreadGateway {
+  Future<ThreadDetailData> loadAuthorPostsPage({
+    required String tid,
+    required String authorId,
+    required int page,
+    int postsPerPage = 200,
+  });
+}
+
+/// Temporary compatibility port for the pre-hydration repository flow.
+///
+/// New synchronization services must depend on [NovelThreadGateway], whose
+/// contract cannot issue an unfiltered chapter request.
+abstract interface class LegacyNovelThreadGateway {
+  Future<ThreadDetailData> getThreadDetail({
+    required String tid,
+    required int page,
+  });
+}
+
+abstract interface class NovelSourceMetadataRecoveryGateway {
+  Future<ThreadDetailData> loadFirstPage({required String tid});
 }

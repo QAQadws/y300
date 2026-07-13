@@ -54,14 +54,18 @@ void main() {
         );
         final gateway = _buildGateway(adapter);
 
-        final result = await gateway.getThreadDetail(tid: '200', page: 3);
+        final result = await gateway.loadAuthorPostsPage(
+          tid: '200',
+          authorId: '1',
+          page: 3,
+        );
 
         expect(adapter.lastUri?.queryParameters['module'], 'viewthread');
         expect(adapter.lastUri?.queryParameters['tid'], '200');
         expect(adapter.lastUri?.queryParameters['page'], '3');
         expect(adapter.lastUri?.queryParameters['version'], '1');
         expect(adapter.lastUri?.queryParameters['ppp'], '200');
-        expect(adapter.lastUri?.queryParameters, isNot(contains('authorid')));
+        expect(adapter.lastUri?.queryParameters['authorid'], '1');
         expect(result.tid, '200');
         expect(result.currentPage, 3);
         expect(result.perPage, 200);
@@ -110,6 +114,31 @@ void main() {
       },
     );
 
+    test('production gateway sends the exact author-page contract', () async {
+      final fixture = await NovelPhase0ApiFixture.load(
+        novelPhase0AuthorPageFixturePaths[1],
+      );
+      final adapter = _NovelThreadGatewayAdapter(responseJson: fixture.root);
+      final gateway = _buildGateway(adapter);
+
+      final result = await gateway.loadAuthorPostsPage(
+        tid: '521519',
+        authorId: '406769',
+        page: 2,
+      );
+
+      expect(adapter.lastUri?.queryParameters, <String, String>{
+        'module': 'viewthread',
+        'tid': '521519',
+        'page': '2',
+        'version': '1',
+        'ppp': '200',
+        'authorid': '406769',
+      });
+      expect(result.currentPage, 2);
+      expect(result.posts.map((post) => post.authorId), everyElement('406769'));
+    });
+
     test('throws state error when api result is failure', () async {
       final adapter = _NovelThreadGatewayAdapter(
         responseJson: <String, dynamic>{
@@ -125,7 +154,7 @@ void main() {
       final gateway = _buildGateway(adapter);
 
       expect(
-        () => gateway.getThreadDetail(tid: '200', page: 1),
+        () => gateway.loadAuthorPostsPage(tid: '200', authorId: '1', page: 1),
         throwsA(
           isA<StateError>().having((error) => error.message, 'message', '读取失败'),
         ),

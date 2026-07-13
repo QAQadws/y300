@@ -42,6 +42,7 @@ void main() {
     );
     expect(find.text('测试作品'), findsWidgets);
     expect(find.byKey(const Key('unified-detail-author-row')), findsOneWidget);
+    expect(find.text('UID: 10001'), findsOneWidget);
     expect(
       find.descendant(
         of: find.byKey(const Key('unified-detail-author-row')),
@@ -1504,6 +1505,7 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
       workId: 'work-1',
       title: '测试作品',
       author: '作者A',
+      sourceAuthorId: '10001',
       coverLocalPath: coverLocalPath,
       inShelf: true,
       intro: '这是一段简介',

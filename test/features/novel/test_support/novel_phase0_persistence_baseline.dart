@@ -5,6 +5,16 @@ const novelPhase0BaselineNovelId = 'novel:55:521519';
 const novelPhase0BaselineEpisodeId = 'novel:55:521519:40692958';
 const novelPhase0BaselineBookmarkId = 'bookmark:novel:55:521519:40692958';
 
+Future<void> prepareNovelPhase0DatabaseVersion28(Database db) async {
+  await db.execute(
+    'DROP TABLE IF EXISTS ${ComicLocalDb.novelEpisodeSyncStagingTable}',
+  );
+  await db.execute(
+    'DROP TABLE IF EXISTS ${ComicLocalDb.novelSourceStateTable}',
+  );
+  await db.setVersion(28);
+}
+
 Future<void> seedNovelPhase0PersistenceBaseline(Database db) async {
   const timestamp = 1783900800000;
   await db.transaction((txn) async {

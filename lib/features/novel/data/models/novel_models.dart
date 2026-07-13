@@ -1,3 +1,5 @@
+import 'package:y300/features/novel/domain/models/novel_source_models.dart';
+
 class NovelItem {
   const NovelItem({
     required this.novelId,
@@ -381,18 +383,13 @@ class NovelEpisodeRefreshResult {
   final int totalCount;
 }
 
-class NovelRefreshSeed {
+class NovelRefreshSeed extends NovelSourceSeed {
   const NovelRefreshSeed({
-    required this.fid,
-    required this.tid,
-    this.typeid,
-    this.tagName,
+    required super.fid,
+    required super.tid,
+    super.typeid,
+    super.tagName,
   });
-
-  final String fid;
-  final String tid;
-  final String? typeid;
-  final String? tagName;
 }
 
 class NovelShelfCategory {
