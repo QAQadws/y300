@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,6 +20,7 @@ import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart
 import 'package:y300/features/novel/domain/models/novel_source_models.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
+import 'package:y300/features/novel/domain/services/novel_chapter_sync_service.dart';
 import 'package:y300/features/novel/presentation/novel_detail_page.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 
@@ -94,6 +97,53 @@ void main() {
     expect(find.byKey(const Key('unified-detail-author-row')), findsOneWidget);
     expect(find.byIcon(Icons.person_outlined), findsOneWidget);
   });
+
+  testWidgets('metadata remains visible while first chapters hydrate', (
+    tester,
+  ) async {
+    final sourceRepository = _HydrationNovelSourceStateRepository();
+    final syncService = _ControlledNovelChapterSyncService();
+    addTearDown(syncService.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+          novelDownloadServiceProvider.overrideWithValue(
+            _NoopNovelDownloadService(),
+          ),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
+          novelSourceStateRepositoryProvider.overrideWithValue(
+            sourceRepository,
+          ),
+          novelChapterSyncServiceProvider.overrideWithValue(syncService),
+          imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
+        ],
+        child: const MaterialApp(home: NovelDetailPage(novelId: 'novel:1')),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('Test Novel'), findsAtLeastNWidgets(1));
+    expect(
+      find.byKey(const Key('novel-chapter-hydration-panel')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('正在加载第 1/2 页'), findsOneWidget);
+    expect(syncService.request?.publisherId, '406769');
+    expect(syncService.request?.mode, NovelChapterSyncMode.initialFull);
+
+    syncService.complete();
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('novel-chapter-hydration-panel')),
+      findsNothing,
+    );
+  });
 }
 
 class _EmptyNovelSourceStateRepository implements NovelSourceStateRepository {
@@ -101,7 +151,10 @@ class _EmptyNovelSourceStateRepository implements NovelSourceStateRepository {
 
   @override
   Future<NovelSourceState?> getSourceState({required String novelId}) async {
-    return null;
+    return _sourceState(
+      novelId: novelId,
+      hydrationState: NovelChapterHydrationState.ready,
+    );
   }
 
   @override
@@ -117,6 +170,128 @@ class _EmptyNovelSourceStateRepository implements NovelSourceStateRepository {
     String? lastError,
     DateTime? chaptersHydratedAt,
   }) async {}
+}
+
+class _HydrationNovelSourceStateRepository
+    implements NovelSourceStateRepository {
+  NovelSourceState state = _sourceState(
+    novelId: 'novel:1',
+    hydrationState: NovelChapterHydrationState.metadataOnly,
+  );
+
+  @override
+  Future<NovelSourceState?> getSourceState({required String novelId}) async {
+    return state;
+  }
+
+  @override
+  Future<void> saveCheckpoint(NovelChapterSyncCheckpoint checkpoint) async {}
+
+  @override
+  Future<void> saveMetadata(NovelSourceMetadata metadata) async {}
+
+  @override
+  Future<void> setHydrationState({
+    required String novelId,
+    required NovelChapterHydrationState state,
+    String? lastError,
+    DateTime? chaptersHydratedAt,
+  }) async {}
+}
+
+class _ControlledNovelChapterSyncService implements NovelChapterSyncService {
+  final StreamController<NovelChapterSyncProgress> _progress =
+      StreamController<NovelChapterSyncProgress>.broadcast();
+  final Completer<void> _completion = Completer<void>();
+  NovelChapterSyncRequest? request;
+  bool _active = false;
+
+  @override
+  bool hasActiveRun(String novelId) => _active;
+
+  @override
+  Future<NovelChapterSyncResult> synchronize(
+    NovelChapterSyncRequest request,
+  ) async {
+    this.request = request;
+    _active = true;
+    _progress.add(
+      NovelChapterSyncProgress(
+        runId: 'widget-run',
+        novelId: request.novelId,
+        mode: request.mode,
+        phase: NovelChapterSyncPhase.fetchingPage,
+        currentPage: 1,
+        totalPages: 2,
+        acceptedCount: 1,
+      ),
+    );
+    await _completion.future;
+    _active = false;
+    final checkpoint = NovelChapterSyncCheckpoint(
+      novelId: request.novelId,
+      publisherId: request.publisherId,
+      lastCompletedAuthorPage: 2,
+      lastSeenPid: '5001',
+      completedAt: DateTime(2026, 7, 13),
+    );
+    _progress.add(
+      NovelChapterSyncProgress(
+        runId: 'widget-run',
+        novelId: request.novelId,
+        mode: request.mode,
+        phase: NovelChapterSyncPhase.completed,
+        currentPage: 2,
+        totalPages: 2,
+        acceptedCount: 1,
+      ),
+    );
+    return NovelChapterSyncResult(
+      mode: request.mode,
+      fetchedPages: 2,
+      insertedCount: 1,
+      updatedCount: 0,
+      totalCount: 1,
+      checkpoint: checkpoint,
+    );
+  }
+
+  @override
+  Stream<NovelChapterSyncProgress> watchProgress(String novelId) {
+    return _progress.stream;
+  }
+
+  void complete() => _completion.complete();
+
+  Future<void> dispose() => _progress.close();
+}
+
+NovelSourceState _sourceState({
+  required String novelId,
+  required NovelChapterHydrationState hydrationState,
+}) {
+  return NovelSourceState(
+    novelId: novelId,
+    publisherId: '406769',
+    publisherName: 'Author A',
+    firstPostPid: '5000',
+    sourceIntro: '来源简介',
+    catalogEntries: const <NovelSourceCatalogEntry>[],
+    metadataSourceVersion: 4,
+    hydrationState: hydrationState,
+    metadataIngestedAt: DateTime(2026, 7, 13),
+    chaptersHydratedAt: hydrationState == NovelChapterHydrationState.ready
+        ? DateTime(2026, 7, 13)
+        : null,
+    lastCompletedAuthorPage: hydrationState == NovelChapterHydrationState.ready
+        ? 1
+        : 0,
+    lastSeenPid: null,
+    lastSyncAt: hydrationState == NovelChapterHydrationState.ready
+        ? DateTime(2026, 7, 13)
+        : null,
+    lastError: null,
+  );
 }
 
 class _NoopImageCacheService implements ImageCacheService {

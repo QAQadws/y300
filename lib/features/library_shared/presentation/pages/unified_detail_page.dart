@@ -34,6 +34,7 @@ class UnifiedDetailPage extends StatefulWidget {
     this.imageHeaderBuilder,
     this.pickCoverImage,
     this.shelfRefreshBus,
+    this.chapterStatus,
   });
 
   final DetailModuleAdapter adapter;
@@ -50,6 +51,7 @@ class UnifiedDetailPage extends StatefulWidget {
   /// 依赖 image_picker。仅当 adapter 实现 [DetailCoverEditor] 时才会被调用。
   final Future<String?> Function()? pickCoverImage;
   final LibraryShelfRefreshBus? shelfRefreshBus;
+  final Widget? chapterStatus;
 
   @override
   State<UnifiedDetailPage> createState() => _UnifiedDetailPageState();
@@ -297,6 +299,8 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         sourceTypeId: header.sourceTypeId,
                       ),
                     ),
+                  if (widget.chapterStatus != null)
+                    SliverToBoxAdapter(child: widget.chapterStatus),
                   SliverToBoxAdapter(
                     child: UnifiedDetailChapterToolbar(
                       chapterCount: state.chapters.length,

@@ -3,17 +3,24 @@ import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/novel/data/repositories/local_novel_repository.dart';
+import 'package:y300/features/novel/data/repositories/sqflite_novel_chapter_sync_repository.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_source_metadata_repository.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_source_state_repository.dart';
+import 'package:y300/features/novel/data/services/default_novel_chapter_sync_service.dart';
 import 'package:y300/features/novel/data/services/default_novel_sync_request_governor.dart';
+import 'package:y300/features/novel/data/services/default_novel_source_metadata_recovery_service.dart';
 import 'package:y300/features/novel/data/services/novel_download_service.dart';
 import 'package:y300/features/novel/data/services/novel_reader_cache_service.dart';
 import 'package:y300/features/novel/data/services/novel_source_metadata_ingest_service.dart';
+import 'package:y300/features/novel/data/services/novel_source_metadata_recovery_gateway.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/data/use_cases/novel_shelf_category_assign_use_case_impl.dart';
 import 'package:y300/features/novel/data/services/novel_thread_gateway.dart';
 import 'package:y300/features/novel/domain/services/novel_episode_discovery_service.dart';
+import 'package:y300/features/novel/domain/services/novel_author_post_episode_builder.dart';
+import 'package:y300/features/novel/domain/services/novel_chapter_sync_service.dart';
 import 'package:y300/features/novel/domain/services/novel_first_post_catalog_extractor.dart';
 import 'package:y300/features/novel/domain/services/novel_intro_section_extractor.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
@@ -21,7 +28,10 @@ import 'package:y300/features/novel/domain/services/novel_reader_search_service.
 import 'package:y300/features/novel/domain/services/novel_title_sanitizer.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_metadata_repository.dart';
+import 'package:y300/features/novel/domain/repositories/novel_chapter_sync_repository.dart';
+import 'package:y300/features/novel/domain/services/novel_post_attach_html_resolver.dart';
 import 'package:y300/features/novel/domain/services/novel_source_metadata_parser.dart';
+import 'package:y300/features/novel/domain/services/novel_source_metadata_recovery_service.dart';
 import 'package:y300/features/novel/domain/services/novel_sync_request_governor.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
@@ -86,6 +96,48 @@ final novelSyncRequestGovernorProvider = Provider<NovelSyncRequestGovernor>((
   ref,
 ) {
   return DefaultNovelSyncRequestGovernor();
+});
+
+final novelAuthorPostEpisodeBuilderProvider =
+    Provider<NovelAuthorPostEpisodeBuilder>((ref) {
+      final imageSourcePipeline = ref.watch(forumImageSourcePipelineProvider);
+      return DefaultNovelAuthorPostEpisodeBuilder(
+        imageSourcePipeline: imageSourcePipeline,
+        attachResolver: NovelPostAttachHtmlResolver(
+          imageSourcePipeline: imageSourcePipeline,
+        ),
+      );
+    });
+
+final novelChapterSyncRepositoryProvider = Provider<NovelChapterSyncRepository>(
+  (ref) {
+    return SqfliteNovelChapterSyncRepository(ComicLocalDb.open());
+  },
+);
+
+final novelSourceMetadataRecoveryServiceProvider =
+    Provider<NovelSourceMetadataRecoveryService>((ref) {
+      return DefaultNovelSourceMetadataRecoveryService(
+        database: ComicLocalDb.open(),
+        gateway: ref.watch(novelSourceMetadataRecoveryGatewayProvider),
+        parser: ref.watch(novelSourceMetadataParserProvider),
+        repository: ref.watch(novelSourceMetadataRepositoryProvider),
+      );
+    });
+
+final novelChapterSyncServiceProvider = Provider<NovelChapterSyncService>((
+  ref,
+) {
+  final service = DefaultNovelChapterSyncService(
+    threadGateway: ref.watch(novelThreadGatewayProvider),
+    governor: ref.watch(novelSyncRequestGovernorProvider),
+    episodeBuilder: ref.watch(novelAuthorPostEpisodeBuilderProvider),
+    repository: ref.watch(novelChapterSyncRepositoryProvider),
+    sourceStateRepository: ref.watch(novelSourceStateRepositoryProvider),
+    shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
+  );
+  ref.onDispose(service.dispose);
+  return service;
 });
 
 final novelIntroSectionExtractorProvider = Provider<NovelIntroSectionExtractor>(

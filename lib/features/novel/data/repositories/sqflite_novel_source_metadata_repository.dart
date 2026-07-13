@@ -106,8 +106,8 @@ class SqfliteNovelSourceMetadataRepository
       final existingShelfRows = await txn.query(
         ComicLocalDb.novelShelfItemsTable,
         columns: const <String>['id'],
-        where: 'category_id = ? AND novel_id = ?',
-        whereArgs: <Object?>[_defaultCategoryId, novelId],
+        where: 'novel_id = ?',
+        whereArgs: <Object?>[novelId],
         limit: 1,
       );
       if (existingShelfRows.isEmpty) {
