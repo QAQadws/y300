@@ -13,38 +13,44 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
   group('ComicFavoriteContentIngestHandler', () {
-    test('declares comic auto refresh and duplicate merge tasks by default', () async {
-      final ingestService = _FakeComicIngestService();
-      final handler = ComicFavoriteContentIngestHandler(
-        ingestService: ingestService,
-      );
+    test(
+      'declares comic auto refresh and duplicate merge tasks by default',
+      () async {
+        final ingestService = _FakeComicIngestService();
+        final handler = ComicFavoriteContentIngestHandler(
+          ingestService: ingestService,
+        );
 
-      final result = await handler.ingest(
-        _request(
-          tid: '100',
-          fid: '30',
-          typeid: '398',
-          kind: ThreadContentKind.comic,
-          tagName: '韩国漫画',
-        ),
-      );
+        final result = await handler.ingest(
+          _request(
+            tid: '100',
+            fid: '30',
+            typeid: '398',
+            kind: ThreadContentKind.comic,
+            tagName: '韩国漫画',
+          ),
+        );
 
-      expect(ingestService.upsertedTids, <String>['100']);
-      expect(result.kind, ThreadContentKind.comic);
-      expect(result.workId, 'yamibo:100');
+        expect(ingestService.upsertedTids, <String>['100']);
+        expect(result.kind, ThreadContentKind.comic);
+        expect(result.workId, 'yamibo:100');
 
-      final autoRefresh = result.postTasks.whereType<ComicAutoRefreshTask>().single;
-      expect(autoRefresh.comicId, 'yamibo:100');
-      expect(autoRefresh.detail.tid, '100');
-      expect(autoRefresh.favoriteTitle, '收藏100');
-      expect(autoRefresh.sourceTagName, '韩国漫画');
-      expect(autoRefresh.forceSearchOnCatalogMiss, isFalse);
+        final autoRefresh = result.postTasks
+            .whereType<ComicAutoRefreshTask>()
+            .single;
+        expect(autoRefresh.comicId, 'yamibo:100');
+        expect(autoRefresh.detail.tid, '100');
+        expect(autoRefresh.favoriteTitle, '收藏100');
+        expect(autoRefresh.sourceTagName, '韩国漫画');
+        expect(autoRefresh.forceSearchOnCatalogMiss, isFalse);
 
-      final mergeTasks =
-          result.postTasks.whereType<ComicDuplicateMergeTask>().toList();
-      expect(mergeTasks, hasLength(1));
-      expect(mergeTasks.single.comicId, 'yamibo:100');
-    });
+        final mergeTasks = result.postTasks
+            .whereType<ComicDuplicateMergeTask>()
+            .toList();
+        expect(mergeTasks, hasLength(1));
+        expect(mergeTasks.single.comicId, 'yamibo:100');
+      },
+    );
 
     test('omits duplicate merge task when option disabled', () async {
       final handler = ComicFavoriteContentIngestHandler(
@@ -61,14 +67,8 @@ void main() {
         ),
       );
 
-      expect(
-        result.postTasks.whereType<ComicDuplicateMergeTask>(),
-        isEmpty,
-      );
-      expect(
-        result.postTasks.whereType<ComicAutoRefreshTask>(),
-        hasLength(1),
-      );
+      expect(result.postTasks.whereType<ComicDuplicateMergeTask>(), isEmpty);
+      expect(result.postTasks.whereType<ComicAutoRefreshTask>(), hasLength(1));
     });
 
     test('forwards forceSearchOnCatalogMiss into auto refresh task', () async {
@@ -135,25 +135,45 @@ void main() {
       expect(task.workId, 'novel:49:200');
       expect(task.tid, '200');
     });
+
+    test('forwards the same preloaded detail object to novel ingest', () async {
+      final ingestService = _FakeNovelIngestService();
+      final handler = NovelFavoriteContentIngestHandler(
+        ingestService: ingestService,
+      );
+      final request = _request(
+        tid: '200',
+        fid: '49',
+        typeid: '293',
+        kind: ThreadContentKind.novel,
+      );
+
+      await handler.ingest(request);
+
+      expect(ingestService.receivedDetails, hasLength(1));
+      expect(
+        identical(ingestService.receivedDetails.single, request.context.detail),
+        isTrue,
+      );
+    });
   });
 
   group('ForumFavoriteContentIngestHandler', () {
-    test('returns thread work id without post tasks and removeFromShelf is a no-op', () async {
-      const handler = ForumFavoriteContentIngestHandler();
+    test(
+      'returns thread work id without post tasks and removeFromShelf is a no-op',
+      () async {
+        const handler = ForumFavoriteContentIngestHandler();
 
-      final result = await handler.ingest(
-        _request(
-          tid: '300',
-          fid: '1',
-          kind: ThreadContentKind.forum,
-        ),
-      );
-      await handler.removeFromShelf(workId: 'thread:300');
+        final result = await handler.ingest(
+          _request(tid: '300', fid: '1', kind: ThreadContentKind.forum),
+        );
+        await handler.removeFromShelf(workId: 'thread:300');
 
-      expect(result.kind, ThreadContentKind.forum);
-      expect(result.workId, 'thread:300');
-      expect(result.postTasks, isEmpty);
-    });
+        expect(result.kind, ThreadContentKind.forum);
+        expect(result.workId, 'thread:300');
+        expect(result.postTasks, isEmpty);
+      },
+    );
   });
 }
 
@@ -218,6 +238,7 @@ class _FakeComicIngestService implements ComicFavoriteIngestService {
 
 class _FakeNovelIngestService implements NovelFavoriteIngestService {
   final List<String> upsertedTids = <String>[];
+  final List<ThreadDetailData> receivedDetails = <ThreadDetailData>[];
   final List<String> removedWorkIds = <String>[];
 
   @override
@@ -227,6 +248,7 @@ class _FakeNovelIngestService implements NovelFavoriteIngestService {
     FavoriteSyncExecutionContext? executionContext,
   }) async {
     upsertedTids.add(detail.tid);
+    receivedDetails.add(detail);
     return 'novel:${detail.fid}:${detail.tid}';
   }
 

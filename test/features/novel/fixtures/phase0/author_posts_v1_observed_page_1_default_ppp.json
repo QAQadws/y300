@@ -1,0 +1,66 @@
+{
+  "Version": "1",
+  "Charset": "UTF-8",
+  "FixtureMetadata": {
+    "kind": "observedAuthorPostsPage",
+    "source": "user-provided Yamibo API response sanitized on 2026-07-13",
+    "originalUtf8Bytes": 297183,
+    "requestedPage": 1,
+    "requestQuery": {
+      "module": "viewthread",
+      "tid": "564823",
+      "page": "1",
+      "version": "1",
+      "authorid": "121222"
+    },
+    "postsPerPageWasExplicit": false,
+    "originalPostCount": 20,
+    "bodyTextSanitized": true,
+    "removedSensitiveFields": [
+      "cookiepre",
+      "auth",
+      "saltkey",
+      "formhash",
+      "member_uid",
+      "member_username"
+    ]
+  },
+  "Variables": {
+    "fid": "55",
+    "ppp": "20",
+    "thread": {
+      "tid": "564823",
+      "fid": "55",
+      "typeid": "295",
+      "subject": "【自翻】【犬甘あんず】想變成小惡魔的我，與魅魔的青梅【完結】",
+      "author": "誹夜",
+      "authorid": "121222",
+      "replies": "38",
+      "allreplies": "181",
+      "maxposition": "182",
+      "views": "16107"
+    },
+    "postlist": [
+      {"pid":"41414373","author":"誹夜","authorid":"121222","message":"<p>已脱敏的楼主正文 1。</p>","number":"1","first":"1","dateline":"2025-12-7 18:00"},
+      {"pid":"41416397","author":"誹夜","authorid":"121222","message":"<p>已脱敏的楼主正文 2。</p>","number":"2","first":"0","dateline":"2025-12-7 18:00"},
+      {"pid":"41416399","author":"誹夜","authorid":"121222","message":"<p>已脱敏的楼主正文 3。</p>","number":"3","first":"0","dateline":"2025-12-7 18:00"},
+      {"pid":"41416400","author":"誹夜","authorid":"121222","message":"<p>已脱敏的楼主正文 4。</p>","number":"4","first":"0","dateline":"2025-12-7 18:00"},
+      {"pid":"41416401","author":"誹夜","authorid":"121222","message":"<p>已脱敏的楼主正文 5。</p>","number":"5","first":"0","dateline":"2025-12-7 18:00"},
+      {"pid":"41418167","author":"誹夜","authorid":"121222","message":"<p>已脱敏的楼主正文 6。</p>","number":"6","first":"0","dateline":"2025-12-8 23:44"},
+      {"pid":"41419391","author":"誹夜","authorid":"121222","message":"<p>已脱敏的楼主正文 7。</p>","number":"7","first":"0","dateline":"2025-12-10 00:02"},
+      {"pid":"41420628","author":"誹夜","authorid":"121222","message":"<p>已脱敏的楼主正文 8。</p>","number":"8","first":"0","dateline":"2025-12-11 15:12"},
+      {"pid":"41421583","author":"誹夜","authorid":"121222","message":"<p>已脱敏的楼主正文 9。</p>","number":"9","first":"0","dateline":"2025-12-12 22:28"},
+      {"pid":"41423673","author":"誹夜","authorid":"121222","message":"<p>已脱敏的楼主正文 10。</p>","number":"10","first":"0","dateline":"2025-12-14 18:08"},
+      {"pid":"41426888","author":"誹夜","authorid":"121222","message":"<p>已脱敏的楼主正文 11。</p>","number":"11","first":"0","dateline":"2025-12-17 23:22"},
+      {"pid":"41428174","author":"誹夜","authorid":"121222","message":"<p>已脱敏的楼主正文 12。</p>","number":"12","first":"0","dateline":"2025-12-19 11:58"},
+      {"pid":"41430505","author":"誹夜","authorid":"121222","message":"<p>已脱敏的楼主正文 13。</p>","number":"13","first":"0","dateline":"2025-12-21 17:12"},
+      {"pid":"41431573","author":"誹夜","authorid":"121222","message":"<p>已脱敏的楼主正文 14。</p>","number":"14","first":"0","dateline":"2025-12-22 22:58"},
+      {"pid":"41433230","author":"誹夜","authorid":"121222","message":"<p>已脱敏的楼主正文 15。</p>","number":"15","first":"0","dateline":"2025-12-24 14:29"},
+      {"pid":"41434346","author":"誹夜","authorid":"121222","message":"<p>已脱敏的楼主正文 16。</p>","number":"16","first":"0","dateline":"2025-12-25 23:13"},
+      {"pid":"41435741","author":"誹夜","authorid":"121222","message":"<p>已脱敏的楼主正文 17。</p>","number":"17","first":"0","dateline":"2025-12-27 22:00"},
+      {"pid":"41436020","author":"誹夜","authorid":"121222","message":"<p>已脱敏的楼主正文 18。</p>","number":"18","first":"0","dateline":"2025-12-28 09:55"},
+      {"pid":"41437248","author":"誹夜","authorid":"121222","message":"<p>已脱敏的楼主正文 19。</p>","number":"19","first":"0","dateline":"2025-12-29 22:43"},
+      {"pid":"41437505","author":"誹夜","authorid":"121222","message":"<p>已脱敏的楼主正文 20。</p>","number":"20","first":"0","dateline":"2025-12-30 10:24"}
+    ]
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "Version": "4",
+  "Charset": "UTF-8",
+  "FixtureMetadata": {
+    "kind": "favoriteDetail",
+    "source": "sanitized structural excerpt derived from a captured Yamibo novel thread",
+    "requestedPage": 1,
+    "unsafeLaterPostPids": [
+      "40213902",
+      "40213904"
+    ]
+  },
+  "Variables": {
+    "fid": "55",
+    "ppp": "20",
+    "thread": {
+      "tid": "521519",
+      "fid": "55",
+      "typeid": "295",
+      "subject": "[个人翻译][长篇]一周一次买下同班同学的那些事",
+      "author": "INCSKY16",
+      "authorid": "406769",
+      "replies": "17003",
+      "views": "100000"
+    },
+    "postlist": [
+      {
+        "pid": "40213901",
+        "author": "INCSKY16",
+        "authorid": "406769",
+        "message": "<p>这是用于测试首楼元数据边界的脱敏简介。</p><p>目录</p><p><a href=\"forum.php?mod=redirect&amp;goto=findpost&amp;ptid=521519&amp;pid=40213902\">第 1 话</a></p>",
+        "number": "1",
+        "first": "1",
+        "dateline": "2023-01-01"
+      },
+      {
+        "pid": "40213902",
+        "author": "INCSKY16",
+        "authorid": "406769",
+        "message": "<p>后续楼层不得参与 version=4 小说元数据解析。</p><a href=\"forum.php?mod=viewthread&amp;tid=521519&amp;highlight=%D2%B2%CE%DE%B7%E7%D3%EA\">旧编码链接</a>",
+        "number": "2",
+        "first": "0",
+        "dateline": "2023-01-02"
+      },
+      {
+        "pid": "40213904",
+        "author": "INCSKY16",
+        "authorid": "406769",
+        "message": "<font><ignore_js_op><p>结构故意不完整的后续楼层",
+        "number": "3",
+        "first": "0",
+        "dateline": "2023-01-03"
+      }
+    ]
+  }
+}

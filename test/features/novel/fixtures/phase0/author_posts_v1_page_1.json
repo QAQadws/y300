@@ -1,0 +1,50 @@
+{
+  "Version": "1",
+  "Charset": "UTF-8",
+  "FixtureMetadata": {
+    "kind": "authorPostsPage",
+    "source": "sanitized structural excerpt derived from a captured Yamibo novel thread",
+    "requestedPage": 1,
+    "originalPostCount": 200,
+    "sanitizedExcerpt": true,
+    "authorId": "406769",
+    "firstCatalogPosition": 1,
+    "lastCatalogPosition": 200
+  },
+  "Variables": {
+    "fid": "55",
+    "ppp": "200",
+    "thread": {
+      "tid": "521519",
+      "fid": "55",
+      "typeid": "295",
+      "subject": "[个人翻译][长篇]一周一次买下同班同学的那些事",
+      "author": "INCSKY16",
+      "authorid": "406769",
+      "replies": "422",
+      "allreplies": "17003",
+      "maxposition": "17004",
+      "views": "100000"
+    },
+    "postlist": [
+      {
+        "pid": "40213901",
+        "author": "INCSKY16",
+        "authorid": "406769",
+        "message": "<p>脱敏后的首楼正文。</p>",
+        "number": "1",
+        "first": "1",
+        "dateline": "2023-01-01"
+      },
+      {
+        "pid": "40689766",
+        "author": "INCSKY16",
+        "authorid": "406769",
+        "message": "<p>脱敏后的第 200 个楼主楼层。</p>",
+        "number": "200",
+        "first": "0",
+        "dateline": "2024-01-01"
+      }
+    ]
+  }
+}

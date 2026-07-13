@@ -1,0 +1,56 @@
+{
+  "Version": "1",
+  "Charset": "UTF-8",
+  "FixtureMetadata": {
+    "kind": "authorPostsPage",
+    "source": "sanitized structural excerpt derived from a captured Yamibo novel thread",
+    "requestedPage": 3,
+    "originalPostCount": 23,
+    "sanitizedExcerpt": true,
+    "authorId": "406769",
+    "firstCatalogPosition": 401,
+    "lastCatalogPosition": 423,
+    "routeEvidence": {
+      "pid": "41397522",
+      "authorFilteredPage": 3,
+      "ordinaryThreadPage": 722,
+      "verifiedBy": "forum.php?mod=redirect&goto=findpost"
+    }
+  },
+  "Variables": {
+    "fid": "55",
+    "ppp": "200",
+    "thread": {
+      "tid": "521519",
+      "fid": "55",
+      "typeid": "295",
+      "subject": "[个人翻译][长篇]一周一次买下同班同学的那些事",
+      "author": "INCSKY16",
+      "authorid": "406769",
+      "replies": "422",
+      "allreplies": "17003",
+      "maxposition": "17004",
+      "views": "100000"
+    },
+    "postlist": [
+      {
+        "pid": "41397522",
+        "author": "INCSKY16",
+        "authorid": "406769",
+        "message": "<p>脱敏后的第 401 个楼主楼层。</p>",
+        "number": "401",
+        "first": "0",
+        "dateline": "2025-01-02"
+      },
+      {
+        "pid": "41570795",
+        "author": "INCSKY16",
+        "authorid": "406769",
+        "message": "<p>脱敏后的第 423 个楼主楼层。</p>",
+        "number": "423",
+        "first": "0",
+        "dateline": "2026-06-28"
+      }
+    ]
+  }
+}

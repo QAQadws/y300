@@ -12,9 +12,8 @@ void main() {
   group('DefaultFavoriteDetailContextLoader', () {
     test('loads detail, resolves tag, and classifies content kind', () async {
       final loader = DefaultFavoriteDetailContextLoader(
-        loadThreadDetail: (tid) async => ApiSuccess(
-          _detail(tid: tid, fid: '30', typeid: '398'),
-        ),
+        loadThreadDetail: (tid) async =>
+            ApiSuccess(_detail(tid: tid, fid: '30', typeid: '398')),
         loadTagLookup: () async => _lookup(comicTagName: '韩国漫画'),
         classifier: const ThreadContentClassifier(),
       );
@@ -30,6 +29,7 @@ void main() {
 
     test('uses preloaded detail without calling detail loader', () async {
       var detailLoadCount = 0;
+      final preloadedDetail = _detail(tid: '100', fid: '49', typeid: '293');
       final loader = DefaultFavoriteDetailContextLoader(
         loadThreadDetail: (tid) async {
           detailLoadCount++;
@@ -41,33 +41,35 @@ void main() {
 
       final result = await loader.load(
         _record(tid: '100'),
-        preloadedDetail: _detail(tid: '100', fid: '49', typeid: '293'),
+        preloadedDetail: preloadedDetail,
       );
 
       expect(detailLoadCount, 0);
       expect(result.dataOrNull?.kind, ThreadContentKind.novel);
+      expect(identical(result.dataOrNull?.detail, preloadedDetail), isTrue);
     });
 
-    test('classifies non comic and non novel boards as forum content', () async {
-      final loader = DefaultFavoriteDetailContextLoader(
-        loadThreadDetail: (tid) async => ApiSuccess(
-          _detail(tid: tid, fid: '1'),
-        ),
-        loadTagLookup: () async => _lookup(),
-        classifier: const ThreadContentClassifier(),
-      );
+    test(
+      'classifies non comic and non novel boards as forum content',
+      () async {
+        final loader = DefaultFavoriteDetailContextLoader(
+          loadThreadDetail: (tid) async =>
+              ApiSuccess(_detail(tid: tid, fid: '1')),
+          loadTagLookup: () async => _lookup(),
+          classifier: const ThreadContentClassifier(),
+        );
 
-      final result = await loader.load(_record(tid: '300'));
+        final result = await loader.load(_record(tid: '300'));
 
-      expect(result.dataOrNull?.kind, ThreadContentKind.forum);
-      expect(result.dataOrNull?.tagName, isNull);
-    });
+        expect(result.dataOrNull?.kind, ThreadContentKind.forum);
+        expect(result.dataOrNull?.tagName, isNull);
+      },
+    );
 
     test('keeps context when tag lookup fails', () async {
       final loader = DefaultFavoriteDetailContextLoader(
-        loadThreadDetail: (tid) async => ApiSuccess(
-          _detail(tid: tid, fid: '30', typeid: '398'),
-        ),
+        loadThreadDetail: (tid) async =>
+            ApiSuccess(_detail(tid: tid, fid: '30', typeid: '398')),
         loadTagLookup: () => throw StateError('tag unavailable'),
         classifier: const ThreadContentClassifier(),
       );
@@ -80,20 +82,23 @@ void main() {
       expect(context.kind, ThreadContentKind.comic);
     });
 
-    test('passes through detail loader failure as context load failure', () async {
-      const error = ApiError(type: ApiErrorType.network, message: 'boom');
-      final loader = DefaultFavoriteDetailContextLoader(
-        loadThreadDetail: (tid) async =>
-            const ApiFailure<ThreadDetailData>(error),
-        loadTagLookup: () async => _lookup(),
-        classifier: const ThreadContentClassifier(),
-      );
+    test(
+      'passes through detail loader failure as context load failure',
+      () async {
+        const error = ApiError(type: ApiErrorType.network, message: 'boom');
+        final loader = DefaultFavoriteDetailContextLoader(
+          loadThreadDetail: (tid) async =>
+              const ApiFailure<ThreadDetailData>(error),
+          loadTagLookup: () async => _lookup(),
+          classifier: const ThreadContentClassifier(),
+        );
 
-      final result = await loader.load(_record(tid: '100'));
+        final result = await loader.load(_record(tid: '100'));
 
-      expect(result, isA<ApiFailure<FavoriteDetailContext>>());
-      expect(result.errorOrNull?.message, 'boom');
-    });
+        expect(result, isA<ApiFailure<FavoriteDetailContext>>());
+        expect(result.errorOrNull?.message, 'boom');
+      },
+    );
   });
 }
 
@@ -129,22 +134,20 @@ ThreadDetailData _detail({
 }
 
 ForumTagLookup _lookup({String comicTagName = '韩国漫画'}) {
-  return ForumTagLookup(
-    <ForumBoardTagSet>[
-      ForumBoardTagSet(
-        fid: '30',
-        name: '漫画区',
-        tags: <ForumTagDefinition>[
-          ForumTagDefinition(fid: '30', typeid: '398', name: comicTagName),
-        ],
-      ),
-      const ForumBoardTagSet(
-        fid: '49',
-        name: '文学区',
-        tags: <ForumTagDefinition>[
-          ForumTagDefinition(fid: '49', typeid: '293', name: '原创'),
-        ],
-      ),
-    ],
-  );
+  return ForumTagLookup(<ForumBoardTagSet>[
+    ForumBoardTagSet(
+      fid: '30',
+      name: '漫画区',
+      tags: <ForumTagDefinition>[
+        ForumTagDefinition(fid: '30', typeid: '398', name: comicTagName),
+      ],
+    ),
+    const ForumBoardTagSet(
+      fid: '49',
+      name: '文学区',
+      tags: <ForumTagDefinition>[
+        ForumTagDefinition(fid: '49', typeid: '293', name: '原创'),
+      ],
+    ),
+  ]);
 }
