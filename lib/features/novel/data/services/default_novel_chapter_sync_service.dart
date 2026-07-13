@@ -79,23 +79,27 @@ class DefaultNovelChapterSyncService implements NovelChapterSyncService {
   }
 
   Future<NovelChapterSyncResult> _run(NovelChapterSyncRequest request) async {
-    if (request.mode != NovelChapterSyncMode.initialFull) {
-      throw UnsupportedError(
-        'Incremental novel synchronization is introduced in Phase 5.',
-      );
-    }
     final novelId = _requireText(request.novelId, 'request.novelId');
     final tid = _requireText(request.tid, 'request.tid');
     final publisherId = _requireText(
       request.publisherId,
       'request.publisherId',
     );
+    final persistedCheckpoint = _validatedCheckpoint(
+      request: request,
+      novelId: novelId,
+      publisherId: publisherId,
+    );
     final startedAt = _clock();
     final runId = _runIdFactory(novelId, startedAt);
-    var page = 1;
+    var page = request.mode == NovelChapterSyncMode.incremental
+        ? persistedCheckpoint!.lastCompletedAuthorPage
+        : 1;
+    var fetchedPages = 0;
     var acceptedCount = 0;
-    var totalPages = 1;
-    String? lastSeenPid;
+    var totalPages = page;
+    var lastSeenPid = persistedCheckpoint?.lastSeenPid;
+    var runBegan = false;
     final seenPids = <String>{};
 
     _emit(
@@ -113,6 +117,7 @@ class DefaultNovelChapterSyncService implements NovelChapterSyncService {
         novelId: novelId,
         mode: request.mode,
       );
+      runBegan = true;
       while (true) {
         if (page > maxAuthorPages) {
           throw StateError(
@@ -139,9 +144,16 @@ class DefaultNovelChapterSyncService implements NovelChapterSyncService {
             postsPerPage: 200,
           ),
         );
+        fetchedPages++;
         if (detail.tid.trim().isNotEmpty && detail.tid.trim() != tid) {
           throw StateError(
             'Author-filtered response tid does not match its request.',
+          );
+        }
+        if (detail.currentPage > 0 && detail.currentPage != page) {
+          throw StateError(
+            'Author-filtered response page ${detail.currentPage} does not '
+            'match requested page $page.',
           );
         }
         totalPages = _estimatedTotalPages(detail);
@@ -216,7 +228,7 @@ class DefaultNovelChapterSyncService implements NovelChapterSyncService {
         runId: runId,
         request: request,
         checkpoint: checkpoint,
-        fetchedPages: page,
+        fetchedPages: fetchedPages,
       );
       _emit(
         NovelChapterSyncProgress(
@@ -231,7 +243,9 @@ class DefaultNovelChapterSyncService implements NovelChapterSyncService {
       );
       _shelfRefreshBus?.notify(
         modules: const <LibraryModuleKey>{LibraryModuleKey.novel},
-        reason: 'novel_initial_chapter_hydration_completed',
+        reason: request.mode == NovelChapterSyncMode.initialFull
+            ? 'novel_initial_chapter_hydration_completed'
+            : 'novel_incremental_chapter_sync_completed',
         source: LibraryMutationSource.novelRefresh,
         workId: novelId,
         tid: tid,
@@ -249,14 +263,18 @@ class DefaultNovelChapterSyncService implements NovelChapterSyncService {
         // Preserve the synchronization error; stale staging is removed by the
         // next beginRun for this novel.
       }
-      try {
-        await _sourceStateRepository.setHydrationState(
-          novelId: novelId,
-          state: NovelChapterHydrationState.failed,
-          lastError: _errorMessage(error),
-        );
-      } catch (_) {
-        // A missing source row is already represented by the original error.
+      if (runBegan) {
+        try {
+          await _sourceStateRepository.setHydrationState(
+            novelId: novelId,
+            state: request.mode == NovelChapterSyncMode.initialFull
+                ? NovelChapterHydrationState.failed
+                : NovelChapterHydrationState.ready,
+            lastError: _errorMessage(error),
+          );
+        } catch (_) {
+          // A missing source row is already represented by the original error.
+        }
       }
       _emit(
         NovelChapterSyncProgress(
@@ -278,6 +296,31 @@ class DefaultNovelChapterSyncService implements NovelChapterSyncService {
       );
       Error.throwWithStackTrace(error, stackTrace);
     }
+  }
+
+  NovelChapterSyncCheckpoint? _validatedCheckpoint({
+    required NovelChapterSyncRequest request,
+    required String novelId,
+    required String publisherId,
+  }) {
+    if (request.mode == NovelChapterSyncMode.initialFull) {
+      return request.checkpoint;
+    }
+    final checkpoint = request.checkpoint;
+    if (checkpoint == null) {
+      throw StateError(
+        'Incremental novel synchronization requires a persisted checkpoint.',
+      );
+    }
+    if (checkpoint.novelId.trim() != novelId ||
+        checkpoint.publisherId.trim() != publisherId ||
+        checkpoint.lastCompletedAuthorPage < 1) {
+      throw StateError(
+        'Incremental novel synchronization checkpoint does not match its '
+        'request.',
+      );
+    }
+    return checkpoint;
   }
 
   int _estimatedTotalPages(ThreadDetailData detail) {

@@ -165,4 +165,6 @@ Phase 3 已完成：首次进入小说详情页时使用 Phase 1 的 `version=1 
 
 Phase 4 已完成：小说详情提供全局持久化的阅读器/原帖楼层模式；原帖模式严格通过 `tid + pid` 和 `ThreadPostLocator` 定位普通帖子页码，`sourcePage` 仍只属于 author-filtered 同步坐标。定位成功会把真实 page 与 target PID 传给原生帖子详情，定位失败提供明确错误和打开帖子首页的显式备选；“继续”始终进入阅读器。
 
-下一阶段是 Phase 5：将小说详情下拉刷新和更新菜单统一切换到基于持久化 checkpoint 的增量同步。
+Phase 5 已完成：小说详情下拉刷新、header 更新和更多菜单刷新统一调用新章节同步服务。ready 状态只从持久化 checkpoint 的最后成功 author-filtered 页重叠抓取，不再从正式章节表猜测起点；增量事务保留旧 PID 顺序和用户状态、追加新 PID、不删除缺席历史 PID，并在所有页面成功后才推进 checkpoint。中间失败保留正式章节、原 checkpoint 与 ready 状态。
+
+下一阶段是 Phase 6：统一阅读器刷新语义，并删除或委托 catalog-first、旧全量刷新 controller 等 legacy 生产路径。

@@ -60,6 +60,10 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
       readingStateBatchWriter: ref.watch(readingStateBatchWriterProvider),
       stateRepository: ref.watch(libraryStateRepositoryProvider),
       sourceStateRepository: ref.watch(novelSourceStateRepositoryProvider),
+      chapterSyncServiceFactory: () =>
+          ref.read(novelChapterSyncServiceProvider),
+      sourceMetadataRecoveryServiceFactory: () =>
+          ref.read(novelSourceMetadataRecoveryServiceProvider),
     );
     final hydrationPanel = hydration.when<Widget?>(
       data: (value) => value.isReady
@@ -113,6 +117,14 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
             : (selection) => _updateOpenMode(selection.first),
       ),
       onOpenChapter: _openChapter,
+      onRefreshCompleted: (_) async {
+        ref.invalidate(hydrationProvider);
+        try {
+          await ref.read(hydrationProvider.future);
+        } catch (_) {
+          // The chapter status panel renders source-state reload failures.
+        }
+      },
       onOpenReader: _openReader,
       onOpenThread: _openThread,
     );

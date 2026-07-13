@@ -15,6 +15,7 @@ import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart
 import 'package:y300/features/novel/domain/models/novel_source_models.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
+import 'package:y300/features/novel/domain/services/novel_chapter_sync_service.dart';
 import 'package:y300/features/novel/presentation/adapters/novel_detail_adapter.dart';
 
 void main() {
@@ -157,17 +158,40 @@ void main() {
     },
   );
 
-  test('refreshWork forwards incremental mode to repository', () async {
-    // 详情页下拉刷新 / 「更新」菜单要走增量；adapter 不能再退回 full。
+  test('refreshWork uses persisted checkpoint for ready novel', () async {
     final repository = _FakeNovelRepository();
+    final syncService = _RecordingNovelChapterSyncService();
     final adapter = NovelDetailAdapter(
       repository,
       stateRepository: _RecordingLibraryStateRepository(),
+      sourceStateRepository: _FakeNovelSourceStateRepository(
+        _sourceState(NovelChapterHydrationState.ready),
+      ),
+      chapterSyncServiceFactory: () => syncService,
     );
 
     await adapter.refreshWork(workId: 'novel:1');
 
-    expect(repository.lastRefreshMode, NovelEpisodeRefreshMode.incremental);
+    expect(syncService.request?.mode, NovelChapterSyncMode.incremental);
+    expect(syncService.request?.checkpoint?.lastCompletedAuthorPage, 3);
+    expect(repository.lastRefreshMode, isNull);
+  });
+
+  test('refreshWork retries initial full for non-ready novel', () async {
+    final syncService = _RecordingNovelChapterSyncService();
+    final adapter = NovelDetailAdapter(
+      _FakeNovelRepository(),
+      stateRepository: _RecordingLibraryStateRepository(),
+      sourceStateRepository: _FakeNovelSourceStateRepository(
+        _sourceState(NovelChapterHydrationState.failed),
+      ),
+      chapterSyncServiceFactory: () => syncService,
+    );
+
+    await adapter.refreshWork(workId: 'novel:1');
+
+    expect(syncService.request?.mode, NovelChapterSyncMode.initialFull);
+    expect(syncService.request?.checkpoint, isNull);
   });
 
   test(
@@ -257,6 +281,64 @@ class _FakeNovelSourceStateRepository implements NovelSourceStateRepository {
     String? lastError,
     DateTime? chaptersHydratedAt,
   }) async {}
+}
+
+class _RecordingNovelChapterSyncService implements NovelChapterSyncService {
+  NovelChapterSyncRequest? request;
+
+  @override
+  bool hasActiveRun(String novelId) => false;
+
+  @override
+  Future<NovelChapterSyncResult> synchronize(
+    NovelChapterSyncRequest request,
+  ) async {
+    this.request = request;
+    final checkpoint = NovelChapterSyncCheckpoint(
+      novelId: request.novelId,
+      publisherId: request.publisherId,
+      lastCompletedAuthorPage: request.mode == NovelChapterSyncMode.incremental
+          ? request.checkpoint!.lastCompletedAuthorPage
+          : 1,
+      lastSeenPid: '2',
+      completedAt: DateTime(2026, 7, 14),
+    );
+    return NovelChapterSyncResult(
+      mode: request.mode,
+      fetchedPages: 1,
+      insertedCount: 0,
+      updatedCount: 2,
+      totalCount: 2,
+      checkpoint: checkpoint,
+    );
+  }
+
+  @override
+  Stream<NovelChapterSyncProgress> watchProgress(String novelId) {
+    return const Stream<NovelChapterSyncProgress>.empty();
+  }
+}
+
+NovelSourceState _sourceState(NovelChapterHydrationState hydrationState) {
+  final ready = hydrationState == NovelChapterHydrationState.ready;
+  return NovelSourceState(
+    novelId: 'novel:1',
+    publisherId: '406769',
+    publisherName: 'Novel Author',
+    firstPostPid: '1',
+    sourceIntro: '来源简介',
+    catalogEntries: const <NovelSourceCatalogEntry>[],
+    metadataSourceVersion: 4,
+    hydrationState: hydrationState,
+    metadataIngestedAt: DateTime(2026, 7, 13),
+    chaptersHydratedAt: ready ? DateTime(2026, 7, 13) : null,
+    lastCompletedAuthorPage: ready ? 3 : 0,
+    lastSeenPid: ready ? '2' : null,
+    lastSyncAt: ready ? DateTime(2026, 7, 13) : null,
+    lastError: hydrationState == NovelChapterHydrationState.failed
+        ? 'previous failure'
+        : null,
+  );
 }
 
 class _FakeNovelRepository implements NovelRepository {

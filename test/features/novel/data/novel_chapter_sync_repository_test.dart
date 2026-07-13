@@ -175,6 +175,112 @@ void main() {
     await repository.discardRun('run-failure');
     expect(await db.query(ComicLocalDb.novelEpisodeSyncStagingTable), isEmpty);
   });
+
+  test(
+    'incremental promotion preserves order and user state while appending new PID',
+    () async {
+      await _insertOfficialEpisode(
+        db,
+        episodeId: 'novel:55:521519:1',
+        orderIndex: 0,
+      );
+      await _insertOfficialEpisode(
+        db,
+        episodeId: 'novel:55:521519:2',
+        orderIndex: 1,
+      );
+      await _insertOfficialEpisode(
+        db,
+        episodeId: 'novel:55:521519:absent',
+        orderIndex: 2,
+      );
+      await db.insert(ComicLocalDb.libraryEpisodeStateTable, <String, Object?>{
+        'content_type': 'novel',
+        'episode_id': 'novel:55:521519:2',
+        'work_id': 'novel:55:521519',
+        'is_read': 1,
+        'is_downloaded': 1,
+        'is_bookmarked': 1,
+        'read_at': 10,
+        'downloaded_at': 11,
+      });
+      final previousCheckpoint = NovelChapterSyncCheckpoint(
+        novelId: 'novel:55:521519',
+        publisherId: '406769',
+        lastCompletedAuthorPage: 3,
+        lastSeenPid: '2',
+        completedAt: DateTime(2026, 7, 13),
+      );
+      await SqfliteNovelSourceStateRepository(
+        Future<Database>.value(db),
+      ).saveCheckpoint(previousCheckpoint);
+
+      await repository.beginRun(
+        runId: 'run-incremental',
+        novelId: 'novel:55:521519',
+        mode: NovelChapterSyncMode.incremental,
+      );
+      await repository.stageEpisodes(
+        runId: 'run-incremental',
+        episodes: <NovelEpisodeDraft>[
+          _draft(pid: '2', title: '重叠页修订标题', orderIndex: 0, sourcePage: 3),
+          _draft(pid: '4', title: '页尾新增章节', orderIndex: 1, sourcePage: 4),
+        ],
+      );
+      final nextCheckpoint = NovelChapterSyncCheckpoint(
+        novelId: 'novel:55:521519',
+        publisherId: '406769',
+        lastCompletedAuthorPage: 4,
+        lastSeenPid: '4',
+        completedAt: DateTime(2026, 7, 14),
+      );
+      final result = await repository.promote(
+        runId: 'run-incremental',
+        request: _incrementalRequest(previousCheckpoint),
+        checkpoint: nextCheckpoint,
+        fetchedPages: 2,
+      );
+
+      final episodes = await db.query(
+        ComicLocalDb.workEpisodesTable,
+        where: 'work_id = ?',
+        whereArgs: const <Object?>['novel:55:521519'],
+        orderBy: 'order_index ASC',
+      );
+      expect(episodes.map((row) => row['episode_id']), <String>[
+        'novel:55:521519:1',
+        'novel:55:521519:2',
+        'novel:55:521519:absent',
+        'novel:55:521519:4',
+      ]);
+      expect(episodes[1]['order_index'], 1);
+      expect(episodes[1]['episode_title'], '重叠页修订标题');
+      expect(episodes.last['order_index'], 3);
+      final content = await db.query(
+        ComicLocalDb.novelEpisodeContentTable,
+        where: 'episode_id = ?',
+        whereArgs: const <Object?>['novel:55:521519:2'],
+      );
+      expect(content.single['plain_text'], '重叠页修订标题 正文');
+      final userState = await db.query(
+        ComicLocalDb.libraryEpisodeStateTable,
+        where: 'content_type = ? AND episode_id = ?',
+        whereArgs: const <Object?>['novel', 'novel:55:521519:2'],
+      );
+      expect(userState.single['is_read'], 1);
+      expect(userState.single['is_downloaded'], 1);
+      expect(userState.single['is_bookmarked'], 1);
+      expect(result.insertedCount, 1);
+      expect(result.updatedCount, 1);
+      expect(result.totalCount, 4);
+      final sourceState = await SqfliteNovelSourceStateRepository(
+        Future<Database>.value(db),
+      ).getSourceState(novelId: 'novel:55:521519');
+      expect(sourceState?.hydrationState, NovelChapterHydrationState.ready);
+      expect(sourceState?.checkpoint?.lastCompletedAuthorPage, 4);
+      expect(sourceState?.checkpoint?.lastSeenPid, '4');
+    },
+  );
 }
 
 NovelChapterSyncRequest _request() {
@@ -186,17 +292,30 @@ NovelChapterSyncRequest _request() {
   );
 }
 
+NovelChapterSyncRequest _incrementalRequest(
+  NovelChapterSyncCheckpoint checkpoint,
+) {
+  return NovelChapterSyncRequest(
+    novelId: 'novel:55:521519',
+    tid: '521519',
+    publisherId: '406769',
+    mode: NovelChapterSyncMode.incremental,
+    checkpoint: checkpoint,
+  );
+}
+
 NovelEpisodeDraft _draft({
   required String pid,
   required String title,
   required int orderIndex,
+  int sourcePage = 1,
 }) {
   return NovelEpisodeDraft(
     episodeId: 'novel:55:521519:$pid',
     novelId: 'novel:55:521519',
     sourceTid: '521519',
     sourcePid: pid,
-    sourcePage: 1,
+    sourcePage: sourcePage,
     episodeTitle: title,
     orderIndex: orderIndex,
     datelineText: '2026-07-13',
@@ -209,6 +328,7 @@ NovelEpisodeDraft _draft({
 Future<void> _insertOfficialEpisode(
   Database db, {
   required String episodeId,
+  int orderIndex = 0,
 }) async {
   await db.insert(ComicLocalDb.workEpisodesTable, <String, Object?>{
     'episode_id': episodeId,
@@ -218,7 +338,7 @@ Future<void> _insertOfficialEpisode(
     'source_pid': episodeId.split(':').last,
     'source_page': 1,
     'episode_title': '旧章节',
-    'order_index': 0,
+    'order_index': orderIndex,
     'dateline_text': '2026-07-12',
   });
   await db.insert(ComicLocalDb.novelEpisodeContentTable, <String, Object?>{

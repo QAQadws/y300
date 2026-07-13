@@ -37,6 +37,7 @@ class UnifiedDetailPage extends StatefulWidget {
     this.chapterStatus,
     this.chapterModeControl,
     this.onOpenChapter,
+    this.onRefreshCompleted,
   });
 
   final DetailModuleAdapter adapter;
@@ -57,6 +58,7 @@ class UnifiedDetailPage extends StatefulWidget {
   final Widget? chapterModeControl;
   final Future<void> Function(BuildContext context, LibraryChapterItem chapter)?
   onOpenChapter;
+  final Future<void> Function(DetailRefreshResult result)? onRefreshCompleted;
 
   @override
   State<UnifiedDetailPage> createState() => _UnifiedDetailPageState();
@@ -747,6 +749,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   Future<void> _refreshAndShowFeedback() async {
     try {
       final result = await _controller.refresh();
+      await widget.onRefreshCompleted?.call(result);
       if (!mounted) {
         return;
       }

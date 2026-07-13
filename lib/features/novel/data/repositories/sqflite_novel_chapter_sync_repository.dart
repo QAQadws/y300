@@ -29,18 +29,29 @@ class SqfliteNovelChapterSyncRepository implements NovelChapterSyncRepository {
         where: 'novel_id = ?',
         whereArgs: <Object?>[normalizedNovelId],
       );
+      final isInitial = mode == NovelChapterSyncMode.initialFull;
       final updated = await txn.update(
         ComicLocalDb.novelSourceStateTable,
         <String, Object?>{
-          'hydration_state': NovelChapterHydrationState.hydrating.storageValue,
+          if (isInitial)
+            'hydration_state':
+                NovelChapterHydrationState.hydrating.storageValue,
           'last_error': null,
         },
-        where: 'novel_id = ?',
-        whereArgs: <Object?>[normalizedNovelId],
+        where: isInitial
+            ? 'novel_id = ?'
+            : 'novel_id = ? AND hydration_state = ?',
+        whereArgs: <Object?>[
+          normalizedNovelId,
+          if (!isInitial) NovelChapterHydrationState.ready.storageValue,
+        ],
       );
       if (updated != 1) {
         throw StateError(
-          'Novel source state does not exist: $normalizedNovelId',
+          isInitial
+              ? 'Novel source state does not exist: $normalizedNovelId'
+              : 'Novel source state is not ready for incremental sync: '
+                    '$normalizedNovelId',
         );
       }
     });
@@ -120,22 +131,32 @@ class SqfliteNovelChapterSyncRepository implements NovelChapterSyncRepository {
 
       final existingRows = await txn.query(
         ComicLocalDb.workEpisodesTable,
-        columns: const <String>['episode_id'],
+        columns: const <String>['episode_id', 'order_index'],
         where: 'work_id = ? AND content_type = ?',
         whereArgs: <Object?>[normalizedNovelId, _contentType],
       );
-      final existingIds = existingRows
-          .map((row) => row['episode_id'] as String)
-          .toSet();
+      final existingOrderById = <String, int>{
+        for (final row in existingRows)
+          row['episode_id'] as String: (row['order_index'] as num).toInt(),
+      };
+      final existingIds = existingOrderById.keys.toSet();
       final stagedIds = <String>{};
       var insertedCount = 0;
       var updatedCount = 0;
+      var nextOrderIndex = existingOrderById.values.fold<int>(
+        0,
+        (next, orderIndex) => orderIndex >= next ? orderIndex + 1 : next,
+      );
       final now = checkpoint.completedAt.millisecondsSinceEpoch;
 
       for (final row in stagedRows) {
         final episodeId = row['episode_id'] as String;
         stagedIds.add(episodeId);
-        if (existingIds.contains(episodeId)) {
+        final existingOrderIndex = existingOrderById[episodeId];
+        final orderIndex = request.mode == NovelChapterSyncMode.incremental
+            ? existingOrderIndex ?? nextOrderIndex++
+            : (row['order_index'] as num).toInt();
+        if (existingOrderIndex != null) {
           updatedCount++;
         } else {
           insertedCount++;
@@ -173,7 +194,7 @@ class SqfliteNovelChapterSyncRepository implements NovelChapterSyncRepository {
             row['source_pid'],
             row['author_filtered_page'],
             row['episode_title'],
-            row['order_index'],
+            orderIndex,
             row['dateline_text'],
           ],
         );
@@ -259,13 +280,23 @@ class SqfliteNovelChapterSyncRepository implements NovelChapterSyncRepository {
         where: 'run_id = ?',
         whereArgs: <Object?>[normalizedRunId],
       );
+      final totalCount = Sqflite.firstIntValue(
+        await txn.rawQuery(
+          '''
+          SELECT COUNT(*)
+          FROM ${ComicLocalDb.workEpisodesTable}
+          WHERE work_id = ? AND content_type = ?
+          ''',
+          <Object?>[normalizedNovelId, _contentType],
+        ),
+      );
 
       return NovelChapterSyncResult(
         mode: request.mode,
         fetchedPages: fetchedPages,
         insertedCount: insertedCount,
         updatedCount: updatedCount,
-        totalCount: stagedRows.length,
+        totalCount: totalCount ?? 0,
         checkpoint: checkpoint,
       );
     });

@@ -11,8 +11,11 @@ import 'package:y300/features/library_shared/domain/services/library_cover_cache
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/services/novel_download_service.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
-import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
+import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
+import 'package:y300/features/novel/domain/models/novel_source_models.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
+import 'package:y300/features/novel/domain/services/novel_chapter_sync_service.dart';
+import 'package:y300/features/novel/domain/services/novel_source_metadata_recovery_service.dart';
 
 /// 小说详情适配器（Phase 6）。
 class NovelDetailAdapter implements DetailModuleAdapter {
@@ -23,11 +26,17 @@ class NovelDetailAdapter implements DetailModuleAdapter {
     ReadingStateBatchWriter? readingStateBatchWriter,
     required LibraryStateRepository stateRepository,
     NovelSourceStateRepository? sourceStateRepository,
+    NovelChapterSyncService Function()? chapterSyncServiceFactory,
+    NovelSourceMetadataRecoveryService Function()?
+    sourceMetadataRecoveryServiceFactory,
   }) : _downloadService = downloadService,
        _coverCacheService = LibraryCoverCacheService(imageCacheService),
        _readingStateBatchWriter = readingStateBatchWriter,
        _stateRepository = stateRepository,
-       _sourceStateRepository = sourceStateRepository;
+       _sourceStateRepository = sourceStateRepository,
+       _chapterSyncServiceFactory = chapterSyncServiceFactory,
+       _sourceMetadataRecoveryServiceFactory =
+           sourceMetadataRecoveryServiceFactory;
 
   final NovelRepository _repository;
   final NovelDownloadService? _downloadService;
@@ -35,6 +44,9 @@ class NovelDetailAdapter implements DetailModuleAdapter {
   final ReadingStateBatchWriter? _readingStateBatchWriter;
   final LibraryStateRepository _stateRepository;
   final NovelSourceStateRepository? _sourceStateRepository;
+  final NovelChapterSyncService Function()? _chapterSyncServiceFactory;
+  final NovelSourceMetadataRecoveryService Function()?
+  _sourceMetadataRecoveryServiceFactory;
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.novel;
@@ -349,16 +361,64 @@ class NovelDetailAdapter implements DetailModuleAdapter {
 
   @override
   Future<DetailRefreshResult> refreshWork({required String workId}) async {
-    // 详情页下拉刷新与「更新」菜单走增量模式：
-    //   - 仅从 MAX(source_page) 开始往后再拉，省去前 N 页 IO；
-    //   - 标题仍走 NovelTitleSanitizer 重写，覆盖论坛在标题里塞的更新时间；
-    //   - 封面/简介/作者/旧章节均不动。
-    // 仓库内部对零章节/单页/catalog 模式自动降级为 full，所以 adapter 无需预判。
-    await _repository.refreshEpisodes(
-      novelId: workId,
-      mode: NovelEpisodeRefreshMode.incremental,
+    final sourceRepository = _sourceStateRepository;
+    final syncServiceFactory = _chapterSyncServiceFactory;
+    if (sourceRepository == null || syncServiceFactory == null) {
+      throw StateError('小说章节同步服务尚未配置。');
+    }
+
+    var sourceState = await sourceRepository.getSourceState(novelId: workId);
+    if (sourceState == null) {
+      throw StateError('缺少小说来源信息，无法更新章节。');
+    }
+    var publisherId = sourceState.publisherId?.trim() ?? '';
+    if (publisherId.isEmpty) {
+      final recoveryServiceFactory = _sourceMetadataRecoveryServiceFactory;
+      if (recoveryServiceFactory == null) {
+        throw StateError('来源帖子缺少发布者 ID，无法更新章节。');
+      }
+      await recoveryServiceFactory().recover(workId);
+      sourceState = await sourceRepository.getSourceState(novelId: workId);
+      publisherId = sourceState?.publisherId?.trim() ?? '';
+    }
+    if (sourceState == null || publisherId.isEmpty) {
+      throw StateError('来源帖子缺少有效的发布者 ID。');
+    }
+
+    final detail = await _repository.getDetail(novelId: workId);
+    final tid = detail?.sourceTid.trim() ?? '';
+    if (tid.isEmpty) {
+      throw StateError('小说缺少来源帖子 ID。');
+    }
+
+    final isIncremental =
+        sourceState.hydrationState == NovelChapterHydrationState.ready;
+    final checkpoint = isIncremental ? sourceState.checkpoint : null;
+    if (isIncremental && checkpoint == null) {
+      throw StateError('小说章节同步检查点缺失，无法安全执行增量更新。');
+    }
+    final result = await syncServiceFactory().synchronize(
+      NovelChapterSyncRequest(
+        novelId: workId,
+        tid: tid,
+        publisherId: publisherId,
+        mode: isIncremental
+            ? NovelChapterSyncMode.incremental
+            : NovelChapterSyncMode.initialFull,
+        checkpoint: checkpoint,
+      ),
     );
-    return DetailRefreshResult.immediate;
+    return DetailRefreshResult(
+      status: DetailRefreshStatus.immediate,
+      message: _refreshResultMessage(result),
+    );
+  }
+
+  String _refreshResultMessage(NovelChapterSyncResult result) {
+    if (result.insertedCount == 0 && result.updatedCount == 0) {
+      return '已是最新章节';
+    }
+    return '已新增 ${result.insertedCount} 章，更新 ${result.updatedCount} 章';
   }
 
   @override

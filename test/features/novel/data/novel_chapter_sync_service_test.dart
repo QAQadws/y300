@@ -115,6 +115,96 @@ void main() {
     expect(sourceStateRepository.lastState, NovelChapterHydrationState.failed);
   });
 
+  test(
+    'incremental sync refetches the persisted checkpoint page through the new last page',
+    () async {
+      final gateway = _FakeGateway(<int, Future<ThreadDetailData> Function()>{
+        3: () async => _page(
+          page: 3,
+          replies: 9,
+          posts: <ThreadPost>[
+            _post(pid: 'old-3', number: 5, message: '<p>修订后的第三章。</p>'),
+            _post(pid: 'new-3', number: 6, message: '<p>页尾新增章节。</p>'),
+          ],
+        ),
+        4: () async => _page(
+          page: 4,
+          replies: 9,
+          posts: <ThreadPost>[
+            _post(pid: 'new-4', number: 7, message: '<p>第四页章节。</p>'),
+          ],
+        ),
+        5: () async => _page(
+          page: 5,
+          replies: 9,
+          posts: <ThreadPost>[
+            _post(pid: 'new-5', number: 8, message: '<p>最新章节。</p>'),
+          ],
+        ),
+      });
+      final repository = _FakeSyncRepository();
+      final service = DefaultNovelChapterSyncService(
+        threadGateway: gateway,
+        governor: _RecordingGovernor(),
+        episodeBuilder: const DefaultNovelAuthorPostEpisodeBuilder(),
+        repository: repository,
+        sourceStateRepository: _FakeSourceStateRepository(),
+        clock: () => DateTime(2026, 7, 14),
+        runIdFactory: (_, _) => 'run-incremental',
+      );
+      addTearDown(service.dispose);
+
+      final result = await service.synchronize(_incrementalRequest());
+
+      expect(gateway.calls.map((call) => call.page), <int>[3, 4, 5]);
+      expect(
+        repository.staged.expand((batch) => batch).map((e) => e.sourcePid),
+        <String>['old-3', 'new-3', 'new-4', 'new-5'],
+      );
+      expect(result.mode, NovelChapterSyncMode.incremental);
+      expect(result.fetchedPages, 3);
+      expect(result.checkpoint.lastCompletedAuthorPage, 5);
+      expect(result.checkpoint.lastSeenPid, 'new-5');
+    },
+  );
+
+  test(
+    'incremental middle page failure keeps ready state and does not promote',
+    () async {
+      final gateway = _FakeGateway(<int, Future<ThreadDetailData> Function()>{
+        3: () async => _page(
+          page: 3,
+          replies: 7,
+          posts: <ThreadPost>[
+            _post(pid: 'old-3', number: 5, message: '<p>第三章。</p>'),
+          ],
+        ),
+        4: () async => throw StateError('page 4 failed'),
+      });
+      final repository = _FakeSyncRepository();
+      final sourceStateRepository = _FakeSourceStateRepository();
+      final service = DefaultNovelChapterSyncService(
+        threadGateway: gateway,
+        governor: _RecordingGovernor(),
+        episodeBuilder: const DefaultNovelAuthorPostEpisodeBuilder(),
+        repository: repository,
+        sourceStateRepository: sourceStateRepository,
+        runIdFactory: (_, _) => 'run-incremental-failure',
+      );
+      addTearDown(service.dispose);
+
+      await expectLater(
+        service.synchronize(_incrementalRequest()),
+        throwsStateError,
+      );
+
+      expect(gateway.calls.map((call) => call.page), <int>[3, 4]);
+      expect(repository.promoteCount, 0);
+      expect(repository.discardCount, 1);
+      expect(sourceStateRepository.lastState, NovelChapterHydrationState.ready);
+    },
+  );
+
   test('concurrent synchronization joins one novel run', () async {
     final response = Completer<ThreadDetailData>();
     final gateway = _FakeGateway(<int, Future<ThreadDetailData> Function()>{
@@ -157,6 +247,22 @@ NovelChapterSyncRequest _request() {
     tid: '521519',
     publisherId: '406769',
     mode: NovelChapterSyncMode.initialFull,
+  );
+}
+
+NovelChapterSyncRequest _incrementalRequest() {
+  return NovelChapterSyncRequest(
+    novelId: 'novel:55:521519',
+    tid: '521519',
+    publisherId: '406769',
+    mode: NovelChapterSyncMode.incremental,
+    checkpoint: NovelChapterSyncCheckpoint(
+      novelId: 'novel:55:521519',
+      publisherId: '406769',
+      lastCompletedAuthorPage: 3,
+      lastSeenPid: 'old-3',
+      completedAt: DateTime(2026, 7, 13),
+    ),
   );
 }
 

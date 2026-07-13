@@ -294,6 +294,46 @@ void main() {
     expect(find.byType(NovelReaderPage), findsOneWidget);
     expect(resolver.callCount, 0);
   });
+
+  testWidgets(
+    'pull refresh and refresh menu use the same incremental service',
+    (tester) async {
+      final syncService = _RecordingImmediateNovelChapterSyncService();
+      await _pumpNovelDetail(
+        tester,
+        preferences: _MemoryNovelInteractionPreferencesRepository(),
+        routeResolver: _FakeNovelChapterSourceRouteResolver.success(),
+        chapterSyncService: syncService,
+      );
+
+      final refreshIndicator = tester.widget<RefreshIndicator>(
+        find.byType(RefreshIndicator),
+      );
+      await refreshIndicator.onRefresh();
+      await tester.pumpAndSettle();
+
+      expect(syncService.requests, hasLength(1));
+      expect(
+        syncService.requests.single.mode,
+        NovelChapterSyncMode.incremental,
+      );
+      expect(
+        syncService.requests.single.checkpoint?.lastCompletedAuthorPage,
+        1,
+      );
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('刷新'));
+      await tester.pumpAndSettle();
+
+      expect(syncService.requests, hasLength(2));
+      expect(
+        syncService.requests.map((request) => request.mode),
+        everyElement(NovelChapterSyncMode.incremental),
+      );
+    },
+  );
 }
 
 Future<void> _pumpNovelDetail(
@@ -302,6 +342,7 @@ Future<void> _pumpNovelDetail(
   required _FakeNovelChapterSourceRouteResolver routeResolver,
   _FakeLibraryStateRepository? libraryStateRepository,
   ThreadRepository? threadRepository,
+  NovelChapterSyncService? chapterSyncService,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -323,6 +364,8 @@ Future<void> _pumpNovelDetail(
           routeResolver,
         ),
         imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
+        if (chapterSyncService != null)
+          novelChapterSyncServiceProvider.overrideWithValue(chapterSyncService),
         if (threadRepository != null)
           threadRepositoryProvider.overrideWithValue(threadRepository),
       ],
@@ -553,6 +596,42 @@ class _ControlledNovelChapterSyncService implements NovelChapterSyncService {
   void complete() => _completion.complete();
 
   Future<void> dispose() => _progress.close();
+}
+
+class _RecordingImmediateNovelChapterSyncService
+    implements NovelChapterSyncService {
+  final List<NovelChapterSyncRequest> requests = <NovelChapterSyncRequest>[];
+
+  @override
+  bool hasActiveRun(String novelId) => false;
+
+  @override
+  Future<NovelChapterSyncResult> synchronize(
+    NovelChapterSyncRequest request,
+  ) async {
+    requests.add(request);
+    return NovelChapterSyncResult(
+      mode: request.mode,
+      fetchedPages: 1,
+      insertedCount: 0,
+      updatedCount: 1,
+      totalCount: 1,
+      checkpoint:
+          request.checkpoint ??
+          NovelChapterSyncCheckpoint(
+            novelId: request.novelId,
+            publisherId: request.publisherId,
+            lastCompletedAuthorPage: 1,
+            lastSeenPid: '5001',
+            completedAt: DateTime(2026, 7, 14),
+          ),
+    );
+  }
+
+  @override
+  Stream<NovelChapterSyncProgress> watchProgress(String novelId) {
+    return const Stream<NovelChapterSyncProgress>.empty();
+  }
 }
 
 NovelSourceState _sourceState({
