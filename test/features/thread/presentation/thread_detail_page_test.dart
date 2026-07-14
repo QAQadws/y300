@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1914,7 +1916,202 @@ void main() {
         closeTo(listTop.dy + 10, 28),
         reason: '目标楼层应贴近 AppBar 下方的列表顶部，而不是落在屏幕中部',
       );
+      final scrollable = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byKey(const Key('thread-detail-list')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      for (var attempt = 0; attempt < 4; attempt++) {
+        scrollable.position.jumpTo(scrollable.position.minScrollExtent);
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+      final firstPost = find.byKey(const Key('thread-post-card-target-0'));
+      expect(firstPost, findsOneWidget);
+      expect(tester.getTopLeft(firstPost).dy, closeTo(listTop.dy + 10, 1));
     });
+
+    testWidgets(
+      'locates the second post after an exceptionally long first post',
+      (tester) async {
+        tester.view.physicalSize = const Size(390, 260);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+        final longFirstPost = [
+          for (var index = 0; index < 120; index++)
+            '<p>首楼中的长篇简介和目录内容 $index</p>',
+        ].join();
+        final repository = _FakeThreadRepository((tid, page) async {
+          return ApiSuccess(
+            ThreadDetailData(
+              tid: tid,
+              fid: '55',
+              subject: '超长首楼定位测试',
+              author: 'author',
+              replies: 1,
+              views: 12,
+              currentPage: 1,
+              lastPage: 1,
+              perPage: 20,
+              posts: <ThreadPost>[
+                ThreadPost(
+                  pid: 'first-post',
+                  author: 'author',
+                  authorId: '1',
+                  message: longFirstPost,
+                  number: 1,
+                  isFirst: true,
+                  dateline: 'today',
+                ),
+                ThreadPost(
+                  pid: 'target-second-post',
+                  author: 'author',
+                  authorId: '1',
+                  message: '<p>第一话 姐姐的日记</p>',
+                  number: 2,
+                  isFirst: false,
+                  dateline: 'today',
+                ),
+              ],
+            ),
+          );
+        });
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            home: const ThreadDetailPage(
+              tid: '556943',
+              initialPage: 1,
+              targetPid: 'target-second-post',
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        final listTop = tester.getTopLeft(
+          find.byKey(const Key('thread-detail-list')),
+        );
+        final targetTop = tester.getTopLeft(
+          find.byKey(const Key('thread-post-card-target-second-post')),
+        );
+        expect(targetTop.dy, closeTo(listTop.dy + 10, 28));
+        expect(_richTextContaining('第一话 姐姐的日记'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'keeps target anchored when the first post grows asynchronously',
+      (tester) async {
+        tester.view.physicalSize = const Size(390, 260);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+        final converter = _ControlledExpandingTextConverter();
+        final preferencesRepository = _FakeForumHtmlReaderPreferencesRepository(
+          ForumHtmlReaderPreferences.defaults().copyWith(
+            conversionMode: TextConversionMode.toSimplified,
+          ),
+        );
+        final repository = _FakeThreadRepository((tid, page) async {
+          return ApiSuccess(
+            ThreadDetailData(
+              tid: tid,
+              fid: '55',
+              subject: '异步首楼定位测试',
+              author: 'author',
+              replies: 1,
+              views: 12,
+              currentPage: 1,
+              lastPage: 1,
+              perPage: 20,
+              posts: <ThreadPost>[
+                ThreadPost(
+                  pid: 'async-first-post',
+                  author: 'author',
+                  authorId: '1',
+                  message: '<p>短首楼樣</p>',
+                  number: 1,
+                  isFirst: true,
+                  dateline: 'today',
+                ),
+                ThreadPost(
+                  pid: 'async-target-post',
+                  author: 'author',
+                  authorId: '1',
+                  message: '<p>第一话 姐姐的日记</p>',
+                  number: 2,
+                  isFirst: false,
+                  dateline: 'today',
+                ),
+              ],
+            ),
+          );
+        });
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            forumHtmlReaderPreferencesRepository: preferencesRepository,
+            textConverterFactory: (mode) =>
+                mode == TextConversionMode.toSimplified
+                ? converter
+                : _FakeTextConverter(mode),
+            home: const ThreadDetailPage(
+              tid: '556943',
+              initialPage: 1,
+              targetPid: 'async-target-post',
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(
+          find.byKey(const Key('thread-target-post-positioning-indicator')),
+          findsNothing,
+        );
+        final listFinder = find.byKey(const Key('thread-detail-list'));
+        final targetFinder = find.byKey(
+          const Key('thread-post-card-async-target-post'),
+        );
+        final scrollable = tester.state<ScrollableState>(
+          find.descendant(of: listFinder, matching: find.byType(Scrollable)),
+        );
+        double targetTop() => tester.getTopLeft(targetFinder).dy;
+        double listTop() => tester.getTopLeft(listFinder).dy;
+        expect(targetTop(), closeTo(listTop() + 10, 1));
+        expect(scrollable.position.pixels, closeTo(0, 0.01));
+        converter.release();
+        await tester.pump();
+        for (var index = 0; index < 10; index++) {
+          await tester.pump(const Duration(milliseconds: 50));
+          expect(targetTop(), closeTo(listTop() + 10, 1));
+          expect(scrollable.position.pixels, closeTo(0, 0.01));
+          expect(
+            find.byKey(const Key('thread-target-post-positioning-indicator')),
+            findsNothing,
+          );
+        }
+
+        final firstPostFinder = find.byKey(
+          const Key('thread-post-card-async-first-post'),
+        );
+        scrollable.position.jumpTo(scrollable.position.minScrollExtent);
+        await tester.pumpAndSettle();
+        expect(firstPostFinder, findsOneWidget);
+        expect(
+          tester.getTopLeft(firstPostFinder).dy,
+          closeTo(listTop() + 10, 1),
+        );
+      },
+    );
 
     testWidgets('locates findpost link before opening native thread page', (
       tester,
@@ -3575,6 +3772,7 @@ Widget _buildTestApp(
   bool diagnosticModeEnabled = false,
   ThreadDetailHtmlFirstRenderMode htmlFirstRenderMode =
       ThreadDetailHtmlFirstRenderMode.legacy,
+  Widget? home,
 }) {
   return ProviderScope(
     overrides: _threadDetailOverrides(
@@ -3597,8 +3795,8 @@ Widget _buildTestApp(
       diagnosticModeEnabled: diagnosticModeEnabled,
       htmlFirstRenderMode: htmlFirstRenderMode,
     ),
-    child: const MaterialApp(
-      home: ThreadDetailPage(tid: '100', subject: '测试主题'),
+    child: MaterialApp(
+      home: home ?? const ThreadDetailPage(tid: '100', subject: '测试主题'),
     ),
   );
 }
@@ -3748,6 +3946,31 @@ class _FakeTextConverter implements TextConverter {
       TextConversionMode.toSimplified => html.replaceAll('樣', '样'),
       TextConversionMode.toTraditional => html.replaceAll('样', '樣'),
     };
+  }
+}
+
+class _ControlledExpandingTextConverter implements TextConverter {
+  final _gate = Completer<void>();
+
+  @override
+  TextConversionMode get mode => TextConversionMode.toSimplified;
+
+  @override
+  String get id => 'controlled-expanding';
+
+  @override
+  Future<String> convertHtml(String html) async {
+    await _gate.future;
+    if (!html.contains('短首楼')) {
+      return html.replaceAll('樣', '样');
+    }
+    return List<String>.filled(500, '异步扩展后的首楼正文').join(' ');
+  }
+
+  void release() {
+    if (!_gate.isCompleted) {
+      _gate.complete();
+    }
   }
 }
 

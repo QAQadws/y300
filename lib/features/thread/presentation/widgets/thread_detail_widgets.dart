@@ -104,6 +104,9 @@ class ThreadDetailContent extends StatefulWidget {
 class _ThreadDetailContentState extends State<ThreadDetailContent> {
   late ThreadDetailRenderEntryPlanner _entryPlanner;
   final GlobalKey _viewportKey = GlobalKey(debugLabel: 'thread-detail-list');
+  final GlobalKey _targetCenterKey = GlobalKey(
+    debugLabel: 'thread-detail-target-center',
+  );
   late ThreadDetailScrollStabilizer _scrollStabilizer;
   ThreadHtmlImagePreloadCoordinator? _htmlImagePreloadCoordinator;
   String? _htmlImagePreloadSignature;
@@ -200,6 +203,21 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
     );
     _imageAspectRatioTracker.resetFor(_imageAspectRatioSignature());
     _scheduleHtmlImageFirstWindowPreload(context);
+    final targetPid = widget.targetPid?.trim();
+    final targetEntryIndex = targetPid == null || targetPid.isEmpty
+        ? -1
+        : entries.indexWhere(
+            (entry) =>
+                entry.kind == ThreadDetailRenderEntryKind.postCard &&
+                entry.post?.pid == targetPid,
+          );
+    if (targetEntryIndex >= 0) {
+      return _buildTargetAnchoredList(
+        entries: entries,
+        targetEntryIndex: targetEntryIndex,
+        palette: palette,
+      );
+    }
     return SizedBox.expand(
       key: _viewportKey,
       child: ListView.builder(
@@ -213,6 +231,87 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           _recordEntryBuild(entry);
           return _buildEntry(context, entry, palette);
         },
+      ),
+    );
+  }
+
+  Widget _buildTargetAnchoredList({
+    required List<ThreadDetailRenderEntry> entries,
+    required int targetEntryIndex,
+    required ThreadDetailNativePalette palette,
+  }) {
+    return SizedBox.expand(
+      key: _viewportKey,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: CustomScrollView(
+          key: const Key('thread-detail-list'),
+          controller: widget.scrollController,
+          center: _targetCenterKey,
+          scrollCacheExtent: const ScrollCacheExtent.pixels(900),
+          semanticChildCount: entries.length,
+          slivers: [
+            _buildTargetEntrySliver(
+              entries: entries,
+              start: 0,
+              count: targetEntryIndex,
+              reverse: true,
+              stabilizeImageLayout: false,
+              addPageTopPadding: true,
+              palette: palette,
+            ),
+            SliverPadding(
+              key: _targetCenterKey,
+              padding: const EdgeInsets.only(top: 10, bottom: 14),
+              sliver: _buildTargetEntrySliver(
+                entries: entries,
+                start: targetEntryIndex,
+                count: entries.length - targetEntryIndex,
+                reverse: false,
+                stabilizeImageLayout: true,
+                addPageTopPadding: false,
+                palette: palette,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  SliverList _buildTargetEntrySliver({
+    required List<ThreadDetailRenderEntry> entries,
+    required int start,
+    required int count,
+    required bool reverse,
+    required bool stabilizeImageLayout,
+    required bool addPageTopPadding,
+    required ThreadDetailNativePalette palette,
+  }) {
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final entryIndex = reverse
+              ? start + count - index - 1
+              : start + index;
+          final entry = entries[entryIndex];
+          _recordEntryBuild(entry);
+          Widget child = _buildEntry(
+            context,
+            entry,
+            palette,
+            stabilizeImageLayout: stabilizeImageLayout,
+          );
+          if (addPageTopPadding && entryIndex == 0) {
+            child = Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: child,
+            );
+          }
+          return IndexedSemantics(index: entryIndex, child: child);
+        },
+        childCount: count,
+        addSemanticIndexes: false,
       ),
     );
   }
@@ -305,8 +404,9 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   Widget _buildEntry(
     BuildContext context,
     ThreadDetailRenderEntry entry,
-    ThreadDetailNativePalette palette,
-  ) {
+    ThreadDetailNativePalette palette, {
+    bool stabilizeImageLayout = true,
+  }) {
     switch (entry.kind) {
       case ThreadDetailRenderEntryKind.postCard:
         return _ThreadPostCardEntry(
@@ -323,7 +423,9 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           onOpenPostLink: widget.onOpenPostLink,
           onOpenPostImages: widget.onOpenPostImages,
           onHtmlFirstImageFallback: _copyHtmlFirstImageUrl,
-          onHtmlFirstImageLayoutShift: _scrollStabilizer.handleLayoutShift,
+          onHtmlFirstImageLayoutShift: stabilizeImageLayout
+              ? _scrollStabilizer.handleLayoutShift
+              : _ignoreImageLayoutShift,
           onHtmlFirstImageFallbackAspectRatio:
               _fallbackAspectRatioForBlockImage,
           onHtmlFirstBlockImageResolved: _handleBlockImageResolved,
@@ -366,7 +468,9 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           onOpenPostLink: widget.onOpenPostLink,
           onOpenPostImages: widget.onOpenPostImages,
           onHtmlFirstImageFallback: _copyHtmlFirstImageUrl,
-          onHtmlFirstImageLayoutShift: _scrollStabilizer.handleLayoutShift,
+          onHtmlFirstImageLayoutShift: stabilizeImageLayout
+              ? _scrollStabilizer.handleLayoutShift
+              : _ignoreImageLayoutShift,
           onHtmlFirstImageFallbackAspectRatio:
               _fallbackAspectRatioForBlockImage,
           onHtmlFirstBlockImageResolved: _handleBlockImageResolved,
@@ -410,6 +514,11 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           height: MediaQuery.sizeOf(context).height * 0.72,
         );
     }
+  }
+
+  void _ignoreImageLayoutShift(ForumHtmlImageLayoutShift _) {
+    // Entries before CustomScrollView.center grow into negative scroll space;
+    // applying the legacy positive-offset compensation would move the target.
   }
 
   void _copyHtmlFirstImageUrl(ThreadPost post, ForumHtmlImageRequest request) {

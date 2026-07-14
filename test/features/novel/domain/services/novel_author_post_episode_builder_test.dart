@@ -28,6 +28,7 @@ void main() {
         number: 1,
         message: '''
           <p>简介</p><p>这只是作品简介。</p><p>目录</p>
+          <strong>作品分卷标题</strong><br>
           <p><a href="forum.php?mod=redirect&amp;goto=findpost&amp;pid=2">第一章</a></p>
         ''',
       ),
@@ -61,6 +62,153 @@ void main() {
     expect(draft?.episodeTitle, '雨终于停了。');
     expect(draft?.plainText, contains('第二段正文'));
     expect(draft?.paragraphs, contains('第二段正文'));
+  });
+
+  test('uses leading inline heading text before the first body div', () {
+    final draft = builder.build(
+      novelId: 'novel:55:521519',
+      tid: '521519',
+      publisherId: '406769',
+      post: _post(
+        pid: '41554030',
+        number: 2,
+        message: '''
+          <strong><strong><font face="&amp;quot">喜歡的人和義妹</font></strong></strong><br>
+          <strong><font face="&amp;quot">第一話（１）</font></strong>
+          <div align="left">　　</div>
+          <div align="left">　　如果能轉世重生的話，我想成為像她那樣的人。</div>
+        ''',
+      ),
+      authorFilteredPage: 1,
+      orderIndex: 0,
+    );
+
+    expect(draft?.episodeTitle, '喜歡的人和義妹');
+  });
+
+  test('skips a publisher floor that replies with a Discuz quote', () {
+    final draft = builder.build(
+      novelId: 'novel:55:521519',
+      tid: '521519',
+      publisherId: '406769',
+      post: _post(
+        pid: '40213904',
+        number: 5,
+        message: '''
+          <div class="quote"><blockquote>
+            <font color="#999999">purplewind 发表于 2025-5-4 16:58</font><br>
+            啊这，怎么开局车祸啊，推进姐妹关系有点太强硬了吧hhhh
+          </blockquote></div>
+          <br>而且还是无自觉的随时随地不看场合秀恩爱（x
+        ''',
+      ),
+      authorFilteredPage: 1,
+      orderIndex: 4,
+    );
+
+    expect(draft, isNull);
+  });
+
+  test('skips an attributed blockquote reply without its wrapper class', () {
+    final draft = builder.build(
+      novelId: 'novel:55:521519',
+      tid: '521519',
+      publisherId: '406769',
+      post: _post(
+        pid: '40213907',
+        number: 8,
+        message: '''
+          <blockquote>hiyade 发表于 2025-12-16 21:29<br>被引用内容</blockquote>
+          <p>楼主的回复。</p>
+        ''',
+      ),
+      authorFilteredPage: 1,
+      orderIndex: 7,
+    );
+
+    expect(draft, isNull);
+  });
+
+  test('does not reject an unattributed literary blockquote', () {
+    final draft = builder.build(
+      novelId: 'novel:55:521519',
+      tid: '521519',
+      publisherId: '406769',
+      post: _post(
+        pid: '40213909',
+        number: 10,
+        message: '''
+          <blockquote>故事中的题记，不是论坛回复。</blockquote>
+          <p>章节正文从这里开始。</p>
+        ''',
+      ),
+      authorFilteredPage: 1,
+      orderIndex: 9,
+    );
+
+    expect(draft?.episodeTitle, '章节正文从这里开始。');
+  });
+
+  test('strips Discuz edit notices without discarding adjacent prose', () {
+    final draft = builder.build(
+      novelId: 'novel:55:521519',
+      tid: '521519',
+      publisherId: '406769',
+      post: _post(
+        pid: '40213905',
+        number: 6,
+        message: '''
+          <i class="pstatus">本帖最后由 咕哒子鸭 于 2025-5-4 19:36 编辑</i>
+          <p>真正的章节正文。</p>
+          <p>本帖最后由 另一位作者 于2025-5-419:36编辑粘连后的正文。</p>
+        ''',
+      ),
+      authorFilteredPage: 1,
+      orderIndex: 5,
+    );
+
+    expect(draft?.episodeTitle, '真正的章节正文。');
+    expect(draft?.plainText, contains('本帖最后由 咕哒子鸭'));
+  });
+
+  test('uses prose attached to an unmarked edit notice', () {
+    final draft = builder.build(
+      novelId: 'novel:55:521519',
+      tid: '521519',
+      publisherId: '406769',
+      post: _post(
+        pid: '40213906',
+        number: 7,
+        message: '<p>本帖最后由 咕哒子鸭 于2025-5-419:36编辑正文从这里开始。后一句。</p>',
+      ),
+      authorFilteredPage: 1,
+      orderIndex: 6,
+    );
+
+    expect(draft?.episodeTitle, '正文从这里开始。');
+  });
+
+  test('uses the first prose block after pstatus as the chapter title', () {
+    final draft = builder.build(
+      novelId: 'novel:55:521519',
+      tid: '521519',
+      publisherId: '406769',
+      post: _post(
+        pid: '40213908',
+        number: 9,
+        message: '''
+          <div class="message">
+            <i class="pstatus"> 本帖最后由 没有太阳的晴日 于 2026-2-24 13:58 编辑 </i><br><br>
+            <div align="center"><font face="宋体"><font size="5">ACT05　知道别人穿什么胖次究竟想干嘛？</font></font></div>
+            <div align="left"><font face="Arial"><font size="3">「嗯？」</font></font></div>
+          </div>
+        ''',
+      ),
+      authorFilteredPage: 1,
+      orderIndex: 8,
+    );
+
+    expect(draft?.episodeTitle, 'ACT05 知道别人穿什么胖次究竟想干嘛？');
   });
 
   test('expands verified attach placeholders and accepts image-only posts', () {

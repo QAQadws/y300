@@ -19,7 +19,9 @@ class FirstMeaningfulSentenceNovelChapterTitlePolicy
   static final RegExp _standaloneMetadataMarker = RegExp(
     r'^[\[【（(]?\s*(?:简介|簡介|目录|目錄)\s*[\]】）)]?[：:]?$',
   );
-  static final RegExp _signatureLine = RegExp(r'^(?:本帖最后由|本帖最後由).+?(?:编辑|編輯)$');
+  static final RegExp _leadingEditNotice = RegExp(
+    r'^(?:本帖最后由|本帖最後由).+?(?:编辑|編輯)\s*',
+  );
   static final RegExp _sentenceEnd = RegExp(
     r'^(.*?(?:……|…{2,}|\.{3,}|[。！？!?；;.])[”’」』】》]*)',
     dotAll: true,
@@ -50,10 +52,10 @@ class FirstMeaningfulSentenceNovelChapterTitlePolicy
         .replaceAll('\u00A0', ' ')
         .replaceAll(RegExp(r'\r\n|\r'), '\n');
     for (final rawLine in normalized.split('\n')) {
-      final line = _collapseWhitespace(rawLine);
-      if (line.isEmpty ||
-          _standaloneMetadataMarker.hasMatch(line) ||
-          _signatureLine.hasMatch(line)) {
+      final line = _collapseWhitespace(
+        rawLine.replaceFirst(_leadingEditNotice, ''),
+      );
+      if (line.isEmpty || _standaloneMetadataMarker.hasMatch(line)) {
         continue;
       }
       return line;

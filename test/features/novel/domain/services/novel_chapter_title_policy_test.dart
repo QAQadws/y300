@@ -18,6 +18,11 @@ void main() {
     expect(_title(policy, '没有句号的第一行\n第二行'), '没有句号的第一行');
   });
 
+  test('ignores standalone and inline Discuz edit notices', () {
+    expect(_title(policy, '本帖最后由 咕哒子鸭 于 2025-5-4 19:36 编辑\n正文第一句。'), '正文第一句。');
+    expect(_title(policy, '本帖最后由 咕哒子鸭 于2025-5-419:36编辑正文第一句。后句。'), '正文第一句。');
+  });
+
   test('falls back to a stable ordinal title for empty metadata text', () {
     expect(
       policy.buildTitle(

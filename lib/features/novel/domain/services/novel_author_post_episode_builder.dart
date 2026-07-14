@@ -1,4 +1,6 @@
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
+import 'package:y300/features/novel/domain/services/novel_author_post_chapter_eligibility_policy.dart';
+import 'package:y300/features/novel/domain/services/novel_chapter_title_candidate_extractor.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_title_policy.dart';
 import 'package:y300/features/novel/domain/services/novel_post_attach_html_resolver.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
@@ -26,15 +28,23 @@ class DefaultNovelAuthorPostEpisodeBuilder
         const DefaultForumImageSourcePipeline(),
     NovelPostAttachHtmlResolver attachResolver =
         const NovelPostAttachHtmlResolver(),
+    NovelChapterTitleCandidateExtractor titleCandidateExtractor =
+        const DiscuzNovelChapterTitleCandidateExtractor(),
+    NovelAuthorPostChapterEligibilityPolicy chapterEligibilityPolicy =
+        const DiscuzNovelAuthorPostChapterEligibilityPolicy(),
   }) : _titlePolicy = titlePolicy,
        _domExtractor = domExtractor,
        _imageSourcePipeline = imageSourcePipeline,
-       _attachResolver = attachResolver;
+       _attachResolver = attachResolver,
+       _titleCandidateExtractor = titleCandidateExtractor,
+       _chapterEligibilityPolicy = chapterEligibilityPolicy;
 
   final NovelChapterTitlePolicy _titlePolicy;
   final ForumPostDomExtractor _domExtractor;
   final ForumImageSourcePipeline _imageSourcePipeline;
   final NovelPostAttachHtmlResolver _attachResolver;
+  final NovelChapterTitleCandidateExtractor _titleCandidateExtractor;
+  final NovelAuthorPostChapterEligibilityPolicy _chapterEligibilityPolicy;
 
   static final RegExp _metadataMarker = RegExp(
     r'^[\[【（(]?\s*(简介|簡介|目录|目錄)\s*[\]】）)]?[：:]?$',
@@ -61,15 +71,19 @@ class DefaultNovelAuthorPostEpisodeBuilder
     }
 
     final rawHtml = _attachResolver.resolve(post);
+    if (!_chapterEligibilityPolicy.isEligible(post: post, rawHtml: rawHtml)) {
+      return null;
+    }
     final plainText = _domExtractor.extractPlainText(rawHtml);
     final paragraphs = _domExtractor.extractParagraphTexts(rawHtml);
+    final titleTextUnits = _titleCandidateExtractor.extractTextUnits(rawHtml);
     final imageUrls = _imageSourcePipeline
         .collectFromPost(post)
         .map((source) => source.normalizedUrl)
         .toList(growable: false);
     final titleText = _titleCandidateText(
       post: post,
-      paragraphs: paragraphs,
+      paragraphs: titleTextUnits,
       rawHtml: rawHtml,
     );
     final isMetadataOnlyFirstPost = _isMetadataOnlyFirstPost(
@@ -119,11 +133,22 @@ class DefaultNovelAuthorPostEpisodeBuilder
           .map((anchor) => _normalize(anchor.text))
           .where((text) => text.isNotEmpty)
           .toSet();
-      return lines
-          .skip(catalogIndex + 1)
-          .where((line) => !_metadataMarker.hasMatch(line))
-          .where((line) => !_isAnchorOnlyLine(line, anchorTexts))
-          .join('\n');
+      final catalogTail = lines.skip(catalogIndex + 1).toList(growable: false);
+      final bodyLines = <String>[];
+      for (var index = 0; index < catalogTail.length; index++) {
+        final line = catalogTail[index];
+        if (_metadataMarker.hasMatch(line) ||
+            _isAnchorOnlyLine(line, anchorTexts) ||
+            _isCatalogGroupHeading(
+              lines: catalogTail,
+              index: index,
+              anchorTexts: anchorTexts,
+            )) {
+          continue;
+        }
+        bodyLines.add(line);
+      }
+      return bodyLines.join('\n');
     }
 
     final introIndex = lines.indexWhere(_isIntroMarker);
@@ -179,6 +204,21 @@ class DefaultNovelAuthorPostEpisodeBuilder
       remainder = remainder.replaceAll(anchorText, '');
     }
     return remainder.replaceAll(RegExp(r'[\s|/·,，、]+'), '').isEmpty;
+  }
+
+  bool _isCatalogGroupHeading({
+    required List<String> lines,
+    required int index,
+    required Set<String> anchorTexts,
+  }) {
+    for (var next = index + 1; next < lines.length; next++) {
+      final nextLine = lines[next];
+      if (_metadataMarker.hasMatch(nextLine)) {
+        continue;
+      }
+      return _isAnchorOnlyLine(nextLine, anchorTexts);
+    }
+    return false;
   }
 
   bool _isCatalogMarker(String line) {

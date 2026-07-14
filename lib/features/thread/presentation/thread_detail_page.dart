@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widget_previews.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -64,12 +63,8 @@ class ThreadDetailPage extends ConsumerStatefulWidget {
 
 class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   late final ScrollController _scrollController;
-  final Set<String> _scrolledTargetKeys = <String>{};
-  final Set<String> _pendingTargetScrollKeys = <String>{};
-  final Map<String, int> _targetScrollAttempts = <String, int>{};
   Timer? _highlightClearTimer;
   String? _highlightPostPid;
-  bool _suppressTargetScrollForPageAction = false;
   ImageRequestHeaderBuilder? _latestImageHeaderBuilder;
 
   /// 跨重建保留的图片真实尺寸快照，供 render plan 锁定首帧高度（防上滑回溯）。
@@ -82,6 +77,15 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   void initState() {
     super.initState();
     _scrollController = ScrollController();
+    _activateTargetHighlight(widget.targetPid);
+  }
+
+  @override
+  void didUpdateWidget(covariant ThreadDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.targetPid?.trim() != widget.targetPid?.trim()) {
+      _activateTargetHighlight(widget.targetPid);
+    }
   }
 
   @override
@@ -119,7 +123,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     ref.listen<AsyncValue<ThreadDetailPageState>>(
       threadDetailControllerProvider(args),
       (previous, next) {
-        _scheduleTargetPostScroll(next.value);
         final previousHint = previous?.value?.threadFavoriteHint;
         final nextHint = next.value?.threadFavoriteHint;
         if (nextHint == null ||
@@ -133,7 +136,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       },
     );
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
-    _scheduleTargetPostScroll(state);
     _schedulePrewarmImageDimensions(state);
 
     return Scaffold(
@@ -314,34 +316,29 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   Future<void> _runPageActionAndScrollTop(
     FutureOr<void> Function() action,
   ) async {
-    _suppressTargetScrollForPageAction = true;
-    try {
-      await action();
-      if (!mounted) {
-        return;
-      }
-      await WidgetsBinding.instance.endOfFrame;
-      if (!mounted || !_scrollController.hasClients) {
-        return;
-      }
-      final position = _scrollController.position;
-      final targetOffset = position.minScrollExtent;
-      if ((position.pixels - targetOffset).abs() < 1) {
-        return;
-      }
-      _recordScrollDiagnostic(
-        type: ThreadDetailDiagnosticEventType.scrollAnimate,
-        scrollOffset: position.pixels,
-        message: 'page action scroll top -> ${targetOffset.toStringAsFixed(1)}',
-      );
-      await _scrollController.animateTo(
-        targetOffset,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
-      );
-    } finally {
-      _suppressTargetScrollForPageAction = false;
+    await action();
+    if (!mounted) {
+      return;
     }
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || !_scrollController.hasClients) {
+      return;
+    }
+    final position = _scrollController.position;
+    final targetOffset = position.minScrollExtent;
+    if ((position.pixels - targetOffset).abs() < 1) {
+      return;
+    }
+    _recordScrollDiagnostic(
+      type: ThreadDetailDiagnosticEventType.scrollAnimate,
+      scrollOffset: position.pixels,
+      message: 'page action scroll top -> ${targetOffset.toStringAsFixed(1)}',
+    );
+    await _scrollController.animateTo(
+      targetOffset,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   Future<void> _openThreadReplyComposer(
@@ -665,162 +662,18 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     );
   }
 
-  void _scheduleTargetPostScroll(ThreadDetailPageState? state) {
-    if (_suppressTargetScrollForPageAction) {
-      return;
-    }
-    final targetPid = widget.targetPid?.trim();
-    if (targetPid == null || targetPid.isEmpty || state == null) {
-      return;
-    }
-    final targetIndex = state.posts.indexWhere((post) => post.pid == targetPid);
-    if (targetIndex < 0) {
-      return;
-    }
-    final key = '${state.currentPage}:$targetPid';
-    if (_scrolledTargetKeys.contains(key) ||
-        _pendingTargetScrollKeys.contains(key)) {
-      return;
-    }
-    _queueTargetPostScroll(state, key, targetPid, targetIndex);
-  }
-
-  void _queueTargetPostScroll(
-    ThreadDetailPageState state,
-    String key,
-    String targetPid,
-    int targetIndex,
-  ) {
-    _pendingTargetScrollKeys.add(key);
-    _recordScrollDiagnostic(
-      type: ThreadDetailDiagnosticEventType.targetPostScroll,
-      pid: targetPid,
-      message: 'queue target post scroll index=$targetIndex',
-    );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _pendingTargetScrollKeys.remove(key);
-      if (!mounted) {
-        return;
-      }
-      _tryScrollToTargetPost(state, key, targetPid, targetIndex);
-    });
-  }
-
-  void _tryScrollToTargetPost(
-    ThreadDetailPageState state,
-    String key,
-    String targetPid,
-    int targetIndex,
-  ) {
-    if (_scrolledTargetKeys.contains(key)) {
-      return;
-    }
-    final targetContext = _postCardContext(targetPid);
-    if (targetContext == null) {
-      _roughScrollTowardTargetPost(state, key, targetIndex);
-      return;
-    }
-    final targetRenderObject = targetContext.findRenderObject();
-    final viewport = RenderAbstractViewport.maybeOf(targetRenderObject);
-    if (targetRenderObject == null ||
-        viewport == null ||
-        !_scrollController.hasClients) {
-      _roughScrollTowardTargetPost(state, key, targetIndex);
-      return;
-    }
-    _scrolledTargetKeys.add(key);
-    _targetScrollAttempts.remove(key);
-    final position = _scrollController.position;
-    final revealed = viewport.getOffsetToReveal(targetRenderObject, 0);
-    final targetOffset = revealed.offset
-        .clamp(position.minScrollExtent, position.maxScrollExtent)
-        .toDouble();
-    _recordScrollDiagnostic(
-      type: ThreadDetailDiagnosticEventType.scrollAnimate,
-      pid: targetPid,
-      scrollOffset: position.pixels,
-      message:
-          'target post animate index=$targetIndex -> ${targetOffset.toStringAsFixed(1)}',
-    );
-    _scrollController.animateTo(
-      targetOffset,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-    );
-    setState(() => _highlightPostPid = targetPid);
+  void _activateTargetHighlight(String? rawPid) {
     _highlightClearTimer?.cancel();
+    final pid = rawPid?.trim();
+    _highlightPostPid = pid == null || pid.isEmpty ? null : pid;
+    if (_highlightPostPid == null) {
+      return;
+    }
     _highlightClearTimer = Timer(const Duration(milliseconds: 1500), () {
-      if (mounted && _highlightPostPid == targetPid) {
+      if (mounted && _highlightPostPid == pid) {
         setState(() => _highlightPostPid = null);
       }
     });
-  }
-
-  void _roughScrollTowardTargetPost(
-    ThreadDetailPageState state,
-    String key,
-    int targetIndex,
-  ) {
-    if (!_scrollController.hasClients) {
-      return;
-    }
-    final attempt = _targetScrollAttempts[key] ?? 0;
-    if (attempt >= 8) {
-      _scrolledTargetKeys.add(key);
-      return;
-    }
-    final position = _scrollController.position;
-    final targetOffset = _roughTargetOffset(
-      state: state,
-      targetIndex: targetIndex,
-      position: position,
-    );
-    _targetScrollAttempts[key] = attempt + 1;
-    _recordScrollDiagnostic(
-      type: ThreadDetailDiagnosticEventType.scrollJump,
-      pid: state.posts[targetIndex].pid,
-      scrollOffset: position.pixels,
-      message:
-          'rough target jump attempt=${attempt + 1} -> ${targetOffset.toStringAsFixed(1)}',
-    );
-    _scrollController.jumpTo(targetOffset);
-    _queueTargetPostScroll(
-      state,
-      key,
-      state.posts[targetIndex].pid,
-      targetIndex,
-    );
-  }
-
-  double _roughTargetOffset({
-    required ThreadDetailPageState state,
-    required int targetIndex,
-    required ScrollPosition position,
-  }) {
-    final range = _builtPostIndexRange(state);
-    if (range != null) {
-      final viewport = position.viewportDimension;
-      if (targetIndex < range.min) {
-        final distance = (range.min - targetIndex).clamp(1, 4).toDouble();
-        return (position.pixels - viewport * distance)
-            .clamp(position.minScrollExtent, position.maxScrollExtent)
-            .toDouble();
-      }
-      if (targetIndex > range.max) {
-        final distance = (targetIndex - range.max).clamp(1, 4).toDouble();
-        return (position.pixels + viewport * distance)
-            .clamp(position.minScrollExtent, position.maxScrollExtent)
-            .toDouble();
-      }
-    }
-
-    final fraction = ((targetIndex + 1) / (state.posts.length + 1)).clamp(
-      0.0,
-      1.0,
-    );
-    return (position.maxScrollExtent * fraction)
-        .clamp(position.minScrollExtent, position.maxScrollExtent)
-        .toDouble();
   }
 
   void _recordScrollDiagnostic({
@@ -839,41 +692,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       scrollOffset: scrollOffset,
       message: message,
     );
-  }
-
-  ({int min, int max})? _builtPostIndexRange(ThreadDetailPageState state) {
-    int? min;
-    int? max;
-    for (var index = 0; index < state.posts.length; index++) {
-      if (_postCardContext(state.posts[index].pid) == null) {
-        continue;
-      }
-      min = min == null ? index : (index < min ? index : min);
-      max = max == null ? index : (index > max ? index : max);
-    }
-    if (min == null || max == null) {
-      return null;
-    }
-    return (min: min, max: max);
-  }
-
-  BuildContext? _postCardContext(String pid) {
-    final element = _findContextByKey(Key('thread-post-card-$pid'));
-    return element;
-  }
-
-  BuildContext? _findContextByKey(Key key) {
-    BuildContext? found;
-    void visitor(Element element) {
-      if (element.widget.key == key) {
-        found = element;
-        return;
-      }
-      element.visitChildren(visitor);
-    }
-
-    context.visitChildElements(visitor);
-    return found;
   }
 
   void _openForumLink(String url) {

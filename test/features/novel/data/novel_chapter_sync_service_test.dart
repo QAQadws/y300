@@ -38,13 +38,19 @@ void main() {
               number: 4,
               message: '<p>其他作者。</p>',
             ),
-            _post(pid: '4', number: 5, message: '<p>第二章开场！后文</p>'),
+            _post(
+              pid: 'reply',
+              number: 5,
+              message:
+                  '<div class="quote"><blockquote>读者 发表于 2026-7-13</blockquote></div><br>楼主回复。',
+            ),
+            _post(pid: '4', number: 6, message: '<p>第二章开场！后文</p>'),
           ],
         ),
         3: () async => _page(
           page: 3,
           posts: <ThreadPost>[
-            _post(pid: '5', number: 6, message: '<p>第三章开场？后文</p>'),
+            _post(pid: '5', number: 7, message: '<p>第三章开场？后文</p>'),
           ],
         ),
       });
