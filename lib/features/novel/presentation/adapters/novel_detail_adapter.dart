@@ -8,6 +8,7 @@ import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
+import 'package:y300/features/library_shared/domain/services/library_source_id_comparator.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/services/novel_download_service.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
@@ -453,19 +454,13 @@ class NovelDetailAdapter implements DetailModuleAdapter {
   ) {
     final list = [...source];
     int compare(LibraryChapterItem a, LibraryChapterItem b) {
-      final result = switch (sortOption.field) {
-        LibraryChapterSortField.chapterIndex => a.orderIndex.compareTo(
-          b.orderIndex,
-        ),
-        LibraryChapterSortField.date => (a.publishTimeText ?? '').compareTo(
-          b.publishTimeText ?? '',
-        ),
-        LibraryChapterSortField.name => a.title.compareTo(b.title),
-        LibraryChapterSortField.tid => _compareNumericText(
-          a.sourcePid ?? '',
-          b.sourcePid ?? '',
-        ),
-      };
+      var result = compareLibrarySourceIds(a.sourcePid, b.sourcePid);
+      if (result == 0) {
+        result = a.orderIndex.compareTo(b.orderIndex);
+      }
+      if (result == 0) {
+        result = a.episodeId.compareTo(b.episodeId);
+      }
       return sortOption.direction == LibrarySortDirection.asc
           ? result
           : -result;
@@ -481,14 +476,5 @@ class NovelDetailAdapter implements DetailModuleAdapter {
       TriStateFilterValue.include => flag,
       TriStateFilterValue.exclude => !flag,
     };
-  }
-
-  int _compareNumericText(String a, String b) {
-    final aNumber = int.tryParse(a);
-    final bNumber = int.tryParse(b);
-    if (aNumber != null && bNumber != null) {
-      return aNumber.compareTo(bNumber);
-    }
-    return a.compareTo(b);
   }
 }

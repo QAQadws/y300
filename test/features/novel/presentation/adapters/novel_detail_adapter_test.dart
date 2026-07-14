@@ -56,6 +56,32 @@ void main() {
     },
   );
 
+  test('loadChapters sorts novel sources by numeric pid', () async {
+    final adapter = NovelDetailAdapter(
+      _FakeNovelRepository(),
+      stateRepository: _RecordingLibraryStateRepository(),
+    );
+
+    final ascending = await adapter.loadChapters(
+      workId: 'novel:1',
+      filters: const LibraryFilterSet(),
+      sortOption: LibraryChapterSortOption.defaults,
+    );
+    final descending = await adapter.loadChapters(
+      workId: 'novel:1',
+      filters: const LibraryFilterSet(),
+      sortOption: const LibraryChapterSortOption(
+        direction: LibrarySortDirection.desc,
+      ),
+    );
+
+    expect(ascending.map((chapter) => chapter.sourcePid), <String?>['2', '10']);
+    expect(descending.map((chapter) => chapter.sourcePid), <String?>[
+      '10',
+      '2',
+    ]);
+  });
+
   test('loadChapters maps paged novel progress to page label', () async {
     final adapter = NovelDetailAdapter(
       _FakeNovelRepository(
@@ -133,7 +159,13 @@ void main() {
         sortOption: LibraryChapterSortOption.defaults,
       );
 
-      expect(chapters.first.progressInfo?.label, '阅读中');
+      expect(
+        chapters
+            .singleWhere((chapter) => chapter.episodeId == 'novel:1:1')
+            .progressInfo
+            ?.label,
+        '阅读中',
+      );
 
       final readAdapter = NovelDetailAdapter(
         _FakeNovelRepository(progress: progress),
@@ -154,7 +186,12 @@ void main() {
         sortOption: LibraryChapterSortOption.defaults,
       );
 
-      expect(readChapters.first.progressInfo, isNull);
+      expect(
+        readChapters
+            .singleWhere((chapter) => chapter.episodeId == 'novel:1:1')
+            .progressInfo,
+        isNull,
+      );
     },
   );
 
@@ -342,9 +379,9 @@ class _FakeNovelRepository implements NovelRepository {
         episodeId: '$novelId:1',
         novelId: novelId,
         sourceTid: '100',
-        sourcePid: '1',
+        sourcePid: '10',
         episodeTitle: '第一章',
-        orderIndex: 0,
+        orderIndex: 10,
       ),
       NovelEpisodeItem(
         episodeId: '$novelId:2',
@@ -352,7 +389,7 @@ class _FakeNovelRepository implements NovelRepository {
         sourceTid: '100',
         sourcePid: '2',
         episodeTitle: '第二章',
-        orderIndex: 1,
+        orderIndex: 0,
       ),
     ];
   }

@@ -108,27 +108,11 @@ class UnifiedDetailController {
     }
   }
 
-  Future<void> toggleSortDirection() async {
-    final nextDirection =
-        _state.chapterSortOption.direction == LibrarySortDirection.asc
-        ? LibrarySortDirection.desc
-        : LibrarySortDirection.asc;
-    _state = _state.copyWith(
-      chapterSortOption: LibraryChapterSortOption(
-        field: _state.chapterSortOption.field,
-        direction: nextDirection,
-      ),
-    );
-    await _loadChaptersOnly();
-  }
-
-  Future<void> updateChapterSortField(LibraryChapterSortField field) async {
-    _state = _state.copyWith(
-      chapterSortOption: LibraryChapterSortOption(
-        field: field,
-        direction: _state.chapterSortOption.direction,
-      ),
-    );
+  Future<void> updateChapterQuery({
+    required LibraryFilterSet filters,
+    required LibraryChapterSortOption sortOption,
+  }) async {
+    _state = _state.copyWith(filters: filters, chapterSortOption: sortOption);
     await _loadChaptersOnly();
   }
 

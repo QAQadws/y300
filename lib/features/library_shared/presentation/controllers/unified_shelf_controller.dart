@@ -323,7 +323,9 @@ class UnifiedShelfController {
   }
 
   Future<void> updateSortOption(LibraryShelfSortOption option) async {
-    _setState(_state.copyWith(sortOption: option));
+    _setState(
+      _state.copyWith(sortOption: LibraryShelfSortOption.normalize(option)),
+    );
     await _reload();
   }
 

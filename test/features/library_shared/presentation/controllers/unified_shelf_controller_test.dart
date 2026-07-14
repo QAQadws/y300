@@ -51,6 +51,37 @@ void main() {
     });
 
     test(
+      'public shelf uses shared default and normalizes unsupported sort',
+      () async {
+        final adapter = _FakeShelfAdapter(
+          categories: const <LibraryCategory>[],
+          queriedItems: const <String, List<LibraryWorkItem>>{},
+        );
+        final controller = UnifiedShelfController(adapter: adapter);
+        addTearDown(controller.dispose);
+
+        expect(
+          controller.state.sortOption.field,
+          LibraryShelfSortField.favoriteAddedAt,
+        );
+        expect(controller.state.sortOption.direction, LibrarySortDirection.asc);
+
+        await controller.updateSortOption(
+          const LibraryShelfSortOption(
+            field: LibraryShelfSortField.name,
+            direction: LibrarySortDirection.desc,
+          ),
+        );
+
+        expect(
+          controller.state.sortOption.field,
+          LibraryShelfSortField.favoriteAddedAt,
+        );
+        expect(controller.state.sortOption.direction, LibrarySortDirection.asc);
+      },
+    );
+
+    test(
       'initialize prefers snapshot adapter without loading categories separately',
       () async {
         final adapter = _SnapshotShelfAdapter(

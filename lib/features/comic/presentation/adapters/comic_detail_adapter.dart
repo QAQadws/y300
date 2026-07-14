@@ -22,6 +22,7 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
+import 'package:y300/features/library_shared/domain/services/library_source_id_comparator.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
 
@@ -963,18 +964,13 @@ class ComicDetailAdapter
   ) {
     final list = [...source];
     int compare(LibraryChapterItem a, LibraryChapterItem b) {
-      final result = switch (sortOption.field) {
-        LibraryChapterSortField.chapterIndex => a.orderIndex.compareTo(
-          b.orderIndex,
-        ),
-        LibraryChapterSortField.date => (a.publishTimeText ?? '').compareTo(
-          b.publishTimeText ?? '',
-        ),
-        LibraryChapterSortField.name => a.title.compareTo(b.title),
-        LibraryChapterSortField.tid => (a.sourceTid ?? '').compareTo(
-          b.sourceTid ?? '',
-        ),
-      };
+      var result = compareLibrarySourceIds(a.sourceTid, b.sourceTid);
+      if (result == 0) {
+        result = a.orderIndex.compareTo(b.orderIndex);
+      }
+      if (result == 0) {
+        result = a.episodeId.compareTo(b.episodeId);
+      }
       return sortOption.direction == LibrarySortDirection.asc
           ? result
           : -result;

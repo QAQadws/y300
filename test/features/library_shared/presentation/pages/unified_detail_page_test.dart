@@ -485,7 +485,7 @@ void main() {
       find.byKey(const Key('unified-detail-chapter-filter-sheet')),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('unified-detail-sort-field')), findsOneWidget);
+    expect(find.byKey(const Key('unified-detail-sort-source')), findsOneWidget);
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
 
@@ -744,12 +744,12 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.byKey(const Key('unified-detail-sort-field')),
+        find.byKey(const Key('unified-detail-sort-source')),
         findsOneWidget,
       );
       expect(
         find.byKey(const Key('unified-detail-sort-direction')),
-        findsOneWidget,
+        findsNothing,
       );
 
       await tester.tap(find.byKey(const Key('unified-detail-filter-unread')));
@@ -867,7 +867,7 @@ void main() {
   });
 
   testWidgets(
-    'UnifiedDetailPage chapter filter sheet applies sort field and direction',
+    'UnifiedDetailPage chapter filter sheet only exposes source sorting',
     (tester) async {
       final adapter = _FakeDetailAdapter(includeSecondChapter: true);
 
@@ -891,11 +891,35 @@ void main() {
 
       await tester.tap(find.byKey(const Key('unified-detail-appbar-filter')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('unified-detail-sort-field')));
+
+      expect(find.text('按来源'), findsOneWidget);
+      expect(find.text('按章节编号'), findsNothing);
+      expect(find.text('按日期'), findsNothing);
+      expect(find.text('按名称'), findsNothing);
+      expect(
+        find.byWidgetPredicate((widget) => widget is DropdownButtonFormField),
+        findsNothing,
+      );
+      expect(find.byType(SegmentedButton<LibrarySortDirection>), findsNothing);
+
+      final sourceSort = find.byKey(const Key('unified-detail-sort-source'));
+      expect(
+        find.descendant(
+          of: sourceSort,
+          matching: find.byIcon(Icons.arrow_upward),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(sourceSort);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('按名称').last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('降序').last);
+      expect(
+        find.descendant(
+          of: sourceSort,
+          matching: find.byIcon(Icons.arrow_downward),
+        ),
+        findsOneWidget,
+      );
+
       await tester.ensureVisible(
         find.byKey(const Key('unified-detail-apply-filter-sort')),
       );
@@ -904,7 +928,6 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(adapter.lastSortOption.field, LibraryChapterSortField.name);
       expect(adapter.lastSortOption.direction, LibrarySortDirection.desc);
 
       final chapterTiles = tester
@@ -1468,18 +1491,7 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
           _match(filters.bookmarked, chapter.isBookmarked);
     }).toList();
     filtered.sort((a, b) {
-      final compared = switch (sortOption.field) {
-        LibraryChapterSortField.chapterIndex => a.orderIndex.compareTo(
-          b.orderIndex,
-        ),
-        LibraryChapterSortField.date => (a.publishTimeText ?? '').compareTo(
-          b.publishTimeText ?? '',
-        ),
-        LibraryChapterSortField.name => a.title.compareTo(b.title),
-        LibraryChapterSortField.tid => (a.sourceTid ?? '').compareTo(
-          b.sourceTid ?? '',
-        ),
-      };
+      final compared = (a.sourceTid ?? '').compareTo(b.sourceTid ?? '');
       return sortOption.direction == LibrarySortDirection.asc
           ? compared
           : -compared;

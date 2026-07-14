@@ -39,6 +39,62 @@ void main() {
     expect(draft, isNull);
   });
 
+  test(
+    'ignores Discuz collapse controls when checking a catalog-only first post',
+    () {
+      final draft = builder.build(
+        novelId: 'novel:55:565218',
+        tid: '565218',
+        publisherId: '406769',
+        post: _post(
+          isFirst: true,
+          number: 1,
+          message: '''
+          <i class="pstatus">本帖最后由 作者 于 2026-7-6 23:25 编辑</i>
+          <p>简介</p><p>作品简介。</p><p>目录：</p>
+          <div class="showcollapse_box">
+            <div class="showcollapse_title">ACT01-20</div>
+            <div class="showcollapse_content">
+              <a href="forum.php?mod=redirect&amp;goto=findpost&amp;pid=41425060">ACT01</a>
+              <div class="showcollapse_gather">收起</div>
+            </div>
+          </div>
+        ''',
+        ),
+        authorFilteredPage: 1,
+        orderIndex: 0,
+      );
+
+      expect(draft, isNull);
+    },
+  );
+
+  test(
+    'uses prose after a collapse control without rewriting chapter HTML',
+    () {
+      final draft = builder.build(
+        novelId: 'novel:55:565218',
+        tid: '565218',
+        publisherId: '406769',
+        post: _post(
+          pid: '41425060',
+          number: 2,
+          message: '''
+          <div class="showcollapse_gather">收起</div>
+          <p>ACT01 我的朋友毫不踌躇</p>
+          <p>真正的章节正文。</p>
+        ''',
+        ),
+        authorFilteredPage: 1,
+        orderIndex: 0,
+      );
+
+      expect(draft?.episodeTitle, 'ACT01 我的朋友毫不踌躇');
+      expect(draft?.rawHtml, contains('showcollapse_gather'));
+      expect(draft?.rawHtml, contains('收起'));
+    },
+  );
+
   test('builds stable episode data from a publisher post', () {
     final draft = builder.build(
       novelId: 'novel:55:521519',

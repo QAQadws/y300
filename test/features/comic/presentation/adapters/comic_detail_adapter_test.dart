@@ -494,6 +494,35 @@ void main() {
     expect(stateRepository.downloadedEpisodeIds, <String>['comic:1:90']);
   });
 
+  test('loadChapters sorts comic sources by numeric tid', () async {
+    final adapter = ComicDetailAdapter(
+      _FakeComicRepository(),
+      stateRepository: _FakeLibraryStateRepository(),
+    );
+
+    final ascending = await adapter.loadChapters(
+      workId: 'comic:1',
+      filters: const LibraryFilterSet(),
+      sortOption: LibraryChapterSortOption.defaults,
+    );
+    final descending = await adapter.loadChapters(
+      workId: 'comic:1',
+      filters: const LibraryFilterSet(),
+      sortOption: const LibraryChapterSortOption(
+        direction: LibrarySortDirection.desc,
+      ),
+    );
+
+    expect(ascending.map((chapter) => chapter.sourceTid), <String?>[
+      '90',
+      '120',
+    ]);
+    expect(descending.map((chapter) => chapter.sourceTid), <String?>[
+      '120',
+      '90',
+    ]);
+  });
+
   test(
     'loadChapters maps current reading progress to chapter progress info',
     () async {

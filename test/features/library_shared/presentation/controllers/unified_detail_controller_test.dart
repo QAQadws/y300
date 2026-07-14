@@ -19,20 +19,32 @@ void main() {
     expect(controller.state.isLoading, isFalse);
   });
 
-  test('toggleSortDirection switches chapter order direction', () async {
-    final adapter = _FakeDetailAdapter();
-    final controller = UnifiedDetailController(
-      adapter: adapter,
-      workId: 'work-1',
-    );
+  test(
+    'updateChapterQuery applies filters and source direction together',
+    () async {
+      final adapter = _FakeDetailAdapter();
+      final controller = UnifiedDetailController(
+        adapter: adapter,
+        workId: 'work-1',
+      );
 
-    await controller.initialize();
-    final before = controller.state.chapterSortOption.direction;
-    await controller.toggleSortDirection();
-    final after = controller.state.chapterSortOption.direction;
+      await controller.initialize();
+      final beforeLoadCount = adapter.loadChaptersCount;
+      await controller.updateChapterQuery(
+        filters: const LibraryFilterSet(unread: TriStateFilterValue.include),
+        sortOption: const LibraryChapterSortOption(
+          direction: LibrarySortDirection.desc,
+        ),
+      );
 
-    expect(before == after, isFalse);
-  });
+      expect(controller.state.filters.unread, TriStateFilterValue.include);
+      expect(
+        controller.state.chapterSortOption.direction,
+        LibrarySortDirection.desc,
+      );
+      expect(adapter.loadChaptersCount, beforeLoadCount + 1);
+    },
+  );
 
   test('reload reads local state without refreshing source chapters', () async {
     final adapter = _FakeDetailAdapter();
@@ -121,6 +133,7 @@ void main() {
 
 class _FakeDetailAdapter implements DetailModuleAdapter {
   int loadHeaderCount = 0;
+  int loadChaptersCount = 0;
   int refreshWorkCount = 0;
   DetailRefreshResult refreshResult = DetailRefreshResult.immediate;
 
@@ -182,6 +195,7 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
     required LibraryFilterSet filters,
     required LibraryChapterSortOption sortOption,
   }) async {
+    loadChaptersCount++;
     final base = [
       LibraryChapterItem(
         episodeId: 'e1',

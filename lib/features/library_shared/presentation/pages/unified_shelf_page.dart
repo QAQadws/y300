@@ -15,6 +15,7 @@ import 'package:y300/features/library_shared/presentation/controllers/unified_sh
 import 'package:y300/features/library_shared/presentation/selection/selection_app_bar.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_controller.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
+import 'package:y300/features/library_shared/presentation/widgets/library_sort_option_tile.dart';
 import 'package:y300/shared/widgets/shelf/fixed_slot_pager_header.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
@@ -1451,30 +1452,19 @@ class _SortTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final options = <LibraryShelfSortField, String>{
-      LibraryShelfSortField.name: '名称',
+    const labels = <LibraryShelfSortField, String>{
       LibraryShelfSortField.chapterCount: '章节数',
-      LibraryShelfSortField.lastReadAt: '最近阅读',
-      LibraryShelfSortField.lastCheckedAt: '检查更新时间',
       LibraryShelfSortField.unreadCount: '未读章节数',
-      LibraryShelfSortField.workUpdatedAt: '作品更新时间',
-      LibraryShelfSortField.fetchedAt: '章节获取时间',
       LibraryShelfSortField.favoriteAddedAt: '收藏日期',
     };
     return Column(
-      children: options.entries
-          .map((entry) {
-            final selected = entry.key == sortOption.field;
-            return ListTile(
-              dense: true,
-              leading: Icon(
-                selected && sortOption.direction == LibrarySortDirection.asc
-                    ? Icons.arrow_upward
-                    : Icons.arrow_downward,
-                size: 18,
-              ),
-              title: Text(entry.value),
-              trailing: selected ? const Icon(Icons.check, size: 18) : null,
+      children: LibraryShelfSortOption.availableFields
+          .map((field) {
+            final selected = field == sortOption.field;
+            return LibrarySortOptionTile(
+              label: labels[field]!,
+              selected: selected,
+              direction: sortOption.direction,
               onTap: () {
                 final nextDirection =
                     selected &&
@@ -1483,7 +1473,7 @@ class _SortTab extends StatelessWidget {
                     : LibrarySortDirection.desc;
                 onChanged(
                   LibraryShelfSortOption(
-                    field: entry.key,
+                    field: field,
                     direction: nextDirection,
                   ),
                 );

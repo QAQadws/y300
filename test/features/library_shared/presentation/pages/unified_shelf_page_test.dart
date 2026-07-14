@@ -115,6 +115,75 @@ void main() {
     expect(find.byKey(const Key('unified-shelf-list-view')), findsOneWidget);
   });
 
+  testWidgets('public shelf sort sheet exposes three fields and asc default', (
+    tester,
+  ) async {
+    LibraryShelfSortOption? queriedSort;
+    final adapter = _FakeShelfAdapter(
+      initialDisplayMode: LibraryDisplayMode.grid,
+      onQuery: ({
+        required List<LibraryCategory> categories,
+        required LibraryFilterSet filters,
+        required LibraryShelfSortOption sortOption,
+        required String keyword,
+      }) async {
+        queriedSort = sortOption;
+        return <String, List<LibraryWorkItem>>{
+          'default': <LibraryWorkItem>[_item(workId: '1', title: 'Comic A')],
+        };
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedShelfPage(
+          adapter: adapter,
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(queriedSort?.field, LibraryShelfSortField.favoriteAddedAt);
+    expect(queriedSort?.direction, LibrarySortDirection.asc);
+
+    await tester.tap(find.byIcon(Icons.filter_list).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(TextButton).at(1));
+    await tester.pumpAndSettle();
+
+    expect(find.text('章节数'), findsOneWidget);
+    expect(find.text('未读章节数'), findsOneWidget);
+    expect(find.text('收藏日期'), findsOneWidget);
+    expect(find.text('名称'), findsNothing);
+    expect(find.text('最近阅读'), findsNothing);
+    expect(find.text('检查更新时间'), findsNothing);
+    expect(find.text('作品更新时间'), findsNothing);
+    expect(find.text('章节获取时间'), findsNothing);
+
+    final favoriteTile = find.ancestor(
+      of: find.text('收藏日期'),
+      matching: find.byType(ListTile),
+    );
+    expect(
+      find.descendant(
+        of: favoriteTile,
+        matching: find.byIcon(Icons.arrow_upward),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('章节数'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('章节数'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(FilledButton).first);
+    await tester.pumpAndSettle();
+
+    expect(queriedSort?.field, LibraryShelfSortField.chapterCount);
+    expect(queriedSort?.direction, LibrarySortDirection.asc);
+  });
+
   testWidgets('pull to refresh triggers adapter refresh in grid/list container', (tester) async {
     final adapter = _FakeShelfAdapter(initialDisplayMode: LibraryDisplayMode.grid);
     await tester.pumpWidget(

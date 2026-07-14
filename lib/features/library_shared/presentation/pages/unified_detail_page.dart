@@ -17,6 +17,7 @@ import 'package:y300/features/library_shared/presentation/detail/unified_detail_
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_misc_sections.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_palette.dart';
 import 'package:y300/features/library_shared/presentation/widgets/cover_focal_point_picker.dart';
+import 'package:y300/features/library_shared/presentation/widgets/library_sort_option_tile.dart';
 
 /// 统一详情页骨架（Phase 4）
 ///
@@ -485,7 +486,6 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
 
   Future<void> _showChapterFilterSheet() async {
     var selectedFilters = _controller.state.filters;
-    var selectedSortField = _controller.state.chapterSortOption.field;
     var selectedDirection = _controller.state.chapterSortOption.direction;
 
     await showModalBottomSheet<void>(
@@ -542,60 +542,19 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         ),
                         const SizedBox(height: 12),
                         const UnifiedDetailSheetSectionHeader(title: '排序'),
-                        DropdownButtonFormField<LibraryChapterSortField>(
-                          key: const Key('unified-detail-sort-field'),
-                          initialValue: selectedSortField,
-                          items: const [
-                            DropdownMenuItem(
-                              value: LibraryChapterSortField.chapterIndex,
-                              child: Text('按章节编号'),
-                            ),
-                            DropdownMenuItem(
-                              value: LibraryChapterSortField.date,
-                              child: Text('按日期'),
-                            ),
-                            DropdownMenuItem(
-                              value: LibraryChapterSortField.name,
-                              child: Text('按名称'),
-                            ),
-                            DropdownMenuItem(
-                              value: LibraryChapterSortField.tid,
-                              child: Text('按来源'),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            if (value != null) {
-                              setSheetState(() => selectedSortField = value);
-                            }
+                        LibrarySortOptionTile(
+                          key: const Key('unified-detail-sort-source'),
+                          label: '按来源',
+                          selected: true,
+                          direction: selectedDirection,
+                          onTap: () {
+                            setSheetState(() {
+                              selectedDirection =
+                                  selectedDirection == LibrarySortDirection.asc
+                                  ? LibrarySortDirection.desc
+                                  : LibrarySortDirection.asc;
+                            });
                           },
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          key: const Key('unified-detail-sort-direction'),
-                          children: [
-                            const Text('排序方向'),
-                            const Spacer(),
-                            SegmentedButton<LibrarySortDirection>(
-                              segments: const [
-                                ButtonSegment(
-                                  value: LibrarySortDirection.asc,
-                                  label: Text('升序'),
-                                ),
-                                ButtonSegment(
-                                  value: LibrarySortDirection.desc,
-                                  label: Text('降序'),
-                                ),
-                              ],
-                              selected: <LibrarySortDirection>{
-                                selectedDirection,
-                              },
-                              onSelectionChanged: (values) {
-                                setSheetState(
-                                  () => selectedDirection = values.first,
-                                );
-                              },
-                            ),
-                          ],
                         ),
                         const SizedBox(height: 10),
                         Row(
@@ -614,19 +573,12 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                                   'unified-detail-apply-filter-sort',
                                 ),
                                 onPressed: () async {
-                                  await _controller.updateFilters(
-                                    selectedFilters,
+                                  await _controller.updateChapterQuery(
+                                    filters: selectedFilters,
+                                    sortOption: LibraryChapterSortOption(
+                                      direction: selectedDirection,
+                                    ),
                                   );
-                                  await _controller.updateChapterSortField(
-                                    selectedSortField,
-                                  );
-                                  final now = _controller
-                                      .state
-                                      .chapterSortOption
-                                      .direction;
-                                  if (now != selectedDirection) {
-                                    await _controller.toggleSortDirection();
-                                  }
                                   if (!mounted || !sheetContext.mounted) {
                                     return;
                                   }

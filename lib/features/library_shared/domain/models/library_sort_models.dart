@@ -10,19 +10,8 @@ enum LibraryShelfSortField {
   favoriteAddedAt,
 }
 
-/// 详情章节层排序字段。
-enum LibraryChapterSortField {
-  chapterIndex,
-  date,
-  name,
-  tid,
-}
-
 /// 通用排序方向。
-enum LibrarySortDirection {
-  asc,
-  desc,
-}
+enum LibrarySortDirection { asc, desc }
 
 /// 书架排序配置。
 class LibraryShelfSortOption {
@@ -36,8 +25,20 @@ class LibraryShelfSortOption {
 
   static const LibraryShelfSortOption defaults = LibraryShelfSortOption(
     field: LibraryShelfSortField.favoriteAddedAt,
-    direction: LibrarySortDirection.desc,
+    direction: LibrarySortDirection.asc,
   );
+
+  /// 公共书架允许用户选择的排序字段，顺序同时作为排序面板展示顺序。
+  static const List<LibraryShelfSortField> availableFields =
+      <LibraryShelfSortField>[
+        LibraryShelfSortField.chapterCount,
+        LibraryShelfSortField.unreadCount,
+        LibraryShelfSortField.favoriteAddedAt,
+      ];
+
+  static LibraryShelfSortOption normalize(LibraryShelfSortOption option) {
+    return availableFields.contains(option.field) ? option : defaults;
+  }
 
   LibraryShelfSortOption copyWith({
     LibraryShelfSortField? field,
@@ -51,17 +52,15 @@ class LibraryShelfSortOption {
 }
 
 /// 章节排序配置。
+///
+/// 公共作品详情仅支持“按来源”：漫画由 adapter 按 TID 排序，小说由
+/// adapter 按 PID 排序。共享层只负责编排排序方向。
 class LibraryChapterSortOption {
-  const LibraryChapterSortOption({
-    required this.field,
-    this.direction = LibrarySortDirection.asc,
-  });
+  const LibraryChapterSortOption({this.direction = LibrarySortDirection.asc});
 
-  final LibraryChapterSortField field;
   final LibrarySortDirection direction;
 
   static const LibraryChapterSortOption defaults = LibraryChapterSortOption(
-    field: LibraryChapterSortField.chapterIndex,
     direction: LibrarySortDirection.asc,
   );
 }

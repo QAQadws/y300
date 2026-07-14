@@ -13,7 +13,7 @@ class DiscuzNovelChapterTitleCandidateExtractor
 
   static const String _excludedSelector =
       'blockquote, .quote, .pstatus, .postedit, .post-edit, '
-      '.post-signature, .signature';
+      '.post-signature, .signature, .showcollapse_gather';
   static final RegExp _leadingEditNotice = RegExp(
     r'^(?:本帖最后由|本帖最後由).+?(?:编辑|編輯)\s*',
   );
