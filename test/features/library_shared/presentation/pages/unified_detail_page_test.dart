@@ -345,7 +345,41 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(adapter.coverRemoved, isTrue);
-    expect(find.text('已取消自定义封面'), findsOneWidget);
+    expect(find.text('已取消封面'), findsOneWidget);
+  });
+
+  testWidgets('UnifiedDetailPage can cancel a source cover by adapter policy', (
+    tester,
+  ) async {
+    final adapter = _CoverEditableDetailAdapter(hasSourceCover: true);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+          pickCoverImage: () async => null,
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('unified-detail-remove-cover')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('unified-detail-remove-cover')));
+    await tester.pumpAndSettle();
+
+    expect(adapter.coverRemoved, isTrue);
+    expect(
+      find.byKey(const Key('unified-detail-plain-header')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('UnifiedDetailPage header gradient follows scaffold background', (
@@ -1730,9 +1764,14 @@ class _CatalogEditableDetailAdapter extends _FakeDetailAdapter
 
 class _CoverEditableDetailAdapter extends _FakeDetailAdapter
     implements DetailCoverEditor {
-  _CoverEditableDetailAdapter({this.hasCustomCover = false});
+  _CoverEditableDetailAdapter({
+    this.hasCustomCover = false,
+    this.hasSourceCover = false,
+  });
 
   bool hasCustomCover;
+  final bool hasSourceCover;
+  bool coverHidden = false;
   bool coverRemoved = false;
   String? lastSourcePath;
   double? lastFocusX;
@@ -1747,12 +1786,20 @@ class _CoverEditableDetailAdapter extends _FakeDetailAdapter
       workId: 'work-1',
       title: '测试作品',
       sourceTitle: '来源标题',
-      customCoverLocalPath: hasCustomCover
+      coverLocalPath: hasSourceCover && !coverHidden
+          ? 'missing-y300-source-cover.png'
+          : null,
+      customCoverLocalPath: hasCustomCover && !coverHidden
           ? 'missing-y300-custom-cover.png'
           : null,
       inShelf: true,
       intro: '简介',
     );
+  }
+
+  @override
+  bool canRemoveCover(LibraryDetailHeader header) {
+    return header.customCoverLocalPath != null || header.coverLocalPath != null;
   }
 
   @override
@@ -1781,6 +1828,7 @@ class _CoverEditableDetailAdapter extends _FakeDetailAdapter
   Future<void> removeCustomCover({required String workId}) async {
     coverRemoved = true;
     hasCustomCover = false;
+    coverHidden = true;
   }
 }
 

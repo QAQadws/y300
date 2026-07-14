@@ -239,7 +239,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         value: 'set-custom-cover',
                         child: Text('自定义封面'),
                       ),
-                      if (_hasCustomCover)
+                      if (_canRemoveCover)
                         const PopupMenuItem(
                           key: Key('unified-detail-remove-cover'),
                           value: 'remove-custom-cover',
@@ -885,9 +885,10 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   bool get _supportsCoverEditing =>
       widget.adapter is DetailCoverEditor && widget.pickCoverImage != null;
 
-  bool get _hasCustomCover {
-    final custom = _controller.state.header?.customCoverLocalPath?.trim();
-    return custom != null && custom.isNotEmpty;
+  bool get _canRemoveCover {
+    final editor = _coverEditor;
+    final header = _controller.state.header;
+    return editor != null && header != null && editor.canRemoveCover(header);
   }
 
   DetailCoverEditor? get _coverEditor => widget.adapter is DetailCoverEditor
@@ -937,7 +938,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
 
   Future<void> _handleRemoveCustomCover() async {
     final editor = _coverEditor;
-    if (editor == null || !_hasCustomCover) {
+    if (editor == null || !_canRemoveCover) {
       return;
     }
     try {
@@ -953,7 +954,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     if (!mounted) {
       return;
     }
-    _showDetailSnackBar('已取消自定义封面');
+    _showDetailSnackBar('已取消封面');
     setState(() {});
   }
 

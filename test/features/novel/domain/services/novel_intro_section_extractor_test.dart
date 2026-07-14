@@ -39,13 +39,13 @@ void main() {
     expect(intro, isNot(contains('第一章')));
   });
 
-  test('只命中 intro：返回 null（缺右边界保守不抽）', () {
+  test('只命中 intro：提取到正文结尾', () {
     const html = '''
 <p>简介</p>
 <p>balabala</p>
 <p>第一章 ...</p>
 ''';
-    expect(extractor.extract(firstPostHtml: html), isNull);
+    expect(extractor.extract(firstPostHtml: html), '简介\nbalabala\n第一章 ...');
   });
 
   test('双 marker 都没命中：返回 null', () {
@@ -89,6 +89,34 @@ void main() {
     expect(intro, contains('简介：这是简介'));
     expect(intro, contains('balabala'));
     expect(intro, isNot(contains('电梯')));
+  });
+
+  test('顶层 strong 和 br 不会被后续折叠 div 吞掉', () {
+    const html = '''
+<strong>作品名</strong><br>
+<strong>简介</strong><br>
+这是第一句简介。<br>
+这是第二句简介。<br>
+<div class="showcollapse_box">
+  <div class="showcollapse_title">剧透提示</div>
+  <div class="showcollapse_content">
+    剧透内容
+    <div class="showcollapse_gather">收起</div>
+  </div>
+</div><br>
+<strong>目录：</strong><br>
+<a href="forum.php?mod=redirect&amp;goto=findpost&amp;pid=2">ACT01</a>
+''';
+
+    final intro = extractor.extract(firstPostHtml: html);
+
+    expect(intro, isNotNull);
+    expect(intro, startsWith('简介\n这是第一句简介。'));
+    expect(intro, contains('这是第二句简介。'));
+    expect(intro, contains('剧透内容'));
+    expect(intro, isNot(contains('收起')));
+    expect(intro, isNot(contains('目录')));
+    expect(intro, isNot(contains('ACT01')));
   });
 
   test('全空 HTML 返回 null', () {

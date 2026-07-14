@@ -119,5 +119,6 @@ abstract class NovelCustomCoverWriter {
     double? focusY,
   });
 
+  /// 隐藏当前封面并清除自定义封面；来源同步不得恢复显示。
   Future<void> removeCustomCover({required String novelId});
 }

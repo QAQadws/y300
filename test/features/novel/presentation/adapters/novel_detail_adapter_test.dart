@@ -302,6 +302,35 @@ void main() {
     expect(header.customCoverFocusY, -0.4);
   });
 
+  test('loadHeader hides persisted source cover after cancellation', () async {
+    final adapter = NovelDetailAdapter(
+      _FakeNovelRepository(
+        coverImageUrl: 'https://img.test/source-cover.jpg',
+        customCoverLocalPath: 'cache/custom-cover.jpg',
+        coverHidden: true,
+      ),
+      stateRepository: _RecordingLibraryStateRepository(),
+    );
+
+    final header = await adapter.loadHeader(workId: 'novel:1');
+
+    expect(header.coverImageUrl, isNull);
+    expect(header.coverLocalPath, isNull);
+    expect(header.customCoverLocalPath, isNull);
+    expect(adapter.canRemoveCover(header), isFalse);
+  });
+
+  test('source cover can be cancelled without a custom cover', () async {
+    final adapter = NovelDetailAdapter(
+      _FakeNovelRepository(coverImageUrl: 'https://img.test/source-cover.jpg'),
+      stateRepository: _RecordingLibraryStateRepository(),
+    );
+
+    final header = await adapter.loadHeader(workId: 'novel:1');
+
+    expect(adapter.canRemoveCover(header), isTrue);
+  });
+
   test(
     'metadata and custom cover mutations delegate to novel capabilities',
     () async {
@@ -406,6 +435,7 @@ class _FakeNovelRepository implements NovelRepository {
     this.customCoverLocalPath,
     this.customCoverFocusX,
     this.customCoverFocusY,
+    this.coverHidden = false,
   });
 
   final NovelReadingProgress? progress;
@@ -414,6 +444,7 @@ class _FakeNovelRepository implements NovelRepository {
   final String? customCoverLocalPath;
   final double? customCoverFocusX;
   final double? customCoverFocusY;
+  final bool coverHidden;
 
   /// 最近一次 refreshEpisodes 收到的 mode —— 用来断言 adapter 是否传了增量模式。
   NovelEpisodeRefreshMode? lastRefreshMode;
@@ -454,6 +485,7 @@ class _FakeNovelRepository implements NovelRepository {
       customCoverLocalPath: customCoverLocalPath,
       customCoverFocusX: customCoverFocusX,
       customCoverFocusY: customCoverFocusY,
+      coverHidden: coverHidden,
       updatedAt: DateTime(2026, 1, 1),
       episodeCount: 2,
     );

@@ -60,6 +60,36 @@ void main() {
     expect(repository.lastCoverLocalPath, '/cache/novel-1.jpg');
   });
 
+  test(
+    'NovelShelfAdapter suppresses hidden source and custom covers',
+    () async {
+      final adapter = NovelShelfAdapter(
+        _FakeNovelRepository(
+          shelfItems: <NovelItem>[
+            NovelItem(
+              novelId: 'novel-hidden',
+              sourceTid: '101',
+              sourceFid: '49',
+              title: 'Hidden cover novel',
+              coverImageUrl: 'https://img.test/source.jpg',
+              customCoverLocalPath: '/cache/custom.jpg',
+              coverHidden: true,
+              updatedAt: DateTime(2026, 1, 1),
+              episodeCount: 1,
+            ),
+          ],
+        ),
+        stateRepository: _FakeLibraryStateRepository(),
+      );
+
+      final items = await adapter.loadCategoryItems(categoryId: 'default');
+
+      expect(items.single.coverImageUrl, isNull);
+      expect(items.single.coverLocalPath, isNull);
+      expect(items.single.customCoverLocalPath, isNull);
+    },
+  );
+
   test('NovelShelfAdapter exposes novel progress from task progress hub', () {
     final hub = DefaultLibraryTaskProgressHub();
     final progress = ValueNotifier<LibraryShelfTaskProgress?>(

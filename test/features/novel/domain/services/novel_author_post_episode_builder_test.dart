@@ -70,6 +70,41 @@ void main() {
   );
 
   test(
+    'uses the first preface line before metadata for a first-post title',
+    () {
+      final draft = builder.build(
+        novelId: 'novel:55:565218',
+        tid: '565218',
+        publisherId: '406769',
+        post: _post(
+          isFirst: true,
+          number: 1,
+          message: '''
+          <strong>我的朋友毫不踌躇</strong><br>
+          <strong>原文标题：わたしの友達は躊躇わない</strong><br>
+          <strong>简介</strong><br>
+          作品简介。<br>
+          <strong>目录：</strong><br>
+          <div class="showcollapse_box showcollapse_active">
+            <div class="showcollapse_title">ACT101-120</div>
+            <div class="showcollapse_content">
+              <a href="forum.php?mod=redirect&amp;goto=findpost&amp;pid=41577032">ACT112</a><br>
+              ACT112.8<br>
+              ACT113
+              <div class="showcollapse_gather">收起</div>
+            </div>
+          </div>
+        ''',
+        ),
+        authorFilteredPage: 1,
+        orderIndex: 0,
+      );
+
+      expect(draft?.episodeTitle, '我的朋友毫不踌躇');
+    },
+  );
+
+  test(
     'uses prose after a collapse control without rewriting chapter HTML',
     () {
       final draft = builder.build(

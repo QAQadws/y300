@@ -248,6 +248,7 @@ class LocalNovelRepository
         w.custom_cover_local_path,
         w.custom_cover_focus_x,
         w.custom_cover_focus_y,
+        w.cover_hidden,
         w.updated_at,
         si.category_id,
         COUNT(e.episode_id) AS episode_count
@@ -327,6 +328,7 @@ class LocalNovelRepository
         w.custom_cover_local_path,
         w.custom_cover_focus_x,
         w.custom_cover_focus_y,
+        w.cover_hidden,
         w.updated_at AS work_updated_at,
         COALESCE(es.total_count, ss.state_count, 0) AS total_count,
         COALESCE(ss.unread_count, 0) AS unread_count,
@@ -404,6 +406,7 @@ class LocalNovelRepository
         w.custom_cover_local_path,
         w.custom_cover_focus_x,
         w.custom_cover_focus_y,
+        w.cover_hidden,
         w.updated_at,
         ? AS category_id,
         COUNT(e.episode_id) AS episode_count
@@ -488,6 +491,7 @@ class LocalNovelRepository
         'custom_cover_local_path': normalizedPath,
         'custom_cover_focus_x': focusX,
         'custom_cover_focus_y': focusY,
+        'cover_hidden': 0,
         'updated_at': DateTime.now().millisecondsSinceEpoch,
       },
       where: 'work_id = ? AND content_type = ?',
@@ -523,6 +527,7 @@ class LocalNovelRepository
         'custom_cover_local_path': null,
         'custom_cover_focus_x': null,
         'custom_cover_focus_y': null,
+        'cover_hidden': 1,
         'updated_at': DateTime.now().millisecondsSinceEpoch,
       },
       where: 'work_id = ? AND content_type = ?',
@@ -1284,6 +1289,7 @@ class LocalNovelRepository
   String _buildNovelId(String fid, String tid) => 'novel:$fid:$tid';
 
   NovelItem _rowToNovelItem(Map<String, Object?> row) {
+    final coverHidden = (row['cover_hidden'] as int? ?? 0) == 1;
     return NovelItem(
       novelId: row['work_id'] as String,
       sourceTid: row['source_tid'] as String,
@@ -1298,6 +1304,7 @@ class LocalNovelRepository
       customCoverLocalPath: row['custom_cover_local_path'] as String?,
       customCoverFocusX: (row['custom_cover_focus_x'] as num?)?.toDouble(),
       customCoverFocusY: (row['custom_cover_focus_y'] as num?)?.toDouble(),
+      coverHidden: coverHidden,
       updatedAt: DateTime.fromMillisecondsSinceEpoch(
         (row['updated_at'] as int?) ?? 0,
       ),
@@ -1328,16 +1335,23 @@ class LocalNovelRepository
   LibraryWorkItem _rowToLibraryWorkItem(Map<String, Object?> row) {
     final unreadCount = row['unread_count'] as int? ?? 0;
     final readCount = row['read_count'] as int? ?? 0;
+    final coverHidden = (row['cover_hidden'] as int? ?? 0) == 1;
     return LibraryWorkItem(
       workId: row['work_id'] as String,
       categoryId: (row['category_id'] as String?) ?? _defaultCategoryId,
       title: _preferredRowText(row['custom_title'], row['title']) ?? '',
       secondaryName: _preferredRowText(row['author'], null),
-      coverImageUrl: row['cover_image_url'] as String?,
-      coverLocalPath: row['cover_local_path'] as String?,
-      customCoverLocalPath: row['custom_cover_local_path'] as String?,
-      customCoverFocusX: (row['custom_cover_focus_x'] as num?)?.toDouble(),
-      customCoverFocusY: (row['custom_cover_focus_y'] as num?)?.toDouble(),
+      coverImageUrl: coverHidden ? null : row['cover_image_url'] as String?,
+      coverLocalPath: coverHidden ? null : row['cover_local_path'] as String?,
+      customCoverLocalPath: coverHidden
+          ? null
+          : row['custom_cover_local_path'] as String?,
+      customCoverFocusX: coverHidden
+          ? null
+          : (row['custom_cover_focus_x'] as num?)?.toDouble(),
+      customCoverFocusY: coverHidden
+          ? null
+          : (row['custom_cover_focus_y'] as num?)?.toDouble(),
       unreadCount: unreadCount,
       totalChapterCount: row['total_count'] as int? ?? unreadCount + readCount,
       readChapterCount: readCount,

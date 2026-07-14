@@ -842,6 +842,14 @@ class ComicDetailAdapter
   }
 
   @override
+  bool canRemoveCover(LibraryDetailHeader header) {
+    return _hasCoverValue(header.customCoverLocalPath) ||
+        _hasCoverValue(header.customCoverImageUrl);
+  }
+
+  bool _hasCoverValue(String? value) => value?.trim().isNotEmpty ?? false;
+
+  @override
   Future<void> setCustomCoverFromLocalFile({
     required String workId,
     required String sourceLocalPath,

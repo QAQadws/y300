@@ -126,7 +126,14 @@ class DefaultNovelAuthorPostEpisodeBuilder
       return lines.where((line) => !_metadataMarker.hasMatch(line)).join('\n');
     }
 
+    final introIndex = lines.indexWhere(_isIntroMarker);
     final catalogIndex = lines.indexWhere(_isCatalogMarker);
+    final firstMetadataIndex = _firstExistingIndex(introIndex, catalogIndex);
+    if (firstMetadataIndex > 0) {
+      // 首楼在简介/目录之前常放置作品标题。它是首楼真正的第一条
+      // 正文候选，优先级应高于目录尾部尚未链接的 ACT 占位文本。
+      return lines.take(firstMetadataIndex).join('\n');
+    }
     if (catalogIndex >= 0) {
       final anchorTexts = _domExtractor
           .extractAnchors(rawHtml)
@@ -151,7 +158,6 @@ class DefaultNovelAuthorPostEpisodeBuilder
       return bodyLines.join('\n');
     }
 
-    final introIndex = lines.indexWhere(_isIntroMarker);
     if (introIndex >= 0) {
       final chapterIndex = lines.indexWhere(
         (line) => _chapterStart.hasMatch(line),
@@ -160,6 +166,16 @@ class DefaultNovelAuthorPostEpisodeBuilder
       return chapterIndex < 0 ? '' : lines.skip(chapterIndex).join('\n');
     }
     return lines.join('\n');
+  }
+
+  int _firstExistingIndex(int left, int right) {
+    if (left < 0) {
+      return right;
+    }
+    if (right < 0) {
+      return left;
+    }
+    return left < right ? left : right;
   }
 
   bool _isMetadataOnlyFirstPost({

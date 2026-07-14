@@ -103,6 +103,19 @@ void main() {
       expect(detail?.customCoverLocalPath, isNull);
       expect(detail?.customCoverFocusX, isNull);
       expect(detail?.customCoverFocusY, isNull);
+      expect(detail?.coverHidden, isTrue);
+
+      await repository.refreshEpisodes(novelId: novelId);
+      detail = await repository.getDetail(novelId: novelId);
+      expect(detail?.coverHidden, isTrue);
+
+      await repository.updateCustomCover(
+        novelId: novelId,
+        customCoverLocalPath: 'cache/replacement-cover.jpg',
+      );
+      detail = await repository.getDetail(novelId: novelId);
+      expect(detail?.coverHidden, isFalse);
+      expect(detail?.customCoverLocalPath, 'cache/replacement-cover.jpg');
     });
 
     test('reader preferences and reading progress can persist', () async {

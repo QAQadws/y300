@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 30;
+  static const int dbVersion = 31;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -83,6 +83,9 @@ class ComicLocalDb {
     if (oldVersion < 30 && newVersion >= 30) {
       await _upgradeFrom29To30(db);
     }
+    if (oldVersion < 31 && newVersion >= 31) {
+      await _upgradeFrom30To31(db);
+    }
   }
 
   static Future<void> _upgradeFrom27To28(Database db) async {
@@ -114,6 +117,15 @@ class ComicLocalDb {
       table: worksTable,
       column: 'custom_cover_focus_y',
       definition: 'REAL',
+    );
+  }
+
+  static Future<void> _upgradeFrom30To31(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      table: worksTable,
+      column: 'cover_hidden',
+      definition: 'INTEGER NOT NULL DEFAULT 0',
     );
   }
 
@@ -307,6 +319,7 @@ class ComicLocalDb {
         custom_cover_local_path TEXT,
         custom_cover_focus_x REAL,
         custom_cover_focus_y REAL,
+        cover_hidden INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL
       )
     ''');

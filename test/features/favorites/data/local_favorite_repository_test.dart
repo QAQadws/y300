@@ -425,6 +425,30 @@ void main() {
       expect(novelItems.single.coverImageUrl, 'https://img.test/novel.jpg');
       expect(novelItems.single.coverLocalPath, '/cache/novel.jpg');
       expect(novelItems.single.customCoverLocalPath, '/cache/novel-custom.jpg');
+
+      await db.update(
+        ComicLocalDb.worksTable,
+        <String, Object?>{'cover_hidden': 1},
+        where: 'work_id = ?',
+        whereArgs: <Object?>['novel:49:200'],
+      );
+      final hiddenNovelItems = await repository.loadCategoryItems(
+        favoriteNovelCategoryId,
+      );
+      final hiddenSnapshot = await repository.queryShelfSnapshot(
+        filters: LibraryFilterSet.defaults,
+        sortOption: LibraryShelfSortOption.defaults,
+        keyword: '',
+      );
+
+      expect(hiddenNovelItems.single.coverImageUrl, isNull);
+      expect(hiddenNovelItems.single.coverLocalPath, isNull);
+      expect(hiddenNovelItems.single.customCoverLocalPath, isNull);
+      final hiddenSnapshotNovel =
+          hiddenSnapshot.itemsByCategory[favoriteNovelCategoryId]!.single;
+      expect(hiddenSnapshotNovel.coverImageUrl, isNull);
+      expect(hiddenSnapshotNovel.coverLocalPath, isNull);
+      expect(hiddenSnapshotNovel.customCoverLocalPath, isNull);
     });
 
     test('queryShelfSnapshot batches category counts, tags, and module covers', () async {

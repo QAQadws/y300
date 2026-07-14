@@ -15,6 +15,7 @@ class NovelItem {
     this.customCoverLocalPath,
     this.customCoverFocusX,
     this.customCoverFocusY,
+    this.coverHidden = false,
     required this.updatedAt,
     required this.episodeCount,
     this.categoryId = 'default',
@@ -35,6 +36,7 @@ class NovelItem {
   final String? customCoverLocalPath;
   final double? customCoverFocusX;
   final double? customCoverFocusY;
+  final bool coverHidden;
   final DateTime updatedAt;
   final int episodeCount;
   final String categoryId;

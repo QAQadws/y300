@@ -196,6 +196,11 @@ class DetailCatalogConfiguration {
 ///
 /// 焦点为归一化 [-1,1] 坐标（对齐 Flutter `Alignment`），null 表示居中。
 abstract class DetailCoverEditor {
+  /// 当前 Header 是否有可取消的封面。
+  ///
+  /// 漫画通常只允许取消自定义封面；小说可以把来源封面也持久隐藏。
+  bool canRemoveCover(LibraryDetailHeader header);
+
   /// 用本地图片文件设为自定义封面，并保存焦点。
   ///
   /// [sourceLocalPath] 为用户选择的原始图片；实现负责复制到受保护缓存区。
@@ -213,7 +218,7 @@ abstract class DetailCoverEditor {
     required double? focusY,
   });
 
-  /// 清除用户自定义封面并恢复来源封面；来源封面为空时进入无封面布局。
+  /// 取消当前封面。具体是恢复来源封面还是持久隐藏来源封面，由模块决定。
   Future<void> removeCustomCover({required String workId});
 }
 

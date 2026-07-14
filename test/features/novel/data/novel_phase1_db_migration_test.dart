@@ -12,7 +12,7 @@ void main() {
   databaseFactory = databaseFactoryFfi;
 
   test(
-    'DB 28 to 30 preserves novel data and adds editable metadata',
+    'DB 28 to 31 preserves novel data and adds cover visibility state',
     () async {
       final temp = await Directory.systemTemp.createTemp(
         'y300-novel-phase1-migration-',
@@ -43,7 +43,7 @@ void main() {
 
       db = await ComicLocalDb.open(databaseName: dbPath);
       addTearDown(db.close);
-      expect(await db.getVersion(), 30);
+      expect(await db.getVersion(), 31);
       final after = await readNovelPhase0PersistenceBaseline(db);
 
       expect(after.work, before.work);
@@ -64,8 +64,16 @@ void main() {
           'custom_title',
           'custom_cover_focus_x',
           'custom_cover_focus_y',
+          'cover_hidden',
         }),
       );
+      final migratedWork = (await db.query(
+        ComicLocalDb.worksTable,
+        where: 'work_id = ?',
+        whereArgs: <Object?>[novelPhase0BaselineNovelId],
+        limit: 1,
+      )).single;
+      expect(migratedWork['cover_hidden'], 0);
 
       final legacyState = await _sourceState(db, novelPhase0BaselineNovelId);
       expect(legacyState['publisher_id'], isNull);

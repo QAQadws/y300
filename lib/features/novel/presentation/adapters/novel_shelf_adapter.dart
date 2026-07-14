@@ -459,11 +459,13 @@ class NovelShelfAdapter
       categoryId: source.categoryId,
       title: source.displayTitle,
       secondaryName: source.publisherName,
-      coverImageUrl: source.coverImageUrl,
-      coverLocalPath: source.coverLocalPath,
-      customCoverLocalPath: source.customCoverLocalPath,
-      customCoverFocusX: source.customCoverFocusX,
-      customCoverFocusY: source.customCoverFocusY,
+      coverImageUrl: source.coverHidden ? null : source.coverImageUrl,
+      coverLocalPath: source.coverHidden ? null : source.coverLocalPath,
+      customCoverLocalPath: source.coverHidden
+          ? null
+          : source.customCoverLocalPath,
+      customCoverFocusX: source.coverHidden ? null : source.customCoverFocusX,
+      customCoverFocusY: source.coverHidden ? null : source.customCoverFocusY,
       unreadCount: unread,
       totalChapterCount: source.episodeCount,
       readChapterCount: read,

@@ -67,8 +67,8 @@ class NovelDetailAdapter
     final sourceState = await _sourceStateRepository?.getSourceState(
       novelId: workId,
     );
-    final coverImageUrl = detail.coverImageUrl;
-    var coverLocalPath = detail.coverLocalPath;
+    final coverImageUrl = detail.coverHidden ? null : detail.coverImageUrl;
+    var coverLocalPath = detail.coverHidden ? null : detail.coverLocalPath;
     if ((coverLocalPath == null || coverLocalPath.trim().isEmpty) &&
         coverImageUrl != null &&
         coverImageUrl.trim().isNotEmpty) {
@@ -96,9 +96,11 @@ class NovelDetailAdapter
       title: detail.displayTitle,
       coverImageUrl: coverImageUrl,
       coverLocalPath: coverLocalPath,
-      customCoverLocalPath: detail.customCoverLocalPath,
-      customCoverFocusX: detail.customCoverFocusX,
-      customCoverFocusY: detail.customCoverFocusY,
+      customCoverLocalPath: detail.coverHidden
+          ? null
+          : detail.customCoverLocalPath,
+      customCoverFocusX: detail.coverHidden ? null : detail.customCoverFocusX,
+      customCoverFocusY: detail.coverHidden ? null : detail.customCoverFocusY,
       sourceTitle: detail.sourceTitle,
       customTitle: detail.customTitle,
       publisherName: sourceState?.publisherName ?? detail.publisherName,
@@ -447,6 +449,13 @@ class NovelDetailAdapter
   }
 
   @override
+  bool canRemoveCover(LibraryDetailHeader header) {
+    return _hasText(header.customCoverLocalPath) ||
+        _hasText(header.coverLocalPath) ||
+        _hasText(header.coverImageUrl);
+  }
+
+  @override
   Future<void> updateCustomCoverFocus({
     required String workId,
     required double? focusX,
@@ -473,6 +482,8 @@ class NovelDetailAdapter
     }
     throw StateError('当前小说仓储不支持自定义封面');
   }
+
+  bool _hasText(String? value) => value?.trim().isNotEmpty ?? false;
 
   @override
   Future<void> moveWorkToCategory({

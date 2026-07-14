@@ -725,7 +725,7 @@ class SqfliteLocalFavoriteRepository
         fc.category_id AS custom_category_id,
         CASE
           WHEN ft.content_kind = 'comic' THEN COALESCE(c.custom_cover_image_url, c.cover_image_url)
-          WHEN ft.content_kind = 'novel' THEN w.cover_image_url
+          WHEN ft.content_kind = 'novel' AND w.cover_hidden = 0 THEN w.cover_image_url
           ELSE NULL
         END AS module_cover_image_url,
         CASE
@@ -734,12 +734,12 @@ class SqfliteLocalFavoriteRepository
         END AS module_custom_cover_image_url,
         CASE
           WHEN ft.content_kind = 'comic' THEN c.cover_local_path
-          WHEN ft.content_kind = 'novel' THEN w.cover_local_path
+          WHEN ft.content_kind = 'novel' AND w.cover_hidden = 0 THEN w.cover_local_path
           ELSE NULL
         END AS module_cover_local_path,
         CASE
           WHEN ft.content_kind = 'comic' THEN c.custom_cover_local_path
-          WHEN ft.content_kind = 'novel' THEN w.custom_cover_local_path
+          WHEN ft.content_kind = 'novel' AND w.cover_hidden = 0 THEN w.custom_cover_local_path
           ELSE NULL
         END AS module_custom_cover_local_path,
         COALESCE(tags.has_tags, 0) AS has_tags
@@ -1142,6 +1142,7 @@ class SqfliteLocalFavoriteRepository
             'cover_image_url',
             'cover_local_path',
             'custom_cover_local_path',
+            'cover_hidden',
           ],
           where: 'work_id = ? AND content_type = ?',
           whereArgs: <Object>[workId, 'novel'],
@@ -1159,6 +1160,9 @@ class SqfliteLocalFavoriteRepository
       return const _FavoriteCoverSnapshot.empty();
     }
     final row = rows.first;
+    if ((row['cover_hidden'] as int? ?? 0) == 1) {
+      return const _FavoriteCoverSnapshot.empty();
+    }
     final customCoverImageUrl = row['custom_cover_image_url'] as String?;
     return _FavoriteCoverSnapshot(
       coverImageUrl: customCoverImageUrl ?? row['cover_image_url'] as String?,
