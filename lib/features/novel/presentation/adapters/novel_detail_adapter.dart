@@ -17,7 +17,8 @@ import 'package:y300/features/novel/domain/repositories/novel_source_state_repos
 import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 
 /// 小说详情适配器（Phase 6）。
-class NovelDetailAdapter implements DetailModuleAdapter {
+class NovelDetailAdapter
+    implements DetailModuleAdapter, DetailMetadataEditor, DetailCoverEditor {
   NovelDetailAdapter(
     this._repository, {
     NovelDownloadService? downloadService,
@@ -43,6 +44,15 @@ class NovelDetailAdapter implements DetailModuleAdapter {
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.novel;
+
+  @override
+  DetailMetadataEditorConfig get metadataEditorConfig =>
+      const DetailMetadataEditorConfig(
+        showAuthor: false,
+        showTranslationGroup: false,
+        showSearchTitle: false,
+        fallbackToDisplaySourceValues: false,
+      );
 
   @override
   Future<LibraryDetailHeader> loadHeader({required String workId}) async {
@@ -83,14 +93,15 @@ class NovelDetailAdapter implements DetailModuleAdapter {
     }
     return LibraryDetailHeader(
       workId: detail.novelId,
-      title: detail.title,
+      title: detail.displayTitle,
       coverImageUrl: coverImageUrl,
       coverLocalPath: coverLocalPath,
       customCoverLocalPath: detail.customCoverLocalPath,
-      author: detail.author,
+      customCoverFocusX: detail.customCoverFocusX,
+      customCoverFocusY: detail.customCoverFocusY,
       sourceTitle: detail.sourceTitle,
-      sourceAuthor: detail.sourceAuthor,
-      sourceAuthorId: sourceState?.publisherId,
+      customTitle: detail.customTitle,
+      publisherName: sourceState?.publisherName ?? detail.publisherName,
       sourceTid: detail.sourceTid,
       sourceTypeId: detail.sourceTypeId,
       sourceTagName: detail.sourceTagName,
@@ -382,6 +393,85 @@ class NovelDetailAdapter implements DetailModuleAdapter {
       workId: workId,
       introText: intro,
     );
+  }
+
+  @override
+  Future<void> updateCustomMetadata({
+    required String workId,
+    String? customTitle,
+    String? customAuthor,
+    String? customTranslationGroup,
+    String? customSearchTitle,
+  }) {
+    final repository = _repository;
+    if (repository is NovelCustomMetadataWriter) {
+      final writer = repository as NovelCustomMetadataWriter;
+      return writer.updateCustomMetadata(
+        novelId: workId,
+        customTitle: customTitle,
+      );
+    }
+    throw StateError('当前小说仓储不支持编辑作品信息');
+  }
+
+  @override
+  Future<void> setCustomCoverFromLocalFile({
+    required String workId,
+    required String sourceLocalPath,
+    double? focusX,
+    double? focusY,
+  }) async {
+    final repository = _repository;
+    if (repository is! NovelCustomCoverWriter) {
+      throw StateError('当前小说仓储不支持自定义封面');
+    }
+    final cached = await _coverCacheService.copyProtectedCoverFromLocalFile(
+      cacheKey: ImageCacheKeys.customCover(
+        ownerType: ImageCacheOwnerType.novel.dbValue,
+        ownerId: workId,
+      ),
+      sourcePath: sourceLocalPath,
+      ownerType: ImageCacheOwnerType.novel,
+      ownerId: workId,
+    );
+    final protectedPath = cached?.localPath?.trim();
+    if (protectedPath == null || protectedPath.isEmpty) {
+      throw StateError('封面图片缓存失败');
+    }
+    await (repository as NovelCustomCoverWriter).updateCustomCover(
+      novelId: workId,
+      customCoverLocalPath: protectedPath,
+      focusX: focusX,
+      focusY: focusY,
+    );
+  }
+
+  @override
+  Future<void> updateCustomCoverFocus({
+    required String workId,
+    required double? focusX,
+    required double? focusY,
+  }) {
+    final repository = _repository;
+    if (repository is NovelCustomCoverWriter) {
+      final writer = repository as NovelCustomCoverWriter;
+      return writer.updateCustomCoverFocus(
+        novelId: workId,
+        focusX: focusX,
+        focusY: focusY,
+      );
+    }
+    throw StateError('当前小说仓储不支持自定义封面');
+  }
+
+  @override
+  Future<void> removeCustomCover({required String workId}) {
+    final repository = _repository;
+    if (repository is NovelCustomCoverWriter) {
+      final writer = repository as NovelCustomCoverWriter;
+      return writer.removeCustomCover(novelId: workId);
+    }
+    throw StateError('当前小说仓储不支持自定义封面');
   }
 
   @override

@@ -12,7 +12,7 @@ void main() {
   databaseFactory = databaseFactoryFfi;
 
   test(
-    'DB 28 to 29 preserves novel data and backfills source states',
+    'DB 28 to 30 preserves novel data and adds editable metadata',
     () async {
       final temp = await Directory.systemTemp.createTemp(
         'y300-novel-phase1-migration-',
@@ -43,7 +43,7 @@ void main() {
 
       db = await ComicLocalDb.open(databaseName: dbPath);
       addTearDown(db.close);
-      expect(await db.getVersion(), 29);
+      expect(await db.getVersion(), 30);
       final after = await readNovelPhase0PersistenceBaseline(db);
 
       expect(after.work, before.work);
@@ -54,6 +54,18 @@ void main() {
       expect(after.episodeState, before.episodeState);
       expect(after.readingProgress, before.readingProgress);
       expect(after.bookmark, before.bookmark);
+
+      final workColumns = (await db.rawQuery(
+        'PRAGMA table_info(${ComicLocalDb.worksTable})',
+      )).map((row) => row['name']).toSet();
+      expect(
+        workColumns,
+        containsAll(<String>{
+          'custom_title',
+          'custom_cover_focus_x',
+          'custom_cover_focus_y',
+        }),
+      );
 
       final legacyState = await _sourceState(db, novelPhase0BaselineNovelId);
       expect(legacyState['publisher_id'], isNull);

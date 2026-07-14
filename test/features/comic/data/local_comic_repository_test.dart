@@ -22,7 +22,7 @@ void main() {
       repository = LocalComicRepository(dbFuture);
     });
 
-    test('database v27 upgrades through v29 without rebuilding', () async {
+    test('database v27 upgrades through v30 without rebuilding', () async {
       final legacyDb = await dbFuture;
       await legacyDb.insert(ComicLocalDb.comicsTable, <String, Object?>{
         'comic_id': 'yamibo:legacy',

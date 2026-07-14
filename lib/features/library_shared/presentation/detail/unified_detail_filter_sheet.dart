@@ -16,9 +16,10 @@ class UnifiedDetailChapterToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final hasActiveFilter = filterSummary != '全部章节';
     return Padding(
       key: const Key('unified-detail-chapter-toolbar'),
-      padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -26,7 +27,8 @@ class UnifiedDetailChapterToolbar extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '共 $chapterCount 章',
+                  '全部章节 · 共 $chapterCount 章',
+                  key: const Key('unified-detail-chapter-heading'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(
@@ -40,15 +42,17 @@ class UnifiedDetailChapterToolbar extends StatelessWidget {
               ],
             ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            filterSummary,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-          ),
+          if (hasActiveFilter) ...[
+            const SizedBox(height: 6),
+            Text(
+              filterSummary,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ],
         ],
       ),
     );

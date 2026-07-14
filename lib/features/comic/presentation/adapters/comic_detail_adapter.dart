@@ -89,6 +89,10 @@ class ComicDetailAdapter
   LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
 
   @override
+  DetailMetadataEditorConfig get metadataEditorConfig =>
+      const DetailMetadataEditorConfig();
+
+  @override
   Future<LibraryDetailHeader> loadHeader({required String workId}) async {
     final detail = await _repository.getComicDetail(comicId: workId);
     if (detail == null) {
@@ -876,6 +880,14 @@ class ComicDetailAdapter
       comicId: workId,
       focusX: focusX,
       focusY: focusY,
+    );
+  }
+
+  @override
+  Future<void> removeCustomCover({required String workId}) {
+    return _repository.updateCustomCover(
+      comicId: workId,
+      customCoverImageUrl: null,
     );
   }
 

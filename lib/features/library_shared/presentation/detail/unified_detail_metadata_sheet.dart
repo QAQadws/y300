@@ -10,6 +10,11 @@ class UnifiedDetailMetadataSheet extends StatefulWidget {
     required this.titleSourceText,
     required this.authorSourceText,
     required this.groupSourceText,
+    this.authorLabel = '作者',
+    this.translationGroupLabel = '汉化组',
+    this.showAuthor = true,
+    this.showTranslationGroup = true,
+    this.showSearchTitle = true,
     required this.onSave,
   });
 
@@ -20,18 +25,26 @@ class UnifiedDetailMetadataSheet extends StatefulWidget {
   final String titleSourceText;
   final String authorSourceText;
   final String groupSourceText;
+  final String authorLabel;
+  final String translationGroupLabel;
+  final bool showAuthor;
+  final bool showTranslationGroup;
+  final bool showSearchTitle;
   final Future<void> Function({
     String? customTitle,
     String? customAuthor,
     String? customTranslationGroup,
     String? customSearchTitle,
-  }) onSave;
+  })
+  onSave;
 
   @override
-  State<UnifiedDetailMetadataSheet> createState() => _UnifiedDetailMetadataSheetState();
+  State<UnifiedDetailMetadataSheet> createState() =>
+      _UnifiedDetailMetadataSheetState();
 }
 
-class _UnifiedDetailMetadataSheetState extends State<UnifiedDetailMetadataSheet> {
+class _UnifiedDetailMetadataSheetState
+    extends State<UnifiedDetailMetadataSheet> {
   late final TextEditingController _titleController;
   late final TextEditingController _authorController;
   late final TextEditingController _groupController;
@@ -43,7 +56,9 @@ class _UnifiedDetailMetadataSheetState extends State<UnifiedDetailMetadataSheet>
     super.initState();
     _titleController = TextEditingController(text: widget.initialTitle);
     _authorController = TextEditingController(text: widget.initialAuthor);
-    _groupController = TextEditingController(text: widget.initialTranslationGroup);
+    _groupController = TextEditingController(
+      text: widget.initialTranslationGroup,
+    );
     _searchController = TextEditingController(text: widget.initialSearchTitle);
   }
 
@@ -80,33 +95,43 @@ class _UnifiedDetailMetadataSheetState extends State<UnifiedDetailMetadataSheet>
                 label: '标题',
                 sourceText: widget.titleSourceText,
               ),
-              const SizedBox(height: 10),
-              _MetadataTextField(
-                fieldKey: const Key('unified-detail-custom-author-input'),
-                controller: _authorController,
-                label: '作者',
-                sourceText: widget.authorSourceText,
-              ),
-              const SizedBox(height: 10),
-              _MetadataTextField(
-                fieldKey: const Key('unified-detail-custom-group-input'),
-                controller: _groupController,
-                label: '汉化组',
-                sourceText: widget.groupSourceText,
-              ),
-              const SizedBox(height: 10),
-              _MetadataTextField(
-                fieldKey: const Key('unified-detail-custom-search-title-input'),
-                controller: _searchController,
-                label: '更新搜索关键词',
-                sourceText: '留空时优先使用自定义标题，否则使用当前作品标题',
-              ),
+              if (widget.showAuthor) ...[
+                const SizedBox(height: 10),
+                _MetadataTextField(
+                  fieldKey: const Key('unified-detail-custom-author-input'),
+                  controller: _authorController,
+                  label: widget.authorLabel,
+                  sourceText: widget.authorSourceText,
+                ),
+              ],
+              if (widget.showTranslationGroup) ...[
+                const SizedBox(height: 10),
+                _MetadataTextField(
+                  fieldKey: const Key('unified-detail-custom-group-input'),
+                  controller: _groupController,
+                  label: widget.translationGroupLabel,
+                  sourceText: widget.groupSourceText,
+                ),
+              ],
+              if (widget.showSearchTitle) ...[
+                const SizedBox(height: 10),
+                _MetadataTextField(
+                  fieldKey: const Key(
+                    'unified-detail-custom-search-title-input',
+                  ),
+                  controller: _searchController,
+                  label: '更新搜索关键词',
+                  sourceText: '留空时优先使用自定义标题，否则使用当前作品标题',
+                ),
+              ],
               const SizedBox(height: 14),
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                      onPressed: _saving
+                          ? null
+                          : () => Navigator.of(context).pop(),
                       child: const Text('取消'),
                     ),
                   ),

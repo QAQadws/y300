@@ -230,7 +230,8 @@ void main() {
 
       expect(header.coverLocalPath, '/cache/novel-cover.jpg');
       expect(header.sourceTitle, 'Novel');
-      expect(header.sourceAuthor, 'Novel Author');
+      expect(header.sourceAuthor, isNull);
+      expect(header.publisherName, 'Novel Author');
       expect(cacheService.lastRequest?.cacheKey, 'cover/novel/novel:1');
       expect(cacheService.lastRequest?.ownerType, ImageCacheOwnerType.novel);
       expect(cacheService.lastRequest?.role, ImageCacheRole.cover);
@@ -244,35 +245,109 @@ void main() {
     },
   );
 
-  test('loadHeader exposes source author id and source intro', () async {
-    final adapter = NovelDetailAdapter(
-      _FakeNovelRepository(),
-      stateRepository: _RecordingLibraryStateRepository(),
-      sourceStateRepository: _FakeNovelSourceStateRepository(
-        NovelSourceState(
-          novelId: 'novel:1',
-          publisherId: '406769',
-          publisherName: 'Novel Author',
-          firstPostPid: '5001',
-          sourceIntro: '来源简介',
-          catalogEntries: const <NovelSourceCatalogEntry>[],
-          metadataSourceVersion: 4,
-          hydrationState: NovelChapterHydrationState.metadataOnly,
-          metadataIngestedAt: DateTime(2026, 7, 13),
-          chaptersHydratedAt: null,
-          lastCompletedAuthorPage: 0,
-          lastSeenPid: null,
-          lastSyncAt: null,
-          lastError: null,
+  test(
+    'loadHeader exposes publisher name and source intro without UID',
+    () async {
+      final adapter = NovelDetailAdapter(
+        _FakeNovelRepository(),
+        stateRepository: _RecordingLibraryStateRepository(),
+        sourceStateRepository: _FakeNovelSourceStateRepository(
+          NovelSourceState(
+            novelId: 'novel:1',
+            publisherId: '406769',
+            publisherName: 'Novel Author',
+            firstPostPid: '5001',
+            sourceIntro: '来源简介',
+            catalogEntries: const <NovelSourceCatalogEntry>[],
+            metadataSourceVersion: 4,
+            hydrationState: NovelChapterHydrationState.metadataOnly,
+            metadataIngestedAt: DateTime(2026, 7, 13),
+            chaptersHydratedAt: null,
+            lastCompletedAuthorPage: 0,
+            lastSeenPid: null,
+            lastSyncAt: null,
+            lastError: null,
+          ),
         ),
+      );
+
+      final header = await adapter.loadHeader(workId: 'novel:1');
+
+      expect(header.publisherName, 'Novel Author');
+      expect(header.publisherId, isNull);
+      expect(header.intro, '来源简介');
+    },
+  );
+
+  test('loadHeader keeps custom title cover and publisher', () async {
+    final adapter = NovelDetailAdapter(
+      _FakeNovelRepository(
+        customTitle: '自定义标题',
+        customCoverLocalPath: 'cache/custom-cover.jpg',
+        customCoverFocusX: 0.2,
+        customCoverFocusY: -0.4,
       ),
+      stateRepository: _RecordingLibraryStateRepository(),
     );
 
     final header = await adapter.loadHeader(workId: 'novel:1');
 
-    expect(header.sourceAuthorId, '406769');
-    expect(header.intro, '来源简介');
+    expect(header.title, '自定义标题');
+    expect(header.author, isNull);
+    expect(header.translationGroup, isNull);
+    expect(header.publisherName, 'Novel Author');
+    expect(header.sourceAuthor, isNull);
+    expect(header.customCoverLocalPath, 'cache/custom-cover.jpg');
+    expect(header.customCoverFocusX, 0.2);
+    expect(header.customCoverFocusY, -0.4);
   });
+
+  test(
+    'metadata and custom cover mutations delegate to novel capabilities',
+    () async {
+      final repository = _EditableNovelRepository();
+      final cacheService = _FakeImageCacheService(
+        localPath: '/protected/custom-novel-cover.jpg',
+      );
+      final adapter = NovelDetailAdapter(
+        repository,
+        imageCacheService: cacheService,
+        stateRepository: _RecordingLibraryStateRepository(),
+      );
+
+      await adapter.updateCustomMetadata(
+        workId: 'novel:1',
+        customTitle: '标题',
+        customSearchTitle: 'ignored',
+      );
+      await adapter.setCustomCoverFromLocalFile(
+        workId: 'novel:1',
+        sourceLocalPath: '/picked/source.jpg',
+        focusX: 0.4,
+        focusY: -0.2,
+      );
+      await adapter.updateCustomCoverFocus(
+        workId: 'novel:1',
+        focusX: -0.1,
+        focusY: 0.3,
+      );
+      await adapter.removeCustomCover(workId: 'novel:1');
+
+      expect(repository.lastCustomTitle, '标题');
+      expect(
+        repository.lastCustomCoverPath,
+        '/protected/custom-novel-cover.jpg',
+      );
+      expect(repository.lastFocusX, -0.1);
+      expect(repository.lastFocusY, 0.3);
+      expect(repository.coverRemoved, isTrue);
+      expect(
+        cacheService.lastCopyRequest?.ownerType,
+        ImageCacheOwnerType.novel,
+      );
+      expect(cacheService.lastCopyRequest?.role, ImageCacheRole.customCover);
+    },
+  );
 }
 
 class _FakeNovelSourceStateRepository implements NovelSourceStateRepository {
@@ -324,10 +399,21 @@ class _RecordingNovelChapterUpdateService implements NovelChapterUpdateService {
 }
 
 class _FakeNovelRepository implements NovelRepository {
-  _FakeNovelRepository({this.progress, this.coverImageUrl});
+  _FakeNovelRepository({
+    this.progress,
+    this.coverImageUrl,
+    this.customTitle,
+    this.customCoverLocalPath,
+    this.customCoverFocusX,
+    this.customCoverFocusY,
+  });
 
   final NovelReadingProgress? progress;
   final String? coverImageUrl;
+  final String? customTitle;
+  final String? customCoverLocalPath;
+  final double? customCoverFocusX;
+  final double? customCoverFocusY;
 
   /// 最近一次 refreshEpisodes 收到的 mode —— 用来断言 adapter 是否传了增量模式。
   NovelEpisodeRefreshMode? lastRefreshMode;
@@ -363,7 +449,11 @@ class _FakeNovelRepository implements NovelRepository {
       sourceFid: '75',
       title: 'Novel',
       author: 'Novel Author',
+      customTitle: customTitle,
       coverImageUrl: coverImageUrl,
+      customCoverLocalPath: customCoverLocalPath,
+      customCoverFocusX: customCoverFocusX,
+      customCoverFocusY: customCoverFocusY,
       updatedAt: DateTime(2026, 1, 1),
       episodeCount: 2,
     );
@@ -505,11 +595,56 @@ class _FakeNovelRepositoryWithCoverWriter extends _FakeNovelRepository
   }
 }
 
+class _EditableNovelRepository extends _FakeNovelRepository
+    implements NovelCustomMetadataWriter, NovelCustomCoverWriter {
+  String? lastCustomTitle;
+  String? lastCustomCoverPath;
+  double? lastFocusX;
+  double? lastFocusY;
+  bool coverRemoved = false;
+
+  @override
+  Future<void> updateCustomMetadata({
+    required String novelId,
+    String? customTitle,
+  }) async {
+    lastCustomTitle = customTitle;
+  }
+
+  @override
+  Future<void> updateCustomCover({
+    required String novelId,
+    required String customCoverLocalPath,
+    double? focusX,
+    double? focusY,
+  }) async {
+    lastCustomCoverPath = customCoverLocalPath;
+    lastFocusX = focusX;
+    lastFocusY = focusY;
+  }
+
+  @override
+  Future<void> updateCustomCoverFocus({
+    required String novelId,
+    double? focusX,
+    double? focusY,
+  }) async {
+    lastFocusX = focusX;
+    lastFocusY = focusY;
+  }
+
+  @override
+  Future<void> removeCustomCover({required String novelId}) async {
+    coverRemoved = true;
+  }
+}
+
 class _FakeImageCacheService implements ImageCacheService {
   _FakeImageCacheService({required this.localPath});
 
   final String localPath;
   ImageCacheRequest? lastRequest;
+  ImageCacheLocalCopyRequest? lastCopyRequest;
 
   @override
   Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
@@ -528,6 +663,7 @@ class _FakeImageCacheService implements ImageCacheService {
   Future<CachedImageResult> copyProtectedLocalFile(
     ImageCacheLocalCopyRequest request,
   ) async {
+    lastCopyRequest = request;
     return CachedImageResult(
       success: true,
       cacheKey: request.cacheKey,

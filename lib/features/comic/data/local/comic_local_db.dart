@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 29;
+  static const int dbVersion = 30;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -80,6 +80,9 @@ class ComicLocalDb {
     if (oldVersion < 29 && newVersion >= 29) {
       await _upgradeFrom28To29(db);
     }
+    if (oldVersion < 30 && newVersion >= 30) {
+      await _upgradeFrom29To30(db);
+    }
   }
 
   static Future<void> _upgradeFrom27To28(Database db) async {
@@ -91,6 +94,40 @@ class ComicLocalDb {
   static Future<void> _upgradeFrom28To29(Database db) async {
     await _createNovelHydrationTables(db);
     await _backfillLegacyNovelSourceState(db);
+  }
+
+  static Future<void> _upgradeFrom29To30(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      table: worksTable,
+      column: 'custom_title',
+      definition: 'TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      table: worksTable,
+      column: 'custom_cover_focus_x',
+      definition: 'REAL',
+    );
+    await _addColumnIfMissing(
+      db,
+      table: worksTable,
+      column: 'custom_cover_focus_y',
+      definition: 'REAL',
+    );
+  }
+
+  static Future<void> _addColumnIfMissing(
+    Database db, {
+    required String table,
+    required String column,
+    required String definition,
+  }) async {
+    final columns = await db.rawQuery('PRAGMA table_info($table)');
+    if (columns.any((entry) => entry['name'] == column)) {
+      return;
+    }
+    await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
   }
 
   static Future<void> _createTables(Database db) async {
@@ -263,10 +300,13 @@ class ComicLocalDb {
         source_typeid TEXT,
         source_tag_name TEXT,
         title TEXT NOT NULL,
+        custom_title TEXT,
         author TEXT,
         cover_image_url TEXT,
         cover_local_path TEXT,
         custom_cover_local_path TEXT,
+        custom_cover_focus_x REAL,
+        custom_cover_focus_y REAL,
         updated_at INTEGER NOT NULL
       )
     ''');

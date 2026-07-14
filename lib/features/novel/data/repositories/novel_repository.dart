@@ -93,3 +93,31 @@ abstract class NovelCoverCacheWriter {
     String? customCoverLocalPath,
   });
 }
+
+/// 小说用户元数据写入能力。
+///
+/// 来源标题和发布者继续由收藏同步维护；这里仅保存用户标题覆盖值。
+abstract class NovelCustomMetadataWriter {
+  Future<void> updateCustomMetadata({
+    required String novelId,
+    String? customTitle,
+  });
+}
+
+/// 小说自定义封面写入能力。
+abstract class NovelCustomCoverWriter {
+  Future<void> updateCustomCover({
+    required String novelId,
+    required String customCoverLocalPath,
+    double? focusX,
+    double? focusY,
+  });
+
+  Future<void> updateCustomCoverFocus({
+    required String novelId,
+    double? focusX,
+    double? focusY,
+  });
+
+  Future<void> removeCustomCover({required String novelId});
+}

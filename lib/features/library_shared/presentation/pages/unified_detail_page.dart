@@ -1,7 +1,6 @@
 import 'dart:io' as io;
 
 import 'package:flutter/material.dart';
-import 'package:y300/core/media/cover_focal_point.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
@@ -157,92 +156,109 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     final detailPalette = const UnifiedDetailPaletteResolver().resolve(
       Theme.of(context),
     );
-    final appBarForeground = _showCollapsedTitle
-        ? detailPalette.collapsedAppBarForeground
-        : detailPalette.onHeader;
+    final headerHasCover = header != null && hasUnifiedDetailCover(header);
+    final expandedAppBarForeground = headerHasCover
+        ? detailPalette.onHeader
+        : detailPalette.collapsedAppBarForeground;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
       backgroundColor: detailPalette.pageBackground,
-      appBar: AppBar(
-        backgroundColor: _showCollapsedTitle
-            ? detailPalette.collapsedAppBarBackground
-            : Colors.transparent,
-        forceMaterialTransparency: !_showCollapsedTitle,
-        elevation: _showCollapsedTitle ? 1 : 0,
-        scrolledUnderElevation: 0,
-        shadowColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
-        foregroundColor: appBarForeground,
-        iconTheme: IconThemeData(color: appBarForeground),
-        titleTextStyle: Theme.of(context).textTheme.titleLarge?.copyWith(
-          color: appBarForeground,
-          fontWeight: FontWeight.w600,
-        ),
-        title: AnimatedOpacity(
-          duration: const Duration(milliseconds: 180),
-          opacity: _showCollapsedTitle ? 1 : 0,
-          child: Text(
-            header?.title ?? '',
-            key: const Key('unified-detail-collapsed-title'),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        actions: [
-          PopupMenuButton<String>(
-            key: const Key('unified-detail-appbar-download'),
-            tooltip: '下载',
-            icon: const Icon(Icons.file_download),
-            onSelected: _handleDownloadMenuAction,
-            itemBuilder: _downloadMenuItems,
-          ),
-          IconButton(
-            key: const Key('unified-detail-appbar-filter'),
-            tooltip: '筛选与排序',
-            icon: const Icon(Icons.filter_list),
-            onPressed: _showChapterFilterSheet,
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert),
-            itemBuilder: (context) => [
-              const PopupMenuItem(value: 'refresh', child: Text('刷新')),
-              const PopupMenuItem(
-                value: 'change-category',
-                child: Text('修改分类'),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: TweenAnimationBuilder<double>(
+          tween: Tween<double>(end: _showCollapsedTitle ? 1 : 0),
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeInOutCubic,
+          builder: (context, progress, _) {
+            final appBarForeground = Color.lerp(
+              expandedAppBarForeground,
+              detailPalette.collapsedAppBarForeground,
+              progress,
+            )!;
+            return AppBar(
+              backgroundColor: detailPalette.collapsedAppBarBackground
+                  .withValues(alpha: progress),
+              forceMaterialTransparency: false,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              shadowColor: Colors.transparent,
+              surfaceTintColor: Colors.transparent,
+              foregroundColor: appBarForeground,
+              iconTheme: IconThemeData(color: appBarForeground),
+              titleTextStyle: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: appBarForeground,
+                fontWeight: FontWeight.w600,
               ),
-              if (widget.adapter is DetailMetadataEditor)
-                const PopupMenuItem(
-                  key: Key('unified-detail-edit-metadata'),
-                  value: 'edit-metadata',
-                  child: Text('编辑作品信息'),
+              title: Opacity(
+                opacity: progress,
+                child: Text(
+                  header?.title ?? '',
+                  key: const Key('unified-detail-collapsed-title'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              if (widget.adapter is DetailCatalogEditor)
-                const PopupMenuItem(
-                  key: Key('unified-detail-configure-catalog'),
-                  value: 'configure-catalog',
-                  child: Text('配置目录'),
+              ),
+              actions: [
+                PopupMenuButton<String>(
+                  key: const Key('unified-detail-appbar-download'),
+                  tooltip: '下载',
+                  icon: const Icon(Icons.file_download),
+                  onSelected: _handleDownloadMenuAction,
+                  itemBuilder: _downloadMenuItems,
                 ),
-              if (_supportsCoverEditing) ...[
-                const PopupMenuItem(
-                  key: Key('unified-detail-set-cover'),
-                  value: 'set-custom-cover',
-                  child: Text('自定义封面'),
+                IconButton(
+                  key: const Key('unified-detail-appbar-filter'),
+                  tooltip: '筛选与排序',
+                  icon: const Icon(Icons.filter_list),
+                  onPressed: _showChapterFilterSheet,
                 ),
-                if (_hasCustomCover)
-                  const PopupMenuItem(
-                    key: Key('unified-detail-adjust-cover-focus'),
-                    value: 'adjust-cover-focus',
-                    child: Text('调整封面焦点'),
-                  ),
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert),
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(value: 'refresh', child: Text('刷新')),
+                    const PopupMenuItem(
+                      value: 'change-category',
+                      child: Text('修改分类'),
+                    ),
+                    if (widget.adapter is DetailMetadataEditor)
+                      const PopupMenuItem(
+                        key: Key('unified-detail-edit-metadata'),
+                        value: 'edit-metadata',
+                        child: Text('编辑作品信息'),
+                      ),
+                    if (widget.adapter is DetailCatalogEditor)
+                      const PopupMenuItem(
+                        key: Key('unified-detail-configure-catalog'),
+                        value: 'configure-catalog',
+                        child: Text('配置目录'),
+                      ),
+                    if (_supportsCoverEditing) ...[
+                      const PopupMenuItem(
+                        key: Key('unified-detail-set-cover'),
+                        value: 'set-custom-cover',
+                        child: Text('自定义封面'),
+                      ),
+                      if (_hasCustomCover)
+                        const PopupMenuItem(
+                          key: Key('unified-detail-remove-cover'),
+                          value: 'remove-custom-cover',
+                          child: Text('取消封面'),
+                        ),
+                    ],
+                    const PopupMenuItem(
+                      value: 'edit-intro',
+                      child: Text('编辑简介'),
+                    ),
+                  ],
+                  onSelected: (value) async {
+                    await _handleMoreAction(value);
+                  },
+                ),
               ],
-              const PopupMenuItem(value: 'edit-intro', child: Text('编辑简介')),
-            ],
-            onSelected: (value) async {
-              await _handleMoreAction(value);
-            },
-          ),
-        ],
+            );
+          },
+        ),
       ),
       body: state.isLoading && header == null
           ? const Center(child: CircularProgressIndicator())
@@ -689,8 +705,8 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       await _handleSetCustomCover();
       return;
     }
-    if (value == 'adjust-cover-focus') {
-      await _handleAdjustCoverFocus();
+    if (value == 'remove-custom-cover') {
+      await _handleRemoveCustomCover();
       return;
     }
     if (value == 'edit-intro') {
@@ -752,6 +768,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     if (editor == null || header == null) {
       return;
     }
+    final config = editor.metadataEditorConfig;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -778,13 +795,22 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
             header.sourceTitle ?? header.title,
           ),
           authorSourceText: _sourceText(
-            '来源作者',
-            header.sourceAuthor ?? header.author,
+            config.sourceAuthorLabel,
+            header.sourceAuthor ??
+                (config.fallbackToDisplaySourceValues ? header.author : null),
           ),
           groupSourceText: _sourceText(
-            '来源汉化组',
-            header.sourceTranslationGroup ?? header.translationGroup,
+            config.sourceTranslationGroupLabel,
+            header.sourceTranslationGroup ??
+                (config.fallbackToDisplaySourceValues
+                    ? header.translationGroup
+                    : null),
           ),
+          authorLabel: config.authorLabel,
+          translationGroupLabel: config.translationGroupLabel,
+          showAuthor: config.showAuthor,
+          showTranslationGroup: config.showTranslationGroup,
+          showSearchTitle: config.showSearchTitle,
           onSave:
               ({
                 customTitle,
@@ -909,44 +935,25 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     setState(() {});
   }
 
-  /// 调整已有自定义封面的焦点（不更换图片）。
-  Future<void> _handleAdjustCoverFocus() async {
+  Future<void> _handleRemoveCustomCover() async {
     final editor = _coverEditor;
-    final header = _controller.state.header;
-    final localPath = header?.customCoverLocalPath?.trim();
-    if (editor == null || localPath == null || localPath.isEmpty) {
-      return;
-    }
-    final focus = await CoverFocalPointPicker.show(
-      context,
-      image: FileImage(io.File(localPath)),
-      initialFocus: CoverFocalPoint.fromNullable(
-        header?.customCoverFocusX,
-        header?.customCoverFocusY,
-      ),
-      title: '调整封面焦点',
-    );
-    if (focus == null || !mounted) {
+    if (editor == null || !_hasCustomCover) {
       return;
     }
     try {
-      await editor.updateCustomCoverFocus(
-        workId: widget.workId,
-        focusX: focus.x,
-        focusY: focus.y,
-      );
+      await editor.removeCustomCover(workId: widget.workId);
     } catch (error) {
       if (!mounted) {
         return;
       }
-      _showDetailSnackBar('焦点更新失败：$error');
+      _showDetailSnackBar('取消封面失败：$error');
       return;
     }
     await _controller.reload();
     if (!mounted) {
       return;
     }
-    _showDetailSnackBar('封面焦点已更新');
+    _showDetailSnackBar('已取消自定义封面');
     setState(() {});
   }
 

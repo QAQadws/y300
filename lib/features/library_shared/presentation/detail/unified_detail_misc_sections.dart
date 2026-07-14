@@ -76,11 +76,12 @@ class UnifiedDetailIntroSection extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final expandable = _exceedsCollapsedLines(
+          final textLayout = _measureTextLayout(
             context: context,
             maxWidth: constraints.maxWidth,
             style: textStyle,
           );
+          final expandable = textLayout.expandable;
           return Semantics(
             button: expandable,
             onTap: expandable ? onToggle : null,
@@ -98,39 +99,36 @@ class UnifiedDetailIntroSection extends StatelessWidget {
                     const SizedBox(height: 6),
                     SizedBox(
                       width: double.infinity,
-                      child: AnimatedSize(
-                        duration: const Duration(milliseconds: 220),
-                        curve: Curves.easeInOutCubic,
-                        alignment: Alignment.topCenter,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _buildIntroText(
-                              style: textStyle,
-                              expandable: expandable,
-                            ),
-                            if (expandable) ...[
-                              const SizedBox(height: 2),
-                              IgnorePointer(
-                                child: Center(
-                                  child: AnimatedRotation(
-                                    key: const Key(
-                                      'unified-detail-intro-arrow',
-                                    ),
-                                    turns: expanded ? 0.5 : 0,
-                                    duration: const Duration(milliseconds: 220),
-                                    curve: Curves.easeInOutCubic,
-                                    child: Icon(
-                                      Icons.keyboard_arrow_down,
-                                      size: 24,
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _AnimatedIntroTextViewport(
+                            intro: intro,
+                            style: textStyle,
+                            expanded: expanded,
+                            expandable: expandable,
+                            collapsedHeight: textLayout.collapsedHeight,
+                            expandedHeight: textLayout.expandedHeight,
+                          ),
+                          if (expandable) ...[
+                            const SizedBox(height: 2),
+                            IgnorePointer(
+                              child: Center(
+                                child: AnimatedRotation(
+                                  key: const Key('unified-detail-intro-arrow'),
+                                  turns: expanded ? 0.5 : 0,
+                                  duration: const Duration(milliseconds: 220),
+                                  curve: Curves.easeInOutCubic,
+                                  child: Icon(
+                                    Icons.keyboard_arrow_down,
+                                    size: 24,
+                                    color: theme.colorScheme.onSurfaceVariant,
                                   ),
                                 ),
                               ),
-                            ],
+                            ),
                           ],
-                        ),
+                        ],
                       ),
                     ),
                   ],
@@ -143,47 +141,111 @@ class UnifiedDetailIntroSection extends StatelessWidget {
     );
   }
 
-  Widget _buildIntroText({required TextStyle style, required bool expandable}) {
-    final text = Text(
-      intro,
-      key: const Key('unified-detail-intro-text'),
-      maxLines: expanded ? null : 3,
-      overflow: TextOverflow.clip,
-      style: style,
-    );
-    if (expanded || !expandable) {
-      return text;
-    }
-    return ShaderMask(
-      key: const Key('unified-detail-intro-fade'),
-      blendMode: BlendMode.dstIn,
-      shaderCallback: (bounds) => const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [Colors.white, Colors.white, Colors.transparent],
-        stops: [0, 0.66, 1],
-      ).createShader(bounds),
-      child: text,
-    );
-  }
-
-  bool _exceedsCollapsedLines({
+  _IntroTextLayout _measureTextLayout({
     required BuildContext context,
     required double maxWidth,
     required TextStyle style,
   }) {
     if (!maxWidth.isFinite || maxWidth <= 0) {
-      return false;
+      return const _IntroTextLayout(
+        expandable: false,
+        collapsedHeight: 0,
+        expandedHeight: 0,
+      );
     }
-    final painter = TextPainter(
+    final collapsedPainter = TextPainter(
       text: TextSpan(text: intro, style: style),
       maxLines: 3,
       textDirection: Directionality.of(context),
       textScaler: MediaQuery.textScalerOf(context),
       locale: Localizations.maybeLocaleOf(context),
     )..layout(maxWidth: maxWidth);
-    return painter.didExceedMaxLines;
+    final expandedPainter = TextPainter(
+      text: TextSpan(text: intro, style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+    )..layout(maxWidth: maxWidth);
+    final layout = _IntroTextLayout(
+      expandable: collapsedPainter.didExceedMaxLines,
+      collapsedHeight: collapsedPainter.height,
+      expandedHeight: expandedPainter.height,
+    );
+    collapsedPainter.dispose();
+    expandedPainter.dispose();
+    return layout;
   }
+}
+
+class _AnimatedIntroTextViewport extends StatelessWidget {
+  const _AnimatedIntroTextViewport({
+    required this.intro,
+    required this.style,
+    required this.expanded,
+    required this.expandable,
+    required this.collapsedHeight,
+    required this.expandedHeight,
+  });
+
+  final String intro;
+  final TextStyle style;
+  final bool expanded;
+  final bool expandable;
+  final double collapsedHeight;
+  final double expandedHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final targetHeight = expanded || !expandable
+        ? expandedHeight
+        : collapsedHeight;
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(end: targetHeight),
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeInOutCubic,
+      builder: (context, height, child) {
+        final viewport = SizedBox(
+          key: const Key('unified-detail-intro-viewport'),
+          height: height,
+          child: ClipRect(
+            child: Align(alignment: Alignment.topLeft, child: child),
+          ),
+        );
+        if (expanded || !expandable) {
+          return viewport;
+        }
+        return ShaderMask(
+          key: const Key('unified-detail-intro-fade'),
+          blendMode: BlendMode.dstIn,
+          shaderCallback: (bounds) => const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.white, Colors.white, Colors.transparent],
+            stops: [0, 0.66, 1],
+          ).createShader(bounds),
+          child: viewport,
+        );
+      },
+      child: Text(
+        intro,
+        key: const Key('unified-detail-intro-text'),
+        overflow: TextOverflow.clip,
+        style: style,
+      ),
+    );
+  }
+}
+
+class _IntroTextLayout {
+  const _IntroTextLayout({
+    required this.expandable,
+    required this.collapsedHeight,
+    required this.expandedHeight,
+  });
+
+  final bool expandable;
+  final double collapsedHeight;
+  final double expandedHeight;
 }
 
 class UnifiedDetailTagStrip extends StatelessWidget {

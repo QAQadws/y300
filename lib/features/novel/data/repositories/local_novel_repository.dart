@@ -26,7 +26,9 @@ class LocalNovelRepository
     implements
         NovelRepository,
         NovelShelfSnapshotRepository,
-        NovelCoverCacheWriter {
+        NovelCoverCacheWriter,
+        NovelCustomMetadataWriter,
+        NovelCustomCoverWriter {
   LocalNovelRepository(
     this._dbFuture, {
     LegacyNovelThreadGateway? threadGateway,
@@ -239,10 +241,13 @@ class LocalNovelRepository
         w.source_typeid,
         w.source_tag_name,
         w.title,
+        w.custom_title,
         w.author,
         w.cover_image_url,
         w.cover_local_path,
         w.custom_cover_local_path,
+        w.custom_cover_focus_x,
+        w.custom_cover_focus_y,
         w.updated_at,
         si.category_id,
         COUNT(e.episode_id) AS episode_count
@@ -315,10 +320,13 @@ class LocalNovelRepository
         w.source_typeid,
         w.source_tag_name,
         w.title,
+        w.custom_title,
         w.author,
         w.cover_image_url,
         w.cover_local_path,
         w.custom_cover_local_path,
+        w.custom_cover_focus_x,
+        w.custom_cover_focus_y,
         w.updated_at AS work_updated_at,
         COALESCE(es.total_count, ss.state_count, 0) AS total_count,
         COALESCE(ss.unread_count, 0) AS unread_count,
@@ -389,10 +397,13 @@ class LocalNovelRepository
         w.source_typeid,
         w.source_tag_name,
         w.title,
+        w.custom_title,
         w.author,
         w.cover_image_url,
         w.cover_local_path,
         w.custom_cover_local_path,
+        w.custom_cover_focus_x,
+        w.custom_cover_focus_y,
         w.updated_at,
         ? AS category_id,
         COUNT(e.episode_id) AS episode_count
@@ -437,6 +448,83 @@ class LocalNovelRepository
     await db.update(
       ComicLocalDb.worksTable,
       values,
+      where: 'work_id = ? AND content_type = ?',
+      whereArgs: <Object>[novelId, _contentType],
+    );
+  }
+
+  @override
+  Future<void> updateCustomMetadata({
+    required String novelId,
+    String? customTitle,
+  }) async {
+    final db = await _dbFuture;
+    await db.update(
+      ComicLocalDb.worksTable,
+      <String, Object?>{
+        'custom_title': _normalizeNullable(customTitle),
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'work_id = ? AND content_type = ?',
+      whereArgs: <Object>[novelId, _contentType],
+    );
+  }
+
+  @override
+  Future<void> updateCustomCover({
+    required String novelId,
+    required String customCoverLocalPath,
+    double? focusX,
+    double? focusY,
+  }) async {
+    final normalizedPath = _normalizeNullable(customCoverLocalPath);
+    if (normalizedPath == null) {
+      throw ArgumentError('自定义封面路径不能为空');
+    }
+    final db = await _dbFuture;
+    await db.update(
+      ComicLocalDb.worksTable,
+      <String, Object?>{
+        'custom_cover_local_path': normalizedPath,
+        'custom_cover_focus_x': focusX,
+        'custom_cover_focus_y': focusY,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'work_id = ? AND content_type = ?',
+      whereArgs: <Object>[novelId, _contentType],
+    );
+  }
+
+  @override
+  Future<void> updateCustomCoverFocus({
+    required String novelId,
+    double? focusX,
+    double? focusY,
+  }) async {
+    final db = await _dbFuture;
+    await db.update(
+      ComicLocalDb.worksTable,
+      <String, Object?>{
+        'custom_cover_focus_x': focusX,
+        'custom_cover_focus_y': focusY,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'work_id = ? AND content_type = ?',
+      whereArgs: <Object>[novelId, _contentType],
+    );
+  }
+
+  @override
+  Future<void> removeCustomCover({required String novelId}) async {
+    final db = await _dbFuture;
+    await db.update(
+      ComicLocalDb.worksTable,
+      <String, Object?>{
+        'custom_cover_local_path': null,
+        'custom_cover_focus_x': null,
+        'custom_cover_focus_y': null,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
       where: 'work_id = ? AND content_type = ?',
       whereArgs: <Object>[novelId, _contentType],
     );
@@ -1204,9 +1292,12 @@ class LocalNovelRepository
       sourceTagName: row['source_tag_name'] as String?,
       title: row['title'] as String,
       author: row['author'] as String?,
+      customTitle: row['custom_title'] as String?,
       coverImageUrl: row['cover_image_url'] as String?,
       coverLocalPath: row['cover_local_path'] as String?,
       customCoverLocalPath: row['custom_cover_local_path'] as String?,
+      customCoverFocusX: (row['custom_cover_focus_x'] as num?)?.toDouble(),
+      customCoverFocusY: (row['custom_cover_focus_y'] as num?)?.toDouble(),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(
         (row['updated_at'] as int?) ?? 0,
       ),
@@ -1240,11 +1331,13 @@ class LocalNovelRepository
     return LibraryWorkItem(
       workId: row['work_id'] as String,
       categoryId: (row['category_id'] as String?) ?? _defaultCategoryId,
-      title: row['title'] as String,
-      secondaryName: row['author'] as String?,
+      title: _preferredRowText(row['custom_title'], row['title']) ?? '',
+      secondaryName: _preferredRowText(row['author'], null),
       coverImageUrl: row['cover_image_url'] as String?,
       coverLocalPath: row['cover_local_path'] as String?,
       customCoverLocalPath: row['custom_cover_local_path'] as String?,
+      customCoverFocusX: (row['custom_cover_focus_x'] as num?)?.toDouble(),
+      customCoverFocusY: (row['custom_cover_focus_y'] as num?)?.toDouble(),
       unreadCount: unreadCount,
       totalChapterCount: row['total_count'] as int? ?? unreadCount + readCount,
       readChapterCount: readCount,
@@ -1480,6 +1573,19 @@ class LocalNovelRepository
     }
     return DateTime.fromMillisecondsSinceEpoch(value);
   }
+}
+
+String? _preferredRowText(Object? preferred, Object? fallback) {
+  for (final value in <Object?>[preferred, fallback]) {
+    if (value is! String) {
+      continue;
+    }
+    final normalized = value.trim();
+    if (normalized.isNotEmpty) {
+      return normalized;
+    }
+  }
+  return null;
 }
 
 /// 增量刷新决策结果。

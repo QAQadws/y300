@@ -123,9 +123,11 @@ abstract class DetailModuleAdapter {
 
 /// 作品元数据编辑能力。
 ///
-/// 这是漫画 Phase 7 的可选合同：统一详情页只在 adapter 实现该接口时显示
-/// “编辑作品信息”，小说/收藏无需感知漫画的自定义标题与搜索关键词语义。
+/// 统一详情页只在 adapter 实现该接口时显示“编辑作品信息”。字段文案和
+/// 搜索关键词能力由配置声明，避免共享页面按漫画/小说写条件分支。
 abstract class DetailMetadataEditor {
+  DetailMetadataEditorConfig get metadataEditorConfig;
+
   Future<void> updateCustomMetadata({
     required String workId,
     String? customTitle,
@@ -133,6 +135,28 @@ abstract class DetailMetadataEditor {
     String? customTranslationGroup,
     String? customSearchTitle,
   });
+}
+
+class DetailMetadataEditorConfig {
+  const DetailMetadataEditorConfig({
+    this.authorLabel = '作者',
+    this.translationGroupLabel = '汉化组',
+    this.sourceAuthorLabel = '来源作者',
+    this.sourceTranslationGroupLabel = '来源汉化组',
+    this.showAuthor = true,
+    this.showTranslationGroup = true,
+    this.showSearchTitle = true,
+    this.fallbackToDisplaySourceValues = true,
+  });
+
+  final String authorLabel;
+  final String translationGroupLabel;
+  final String sourceAuthorLabel;
+  final String sourceTranslationGroupLabel;
+  final bool showAuthor;
+  final bool showTranslationGroup;
+  final bool showSearchTitle;
+  final bool fallbackToDisplaySourceValues;
 }
 
 /// 作品目录 URL 编辑能力。
@@ -167,8 +191,8 @@ class DetailCatalogConfiguration {
 
 /// 自定义封面编辑可选合同。
 ///
-/// 仅漫画详情页需要：从本地图片设自定义封面、调整已有自定义封面的焦点。
-/// 小说/收藏不实现该接口，统一详情页据此决定是否展示相关入口。
+/// 漫画和小说可以按需实现：从本地图片设自定义封面、调整已有自定义封面的
+/// 焦点。统一详情页据此决定是否展示相关入口。
 ///
 /// 焦点为归一化 [-1,1] 坐标（对齐 Flutter `Alignment`），null 表示居中。
 abstract class DetailCoverEditor {
@@ -188,6 +212,9 @@ abstract class DetailCoverEditor {
     required double? focusX,
     required double? focusY,
   });
+
+  /// 清除用户自定义封面并恢复来源封面；来源封面为空时进入无封面布局。
+  Future<void> removeCustomCover({required String workId});
 }
 
 /// 原帖跳转目标。

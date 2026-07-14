@@ -1,15 +1,8 @@
 /// 模块标识：用于区分漫画与小说的默认行为差异。
-enum LibraryModuleKey {
-  comic,
-  novel,
-  favorite,
-}
+enum LibraryModuleKey { comic, novel, favorite }
 
 /// 作品展示方式：网格或列表。
-enum LibraryDisplayMode {
-  grid,
-  list,
-}
+enum LibraryDisplayMode { grid, list }
 
 /// 标签模型。
 class LibraryTag {
@@ -161,14 +154,18 @@ class LibraryWorkItem {
       secondaryName: secondaryName ?? this.secondaryName,
       coverImageUrl: coverImageUrl ?? this.coverImageUrl,
       customCoverImageUrl: customCoverImageUrl ?? this.customCoverImageUrl,
-      coverLocalPath: clearCoverLocalPath ? null : (coverLocalPath ?? this.coverLocalPath),
+      coverLocalPath: clearCoverLocalPath
+          ? null
+          : (coverLocalPath ?? this.coverLocalPath),
       customCoverLocalPath: clearCustomCoverLocalPath
           ? null
           : (customCoverLocalPath ?? this.customCoverLocalPath),
-      customCoverFocusX:
-          clearCustomCoverFocus ? null : (customCoverFocusX ?? this.customCoverFocusX),
-      customCoverFocusY:
-          clearCustomCoverFocus ? null : (customCoverFocusY ?? this.customCoverFocusY),
+      customCoverFocusX: clearCustomCoverFocus
+          ? null
+          : (customCoverFocusX ?? this.customCoverFocusX),
+      customCoverFocusY: clearCustomCoverFocus
+          ? null
+          : (customCoverFocusY ?? this.customCoverFocusY),
       unreadCount: unreadCount ?? this.unreadCount,
       totalChapterCount: totalChapterCount ?? this.totalChapterCount,
       readChapterCount: readChapterCount ?? this.readChapterCount,
@@ -197,6 +194,8 @@ class LibraryDetailHeader {
     this.author,
     this.sourceAuthor,
     this.sourceAuthorId,
+    this.publisherName,
+    this.publisherId,
     this.customAuthor,
     this.translationGroup,
     this.sourceTitle,
@@ -224,6 +223,8 @@ class LibraryDetailHeader {
   final String? author;
   final String? sourceAuthor;
   final String? sourceAuthorId;
+  final String? publisherName;
+  final String? publisherId;
   final String? customAuthor;
   final String? translationGroup;
   final String? sourceTitle;

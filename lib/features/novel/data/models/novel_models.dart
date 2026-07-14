@@ -9,9 +9,12 @@ class NovelItem {
     this.sourceTagName,
     required this.title,
     this.author,
+    this.customTitle,
     this.coverImageUrl,
     this.coverLocalPath,
     this.customCoverLocalPath,
+    this.customCoverFocusX,
+    this.customCoverFocusY,
     required this.updatedAt,
     required this.episodeCount,
     this.categoryId = 'default',
@@ -23,22 +26,36 @@ class NovelItem {
   final String? sourceTypeId;
   final String? sourceTagName;
   final String title;
+
+  /// 来源发布者名称；小说详情不额外维护作品作者或翻译者。
   final String? author;
+  final String? customTitle;
   final String? coverImageUrl;
   final String? coverLocalPath;
   final String? customCoverLocalPath;
+  final double? customCoverFocusX;
+  final double? customCoverFocusY;
   final DateTime updatedAt;
   final int episodeCount;
   final String categoryId;
 
-  /// Transitional source metadata aliases.
-  ///
-  /// Novel persistence has not been migrated to source/custom columns yet, so
-  /// the current stored title/author are treated as source metadata. Detail and
-  /// shelf adapters should use these aliases when wiring source-aware UI.
   String get sourceTitle => title;
 
-  String? get sourceAuthor => author;
+  String get displayTitle =>
+      _preferredText(customTitle, sourceTitle) ?? sourceTitle;
+
+  String? get publisherName => _preferredText(author, null);
+}
+
+String? _preferredText(String? preferred, String? fallback) {
+  final normalizedPreferred = preferred?.trim();
+  if (normalizedPreferred != null && normalizedPreferred.isNotEmpty) {
+    return normalizedPreferred;
+  }
+  final normalizedFallback = fallback?.trim();
+  return normalizedFallback == null || normalizedFallback.isEmpty
+      ? null
+      : normalizedFallback;
 }
 
 class NovelEpisodeItem {

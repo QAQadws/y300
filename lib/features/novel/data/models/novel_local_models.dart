@@ -1,4 +1,4 @@
-﻿/// 本地 works 表记录。
+/// 本地 works 表记录。
 class NovelWorkRecord {
   const NovelWorkRecord({
     required this.workId,
@@ -9,9 +9,12 @@ class NovelWorkRecord {
     this.sourceTagName,
     required this.title,
     this.author,
+    this.customTitle,
     this.coverImageUrl,
     this.coverLocalPath,
     this.customCoverLocalPath,
+    this.customCoverFocusX,
+    this.customCoverFocusY,
     required this.updatedAt,
   });
 
@@ -23,9 +26,12 @@ class NovelWorkRecord {
   final String? sourceTagName;
   final String title;
   final String? author;
+  final String? customTitle;
   final String? coverImageUrl;
   final String? coverLocalPath;
   final String? customCoverLocalPath;
+  final double? customCoverFocusX;
+  final double? customCoverFocusY;
   final int updatedAt;
 }
 

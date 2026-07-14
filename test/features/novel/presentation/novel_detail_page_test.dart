@@ -78,7 +78,7 @@ void main() {
     },
   );
 
-  testWidgets('NovelDetailPage hides group row but keeps author row', (
+  testWidgets('NovelDetailPage only renders publisher metadata', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -105,12 +105,57 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    // 小说 detail 不展示「原作者作品」组（group_outlined）行。
+    expect(
+      find.byKey(const Key('unified-detail-plain-header')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('unified-detail-author-row')), findsNothing);
     expect(find.byKey(const Key('unified-detail-group-row')), findsNothing);
-    expect(find.byIcon(Icons.group_outlined), findsNothing);
-    // 作者行（person_outlined）仍要保留。
-    expect(find.byKey(const Key('unified-detail-author-row')), findsOneWidget);
-    expect(find.byIcon(Icons.person_outlined), findsOneWidget);
+    expect(
+      find.byKey(const Key('unified-detail-publisher-row')),
+      findsOneWidget,
+    );
+    expect(find.text('Author A'), findsOneWidget);
+    expect(find.textContaining('UID:'), findsNothing);
+    expect(
+      find.byKey(const Key('unified-detail-header-gradient')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('NovelDetailPage exposes novel metadata and cover actions', (
+    tester,
+  ) async {
+    await _pumpNovelDetail(
+      tester,
+      preferences: _MemoryNovelInteractionPreferencesRepository(),
+      routeResolver: _FakeNovelChapterSourceRouteResolver.success(),
+    );
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('unified-detail-edit-metadata')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('unified-detail-set-cover')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('unified-detail-edit-metadata')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('unified-detail-custom-author-input')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('unified-detail-custom-group-input')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('unified-detail-custom-search-title-input')),
+      findsNothing,
+    );
   });
 
   testWidgets('metadata remains visible while first chapters hydrate', (
@@ -178,6 +223,29 @@ void main() {
       control,
       300,
       scrollable: find.byType(Scrollable).first,
+    );
+    final segmentedButton = tester
+        .widget<SegmentedButton<NovelChapterOpenMode>>(control);
+    expect(
+      segmentedButton.style?.minimumSize?.resolve(<WidgetState>{}),
+      const Size(0, 36),
+    );
+    final shape = segmentedButton.style?.shape?.resolve(<WidgetState>{});
+    expect(shape, isA<RoundedRectangleBorder>());
+    expect(
+      (shape! as RoundedRectangleBorder).borderRadius,
+      BorderRadius.circular(8),
+    );
+    expect(
+      find.descendant(of: control, matching: find.byIcon(Icons.book_outlined)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: control,
+        matching: find.byIcon(Icons.chat_bubble_outline),
+      ),
+      findsOneWidget,
     );
     await tester.tap(find.descendant(of: control, matching: find.text('原帖')));
     await tester.pumpAndSettle();

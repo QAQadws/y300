@@ -13,7 +13,7 @@ void main() {
     tester,
   ) async {
     ReaderRouteTarget? openedTarget;
-    final adapter = _FakeDetailAdapter();
+    final adapter = _FakeDetailAdapter(module: LibraryModuleKey.comic);
     await tester.pumpWidget(
       MaterialApp(
         home: UnifiedDetailPage(
@@ -51,25 +51,25 @@ void main() {
       findsOneWidget,
     );
     expect(
-      tester.widget<AnimatedOpacity>(
+      tester.widget<Opacity>(
         find.ancestor(
           of: find.byKey(const Key('unified-detail-collapsed-title')),
-          matching: find.byType(AnimatedOpacity),
+          matching: find.byType(Opacity),
         ),
       ),
-      isA<AnimatedOpacity>().having((w) => w.opacity, 'opacity', 0),
+      isA<Opacity>().having((w) => w.opacity, 'opacity', 0),
     );
 
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
     await tester.pumpAndSettle();
     expect(
-      tester.widget<AnimatedOpacity>(
+      tester.widget<Opacity>(
         find.ancestor(
           of: find.byKey(const Key('unified-detail-collapsed-title')),
-          matching: find.byType(AnimatedOpacity),
+          matching: find.byType(Opacity),
         ),
       ),
-      isA<AnimatedOpacity>().having((w) => w.opacity, 'opacity', 1),
+      isA<Opacity>().having((w) => w.opacity, 'opacity', 1),
     );
 
     // 章节列表位于下方 sliver，测试中需要滚动后再断言。
@@ -286,9 +286,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('unified-detail-set-cover')), findsOneWidget);
-      // 无自定义封面时不显示“调整焦点”。
+      // 无自定义封面时不显示“取消封面”。
       expect(
-        find.byKey(const Key('unified-detail-adjust-cover-focus')),
+        find.byKey(const Key('unified-detail-remove-cover')),
         findsNothing,
       );
     },
@@ -317,47 +317,36 @@ void main() {
     },
   );
 
-  testWidgets(
-    'UnifiedDetailPage adjust-focus updates focus through cover editor',
-    (tester) async {
-      final adapter = _CoverEditableDetailAdapter(hasCustomCover: true);
-      await tester.pumpWidget(
-        MaterialApp(
-          home: UnifiedDetailPage(
-            adapter: adapter,
-            workId: 'work-1',
-            onOpenReader: (context, target) async {},
-            onOpenThread: (context, target) async {},
-            pickCoverImage: () async => null,
-          ),
+  testWidgets('UnifiedDetailPage removes custom cover through cover editor', (
+    tester,
+  ) async {
+    final adapter = _CoverEditableDetailAdapter(hasCustomCover: true);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+          pickCoverImage: () async => null,
         ),
-      );
+      ),
+    );
 
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.more_vert));
-      await tester.pumpAndSettle();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
 
-      expect(
-        find.byKey(const Key('unified-detail-adjust-cover-focus')),
-        findsOneWidget,
-      );
-      await tester.tap(
-        find.byKey(const Key('unified-detail-adjust-cover-focus')),
-      );
+    expect(
+      find.byKey(const Key('unified-detail-remove-cover')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('unified-detail-remove-cover')));
+    await tester.pumpAndSettle();
 
-      // 焦点选区器弹出；测试环境图片不会解析完成（加载圈常驻动画），不能
-      // pumpAndSettle。“确定”按钮始终可见，直接确认默认（居中）焦点。
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.tap(find.text('确定'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-
-      expect(adapter.focusUpdated, isTrue);
-      expect(adapter.lastFocusX, 0.0);
-      expect(adapter.lastFocusY, 0.0);
-    },
-  );
+    expect(adapter.coverRemoved, isTrue);
+    expect(find.text('已取消自定义封面'), findsOneWidget);
+  });
 
   testWidgets('UnifiedDetailPage header gradient follows scaffold background', (
     tester,
@@ -384,6 +373,7 @@ void main() {
 
     await tester.pumpAndSettle();
 
+    expect(tester.widget<AppBar>(find.byType(AppBar)).backgroundColor?.a, 0);
     expect(
       tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
       pageBackground,
@@ -399,12 +389,34 @@ void main() {
     );
 
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 110));
+
+    final appearingAlpha = tester
+        .widget<AppBar>(find.byType(AppBar))
+        .backgroundColor!
+        .a;
+    expect(appearingAlpha, greaterThan(0));
+    expect(appearingAlpha, lessThan(1));
+
     await tester.pumpAndSettle();
 
     expect(
       tester.widget<AppBar>(find.byType(AppBar)).backgroundColor,
       pageBackground,
     );
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, 300));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 110));
+    final disappearingAlpha = tester
+        .widget<AppBar>(find.byType(AppBar))
+        .backgroundColor!
+        .a;
+    expect(disappearingAlpha, greaterThan(0));
+    expect(disappearingAlpha, lessThan(1));
+    await tester.pumpAndSettle();
+    expect(tester.widget<AppBar>(find.byType(AppBar)).backgroundColor?.a, 0);
   });
 
   testWidgets(
@@ -434,16 +446,66 @@ void main() {
         find.byKey(const Key('unified-detail-header-section')),
         findsOneWidget,
       );
+      final plainHeaderHeight = tester
+          .getSize(find.byKey(const Key('unified-detail-plain-header')))
+          .height;
       expect(
         find.byKey(const Key('unified-detail-hero-title')),
         findsOneWidget,
       );
+      expect(
+        find.byKey(const Key('unified-detail-plain-header')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<Align>(
+              find.byKey(const Key('unified-detail-plain-header-content')),
+            )
+            .alignment,
+        Alignment.centerLeft,
+      );
+      expect(
+        find.byKey(const Key('unified-detail-header-gradient')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('unified-detail-header-seam-bridge')),
+        findsNothing,
+      );
+      expect(find.byType(ImageFiltered), findsNothing);
       expect(
         find.descendant(
           of: find.byKey(const Key('unified-detail-header-section')),
           matching: find.byKey(const Key('unified-detail-header-actions-row')),
         ),
         findsOneWidget,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
+            scaffoldBackgroundColor: pageBackground,
+          ),
+          home: UnifiedDetailPage(
+            key: const ValueKey('covered-detail-page'),
+            adapter: _FakeDetailAdapter(
+              coverLocalPath: 'missing-y300-detail-cover.png',
+            ),
+            workId: 'work-1',
+            onOpenReader: (context, target) async {},
+            onOpenThread: (context, target) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .getSize(find.byKey(const Key('unified-detail-cover-header')))
+            .height,
+        plainHeaderHeight,
       );
     },
   );
@@ -502,11 +564,12 @@ void main() {
   testWidgets('UnifiedDetailPage header seam bridge does not block actions', (
     tester,
   ) async {
-    final adapter = _FakeDetailAdapter()
-      ..refreshResult = DetailRefreshResult.queued(
-        estimatedDuration: const Duration(milliseconds: 10500),
-        queuePosition: 1,
-      );
+    final adapter =
+        _FakeDetailAdapter(coverLocalPath: 'missing-y300-detail-cover.png')
+          ..refreshResult = DetailRefreshResult.queued(
+            estimatedDuration: const Duration(milliseconds: 10500),
+            queuePosition: 1,
+          );
 
     await tester.pumpWidget(
       MaterialApp(
@@ -721,8 +784,8 @@ void main() {
         find.byKey(const Key('unified-detail-chapter-toolbar')),
         findsOneWidget,
       );
-      expect(find.text('共 2 章'), findsOneWidget);
-      expect(find.text('全部章节'), findsOneWidget);
+      expect(find.text('全部章节 · 共 2 章'), findsOneWidget);
+      expect(find.text('全部章节'), findsNothing);
 
       await tester.tap(find.byKey(const Key('unified-detail-appbar-filter')));
       await tester.pumpAndSettle();
@@ -842,8 +905,8 @@ void main() {
     );
 
     final toolbar = find.byKey(const Key('unified-detail-chapter-toolbar'));
-    expect(find.text('共 2 章'), findsOneWidget);
-    expect(find.text('全部章节'), findsOneWidget);
+    expect(find.text('全部章节 · 共 2 章'), findsOneWidget);
+    expect(find.text('全部章节'), findsNothing);
     expect(
       find.descendant(of: toolbar, matching: find.byIcon(Icons.filter_list)),
       findsNothing,
@@ -1599,6 +1662,10 @@ class _EditableDetailAdapter extends _FakeDetailAdapter
   LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
 
   @override
+  DetailMetadataEditorConfig get metadataEditorConfig =>
+      const DetailMetadataEditorConfig();
+
+  @override
   Future<LibraryDetailHeader> loadHeader({required String workId}) async {
     return LibraryDetailHeader(
       workId: 'work-1',
@@ -1665,8 +1732,8 @@ class _CoverEditableDetailAdapter extends _FakeDetailAdapter
     implements DetailCoverEditor {
   _CoverEditableDetailAdapter({this.hasCustomCover = false});
 
-  final bool hasCustomCover;
-  bool focusUpdated = false;
+  bool hasCustomCover;
+  bool coverRemoved = false;
   String? lastSourcePath;
   double? lastFocusX;
   double? lastFocusY;
@@ -1706,9 +1773,14 @@ class _CoverEditableDetailAdapter extends _FakeDetailAdapter
     required double? focusX,
     required double? focusY,
   }) async {
-    focusUpdated = true;
     lastFocusX = focusX;
     lastFocusY = focusY;
+  }
+
+  @override
+  Future<void> removeCustomCover({required String workId}) async {
+    coverRemoved = true;
+    hasCustomCover = false;
   }
 }
 

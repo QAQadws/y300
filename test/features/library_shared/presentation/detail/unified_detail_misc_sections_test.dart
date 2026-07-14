@@ -37,7 +37,7 @@ void main() {
       find.byKey(const Key('unified-detail-intro-arrow')),
     );
 
-    expect(introText().maxLines, 3);
+    expect(introText().maxLines, isNull);
     expect(find.byKey(const Key('unified-detail-intro-fade')), findsOneWidget);
     expect(arrow().turns, 0);
     expect(
@@ -71,6 +71,38 @@ void main() {
           .getSize(find.byKey(const Key('unified-detail-intro-section')))
           .height,
       greaterThan(collapsedHeight),
+    );
+
+    final expandedHeight = tester
+        .getSize(find.byKey(const Key('unified-detail-intro-section')))
+        .height;
+    await tester.tap(find.byKey(const Key('unified-detail-intro-toggle')));
+    await tester.pump();
+
+    expect(expanded, isFalse);
+    expect(introText().maxLines, isNull);
+    expect(
+      tester
+          .getSize(find.byKey(const Key('unified-detail-intro-section')))
+          .height,
+      expandedHeight,
+    );
+
+    await tester.pump(const Duration(milliseconds: 110));
+
+    final collapsingHeight = tester
+        .getSize(find.byKey(const Key('unified-detail-intro-section')))
+        .height;
+    expect(collapsingHeight, lessThan(expandedHeight));
+    expect(collapsingHeight, greaterThan(collapsedHeight));
+
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .getSize(find.byKey(const Key('unified-detail-intro-section')))
+          .height,
+      collapsedHeight,
     );
   });
 

@@ -7,6 +7,15 @@ import 'package:y300/features/cache/presentation/widgets/library_cached_image.da
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_palette.dart';
 
+bool hasUnifiedDetailCover(LibraryDetailHeader header) {
+  return <String?>[
+    header.customCoverLocalPath,
+    header.coverLocalPath,
+    header.customCoverImageUrl,
+    header.coverImageUrl,
+  ].any((value) => value?.trim().isNotEmpty == true);
+}
+
 /// 顶部视觉区与动作区作为一个滚动单元，避免 RefreshIndicator 下拉拉伸时
 /// 两个 Sliver 独立变形造成肉眼可见的缝隙。
 class UnifiedDetailHeaderSection extends StatelessWidget {
@@ -35,6 +44,26 @@ class UnifiedDetailHeaderSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!hasUnifiedDetailCover(header)) {
+      return Column(
+        key: const Key('unified-detail-header-section'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _PlainHeroInfoSection(
+            header: header,
+            moduleKey: moduleKey,
+            topInset: topInset,
+            palette: palette,
+          ),
+          _HeaderActionsRow(
+            header: header,
+            onToggleShelf: onToggleShelf,
+            onRefresh: onRefresh,
+            onOpenThread: onOpenThread,
+          ),
+        ],
+      );
+    }
     return Stack(
       key: const Key('unified-detail-header-section'),
       clipBehavior: Clip.none,
@@ -91,7 +120,8 @@ class _HeroInfoSection extends StatelessWidget {
   // 封面与文字块的内边距
   static const EdgeInsets _contentPadding = EdgeInsets.fromLTRB(30, 0, 12, 30);
 
-  static double heightFor(double topInset) => topInset + kToolbarHeight + _heroExtraHeight;
+  static double heightFor(double topInset) =>
+      topInset + kToolbarHeight + _heroExtraHeight;
 
   final LibraryDetailHeader header;
   final LibraryModuleKey moduleKey;
@@ -102,27 +132,27 @@ class _HeroInfoSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final title = header.title;
-    final author = header.author?.trim().isNotEmpty == true ? header.author! : '未知作者';
-    final group =
-        header.translationGroup?.trim().isNotEmpty == true ? header.translationGroup! : '未知汉化组';
+    final author = _nonEmpty(header.author);
+    final group = _nonEmpty(header.translationGroup);
 
     return SizedBox(
+      key: const Key('unified-detail-cover-header'),
       height: heightFor(topInset),
       child: Stack(
         fit: StackFit.expand,
         children: [
           _DetailHeaderBackground(
-            title: title,
             coverImageUrl: header.coverImageUrl,
             customCoverImageUrl: header.customCoverImageUrl,
             coverLocalPath: header.coverLocalPath,
             customCoverLocalPath: header.customCoverLocalPath,
-            hasCover: _hasCover(header),
             palette: palette,
             imageHeaderBuilder: imageHeaderBuilder,
           ),
           Padding(
-            padding: _contentPadding.copyWith(top: topInset + kToolbarHeight + 4),
+            padding: _contentPadding.copyWith(
+              top: topInset + kToolbarHeight + 4,
+            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -143,13 +173,20 @@ class _HeroInfoSection extends StatelessWidget {
                 Expanded(
                   child: Padding(
                     // 文字区底边距不要过大，否则会形成“被拉开”的视觉缝隙。
-                    padding: const EdgeInsets.only(top: 6, left: 0, right: 0, bottom: 30),
+                    padding: const EdgeInsets.only(
+                      top: 6,
+                      left: 0,
+                      right: 0,
+                      bottom: 30,
+                    ),
                     child: _HeroMetaColumn(
                       moduleKey: moduleKey,
                       title: title,
                       author: author,
                       sourceAuthorId: header.sourceAuthorId,
                       translationGroup: group,
+                      publisherName: _nonEmpty(header.publisherName),
+                      publisherId: _nonEmpty(header.publisherId),
                       foregroundColor: palette.onHeader,
                     ),
                   ),
@@ -163,20 +200,12 @@ class _HeroInfoSection extends StatelessWidget {
             alignment: Alignment.bottomCenter,
             child: SizedBox(
               height: 1,
-              child: ColoredBox(
-                color: palette.headerGradientEnd,
-              ),
+              child: ColoredBox(color: palette.headerGradientEnd),
             ),
           ),
         ],
       ),
     );
-  }
-
-  bool _hasCover(LibraryDetailHeader header) {
-    return _preferredLocalPath(header) != null ||
-        header.customCoverImageUrl?.trim().isNotEmpty == true ||
-        header.coverImageUrl?.trim().isNotEmpty == true;
   }
 
   /// 当前是否在展示自定义封面（焦点仅对自定义封面生效）。
@@ -204,6 +233,53 @@ class _HeroInfoSection extends StatelessWidget {
   }
 }
 
+class _PlainHeroInfoSection extends StatelessWidget {
+  const _PlainHeroInfoSection({
+    required this.header,
+    required this.moduleKey,
+    required this.topInset,
+    required this.palette,
+  });
+
+  final LibraryDetailHeader header;
+  final LibraryModuleKey moduleKey;
+  final double topInset;
+  final UnifiedDetailPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: _HeroInfoSection.heightFor(topInset),
+      child: ColoredBox(
+        key: const Key('unified-detail-plain-header'),
+        color: palette.pageBackground,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            24,
+            topInset + kToolbarHeight + 20,
+            24,
+            30,
+          ),
+          child: Align(
+            key: const Key('unified-detail-plain-header-content'),
+            alignment: Alignment.centerLeft,
+            child: _HeroMetaColumn(
+              moduleKey: moduleKey,
+              title: header.title,
+              author: _nonEmpty(header.author),
+              sourceAuthorId: _nonEmpty(header.sourceAuthorId),
+              translationGroup: _nonEmpty(header.translationGroup),
+              publisherName: _nonEmpty(header.publisherName),
+              publisherId: _nonEmpty(header.publisherId),
+              foregroundColor: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _HeroMetaColumn extends StatelessWidget {
   const _HeroMetaColumn({
     required this.moduleKey,
@@ -211,26 +287,31 @@ class _HeroMetaColumn extends StatelessWidget {
     required this.author,
     required this.sourceAuthorId,
     required this.translationGroup,
+    required this.publisherName,
+    required this.publisherId,
     required this.foregroundColor,
   });
 
   final LibraryModuleKey moduleKey;
   final String title;
-  final String author;
+  final String? author;
   final String? sourceAuthorId;
-  final String translationGroup;
+  final String? translationGroup;
+  final String? publisherName;
+  final String? publisherId;
   final Color foregroundColor;
 
   @override
   Widget build(BuildContext context) {
-    // 小说标题格式混乱，几乎无法稳定从中解析作者/汉化组等元信息，
-    // 只保留发布者本身（person 行）即可；group 行专属漫画。
-    final showGroupRow = moduleKey == LibraryModuleKey.comic;
-    final groupLabel = translationGroup;
-    final normalizedSourceAuthorId = sourceAuthorId?.trim();
+    final contributorLabel = moduleKey == LibraryModuleKey.novel
+        ? '翻译者'
+        : '汉化组';
+    final showContributorMetadata = moduleKey != LibraryModuleKey.novel;
 
     return DefaultTextStyle(
-      style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: foregroundColor),
+      style: Theme.of(
+        context,
+      ).textTheme.bodyMedium!.copyWith(color: foregroundColor),
       child: Column(
         key: const Key('unified-detail-hero-meta'),
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -242,30 +323,26 @@ class _HeroMetaColumn extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: foregroundColor,
-                  fontWeight: FontWeight.w700,
-                ),
+              color: foregroundColor,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-          const SizedBox(height: 8),
-          Row(
-            key: const Key('unified-detail-author-row'),
-            children: [
-              Icon(Icons.person_outlined, size: 18, color: foregroundColor),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  author,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          if (normalizedSourceAuthorId != null &&
-              normalizedSourceAuthorId.isNotEmpty) ...[
+          if (showContributorMetadata && author != null) ...[
+            const SizedBox(height: 8),
+            _HeroMetadataRow(
+              rowKey: const Key('unified-detail-author-row'),
+              icon: Icons.person_outlined,
+              semanticLabel: '作者',
+              value: author!,
+              foregroundColor: foregroundColor,
+            ),
+          ],
+          if (showContributorMetadata &&
+              author != null &&
+              sourceAuthorId != null) ...[
             const SizedBox(height: 6),
             Text(
-              'UID: $normalizedSourceAuthorId',
+              'UID: $sourceAuthorId',
               key: const Key('unified-detail-source-author-id'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -274,21 +351,36 @@ class _HeroMetaColumn extends StatelessWidget {
               ),
             ),
           ],
-          if (showGroupRow) ...[
+          if (showContributorMetadata && translationGroup != null) ...[
             const SizedBox(height: 6),
-            Row(
-              key: const Key('unified-detail-group-row'),
-              children: [
-                Icon(Icons.group_outlined, size: 18, color: foregroundColor),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    groupLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+            _HeroMetadataRow(
+              rowKey: const Key('unified-detail-group-row'),
+              icon: Icons.translate_outlined,
+              semanticLabel: contributorLabel,
+              value: translationGroup!,
+              foregroundColor: foregroundColor,
+            ),
+          ],
+          if (publisherName != null) ...[
+            const SizedBox(height: 6),
+            _HeroMetadataRow(
+              rowKey: const Key('unified-detail-publisher-row'),
+              icon: Icons.account_circle_outlined,
+              semanticLabel: '发布者',
+              value: publisherName!,
+              foregroundColor: foregroundColor,
+            ),
+          ],
+          if (moduleKey != LibraryModuleKey.novel && publisherId != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              'UID: $publisherId',
+              key: const Key('unified-detail-publisher-id'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: foregroundColor.withValues(alpha: 0.72),
+              ),
             ),
           ],
         ],
@@ -297,14 +389,46 @@ class _HeroMetaColumn extends StatelessWidget {
   }
 }
 
+class _HeroMetadataRow extends StatelessWidget {
+  const _HeroMetadataRow({
+    required this.rowKey,
+    required this.icon,
+    required this.semanticLabel,
+    required this.value,
+    required this.foregroundColor,
+  });
+
+  final Key rowKey;
+  final IconData icon;
+  final String semanticLabel;
+  final String value;
+  final Color foregroundColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: '$semanticLabel：$value',
+      excludeSemantics: true,
+      child: Row(
+        key: rowKey,
+        children: [
+          Icon(icon, size: 18, color: foregroundColor),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(value, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DetailHeaderBackground extends StatelessWidget {
   const _DetailHeaderBackground({
-    required this.title,
     required this.coverImageUrl,
     required this.customCoverImageUrl,
     required this.coverLocalPath,
     required this.customCoverLocalPath,
-    required this.hasCover,
     required this.palette,
     required this.imageHeaderBuilder,
   });
@@ -312,37 +436,32 @@ class _DetailHeaderBackground extends StatelessWidget {
   // 可统一调节模糊强度；你觉得偏糊就继续往下调。
   static const double _blurSigma = 6;
 
-  final String title;
   final String? coverImageUrl;
   final String? customCoverImageUrl;
   final String? coverLocalPath;
   final String? customCoverLocalPath;
-  final bool hasCover;
   final UnifiedDetailPalette palette;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
 
   @override
   Widget build(BuildContext context) {
-    if (!hasCover) {
-      return Container(
-        color: palette.headerFallbackBackground,
-        alignment: Alignment.center,
-        child: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
-      );
-    }
-
     return Stack(
       fit: StackFit.expand,
       children: [
         // 仅对背景图本身做模糊，避免把滚动中的列表内容一起模糊。
         ClipRect(
           child: ImageFiltered(
-            imageFilter: ImageFilter.blur(sigmaX: _blurSigma, sigmaY: _blurSigma),
+            imageFilter: ImageFilter.blur(
+              sigmaX: _blurSigma,
+              sigmaY: _blurSigma,
+            ),
             child: LibraryCachedImage(
               localPath: _preferredLocalPath,
               imageUrl: _preferredRemoteUrl,
               fit: BoxFit.cover,
-              placeholder: Container(color: palette.headerPlaceholderBackground),
+              placeholder: Container(
+                color: palette.headerPlaceholderBackground,
+              ),
               headerBuilder: imageHeaderBuilder,
             ),
           ),
@@ -386,6 +505,11 @@ class _DetailHeaderBackground extends StatelessWidget {
   }
 }
 
+String? _nonEmpty(String? value) {
+  final normalized = value?.trim();
+  return normalized == null || normalized.isEmpty ? null : normalized;
+}
+
 class _HeaderActionsRow extends StatelessWidget {
   const _HeaderActionsRow({
     required this.header,
@@ -416,11 +540,19 @@ class _HeaderActionsRow extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: _ActionChip(icon: Icons.refresh, label: '更新', onTap: onRefresh),
+            child: _ActionChip(
+              icon: Icons.refresh,
+              label: '更新',
+              onTap: onRefresh,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: _ActionChip(icon: Icons.open_in_new, label: '原帖', onTap: onOpenThread),
+            child: _ActionChip(
+              icon: Icons.open_in_new,
+              label: '原帖',
+              onTap: onOpenThread,
+            ),
           ),
         ],
       ),
@@ -454,7 +586,8 @@ class _CoverImage extends StatelessWidget {
       child: SizedBox(
         width: 120,
         height: 168,
-        child: (url == null || url!.trim().isEmpty) &&
+        child:
+            (url == null || url!.trim().isEmpty) &&
                 (localPath == null || localPath!.trim().isEmpty)
             ? Container(
                 color: palette.headerPlaceholderBackground,
@@ -464,7 +597,9 @@ class _CoverImage extends StatelessWidget {
                         children: [
                           Icon(
                             Icons.menu_book_outlined,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                           const SizedBox(height: 6),
                           Text(
@@ -514,10 +649,7 @@ class _ActionChip extends StatelessWidget {
           children: [
             Icon(icon, size: 22),
             const SizedBox(height: 6),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
+            Text(label, style: Theme.of(context).textTheme.labelLarge),
           ],
         ),
       ),

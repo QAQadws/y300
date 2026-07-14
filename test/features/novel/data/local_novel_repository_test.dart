@@ -71,6 +71,40 @@ void main() {
       },
     );
 
+    test('custom title and cover survive source refresh', () async {
+      const novelId = 'novel:49:200';
+      await repository.upsertNovelBySeed(
+        seed: const NovelRefreshSeed(fid: '49', tid: '200'),
+      );
+      await repository.updateCustomMetadata(
+        novelId: novelId,
+        customTitle: '自定义标题',
+      );
+      await repository.updateCustomCover(
+        novelId: novelId,
+        customCoverLocalPath: 'cache/novel-cover.jpg',
+        focusX: 0.25,
+        focusY: -0.5,
+      );
+
+      await repository.refreshEpisodes(novelId: novelId);
+
+      var detail = await repository.getDetail(novelId: novelId);
+      expect(detail?.displayTitle, '自定义标题');
+      expect(detail?.publisherName, '楼主A');
+      expect(detail?.customCoverLocalPath, 'cache/novel-cover.jpg');
+      expect(detail?.customCoverFocusX, 0.25);
+      expect(detail?.customCoverFocusY, -0.5);
+
+      await repository.removeCustomCover(novelId: novelId);
+      detail = await repository.getDetail(novelId: novelId);
+
+      expect(detail?.publisherName, '楼主A');
+      expect(detail?.customCoverLocalPath, isNull);
+      expect(detail?.customCoverFocusX, isNull);
+      expect(detail?.customCoverFocusY, isNull);
+    });
+
     test('reader preferences and reading progress can persist', () async {
       await repository.upsertNovelBySeed(
         seed: const NovelRefreshSeed(fid: '55', tid: '300'),
