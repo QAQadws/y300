@@ -429,7 +429,7 @@ void main() {
     },
   );
 
-  testWidgets('MorePage opens appearance settings and changes theme mode', (
+  testWidgets('MorePage opens appearance drawer and changes theme mode', (
     tester,
   ) async {
     final appearanceController = _FakeAppAppearanceController();
@@ -454,7 +454,13 @@ void main() {
     await tester.tap(find.byKey(const Key('more-appearance-entry')));
     await tester.pumpAndSettle();
 
+    expect(find.byKey(const Key('appearance-settings-sheet')), findsOneWidget);
+    expect(find.text('更多'), findsOneWidget);
     expect(find.text('外观与文字'), findsWidgets);
+    expect(
+      find.byKey(const Key('appearance-theme-segmented-button')),
+      findsNothing,
+    );
     expect(
       find.byKey(const Key('appearance-theme-option-light')),
       findsOneWidget,
@@ -467,19 +473,32 @@ void main() {
       find.byKey(const Key('appearance-theme-option-system')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const Key('appearance-theme-selected-light')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const Key('appearance-theme-option-dark')));
     await tester.pumpAndSettle();
 
     expect(appearanceController.themePreference, AppThemePreference.dark);
+    expect(
+      find.byKey(const Key('appearance-theme-selected-dark')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('appearance-theme-selected-light')),
+      findsNothing,
+    );
 
-    await tester.pageBack();
+    await tester.tap(find.byKey(const Key('appearance-settings-close-button')));
     await tester.pumpAndSettle();
 
+    expect(find.byKey(const Key('appearance-settings-sheet')), findsNothing);
     expect(find.text('当前：深色'), findsOneWidget);
   });
 
-  testWidgets('AppearanceSettingsPage shows snackbar when save fails', (
+  testWidgets('Appearance settings drawer shows snackbar when save fails', (
     tester,
   ) async {
     final appearanceController = _FakeAppAppearanceController(failOnSave: true);
@@ -508,6 +527,11 @@ void main() {
 
     expect(find.textContaining('主题设置保存失败'), findsOneWidget);
     expect(appearanceController.themePreference, AppThemePreference.light);
+    expect(find.byKey(const Key('appearance-settings-sheet')), findsOneWidget);
+    expect(
+      find.byKey(const Key('appearance-theme-selected-light')),
+      findsOneWidget,
+    );
   });
 }
 

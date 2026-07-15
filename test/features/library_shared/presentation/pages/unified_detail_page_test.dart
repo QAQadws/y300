@@ -89,6 +89,11 @@ void main() {
     expect(find.byIcon(Icons.filter_list), findsAtLeastNWidgets(1));
     expect(find.byKey(const Key('unified-detail-tag-strip')), findsOneWidget);
     expect(find.text('韩国漫画'), findsOneWidget);
+    final tagWidth = tester
+        .getSize(find.byKey(const Key('unified-detail-source-tag')))
+        .width;
+    final labelWidth = tester.getSize(find.text('韩国漫画')).width;
+    expect(tagWidth, closeTo(labelWidth + 22, 1));
 
     await tester.tap(
       find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
@@ -729,73 +734,77 @@ void main() {
     expect(progressLine.text.toPlainText(), contains('  ·  上次阅读'));
   });
 
-  testWidgets('UnifiedDetailPage renders explicit chapter status badges', (
-    tester,
-  ) async {
-    final adapter = _FakeDetailAdapter(
-      module: LibraryModuleKey.comic,
-      progressInfo: const LibraryChapterProgressInfo(
-        label: '第 3 页',
-        isCurrent: true,
-        fraction: 0.42,
-      ),
-      isBookmarked: true,
-      isDownloaded: true,
-      isRead: true,
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: UnifiedDetailPage(
-          adapter: adapter,
-          workId: 'work-1',
-          onOpenReader: (context, target) async {},
-          onOpenThread: (context, target) async {},
+  testWidgets(
+    'UnifiedDetailPage renders chapter indicators without status text',
+    (tester) async {
+      final adapter = _FakeDetailAdapter(
+        module: LibraryModuleKey.comic,
+        progressInfo: const LibraryChapterProgressInfo(
+          label: '第 3 页',
+          isCurrent: true,
+          fraction: 0.42,
         ),
-      ),
-    );
+        isBookmarked: true,
+        isDownloaded: true,
+        isRead: true,
+      );
 
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: UnifiedDetailPage(
+            adapter: adapter,
+            workId: 'work-1',
+            onOpenReader: (context, target) async {},
+            onOpenThread: (context, target) async {},
+          ),
+        ),
+      );
 
-    expect(
-      find.byKey(
-        const ValueKey<String>('unified-detail-chapter-inline-progress-e1'),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(
-        const ValueKey<String>('unified-detail-chapter-bookmark-indicator-e1'),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(
-        const ValueKey<String>('unified-detail-chapter-downloaded-badge-e1'),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(
-        const ValueKey<String>('unified-detail-chapter-read-badge-e1'),
-      ),
-      findsNothing,
-    );
-    expect(find.text('书签'), findsNothing);
-    expect(
-      find.byKey(
-        const ValueKey<String>('unified-detail-chapter-bookmark-button-e1'),
-      ),
-      findsNothing,
-    );
-    expect(find.text('已下载'), findsOneWidget);
-    expect(find.text('已读'), findsNothing);
-  });
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+
+      expect(
+        find.byKey(
+          const ValueKey<String>('unified-detail-chapter-inline-progress-e1'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(
+          const ValueKey<String>(
+            'unified-detail-chapter-bookmark-indicator-e1',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(
+          const ValueKey<String>('unified-detail-chapter-downloaded-badge-e1'),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.byKey(
+          const ValueKey<String>('unified-detail-chapter-read-badge-e1'),
+        ),
+        findsNothing,
+      );
+      expect(find.text('书签'), findsNothing);
+      expect(
+        find.byKey(
+          const ValueKey<String>('unified-detail-chapter-bookmark-button-e1'),
+        ),
+        findsNothing,
+      );
+      expect(find.text('已下载'), findsNothing);
+      expect(find.byTooltip('已下载，点击删除下载'), findsOneWidget);
+      expect(find.text('已读'), findsNothing);
+    },
+  );
 
   testWidgets(
     'UnifiedDetailPage AppBar filter opens sheet and filters unread',
@@ -1136,7 +1145,7 @@ void main() {
     );
   });
 
-  testWidgets('UnifiedDetailPage keeps download action and downloaded badge', (
+  testWidgets('UnifiedDetailPage keeps download action without status badge', (
     tester,
   ) async {
     final adapter = _FakeDetailAdapter();
@@ -1177,8 +1186,10 @@ void main() {
       find.byKey(
         const ValueKey<String>('unified-detail-chapter-downloaded-badge-e1'),
       ),
-      findsOneWidget,
+      findsNothing,
     );
+    expect(find.text('已下载'), findsNothing);
+    expect(find.byTooltip('已下载，点击删除下载'), findsOneWidget);
 
     await tester.tap(find.byTooltip('已下载，点击删除下载'));
     await tester.pumpAndSettle();
@@ -1436,7 +1447,7 @@ void main() {
   );
 
   testWidgets(
-    'UnifiedDetailPage reports delete download failures and keeps badge',
+    'UnifiedDetailPage reports delete download failures and keeps download state',
     (tester) async {
       final adapter = _FakeDetailAdapter(isDownloaded: true)
         ..failDeleteDownload = true;
@@ -1468,8 +1479,10 @@ void main() {
         find.byKey(
           const ValueKey<String>('unified-detail-chapter-downloaded-badge-e1'),
         ),
-        findsOneWidget,
+        findsNothing,
       );
+      expect(find.text('已下载'), findsNothing);
+      expect(find.byTooltip('已下载，点击删除下载'), findsOneWidget);
     },
   );
 }

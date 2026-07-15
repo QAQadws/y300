@@ -52,6 +52,44 @@ void main() {
     expect(policy.customStylesFor(fragment.querySelector('span')!), isNull);
   });
 
+  test('styles the outer quote surface without nesting duplicate chrome', () {
+    final policy = ForumHtmlStylePolicy(
+      ForumHtmlReaderPreferences.defaults().copyWith(
+        typography: const RichTextTypography(
+          fontScale: 1,
+          lineHeightScale: 1.5,
+          paragraphSpacing: 18,
+        ),
+      ),
+      quoteBackgroundColor: const Color(0xFFF1E8DC),
+      quoteAccentColor: const Color(0xFF9A7654),
+    );
+    final fragment = html_parser.parseFragment(
+      '<div class="quote"><blockquote>嵌套引用</blockquote></div>'
+      '<blockquote id="standalone">独立引用</blockquote>',
+    );
+    final quoteStyles = {
+      'background-color': '#F1E8DC',
+      'border-left': '3px solid #9A7654',
+      'border-radius': '6px',
+      'padding': '8px 10px',
+      'margin': '0 0 18.0px',
+    };
+
+    expect(
+      policy.customStylesFor(fragment.querySelector('.quote')!),
+      quoteStyles,
+    );
+    expect(
+      policy.customStylesFor(fragment.querySelector('.quote blockquote')!),
+      {'margin': '0'},
+    );
+    expect(
+      policy.customStylesFor(fragment.querySelector('#standalone')!),
+      quoteStyles,
+    );
+  });
+
   test('adds code block whitespace and monospace styles', () {
     final policy = ForumHtmlStylePolicy(ForumHtmlReaderPreferences.defaults());
     final fragment = html_parser.parseFragment(

@@ -295,13 +295,13 @@ class _TagChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
+      key: const Key('unified-detail-source-tag'),
       constraints: const BoxConstraints(minHeight: 30, maxWidth: 160),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         border: Border.all(color: scheme.outlineVariant),
         borderRadius: BorderRadius.circular(6),
       ),
-      alignment: Alignment.center,
       child: Text(
         label,
         maxLines: 1,

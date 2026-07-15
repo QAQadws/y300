@@ -21,14 +21,13 @@ class ThreadPostImageDimensionStore extends ChangeNotifier
       <String, ThreadPostResourceDimension>{};
 
   int _revision = 0;
+  bool _disposed = false;
 
   @override
   String get signature => 'rev:$_revision';
 
   @override
-  ThreadPostResourceDimension? blockImageDimension(
-    ThreadPostImageBlock image,
-  ) {
+  ThreadPostResourceDimension? blockImageDimension(ThreadPostImageBlock image) {
     return _blockDimensions[ThreadPostResourceLayoutHints.blockImageKey(image)];
   }
 
@@ -48,6 +47,13 @@ class ThreadPostImageDimensionStore extends ChangeNotifier
     Map<String, ThreadPostResourceDimension> inlineDimensions =
         const <String, ThreadPostResourceDimension>{},
   }) {
+    // Cache prewarming is intentionally fire-and-forget. A result may arrive
+    // after the owning detail page has gone away, so treat the store as a
+    // disposable sink for late writes instead of calling ChangeNotifier after
+    // dispose.
+    if (_disposed) {
+      return;
+    }
     var changed = false;
     changed = _mergeInto(_blockDimensions, blockDimensions) || changed;
     changed = _mergeInto(_inlineDimensions, inlineDimensions) || changed;
@@ -56,6 +62,15 @@ class ThreadPostImageDimensionStore extends ChangeNotifier
     }
     _revision += 1;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) {
+      return;
+    }
+    _disposed = true;
+    super.dispose();
   }
 
   bool _mergeInto(

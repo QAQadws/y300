@@ -8,9 +8,15 @@ import 'package:y300/features/reader_shared/domain/rich_text/typography/discuz_f
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 
 class ForumHtmlStylePolicy {
-  const ForumHtmlStylePolicy(this.preferences);
+  const ForumHtmlStylePolicy(
+    this.preferences, {
+    this.quoteBackgroundColor = const Color(0xFFF2F2F2),
+    this.quoteAccentColor = const Color(0xFFBDBDBD),
+  });
 
   final ForumHtmlReaderPreferences preferences;
+  final Color quoteBackgroundColor;
+  final Color quoteAccentColor;
 
   TextStyle baseTextStyle(BuildContext context) {
     final fallback = Theme.of(context).textTheme.bodyMedium;
@@ -25,6 +31,18 @@ class ForumHtmlStylePolicy {
     if (isForumCollapseElement(element) ||
         isForumCollapseGatherElement(element)) {
       return {'display': 'none'};
+    }
+    if (_isQuoteSurface(element)) {
+      return {
+        'background-color': _toCssHex(quoteBackgroundColor),
+        'border-left': '3px solid ${_toCssHex(quoteAccentColor)}',
+        'border-radius': '6px',
+        'padding': '8px 10px',
+        'margin': '0 0 ${preferences.typography.paragraphSpacing}px',
+      };
+    }
+    if (_isQuoteBodyInsideSurface(element)) {
+      return {'margin': '0'};
     }
     if (_isCodeLike(element)) {
       return {
@@ -88,6 +106,35 @@ class ForumHtmlStylePolicy {
   bool _isParagraphLike(html_dom.Element element) {
     final tagName = element.localName?.toLowerCase();
     return tagName == 'p' || tagName == 'div' || tagName == 'blockquote';
+  }
+
+  bool _isQuoteSurface(html_dom.Element element) {
+    if (element.classes.contains('quote')) {
+      return true;
+    }
+    return element.localName?.toLowerCase() == 'blockquote' &&
+        !_hasQuoteContainerAncestor(element);
+  }
+
+  bool _isQuoteBodyInsideSurface(html_dom.Element element) {
+    return element.localName?.toLowerCase() == 'blockquote' &&
+        _hasQuoteContainerAncestor(element);
+  }
+
+  bool _hasQuoteContainerAncestor(html_dom.Element element) {
+    html_dom.Node? ancestor = element.parentNode;
+    while (ancestor != null) {
+      if (ancestor is html_dom.Element && ancestor.classes.contains('quote')) {
+        return true;
+      }
+      ancestor = ancestor.parentNode;
+    }
+    return false;
+  }
+
+  String _toCssHex(Color color) {
+    final rgb = color.toARGB32() & 0x00FFFFFF;
+    return '#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}';
   }
 
   bool _isCodeLike(html_dom.Element element) {

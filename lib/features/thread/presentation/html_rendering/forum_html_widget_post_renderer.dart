@@ -62,7 +62,20 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   Widget build(BuildContext context) {
     final resolvedPreferences =
         preferences ?? ForumHtmlReaderPreferences.defaults();
-    final stylePolicy = ForumHtmlStylePolicy(resolvedPreferences);
+    final scheme = Theme.of(context).colorScheme;
+    final stylePolicy = ForumHtmlStylePolicy(
+      resolvedPreferences,
+      quoteBackgroundColor:
+          Color.lerp(
+            scheme.surfaceContainer,
+            scheme.surfaceContainerHighest,
+            0.72,
+          ) ??
+          scheme.surfaceContainerHighest,
+      quoteAccentColor:
+          Color.lerp(scheme.outlineVariant, scheme.primary, 0.45) ??
+          scheme.outlineVariant,
+    );
     final document = preparedDocument;
     final preparedHtml =
         document?.preparedHtml ??

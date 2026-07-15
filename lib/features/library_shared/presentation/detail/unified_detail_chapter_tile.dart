@@ -33,7 +33,6 @@ class UnifiedDetailChapterTile extends StatelessWidget {
     final subtitleColor = chapter.isRead
         ? scheme.onSurfaceVariant.withAlpha(170)
         : scheme.onSurfaceVariant;
-    final hasStatus = chapter.isDownloaded;
 
     return Material(
       key: tileKey,
@@ -92,10 +91,6 @@ class UnifiedDetailChapterTile extends StatelessWidget {
                           ) ??
                           TextStyle(color: subtitleColor),
                     ),
-                    if (hasStatus) ...[
-                      const SizedBox(height: 7),
-                      _ChapterStatusRow(chapter: chapter),
-                    ],
                   ],
                 ),
               ),
@@ -124,32 +119,6 @@ class UnifiedDetailChapterTile extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _ChapterStatusRow extends StatelessWidget {
-  const _ChapterStatusRow({required this.chapter});
-
-  final LibraryChapterItem chapter;
-
-  @override
-  Widget build(BuildContext context) {
-    final badges = <Widget>[
-      if (chapter.isDownloaded)
-        _DetailStatusBadge(
-          key: ValueKey<String>(
-            'unified-detail-chapter-downloaded-badge-${chapter.episodeId}',
-          ),
-          icon: Icons.check_circle_outline,
-          label: '已下载',
-        ),
-    ];
-
-    if (badges.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Wrap(spacing: 6, runSpacing: 5, children: badges);
   }
 }
 
@@ -200,51 +169,6 @@ class _ChapterSubtitle extends StatelessWidget {
       ),
       label: '$subtitle，${progress.semanticLabel ?? progress.label}',
       child: ExcludeSemantics(child: text),
-    );
-  }
-}
-
-class _DetailStatusBadge extends StatelessWidget {
-  const _DetailStatusBadge({
-    super.key,
-    required this.icon,
-    required this.label,
-  });
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final foreground = scheme.tertiary;
-
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 110),
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: foreground.withAlpha(18),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: foreground.withAlpha(48)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: foreground),
-          const SizedBox(width: 3),
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: foreground,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

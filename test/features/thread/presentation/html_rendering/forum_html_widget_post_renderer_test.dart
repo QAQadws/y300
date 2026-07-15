@@ -102,6 +102,56 @@ void main() {
     });
   });
 
+  testWidgets('uses theme-aware quote surface colors', (tester) async {
+    const surface = Color(0xFFFBEFDE);
+    const surfaceHighest = Color(0xFFEBD7BC);
+    const outline = Color(0xFFD2B48C);
+    const primary = Color(0xFF7A4B24);
+    final colorScheme = ColorScheme.fromSeed(seedColor: primary).copyWith(
+      surfaceContainer: surface,
+      surfaceContainerHighest: surfaceHighest,
+      outlineVariant: outline,
+      primary: primary,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(colorScheme: colorScheme),
+        home: const Scaffold(
+          body: ForumHtmlWidgetPostRenderer(
+            sourceId: 'quote-surface',
+            html:
+                '<div class="quote"><blockquote>'
+                '<a href="space.php?uid=1">作者 发表于 2026-1-5</a><br>'
+                '引用正文'
+                '</blockquote></div>',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final htmlWidget = tester.widget<HtmlWidget>(
+      find.byKey(const Key('forum-html-renderer-quote-surface')),
+    );
+    final quoteStyles = htmlWidget.customStylesBuilder?.call(
+      _elementFrom('<div class="quote">引用正文</div>'),
+    );
+    final expectedBackground =
+        Color.lerp(surface, surfaceHighest, 0.72) ?? surfaceHighest;
+    final expectedAccent = Color.lerp(outline, primary, 0.45) ?? outline;
+
+    expect(
+      quoteStyles,
+      containsPair('background-color', _cssHex(expectedBackground)),
+    );
+    expect(
+      quoteStyles,
+      containsPair('border-left', '3px solid ${_cssHex(expectedAccent)}'),
+    );
+    expect(find.textContaining('引用正文', findRichText: true), findsOneWidget);
+  });
+
   testWidgets('renders sanitized html when author styles are disabled', (
     tester,
   ) async {
@@ -1153,6 +1203,11 @@ void main() {
     expect(tappedImage?.isSticker, isTrue);
     expect(tappedImage?.attachmentId, isNull);
   });
+}
+
+String _cssHex(Color color) {
+  final rgb = color.toARGB32() & 0x00FFFFFF;
+  return '#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}';
 }
 
 html_dom.Element _elementFrom(String html) {

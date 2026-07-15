@@ -144,7 +144,7 @@ class _ReaderDisplaySettingsContentState
       padding: const EdgeInsets.only(bottom: 16),
       children: [
         const ReaderSheetTitle(title: '显示设置'),
-        _EnumSegment<ReaderModePreference>(
+        ReaderSegmentControl<ReaderModePreference>(
           label: '阅读模式',
           value: _current.readerMode,
           values: ReaderModePreference.values,
@@ -154,7 +154,7 @@ class _ReaderDisplaySettingsContentState
             widget.onModeChanged(value);
           },
         ),
-        _EnumSegment<ReaderPageFitPreference>(
+        ReaderSegmentControl<ReaderPageFitPreference>(
           label: '页面适配',
           value: _current.pageFit,
           values: ReaderPageFitPreference.values,
@@ -164,7 +164,7 @@ class _ReaderDisplaySettingsContentState
             widget.onPageFitChanged(value);
           },
         ),
-        _EnumSegment<ReaderBackgroundPreference>(
+        ReaderSegmentControl<ReaderBackgroundPreference>(
           label: '背景色',
           value: _current.background,
           values: ReaderBackgroundPreference.values,
@@ -250,50 +250,3 @@ class _ReaderDisplaySettingsContentState
     }
   }
 }
-
-class _EnumSegment<T extends Object> extends StatelessWidget {
-  const _EnumSegment({
-    required this.label,
-    required this.value,
-    required this.values,
-    required this.labelBuilder,
-    required this.onChanged,
-  });
-
-  final String label;
-  final T value;
-  final List<T> values;
-  final String Function(T value) labelBuilder;
-  final ValueChanged<T> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-      child: Row(
-        children: [
-          SizedBox(width: 88, child: Text(label)),
-          Expanded(
-            child: SegmentedButton<T>(
-              segments: [
-                for (final item in values)
-                  ButtonSegment<T>(
-                    value: item,
-                    label: Text(labelBuilder(item)),
-                  ),
-              ],
-              selected: {value},
-              showSelectedIcon: false,
-              onSelectionChanged: (selection) {
-                if (selection.isNotEmpty) {
-                  onChanged(selection.first);
-                }
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-

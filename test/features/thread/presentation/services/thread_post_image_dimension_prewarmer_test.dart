@@ -39,6 +39,23 @@ void main() {
       );
       expect(notifications, 1);
     });
+
+    test('ignores late writes after the owning page disposes the store', () {
+      final store = ThreadPostImageDimensionStore();
+      var notifications = 0;
+      store.addListener(() => notifications += 1);
+      store.dispose();
+
+      expect(
+        () => store.recordAll(
+          blockDimensions: const <String, ThreadPostResourceDimension>{
+            'block:late': ThreadPostResourceDimension(width: 800, height: 400),
+          },
+        ),
+        returnsNormally,
+      );
+      expect(notifications, 0);
+    });
   });
 
   group('ThreadPostImageDimensionPrewarmer', () {
@@ -64,10 +81,9 @@ void main() {
         store: store,
       );
 
-      await prewarmer.prewarmDocuments(
-        <ThreadPostBodyDocument>[document],
-        cacheKeyResolver: (_) => 'cache-0',
-      );
+      await prewarmer.prewarmDocuments(<ThreadPostBodyDocument>[
+        document,
+      ], cacheKeyResolver: (_) => 'cache-0');
 
       expect(store.blockImageDimension(block)?.aspectRatio, closeTo(4.0, 1e-9));
     });
@@ -80,19 +96,18 @@ void main() {
         originalWidth: 600,
         originalHeight: 300,
       );
-      final cacheService = _SizedImageCacheService(<String, CachedImageResult>{});
+      final cacheService = _SizedImageCacheService(
+        <String, CachedImageResult>{},
+      );
       final store = ThreadPostImageDimensionStore();
       final prewarmer = ThreadPostImageDimensionPrewarmer(
         imageCacheService: cacheService,
         store: store,
       );
 
-      await prewarmer.prewarmDocuments(
-        const <ThreadPostBodyDocument>[
-          ThreadPostBodyDocument(blocks: <ThreadPostBodyBlock>[block]),
-        ],
-        cacheKeyResolver: (_) => 'cache-0',
-      );
+      await prewarmer.prewarmDocuments(const <ThreadPostBodyDocument>[
+        ThreadPostBodyDocument(blocks: <ThreadPostBodyBlock>[block]),
+      ], cacheKeyResolver: (_) => 'cache-0');
 
       expect(cacheService.lookups, isEmpty);
       expect(store.blockImageDimension(block), isNull);

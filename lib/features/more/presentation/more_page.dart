@@ -11,7 +11,7 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_driver.da
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
 import 'package:y300/features/auth/presentation/login_webview_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
-import 'package:y300/features/more/presentation/appearance_settings_page.dart';
+import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
 import 'package:y300/features/more/presentation/data_storage_page.dart';
 import 'package:y300/features/more/presentation/more_debug_tools.dart';
 
@@ -73,13 +73,7 @@ class _MorePageState extends ConsumerState<MorePage> {
             subtitle: Text(
               '当前：${appearanceSettings.themePreference.displayLabel}',
             ),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const AppearanceSettingsPage(),
-                ),
-              );
-            },
+            onTap: () => _showAppearanceSettingsSheet(context),
           ),
           ListTile(
             key: const Key('more-data-storage-entry'),
@@ -110,6 +104,14 @@ class _MorePageState extends ConsumerState<MorePage> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _showAppearanceSettingsSheet(BuildContext context) {
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => const AppearanceSettingsSheet(),
     );
   }
 

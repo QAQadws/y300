@@ -52,10 +52,7 @@ class ReaderActionSheet<T extends Object> extends StatelessWidget {
 }
 
 class ReaderSheetTitle extends StatelessWidget {
-  const ReaderSheetTitle({
-    super.key,
-    required this.title,
-  });
+  const ReaderSheetTitle({super.key, required this.title});
 
   final String title;
 
@@ -91,36 +88,30 @@ class ReaderSegmentControl<T extends Object> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final control = SegmentedButton<T>(
-            segments: [
+          final control = Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
               for (final item in values)
-                ButtonSegment<T>(
-                  value: item,
-                  label: Text(labelBuilder(item)),
+                _ReaderChoiceButton(
+                  key: ValueKey<String>('reader-segment-${labelBuilder(item)}'),
+                  label: labelBuilder(item),
+                  selected: item == value,
+                  enabled: enabled,
+                  scheme: scheme,
+                  onPressed: () => onChanged(item),
                 ),
             ],
-            selected: {value},
-            showSelectedIcon: false,
-            onSelectionChanged: enabled
-                ? (selection) {
-                    if (selection.isNotEmpty) {
-                      onChanged(selection.first);
-                    }
-                  }
-                : null,
           );
           if (constraints.maxWidth < 360) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(label),
-                const SizedBox(height: 6),
-                control,
-              ],
+              children: [Text(label), const SizedBox(height: 6), control],
             );
           }
           return Row(
@@ -130,6 +121,56 @@ class ReaderSegmentControl<T extends Object> extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _ReaderChoiceButton extends StatelessWidget {
+  const _ReaderChoiceButton({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.enabled,
+    required this.scheme,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool selected;
+  final bool enabled;
+  final ColorScheme scheme;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = selected ? scheme.onPrimaryContainer : scheme.onSurface;
+    final border = selected ? scheme.primary : scheme.outline;
+    return Semantics(
+      button: true,
+      selected: selected,
+      enabled: enabled,
+      label: selected ? '$label，已选择' : label,
+      child: OutlinedButton(
+        onPressed: enabled ? onPressed : null,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: foreground,
+          backgroundColor: selected ? scheme.primaryContainer : null,
+          minimumSize: const Size(0, 40),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          side: BorderSide(
+            color: selected ? Colors.transparent : border,
+            width: selected ? 0 : 1,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          textStyle: TextStyle(
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+        child: Text(label),
       ),
     );
   }
