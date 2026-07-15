@@ -462,10 +462,19 @@ void main() {
     'ComicReaderPage switches from vertical to rtl mode via mode sheet',
     (tester) async {
       await prepareLargeViewport(tester);
+      final repository = _ReaderFakeRepository(
+        progress: ComicReadingProgress(
+          comicId: 'yamibo:100',
+          episodeId: 'yamibo:100:101',
+          imageIndex: 1,
+          scrollOffset: 0,
+          updatedAt: DateTime(2026, 1, 1),
+        ),
+      );
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+            comicRepositoryProvider.overrideWithValue(repository),
             comicReadingStateWriterProvider.overrideWithValue(
               _NoopReadingStateWriter(),
             ),
@@ -503,6 +512,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('comic-reader-page-view')), findsOneWidget);
+      final pageView = tester.widget<PageView>(
+        find.byKey(const Key('comic-reader-page-view')),
+      );
+      expect(pageView.reverse, isTrue);
+      expect(pageView.controller!.page, closeTo(1, 0.01));
     },
   );
 

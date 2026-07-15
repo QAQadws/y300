@@ -249,46 +249,92 @@ void main() {
       },
     );
 
-    testWidgets(
-      'ThreadImageReaderPage $mode slider seek remains at the released page '
-      '[known Phase 1 defect]',
-      (tester) async {
+    for (final targetIndex in <int>[0, 4]) {
+      testWidgets('ThreadImageReaderPage $mode slider seek remains at page '
+          '${targetIndex + 1}', (tester) async {
         await _pumpHorizontalReader(tester, mode: mode);
         await _openReaderMenu(tester);
         final slider = find.byKey(const Key('shared-reader-progress-slider'));
         final gesture = await tester.startGesture(tester.getCenter(slider));
-        await gesture.moveBy(Offset(tester.getSize(slider).width * 0.42, 0));
+        final direction = targetIndex == 0 ? -1.0 : 1.0;
+        await gesture.moveBy(
+          Offset(tester.getSize(slider).width * 0.42 * direction, 0),
+        );
         await tester.pump();
-        expect(find.text('5'), findsWidgets);
+        expect(find.text('${targetIndex + 1}'), findsWidgets);
 
         await gesture.up();
         await tester.pump();
-        expect(_pageController(tester).page, closeTo(4, 0.01));
+        expect(_pageController(tester).page, closeTo(targetIndex, 0.01));
 
         await tester.pump(const Duration(milliseconds: 16));
         await tester.pump(const Duration(milliseconds: 16));
-        await tester.pump(const Duration(milliseconds: 250));
-        expect(_pageController(tester).page, closeTo(4, 0.01));
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.tapAt(
+          tester.getCenter(
+            find.byKey(const Key('shared-reader-center-tap-zone')),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 330));
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(_pageController(tester).page, closeTo(targetIndex, 0.01));
         expect(
           tester
               .widget<Text>(
                 find.byKey(const Key('shared-reader-current-label')),
               )
               .data,
-          '5',
+          '${targetIndex + 1}',
         );
         expect(
           tester
               .widget<Text>(find.byKey(const Key('shared-reader-top-subtitle')))
               .data,
-          '5 / 5',
+          '${targetIndex + 1} / 5',
         );
-      },
-      // Phase 1 removes this skip after initial restore no longer overwrites a
-      // completed paged seek.
-      skip: true,
-    );
+      });
+    }
   }
+
+  testWidgets(
+    'ThreadImageReaderPage mode switch keeps committed logical page',
+    (tester) async {
+      await _pumpHorizontalReader(tester, mode: 'ltr');
+      await tester.drag(
+        find.byKey(const Key('thread-image-reader-page-view')),
+        const Offset(-900, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(_pageController(tester).page, closeTo(3, 0.01));
+
+      await _openReaderMenu(tester);
+      await tester.tap(
+        find.byKey(const Key('shared-reader-bottom-action-display')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('RTL'));
+      await tester.pump(const Duration(milliseconds: 350));
+      Navigator.of(
+        tester.element(
+          find.byKey(const Key('comic-reader-display-settings-sheet')),
+        ),
+      ).pop();
+      await tester.pumpAndSettle();
+
+      final pageView = tester.widget<PageView>(
+        find.byKey(const Key('thread-image-reader-page-view')),
+      );
+      expect(pageView.reverse, isTrue);
+      expect(pageView.controller!.page, closeTo(3, 0.01));
+      expect(
+        tester
+            .widget<Text>(find.byKey(const Key('shared-reader-top-subtitle')))
+            .data,
+        '4 / 5',
+      );
+    },
+  );
 
   testWidgets(
     'ThreadImageReaderPage records preload tasks without duplicates',

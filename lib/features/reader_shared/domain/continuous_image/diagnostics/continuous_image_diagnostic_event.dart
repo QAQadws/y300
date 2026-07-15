@@ -5,6 +5,7 @@ enum ContinuousImageDiagnosticEventType {
   seekPreviewChanged,
   seekStarted,
   seekReached,
+  seekSuperseded,
   seekFailed,
   pageChanged,
   zoomActivated,
