@@ -5,6 +5,7 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reader_shared/domain/image_session/reader_image_session.dart';
+import 'package:y300/features/reader_shared/domain/metrics/reader_performance_metrics.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_capability.dart';
 import 'package:y300/features/reader_shared/presentation/services/reader_image_session_store.dart';
 
@@ -37,6 +38,9 @@ class ReaderImageSessionPreloadResult {
     required this.result,
     required this.generation,
     required this.applied,
+    required this.elapsed,
+    required this.stale,
+    required this.providerMatched,
   });
 
   final String readerOwnerId;
@@ -47,6 +51,9 @@ class ReaderImageSessionPreloadResult {
   final ForumImagePrecacheResult result;
   final int generation;
   final bool applied;
+  final Duration elapsed;
+  final bool stale;
+  final bool providerMatched;
 }
 
 class ReaderImageSessionPreloadScheduled {
@@ -74,16 +81,19 @@ class ReaderImageSessionPreloadCoordinator {
     ReaderImageSessionStore? sessionStore,
     void Function(ReaderImageSessionPreloadScheduled scheduled)? onScheduled,
     void Function(ReaderImageSessionPreloadResult result)? onResult,
+    ReaderPerformanceMetricsCollector? performanceMetrics,
   }) : _policy = policy,
        _sessionStore = sessionStore,
        _onScheduled = onScheduled,
-       _onResult = onResult;
+       _onResult = onResult,
+       _performanceMetrics = performanceMetrics;
 
   final ReaderImageSessionPreloadPolicy _policy;
   final ReaderImageSessionStore? _sessionStore;
   final void Function(ReaderImageSessionPreloadScheduled scheduled)?
   _onScheduled;
   final void Function(ReaderImageSessionPreloadResult result)? _onResult;
+  final ReaderPerformanceMetricsCollector? _performanceMetrics;
   final List<_ReaderImagePreparationTask> _pending =
       <_ReaderImagePreparationTask>[];
   final Set<_ReaderImagePreparationTask> _running =
@@ -346,9 +356,11 @@ class ReaderImageSessionPreloadCoordinator {
     if (_disposed || task.generation != _generation) {
       return false;
     }
+    _performanceMetrics?.recordPreloadRequest();
     final identity = _scheduleIdentity(task.request);
     if (!task.force &&
         _kindSatisfies(_finishedByIdentity[identity], task.request.kind)) {
+      _performanceMetrics?.recordPreloadHit();
       return false;
     }
     final running = _running.where(
@@ -361,6 +373,7 @@ class ReaderImageSessionPreloadCoordinator {
           (candidate) =>
               _kindSatisfies(candidate.request.kind, task.request.kind),
         )) {
+      _performanceMetrics?.recordPreloadHit();
       return false;
     }
     final pendingIndex = _pending.indexWhere(
@@ -373,6 +386,7 @@ class ReaderImageSessionPreloadCoordinator {
       if (!task.force &&
           _kindSatisfies(existing.request.kind, task.request.kind) &&
           existing.priority.index <= task.priority.index) {
+        _performanceMetrics?.recordPreloadHit();
         return false;
       }
       _pending.removeAt(pendingIndex);
@@ -401,6 +415,7 @@ class ReaderImageSessionPreloadCoordinator {
   }
 
   Future<void> _runTask(_ReaderImagePreparationTask task) async {
+    final stopwatch = Stopwatch()..start();
     ForumImagePrecacheResult result;
     try {
       switch (task.request.kind) {
@@ -418,6 +433,7 @@ class ReaderImageSessionPreloadCoordinator {
     } catch (error) {
       result = ForumImagePrecacheResult.failed(error);
     }
+    stopwatch.stop();
     if (!_disposed && task.generation == _generation) {
       final identity = _scheduleIdentity(task.request);
       final previous = _finishedByIdentity[identity];
@@ -430,6 +446,7 @@ class ReaderImageSessionPreloadCoordinator {
       generation: task.generation,
       result: result,
       preparationSink: task.preparationSink,
+      elapsed: stopwatch.elapsed,
     );
     if (task.completer case final completer? when !completer.isCompleted) {
       completer.complete(event);
@@ -463,6 +480,7 @@ class ReaderImageSessionPreloadCoordinator {
     required int generation,
     required ForumImagePrecacheResult result,
     required ReaderImagePreparationSink? preparationSink,
+    required Duration elapsed,
   }) {
     final currentGeneration = !_disposed && generation == _generation;
     final applied =
@@ -477,6 +495,15 @@ class ReaderImageSessionPreloadCoordinator {
               result: result,
             ) ??
             true);
+    final stale = !currentGeneration;
+    final providerMatched = stale || applied;
+    _performanceMetrics?.recordPreloadResult(
+      kind: request.kind,
+      elapsed: elapsed,
+      fromDiskCache: result.fromDiskCache,
+      stale: stale,
+      providerMatched: providerMatched,
+    );
     final event = ReaderImageSessionPreloadResult(
       readerOwnerId: request.readerOwnerId,
       itemId: request.itemId,
@@ -486,6 +513,9 @@ class ReaderImageSessionPreloadCoordinator {
       result: result,
       generation: generation,
       applied: applied,
+      elapsed: elapsed,
+      stale: stale,
+      providerMatched: providerMatched,
     );
     try {
       _onResult?.call(event);

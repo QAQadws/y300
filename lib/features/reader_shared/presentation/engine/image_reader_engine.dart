@@ -1,21 +1,24 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:flutter/rendering.dart'
+    show RenderAbstractViewport, ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
+import 'package:y300/features/reader_shared/data/export/reader_image_export_providers.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reader_shared/domain/export/reader_image_export.dart';
+import 'package:y300/features/reader_shared/domain/metrics/reader_performance_metrics.dart';
 import 'package:y300/features/reader_shared/domain/reader_preferences/reader_preferences.dart';
 import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_presentation.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_capability.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_display_settings_sheet.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_page_indicator_overlay.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_position_state.dart';
+import 'package:y300/features/reader_shared/presentation/engine/reader_vertical_position_driver.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_zoomable_image.dart';
 import 'package:y300/features/reader_shared/presentation/reader_preferences/reader_preferences_provider.dart';
-import 'package:y300/features/reader_shared/data/export/reader_image_export_providers.dart';
 import 'package:y300/features/reader_shared/presentation/services/reader_image_session_preload_coordinator.dart';
 import 'package:y300/features/reader_shared/presentation/services/reader_image_session_store.dart';
 
@@ -95,6 +98,10 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       InMemoryContinuousImageExtentRegistry();
   late final ReaderImageSessionStore _imageSessionStore;
   late final ReaderImageSessionPreloadCoordinator _sessionPreloadCoordinator;
+  late final ReaderVerticalPositionDriver _verticalPositionDriver;
+  final ReaderPerformanceMetricsCollector _performanceMetrics =
+      ReaderPerformanceMetricsCollector();
+  final Map<String, GlobalKey> _verticalItemAnchors = <String, GlobalKey>{};
 
   List<ContinuousImageItem> _latestItems = const <ContinuousImageItem>[];
   double _pendingScrollCompensationDelta = 0;
@@ -116,6 +123,16 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       sessionStore: _imageSessionStore,
       onScheduled: _recordSessionPreloadScheduled,
       onResult: _recordSessionPreload,
+      performanceMetrics: _performanceMetrics,
+    );
+    _verticalPositionDriver = ReaderVerticalPositionDriver(
+      isReady: () => mounted && _scrollController.hasClients,
+      currentOffset: () => _scrollController.offset,
+      clampOffset: _clampVerticalOffset,
+      jumpTo: _scrollController.jumpTo,
+      estimateOffset: _estimateVerticalOffset,
+      exactOffset: _resolveExactVerticalOffset,
+      waitForLayout: _waitForVerticalLayout,
     );
   }
 
@@ -139,6 +156,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _zoomGate.dispose();
     _activePagedIndex.dispose();
     _pageIndicatorDimTimer?.cancel();
+    _verticalPositionDriver.dispose();
     _sessionPreloadCoordinator.dispose();
     _imageSessionStore.dispose();
     super.dispose();
@@ -218,6 +236,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   ) {
     final items = content.items;
     _latestItems = items;
+    _syncVerticalItemAnchors(items);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _syncScrollPositionActivityListener();
@@ -227,24 +246,29 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         );
       }
     });
-    final reader = ContinuousImageReaderView(
-      items: items,
-      mode: ContinuousImageReaderMode.vertical,
-      scrollController: _scrollController,
-      scrollCacheExtent: ScrollCacheExtent.pixels(
-        MediaQuery.sizeOf(context).height *
-            widget.flowPolicy.viewportCacheExtentFactor,
+    final reader = NotificationListener<ScrollNotification>(
+      onNotification: _onVerticalScrollNotification,
+      child: ContinuousImageReaderView(
+        items: items,
+        mode: ContinuousImageReaderMode.vertical,
+        scrollController: _scrollController,
+        scrollCacheExtent: ScrollCacheExtent.pixels(
+          MediaQuery.sizeOf(context).height *
+              widget.flowPolicy.viewportCacheExtentFactor,
+        ),
+        layoutResolver: _layoutResolver,
+        onExtentResolved: _recordExtent,
+        verticalListKey: widget.listKey,
+        slotKeyPrefix: widget.slotKeyPrefix,
+        verticalItemAnchorKeyBuilder: (item, _) =>
+            _verticalItemAnchors[item.id]!,
+        verticalTrailingBuilder: _capability.verticalTrailingBuilder(
+          engineContext,
+        ),
+        itemBuilder: (context, item, index, {required paged}) {
+          return _buildImage(item, index, preferences, paged: false);
+        },
       ),
-      layoutResolver: _layoutResolver,
-      onExtentResolved: _recordExtent,
-      verticalListKey: widget.listKey,
-      slotKeyPrefix: widget.slotKeyPrefix,
-      verticalTrailingBuilder: _capability.verticalTrailingBuilder(
-        engineContext,
-      ),
-      itemBuilder: (context, item, index, {required paged}) {
-        return _buildImage(item, index, preferences, paged: false);
-      },
     );
     return ReaderZoomableImage(
       key: const Key('image-reader-engine-vertical-zoom-surface'),
@@ -325,6 +349,87 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     );
   }
 
+  void _syncVerticalItemAnchors(List<ContinuousImageItem> items) {
+    final activeIds = items.map((item) => item.id).toSet();
+    _verticalItemAnchors.removeWhere(
+      (itemId, _) => !activeIds.contains(itemId),
+    );
+    for (final item in items) {
+      _verticalItemAnchors.putIfAbsent(
+        item.id,
+        () => GlobalKey(debugLabel: 'reader-vertical-anchor-${item.id}'),
+      );
+    }
+  }
+
+  double? _estimateVerticalOffset(int targetIndex) {
+    if (!_scrollController.hasClients || _latestItems.isEmpty) {
+      return null;
+    }
+    final position = _scrollController.position;
+    final maxScroll = position.maxScrollExtent;
+    if (!position.hasContentDimensions || maxScroll <= 0) {
+      return null;
+    }
+    final clampedIndex = targetIndex.clamp(0, _latestItems.length - 1).toInt();
+    final estimated = _extentRegistry.estimateOffsetForIndex(
+      clampedIndex,
+      _latestItems,
+      crossAxisExtent: MediaQuery.sizeOf(context).width,
+      resolver: _layoutResolver,
+    );
+    if (estimated.isFinite && (estimated > 0 || clampedIndex == 0)) {
+      return estimated;
+    }
+    if (_latestItems.length <= 1) {
+      return 0;
+    }
+    return maxScroll * (clampedIndex / (_latestItems.length - 1));
+  }
+
+  double? _resolveExactVerticalOffset(int targetIndex) {
+    if (!_scrollController.hasClients ||
+        targetIndex < 0 ||
+        targetIndex >= _latestItems.length) {
+      return null;
+    }
+    final item = _latestItems[targetIndex];
+    final itemContext = _verticalItemAnchors[item.id]?.currentContext;
+    final renderObject = itemContext?.findRenderObject();
+    if (renderObject == null || !renderObject.attached) {
+      return null;
+    }
+    final viewport = RenderAbstractViewport.maybeOf(renderObject);
+    if (viewport == null) {
+      return null;
+    }
+    return viewport.getOffsetToReveal(renderObject, 0).offset;
+  }
+
+  double _clampVerticalOffset(double offset) {
+    if (!_scrollController.hasClients || !offset.isFinite) {
+      return 0;
+    }
+    final position = _scrollController.position;
+    return offset
+        .clamp(position.minScrollExtent, position.maxScrollExtent)
+        .toDouble();
+  }
+
+  Future<void> _waitForVerticalLayout() async {
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
+  bool _onVerticalScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollStartNotification &&
+        notification.dragDetails != null) {
+      _verticalPositionDriver.cancelActive(
+        ReaderVerticalSeekCancelReason.userScroll,
+      );
+    }
+    return false;
+  }
+
   BoxFit _imageFitFor(ReaderPageFitPreference fit, {required bool paged}) {
     switch (fit) {
       case ReaderPageFitPreference.fitWidth:
@@ -372,9 +477,14 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       return current;
     }
     final previous = _lastOwnerId;
+    _verticalPositionDriver.cancelActive(
+      ReaderVerticalSeekCancelReason.ownerChanged,
+    );
     if (previous != null) {
       _extentRegistry.clearForOwner(previous);
     }
+    _verticalItemAnchors.clear();
+    _performanceMetrics.reset();
     final initialIndex = content.initialIndex
         .clamp(0, content.length - 1)
         .toInt();
@@ -410,8 +520,19 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       generation: _readerSessionGeneration,
       status: 'created',
       result: 'ready',
+      message: _readerMemoryBudgetLogFields(),
     );
     return next;
+  }
+
+  String _readerMemoryBudgetLogFields() {
+    final imageCache = PaintingBinding.instance.imageCache;
+    const policy = ReaderImageSessionPreloadPolicy.aggressiveReaderSession;
+    return 'decodedRadius=${policy.decodedRadius} '
+        'diskRadius=${policy.diskRadius} '
+        'maxConcurrent=${policy.maxConcurrentTasks} '
+        'imageCacheMaxEntries=${imageCache.maximumSize} '
+        'imageCacheMaxBytes=${imageCache.maximumSizeBytes}';
   }
 
   void _syncPageControllerIfNeeded(
@@ -501,6 +622,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
 
     final targetOffset = _capability.initialVerticalScrollOffset;
     var result = 'noStoredOffset';
+    ReaderVerticalSeekResult? verticalSeek;
     if (_scrollController.offset == 0 &&
         targetOffset != null &&
         targetOffset > 0) {
@@ -514,6 +636,27 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       } else {
         result = 'noScrollableExtent';
       }
+    } else if (_scrollController.offset == 0 && targetIndex > 0) {
+      verticalSeek = await _verticalPositionDriver.seekToIndex(targetIndex);
+      _performanceMetrics.recordSeek(
+        elapsed: verticalSeek.elapsed,
+        correctionDelta: verticalSeek.correctionDelta,
+      );
+      if (verticalSeek.status == ReaderVerticalSeekStatus.cancelled) {
+        positionState.consumeInitialRestore();
+        _recordInitialRestoreCompleted(
+          index: _lastKnownIndex,
+          mode: ReaderModePreference.vertical,
+          generation: generation,
+          status: 'cancelled',
+          result: verticalSeek.cancelReason?.name ?? 'cancelled',
+          elapsedMs: verticalSeek.elapsed.inMilliseconds,
+          correctionDelta: verticalSeek.correctionDelta,
+        );
+        _scheduleVerticalProgressSync();
+        return;
+      }
+      result = verticalSeek.exact ? 'indexExact' : 'indexEstimated';
     } else if (_scrollController.offset != 0) {
       result = 'alreadyMoved';
     }
@@ -529,6 +672,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       generation: generation,
       status: 'consumed',
       result: result,
+      elapsedMs: verticalSeek?.elapsed.inMilliseconds,
+      correctionDelta: verticalSeek?.correctionDelta,
     );
   }
 
@@ -601,6 +746,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     required int generation,
     required String status,
     required String result,
+    int? elapsedMs,
+    double? correctionDelta,
   }) {
     _recordReaderDiagnostic(
       type: ContinuousImageDiagnosticEventType.initialRestoreCompleted,
@@ -610,6 +757,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       targetIndex: index,
       status: status,
       result: result,
+      elapsedMs: elapsedMs,
+      correctionDelta: correctionDelta,
     );
   }
 
@@ -1000,6 +1149,9 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _lastSliderCommitAt = now;
     final previousIndex = _lastKnownIndex;
     final seekGeneration = ++_seekGeneration;
+    final seekStopwatch = Stopwatch()..start();
+    var seekCorrectionDelta = 0.0;
+    var performanceRecorded = false;
     _activeSeekGeneration = seekGeneration;
     if (positionState.needsInitialRestore) {
       positionState.consumeInitialRestore();
@@ -1020,19 +1172,41 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       _isSliderCommitInFlight = true;
       _pendingCommittedIndex = targetIndex;
       _sliderPreviewIndex = targetIndex;
-      _lastKnownIndex = targetIndex;
     });
     _promoteSessionSeekTarget(targetIndex);
 
     try {
       var reached = false;
       if (preferences.readerMode == ReaderModePreference.vertical) {
-        await _jumpVerticalToIndex(targetIndex);
+        final verticalResult = await _jumpVerticalToIndex(targetIndex);
+        seekCorrectionDelta = verticalResult.correctionDelta;
+        _performanceMetrics.recordSeek(
+          elapsed: verticalResult.elapsed,
+          correctionDelta: seekCorrectionDelta,
+        );
+        performanceRecorded = true;
+        if (verticalResult.status == ReaderVerticalSeekStatus.cancelled) {
+          _recordSeekSuperseded(
+            seekGeneration: seekGeneration,
+            targetIndex: targetIndex,
+            mode: preferences.readerMode,
+            reason: verticalResult.cancelReason?.name ?? 'cancelled',
+            elapsedMs: verticalResult.elapsed.inMilliseconds,
+            correctionDelta: seekCorrectionDelta,
+          );
+          _scheduleVerticalProgressSync();
+          return;
+        }
+        if (!verticalResult.reached) {
+          throw StateError('verticalSeekUnavailable');
+        }
         if (!_isCurrentPositionState(positionState, total)) {
           _recordSeekSuperseded(
             seekGeneration: seekGeneration,
             targetIndex: targetIndex,
             mode: preferences.readerMode,
+            elapsedMs: verticalResult.elapsed.inMilliseconds,
+            correctionDelta: seekCorrectionDelta,
           );
           return;
         }
@@ -1045,6 +1219,13 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
           targetIndex: targetIndex,
           generation: seekGeneration,
         );
+        if (reached) {
+          _performanceMetrics.recordSeek(
+            elapsed: seekStopwatch.elapsed,
+            correctionDelta: 0,
+          );
+          performanceRecorded = true;
+        }
       }
 
       if (!_isCurrentPositionState(positionState, total)) {
@@ -1052,6 +1233,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
           seekGeneration: seekGeneration,
           targetIndex: targetIndex,
           mode: preferences.readerMode,
+          elapsedMs: seekStopwatch.elapsed.inMilliseconds,
+          correctionDelta: seekCorrectionDelta,
         );
         return;
       }
@@ -1080,6 +1263,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
           targetIndex: targetIndex,
           status: 'completed',
           result: 'reached',
+          elapsedMs: seekStopwatch.elapsed.inMilliseconds,
+          correctionDelta: seekCorrectionDelta,
         );
       } else {
         _recordReaderDiagnostic(
@@ -1093,6 +1278,12 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         );
       }
     } catch (error) {
+      if (!performanceRecorded) {
+        _performanceMetrics.recordSeek(
+          elapsed: seekStopwatch.elapsed,
+          correctionDelta: seekCorrectionDelta,
+        );
+      }
       _recordReaderDiagnostic(
         type: ContinuousImageDiagnosticEventType.seekFailed,
         index: _lastKnownIndex,
@@ -1101,6 +1292,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         targetIndex: targetIndex,
         status: 'failed',
         result: error.runtimeType.toString(),
+        elapsedMs: seekStopwatch.elapsed.inMilliseconds,
+        correctionDelta: seekCorrectionDelta,
       );
     } finally {
       _releaseSliderCommitLock(seekGeneration);
@@ -1111,6 +1304,9 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     required int seekGeneration,
     required int targetIndex,
     required ReaderModePreference mode,
+    String reason = 'ownerOrItemCountChanged',
+    int? elapsedMs,
+    double? correctionDelta,
   }) {
     _recordReaderDiagnostic(
       type: ContinuousImageDiagnosticEventType.seekSuperseded,
@@ -1119,7 +1315,9 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       generation: seekGeneration,
       targetIndex: targetIndex,
       status: 'superseded',
-      result: 'ownerOrItemCountChanged',
+      result: reason,
+      elapsedMs: elapsedMs,
+      correctionDelta: correctionDelta,
     );
   }
 
@@ -1136,57 +1334,24 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
 
     if (mounted) {
       setState(release);
+      if (_diagnosticMode == ReaderModePreference.vertical) {
+        _scheduleVerticalProgressSync();
+      }
     } else {
       release();
     }
   }
 
-  Future<void> _jumpVerticalToIndex(int targetIndex) async {
-    final items = _latestItems;
-    final totalImages = items.length;
-    if (!_scrollController.hasClients || totalImages <= 1) {
-      return;
-    }
-    final maxScroll = _scrollController.position.maxScrollExtent;
-    if (maxScroll <= 0) {
-      return;
-    }
-    final crossAxisExtent = MediaQuery.sizeOf(context).width;
-    final estimatedOffset = _extentRegistry.estimateOffsetForIndex(
-      targetIndex,
-      items,
-      crossAxisExtent: crossAxisExtent,
-      resolver: _layoutResolver,
-    );
-    final ratio = targetIndex / (totalImages - 1);
-    final fallbackOffset = maxScroll * ratio;
-    final offset =
-        (estimatedOffset.isFinite && estimatedOffset > 0
-                ? estimatedOffset
-                : fallbackOffset)
-            .clamp(0.0, maxScroll)
-            .toDouble();
-    _scrollController.jumpTo(offset);
-    await WidgetsBinding.instance.endOfFrame;
-    if (!_scrollController.hasClients) {
-      return;
-    }
-    final latestMax = _scrollController.position.maxScrollExtent;
-    final latestEstimatedOffset = _extentRegistry.estimateOffsetForIndex(
-      targetIndex,
-      items,
-      crossAxisExtent: crossAxisExtent,
-      resolver: _layoutResolver,
-    );
-    final correctedOffset =
-        (latestEstimatedOffset.isFinite && latestEstimatedOffset > 0
-                ? latestEstimatedOffset
-                : latestMax * ratio)
-            .clamp(0.0, latestMax)
-            .toDouble();
-    if ((_scrollController.offset - correctedOffset).abs() > 1.5) {
-      _scrollController.jumpTo(correctedOffset);
-    }
+  Future<ReaderVerticalSeekResult> _jumpVerticalToIndex(int targetIndex) {
+    return _verticalPositionDriver.seekToIndex(targetIndex);
+  }
+
+  void _scheduleVerticalProgressSync() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_isSliderCommitInFlight) {
+        _onVerticalScroll();
+      }
+    });
   }
 
   void _precachePagedWindow(int centerIndex) {
@@ -1315,12 +1480,16 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       result: result.result.success ? 'success' : 'failure',
       preloadKind: result.kind.name,
       applied: result.applied,
+      elapsedMs: result.elapsed.inMilliseconds,
       message:
           'diskAttempted=${result.result.diskCacheAttempted} '
           'diskHit=${result.result.fromDiskCache} '
           'decodeAttempted=${result.result.decodePrecacheAttempted} '
           'decoded=${result.result.decoded} '
-          'reason=${result.result.failureReason ?? '-'}',
+          'stale=${result.stale} '
+          'providerMatched=${result.providerMatched} '
+          'reason=${result.result.failureReason ?? '-'} '
+          '${_performanceMetrics.snapshot.toLogFields()}',
     );
   }
 
@@ -1452,6 +1621,11 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (currentMode == nextMode) {
       return;
     }
+    if (currentMode == ReaderModePreference.vertical) {
+      _verticalPositionDriver.cancelActive(
+        ReaderVerticalSeekCancelReason.modeChanged,
+      );
+    }
     final positionState = _positionState;
     if (positionState == null) {
       return;
@@ -1493,7 +1667,37 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       result: 'pending',
     );
     if (nextMode == ReaderModePreference.vertical) {
-      await _jumpVerticalToIndex(targetIndex);
+      final verticalResult = await _jumpVerticalToIndex(targetIndex);
+      _performanceMetrics.recordSeek(
+        elapsed: verticalResult.elapsed,
+        correctionDelta: verticalResult.correctionDelta,
+      );
+      if (verticalResult.status == ReaderVerticalSeekStatus.cancelled) {
+        _recordSeekSuperseded(
+          seekGeneration: generation,
+          targetIndex: targetIndex,
+          mode: nextMode,
+          reason: verticalResult.cancelReason?.name ?? 'cancelled',
+          elapsedMs: verticalResult.elapsed.inMilliseconds,
+          correctionDelta: verticalResult.correctionDelta,
+        );
+        _scheduleVerticalProgressSync();
+        return;
+      }
+      if (!verticalResult.reached) {
+        _recordReaderDiagnostic(
+          type: ContinuousImageDiagnosticEventType.seekFailed,
+          index: _lastKnownIndex,
+          mode: nextMode,
+          generation: generation,
+          targetIndex: targetIndex,
+          status: 'modeSwitch',
+          result: 'verticalSeekUnavailable',
+          elapsedMs: verticalResult.elapsed.inMilliseconds,
+          correctionDelta: verticalResult.correctionDelta,
+        );
+        return;
+      }
       if (!_isCurrentPositionState(positionState, itemCount)) {
         return;
       }
@@ -1506,6 +1710,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         targetIndex: targetIndex,
         status: 'modeSwitch',
         result: 'reached',
+        elapsedMs: verticalResult.elapsed.inMilliseconds,
+        correctionDelta: verticalResult.correctionDelta,
       );
       return;
     }
@@ -1738,6 +1944,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     String? result,
     String? preloadKind,
     bool? applied,
+    int? elapsedMs,
+    double? correctionDelta,
     String message = '',
   }) {
     final recorder = _capability.diagnosticRecorder;
@@ -1768,6 +1976,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
           result: result,
           preloadKind: preloadKind,
           applied: applied,
+          elapsedMs: elapsedMs,
+          correctionDelta: correctionDelta,
           message: message,
         ),
       );

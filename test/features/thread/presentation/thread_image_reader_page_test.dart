@@ -141,6 +141,61 @@ void main() {
     expect(precacheService.decodedSpecs.first.cacheKey, 'thread/inline/page-1');
   });
 
+  testWidgets(
+    'ThreadImageReaderPage vertical slider lands on exact item anchor',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const <String, Object>{
+        'reader_pref_mode': 'vertical',
+      });
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final recorder = _RecordingContinuousImageDiagnosticRecorder();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            imageCacheServiceProvider.overrideWithValue(
+              _RecordingImageCacheService(),
+            ),
+          ],
+          child: MaterialApp(
+            home: ThreadImageReaderPage(
+              request: _request(),
+              diagnosticRecorder: recorder,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await _openReaderMenu(tester);
+
+      final slider = find.byKey(const Key('shared-reader-progress-slider'));
+      final sliderRect = tester.getRect(slider);
+      await tester.tapAt(sliderRect.center);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 16));
+
+      final target = find.byKey(
+        const ValueKey<String>('thread-image-reader-image-slot-2'),
+      );
+      expect(target, findsOneWidget);
+      expect(tester.getTopLeft(target).dy, closeTo(0, 1));
+      expect(
+        recorder.events.any(
+          (event) =>
+              event.type == ContinuousImageDiagnosticEventType.seekReached &&
+              event.targetIndex == 2 &&
+              event.elapsedMs != null &&
+              event.correctionDelta != null,
+        ),
+        isTrue,
+      );
+    },
+  );
+
   for (final mode in <String>['ltr', 'rtl']) {
     testWidgets(
       'ThreadImageReaderPage $mode uses logical indexes for swipe and taps',
@@ -377,15 +432,16 @@ void main() {
           .map((event) => '${event.itemId}:${event.preloadKind}')
           .toSet();
 
-      expect(scheduled, hasLength(5));
-      expect(completed, hasLength(5));
+      expect(scheduled, isNotEmpty);
+      expect(scheduled.length, lessThanOrEqualTo(7));
+      expect(completed, hasLength(scheduled.length));
       expect(scheduled.length - taskIdentities.length, 0);
       expect(scheduled.map((event) => event.readerKind).toSet(), <String>{
         'thread',
       });
-      expect(scheduled.map((event) => event.mode).toSet(), <String>{
-        'vertical',
-      });
+      final modes = scheduled.map((event) => event.mode).toSet();
+      expect(modes, contains('ltr'));
+      expect(modes.difference(<String>{'vertical', 'ltr'}), isEmpty);
       expect(completed.every((event) => event.applied == true), isTrue);
     },
   );

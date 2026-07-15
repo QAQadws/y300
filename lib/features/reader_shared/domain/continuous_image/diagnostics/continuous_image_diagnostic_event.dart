@@ -44,6 +44,8 @@ class ContinuousImageDiagnosticEvent {
     this.result,
     this.preloadKind,
     this.applied,
+    this.elapsedMs,
+    this.correctionDelta,
     this.message = '',
   });
 
@@ -64,6 +66,8 @@ class ContinuousImageDiagnosticEvent {
   final String? result;
   final String? preloadKind;
   final bool? applied;
+  final int? elapsedMs;
+  final double? correctionDelta;
   final String message;
 
   String toLogFields() {
@@ -82,6 +86,9 @@ class ContinuousImageDiagnosticEvent {
       if (result?.trim().isNotEmpty == true) 'result=$result',
       if (preloadKind?.trim().isNotEmpty == true) 'kind=$preloadKind',
       if (applied != null) 'applied=$applied',
+      if (elapsedMs != null) 'elapsedMs=$elapsedMs',
+      if (correctionDelta != null)
+        'correctionDelta=${correctionDelta!.toStringAsFixed(1)}',
       if (source?.trim().isNotEmpty == true) 'source=$source',
       if (aspectRatio != null) 'ratio=${aspectRatio!.toStringAsFixed(4)}',
       if (width != null && height != null) 'size=${width}x$height',

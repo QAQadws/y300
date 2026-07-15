@@ -59,6 +59,8 @@ void main() {
         result: 'success',
         preloadKind: 'decoded',
         applied: true,
+        elapsedMs: 42,
+        correctionDelta: -18.5,
       );
 
       final fields = event.toLogFields();
@@ -72,6 +74,8 @@ void main() {
       expect(fields, contains('result=success'));
       expect(fields, contains('kind=decoded'));
       expect(fields, contains('applied=true'));
+      expect(fields, contains('elapsedMs=42'));
+      expect(fields, contains('correctionDelta=-18.5'));
     });
   });
 }

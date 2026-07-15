@@ -8,6 +8,7 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reader_shared/domain/image_session/reader_image_session.dart';
+import 'package:y300/features/reader_shared/domain/metrics/reader_performance_metrics.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_capability.dart';
 import 'package:y300/features/reader_shared/presentation/services/reader_image_session_preload_coordinator.dart';
 import 'package:y300/features/reader_shared/presentation/services/reader_image_session_store.dart';
@@ -76,8 +77,10 @@ void main() {
     ) async {
       final service = _RecordingPrecacheService();
       final scheduled = <ReaderImageSessionPreloadScheduled>[];
+      final metrics = ReaderPerformanceMetricsCollector();
       final coordinator = ReaderImageSessionPreloadCoordinator(
         onScheduled: scheduled.add,
+        performanceMetrics: metrics,
       );
       await tester.pumpWidget(
         Builder(
@@ -122,6 +125,9 @@ void main() {
           .map((event) => '${event.spec.cacheKey}:${event.kind.name}')
           .toSet();
       expect(taskIdentities, hasLength(scheduled.length));
+      expect(metrics.snapshot.preloadRequestCount, 10);
+      expect(metrics.snapshot.preloadHitCount, 3);
+      expect(metrics.snapshot.providerMismatchCount, 0);
     });
 
     testWidgets('upgrades pending disk work to decoded without stale work', (
@@ -173,8 +179,10 @@ void main() {
       final decodedCompleter = Completer<ForumImagePrecacheResult>();
       final service = _RecordingPrecacheService(decodedCompleter);
       final results = <ReaderImageSessionPreloadResult>[];
+      final metrics = ReaderPerformanceMetricsCollector();
       final coordinator = ReaderImageSessionPreloadCoordinator(
         onResult: results.add,
+        performanceMetrics: metrics,
       );
       await tester.pumpWidget(
         Builder(
@@ -198,6 +206,9 @@ void main() {
 
       expect(results, hasLength(1));
       expect(results.single.applied, isFalse);
+      expect(results.single.stale, isTrue);
+      expect(metrics.snapshot.staleTaskCount, 1);
+      expect(metrics.snapshot.providerMismatchCount, 0);
     });
 
     testWidgets('applies results to session store and writes to sink', (

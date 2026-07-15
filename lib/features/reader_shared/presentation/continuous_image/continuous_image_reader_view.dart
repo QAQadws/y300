@@ -33,6 +33,7 @@ class ContinuousImageReaderView extends StatelessWidget {
     this.verticalListKey = const Key('continuous-image-reader-list'),
     this.horizontalPageKey = const Key('continuous-image-reader-page-view'),
     this.slotKeyPrefix = 'continuous-image-reader-slot',
+    this.verticalItemAnchorKeyBuilder,
   });
 
   final List<ContinuousImageItem> items;
@@ -51,6 +52,8 @@ class ContinuousImageReaderView extends StatelessWidget {
   final Key verticalListKey;
   final Key horizontalPageKey;
   final String slotKeyPrefix;
+  final Key Function(ContinuousImageItem item, int index)?
+  verticalItemAnchorKeyBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -79,6 +82,7 @@ class ContinuousImageReaderView extends StatelessWidget {
           children: [
             ContinuousImageReaderSlot(
               key: ValueKey<String>('$slotKeyPrefix-${item.index}'),
+              anchorKey: verticalItemAnchorKeyBuilder?.call(item, index),
               item: item,
               layoutResolver: layoutResolver,
               onExtentResolved: onExtentResolved,
@@ -120,12 +124,14 @@ class ContinuousImageReaderSlot extends StatelessWidget {
     required this.layoutResolver,
     required this.onExtentResolved,
     required this.child,
+    this.anchorKey,
   });
 
   final ContinuousImageItem item;
   final ContinuousImageLayoutResolver layoutResolver;
   final ValueChanged<ContinuousImageExtent> onExtentResolved;
   final Widget child;
+  final Key? anchorKey;
 
   @override
   Widget build(BuildContext context) {
@@ -139,7 +145,7 @@ class ContinuousImageReaderSlot extends StatelessWidget {
         final aspectRatio = width > 0
             ? width / expectedHeight
             : hint.aspectRatio;
-        return ContinuousImageExtentObserver(
+        final slot = ContinuousImageExtentObserver(
           item: item,
           aspectRatio: aspectRatio,
           dimensionSource: hint.source,
@@ -149,6 +155,8 @@ class ContinuousImageReaderSlot extends StatelessWidget {
             child: ClipRect(child: child),
           ),
         );
+        final key = anchorKey;
+        return key == null ? slot : KeyedSubtree(key: key, child: slot);
       },
     );
   }
