@@ -76,15 +76,40 @@ void main() {
     expect(actionTaps, 1);
   });
 
+  testWidgets('overlay controls are excluded from reader tap zones', (
+    tester,
+  ) async {
+    var actionTaps = 0;
+    final controller = ReaderOverlayController()..showMenu();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _buildScaffold(
+        controller: controller,
+        bottomActions: [
+          ReaderToolbarAction(
+            id: 'display',
+            icon: Icons.tune,
+            label: '显示',
+            onPressed: () => actionTaps += 1,
+          ),
+        ],
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(const Key('shared-reader-bottom-action-display')),
+    );
+    await tester.pump(const Duration(milliseconds: 330));
+
+    expect(actionTaps, 1);
+    expect(controller.isMenuVisible, isTrue);
+  });
+
   testWidgets('ReaderOverlayScaffold center callback keeps default toggle', (
     tester,
   ) async {
     var centerTaps = 0;
-    await tester.pumpWidget(
-      _buildScaffold(
-        onCenterTap: () => centerTaps += 1,
-      ),
-    );
+    await tester.pumpWidget(_buildScaffold(onCenterTap: () => centerTaps += 1));
 
     await tester.tapAt(const Offset(400, 300));
     await _pumpTapAndOverlayAnimation(tester);
@@ -123,29 +148,27 @@ void main() {
     expect(controller.isMenuVisible, isFalse);
   });
 
-  testWidgets('ReaderOverlayScaffold uses reader chrome background in dark theme', (
-    tester,
-  ) async {
-    final theme = AppTheme.dark();
-    final palette = const ReaderChromePaletteResolver().resolve(theme);
+  testWidgets(
+    'ReaderOverlayScaffold uses reader chrome background in dark theme',
+    (tester) async {
+      final theme = AppTheme.dark();
+      final palette = const ReaderChromePaletteResolver().resolve(theme);
 
-    await tester.pumpWidget(
-      _buildScaffold(
-        theme: theme,
-        menuInitiallyVisible: true,
-      ),
-    );
+      await tester.pumpWidget(
+        _buildScaffold(theme: theme, menuInitiallyVisible: true),
+      );
 
-    final top = tester.widget<Material>(
-      find.byKey(const Key('shared-reader-top-overlay-bar')),
-    );
-    final bottom = tester.widget<Material>(
-      find.byKey(const Key('shared-reader-bottom-overlay-panel')),
-    );
+      final top = tester.widget<Material>(
+        find.byKey(const Key('shared-reader-top-overlay-bar')),
+      );
+      final bottom = tester.widget<Material>(
+        find.byKey(const Key('shared-reader-bottom-overlay-panel')),
+      );
 
-    expect(top.color, palette.chromeBackground);
-    expect(bottom.color, palette.chromeBackground);
-  });
+      expect(top.color, palette.chromeBackground);
+      expect(bottom.color, palette.chromeBackground);
+    },
+  );
 }
 
 Future<void> _pumpTapAndOverlayAnimation(WidgetTester tester) async {
@@ -157,6 +180,7 @@ Future<void> _pumpTapAndOverlayAnimation(WidgetTester tester) async {
 Widget _buildScaffold({
   bool menuInitiallyVisible = false,
   List<ReaderToolbarAction> topActions = const <ReaderToolbarAction>[],
+  List<ReaderToolbarAction> bottomActions = const <ReaderToolbarAction>[],
   VoidCallback? onCenterTap,
   ReaderOverlayController? controller,
   ThemeData? theme,
@@ -182,7 +206,7 @@ Widget _buildScaffold({
             onChanged: (_) {},
             onChangeEnd: (_) {},
           ),
-          actions: const <ReaderToolbarAction>[],
+          actions: bottomActions,
         ),
         child: const ColoredBox(color: Colors.white),
       ),

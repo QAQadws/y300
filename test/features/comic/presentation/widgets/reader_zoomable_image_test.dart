@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_zoomable_image.dart';
@@ -5,6 +7,7 @@ import 'package:y300/features/reader_shared/presentation/engine/reader_zoomable_
 Widget _hostZoomableImage({
   ReaderZoomBehavior behavior = ReaderZoomBehavior.bounded,
   ValueChanged<bool>? onZoomStateChanged,
+  Widget? child,
 }) {
   return MaterialApp(
     home: Scaffold(
@@ -15,7 +18,7 @@ Widget _hostZoomableImage({
           child: ReaderZoomableImage(
             behavior: behavior,
             onZoomStateChanged: onZoomStateChanged,
-            child: Container(color: Colors.blue),
+            child: child ?? Container(color: Colors.blue),
           ),
         ),
       ),
@@ -46,8 +49,10 @@ Widget _hostScrollableZoomableImage(
   );
 }
 
-InteractiveViewer _readInteractiveViewer(WidgetTester tester) {
-  return tester.widget<InteractiveViewer>(find.byType(InteractiveViewer));
+Transform _readBoundedTransform(WidgetTester tester) {
+  return tester.widget<Transform>(
+    find.byKey(const Key('reader-bounded-zoom-transform')),
+  );
 }
 
 void main() {
@@ -71,17 +76,23 @@ void main() {
 
     expect(states, containsAllInOrder(<bool>[true, false]));
     expect(find.byType(InteractiveViewer), findsNothing);
+    expect(
+      _readBoundedTransform(tester).transform.getMaxScaleOnAxis(),
+      closeTo(1, 0.001),
+    );
   });
 
-  testWidgets('InteractiveViewer stays out of the gesture arena at rest', (
+  testWidgets('stable transform stays out of the gesture arena at rest', (
     tester,
   ) async {
-    // 关键契约：静止 1× 时既不启用 InteractiveViewer 手势，也不为双击
-    // 额外挂 GestureDetector，外层 ListView/PageView 独享单指滚动。
     await tester.pumpWidget(_hostZoomableImage());
     await tester.pump();
 
     expect(find.byType(InteractiveViewer), findsNothing);
+    expect(
+      _readBoundedTransform(tester).transform.getMaxScaleOnAxis(),
+      closeTo(1, 0.001),
+    );
     expect(
       find.descendant(
         of: find.byType(ReaderZoomableImage),
@@ -108,9 +119,7 @@ void main() {
     }
   });
 
-  testWidgets('InteractiveViewer claims gestures after double-tap zoom-in', (
-    tester,
-  ) async {
+  testWidgets('bounded surface pans after double-tap zoom-in', (tester) async {
     await tester.pumpWidget(_hostZoomableImage());
     final target = find.byType(ReaderZoomableImage);
 
@@ -119,11 +128,15 @@ void main() {
     await tester.tapAt(tester.getCenter(target));
     await tester.pumpAndSettle();
 
-    // 双击缩放动画走完后应处于 zoomed 状态，pan/scale 都必须已挂上，否则
-    // 缩放态下的移动手势会没人接管。
-    final viewer = _readInteractiveViewer(tester);
-    expect(viewer.panEnabled, isTrue);
-    expect(viewer.scaleEnabled, isTrue);
+    final before = _readBoundedTransform(tester).transform.clone();
+    expect(before.getMaxScaleOnAxis(), greaterThan(1));
+
+    await tester.dragFrom(tester.getCenter(target), const Offset(-40, -30));
+    await tester.pump();
+
+    final after = _readBoundedTransform(tester).transform;
+    expect(after.getTranslation().x, lessThan(before.getTranslation().x));
+    expect(after.getTranslation().y, lessThan(before.getTranslation().y));
   });
 
   testWidgets('direct two-finger pinch activates the zoom surface', (
@@ -143,18 +156,15 @@ void main() {
     await second.moveTo(center + const Offset(72, 0));
     await tester.pump();
 
-    final viewer = _readInteractiveViewer(tester);
-    expect(
-      viewer.transformationController!.value.getMaxScaleOnAxis(),
-      greaterThan(1),
-    );
+    final transform = _readBoundedTransform(tester);
+    expect(transform.transform.getMaxScaleOnAxis(), greaterThan(1));
     expect(states, <bool>[true]);
 
     await first.up();
     await second.up();
     await tester.pumpAndSettle();
 
-    expect(find.byType(InteractiveViewer), findsOneWidget);
+    expect(find.byType(InteractiveViewer), findsNothing);
   });
 
   testWidgets('continuous vertical pinch scales the whole transform', (
@@ -216,4 +226,121 @@ void main() {
 
     expect(controller.offset, greaterThan(0));
   });
+
+  testWidgets('zoom cycles preserve the image child identity', (tester) async {
+    final provider = MemoryImage(Uint8List.fromList(_transparentImageBytes));
+    final image = Image(image: provider);
+    await tester.pumpWidget(_hostZoomableImage(child: image));
+    final target = find.byType(ReaderZoomableImage);
+    final initialElement = tester.element(find.byType(Image));
+
+    for (var cycle = 0; cycle < 20; cycle += 1) {
+      await tester.tapAt(tester.getCenter(target));
+      await tester.pump(const Duration(milliseconds: 40));
+      await tester.tapAt(tester.getCenter(target));
+      await tester.pumpAndSettle();
+    }
+
+    expect(tester.element(find.byType(Image)), same(initialElement));
+    expect(tester.widget<Image>(find.byType(Image)).image, same(provider));
+    expect(find.byType(InteractiveViewer), findsNothing);
+  });
+
+  testWidgets('paged swipe gate preserves image and provider identity', (
+    tester,
+  ) async {
+    final blocked = ValueNotifier<bool>(false);
+    addTearDown(blocked.dispose);
+    final provider = MemoryImage(Uint8List.fromList(_transparentImageBytes));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReaderPagedSwipeGate(
+          blockedListenable: blocked,
+          child: Image(image: provider),
+        ),
+      ),
+    );
+    final initialElement = tester.element(find.byType(Image));
+
+    blocked.value = true;
+    await tester.pump();
+    blocked.value = false;
+    await tester.pump();
+
+    expect(tester.element(find.byType(Image)), same(initialElement));
+    expect(tester.widget<Image>(find.byType(Image)).image, same(provider));
+  });
 }
+
+const List<int> _transparentImageBytes = <int>[
+  0x89,
+  0x50,
+  0x4e,
+  0x47,
+  0x0d,
+  0x0a,
+  0x1a,
+  0x0a,
+  0x00,
+  0x00,
+  0x00,
+  0x0d,
+  0x49,
+  0x48,
+  0x44,
+  0x52,
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x08,
+  0x06,
+  0x00,
+  0x00,
+  0x00,
+  0x1f,
+  0x15,
+  0xc4,
+  0x89,
+  0x00,
+  0x00,
+  0x00,
+  0x0d,
+  0x49,
+  0x44,
+  0x41,
+  0x54,
+  0x08,
+  0xd7,
+  0x63,
+  0xf8,
+  0xcf,
+  0xc0,
+  0xf0,
+  0x1f,
+  0x00,
+  0x05,
+  0x00,
+  0x01,
+  0xff,
+  0x89,
+  0x99,
+  0x3d,
+  0x1d,
+  0x00,
+  0x00,
+  0x00,
+  0x00,
+  0x49,
+  0x45,
+  0x4e,
+  0x44,
+  0xae,
+  0x42,
+  0x60,
+  0x82,
+];

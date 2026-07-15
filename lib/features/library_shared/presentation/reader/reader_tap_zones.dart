@@ -1,6 +1,6 @@
-import 'dart:async';
-
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader_gesture_coordinator.dart';
 
 /// Reader tap-zone layout shared by long-form readers.
 ///
@@ -15,6 +15,8 @@ class ReaderTapZones extends StatefulWidget {
     this.onRightTap,
     this.bottomSafeFraction = 0,
     this.enabled = true,
+    this.blockedListenable,
+    this.gestureCoordinator,
     this.child,
   });
 
@@ -23,6 +25,8 @@ class ReaderTapZones extends StatefulWidget {
   final VoidCallback? onRightTap;
   final double bottomSafeFraction;
   final bool enabled;
+  final ValueListenable<bool>? blockedListenable;
+  final ReaderGestureCoordinator? gestureCoordinator;
   final Widget? child;
 
   @override
@@ -30,20 +34,32 @@ class ReaderTapZones extends StatefulWidget {
 }
 
 class _ReaderTapZonesState extends State<ReaderTapZones> {
-  static const double _tapSlop = 18;
-  static const Duration _singleTapDelay = Duration(milliseconds: 320);
+  late ReaderGestureCoordinator _gestureCoordinator;
+  late bool _ownsGestureCoordinator;
 
-  int? _activePointer;
-  Offset? _downLocalPosition;
-  bool _isCandidateCancelled = false;
-  bool _suppressCurrentTap = false;
-  Timer? _pendingTapTimer;
-  Offset? _pendingTapPosition;
+  @override
+  void initState() {
+    super.initState();
+    _attachGestureCoordinator();
+  }
+
+  @override
+  void didUpdateWidget(ReaderTapZones oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.gestureCoordinator == widget.gestureCoordinator) {
+      return;
+    }
+    if (_ownsGestureCoordinator) {
+      _gestureCoordinator.dispose();
+    }
+    _attachGestureCoordinator();
+  }
 
   @override
   void dispose() {
-    _pendingTapTimer?.cancel();
-    _pendingTapPosition = null;
+    if (_ownsGestureCoordinator) {
+      _gestureCoordinator.dispose();
+    }
     super.dispose();
   }
 
@@ -54,9 +70,13 @@ class _ReaderTapZonesState extends State<ReaderTapZones> {
       child: Listener(
         behavior: HitTestBehavior.translucent,
         onPointerDown: widget.enabled ? _handlePointerDown : null,
-        onPointerMove: widget.enabled ? _handlePointerMove : null,
+        onPointerMove: widget.enabled
+            ? _gestureCoordinator.handlePointerMove
+            : null,
         onPointerUp: widget.enabled ? _handlePointerUp : null,
-        onPointerCancel: widget.enabled ? _handlePointerCancel : null,
+        onPointerCancel: widget.enabled
+            ? _gestureCoordinator.handlePointerCancel
+            : null,
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -94,69 +114,37 @@ class _ReaderTapZonesState extends State<ReaderTapZones> {
   }
 
   void _handlePointerDown(PointerDownEvent event) {
-    if (_activePointer != null) {
-      _isCandidateCancelled = true;
-      return;
-    }
-    _activePointer = event.pointer;
-    _downLocalPosition = event.localPosition;
-    _isCandidateCancelled = !_isInsideActiveTapArea(event.localPosition);
-
-    _suppressCurrentTap = _isDoubleTapCandidate(event.localPosition);
-    if (_suppressCurrentTap) {
-      _pendingTapTimer?.cancel();
-      _pendingTapTimer = null;
-      _pendingTapPosition = null;
-    }
-  }
-
-  void _handlePointerMove(PointerMoveEvent event) {
-    if (event.pointer != _activePointer || _isCandidateCancelled) {
-      return;
-    }
-    final down = _downLocalPosition;
-    if (down == null || (event.localPosition - down).distance > _tapSlop) {
-      _isCandidateCancelled = true;
-    }
+    _gestureCoordinator.handlePointerDown(
+      event,
+      singleTapEnabled:
+          _singleTapEnabled && _isInsideActiveTapArea(event.localPosition),
+    );
   }
 
   void _handlePointerUp(PointerUpEvent event) {
-    if (event.pointer != _activePointer) {
-      return;
-    }
-    final down = _downLocalPosition;
-    final shouldDispatch = !_suppressCurrentTap &&
-        !_isCandidateCancelled &&
-        down != null &&
-        (event.localPosition - down).distance <= _tapSlop;
-    final action = shouldDispatch ? _actionForPosition(event.localPosition) : null;
-    _resetPointerCandidate();
-    if (action == null) {
-      _pendingTapPosition = null;
-      return;
-    }
-    _pendingTapTimer?.cancel();
-    _pendingTapPosition = event.localPosition;
-    _pendingTapTimer = Timer(_singleTapDelay, () {
-      _pendingTapPosition = null;
-      if (mounted) {
-        action();
-      }
-    });
+    final action = _singleTapEnabled
+        ? _actionForPosition(event.localPosition)
+        : null;
+    _gestureCoordinator.handlePointerUp(
+      event,
+      singleTapAction: action == null
+          ? null
+          : () {
+              if (mounted) {
+                action();
+              }
+            },
+    );
   }
 
-  void _handlePointerCancel(PointerCancelEvent event) {
-    if (event.pointer == _activePointer) {
-      _resetPointerCandidate();
-    }
+  void _attachGestureCoordinator() {
+    _ownsGestureCoordinator = widget.gestureCoordinator == null;
+    _gestureCoordinator =
+        widget.gestureCoordinator ?? ReaderGestureCoordinator();
   }
 
-  void _resetPointerCandidate() {
-    _activePointer = null;
-    _downLocalPosition = null;
-    _isCandidateCancelled = false;
-    _suppressCurrentTap = false;
-  }
+  bool get _singleTapEnabled =>
+      widget.enabled && !(widget.blockedListenable?.value ?? false);
 
   VoidCallback? _actionForPosition(Offset position) {
     if (!_isInsideActiveTapArea(position)) {
@@ -174,17 +162,6 @@ class _ReaderTapZonesState extends State<ReaderTapZones> {
       return widget.onCenterTap;
     }
     return widget.onRightTap;
-  }
-
-  bool _isDoubleTapCandidate(Offset position) {
-    final pendingPosition = _pendingTapPosition;
-    if (!(_pendingTapTimer?.isActive ?? false) || pendingPosition == null) {
-      return false;
-    }
-    if (!_isInsideActiveTapArea(position)) {
-      return false;
-    }
-    return (position - pendingPosition).distance <= 48;
   }
 
   bool _isInsideActiveTapArea(Offset position) {

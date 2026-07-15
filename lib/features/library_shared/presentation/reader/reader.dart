@@ -1,5 +1,6 @@
 export 'reader_bottom_overlay_panel.dart';
 export 'reader_chrome_palette.dart';
+export 'reader_gesture_coordinator.dart';
 export 'reader_models.dart';
 export 'reader_overlay_scaffold.dart';
 export 'reader_progress_control.dart';

@@ -1,21 +1,88 @@
-import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader_gesture_coordinator.dart';
 
 enum ReaderZoomBehavior { bounded, continuousVertical }
 
-/// Reusable zoomable image container for reader pages.
+/// Keeps a PageView subtree stable while selectively claiming page swipes.
 ///
-/// Responsibilities:
-/// 1. Keep [InteractiveViewer] out of the tree while resting at 1x.
-/// 2. Provide double-tap zoom focusing around the tapped local position.
-/// 3. Bootstrap direct two-finger zoom without claiming single-finger drags.
-/// 4. Provide pinch adjustment and pan after zoom has been activated.
-/// 5. Expose a lightweight zoom-state callback so parent widgets can coordinate
-///    page/scroll gestures when the image is magnified.
+/// The gate itself listens to zoom state. At 1x PageView receives pointer
+/// events; while zoomed the foreground absorber keeps them from PageView. The
+/// ancestor gesture coordinator still forwards those events to the zoom
+/// surface for panning.
+class ReaderPagedSwipeGate extends StatefulWidget {
+  const ReaderPagedSwipeGate({
+    super.key,
+    required this.blockedListenable,
+    required this.child,
+  });
+
+  final ValueListenable<bool> blockedListenable;
+  final Widget child;
+
+  @override
+  State<ReaderPagedSwipeGate> createState() => _ReaderPagedSwipeGateState();
+}
+
+class _ReaderPagedSwipeGateState extends State<ReaderPagedSwipeGate> {
+  @override
+  void initState() {
+    super.initState();
+    widget.blockedListenable.addListener(_onBlockedChanged);
+  }
+
+  @override
+  void didUpdateWidget(ReaderPagedSwipeGate oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.blockedListenable == widget.blockedListenable) {
+      return;
+    }
+    oldWidget.blockedListenable.removeListener(_onBlockedChanged);
+    widget.blockedListenable.addListener(_onBlockedChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.blockedListenable.removeListener(_onBlockedChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final blocked = widget.blockedListenable.value;
+    return Stack(
+      key: const Key('reader-paged-swipe-gate'),
+      fit: StackFit.expand,
+      children: [
+        widget.child,
+        Positioned.fill(
+          child: IgnorePointer(
+            ignoring: !blocked,
+            child: const AbsorbPointer(child: SizedBox.expand()),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _onBlockedChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+}
+
+/// Backwards-compatible reader zoom wrapper.
+///
+/// Production readers inject the session [gestureCoordinator] shared with tap
+/// zones. Standalone usages get a private coordinator and pointer observer.
 class ReaderZoomableImage extends StatefulWidget {
   const ReaderZoomableImage({
     super.key,
     required this.child,
+    this.gestureCoordinator,
+    this.activePageIndexListenable,
+    this.pageIndex,
     this.minScale = 1,
     this.maxScale = 4,
     this.doubleTapScale = 2,
@@ -24,6 +91,9 @@ class ReaderZoomableImage extends StatefulWidget {
   });
 
   final Widget child;
+  final ReaderGestureCoordinator? gestureCoordinator;
+  final ValueListenable<int>? activePageIndexListenable;
+  final int? pageIndex;
   final double minScale;
   final double maxScale;
   final double doubleTapScale;
@@ -34,34 +104,126 @@ class ReaderZoomableImage extends StatefulWidget {
   State<ReaderZoomableImage> createState() => _ReaderZoomableImageState();
 }
 
-class _ReaderZoomableImageState extends State<ReaderZoomableImage>
+class _ReaderZoomableImageState extends State<ReaderZoomableImage> {
+  late ReaderGestureCoordinator _gestureCoordinator;
+  late bool _ownsGestureCoordinator;
+
+  @override
+  void initState() {
+    super.initState();
+    _attachGestureCoordinator();
+  }
+
+  @override
+  void didUpdateWidget(ReaderZoomableImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.gestureCoordinator == widget.gestureCoordinator) {
+      return;
+    }
+    if (_ownsGestureCoordinator) {
+      _gestureCoordinator.dispose();
+    }
+    _attachGestureCoordinator();
+  }
+
+  @override
+  void dispose() {
+    if (_ownsGestureCoordinator) {
+      _gestureCoordinator.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final surface = ReaderZoomSurface(
+      gestureCoordinator: _gestureCoordinator,
+      activePageIndexListenable: widget.activePageIndexListenable,
+      pageIndex: widget.pageIndex,
+      minScale: widget.minScale,
+      maxScale: widget.maxScale,
+      doubleTapScale: widget.doubleTapScale,
+      behavior: widget.behavior,
+      onZoomStateChanged: widget.onZoomStateChanged,
+      child: widget.child,
+    );
+    if (!_ownsGestureCoordinator) {
+      return surface;
+    }
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (event) =>
+          _gestureCoordinator.handlePointerDown(event, singleTapEnabled: false),
+      onPointerMove: _gestureCoordinator.handlePointerMove,
+      onPointerUp: (event) =>
+          _gestureCoordinator.handlePointerUp(event, singleTapAction: null),
+      onPointerCancel: _gestureCoordinator.handlePointerCancel,
+      child: surface,
+    );
+  }
+
+  void _attachGestureCoordinator() {
+    _ownsGestureCoordinator = widget.gestureCoordinator == null;
+    _gestureCoordinator =
+        widget.gestureCoordinator ?? ReaderGestureCoordinator();
+  }
+}
+
+/// Stable transform surface shared by vertical and paged image readers.
+///
+/// The transform and image child stay mounted for the lifetime of the page.
+/// Raw pointer observation keeps 1x drags in the parent ListView/PageView;
+/// paged readers gate their PageView while this surface reports zoomed state.
+class ReaderZoomSurface extends StatefulWidget {
+  const ReaderZoomSurface({
+    super.key,
+    required this.gestureCoordinator,
+    required this.child,
+    this.activePageIndexListenable,
+    this.pageIndex,
+    this.minScale = 1,
+    this.maxScale = 4,
+    this.doubleTapScale = 2,
+    this.behavior = ReaderZoomBehavior.bounded,
+    this.onZoomStateChanged,
+  });
+
+  final ReaderGestureCoordinator gestureCoordinator;
+  final Widget child;
+  final ValueListenable<int>? activePageIndexListenable;
+  final int? pageIndex;
+  final double minScale;
+  final double maxScale;
+  final double doubleTapScale;
+  final ReaderZoomBehavior behavior;
+  final ValueChanged<bool>? onZoomStateChanged;
+
+  @override
+  State<ReaderZoomSurface> createState() => _ReaderZoomSurfaceState();
+}
+
+class _ReaderZoomSurfaceState extends State<ReaderZoomSurface>
     with SingleTickerProviderStateMixin {
   static const Duration _doubleTapAnimationDuration = Duration(
     milliseconds: 180,
   );
   static const double _minimumPinchDistance = 0.01;
+  static const double _restingScaleTolerance = 0.01;
 
   late final TransformationController _transformationController;
   late final AnimationController _animationController;
-
   Animation<Matrix4>? _matrixAnimation;
-  Offset? _doubleTapLocalPosition;
+  bool? _animationTargetZoomed;
 
   final Map<int, Offset> _activePointers = <int, Offset>{};
-  int? _tapCandidatePointer;
-  Offset? _tapDownLocalPosition;
-  bool _tapCandidateCancelled = false;
-  bool _tapCompletesDoubleTap = false;
-  Duration? _previousTapUpTime;
-  Offset? _previousTapLocalPosition;
-  bool _zoomSurfaceActive = false;
-  bool _deactivateAfterAnimation = false;
   bool _rawPinchActive = false;
   List<int> _rawPinchPointerIds = const <int>[];
   double? _rawPinchInitialDistance;
   double? _rawPinchInitialScale;
   Offset? _rawPinchInitialSceneFocalPoint;
+  int? _panPointer;
   bool _continuousHorizontalPanActive = false;
+  bool _isZoomed = false;
 
   @override
   void initState() {
@@ -71,10 +233,31 @@ class _ReaderZoomableImageState extends State<ReaderZoomableImage>
         AnimationController(vsync: this, duration: _doubleTapAnimationDuration)
           ..addListener(_onAnimateMatrix)
           ..addStatusListener(_onAnimationStatusChanged);
+    _attachExternalListeners();
+  }
+
+  @override
+  void didUpdateWidget(ReaderZoomSurface oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.gestureCoordinator != widget.gestureCoordinator) {
+      oldWidget.gestureCoordinator.removeDoubleTapListener(_onDoubleTap);
+      oldWidget.gestureCoordinator.removePointerListener(_onPointerEvent);
+      widget.gestureCoordinator.addDoubleTapListener(_onDoubleTap);
+      widget.gestureCoordinator.addPointerListener(_onPointerEvent);
+    }
+    if (oldWidget.activePageIndexListenable !=
+        widget.activePageIndexListenable) {
+      oldWidget.activePageIndexListenable?.removeListener(_onActivePageChanged);
+      widget.activePageIndexListenable?.addListener(_onActivePageChanged);
+    }
+    _onActivePageChanged();
   }
 
   @override
   void dispose() {
+    widget.gestureCoordinator.removeDoubleTapListener(_onDoubleTap);
+    widget.gestureCoordinator.removePointerListener(_onPointerEvent);
+    widget.activePageIndexListenable?.removeListener(_onActivePageChanged);
     _transformationController.dispose();
     _animationController
       ..removeListener(_onAnimateMatrix)
@@ -85,123 +268,170 @@ class _ReaderZoomableImageState extends State<ReaderZoomableImage>
 
   @override
   Widget build(BuildContext context) {
-    final content = widget.behavior == ReaderZoomBehavior.continuousVertical
-        ? ClipRect(
-            child: ValueListenableBuilder<Matrix4>(
-              valueListenable: _transformationController,
-              builder: (context, matrix, child) => Transform(
-                key: const Key('reader-continuous-zoom-transform'),
-                transform: matrix,
-                alignment: Alignment.topLeft,
-                child: child,
-              ),
-              child: widget.child,
-            ),
-          )
-        : _zoomSurfaceActive
-        ? InteractiveViewer(
-            transformationController: _transformationController,
-            minScale: widget.minScale,
-            maxScale: widget.maxScale,
-            clipBehavior: Clip.hardEdge,
-            onInteractionStart: (_) => _animationController.stop(),
-            onInteractionEnd: (_) => _deactivateIfRestingAtMinimumScale(),
-            child: widget.child,
-          )
-        : widget.child;
-
-    // Listener 只旁观原始指针事件，不进入手势竞技场。1× 时不构建
-    // InteractiveViewer，外层 ListView/PageView 因而独占单指拖动。
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: _onPointerDown,
-      onPointerMove: _onPointerMove,
-      onPointerUp: _onPointerUp,
-      onPointerCancel: _onPointerCancel,
-      child: content,
+    final transformKey =
+        widget.behavior == ReaderZoomBehavior.continuousVertical
+        ? const Key('reader-continuous-zoom-transform')
+        : const Key('reader-bounded-zoom-transform');
+    return ClipRect(
+      child: AnimatedBuilder(
+        animation: _transformationController,
+        child: widget.child,
+        builder: (context, child) => Transform(
+          key: transformKey,
+          transform: _transformationController.value,
+          alignment: Alignment.topLeft,
+          child: child,
+        ),
+      ),
     );
   }
 
-  void _onAnimateMatrix() {
-    final animation = _matrixAnimation;
-    if (animation == null) {
+  void _attachExternalListeners() {
+    widget.gestureCoordinator.addDoubleTapListener(_onDoubleTap);
+    widget.gestureCoordinator.addPointerListener(_onPointerEvent);
+    widget.activePageIndexListenable?.addListener(_onActivePageChanged);
+    _onActivePageChanged();
+  }
+
+  void _onPointerEvent(PointerEvent event) {
+    if (event is PointerDownEvent) {
+      _onPointerDown(event);
+    } else if (event is PointerMoveEvent) {
+      _onPointerMove(event);
+    } else if (event is PointerUpEvent) {
+      _onPointerUp(event);
+    } else if (event is PointerCancelEvent) {
+      _onPointerCancel(event);
+    }
+  }
+
+  void _onActivePageChanged() {
+    if (_isCurrentPage) {
       return;
     }
-    _transformationController.value = animation.value;
+    _resetToRestingState();
+  }
+
+  bool get _isCurrentPage {
+    final activePageIndex = widget.activePageIndexListenable;
+    final pageIndex = widget.pageIndex;
+    return activePageIndex == null ||
+        pageIndex == null ||
+        activePageIndex.value == pageIndex;
+  }
+
+  void _onDoubleTap(ReaderDoubleTapDetails details) {
+    if (!_isCurrentPage) {
+      return;
+    }
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) {
+      return;
+    }
+    final localPosition = renderObject.globalToLocal(details.globalPosition);
+    if (localPosition.dx < 0 ||
+        localPosition.dy < 0 ||
+        localPosition.dx > renderObject.size.width ||
+        localPosition.dy > renderObject.size.height) {
+      return;
+    }
+
+    _stopAnimation();
+    if (_currentScale > widget.minScale + _restingScaleTolerance) {
+      _animateTo(Matrix4.identity(), targetZoomed: false);
+      return;
+    }
+
+    final targetScale = widget.doubleTapScale
+        .clamp(widget.minScale, widget.maxScale)
+        .toDouble();
+    final scenePoint = _transformationController.toScene(localPosition);
+    final targetTranslation = _clampTranslation(
+      Offset(
+        -scenePoint.dx * (targetScale - 1),
+        -scenePoint.dy * (targetScale - 1),
+      ),
+      targetScale,
+    );
+    final targetMatrix = _matrixFor(targetTranslation, targetScale);
+    _setZoomed(true);
+    _animateTo(targetMatrix, targetZoomed: true);
   }
 
   void _onPointerDown(PointerDownEvent event) {
-    _activePointers[event.pointer] = event.localPosition;
-    if (_activePointers.length == 2 &&
-        (!_zoomSurfaceActive ||
-            widget.behavior == ReaderZoomBehavior.continuousVertical)) {
-      _resetTapCandidate(clearPreviousTap: true);
+    if (!_isCurrentPage) {
+      return;
+    }
+    final localPosition = _globalToLocal(event.position);
+    final size = context.size;
+    if (localPosition == null ||
+        size == null ||
+        localPosition.dx < 0 ||
+        localPosition.dy < 0 ||
+        localPosition.dx > size.width ||
+        localPosition.dy > size.height) {
+      return;
+    }
+    _activePointers[event.pointer] = localPosition;
+    if (_activePointers.length == 2) {
       _startRawPinch();
       return;
     }
-
-    if (_tapCandidatePointer != null) {
-      _resetTapCandidate(clearPreviousTap: true);
-      return;
-    }
-
-    _tapCandidatePointer = event.pointer;
-    _tapDownLocalPosition = event.localPosition;
-    _tapCandidateCancelled = false;
-    _tapCompletesDoubleTap = _isSecondTap(event);
-    _continuousHorizontalPanActive = false;
-    if (!_tapCompletesDoubleTap) {
-      _clearExpiredPreviousTap(event.timeStamp);
+    if (_isZoomed) {
+      _panPointer = event.pointer;
+      _continuousHorizontalPanActive = false;
     }
   }
 
   void _onPointerMove(PointerMoveEvent event) {
-    if (_activePointers.containsKey(event.pointer)) {
-      _activePointers[event.pointer] = event.localPosition;
+    if (!_activePointers.containsKey(event.pointer)) {
+      return;
     }
+    final localPosition = _globalToLocal(event.position);
+    if (localPosition == null) {
+      return;
+    }
+    _activePointers[event.pointer] = localPosition;
     if (_rawPinchActive) {
       _updateRawPinch();
       return;
     }
-    _updateContinuousHorizontalPan(event);
-    if (event.pointer != _tapCandidatePointer || _tapCandidateCancelled) {
-      return;
-    }
-    final down = _tapDownLocalPosition;
-    if (down == null || (event.localPosition - down).distance > kTouchSlop) {
-      _tapCandidateCancelled = true;
+    if (_isZoomed && event.pointer == _panPointer) {
+      _updatePan(event);
     }
   }
 
   void _onPointerUp(PointerUpEvent event) {
-    if (_rawPinchActive && _rawPinchPointerIds.contains(event.pointer)) {
-      _activePointers.remove(event.pointer);
-      _finishRawPinch();
-      return;
-    }
-    if (event.pointer == _tapCandidatePointer) {
-      _completeTapCandidate(event);
-    }
-    _activePointers.remove(event.pointer);
+    _finishPointer(event.pointer);
   }
 
   void _onPointerCancel(PointerCancelEvent event) {
-    if (_rawPinchActive && _rawPinchPointerIds.contains(event.pointer)) {
-      _activePointers.remove(event.pointer);
+    _finishPointer(event.pointer);
+  }
+
+  Offset? _globalToLocal(Offset globalPosition) {
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) {
+      return null;
+    }
+    return renderObject.globalToLocal(globalPosition);
+  }
+
+  void _finishPointer(int pointer) {
+    final wasPinchPointer =
+        _rawPinchActive && _rawPinchPointerIds.contains(pointer);
+    _activePointers.remove(pointer);
+    if (wasPinchPointer) {
       _finishRawPinch();
-      return;
     }
-    if (event.pointer == _tapCandidatePointer) {
-      _resetTapCandidate(clearPreviousTap: true);
+    if (_panPointer == pointer) {
+      _panPointer = null;
+      _continuousHorizontalPanActive = false;
     }
-    _activePointers.remove(event.pointer);
   }
 
   void _startRawPinch() {
     final pointerIds = _activePointers.keys.take(2).toList(growable: false);
-    if (pointerIds.length != 2) {
-      return;
-    }
     final first = _activePointers[pointerIds[0]];
     final second = _activePointers[pointerIds[1]];
     if (first == null || second == null) {
@@ -212,8 +442,8 @@ class _ReaderZoomableImageState extends State<ReaderZoomableImage>
       return;
     }
 
-    _animationController.stop();
-    final initialFocalPoint = Offset(
+    _stopAnimation();
+    final focalPoint = Offset(
       (first.dx + second.dx) / 2,
       (first.dy + second.dy) / 2,
     );
@@ -222,9 +452,10 @@ class _ReaderZoomableImageState extends State<ReaderZoomableImage>
     _rawPinchInitialDistance = distance;
     _rawPinchInitialScale = _currentScale;
     _rawPinchInitialSceneFocalPoint = _transformationController.toScene(
-      initialFocalPoint,
+      focalPoint,
     );
-    _activateZoomSurface();
+    _panPointer = null;
+    _setZoomed(true);
   }
 
   void _updateRawPinch() {
@@ -235,70 +466,69 @@ class _ReaderZoomableImageState extends State<ReaderZoomableImage>
     final second = _activePointers[_rawPinchPointerIds[1]];
     final initialDistance = _rawPinchInitialDistance;
     final initialScale = _rawPinchInitialScale;
-    final initialSceneFocalPoint = _rawPinchInitialSceneFocalPoint;
+    final sceneFocalPoint = _rawPinchInitialSceneFocalPoint;
     if (first == null ||
         second == null ||
         initialDistance == null ||
         initialScale == null ||
-        initialSceneFocalPoint == null) {
+        sceneFocalPoint == null) {
       return;
     }
 
-    final currentDistance = (second - first).distance;
-    final scale = (initialScale * currentDistance / initialDistance)
+    final distance = (second - first).distance;
+    final scale = (initialScale * distance / initialDistance)
         .clamp(widget.minScale, widget.maxScale)
         .toDouble();
-    final currentFocalPoint = Offset(
+    final focalPoint = Offset(
       (first.dx + second.dx) / 2,
       (first.dy + second.dy) / 2,
     );
-    final translation = _clampContinuousTranslation(
-      currentFocalPoint - initialSceneFocalPoint * scale,
+    final translation = _clampTranslation(
+      focalPoint - sceneFocalPoint * scale,
       scale,
     );
-    _transformationController.value = Matrix4.identity()
-      ..translateByDouble(translation.dx, translation.dy, 0, 1)
-      ..scaleByDouble(scale, scale, 1, 1);
+    _transformationController.value = _matrixFor(translation, scale);
+    _syncZoomStateFromMatrix();
   }
 
-  void _updateContinuousHorizontalPan(PointerMoveEvent event) {
-    if (widget.behavior != ReaderZoomBehavior.continuousVertical ||
-        !_zoomSurfaceActive ||
-        event.pointer != _tapCandidatePointer) {
-      return;
+  void _finishRawPinch() {
+    _rawPinchActive = false;
+    _rawPinchPointerIds = const <int>[];
+    _rawPinchInitialDistance = null;
+    _rawPinchInitialScale = null;
+    _rawPinchInitialSceneFocalPoint = null;
+    _syncZoomStateFromMatrix();
+    if (!_isZoomed) {
+      _transformationController.value = Matrix4.identity();
     }
-    final down = _tapDownLocalPosition;
-    if (down == null) {
-      return;
-    }
-    final displacement = event.localPosition - down;
-    if (!_continuousHorizontalPanActive) {
-      if (displacement.dx.abs() <= kTouchSlop ||
-          displacement.dx.abs() <= displacement.dy.abs()) {
-        return;
+  }
+
+  void _updatePan(PointerMoveEvent event) {
+    if (widget.behavior == ReaderZoomBehavior.continuousVertical) {
+      if (!_continuousHorizontalPanActive) {
+        if (event.delta.dx.abs() <= event.delta.dy.abs()) {
+          return;
+        }
+        _continuousHorizontalPanActive = true;
       }
-      _continuousHorizontalPanActive = true;
-      _tapCandidateCancelled = true;
     }
     final matrix = _transformationController.value;
-    final scale = matrix.getMaxScaleOnAxis();
-    final currentTranslation = matrix.getTranslation();
-    final translation = _clampContinuousTranslation(
-      Offset(currentTranslation.x + event.delta.dx, currentTranslation.y),
-      scale,
+    final translation3 = matrix.getTranslation();
+    final verticalDelta =
+        widget.behavior == ReaderZoomBehavior.continuousVertical
+        ? 0.0
+        : event.delta.dy;
+    final translation = _clampTranslation(
+      Offset(translation3.x + event.delta.dx, translation3.y + verticalDelta),
+      _currentScale,
     );
-    _transformationController.value = Matrix4.identity()
-      ..translateByDouble(translation.dx, translation.dy, 0, 1)
-      ..scaleByDouble(scale, scale, 1, 1);
+    _transformationController.value = _matrixFor(translation, _currentScale);
   }
 
-  Offset _clampContinuousTranslation(Offset translation, double scale) {
-    if (widget.behavior != ReaderZoomBehavior.continuousVertical) {
-      return translation;
-    }
+  Offset _clampTranslation(Offset translation, double scale) {
     final size = context.size;
-    if (size == null || size.width <= 0 || size.height <= 0) {
-      return translation;
+    if (size == null || size.width <= 0 || size.height <= 0 || scale <= 1) {
+      return Offset.zero;
     }
     final minX = size.width * (1 - scale);
     final minY = size.height * (1 - scale);
@@ -308,157 +538,13 @@ class _ReaderZoomableImageState extends State<ReaderZoomableImage>
     );
   }
 
-  void _finishRawPinch() {
-    _rawPinchActive = false;
-    _rawPinchPointerIds = const <int>[];
-    _rawPinchInitialDistance = null;
-    _rawPinchInitialScale = null;
-    _rawPinchInitialSceneFocalPoint = null;
-    if (_transformationController.value.getMaxScaleOnAxis() <= 1.01) {
-      _deactivateZoomSurface();
-    }
+  Matrix4 _matrixFor(Offset translation, double scale) {
+    return Matrix4.identity()
+      ..translateByDouble(translation.dx, translation.dy, 0, 1)
+      ..scaleByDouble(scale, scale, 1, 1);
   }
 
-  bool _isSecondTap(PointerDownEvent event) {
-    final previousTime = _previousTapUpTime;
-    final previousPosition = _previousTapLocalPosition;
-    if (previousTime == null || previousPosition == null) {
-      return false;
-    }
-    final interval = event.timeStamp - previousTime;
-    return interval >= Duration.zero &&
-        interval <= kDoubleTapTimeout &&
-        (event.localPosition - previousPosition).distance <= kDoubleTapSlop;
-  }
-
-  void _clearExpiredPreviousTap(Duration currentTime) {
-    final previousTime = _previousTapUpTime;
-    if (previousTime == null ||
-        currentTime - previousTime > kDoubleTapTimeout) {
-      _previousTapUpTime = null;
-      _previousTapLocalPosition = null;
-    }
-  }
-
-  void _completeTapCandidate(PointerUpEvent event) {
-    final down = _tapDownLocalPosition;
-    final isTap =
-        !_tapCandidateCancelled &&
-        down != null &&
-        (event.localPosition - down).distance <= kTouchSlop;
-    if (!isTap) {
-      _resetTapCandidate(clearPreviousTap: true);
-      return;
-    }
-
-    if (_tapCompletesDoubleTap) {
-      _doubleTapLocalPosition = event.localPosition;
-      _resetTapCandidate(clearPreviousTap: true);
-      _onDoubleTap();
-      return;
-    }
-
-    _previousTapUpTime = event.timeStamp;
-    _previousTapLocalPosition = event.localPosition;
-    _resetTapCandidate(clearPreviousTap: false);
-  }
-
-  void _resetTapCandidate({required bool clearPreviousTap}) {
-    _tapCandidatePointer = null;
-    _tapDownLocalPosition = null;
-    _tapCandidateCancelled = false;
-    _tapCompletesDoubleTap = false;
-    _continuousHorizontalPanActive = false;
-    if (clearPreviousTap) {
-      _previousTapUpTime = null;
-      _previousTapLocalPosition = null;
-    }
-  }
-
-  void _onDoubleTap() {
-    final currentMatrix = _transformationController.value;
-    final currentScale = currentMatrix.getMaxScaleOnAxis();
-    final shouldZoomIn = currentScale <= 1.01;
-
-    if (!shouldZoomIn || _doubleTapLocalPosition == null) {
-      _deactivateAfterAnimation = true;
-      _animateTo(Matrix4.identity());
-      return;
-    }
-
-    final targetScale = widget.doubleTapScale
-        .clamp(widget.minScale, widget.maxScale)
-        .toDouble();
-    final scenePoint = _transformationController.toScene(
-      _doubleTapLocalPosition!,
-    );
-
-    final targetTranslation = _clampContinuousTranslation(
-      Offset(
-        -scenePoint.dx * (targetScale - 1),
-        -scenePoint.dy * (targetScale - 1),
-      ),
-      targetScale,
-    );
-    final targetMatrix = Matrix4.identity()
-      ..translateByDouble(targetTranslation.dx, targetTranslation.dy, 0, 1)
-      ..scaleByDouble(targetScale, targetScale, 1, 1);
-
-    _deactivateAfterAnimation = false;
-    if (_zoomSurfaceActive) {
-      _animateTo(targetMatrix);
-      return;
-    }
-    _activateZoomSurface();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _zoomSurfaceActive) {
-        _animateTo(targetMatrix);
-      }
-    });
-  }
-
-  void _onAnimationStatusChanged(AnimationStatus status) {
-    if (status != AnimationStatus.completed || !_deactivateAfterAnimation) {
-      return;
-    }
-    _deactivateAfterAnimation = false;
-    _deactivateZoomSurface();
-  }
-
-  void _deactivateIfRestingAtMinimumScale() {
-    if (_transformationController.value.getMaxScaleOnAxis() <= 1.01) {
-      _deactivateZoomSurface();
-    }
-  }
-
-  void _deactivateZoomSurface() {
-    if (!_zoomSurfaceActive) {
-      return;
-    }
-    _rawPinchActive = false;
-    _rawPinchPointerIds = const <int>[];
-    _rawPinchInitialDistance = null;
-    _rawPinchInitialScale = null;
-    _rawPinchInitialSceneFocalPoint = null;
-    _continuousHorizontalPanActive = false;
-    _transformationController.value = Matrix4.identity();
-    setState(() {
-      _zoomSurfaceActive = false;
-    });
-    widget.onZoomStateChanged?.call(false);
-  }
-
-  void _activateZoomSurface() {
-    if (_zoomSurfaceActive) {
-      return;
-    }
-    setState(() {
-      _zoomSurfaceActive = true;
-    });
-    widget.onZoomStateChanged?.call(true);
-  }
-
-  void _animateTo(Matrix4 targetMatrix) {
+  void _animateTo(Matrix4 targetMatrix, {required bool targetZoomed}) {
     _matrixAnimation =
         Matrix4Tween(
           begin: _transformationController.value,
@@ -469,10 +555,68 @@ class _ReaderZoomableImageState extends State<ReaderZoomableImage>
             curve: Curves.easeOutCubic,
           ),
         );
+    _animationTargetZoomed = targetZoomed;
     _animationController
-      ..stop()
       ..reset()
       ..forward();
+  }
+
+  void _onAnimateMatrix() {
+    final animation = _matrixAnimation;
+    if (animation == null) {
+      return;
+    }
+    _transformationController.value = animation.value;
+    if (_animationTargetZoomed == false) {
+      _syncZoomStateFromMatrix();
+    }
+  }
+
+  void _onAnimationStatusChanged(AnimationStatus status) {
+    if (status != AnimationStatus.completed) {
+      return;
+    }
+    final targetZoomed = _animationTargetZoomed;
+    _matrixAnimation = null;
+    _animationTargetZoomed = null;
+    if (targetZoomed == false) {
+      _transformationController.value = Matrix4.identity();
+    }
+    if (targetZoomed != null) {
+      _setZoomed(targetZoomed);
+    }
+  }
+
+  void _stopAnimation() {
+    _animationController.stop();
+    _matrixAnimation = null;
+    _animationTargetZoomed = null;
+  }
+
+  void _syncZoomStateFromMatrix() {
+    _setZoomed(_currentScale > widget.minScale + _restingScaleTolerance);
+  }
+
+  void _setZoomed(bool value) {
+    if (_isZoomed == value) {
+      return;
+    }
+    _isZoomed = value;
+    widget.onZoomStateChanged?.call(value);
+  }
+
+  void _resetToRestingState() {
+    _stopAnimation();
+    _activePointers.clear();
+    _rawPinchActive = false;
+    _rawPinchPointerIds = const <int>[];
+    _rawPinchInitialDistance = null;
+    _rawPinchInitialScale = null;
+    _rawPinchInitialSceneFocalPoint = null;
+    _panPointer = null;
+    _continuousHorizontalPanActive = false;
+    _transformationController.value = Matrix4.identity();
+    _setZoomed(false);
   }
 
   double get _currentScale =>

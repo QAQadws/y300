@@ -415,6 +415,18 @@ void main() {
       ),
       isTrue,
     );
+    expect(
+      tester
+          .widget<PageView>(
+            find.byKey(const Key('thread-image-reader-page-view')),
+          )
+          .physics,
+      isA<PageScrollPhysics>(),
+    );
+    final zoomedPage = _pageController(tester).page;
+    await tester.dragFrom(center, const Offset(-900, 0));
+    await tester.pumpAndSettle();
+    expect(_pageController(tester).page, closeTo(zoomedPage!, 0.01));
 
     await tester.tapAt(center);
     await tester.pump(const Duration(milliseconds: 60));
@@ -438,6 +450,20 @@ void main() {
           .ignoring,
       isTrue,
     );
+    expect(
+      tester
+          .widget<PageView>(
+            find.byKey(const Key('thread-image-reader-page-view')),
+          )
+          .physics,
+      isA<PageScrollPhysics>(),
+    );
+    await tester.drag(
+      find.byKey(const Key('thread-image-reader-page-view')),
+      const Offset(-900, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(_pageController(tester).page, closeTo(3, 0.01));
   });
 }
 

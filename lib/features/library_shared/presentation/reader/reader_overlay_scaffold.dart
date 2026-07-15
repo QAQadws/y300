@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_bottom_overlay_panel.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader_gesture_coordinator.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_tap_zones.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_top_overlay_bar.dart';
@@ -79,6 +81,8 @@ class ReaderOverlayScaffold extends StatefulWidget {
     this.onRightTap,
     this.menuInitiallyVisible = false,
     this.tapZonesEnabled = true,
+    this.tapZonesBlockedListenable,
+    this.gestureCoordinator,
     this.bottomSafeFraction = 0,
     this.animationDuration = const Duration(milliseconds: 240),
   });
@@ -92,6 +96,8 @@ class ReaderOverlayScaffold extends StatefulWidget {
   final VoidCallback? onRightTap;
   final bool menuInitiallyVisible;
   final bool tapZonesEnabled;
+  final ValueListenable<bool>? tapZonesBlockedListenable;
+  final ReaderGestureCoordinator? gestureCoordinator;
   final double bottomSafeFraction;
   final Duration animationDuration;
 
@@ -110,7 +116,8 @@ class _ReaderOverlayScaffoldState extends State<ReaderOverlayScaffold>
   void initState() {
     super.initState();
     _isMenuVisible =
-        widget.menuInitiallyVisible || (widget.controller?.isMenuVisible ?? false);
+        widget.menuInitiallyVisible ||
+        (widget.controller?.isMenuVisible ?? false);
     _animationController = AnimationController(
       vsync: this,
       duration: widget.animationDuration,
@@ -159,6 +166,8 @@ class _ReaderOverlayScaffoldState extends State<ReaderOverlayScaffold>
       children: [
         ReaderTapZones(
           enabled: widget.tapZonesEnabled,
+          blockedListenable: widget.tapZonesBlockedListenable,
+          gestureCoordinator: widget.gestureCoordinator,
           bottomSafeFraction: widget.bottomSafeFraction,
           onCenterTap: _handleCenterTap,
           onLeftTap: widget.onLeftTap,
