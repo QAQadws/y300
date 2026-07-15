@@ -20,11 +20,14 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
     required this.fit,
     this.width,
     this.height,
+    this.preferredLocalPath,
+    this.decodeDisplaySize,
     required this.placeholder,
     this.errorPlaceholder,
     this.headerBuilder,
     this.onImageResolved,
     this.onImageFailed,
+    this.onLocalPathResolved,
     this.imageProviderOverride,
     this.remoteImageProviderOverride,
   });
@@ -33,11 +36,14 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
   final BoxFit fit;
   final double? width;
   final double? height;
+  final String? preferredLocalPath;
+  final Size? decodeDisplaySize;
   final Widget placeholder;
   final Widget? errorPlaceholder;
   final ImageRequestHeaderBuilder? headerBuilder;
   final ValueChanged<Size>? onImageResolved;
   final VoidCallback? onImageFailed;
+  final ValueChanged<String>? onLocalPathResolved;
   @visibleForTesting
   final ImageProvider? imageProviderOverride;
   @visibleForTesting
@@ -67,7 +73,8 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
       return;
     }
     if (oldWidget.request?.cacheKey != widget.request?.cacheKey ||
-        oldWidget.request?.sourceUrl != widget.request?.sourceUrl) {
+        oldWidget.request?.sourceUrl != widget.request?.sourceUrl ||
+        oldWidget.preferredLocalPath != widget.preferredLocalPath) {
       _restartCacheFlow();
     }
   }
@@ -84,6 +91,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
       fit: widget.fit,
       width: widget.width,
       height: widget.height,
+      decodeDisplaySize: widget.decodeDisplaySize,
       placeholder: widget.placeholder,
       errorPlaceholder: widget.errorPlaceholder,
       headerBuilder: widget.headerBuilder,
@@ -145,6 +153,12 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     if (request == null) {
       return;
     }
+    final preferredLocalPath = widget.preferredLocalPath?.trim();
+    if (preferredLocalPath != null && preferredLocalPath.isNotEmpty) {
+      _localPath = preferredLocalPath;
+      _allowRemoteFallback = true;
+      return;
+    }
     if (request.cacheKey.trim().isEmpty) {
       _allowRemoteFallback = true;
       return;
@@ -162,8 +176,13 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
       return;
     }
     if (_hasUsableLocalPath(cached)) {
+      final cachedLocalPath = cached?.localPath?.trim();
+      if (cachedLocalPath == null || cachedLocalPath.isEmpty) {
+        return;
+      }
+      widget.onLocalPathResolved?.call(cachedLocalPath);
       setState(() {
-        _localPath = cached!.localPath;
+        _localPath = cachedLocalPath;
         _allowRemoteFallback = false;
       });
       return;
@@ -177,6 +196,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     if (!_isActive(generation) || !_hasUsableLocalPath(result)) {
       return;
     }
+    widget.onLocalPathResolved?.call(result.localPath!.trim());
     if (_displayedRemoteImage) {
       return;
     }

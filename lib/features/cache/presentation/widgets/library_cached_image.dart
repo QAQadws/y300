@@ -26,6 +26,7 @@ class LibraryCachedImage extends StatefulWidget {
     required this.fit,
     this.width,
     this.height,
+    this.decodeDisplaySize,
     this.alignment = Alignment.center,
     this.downscalePolicy = const WidthBoundImageDownscalePolicy(),
     required this.placeholder,
@@ -45,6 +46,7 @@ class LibraryCachedImage extends StatefulWidget {
   final BoxFit fit;
   final double? width;
   final double? height;
+  final Size? decodeDisplaySize;
 
   /// `BoxFit.cover` 下的对齐点（自定义封面焦点）。默认居中。
   final AlignmentGeometry alignment;
@@ -72,10 +74,10 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
   String? _reportedFailureIdentity;
 
   /// 本帧解码目标（宽度优先策略结果），供网络分支与 contain 文件分支复用。
-  ImageDecodeTarget _decodeTarget = ImageDecodeTarget.none;
   /// 本帧显示框尺寸与 DPR，供 cover 感知降采样解析复用。
   Size _displaySize = Size.zero;
   double _devicePixelRatio = 1;
+  ImageDecodeTarget _decodeTarget = ImageDecodeTarget.none;
 
   @override
   void didUpdateWidget(covariant LibraryCachedImage oldWidget) {
@@ -104,10 +106,16 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
       builder: (context, constraints) {
         // 显式 width/height 可能是 double.infinity（如竖向阅读 width: infinity 表示
         // 撑满列宽），此时退回布局约束取真实宽度，否则会被当成无界而跳过降采样。
-        _displaySize = Size(
-          _finiteOr(widget.width, constraints.maxWidth),
-          _finiteOr(widget.height, constraints.maxHeight),
-        );
+        final decodeDisplaySize = widget.decodeDisplaySize;
+        _displaySize =
+            decodeDisplaySize != null &&
+                decodeDisplaySize.width.isFinite &&
+                decodeDisplaySize.width > 0
+            ? decodeDisplaySize
+            : Size(
+                _finiteOr(widget.width, constraints.maxWidth),
+                _finiteOr(widget.height, constraints.maxHeight),
+              );
         _devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
         _decodeTarget = widget.downscalePolicy.resolve(
           displaySize: _displaySize,
@@ -159,8 +167,8 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
       if (file.existsSync()) {
         final fileProvider = FileImage(file);
         // cover 用 cover 感知降采样修复横长竖短图模糊；其它 fit 走宽度优先策略。
-        final displayProvider = resolveDownscaledImageProvider(
-          base: fileProvider,
+        final displayProvider = resolveDownscaledFileImageProvider(
+          localPath: file.path,
           fit: widget.fit,
           displaySize: _displaySize,
           devicePixelRatio: _devicePixelRatio,
@@ -237,13 +245,19 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
     final provider =
         widget.remoteImageProviderOverride ??
         NetworkImage(remote, headers: headers.isEmpty ? null : headers);
-    // 默认 Image 构造器不支持 cacheWidth/cacheHeight，网络分支改用 ResizeImage
-    // 在解码阶段降采样。尺寸上报仍用未包裹的 provider，保持原始分辨率用于布局提示。
-    final displayProvider = ResizeImage.resizeIfNeeded(
-      _decodeTarget.cacheWidth,
-      _decodeTarget.cacheHeight,
-      provider,
-    );
+    final displayProvider = widget.decodeDisplaySize == null
+        ? ResizeImage.resizeIfNeeded(
+            _decodeTarget.cacheWidth,
+            _decodeTarget.cacheHeight,
+            provider,
+          )
+        : resolveDownscaledImageProvider(
+            base: provider,
+            fit: widget.fit,
+            displaySize: _displaySize,
+            devicePixelRatio: _devicePixelRatio,
+            downscalePolicy: widget.downscalePolicy,
+          );
     return Image(
       image: displayProvider,
       fit: widget.fit,

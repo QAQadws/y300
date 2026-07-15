@@ -10,6 +10,7 @@ import 'package:y300/features/cache/domain/services/forum_image_precache_service
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_presentation.dart';
+import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 
@@ -35,6 +36,7 @@ void main() {
     expect(find.byType(ContinuousImageReaderView), findsOneWidget);
     expect(find.byKey(const Key('thread-image-reader-list')), findsOneWidget);
     expect(find.byType(CachedLibraryImage), findsWidgets);
+    expect(find.byType(ReaderSessionImage), findsWidgets);
   });
 
   testWidgets('ThreadImageReaderPage exposes general reading chrome only', (

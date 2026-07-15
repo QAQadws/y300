@@ -1,3 +1,5 @@
+import 'dart:io' as io;
+
 import 'package:flutter/painting.dart';
 import 'package:y300/core/media/cover_aware_resize_image.dart';
 import 'package:y300/core/media/image_downscale_policy.dart';
@@ -32,5 +34,27 @@ ImageProvider resolveDownscaledImageProvider({
     displaySize: displaySize,
     devicePixelRatio: devicePixelRatio,
   );
-  return ResizeImage.resizeIfNeeded(target.cacheWidth, target.cacheHeight, base);
+  return ResizeImage.resizeIfNeeded(
+    target.cacheWidth,
+    target.cacheHeight,
+    base,
+  );
+}
+
+/// Canonical local-file provider used by both on-screen reader images and
+/// decoded preheating. Equal inputs produce equal ImageProvider cache keys.
+ImageProvider resolveDownscaledFileImageProvider({
+  required String localPath,
+  required BoxFit fit,
+  required Size displaySize,
+  required double devicePixelRatio,
+  ImageDownscalePolicy downscalePolicy = const WidthBoundImageDownscalePolicy(),
+}) {
+  return resolveDownscaledImageProvider(
+    base: FileImage(io.File(localPath)),
+    fit: fit,
+    displaySize: displaySize,
+    devicePixelRatio: devicePixelRatio,
+    downscalePolicy: downscalePolicy,
+  );
 }

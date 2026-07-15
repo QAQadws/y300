@@ -5,12 +5,12 @@ import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
-import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_chapter_preload.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/comic/presentation/services/comic_reader_continuous_image_adapter.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
+import 'package:y300/features/reader_shared/domain/image_session/reader_image_session.dart';
 import 'package:y300/features/reader_shared/domain/reader_preferences/reader_preferences.dart';
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 
@@ -49,6 +49,10 @@ class ComicReaderCapability extends ReaderCapability {
 
   @override
   ReaderKind get readerKind => ReaderKind.comic;
+
+  @override
+  ReaderImagePreparationSink get imagePreparationSink =>
+      _ComicReaderImagePreparationSink(controller);
 
   final VoidCallback onShowMoreActions;
   final VoidCallback onShowChapterList;
@@ -240,6 +244,11 @@ class ComicReaderCapability extends ReaderCapability {
   }
 
   @override
+  String? initialLocalPathFor(ContinuousImageItem item) {
+    return _imageForIndex(item.index)?.effectiveLocalPath;
+  }
+
+  @override
   ForumImageLoadSpec? imageLoadSpecFor(ContinuousImageItem item) {
     final uri = Uri.tryParse(item.url.trim());
     if (uri == null) {
@@ -268,10 +277,11 @@ class ComicReaderCapability extends ReaderCapability {
       return const SizedBox.shrink();
     }
     final imageUrl = image.imageUrl;
-    return LibraryCachedImage(
-      localPath: image.effectiveLocalPath,
-      imageUrl: imageUrl,
+    return ReaderSessionImage(
+      sessionBinding: spec.sessionBinding,
+      cacheRequest: cacheRequestFor(spec.item),
       fit: spec.fit,
+      expectedDisplaySize: spec.expectedDisplaySize,
       width: spec.paged ? null : double.infinity,
       placeholder: _ComicReaderImageLoadingPlaceholder(
         paged: spec.paged,
@@ -323,6 +333,17 @@ class ComicReaderCapability extends ReaderCapability {
       case ReaderModePreference.rtl:
         return '右到左';
     }
+  }
+}
+
+class _ComicReaderImagePreparationSink implements ReaderImagePreparationSink {
+  const _ComicReaderImagePreparationSink(this.controller);
+
+  final ComicReaderController controller;
+
+  @override
+  Future<void> record(ReaderImagePreparationRecord record) {
+    return controller.recordPreparedReaderImage(record);
   }
 }
 

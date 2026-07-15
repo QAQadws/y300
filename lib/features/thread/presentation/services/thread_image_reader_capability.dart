@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
-import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
@@ -13,8 +12,8 @@ import 'package:y300/features/thread/domain/models/thread_image_open_models.dart
 /// 与漫画相比，帖子图片阅读是"通用阅读"的子集：保留模式切换/缩放/滑块/页码/显示
 /// 设置（这些由引擎统一提供），去掉书签/下载/章节/上一话下一话/原帖等 detail 强
 /// 相关项——做法是对相应能力返回空/`null`，由引擎据此自动隐藏，而非在引擎里写
-/// if-else。图片内容用 [CachedLibraryImage]（request 驱动），与漫画的 localPath
-/// 驱动互不影响。
+/// if-else。图片内容通过共享 session entry 消费预加载结果，同时保留
+/// [ReaderSessionImage] 内部的 [CachedLibraryImage] 查询与远端 fallback。
 class ThreadImageReaderCapability extends ReaderCapability {
   ThreadImageReaderCapability({
     required this.request,
@@ -103,9 +102,11 @@ class ThreadImageReaderCapability extends ReaderCapability {
 
   @override
   Widget buildImageContent(BuildContext context, ReaderImageBuildSpec spec) {
-    return CachedLibraryImage(
-      request: cacheRequestFor(spec.item),
+    return ReaderSessionImage(
+      sessionBinding: spec.sessionBinding,
+      cacheRequest: cacheRequestFor(spec.item),
       fit: spec.fit,
+      expectedDisplaySize: spec.expectedDisplaySize,
       width: spec.paged ? null : double.infinity,
       headerBuilder: imageHeaderBuilder,
       placeholder: const Center(

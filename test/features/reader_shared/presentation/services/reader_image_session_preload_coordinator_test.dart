@@ -7,8 +7,10 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
+import 'package:y300/features/reader_shared/domain/image_session/reader_image_session.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_capability.dart';
 import 'package:y300/features/reader_shared/presentation/services/reader_image_session_preload_coordinator.dart';
+import 'package:y300/features/reader_shared/presentation/services/reader_image_session_store.dart';
 
 void main() {
   group('ReaderImageSessionPreloadCoordinator', () {
@@ -198,6 +200,45 @@ void main() {
       expect(results.single.applied, isFalse);
     });
 
+    testWidgets('applies results to session store and writes to sink', (
+      tester,
+    ) async {
+      final store = ReaderImageSessionStore();
+      addTearDown(store.dispose);
+      final sink = _RecordingPreparationSink();
+      final coordinator = ReaderImageSessionPreloadCoordinator(
+        sessionStore: store,
+      );
+      final content = _content(count: 1);
+      coordinator.resetSession(
+        readerOwnerId: content.ownerId,
+        items: content.items,
+      );
+      final binding = store.bindingFor(content.items.single);
+      final service = _RecordingPrecacheService();
+      await tester.pumpWidget(
+        Builder(
+          builder: (context) {
+            coordinator.submitWindow(
+              context: context,
+              content: content,
+              focusIndex: 0,
+              scrollDirection: ContinuousImageScrollDirection.idle,
+              capability: _SinkCapability(sink),
+              precacheService: service,
+            );
+            return const SizedBox();
+          },
+        ),
+      );
+      await tester.pump();
+
+      expect(binding.value.status, ReaderImageSessionStatus.decoded);
+      expect(binding.value.localPath, '/cache/0.jpg');
+      expect(sink.records, hasLength(1));
+      expect(sink.records.single.itemId, content.items.single.id);
+    });
+
     testWidgets('dispose suppresses future submissions', (tester) async {
       final service = _RecordingPrecacheService();
       final coordinator = ReaderImageSessionPreloadCoordinator()..dispose();
@@ -281,6 +322,24 @@ class _TestCapability extends ReaderCapability {
       cacheKey: item.cacheKey,
       retentionClass: ImageRetentionClass.recentReader,
     );
+  }
+}
+
+class _SinkCapability extends _TestCapability {
+  _SinkCapability(this.sink);
+
+  final ReaderImagePreparationSink sink;
+
+  @override
+  ReaderImagePreparationSink get imagePreparationSink => sink;
+}
+
+class _RecordingPreparationSink implements ReaderImagePreparationSink {
+  final records = <ReaderImagePreparationRecord>[];
+
+  @override
+  Future<void> record(ReaderImagePreparationRecord record) async {
+    records.add(record);
   }
 }
 

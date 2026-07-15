@@ -4,7 +4,12 @@ import 'package:flutter/widgets.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
+import 'package:y300/features/reader_shared/domain/image_session/reader_image_session.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_capability.dart';
+import 'package:y300/features/reader_shared/presentation/services/reader_image_session_store.dart';
+
+export 'package:y300/features/reader_shared/domain/image_session/reader_image_session.dart'
+    show ReaderImageSessionPreloadKind;
 
 class ReaderImageSessionPreloadPolicy {
   const ReaderImageSessionPreloadPolicy({
@@ -19,11 +24,11 @@ class ReaderImageSessionPreloadPolicy {
   static const aggressiveReaderSession = ReaderImageSessionPreloadPolicy();
 }
 
-enum ReaderImageSessionPreloadKind { decoded, disk }
-
 class ReaderImageSessionPreloadResult {
   const ReaderImageSessionPreloadResult({
     required this.readerOwnerId,
+    required this.itemId,
+    required this.imageIndex,
     required this.spec,
     required this.kind,
     required this.result,
@@ -32,6 +37,8 @@ class ReaderImageSessionPreloadResult {
   });
 
   final String readerOwnerId;
+  final String itemId;
+  final int imageIndex;
   final ForumImageLoadSpec spec;
   final ReaderImageSessionPreloadKind kind;
   final ForumImagePrecacheResult result;
@@ -42,12 +49,16 @@ class ReaderImageSessionPreloadResult {
 class ReaderImageSessionPreloadScheduled {
   const ReaderImageSessionPreloadScheduled({
     required this.readerOwnerId,
+    required this.itemId,
+    required this.imageIndex,
     required this.spec,
     required this.kind,
     required this.generation,
   });
 
   final String readerOwnerId;
+  final String itemId;
+  final int imageIndex;
   final ForumImageLoadSpec spec;
   final ReaderImageSessionPreloadKind kind;
   final int generation;
@@ -57,13 +68,16 @@ class ReaderImageSessionPreloadCoordinator {
   ReaderImageSessionPreloadCoordinator({
     ReaderImageSessionPreloadPolicy policy =
         ReaderImageSessionPreloadPolicy.aggressiveReaderSession,
+    ReaderImageSessionStore? sessionStore,
     void Function(ReaderImageSessionPreloadScheduled scheduled)? onScheduled,
     void Function(ReaderImageSessionPreloadResult result)? onResult,
   }) : _policy = policy,
+       _sessionStore = sessionStore,
        _onScheduled = onScheduled,
        _onResult = onResult;
 
   final ReaderImageSessionPreloadPolicy _policy;
+  final ReaderImageSessionStore? _sessionStore;
   final void Function(ReaderImageSessionPreloadScheduled scheduled)?
   _onScheduled;
   final void Function(ReaderImageSessionPreloadResult result)? _onResult;
@@ -74,12 +88,22 @@ class ReaderImageSessionPreloadCoordinator {
 
   int get generation => _generation;
 
-  void resetSession() {
+  void resetSession({
+    String? readerOwnerId,
+    Iterable<ContinuousImageItem> items = const <ContinuousImageItem>[],
+  }) {
     if (_disposed) {
       return;
     }
     _generation += 1;
     _scheduledByIdentity.clear();
+    if (readerOwnerId != null) {
+      _sessionStore?.startSession(
+        readerOwnerId: readerOwnerId,
+        generation: _generation,
+        items: items,
+      );
+    }
   }
 
   void dispose() {
@@ -117,6 +141,7 @@ class ReaderImageSessionPreloadCoordinator {
       requests.add(
         ReaderImageSessionPreloadRequest(
           readerOwnerId: content.ownerId,
+          itemId: item.id,
           index: index,
           spec: spec,
           kind: distance <= _policy.decodedRadius
@@ -141,6 +166,11 @@ class ReaderImageSessionPreloadCoordinator {
       return;
     }
     final generation = _generation;
+    _sessionStore?.startSession(
+      readerOwnerId: content.ownerId,
+      generation: generation,
+      items: content.items,
+    );
     final requests = buildRequests(
       content: content,
       focusIndex: focusIndex,
@@ -161,6 +191,7 @@ class ReaderImageSessionPreloadCoordinator {
               generation: generation,
               precacheService: precacheService,
               expectedDisplaySize: expectedDisplaySize,
+              preparationSink: capability.imagePreparationSink,
             ),
           );
         case ReaderImageSessionPreloadKind.disk:
@@ -169,6 +200,7 @@ class ReaderImageSessionPreloadCoordinator {
               request: request,
               generation: generation,
               precacheService: precacheService,
+              preparationSink: capability.imagePreparationSink,
             ),
           );
       }
@@ -181,6 +213,7 @@ class ReaderImageSessionPreloadCoordinator {
     required int generation,
     required ForumImagePrecacheService precacheService,
     required Size? expectedDisplaySize,
+    required ReaderImagePreparationSink? preparationSink,
   }) async {
     ForumImagePrecacheResult result;
     try {
@@ -192,7 +225,12 @@ class ReaderImageSessionPreloadCoordinator {
     } catch (error) {
       result = ForumImagePrecacheResult.failed(error);
     }
-    _notifyResult(request: request, generation: generation, result: result);
+    _notifyResult(
+      request: request,
+      generation: generation,
+      result: result,
+      preparationSink: preparationSink,
+    );
   }
 
   void _notifyScheduled({
@@ -203,6 +241,8 @@ class ReaderImageSessionPreloadCoordinator {
       _onScheduled?.call(
         ReaderImageSessionPreloadScheduled(
           readerOwnerId: request.readerOwnerId,
+          itemId: request.itemId,
+          imageIndex: request.index,
           spec: request.spec,
           kind: request.kind,
           generation: generation,
@@ -217,6 +257,7 @@ class ReaderImageSessionPreloadCoordinator {
     required ReaderImageSessionPreloadRequest request,
     required int generation,
     required ForumImagePrecacheService precacheService,
+    required ReaderImagePreparationSink? preparationSink,
   }) async {
     ForumImagePrecacheResult result;
     try {
@@ -224,23 +265,73 @@ class ReaderImageSessionPreloadCoordinator {
     } catch (error) {
       result = ForumImagePrecacheResult.failed(error);
     }
-    _notifyResult(request: request, generation: generation, result: result);
+    _notifyResult(
+      request: request,
+      generation: generation,
+      result: result,
+      preparationSink: preparationSink,
+    );
   }
 
   void _notifyResult({
     required ReaderImageSessionPreloadRequest request,
     required int generation,
     required ForumImagePrecacheResult result,
+    required ReaderImagePreparationSink? preparationSink,
   }) {
-    _onResult?.call(
-      ReaderImageSessionPreloadResult(
-        readerOwnerId: request.readerOwnerId,
-        spec: request.spec,
-        kind: request.kind,
-        result: result,
-        generation: generation,
-        applied: !_disposed && generation == _generation,
-      ),
+    final currentGeneration = !_disposed && generation == _generation;
+    final applied =
+        currentGeneration &&
+        (_sessionStore?.applyPreloadResult(
+              readerOwnerId: request.readerOwnerId,
+              itemId: request.itemId,
+              generation: generation,
+              sourceUrl: request.spec.sourceUrl,
+              cacheKey: request.spec.cacheKey,
+              kind: request.kind,
+              result: result,
+            ) ??
+            true);
+    final event = ReaderImageSessionPreloadResult(
+      readerOwnerId: request.readerOwnerId,
+      itemId: request.itemId,
+      imageIndex: request.index,
+      spec: request.spec,
+      kind: request.kind,
+      result: result,
+      generation: generation,
+      applied: applied,
+    );
+    try {
+      _onResult?.call(event);
+    } catch (_) {
+      // Diagnostics must not alter image preparation or display.
+    }
+    final localPath = result.localPath?.trim();
+    if (!applied ||
+        !result.success ||
+        preparationSink == null ||
+        localPath == null ||
+        localPath.isEmpty) {
+      return;
+    }
+    unawaited(
+      preparationSink
+          .record(
+            ReaderImagePreparationRecord(
+              readerOwnerId: request.readerOwnerId,
+              itemId: request.itemId,
+              imageIndex: request.index,
+              sourceUrl: request.spec.sourceUrl,
+              cacheKey: result.cacheKey ?? request.spec.cacheKey,
+              localPath: localPath,
+              generation: generation,
+              decoded: result.decoded,
+            ),
+          )
+          .catchError((_) {
+            // Business metadata is best-effort and never blocks the reader.
+          }),
     );
   }
 
@@ -304,12 +395,14 @@ class ReaderImageSessionPreloadCoordinator {
 class ReaderImageSessionPreloadRequest {
   const ReaderImageSessionPreloadRequest({
     required this.readerOwnerId,
+    required this.itemId,
     required this.index,
     required this.spec,
     required this.kind,
   });
 
   final String readerOwnerId;
+  final String itemId;
   final int index;
   final ForumImageLoadSpec spec;
   final ReaderImageSessionPreloadKind kind;

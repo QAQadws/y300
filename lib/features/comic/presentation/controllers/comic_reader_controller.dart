@@ -18,6 +18,7 @@ import 'package:y300/features/comic/domain/services/comic_reader_preload_queue.d
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
+import 'package:y300/features/reader_shared/domain/image_session/reader_image_session.dart';
 
 class ComicReaderArgs {
   const ComicReaderArgs({required this.comicId, required this.episodeId});
@@ -264,6 +265,24 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   bool _firstImageVisibleLogged = false;
 
   String get _activeEpisodeId => _currentEpisodeId;
+
+  /// Persists shared-session cache metadata without changing explicit
+  /// download state or rebuilding the reader view.
+  Future<void> recordPreparedReaderImage(
+    ReaderImagePreparationRecord record,
+  ) async {
+    if (!ref.mounted || record.readerOwnerId != _activeEpisodeId) {
+      return;
+    }
+    await _updateImageCacheMetadata(
+      episodeId: record.readerOwnerId,
+      imageUrl: record.sourceUrl,
+      stableCacheKey: record.cacheKey,
+      lastSourceUrl: record.sourceUrl,
+      localPath: record.localPath,
+      lastAccessedAt: DateTime.now(),
+    );
+  }
 
   @override
   FutureOr<ComicReaderViewState> build() async {
@@ -583,10 +602,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     return localPath;
   }
 
-  Future<void> setCurrentImageAsCover({
-    double? focusX,
-    double? focusY,
-  }) async {
+  Future<void> setCurrentImageAsCover({double? focusX, double? focusY}) async {
     final current = state.value;
     final image = current?.currentImage;
     if (current == null || image == null) {

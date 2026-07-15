@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'dart:io' as io;
-
 import 'package:flutter/material.dart';
 import 'package:y300/core/media/image_display_provider.dart';
-import 'package:y300/core/media/image_downscale_policy.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
@@ -222,17 +220,15 @@ ImageProvider defaultForumPrecacheImageProviderBuilder({
   required Size? expectedDisplaySize,
   required double devicePixelRatio,
 }) {
-  final fileProvider = FileImage(io.File(localPath));
   final size = expectedDisplaySize;
   if (size == null) {
-    return fileProvider;
+    return FileImage(io.File(localPath));
   }
-  return resolveDownscaledImageProvider(
-    base: fileProvider,
+  return resolveDownscaledFileImageProvider(
+    localPath: localPath,
     fit: fit,
     displaySize: size,
     devicePixelRatio: devicePixelRatio,
-    downscalePolicy: const WidthBoundImageDownscalePolicy(),
   );
 }
 

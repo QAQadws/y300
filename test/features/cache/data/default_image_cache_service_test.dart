@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' as io;
 import 'dart:typed_data';
 import 'dart:ui';
@@ -12,6 +13,45 @@ import 'package:y300/features/cache/data/repositories/image_cache_repository.dar
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 
 void main() {
+  test('ensureCached deduplicates concurrent same-key downloads', () async {
+    final tempDir = await io.Directory.systemTemp.createTemp(
+      'y300-image-cache-dedupe-test-',
+    );
+    addTearDown(() async {
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+    final imageFile = io.File('${tempDir.path}/downloaded.jpg');
+    await imageFile.writeAsBytes(<int>[1, 2, 3, 4]);
+    final downloadCompleter = Completer<String>();
+    final downloader = _SpyImageFileDownloader(
+      localPath: imageFile.path,
+      downloadCompleter: downloadCompleter,
+    );
+    final service = DefaultImageCacheService(
+      repository: _MemoryImageCacheRepository(),
+      cacheManagerFuture: Future<BaseCacheManager>.value(_UnusedCacheManager()),
+      directoryResolver: const ImageCacheDirectoryResolver(),
+      downloader: downloader,
+    );
+    const request = ImageCacheRequest(
+      cacheKey: 'comic-page-dedupe',
+      sourceUrl: 'https://bbs.yamibo.com/data/attachment/page.jpg',
+      ownerType: ImageCacheOwnerType.comic,
+      ownerId: 'yamibo:100',
+      role: ImageCacheRole.comicPage,
+    );
+
+    final first = service.ensureCached(request);
+    final second = service.ensureCached(request);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(downloader.downloadCount, 1);
+    downloadCompleter.complete(imageFile.path);
+    await Future.wait(<Future<CachedImageResult>>[first, second]);
+  });
+
   test('ensureCached passes anti-hotlink headers to downloader', () async {
     final tempDir = await io.Directory.systemTemp.createTemp(
       'y300-image-cache-test-',
@@ -330,10 +370,7 @@ void main() {
       );
 
       expect(deletedCount, 2);
-      expect(
-        repository.records.keys,
-        <String>{'cover-1', 'protected-page-1'},
-      );
+      expect(repository.records.keys, <String>{'cover-1', 'protected-page-1'});
       expect(await comicPageFile.exists(), isFalse);
       expect(await threadFile.exists(), isFalse);
     },
@@ -353,9 +390,7 @@ void main() {
       );
     final service = DefaultImageCacheService(
       repository: repository,
-      cacheManagerFuture: Future<BaseCacheManager>.value(
-        _UnusedCacheManager(),
-      ),
+      cacheManagerFuture: Future<BaseCacheManager>.value(_UnusedCacheManager()),
       directoryResolver: const ImageCacheDirectoryResolver(),
     );
 
@@ -498,9 +533,11 @@ class _SpyImageHeaderBuilder implements ImageRequestHeaderBuilder {
 }
 
 class _SpyImageFileDownloader implements ImageFileDownloader {
-  _SpyImageFileDownloader({required this.localPath});
+  _SpyImageFileDownloader({required this.localPath, this.downloadCompleter});
 
   final String localPath;
+  final Completer<String>? downloadCompleter;
+  int downloadCount = 0;
   Map<String, String>? lastHeaders;
   String? lastSourceUrl;
   bool? lastForce;
@@ -513,10 +550,11 @@ class _SpyImageFileDownloader implements ImageFileDownloader {
     Map<String, String>? headers,
     bool force = false,
   }) async {
+    downloadCount += 1;
     lastSourceUrl = sourceUrl;
     lastHeaders = headers;
     lastForce = force;
-    return localPath;
+    return downloadCompleter?.future ?? localPath;
   }
 }
 
@@ -559,14 +597,13 @@ class _MemoryImageCacheRepository implements ImageCacheRepository {
 
   @override
   Future<List<CachedImageRecord>> listUnprotectedByAccessTime() async {
-    final unprotected = records.values
-        .where((record) => !record.protected)
-        .toList()
-      ..sort((a, b) {
-        final aTime = a.lastAccessedAt ?? a.updatedAt;
-        final bTime = b.lastAccessedAt ?? b.updatedAt;
-        return aTime.compareTo(bTime);
-      });
+    final unprotected =
+        records.values.where((record) => !record.protected).toList()
+          ..sort((a, b) {
+            final aTime = a.lastAccessedAt ?? a.updatedAt;
+            final bTime = b.lastAccessedAt ?? b.updatedAt;
+            return aTime.compareTo(bTime);
+          });
     return unprotected;
   }
 

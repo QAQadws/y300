@@ -4,7 +4,9 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
+import 'package:y300/features/reader_shared/domain/image_session/reader_image_session.dart';
 import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_reader_view.dart';
+import 'package:y300/features/reader_shared/presentation/services/reader_image_session_store.dart';
 
 enum ReaderKind { generic, thread, comic }
 
@@ -98,6 +100,8 @@ class ReaderImageBuildSpec {
     required this.index,
     required this.paged,
     required this.fit,
+    required this.sessionBinding,
+    required this.expectedDisplaySize,
   });
 
   final ContinuousImageItem item;
@@ -106,6 +110,8 @@ class ReaderImageBuildSpec {
   /// 横向单页模式为 true，垂直连续模式为 false。
   final bool paged;
   final BoxFit fit;
+  final ReaderImageSessionBinding sessionBinding;
+  final Size expectedDisplaySize;
 }
 
 /// 一台具体阅读器的"专属能力"。[ImageReaderEngine] 只认这个抽象。
@@ -126,6 +132,9 @@ abstract class ReaderCapability {
 
   /// 图片请求头构建器（鉴权/Referer）。
   ImageRequestHeaderBuilder? get imageHeaderBuilder;
+
+  /// Optional non-blocking business metadata writer for prepared images.
+  ReaderImagePreparationSink? get imagePreparationSink => null;
 
   /// 顶部标题/副标题。
   ReaderTitleSpec titleFor(ReaderEngineContext context);
@@ -177,6 +186,9 @@ abstract class ReaderCapability {
 
   /// 为某连续图片项构造缓存请求（供解码预热与图片加载）。
   ImageCacheRequest cacheRequestFor(ContinuousImageItem item);
+
+  /// Existing business-local path used to seed a new shared reader session.
+  String? initialLocalPathFor(ContinuousImageItem item) => null;
 
   /// 为阅读会话预热构造统一图片请求。
   ///

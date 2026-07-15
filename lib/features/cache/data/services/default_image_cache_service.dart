@@ -69,9 +69,30 @@ class DefaultImageCacheService
   final SiteUrlResolver _urlResolver;
   final ImageFileDownloader _downloader;
   final CacheDiagnosticRecorder _diagnosticRecorder;
+  final Map<String, Future<CachedImageResult>> _ensureTasks =
+      <String, Future<CachedImageResult>>{};
 
   @override
-  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) {
+    final cacheKey = request.cacheKey.trim();
+    final sourceUrl =
+        _urlResolver.resolve(request.sourceUrl) ?? request.sourceUrl.trim();
+    final identity = '$cacheKey\n$sourceUrl';
+    final existing = _ensureTasks[identity];
+    if (existing != null) {
+      return existing;
+    }
+    late final Future<CachedImageResult> task;
+    task = _ensureCached(request).whenComplete(() {
+      if (identical(_ensureTasks[identity], task)) {
+        _ensureTasks.remove(identity);
+      }
+    });
+    _ensureTasks[identity] = task;
+    return task;
+  }
+
+  Future<CachedImageResult> _ensureCached(ImageCacheRequest request) async {
     final cacheKey = request.cacheKey.trim();
     final sourceUrl =
         _urlResolver.resolve(request.sourceUrl) ?? request.sourceUrl.trim();
@@ -459,7 +480,9 @@ class DefaultImageCacheService
     // 论坛首屏不因普通清理立即退化（对齐缓存方案 §11.1）。
     final records = await _repository.listUnprotectedByAccessTime();
     final clearable = records
-        .where((record) => record.retentionClass == ImageRetentionClass.ephemeral)
+        .where(
+          (record) => record.retentionClass == ImageRetentionClass.ephemeral,
+        )
         .toList(growable: false);
     for (final record in clearable) {
       await _deleteRecord(record);

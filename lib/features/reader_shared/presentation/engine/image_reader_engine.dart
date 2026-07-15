@@ -15,6 +15,7 @@ import 'package:y300/features/reader_shared/presentation/engine/reader_position_
 import 'package:y300/features/reader_shared/presentation/engine/reader_zoomable_image.dart';
 import 'package:y300/features/reader_shared/presentation/reader_preferences/reader_preferences_provider.dart';
 import 'package:y300/features/reader_shared/presentation/services/reader_image_session_preload_coordinator.dart';
+import 'package:y300/features/reader_shared/presentation/services/reader_image_session_store.dart';
 
 /// 通用图片阅读壳：垂直/横向模式、缩放、overlay 工具栏、进度滑块、页码浮层、
 /// 显示设置、滚动锚定补偿、解码预热。
@@ -89,11 +90,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       ContinuousImageScrollAnchorCoordinator(layoutResolver: _layoutResolver);
   final InMemoryContinuousImageExtentRegistry _extentRegistry =
       InMemoryContinuousImageExtentRegistry();
-  late final ReaderImageSessionPreloadCoordinator _sessionPreloadCoordinator =
-      ReaderImageSessionPreloadCoordinator(
-        onScheduled: _recordSessionPreloadScheduled,
-        onResult: _recordSessionPreload,
-      );
+  late final ReaderImageSessionStore _imageSessionStore;
+  late final ReaderImageSessionPreloadCoordinator _sessionPreloadCoordinator;
 
   List<ContinuousImageItem> _latestItems = const <ContinuousImageItem>[];
   double _pendingScrollCompensationDelta = 0;
@@ -110,6 +108,12 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _gestureCoordinator = ReaderGestureCoordinator();
     _zoomGate = ValueNotifier<bool>(false);
     _activePagedIndex = ValueNotifier<int>(0);
+    _imageSessionStore = ReaderImageSessionStore();
+    _sessionPreloadCoordinator = ReaderImageSessionPreloadCoordinator(
+      sessionStore: _imageSessionStore,
+      onScheduled: _recordSessionPreloadScheduled,
+      onResult: _recordSessionPreload,
+    );
   }
 
   @override
@@ -133,6 +137,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _activePagedIndex.dispose();
     _pageIndicatorDimTimer?.cancel();
     _sessionPreloadCoordinator.dispose();
+    _imageSessionStore.dispose();
     super.dispose();
   }
   // ENGINE_BODY_PLACEHOLDER
@@ -284,6 +289,10 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     required bool paged,
   }) {
     _notifyCurrentImageVisible(index);
+    final sessionBinding = _imageSessionStore.bindingFor(
+      item,
+      initialLocalPath: _capability.initialLocalPathFor(item),
+    );
     final image = _capability.buildImageContent(
       context,
       ReaderImageBuildSpec(
@@ -291,6 +300,11 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         index: index,
         paged: paged,
         fit: _imageFitFor(preferences.pageFit, paged: paged),
+        sessionBinding: sessionBinding,
+        expectedDisplaySize: _expectedImageDisplaySize(
+          preferences,
+          paged: paged,
+        ),
       ),
     );
     if (!paged) {
@@ -378,7 +392,10 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _sliderPreviewIndex = null;
     _lastSliderCommitAt = null;
     _positionRetryScheduled = false;
-    _sessionPreloadCoordinator.resetSession();
+    _sessionPreloadCoordinator.resetSession(
+      readerOwnerId: content.ownerId,
+      items: content.items,
+    );
     _readerSessionGeneration += 1;
     _restoreGeneration = 0;
     _seekGeneration = 0;
@@ -1212,11 +1229,28 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (!mounted) {
       return null;
     }
-    final mediaSize = MediaQuery.maybeSizeOf(context);
-    if (mediaSize == null || mediaSize.width <= 0) {
-      return null;
+    final preferences =
+        ref.read(readerPreferencesControllerProvider).value ??
+        ReaderPreferences.defaults();
+    return _expectedImageDisplaySize(
+      preferences,
+      paged: _diagnosticMode != ReaderModePreference.vertical,
+    );
+  }
+
+  Size _expectedImageDisplaySize(
+    ReaderPreferences preferences, {
+    required bool paged,
+  }) {
+    final mediaSize = MediaQuery.sizeOf(context);
+    if (!paged) {
+      return mediaSize;
     }
-    return Size(mediaSize.width, mediaSize.height);
+    final inset = preferences.pageSpacing.clamp(0.0, 48.0).toDouble() * 2;
+    return Size(
+      (mediaSize.width - inset).clamp(1.0, double.infinity).toDouble(),
+      (mediaSize.height - inset).clamp(1.0, double.infinity).toDouble(),
+    );
   }
 
   void _recordSessionPreloadScheduled(
@@ -1225,8 +1259,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _recordReaderDiagnostic(
       type: ContinuousImageDiagnosticEventType.prefetchScheduled,
       ownerId: scheduled.readerOwnerId,
-      itemId: scheduled.spec.cacheKey ?? scheduled.spec.sourceUrl,
-      index: scheduled.spec.imageIndex ?? -1,
+      itemId: scheduled.itemId,
+      index: scheduled.imageIndex,
       source: scheduled.spec.sourceUrl,
       generation: scheduled.generation,
       status: 'scheduled',
@@ -1240,8 +1274,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _recordReaderDiagnostic(
       type: ContinuousImageDiagnosticEventType.prefetchCompleted,
       ownerId: result.readerOwnerId,
-      itemId: result.spec.cacheKey ?? result.spec.sourceUrl,
-      index: result.spec.imageIndex ?? -1,
+      itemId: result.itemId,
+      index: result.imageIndex,
       source: result.spec.sourceUrl,
       generation: result.generation,
       status: 'completed',
