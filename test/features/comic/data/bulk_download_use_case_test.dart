@@ -54,7 +54,10 @@ void main() {
     expect(result.failedComicIds, isEmpty);
     expect(result.downloadedEpisodeCount, 2);
     expect(capturedProgress.whereType<LibraryShelfTaskProgress>(), isNotEmpty);
-    expect(capturedProgress.whereType<LibraryShelfTaskProgress>().last.current, 2);
+    expect(
+      capturedProgress.whereType<LibraryShelfTaskProgress>().last.current,
+      2,
+    );
     expect(hub.progressFor(LibraryModuleKey.comic).value, isNull);
     expect(bus.signal.value?.source, LibraryMutationSource.bulkDownload);
     expect(bus.signal.value?.reason, 'comic_bulk_download_completed');
@@ -120,34 +123,37 @@ void main() {
     expect(bus.signal.value?.reason, 'comic_bulk_download_partially_completed');
   });
 
-  test('empty or fully failed comics do not emit refresh bus without success', () async {
-    final repository = _FakeComicRepository(
-      episodesByComicId: <String, List<ComicEpisodeItem>>{
-        'comic:empty': const <ComicEpisodeItem>[],
-        'comic:failed': _episodes('comic:failed', 1),
-      },
-    );
-    final downloadService = _FakeComicDownloadService(
-      failingEpisodeIds: <String>{'comic:failed:1'},
-    );
-    final bus = LibraryShelfRefreshBus();
-    addTearDown(bus.dispose);
-    final useCase = _buildUseCase(
-      repository: repository,
-      downloadService: downloadService,
-      shelfRefreshBus: bus,
-    );
+  test(
+    'empty or fully failed comics do not emit refresh bus without success',
+    () async {
+      final repository = _FakeComicRepository(
+        episodesByComicId: <String, List<ComicEpisodeItem>>{
+          'comic:empty': const <ComicEpisodeItem>[],
+          'comic:failed': _episodes('comic:failed', 1),
+        },
+      );
+      final downloadService = _FakeComicDownloadService(
+        failingEpisodeIds: <String>{'comic:failed:1'},
+      );
+      final bus = LibraryShelfRefreshBus();
+      addTearDown(bus.dispose);
+      final useCase = _buildUseCase(
+        repository: repository,
+        downloadService: downloadService,
+        shelfRefreshBus: bus,
+      );
 
-    final result = await useCase.downloadComics(<String>{
-      'comic:empty',
-      'comic:failed',
-    });
+      final result = await useCase.downloadComics(<String>{
+        'comic:empty',
+        'comic:failed',
+      });
 
-    expect(result.completedComicIds, isEmpty);
-    expect(result.failedComicIds, <String>['comic:empty', 'comic:failed']);
-    expect(result.downloadedEpisodeCount, 0);
-    expect(bus.signal.value, isNull);
-  });
+      expect(result.completedComicIds, isEmpty);
+      expect(result.failedComicIds, <String>['comic:empty', 'comic:failed']);
+      expect(result.downloadedEpisodeCount, 0);
+      expect(bus.signal.value, isNull);
+    },
+  );
 
   test('rejects reentrant download calls', () async {
     final gate = Completer<void>();
@@ -184,7 +190,8 @@ DefaultBulkDownloadUseCase _buildUseCase({
   return DefaultBulkDownloadUseCase(
     comicRepository: repository,
     downloadService: downloadService,
-    libraryStateRepository: stateRepository ?? _RecordingLibraryStateRepository(),
+    libraryStateRepository:
+        stateRepository ?? _RecordingLibraryStateRepository(),
     taskProgressHub: DefaultLibraryTaskProgressHub(),
     shelfRefreshBus: shelfRefreshBus ?? LibraryShelfRefreshBus(),
   );
@@ -250,9 +257,7 @@ class _FakeComicDownloadService implements ComicDownloadService {
 }
 
 class _FakeComicRepository implements ComicRepository {
-  _FakeComicRepository({
-    required this.episodesByComicId,
-  });
+  _FakeComicRepository({required this.episodesByComicId});
 
   final Map<String, List<ComicEpisodeItem>> episodesByComicId;
 
@@ -286,7 +291,8 @@ class _FakeComicRepository implements ComicRepository {
   Future<void> deleteCategory({required String categoryId}) async {}
 
   @override
-  Future<List<ComicShelfCategory>> getCategories() async => const <ComicShelfCategory>[];
+  Future<List<ComicShelfCategory>> getCategories() async =>
+      const <ComicShelfCategory>[];
 
   @override
   Future<ComicDetail?> getComicDetail({required String comicId}) async {
@@ -323,6 +329,17 @@ class _FakeComicRepository implements ComicRepository {
   Future<ComicReadingProgress?> getLastReadProgress({
     required String comicId,
   }) async => null;
+
+  @override
+  Future<ComicReadingProgress?> getReadingProgressForEpisode({
+    required String comicId,
+    required String episodeId,
+  }) async => null;
+
+  @override
+  Future<List<ComicReadingProgress>> getReadingProgresses({
+    required String comicId,
+  }) async => const <ComicReadingProgress>[];
 
   @override
   Future<List<ComicShelfItem>> getShelfItems({
@@ -423,10 +440,14 @@ class _FakeComicRepository implements ComicRepository {
   }) async {}
 
   @override
-  Future<void> updateCatalogUrl({required String comicId, required String catalogUrl}) async {}
+  Future<void> updateCatalogUrl({
+    required String comicId,
+    required String catalogUrl,
+  }) async {}
 
   @override
-  Future<Set<String>> getKnownEpisodeTids({required String comicId}) async => <String>{};
+  Future<Set<String>> getKnownEpisodeTids({required String comicId}) async =>
+      <String>{};
 }
 
 class _RecordingLibraryStateRepository implements LibraryStateRepository {

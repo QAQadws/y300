@@ -111,6 +111,10 @@ void main() {
       theme.sliderTheme.inactiveTrackColor,
       scheme.surfaceContainerHighest,
     );
+    expect(theme.sliderTheme.trackHeight, 4);
+    expect(theme.sliderTheme.overlayColor, Colors.transparent);
+    expect(theme.sliderTheme.overlayShape, SliderComponentShape.noOverlay);
+    expect(theme.sliderTheme.showValueIndicator, ShowValueIndicator.never);
     expect(theme.inputDecorationTheme.fillColor, scheme.surfaceContainer);
     expect(theme.popupMenuTheme.color, isNot(Colors.white));
     expect(theme.bottomSheetTheme.modalBackgroundColor, isNot(Colors.white));
@@ -323,6 +327,10 @@ void _expectComponentThemesMatchScheme(ThemeData theme) {
   expect(theme.sliderTheme.activeTrackColor, scheme.primary);
   expect(theme.sliderTheme.thumbColor, scheme.primary);
   expect(theme.sliderTheme.inactiveTrackColor, scheme.surfaceContainerHighest);
+  expect(theme.sliderTheme.trackHeight, 4);
+  expect(theme.sliderTheme.overlayColor, Colors.transparent);
+  expect(theme.sliderTheme.overlayShape, SliderComponentShape.noOverlay);
+  expect(theme.sliderTheme.showValueIndicator, ShowValueIndicator.never);
   expect(theme.listTileTheme.textColor, scheme.onSurface);
   expect(theme.dividerTheme.color, scheme.outlineVariant);
   expect(theme.inputDecorationTheme.fillColor, scheme.surfaceContainer);

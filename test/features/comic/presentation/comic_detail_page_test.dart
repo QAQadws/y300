@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
@@ -26,49 +26,79 @@ import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
 void main() {
-  testWidgets('ComicDetailPage renders unified detail header and chapter list', (tester) async {
+  testWidgets(
+    'ComicDetailPage renders unified detail header and chapter list',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+            comicEpisodeRefreshServiceProvider.overrideWithValue(
+              _FakeComicEpisodeRefreshService(),
+            ),
+            comicDownloadServiceProvider.overrideWithValue(
+              _NoopComicDownloadService(),
+            ),
+            comicReadingStateWriterProvider.overrideWithValue(
+              _NoopReadingStateWriter(),
+            ),
+            comicReaderServiceProvider.overrideWith(
+              (ref) async => _FakeComicReaderService(),
+            ),
+            imageCacheServiceProvider.overrideWithValue(
+              _FakeImageCacheService(),
+            ),
+            libraryStateRepositoryProvider.overrideWithValue(
+              _FakeLibraryStateRepository(),
+            ),
+          ],
+          child: const MaterialApp(home: ComicDetailPage(comicId: 'comic:1')),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('Test Comic'), findsAtLeastNWidgets(1));
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.file_download), findsAtLeastNWidgets(1));
+      expect(
+        find.byKey(const Key('novel-chapter-open-mode-control')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('ComicDetailPage can open reader from chapter row', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
-          comicEpisodeRefreshServiceProvider.overrideWithValue(_FakeComicEpisodeRefreshService()),
-          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
-          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
-          comicReaderServiceProvider.overrideWith((ref) async => _FakeComicReaderService()),
+          comicEpisodeRefreshServiceProvider.overrideWithValue(
+            _FakeComicEpisodeRefreshService(),
+          ),
+          comicDownloadServiceProvider.overrideWithValue(
+            _NoopComicDownloadService(),
+          ),
+          comicReadingStateWriterProvider.overrideWithValue(
+            _NoopReadingStateWriter(),
+          ),
+          comicReaderServiceProvider.overrideWith(
+            (ref) async => _FakeComicReaderService(),
+          ),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
-        ],
-        child: const MaterialApp(home: ComicDetailPage(comicId: 'comic:1')),
-      ),
-    );
-
-    await tester.pumpAndSettle();
-
-    expect(find.text('Test Comic'), findsAtLeastNWidgets(1));
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')), findsOneWidget);
-    expect(find.byIcon(Icons.file_download), findsAtLeastNWidgets(1));
-    expect(
-      find.byKey(const Key('novel-chapter-open-mode-control')),
-      findsNothing,
-    );
-  });
-
-  testWidgets('ComicDetailPage can open reader from chapter row', (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
-          comicEpisodeRefreshServiceProvider.overrideWithValue(_FakeComicEpisodeRefreshService()),
-          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
-          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
-          comicReaderServiceProvider.overrideWith((ref) async => _FakeComicReaderService()),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
         ],
         child: const MaterialApp(home: ComicDetailPage(comicId: 'comic:1')),
       ),
@@ -86,18 +116,30 @@ void main() {
     expect(find.byKey(const Key('comic-reader-image-list')), findsOneWidget);
   });
 
-  testWidgets('ComicDetailPage does not reopen reader on normal reader exit', (tester) async {
+  testWidgets('ComicDetailPage does not reopen reader on normal reader exit', (
+    tester,
+  ) async {
     final observer = _CountingNavigatorObserver();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
-          comicEpisodeRefreshServiceProvider.overrideWithValue(_FakeComicEpisodeRefreshService()),
-          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
-          comicReadingStateWriterProvider.overrideWithValue(_NoopReadingStateWriter()),
-          comicReaderServiceProvider.overrideWith((ref) async => _FakeComicReaderService()),
+          comicEpisodeRefreshServiceProvider.overrideWithValue(
+            _FakeComicEpisodeRefreshService(),
+          ),
+          comicDownloadServiceProvider.overrideWithValue(
+            _NoopComicDownloadService(),
+          ),
+          comicReadingStateWriterProvider.overrideWithValue(
+            _NoopReadingStateWriter(),
+          ),
+          comicReaderServiceProvider.overrideWith(
+            (ref) async => _FakeComicReaderService(),
+          ),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
         ],
         child: MaterialApp(
           navigatorObservers: [observer],
@@ -113,7 +155,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(observer.pushCount, 2);
 
-    Navigator.of(tester.element(find.byKey(const Key('comic-reader-image-list')))).pop(
+    Navigator.of(
+      tester.element(find.byKey(const Key('comic-reader-image-list'))),
+    ).pop(
       const ComicReaderExitResult(
         comicId: 'comic:1',
         lastReadEpisodeId: 'comic:1:e2',
@@ -126,78 +170,98 @@ void main() {
     expect(find.byType(ComicDetailPage), findsOneWidget);
   });
 
-  testWidgets('ComicReaderPage completion reloads detail with read chapter dimmed', (tester) async {
-    final stateRepository = _MutableLibraryStateRepository();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
-          comicEpisodeRefreshServiceProvider.overrideWithValue(_FakeComicEpisodeRefreshService()),
-          comicDownloadServiceProvider.overrideWithValue(_NoopComicDownloadService()),
-          comicReadingStateWriterProvider.overrideWithValue(
-            _RecordingReadingStateWriter(stateRepository),
+  testWidgets(
+    'ComicReaderPage completion reloads detail without a read badge',
+    (tester) async {
+      final stateRepository = _MutableLibraryStateRepository();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+            comicEpisodeRefreshServiceProvider.overrideWithValue(
+              _FakeComicEpisodeRefreshService(),
+            ),
+            comicDownloadServiceProvider.overrideWithValue(
+              _NoopComicDownloadService(),
+            ),
+            comicReadingStateWriterProvider.overrideWithValue(
+              _RecordingReadingStateWriter(stateRepository),
+            ),
+            comicReaderServiceProvider.overrideWith(
+              (ref) async => _FakeComicReaderService(),
+            ),
+            imageCacheServiceProvider.overrideWithValue(
+              _FakeImageCacheService(),
+            ),
+            libraryStateRepositoryProvider.overrideWithValue(stateRepository),
+          ],
+          child: const MaterialApp(home: ComicDetailPage(comicId: 'comic:1')),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      await _scrollFirstChapterIntoTapArea(tester);
+      expect(
+        find.byKey(
+          const ValueKey<String>(
+            'unified-detail-chapter-read-badge-comic:1:e1',
           ),
-          comicReaderServiceProvider.overrideWith((ref) async => _FakeComicReaderService()),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-          libraryStateRepositoryProvider.overrideWithValue(stateRepository),
-        ],
-        child: const MaterialApp(home: ComicDetailPage(comicId: 'comic:1')),
-      ),
-    );
+        ),
+        findsNothing,
+      );
 
-    await tester.pumpAndSettle();
-    await _scrollFirstChapterIntoTapArea(tester);
-    expect(
-      find.byKey(
-        const ValueKey<String>('unified-detail-chapter-read-badge-comic:1:e1'),
-      ),
-      findsNothing,
-    );
+      await tester.tap(find.text('Episode 1'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
-    await tester.tap(find.text('Episode 1'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    final readerElement = tester.element(find.byKey(const Key('comic-reader-image-list')));
-    final readerProviderContainer = ProviderScope.containerOf(readerElement);
-    const readerArgs = ComicReaderArgs(
-      comicId: 'comic:1',
-      episodeId: 'comic:1:e1',
-    );
-    await readerProviderContainer.read(comicReaderControllerProvider(readerArgs).future);
-    final readerController = readerProviderContainer.read(
-      comicReaderControllerProvider(readerArgs).notifier,
-    );
-    await readerController.onImageVisible(0);
-    await readerController.onImageResolved(
-      imageIndex: 0,
-      imageUrl: 'https://img.test/e1-1.jpg',
-      width: 900,
-      height: 1600,
-    );
-    Navigator.of(readerElement).pop(
-      const ComicReaderExitResult(
+      final readerElement = tester.element(
+        find.byKey(const Key('comic-reader-image-list')),
+      );
+      final readerProviderContainer = ProviderScope.containerOf(readerElement);
+      const readerArgs = ComicReaderArgs(
         comicId: 'comic:1',
-        lastReadEpisodeId: 'comic:1:e1',
-        completedEpisodeIds: <String>['comic:1:e1'],
-      ),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+        episodeId: 'comic:1:e1',
+      );
+      await readerProviderContainer.read(
+        comicReaderControllerProvider(readerArgs).future,
+      );
+      final readerController = readerProviderContainer.read(
+        comicReaderControllerProvider(readerArgs).notifier,
+      );
+      await readerController.onImageVisible(0);
+      await readerController.onImageResolved(
+        imageIndex: 0,
+        imageUrl: 'https://img.test/e1-1.jpg',
+        width: 900,
+        height: 1600,
+      );
+      Navigator.of(readerElement).pop(
+        const ComicReaderExitResult(
+          comicId: 'comic:1',
+          lastReadEpisodeId: 'comic:1:e1',
+          completedEpisodeIds: <String>['comic:1:e1'],
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
-    expect(stateRepository.markedReadEpisodeIds, contains('comic:1:e1'));
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(
-      find.byKey(
-        const ValueKey<String>('unified-detail-chapter-read-badge-comic:1:e1'),
-      ),
-      findsOneWidget,
-    );
-  });
+      expect(stateRepository.markedReadEpisodeIds, contains('comic:1:e1'));
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(
+        find.byKey(
+          const ValueKey<String>(
+            'unified-detail-chapter-read-badge-comic:1:e1',
+          ),
+        ),
+        findsNothing,
+      );
+      expect(find.text('已读'), findsNothing);
+    },
+  );
 }
 
 class _CountingNavigatorObserver extends NavigatorObserver {
@@ -222,7 +286,11 @@ class _FakeComicReaderService implements ComicReaderService {
     int? imageIndex,
     bool protected = false,
   }) async {
-    return ComicImageCacheResult(success: true, localPath: '/cache/mock.jpg', cacheKey: cacheKey);
+    return ComicImageCacheResult(
+      success: true,
+      localPath: '/cache/mock.jpg',
+      cacheKey: cacheKey,
+    );
   }
 
   @override
@@ -312,8 +380,7 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
     FavoriteSyncExecutionContext? executionContext,
     ThreadDetailData? preloadedRootDetail,
     ComicThreadDetailCache? threadCache,
-  }
-  ) async {
+  }) async {
     return const ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.empty,
       links: <ComicEpisodeLink>[],
@@ -326,8 +393,7 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
     FavoriteSyncExecutionContext? executionContext,
     ThreadDetailData? preloadedRootDetail,
     ComicThreadDetailCache? threadCache,
-  }
-  ) async {
+  }) async {
     return const ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.empty,
       links: <ComicEpisodeLink>[],
@@ -343,8 +409,7 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(
     String catalogUrl, {
     FavoriteSyncExecutionContext? executionContext,
-  }
-  ) async {
+  }) async {
     return const ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.empty,
       links: <ComicEpisodeLink>[],
@@ -367,10 +432,16 @@ Future<void> _scrollFirstChapterIntoTapArea(WidgetTester tester) async {
 
 class _NoopComicDownloadService implements ComicDownloadService {
   @override
-  Future<void> deleteEpisodeDownload({required String comicId, required String episodeId}) async {}
+  Future<void> deleteEpisodeDownload({
+    required String comicId,
+    required String episodeId,
+  }) async {}
 
   @override
-  Future<DownloadedComicEpisode> downloadEpisode({required String comicId, required String episodeId}) {
+  Future<DownloadedComicEpisode> downloadEpisode({
+    required String comicId,
+    required String episodeId,
+  }) {
     throw UnimplementedError();
   }
 
@@ -482,7 +553,10 @@ class _FakeComicRepository implements ComicRepository {
   }
 
   @override
-  Future<List<ComicEpisodeItem>> getComicEpisodes({required String comicId, bool descending = true}) async {
+  Future<List<ComicEpisodeItem>> getComicEpisodes({
+    required String comicId,
+    bool descending = true,
+  }) async {
     return const [
       ComicEpisodeItem(
         episodeId: 'comic:1:e1',
@@ -501,7 +575,9 @@ class _FakeComicRepository implements ComicRepository {
       const ComicShelfDisplaySettings(gridColumnCount: 3);
 
   @override
-  Future<List<ComicEpisodeImageItem>> getEpisodeImages({required String episodeId}) async {
+  Future<List<ComicEpisodeImageItem>> getEpisodeImages({
+    required String episodeId,
+  }) async {
     return const <ComicEpisodeImageItem>[
       ComicEpisodeImageItem(
         episodeId: 'comic:1:e1',
@@ -513,10 +589,27 @@ class _FakeComicRepository implements ComicRepository {
   }
 
   @override
-  Future<ComicReadingProgress?> getLastReadProgress({required String comicId}) async => _progress;
+  Future<ComicReadingProgress?> getLastReadProgress({
+    required String comicId,
+  }) async => _progress;
 
   @override
-  Future<List<ComicShelfItem>> getShelfItems({String categoryId = 'default'}) async => const [];
+  Future<ComicReadingProgress?> getReadingProgressForEpisode({
+    required String comicId,
+    required String episodeId,
+  }) async => _progress?.episodeId == episodeId ? _progress : null;
+
+  @override
+  Future<List<ComicReadingProgress>> getReadingProgresses({
+    required String comicId,
+  }) async => _progress == null
+      ? const <ComicReadingProgress>[]
+      : <ComicReadingProgress>[_progress!];
+
+  @override
+  Future<List<ComicShelfItem>> getShelfItems({
+    String categoryId = 'default',
+  }) async => const [];
 
   @override
   Future<bool> isInShelf({required String comicId}) async => true;
@@ -527,7 +620,11 @@ class _FakeComicRepository implements ComicRepository {
     required List<ComicEpisodeLink> episodeLinks,
     required String fallbackSourceTid,
   }) async {
-    return const ComicEpisodeRefreshResult(insertedCount: 0, updatedCount: 0, totalCount: 1);
+    return const ComicEpisodeRefreshResult(
+      insertedCount: 0,
+      updatedCount: 0,
+      totalCount: 1,
+    );
   }
 
   @override
@@ -544,18 +641,48 @@ class _FakeComicRepository implements ComicRepository {
   }) async {}
 
   @override
-  Future<void> saveEpisodeImages({required String episodeId, required List<String> imageUrls}) async {}
+  Future<void> saveEpisodeImages({
+    required String episodeId,
+    required List<String> imageUrls,
+  }) async {}
 
   @override
-  Future<void> updateCustomCover({required String comicId, required String? customCoverImageUrl}) async {}
+  Future<void> updateCustomCover({
+    required String comicId,
+    required String? customCoverImageUrl,
+  }) async {}
   @override
-  Future<void> updateCustomCoverFromLocalFile({required String comicId, required String localCoverPath, String? sourceEpisodeId, int? sourceImageIndex, String? sourceImageUrl, double? focusX, double? focusY}) async {}
+  Future<void> updateCustomCoverFromLocalFile({
+    required String comicId,
+    required String localCoverPath,
+    String? sourceEpisodeId,
+    int? sourceImageIndex,
+    String? sourceImageUrl,
+    double? focusX,
+    double? focusY,
+  }) async {}
   @override
-  Future<void> updateCustomCoverFocus({required String comicId, required double? focusX, required double? focusY}) async {}
+  Future<void> updateCustomCoverFocus({
+    required String comicId,
+    required double? focusX,
+    required double? focusY,
+  }) async {}
   @override
-  Future<void> updateCustomMetadata({required String comicId, String? customTitle, String? customAuthor, String? customTranslationGroup, String? customSearchTitle}) async {}
+  Future<void> updateCustomMetadata({
+    required String comicId,
+    String? customTitle,
+    String? customAuthor,
+    String? customTranslationGroup,
+    String? customSearchTitle,
+  }) async {}
   @override
-  Future<void> clearCustomMetadata({required String comicId, bool title = false, bool author = false, bool translationGroup = false, bool searchTitle = false}) async {}
+  Future<void> clearCustomMetadata({
+    required String comicId,
+    bool title = false,
+    bool author = false,
+    bool translationGroup = false,
+    bool searchTitle = false,
+  }) async {}
 
   @override
   Future<void> updateEpisodeImageCacheStatus({
@@ -585,10 +712,14 @@ class _FakeComicRepository implements ComicRepository {
   }
 
   @override
-  Future<void> updateCatalogUrl({required String comicId, required String catalogUrl}) async {}
+  Future<void> updateCatalogUrl({
+    required String comicId,
+    required String catalogUrl,
+  }) async {}
 
   @override
-  Future<Set<String>> getKnownEpisodeTids({required String comicId}) async => <String>{};
+  Future<Set<String>> getKnownEpisodeTids({required String comicId}) async =>
+      <String>{};
 }
 
 class _FakeLibraryStateRepository implements LibraryStateRepository {
@@ -736,7 +867,8 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
 }
 
 class _MutableLibraryStateRepository extends _FakeLibraryStateRepository {
-  final Map<String, LibraryEpisodeState> _states = <String, LibraryEpisodeState>{};
+  final Map<String, LibraryEpisodeState> _states =
+      <String, LibraryEpisodeState>{};
   final Set<String> markedReadEpisodeIds = <String>{};
 
   @override
@@ -788,8 +920,7 @@ class _RecordingReadingStateWriter implements ComicReadingStateWriter {
     return (await stateRepository.getEpisodeState(
           moduleKey: LibraryModuleKey.comic,
           episodeId: episodeId,
-        ))
-            ?.isBookmarked ??
+        ))?.isBookmarked ??
         false;
   }
 
@@ -801,8 +932,7 @@ class _RecordingReadingStateWriter implements ComicReadingStateWriter {
     return (await stateRepository.getEpisodeState(
           moduleKey: LibraryModuleKey.comic,
           episodeId: episodeId,
-        ))
-            ?.isRead ??
+        ))?.isRead ??
         false;
   }
 

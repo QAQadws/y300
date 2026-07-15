@@ -1506,6 +1506,16 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   }
 
   @override
+  void cycleReaderMode() {
+    final currentMode =
+        ref.read(readerPreferencesControllerProvider).value?.readerMode ??
+        ReaderModePreference.vertical;
+    final modes = ReaderModePreference.values;
+    final nextMode = modes[(currentMode.index + 1) % modes.length];
+    unawaited(_onReaderModeChanged(nextMode));
+  }
+
+  @override
   void exportCurrentImage() {
     unawaited(_exportCurrentImage());
   }
@@ -1772,9 +1782,9 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     );
   }
 
-  /// 工具栏动作执行前先收起 overlay 菜单——对齐原漫画各 handler 的行为，
-  /// 也让抽屉打开时不与顶部/底部栏叠加。引擎内置动作（显示/模式）自身已收起，
-  /// 这里对能力注入的动作统一补齐。
+  /// 按动作策略收起 overlay 菜单。
+  ///
+  /// 默认动作会关闭菜单；模式轮询等需要连续操作的动作可以显式保留菜单。
   List<ReaderToolbarAction> _withMenuDismiss(
     List<ReaderToolbarAction> actions,
   ) {
@@ -1785,8 +1795,11 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
             icon: action.icon,
             label: action.label,
             enabled: action.enabled,
+            dismissMenu: action.dismissMenu,
             onPressed: () {
-              _overlayController.hideMenu();
+              if (action.dismissMenu) {
+                _overlayController.hideMenu();
+              }
               action.onPressed();
             },
           ),

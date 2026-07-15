@@ -37,6 +37,7 @@ class UnifiedDetailPage extends StatefulWidget {
     this.chapterStatus,
     this.chapterModeControl,
     this.onOpenChapter,
+    this.onContinue,
     this.onRefreshCompleted,
   });
 
@@ -58,6 +59,8 @@ class UnifiedDetailPage extends StatefulWidget {
   final Widget? chapterModeControl;
   final Future<void> Function(BuildContext context, LibraryChapterItem chapter)?
   onOpenChapter;
+  final Future<void> Function(BuildContext context, ReaderRouteTarget target)?
+  onContinue;
   final Future<void> Function(DetailRefreshResult result)? onRefreshCompleted;
 
   @override
@@ -345,8 +348,6 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         ),
                         chapter: chapter,
                         subtitle: _chapterSubtitle(chapter),
-                        showInlineProgress:
-                            widget.adapter.moduleKey == LibraryModuleKey.comic,
                         isDownloading: _downloadingEpisodeIds.contains(
                           chapter.episodeId,
                         ),
@@ -371,7 +372,8 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
           if (!context.mounted || target == null) {
             return;
           }
-          await widget.onOpenReader(context, target);
+          final handler = widget.onContinue ?? widget.onOpenReader;
+          await handler(context, target);
           if (!context.mounted) {
             return;
           }

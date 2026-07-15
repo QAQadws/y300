@@ -271,7 +271,10 @@ class ComicDetailAdapter
       comicId: workId,
       descending: false,
     );
-    final progress = await _repository.getLastReadProgress(comicId: workId);
+    final progresses = await _repository.getReadingProgresses(comicId: workId);
+    final progressByEpisodeId = <String, ComicReadingProgress>{
+      for (final progress in progresses) progress.episodeId: progress,
+    };
 
     final mapped = <LibraryChapterItem>[];
     for (final item in episodes) {
@@ -295,7 +298,7 @@ class ComicDetailAdapter
           isBookmarked: state?.isBookmarked ?? false,
           progressInfo: await _progressInfoForEpisode(
             episode: item,
-            progress: progress,
+            progress: progressByEpisodeId[item.episodeId],
             isRead: isRead,
           ),
         ),
@@ -311,7 +314,7 @@ class ComicDetailAdapter
     required ComicReadingProgress? progress,
     required bool isRead,
   }) async {
-    if (isRead || progress == null || progress.episodeId != episode.episodeId) {
+    if (isRead || progress == null) {
       return null;
     }
     final rawImageIndex = progress.imageIndex < 0 ? 0 : progress.imageIndex;
@@ -466,9 +469,18 @@ class ComicDetailAdapter
         .map((episode) => episode.episodeId)
         .toSet();
 
-    final progress = await _repository.getLastReadProgress(comicId: workId);
-    if (progress != null && validEpisodeIds.contains(progress.episodeId)) {
-      return progress.episodeId;
+    final progresses = await _repository.getReadingProgresses(comicId: workId);
+    for (final progress in progresses) {
+      if (!validEpisodeIds.contains(progress.episodeId)) {
+        continue;
+      }
+      final state = await _stateRepository.getEpisodeState(
+        moduleKey: LibraryModuleKey.comic,
+        episodeId: progress.episodeId,
+      );
+      if (!(state?.isRead ?? false)) {
+        return progress.episodeId;
+      }
     }
 
     final workState = await _stateRepository.getWorkState(
@@ -477,7 +489,13 @@ class ComicDetailAdapter
     );
     final stateEpisodeId = workState?.lastReadEpisodeId;
     if (stateEpisodeId != null && validEpisodeIds.contains(stateEpisodeId)) {
-      return stateEpisodeId;
+      final state = await _stateRepository.getEpisodeState(
+        moduleKey: LibraryModuleKey.comic,
+        episodeId: stateEpisodeId,
+      );
+      if (!(state?.isRead ?? false)) {
+        return stateEpisodeId;
+      }
     }
 
     // 没有历史进度时，优先从第一章未读章节开始。无状态章节按未读处理，

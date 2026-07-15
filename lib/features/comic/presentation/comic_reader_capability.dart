@@ -125,7 +125,8 @@ class ComicReaderCapability extends ReaderCapability {
         id: 'mode',
         icon: _modeIcon(preferences.readerMode),
         label: _modeLabel(preferences.readerMode),
-        onPressed: context.actions.openModeSheet,
+        dismissMenu: false,
+        onPressed: context.actions.cycleReaderMode,
       ),
       ReaderToolbarAction(
         id: 'catalog',

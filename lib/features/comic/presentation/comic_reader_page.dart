@@ -15,6 +15,7 @@ import 'package:y300/features/reader_shared/domain/reader_preferences/reader_pre
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 import 'package:y300/features/reader_shared/presentation/reader_preferences/reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+import 'package:y300/shared/widgets/transient_feedback.dart';
 
 enum _ComicReaderMoreAction { markReadToggle, setCurrentPageAsCover }
 
@@ -77,7 +78,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
               controller: controller,
               diagnosticRecorder: widget.diagnosticRecorder,
               exitResult: _exitResultFor(viewState),
-              onToggleBookmark: () => unawaited(controller.toggleBookmark()),
+              onToggleBookmark: () => unawaited(_toggleBookmark()),
               onOpenSourceThread: () => _openSourceThread(viewState),
               onShowMoreActions: () =>
                   unawaited(_showMoreActionSheet(viewState)),
@@ -190,9 +191,21 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     final controller = _controller();
     switch (action) {
       case _ComicReaderMoreAction.markReadToggle:
-        await controller.setCurrentEpisodeRead(!viewState.isCurrentEpisodeRead);
+        final message = await controller.setCurrentEpisodeRead(
+          !viewState.isCurrentEpisodeRead,
+        );
+        if (mounted && message != null) {
+          showTransientSnackBar(context, message);
+        }
       case _ComicReaderMoreAction.setCurrentPageAsCover:
         await _handleSetCoverWithFocus();
+    }
+  }
+
+  Future<void> _toggleBookmark() async {
+    final message = await _controller().toggleBookmark();
+    if (mounted && message != null) {
+      showTransientSnackBar(context, message);
     }
   }
 
@@ -201,6 +214,9 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     final controller = _controller();
     final localPath = await controller.prepareCurrentImageForCover();
     if (localPath == null || localPath.trim().isEmpty || !mounted) {
+      if (mounted) {
+        showTransientSnackBar(context, '当前页图片缓存失败，无法设为封面');
+      }
       return;
     }
     final focus = await CoverFocalPointPicker.show(
@@ -212,7 +228,13 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
       // 取消选区则不改动封面。
       return;
     }
-    await controller.setCurrentImageAsCover(focusX: focus.x, focusY: focus.y);
+    final message = await controller.setCurrentImageAsCover(
+      focusX: focus.x,
+      focusY: focus.y,
+    );
+    if (mounted && message != null) {
+      showTransientSnackBar(context, message);
+    }
   }
 
   Future<void> _showMoreActionSheet(ComicReaderViewState viewState) async {

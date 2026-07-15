@@ -32,10 +32,14 @@ class LocalComicRepository
     this._dbFuture, {
     ComicSubjectParser? subjectParser,
     ComicSingleThreadEpisodeNamer? singleThreadEpisodeNamer,
-  })  : _subjectParser = subjectParser ?? const RuleBasedComicSubjectParser(),
-        _singleThreadEpisodeNamer = singleThreadEpisodeNamer ??
-            const DefaultComicSingleThreadEpisodeNamer() {
-    _shelfStore = ComicShelfStore(_dbFuture, defaultCategoryId: _defaultCategoryId);
+  }) : _subjectParser = subjectParser ?? const RuleBasedComicSubjectParser(),
+       _singleThreadEpisodeNamer =
+           singleThreadEpisodeNamer ??
+           const DefaultComicSingleThreadEpisodeNamer() {
+    _shelfStore = ComicShelfStore(
+      _dbFuture,
+      defaultCategoryId: _defaultCategoryId,
+    );
     _detailStore = ComicDetailStore(_dbFuture, subjectParser: _subjectParser);
     _coverStore = ComicCoverStore(_dbFuture);
     _episodeStore = ComicEpisodeStore(
@@ -80,10 +84,7 @@ class LocalComicRepository
     required String categoryId,
     required String newName,
   }) {
-    return _shelfStore.renameCategory(
-      categoryId: categoryId,
-      newName: newName,
-    );
+    return _shelfStore.renameCategory(categoryId: categoryId, newName: newName);
   }
 
   @override
@@ -353,9 +354,7 @@ class LocalComicRepository
   }
 
   @override
-  Future<void> clearEpisodeImageCache({
-    required String episodeId,
-  }) {
+  Future<void> clearEpisodeImageCache({required String episodeId}) {
     return _episodeStore.clearEpisodeImageCache(episodeId: episodeId);
   }
 
@@ -375,10 +374,26 @@ class LocalComicRepository
   }
 
   @override
-  Future<ComicReadingProgress?> getLastReadProgress({
+  Future<ComicReadingProgress?> getLastReadProgress({required String comicId}) {
+    return _readingProgressStore.getLastReadProgress(comicId: comicId);
+  }
+
+  @override
+  Future<ComicReadingProgress?> getReadingProgressForEpisode({
+    required String comicId,
+    required String episodeId,
+  }) {
+    return _readingProgressStore.getReadingProgressForEpisode(
+      comicId: comicId,
+      episodeId: episodeId,
+    );
+  }
+
+  @override
+  Future<List<ComicReadingProgress>> getReadingProgresses({
     required String comicId,
   }) {
-    return _readingProgressStore.getLastReadProgress(comicId: comicId);
+    return _readingProgressStore.getReadingProgresses(comicId: comicId);
   }
 
   @override
@@ -439,9 +454,7 @@ class LocalComicRepository
   }
 
   @override
-  Future<ComicShelfWorkStats> getShelfWorkStats({
-    required String comicId,
-  }) {
+  Future<ComicShelfWorkStats> getShelfWorkStats({required String comicId}) {
     return _snapshotStore.getShelfWorkStats(comicId: comicId);
   }
 
@@ -475,9 +488,7 @@ class LocalComicRepository
   }
 
   @override
-  Future<List<ComicDuplicateGroup>> findDuplicateGroups({
-    String? comicId,
-  }) {
+  Future<List<ComicDuplicateGroup>> findDuplicateGroups({String? comicId}) {
     return _duplicateMergeStore.findDuplicateGroups(comicId: comicId);
   }
 

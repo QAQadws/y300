@@ -47,21 +47,18 @@ class ReaderProgressControl extends StatelessWidget {
                     ),
                   ),
                   Expanded(
-                    child: Slider(
-                      key: const Key('shared-reader-progress-slider'),
-                      value: sliderValue,
-                      min: 0,
-                      max: maxValue,
-                      divisions: safeTotal > 1 ? safeTotal - 1 : null,
-                      onChangeStart: config.interactionLocked
-                          ? null
-                          : config.onChangeStart,
-                      onChanged: config.interactionLocked
-                          ? null
-                          : config.onChanged,
-                      onChangeEnd: config.interactionLocked
-                          ? null
-                          : config.onChangeEnd,
+                    child: AbsorbPointer(
+                      absorbing: config.interactionLocked,
+                      child: Slider(
+                        key: const Key('shared-reader-progress-slider'),
+                        value: sliderValue,
+                        min: 0,
+                        max: maxValue,
+                        divisions: safeTotal > 1 ? safeTotal - 1 : null,
+                        onChangeStart: config.onChangeStart,
+                        onChanged: config.onChanged,
+                        onChangeEnd: config.onChangeEnd,
+                      ),
                     ),
                   ),
                   SizedBox(

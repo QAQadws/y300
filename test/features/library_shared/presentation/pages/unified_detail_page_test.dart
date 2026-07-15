@@ -680,12 +680,12 @@ void main() {
     );
   });
 
-  testWidgets('UnifiedDetailPage keeps novel progress as a status badge', (
+  testWidgets('UnifiedDetailPage renders novel last-read marker inline', (
     tester,
   ) async {
     final adapter = _FakeDetailAdapter(
       progressInfo: const LibraryChapterProgressInfo(
-        label: '已读 42%',
+        label: '上次阅读',
         isCurrent: true,
         fraction: 0.42,
       ),
@@ -710,14 +710,23 @@ void main() {
 
     expect(
       find.byKey(const ValueKey<String>('unified-detail-chapter-progress-e1')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.byKey(
         const ValueKey<String>('unified-detail-chapter-inline-progress-e1'),
       ),
-      findsNothing,
+      findsOneWidget,
     );
+    final progressLine = tester.widget<RichText>(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey<String>('unified-detail-chapter-inline-progress-e1'),
+        ),
+        matching: find.byType(RichText),
+      ),
+    );
+    expect(progressLine.text.toPlainText(), contains('  ·  上次阅读'));
   });
 
   testWidgets('UnifiedDetailPage renders explicit chapter status badges', (
@@ -726,7 +735,7 @@ void main() {
     final adapter = _FakeDetailAdapter(
       module: LibraryModuleKey.comic,
       progressInfo: const LibraryChapterProgressInfo(
-        label: '已读 42%',
+        label: '第 3 页',
         isCurrent: true,
         fraction: 0.42,
       ),
@@ -775,7 +784,7 @@ void main() {
       find.byKey(
         const ValueKey<String>('unified-detail-chapter-read-badge-e1'),
       ),
-      findsOneWidget,
+      findsNothing,
     );
     expect(find.text('书签'), findsNothing);
     expect(
@@ -785,7 +794,7 @@ void main() {
       findsNothing,
     );
     expect(find.text('已下载'), findsOneWidget);
-    expect(find.text('已读'), findsOneWidget);
+    expect(find.text('已读'), findsNothing);
   });
 
   testWidgets(

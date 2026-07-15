@@ -34,6 +34,53 @@ void main() {
     expect(episodes.last.episodeId, 'yamibo:100:103');
   });
 
+  test('opening a chapter restores that chapter progress', () async {
+    final repository = _ReaderRepoForControllerTest(
+      readingProgresses: <ComicReadingProgress>[
+        ComicReadingProgress(
+          comicId: 'yamibo:100',
+          episodeId: 'yamibo:100:101',
+          imageIndex: 4,
+          scrollOffset: 80,
+          updatedAt: DateTime(2026, 7, 15, 12),
+        ),
+        ComicReadingProgress(
+          comicId: 'yamibo:100',
+          episodeId: 'yamibo:100:102',
+          imageIndex: 2,
+          scrollOffset: 35,
+          updatedAt: DateTime(2026, 7, 14, 12),
+        ),
+      ],
+    );
+    final service = _ReaderServiceSpy();
+    final writer = _ReadingStateWriterSpy(repository);
+    final container = ProviderContainer(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(repository),
+        comicReadingStateWriterProvider.overrideWithValue(writer),
+        comicReaderServiceProvider.overrideWith((ref) async => service),
+        comicDownloadServiceProvider.overrideWithValue(
+          _NoopComicDownloadService(),
+        ),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    const args = ComicReaderArgs(
+      comicId: 'yamibo:100',
+      episodeId: 'yamibo:100:102',
+    );
+    final state = await container.read(
+      comicReaderControllerProvider(args).future,
+    );
+
+    expect(state.episodeId, 'yamibo:100:102');
+    expect(state.currentImageIndex, 2);
+    expect(state.lastScrollOffset, 35);
+  });
+
   test(
     'page visibility and jumps leave image preparation to shared engine',
     () async {
@@ -556,13 +603,14 @@ void main() {
     );
     await container.read(comicReaderControllerProvider(args).future);
 
-    await container
+    final message = await container
         .read(comicReaderControllerProvider(args).notifier)
         .toggleBookmark();
 
     final state = container.read(comicReaderControllerProvider(args)).value!;
     expect(state.isBookmarked, isTrue);
     expect(writer.bookmarkedEpisodeIds, contains('yamibo:100:101'));
+    expect(message, '已添加书签');
   });
 
   test('setCurrentEpisodeRead updates current chapter state', () async {
@@ -588,13 +636,14 @@ void main() {
     );
     await container.read(comicReaderControllerProvider(args).future);
 
-    await container
+    final message = await container
         .read(comicReaderControllerProvider(args).notifier)
         .setCurrentEpisodeRead(true);
 
     final state = container.read(comicReaderControllerProvider(args)).value!;
     expect(state.isCurrentEpisodeRead, isTrue);
     expect(state.chapters.first.isRead, isTrue);
+    expect(message, '本章已标记为已读');
   });
 
   test(
@@ -623,12 +672,13 @@ void main() {
       );
       await container.read(comicReaderControllerProvider(args).future);
 
-      await container
+      final message = await container
           .read(comicReaderControllerProvider(args).notifier)
           .setCurrentImageAsCover();
 
       expect(imageCache.lastLocalCopyRequest?.role, ImageCacheRole.customCover);
       expect(repository.lastCustomCoverLocalPath, '/protected/cover.jpg');
+      expect(message, '封面已更新');
     },
   );
 
@@ -1096,12 +1146,14 @@ class _ReaderRepoForControllerTest
     this.lastImageHeight,
     this.imageCount = 5,
     this.emptyEpisodeIds = const <String>{},
+    this.readingProgresses = const <ComicReadingProgress>[],
   });
 
   final bool singlePage;
   final int? lastImageWidth;
   final int? lastImageHeight;
   final int imageCount;
+  final List<ComicReadingProgress> readingProgresses;
 
   /// 这些 episode 在 fetch+save 之前，DB 视为空。用来模拟"首次进入未缓存"。
   final Set<String> emptyEpisodeIds;
@@ -1288,8 +1340,21 @@ class _ReaderRepoForControllerTest
   Future<ComicReadingProgress?> getLastReadProgress({
     required String comicId,
   }) async {
-    return null;
+    return readingProgresses.firstOrNull;
   }
+
+  @override
+  Future<ComicReadingProgress?> getReadingProgressForEpisode({
+    required String comicId,
+    required String episodeId,
+  }) async => readingProgresses
+      .where((progress) => progress.episodeId == episodeId)
+      .firstOrNull;
+
+  @override
+  Future<List<ComicReadingProgress>> getReadingProgresses({
+    required String comicId,
+  }) async => List<ComicReadingProgress>.unmodifiable(readingProgresses);
 
   @override
   Future<List<ComicShelfItem>> getShelfItems({

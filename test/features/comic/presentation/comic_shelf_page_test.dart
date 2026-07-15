@@ -155,6 +155,17 @@ class _FakeComicRepository implements ComicRepository {
   }) async => null;
 
   @override
+  Future<ComicReadingProgress?> getReadingProgressForEpisode({
+    required String comicId,
+    required String episodeId,
+  }) async => null;
+
+  @override
+  Future<List<ComicReadingProgress>> getReadingProgresses({
+    required String comicId,
+  }) async => const <ComicReadingProgress>[];
+
+  @override
   Future<List<ComicShelfItem>> getShelfItems({
     String categoryId = 'default',
   }) async {
@@ -269,10 +280,14 @@ class _FakeComicRepository implements ComicRepository {
   }) async {}
 
   @override
-  Future<void> updateCatalogUrl({required String comicId, required String catalogUrl}) async {}
+  Future<void> updateCatalogUrl({
+    required String comicId,
+    required String catalogUrl,
+  }) async {}
 
   @override
-  Future<Set<String>> getKnownEpisodeTids({required String comicId}) async => <String>{};
+  Future<Set<String>> getKnownEpisodeTids({required String comicId}) async =>
+      <String>{};
 }
 
 class _FakeLibraryStateRepository implements LibraryStateRepository {

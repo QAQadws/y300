@@ -146,7 +146,6 @@ class NovelDetailAdapter
           progressInfo: _progressInfoForEpisode(
             episodeId: item.episodeId,
             progress: progress,
-            isRead: isRead,
           ),
         ),
       );
@@ -159,45 +158,18 @@ class NovelDetailAdapter
   LibraryChapterProgressInfo? _progressInfoForEpisode({
     required String episodeId,
     required NovelReadingProgress? progress,
-    required bool isRead,
   }) {
-    if (isRead || progress == null || progress.episodeId != episodeId) {
+    if (progress == null || progress.episodeId != episodeId) {
       return null;
     }
 
     final fraction = progress.progressPercent.clamp(0.0, 1.0).toDouble();
-    if (progress.flowMode != NovelReaderFlowMode.vertical) {
-      final pageNumber = (progress.pageIndex < 0 ? 0 : progress.pageIndex) + 1;
-      return LibraryChapterProgressInfo(
-        label: '第 $pageNumber 页',
-        isCurrent: true,
-        fraction: fraction,
-        semanticLabel: fraction > 0
-            ? '当前读到第 $pageNumber 页，已读 ${(fraction * 100).round()}%'
-            : '当前读到第 $pageNumber 页',
-      );
-    }
-
-    if (fraction > 0) {
-      final percent = (fraction * 100).round().clamp(1, 100);
-      return LibraryChapterProgressInfo(
-        label: '已读 $percent%',
-        isCurrent: true,
-        fraction: fraction,
-        semanticLabel: '当前章节已读 $percent%',
-      );
-    }
-
-    if (progress.scrollOffset > 0) {
-      return const LibraryChapterProgressInfo(
-        label: '阅读中',
-        isCurrent: true,
-        fraction: 0,
-        semanticLabel: '当前章节阅读中',
-      );
-    }
-
-    return null;
+    return LibraryChapterProgressInfo(
+      label: '上次阅读',
+      isCurrent: true,
+      fraction: fraction,
+      semanticLabel: '上次阅读的章节',
+    );
   }
 
   @override

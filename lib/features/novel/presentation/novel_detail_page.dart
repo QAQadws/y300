@@ -127,6 +127,7 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
             : (selection) => _updateOpenMode(selection.first),
       ),
       onOpenChapter: _openChapter,
+      onContinue: _openContinue,
       onRefreshCompleted: (_) async {
         ref.invalidate(hydrationProvider);
         try {
@@ -203,8 +204,50 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
       return;
     }
 
-    final tid = chapter.sourceTid?.trim() ?? '';
-    final pid = chapter.sourcePid?.trim() ?? '';
+    await _openSourceChapter(
+      context,
+      tid: chapter.sourceTid?.trim() ?? '',
+      pid: chapter.sourcePid?.trim() ?? '',
+      subject: chapter.title,
+    );
+  }
+
+  Future<void> _openContinue(
+    BuildContext context,
+    ReaderRouteTarget target,
+  ) async {
+    final mode =
+        ref.read(novelChapterOpenModeControllerProvider).value ??
+        NovelChapterOpenMode.reader;
+    if (mode == NovelChapterOpenMode.reader) {
+      await _openReader(context, target);
+      return;
+    }
+
+    final episodes = await ref
+        .read(novelRepositoryProvider)
+        .getEpisodes(novelId: target.workId, descending: false);
+    final matches = episodes.where(
+      (episode) => episode.episodeId == target.episodeId,
+    );
+    if (matches.isEmpty || !context.mounted) {
+      return;
+    }
+    final episode = matches.first;
+    await _openSourceChapter(
+      context,
+      tid: episode.sourceTid.trim(),
+      pid: episode.sourcePid?.trim() ?? '',
+      subject: episode.episodeTitle,
+    );
+  }
+
+  Future<void> _openSourceChapter(
+    BuildContext context, {
+    required String tid,
+    required String pid,
+    required String subject,
+  }) async {
     try {
       final route = await ref
           .read(novelChapterSourceRouteResolverProvider)
@@ -216,7 +259,7 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
         context,
         ThreadRouteTarget(
           tid: route.tid,
-          subject: chapter.title,
+          subject: subject,
           initialPage: route.page,
           targetPid: route.pid,
         ),
@@ -229,7 +272,7 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
         context: context,
         message: error.message,
         fallbackTid: tid,
-        subject: chapter.title,
+        subject: subject,
       );
     }
   }

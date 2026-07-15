@@ -7,6 +7,7 @@ class ReaderToolbarAction {
     required this.label,
     required this.onPressed,
     this.enabled = true,
+    this.dismissMenu = true,
   });
 
   final String id;
@@ -14,6 +15,12 @@ class ReaderToolbarAction {
   final String label;
   final VoidCallback onPressed;
   final bool enabled;
+
+  /// Whether the reader overlay should close before invoking the action.
+  ///
+  /// Persistent controls such as a mode cycle can keep the menu open so the
+  /// user can repeat the action without reopening the overlay.
+  final bool dismissMenu;
 }
 
 class ReaderTopBarConfig {

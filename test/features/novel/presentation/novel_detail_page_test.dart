@@ -285,6 +285,39 @@ void main() {
     expect(libraryState.readMutationCount, 0);
   });
 
+  testWidgets('continue honors source-post mode for the last-read chapter', (
+    tester,
+  ) async {
+    final resolver = _FakeNovelChapterSourceRouteResolver.success(page: 6);
+    await _pumpNovelDetail(
+      tester,
+      preferences: _MemoryNovelInteractionPreferencesRepository(
+        NovelChapterOpenMode.sourcePost,
+      ),
+      routeResolver: resolver,
+      repository: _FakeNovelRepository(
+        progress: NovelReadingProgress(
+          novelId: 'novel:1',
+          episodeId: 'novel:1:e1',
+          scrollOffset: 88,
+          updatedAt: DateTime(2026, 7, 15),
+        ),
+      ),
+      threadRepository: _FakeThreadRepository(),
+    );
+
+    await tester.tap(find.text('继续'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final threadPage = tester.widget<ThreadDetailPage>(
+      find.byType(ThreadDetailPage),
+    );
+    expect(threadPage.initialPage, 6);
+    expect(threadPage.targetPid, '5001');
+    expect(resolver.lastReference?.pid, '5001');
+  });
+
   testWidgets('reader mode keeps opening chapters in NovelReaderPage', (
     tester,
   ) async {
@@ -344,7 +377,7 @@ void main() {
     expect(threadPage.targetPid, isNull);
   });
 
-  testWidgets('continue always opens the reader in source-post mode', (
+  testWidgets('continue opens the first chapter in source-post mode', (
     tester,
   ) async {
     final resolver = _FakeNovelChapterSourceRouteResolver.success();
@@ -354,14 +387,16 @@ void main() {
         NovelChapterOpenMode.sourcePost,
       ),
       routeResolver: resolver,
+      threadRepository: _FakeThreadRepository(),
     );
 
     await tester.tap(find.text('继续'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.byType(NovelReaderPage), findsOneWidget);
-    expect(resolver.callCount, 0);
+    expect(find.byType(ThreadDetailPage), findsOneWidget);
+    expect(find.byType(NovelReaderPage), findsNothing);
+    expect(resolver.callCount, 1);
   });
 
   testWidgets(
@@ -397,6 +432,7 @@ Future<void> _pumpNovelDetail(
   WidgetTester tester, {
   required _MemoryNovelInteractionPreferencesRepository preferences,
   required _FakeNovelChapterSourceRouteResolver routeResolver,
+  _FakeNovelRepository? repository,
   _FakeLibraryStateRepository? libraryStateRepository,
   ThreadRepository? threadRepository,
   NovelChapterUpdateService? chapterUpdateService,
@@ -404,7 +440,9 @@ Future<void> _pumpNovelDetail(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+        novelRepositoryProvider.overrideWithValue(
+          repository ?? _FakeNovelRepository(),
+        ),
         novelDownloadServiceProvider.overrideWithValue(
           _NoopNovelDownloadService(),
         ),
@@ -782,6 +820,10 @@ class _NoopNovelDownloadService implements NovelDownloadService {
 }
 
 class _FakeNovelRepository implements NovelRepository {
+  _FakeNovelRepository({this.progress});
+
+  final NovelReadingProgress? progress;
+
   @override
   Future<String> createCategory({required String name}) async => 'created';
 
@@ -846,7 +888,7 @@ class _FakeNovelRepository implements NovelRepository {
   @override
   Future<NovelReadingProgress?> getReadingProgress({
     required String novelId,
-  }) async => null;
+  }) async => progress;
 
   @override
   Future<List<NovelItem>> getShelfItems({

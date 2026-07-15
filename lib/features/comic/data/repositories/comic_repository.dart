@@ -94,9 +94,7 @@ abstract class ComicRepository implements CatalogUrlUpdater {
     throw UnimplementedError('purgeWork($comicId)');
   }
 
-  Future<List<ComicShelfItem>> getShelfItems({
-    String categoryId = 'default',
-  });
+  Future<List<ComicShelfItem>> getShelfItems({String categoryId = 'default'});
 
   Future<ComicDetail?> getComicDetail({required String comicId});
 
@@ -121,9 +119,7 @@ abstract class ComicRepository implements CatalogUrlUpdater {
     String? cacheLocalPath,
   });
 
-  Future<void> clearEpisodeImageCache({
-    required String episodeId,
-  });
+  Future<void> clearEpisodeImageCache({required String episodeId});
 
   Future<void> updateLastReadProgress({
     required String comicId,
@@ -132,9 +128,25 @@ abstract class ComicRepository implements CatalogUrlUpdater {
     required double scrollOffset,
   });
 
-  Future<ComicReadingProgress?> getLastReadProgress({
+  Future<ComicReadingProgress?> getLastReadProgress({required String comicId});
+
+  Future<ComicReadingProgress?> getReadingProgressForEpisode({
     required String comicId,
-  });
+    required String episodeId,
+  }) async {
+    final progress = await getLastReadProgress(comicId: comicId);
+    return progress?.episodeId == episodeId ? progress : null;
+  }
+
+  /// Returns all persisted chapter progress rows, newest visit first.
+  Future<List<ComicReadingProgress>> getReadingProgresses({
+    required String comicId,
+  }) async {
+    final progress = await getLastReadProgress(comicId: comicId);
+    return progress == null
+        ? const <ComicReadingProgress>[]
+        : <ComicReadingProgress>[progress];
+  }
 
   Future<ComicEpisodeRefreshResult> mergeEpisodesFromLinks({
     required String comicId,
@@ -196,9 +208,7 @@ class ComicShelfWorkStats {
 }
 
 abstract class ComicShelfStatsRepository {
-  Future<ComicShelfWorkStats> getShelfWorkStats({
-    required String comicId,
-  });
+  Future<ComicShelfWorkStats> getShelfWorkStats({required String comicId});
 }
 
 abstract class ComicCoverCacheWriter {
@@ -235,10 +245,7 @@ abstract class ComicEpisodeImageCacheMetadataWriter {
 }
 
 class ComicDuplicateGroup {
-  const ComicDuplicateGroup({
-    required this.comicIds,
-    required this.sharedTids,
-  });
+  const ComicDuplicateGroup({required this.comicIds, required this.sharedTids});
 
   final Set<String> comicIds;
   final Set<String> sharedTids;
@@ -253,12 +260,11 @@ class ComicDuplicateMergeResult {
     required this.movedEpisodeCount,
   });
 
-  const ComicDuplicateMergeResult.unchanged({
-    required this.targetComicId,
-  })  : targetTitle = null,
-        mergedComicIds = const <String>{},
-        replacements = const <String, String>{},
-        movedEpisodeCount = 0;
+  const ComicDuplicateMergeResult.unchanged({required this.targetComicId})
+    : targetTitle = null,
+      mergedComicIds = const <String>{},
+      replacements = const <String, String>{},
+      movedEpisodeCount = 0;
 
   final String targetComicId;
   final String? targetTitle;
@@ -278,10 +284,10 @@ class ComicDuplicateMergeSummary {
   });
 
   const ComicDuplicateMergeSummary.empty()
-      : mergedGroupCount = 0,
-        removedComicCount = 0,
-        movedEpisodeCount = 0,
-        replacements = const <String, String>{};
+    : mergedGroupCount = 0,
+      removedComicCount = 0,
+      movedEpisodeCount = 0,
+      replacements = const <String, String>{};
 
   final int mergedGroupCount;
   final int removedComicCount;
@@ -298,18 +304,13 @@ class ComicDuplicateMergeSummary {
       mergedGroupCount: mergedGroupCount + 1,
       removedComicCount: removedComicCount + result.mergedComicIds.length,
       movedEpisodeCount: movedEpisodeCount + result.movedEpisodeCount,
-      replacements: <String, String>{
-        ...replacements,
-        ...result.replacements,
-      },
+      replacements: <String, String>{...replacements, ...result.replacements},
     );
   }
 }
 
 abstract class ComicDuplicateMergeRepository {
-  Future<List<ComicDuplicateGroup>> findDuplicateGroups({
-    String? comicId,
-  });
+  Future<List<ComicDuplicateGroup>> findDuplicateGroups({String? comicId});
 
   Future<ComicDuplicateMergeResult> mergeDuplicateGroup({
     required Set<String> comicIds,

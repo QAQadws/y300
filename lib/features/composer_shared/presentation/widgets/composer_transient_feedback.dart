@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/shared/widgets/transient_feedback.dart';
 
 List<ComposerImageAttachment> visibleComposerImageAttachments(
   List<ComposerImageAttachment> attachments,
@@ -22,11 +23,5 @@ Set<String> uploadedComposerImageAttachmentIds(
 }
 
 void showComposerSnackBar(BuildContext context, String message) {
-  final trimmed = message.trim();
-  if (trimmed.isEmpty) {
-    return;
-  }
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(trimmed)));
+  showTransientSnackBar(context, message);
 }

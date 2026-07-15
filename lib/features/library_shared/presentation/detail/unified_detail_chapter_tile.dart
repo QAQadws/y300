@@ -7,7 +7,6 @@ class UnifiedDetailChapterTile extends StatelessWidget {
     required this.tileKey,
     required this.chapter,
     required this.subtitle,
-    required this.showInlineProgress,
     required this.isDownloading,
     required this.downloadIconSize,
     required this.onTap,
@@ -18,7 +17,6 @@ class UnifiedDetailChapterTile extends StatelessWidget {
   final Key tileKey;
   final LibraryChapterItem chapter;
   final String subtitle;
-  final bool showInlineProgress;
   final bool isDownloading;
   final double downloadIconSize;
   final VoidCallback onTap;
@@ -35,10 +33,7 @@ class UnifiedDetailChapterTile extends StatelessWidget {
     final subtitleColor = chapter.isRead
         ? scheme.onSurfaceVariant.withAlpha(170)
         : scheme.onSurfaceVariant;
-    final hasStatus =
-        (chapter.progressInfo != null && !showInlineProgress) ||
-        chapter.isDownloaded ||
-        chapter.isRead;
+    final hasStatus = chapter.isDownloaded;
 
     return Material(
       key: tileKey,
@@ -90,9 +85,7 @@ class UnifiedDetailChapterTile extends StatelessWidget {
                     _ChapterSubtitle(
                       subtitle,
                       episodeId: chapter.episodeId,
-                      progress: showInlineProgress
-                          ? chapter.progressInfo
-                          : null,
+                      progress: chapter.progressInfo,
                       style:
                           theme.textTheme.bodySmall?.copyWith(
                             color: subtitleColor,
@@ -101,10 +94,7 @@ class UnifiedDetailChapterTile extends StatelessWidget {
                     ),
                     if (hasStatus) ...[
                       const SizedBox(height: 7),
-                      _ChapterStatusRow(
-                        chapter: chapter,
-                        showProgress: !showInlineProgress,
-                      ),
+                      _ChapterStatusRow(chapter: chapter),
                     ],
                   ],
                 ),
@@ -138,21 +128,13 @@ class UnifiedDetailChapterTile extends StatelessWidget {
 }
 
 class _ChapterStatusRow extends StatelessWidget {
-  const _ChapterStatusRow({required this.chapter, required this.showProgress});
+  const _ChapterStatusRow({required this.chapter});
 
   final LibraryChapterItem chapter;
-  final bool showProgress;
 
   @override
   Widget build(BuildContext context) {
     final badges = <Widget>[
-      if (showProgress && chapter.progressInfo != null)
-        _ChapterProgressBadge(
-          key: ValueKey<String>(
-            'unified-detail-chapter-progress-${chapter.episodeId}',
-          ),
-          progress: chapter.progressInfo!,
-        ),
       if (chapter.isDownloaded)
         _DetailStatusBadge(
           key: ValueKey<String>(
@@ -160,16 +142,6 @@ class _ChapterStatusRow extends StatelessWidget {
           ),
           icon: Icons.check_circle_outline,
           label: '已下载',
-          tone: _DetailStatusBadgeTone.success,
-        ),
-      if (chapter.isRead)
-        _DetailStatusBadge(
-          key: ValueKey<String>(
-            'unified-detail-chapter-read-badge-${chapter.episodeId}',
-          ),
-          icon: Icons.done,
-          label: '已读',
-          tone: _DetailStatusBadgeTone.muted,
         ),
     ];
 
@@ -232,63 +204,20 @@ class _ChapterSubtitle extends StatelessWidget {
   }
 }
 
-class _ChapterProgressBadge extends StatelessWidget {
-  const _ChapterProgressBadge({super.key, required this.progress});
-
-  final LibraryChapterProgressInfo progress;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final text = Text(
-      progress.label,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-        color: scheme.primary,
-        fontWeight: FontWeight.w600,
-      ),
-    );
-    final badge = Container(
-      constraints: const BoxConstraints(maxWidth: 120),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: scheme.primary.withAlpha(22),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: scheme.primary.withAlpha(64)),
-      ),
-      child: text,
-    );
-
-    final semanticLabel = progress.semanticLabel;
-    if (semanticLabel == null || semanticLabel.isEmpty) {
-      return badge;
-    }
-    return Semantics(label: semanticLabel, child: badge);
-  }
-}
-
-enum _DetailStatusBadgeTone { success, muted }
-
 class _DetailStatusBadge extends StatelessWidget {
   const _DetailStatusBadge({
     super.key,
     required this.icon,
     required this.label,
-    required this.tone,
   });
 
   final IconData icon;
   final String label;
-  final _DetailStatusBadgeTone tone;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final foreground = switch (tone) {
-      _DetailStatusBadgeTone.success => scheme.tertiary,
-      _DetailStatusBadgeTone.muted => scheme.onSurfaceVariant,
-    };
+    final foreground = scheme.tertiary;
 
     return Container(
       constraints: const BoxConstraints(maxWidth: 110),

@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 31;
+  static const int dbVersion = 32;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -86,6 +86,9 @@ class ComicLocalDb {
     if (oldVersion < 31 && newVersion >= 31) {
       await _upgradeFrom30To31(db);
     }
+    if (oldVersion < 32 && newVersion >= 32) {
+      await _upgradeFrom31To32(db);
+    }
   }
 
   static Future<void> _upgradeFrom27To28(Database db) async {
@@ -127,6 +130,39 @@ class ComicLocalDb {
       column: 'cover_hidden',
       definition: 'INTEGER NOT NULL DEFAULT 0',
     );
+  }
+
+  static Future<void> _upgradeFrom31To32(Database db) async {
+    const migratedTable = '${readingProgressTable}_v32';
+    await db.execute('DROP TABLE IF EXISTS $migratedTable');
+    await db.execute('''
+      CREATE TABLE $migratedTable (
+        comic_id TEXT NOT NULL,
+        episode_id TEXT NOT NULL,
+        image_index INTEGER NOT NULL,
+        scroll_offset REAL NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (comic_id, episode_id),
+        FOREIGN KEY (comic_id) REFERENCES $comicsTable(comic_id) ON DELETE CASCADE,
+        FOREIGN KEY (episode_id) REFERENCES $episodesTable(episode_id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute('''
+      INSERT OR REPLACE INTO $migratedTable (
+        comic_id, episode_id, image_index, scroll_offset, updated_at
+      )
+      SELECT progress.comic_id, progress.episode_id, progress.image_index,
+             progress.scroll_offset, progress.updated_at
+      FROM $readingProgressTable AS progress
+      INNER JOIN $episodesTable AS episode
+        ON episode.episode_id = progress.episode_id
+       AND episode.comic_id = progress.comic_id
+    ''');
+    await db.execute('DROP TABLE $readingProgressTable');
+    await db.execute(
+      'ALTER TABLE $migratedTable RENAME TO $readingProgressTable',
+    );
+    await _createReadingProgressIndex(db);
   }
 
   static Future<void> _addColumnIfMissing(
@@ -288,14 +324,24 @@ class ComicLocalDb {
   static Future<void> _createReadingProgressTable(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS $readingProgressTable (
-        comic_id TEXT PRIMARY KEY,
+        comic_id TEXT NOT NULL,
         episode_id TEXT NOT NULL,
         image_index INTEGER NOT NULL,
         scroll_offset REAL NOT NULL,
         updated_at INTEGER NOT NULL,
-        FOREIGN KEY (comic_id) REFERENCES $comicsTable(comic_id) ON DELETE CASCADE
+        PRIMARY KEY (comic_id, episode_id),
+        FOREIGN KEY (comic_id) REFERENCES $comicsTable(comic_id) ON DELETE CASCADE,
+        FOREIGN KEY (episode_id) REFERENCES $episodesTable(episode_id) ON DELETE CASCADE
       )
     ''');
+    await _createReadingProgressIndex(db);
+  }
+
+  static Future<void> _createReadingProgressIndex(Database db) async {
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_reading_progress_comic_updated '
+      'ON $readingProgressTable(comic_id, updated_at DESC)',
+    );
   }
 
   /// Phase 0: 为小说模块预留统一内容表与阅读偏好表。

@@ -18,15 +18,13 @@ class ComicDuplicateMergeStore {
   }) async {
     final db = await _dbFuture;
     final normalizedComicId = _normalizeNullable(comicId);
-    final rows = await db.rawQuery(
-      '''
+    final rows = await db.rawQuery('''
       SELECT comic_id, source_tid
       FROM ${ComicLocalDb.episodesTable}
       UNION ALL
       SELECT comic_id, source_tid
       FROM ${ComicLocalDb.comicsTable}
-      ''',
-    );
+      ''');
     if (rows.isEmpty) {
       return const <ComicDuplicateGroup>[];
     }
@@ -86,7 +84,10 @@ class ComicDuplicateMergeStore {
   Future<ComicDuplicateMergeResult> mergeDuplicateGroup({
     required Set<String> comicIds,
   }) async {
-    final normalizedIds = comicIds.map(_normalizeNullable).whereType<String>().toSet();
+    final normalizedIds = comicIds
+        .map(_normalizeNullable)
+        .whereType<String>()
+        .toSet();
     if (normalizedIds.length <= 1) {
       return ComicDuplicateMergeResult.unchanged(
         targetComicId: normalizedIds.isEmpty ? '' : normalizedIds.first,
@@ -98,7 +99,9 @@ class ComicDuplicateMergeStore {
       final comics = await _loadComicRecords(txn, normalizedIds);
       if (comics.length <= 1) {
         return ComicDuplicateMergeResult.unchanged(
-          targetComicId: comics.isEmpty ? normalizedIds.first : comics.first.comicId,
+          targetComicId: comics.isEmpty
+              ? normalizedIds.first
+              : comics.first.comicId,
         );
       }
 
@@ -172,7 +175,9 @@ class ComicDuplicateMergeStore {
   ComicRecord chooseDuplicateMergeTarget(List<ComicRecord> comics) {
     final sorted = comics.toList(growable: false)
       ..sort((a, b) {
-        final titleOrder = _titleLength(a.title).compareTo(_titleLength(b.title));
+        final titleOrder = _titleLength(
+          a.title,
+        ).compareTo(_titleLength(b.title));
         if (titleOrder != 0) {
           return titleOrder;
         }
@@ -218,14 +223,11 @@ class ComicDuplicateMergeStore {
       );
 
       if (existingRows.isEmpty) {
-        await txn.insert(
-          ComicLocalDb.episodesTable,
-          <String, Object?>{
-            ...row,
-            'episode_id': targetEpisodeId,
-            'comic_id': targetComicId,
-          },
-        );
+        await txn.insert(ComicLocalDb.episodesTable, <String, Object?>{
+          ...row,
+          'episode_id': targetEpisodeId,
+          'comic_id': targetComicId,
+        });
         await _mergeEpisodeStateIntoTarget(
           txn,
           sourceEpisodeId: sourceEpisodeId,
@@ -279,19 +281,25 @@ class ComicDuplicateMergeStore {
     required Map<String, Object?> existing,
     required Map<String, Object?> incoming,
   }) async {
-    final existingTitle = _normalizeNullable(existing['episode_title'] as String?);
-    final incomingTitle = _normalizeNullable(incoming['episode_title'] as String?);
+    final existingTitle = _normalizeNullable(
+      existing['episode_title'] as String?,
+    );
+    final incomingTitle = _normalizeNullable(
+      incoming['episode_title'] as String?,
+    );
     final existingUrl = _normalizeNullable(existing['source_url'] as String?);
     final incomingUrl = _normalizeNullable(incoming['source_url'] as String?);
     final update = <String, Object?>{};
     if (incomingTitle != null &&
-        (existingTitle == null || incomingTitle.length > existingTitle.length)) {
+        (existingTitle == null ||
+            incomingTitle.length > existingTitle.length)) {
       update['episode_title'] = incomingTitle;
     }
     if (incomingUrl != null && (existingUrl == null || existingUrl.isEmpty)) {
       update['source_url'] = incomingUrl;
     }
-    final publishTimeText = _normalizeNullable(existing['publish_time_text'] as String?) ??
+    final publishTimeText =
+        _normalizeNullable(existing['publish_time_text'] as String?) ??
         _normalizeNullable(incoming['publish_time_text'] as String?);
     if (publishTimeText != null) {
       update['publish_time_text'] = publishTimeText;
@@ -319,10 +327,13 @@ class ComicDuplicateMergeStore {
     // identical — keeping the target's copy and discarding the source's
     // avoids duplicates. The source images are removed by cascade when the
     // source episode row is deleted at the end of mergeSourceComicIntoTarget.
-    final targetImageCount = (await txn.rawQuery(
-      'SELECT COUNT(*) AS c FROM ${ComicLocalDb.episodeImagesTable} WHERE episode_id = ?',
-      <Object>[targetEpisodeId],
-    )).first['c'] as int? ?? 0;
+    final targetImageCount =
+        (await txn.rawQuery(
+              'SELECT COUNT(*) AS c FROM ${ComicLocalDb.episodeImagesTable} WHERE episode_id = ?',
+              <Object>[targetEpisodeId],
+            )).first['c']
+            as int? ??
+        0;
     if (targetImageCount == 0) {
       await txn.update(
         ComicLocalDb.episodeImagesTable,
@@ -407,8 +418,14 @@ class ComicDuplicateMergeStore {
       <String, Object?>{
         'work_id': targetComicId,
         'is_read': _maxInt(target['is_read'], source['is_read']),
-        'is_downloaded': _maxInt(target['is_downloaded'], source['is_downloaded']),
-        'is_bookmarked': _maxInt(target['is_bookmarked'], source['is_bookmarked']),
+        'is_downloaded': _maxInt(
+          target['is_downloaded'],
+          source['is_downloaded'],
+        ),
+        'is_bookmarked': _maxInt(
+          target['is_bookmarked'],
+          source['is_bookmarked'],
+        ),
         'read_at': _maxNullableInt(target['read_at'], source['read_at']),
         'downloaded_at': _maxNullableInt(
           target['downloaded_at'],
@@ -666,7 +683,10 @@ class ComicDuplicateMergeStore {
     target ??= <String, Object?>{
       'content_type': 'comic',
       'work_id': targetComicId,
-      'created_at': rows.map((row) => row['created_at']).whereType<int>().fold<int>(
+      'created_at': rows
+          .map((row) => row['created_at'])
+          .whereType<int>()
+          .fold<int>(
             DateTime.now().millisecondsSinceEpoch,
             (minValue, value) => value < minValue ? value : minValue,
           ),
@@ -761,20 +781,23 @@ class ComicDuplicateMergeStore {
       ComicLocalDb.readingProgressTable,
       where: _whereIn('comic_id', args.length + 1),
       whereArgs: <Object>[targetComicId, ...args],
-      orderBy: 'updated_at DESC',
+      orderBy: 'updated_at DESC, rowid DESC',
     );
     if (rows.isEmpty) {
       return;
     }
-    final winner = rows.first;
-    await txn.insert(
-      ComicLocalDb.readingProgressTable,
-      <String, Object?>{
-        ...winner,
-        'comic_id': targetComicId,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    final latestByEpisodeId = <String, Map<String, Object?>>{};
+    for (final row in rows) {
+      final episodeId = row['episode_id'] as String;
+      latestByEpisodeId.putIfAbsent(episodeId, () => row);
+    }
+    for (final winner in latestByEpisodeId.values) {
+      await txn.insert(
+        ComicLocalDb.readingProgressTable,
+        <String, Object?>{...winner, 'comic_id': targetComicId},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
     await txn.delete(
       ComicLocalDb.readingProgressTable,
       where: _whereIn('comic_id', args.length),

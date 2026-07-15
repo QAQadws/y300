@@ -95,6 +95,9 @@ class _NoopEngineActions implements ReaderEngineActions {
   void openDisplaySettings() {}
 
   @override
+  void cycleReaderMode() {}
+
+  @override
   void openModeSheet() {}
 
   @override

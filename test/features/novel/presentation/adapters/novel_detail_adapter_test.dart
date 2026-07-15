@@ -107,12 +107,12 @@ void main() {
       (chapter) => chapter.episodeId == 'novel:1:2',
     );
 
-    expect(current.progressInfo?.label, '第 3 页');
+    expect(current.progressInfo?.label, '上次阅读');
     expect(current.progressInfo?.fraction, 0.35);
     expect(current.progressInfo?.isCurrent, isTrue);
   });
 
-  test('loadChapters maps vertical novel progress to percent label', () async {
+  test('loadChapters marks the latest vertical chapter as last read', () async {
     final adapter = NovelDetailAdapter(
       _FakeNovelRepository(
         progress: NovelReadingProgress(
@@ -135,12 +135,12 @@ void main() {
       (chapter) => chapter.episodeId == 'novel:1:1',
     );
 
-    expect(current.progressInfo?.label, '已读 42%');
+    expect(current.progressInfo?.label, '上次阅读');
     expect(current.progressInfo?.fraction, 0.42);
   });
 
   test(
-    'loadChapters shows reading fallback and hides progress for read chapter',
+    'loadChapters keeps last-read marker independent from read completion',
     () async {
       final progress = NovelReadingProgress(
         novelId: 'novel:1',
@@ -164,7 +164,7 @@ void main() {
             .singleWhere((chapter) => chapter.episodeId == 'novel:1:1')
             .progressInfo
             ?.label,
-        '阅读中',
+        '上次阅读',
       );
 
       final readAdapter = NovelDetailAdapter(
@@ -189,8 +189,9 @@ void main() {
       expect(
         readChapters
             .singleWhere((chapter) => chapter.episodeId == 'novel:1:1')
-            .progressInfo,
-        isNull,
+            .progressInfo
+            ?.label,
+        '上次阅读',
       );
     },
   );

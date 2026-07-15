@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -44,104 +44,7 @@ import 'package:y300/features/startup/presentation/main_shell_page.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
-  testWidgets('MainShellPage can switch between forum/comic/novel/more tabs', (tester) async {
-    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
-      ComicSearchRefreshQueueSnapshot.empty,
-    );
-    final webViewDriver = _FakeForumWebViewDriver();
-    addTearDown(queueSnapshot.dispose);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
-          novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
-          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
-          localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository()),
-          favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
-          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
-          mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
-          mainShellNotificationInitializerProvider
-              .overrideWithValue(() async {}),
-          mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
-          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
-          ),
-          forumWebViewDriverFactoryProvider.overrideWithValue(() => webViewDriver),
-          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
-        ],
-        child: const MaterialApp(home: MainShellPage()),
-      ),
-    );
-
-    await tester.pump();
-
-    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
-
-    await tester.tap(find.text('收藏').last);
-    await tester.pumpAndSettle();
-    expect(find.text('收藏'), findsWidgets);
-    expect(find.byKey(const Key('unified-shelf-list-view')), findsOneWidget);
-
-    await tester.tap(find.text('漫画').last);
-    await tester.pumpAndSettle();
-    expect(find.byType(AppBar), findsOneWidget);
-    expect(find.byIcon(Icons.search), findsOneWidget);
-
-    await tester.tap(find.text('小说').last);
-    await tester.pumpAndSettle();
-    expect(find.byType(AppBar), findsOneWidget);
-    expect(find.byKey(const Key('unified-shelf-category-indicator')), findsOneWidget);
-
-    await tester.tap(find.text('更多'));
-    await tester.pumpAndSettle();
-    expect(find.text('更多'), findsWidgets);
-    expect(find.byKey(const Key('more-login-entry')), findsOneWidget);
-  });
-
-  testWidgets('Novel tab icon changes after tap', (tester) async {
-    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
-      ComicSearchRefreshQueueSnapshot.empty,
-    );
-    final webViewDriver = _FakeForumWebViewDriver();
-    addTearDown(queueSnapshot.dispose);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
-          novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
-          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
-          localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository()),
-          favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
-          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
-          mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
-          mainShellNotificationInitializerProvider
-              .overrideWithValue(() async {}),
-          mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
-          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
-          ),
-          forumWebViewDriverFactoryProvider.overrideWithValue(() => webViewDriver),
-          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
-        ],
-        child: const MaterialApp(home: MainShellPage()),
-      ),
-    );
-
-    await tester.pump();
-
-    expect(find.byIcon(Icons.local_library_outlined), findsOneWidget);
-    expect(find.byIcon(Icons.local_library), findsNothing);
-
-    await tester.tap(find.text('小说'));
-    await tester.pumpAndSettle();
-
-    expect(find.byIcon(Icons.local_library_outlined), findsNothing);
-    expect(find.byIcon(Icons.local_library), findsOneWidget);
-  });
-
-  testWidgets('MainShellPage navigation bar reads the themed background color', (
+  testWidgets('MainShellPage can switch between forum/comic/novel/more tabs', (
     tester,
   ) async {
     final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
@@ -180,62 +83,204 @@ void main() {
           ),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
-        child: MaterialApp(
-          theme: AppTheme.light(),
-          home: const MainShellPage(),
-        ),
+        child: const MaterialApp(home: MainShellPage()),
       ),
     );
 
     await tester.pump();
 
-    final navigationBarContext = tester.element(find.byType(NavigationBar));
+    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+
+    await tester.tap(find.text('收藏').last);
+    await tester.pumpAndSettle();
+    expect(find.text('收藏'), findsWidgets);
+    expect(find.byKey(const Key('unified-shelf-list-view')), findsOneWidget);
+
+    await tester.tap(find.text('漫画').last);
+    await tester.pumpAndSettle();
+    expect(find.byType(AppBar), findsOneWidget);
+    expect(find.byIcon(Icons.search), findsOneWidget);
+
+    await tester.tap(find.text('小说').last);
+    await tester.pumpAndSettle();
+    expect(find.byType(AppBar), findsOneWidget);
     expect(
-      NavigationBarTheme.of(navigationBarContext).backgroundColor,
-      const Color(0xFFFDE6B9),
+      find.byKey(const Key('unified-shelf-category-indicator')),
+      findsOneWidget,
     );
+
+    await tester.tap(find.text('更多'));
+    await tester.pumpAndSettle();
+    expect(find.text('更多'), findsWidgets);
+    expect(find.byKey(const Key('more-login-entry')), findsOneWidget);
   });
 
-  testWidgets('MainShellPage notification permission wiring does not block shell build', (tester) async {
+  testWidgets('Novel tab icon changes after tap', (tester) async {
     final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
       ComicSearchRefreshQueueSnapshot.empty,
     );
-    final notificationService = _FakeLibraryTaskNotificationService(
-      initialPermission: LibraryTaskNotificationPermissionState.denied,
-    );
     final webViewDriver = _FakeForumWebViewDriver();
     addTearDown(queueSnapshot.dispose);
-    addTearDown(notificationService.dispose);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
-          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
-          localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository()),
-          favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
-          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
+          localFavoriteRepositoryProvider.overrideWith(
+            (ref) => _FakeLocalFavoriteRepository(),
+          ),
+          favoriteSyncServiceProvider.overrideWith(
+            (ref) => _FakeFavoriteSyncService(),
+          ),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+            queueSnapshot,
+          ),
           mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
-          libraryTaskNotificationServiceProvider.overrideWithValue(
-            notificationService,
+          mainShellNotificationInitializerProvider.overrideWithValue(
+            () async {},
           ),
           mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
           authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
-          forumWebViewDriverFactoryProvider.overrideWithValue(() => webViewDriver),
+          forumWebViewDriverFactoryProvider.overrideWithValue(
+            () => webViewDriver,
+          ),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
         child: const MaterialApp(home: MainShellPage()),
       ),
     );
 
+    await tester.pump();
+
+    expect(find.byIcon(Icons.local_library_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.local_library), findsNothing);
+
+    await tester.tap(find.text('小说'));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
-    expect(tester.takeException(), isNull);
+    expect(find.byIcon(Icons.local_library_outlined), findsNothing);
+    expect(find.byIcon(Icons.local_library), findsOneWidget);
   });
+
+  testWidgets(
+    'MainShellPage navigation bar reads the themed background color',
+    (tester) async {
+      final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+        ComicSearchRefreshQueueSnapshot.empty,
+      );
+      final webViewDriver = _FakeForumWebViewDriver();
+      addTearDown(queueSnapshot.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+            novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+            libraryStateRepositoryProvider.overrideWithValue(
+              _FakeLibraryStateRepository(),
+            ),
+            localFavoriteRepositoryProvider.overrideWith(
+              (ref) => _FakeLocalFavoriteRepository(),
+            ),
+            favoriteSyncServiceProvider.overrideWith(
+              (ref) => _FakeFavoriteSyncService(),
+            ),
+            comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+              queueSnapshot,
+            ),
+            mainShellBackgroundTaskStarterProvider.overrideWithValue(
+              () async {},
+            ),
+            mainShellNotificationInitializerProvider.overrideWithValue(
+              () async {},
+            ),
+            mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
+            authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+            forumModeSettingsRepositoryProvider.overrideWithValue(
+              _FakeForumModeSettingsRepository(),
+            ),
+            forumWebViewDriverFactoryProvider.overrideWithValue(
+              () => webViewDriver,
+            ),
+            cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.light(),
+            home: const MainShellPage(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      final navigationBarContext = tester.element(find.byType(NavigationBar));
+      expect(
+        NavigationBarTheme.of(navigationBarContext).backgroundColor,
+        const Color(0xFFFDE6B9),
+      );
+    },
+  );
+
+  testWidgets(
+    'MainShellPage notification permission wiring does not block shell build',
+    (tester) async {
+      final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+        ComicSearchRefreshQueueSnapshot.empty,
+      );
+      final notificationService = _FakeLibraryTaskNotificationService(
+        initialPermission: LibraryTaskNotificationPermissionState.denied,
+      );
+      final webViewDriver = _FakeForumWebViewDriver();
+      addTearDown(queueSnapshot.dispose);
+      addTearDown(notificationService.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+            novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+            libraryStateRepositoryProvider.overrideWithValue(
+              _FakeLibraryStateRepository(),
+            ),
+            localFavoriteRepositoryProvider.overrideWith(
+              (ref) => _FakeLocalFavoriteRepository(),
+            ),
+            favoriteSyncServiceProvider.overrideWith(
+              (ref) => _FakeFavoriteSyncService(),
+            ),
+            comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+              queueSnapshot,
+            ),
+            mainShellBackgroundTaskStarterProvider.overrideWithValue(
+              () async {},
+            ),
+            libraryTaskNotificationServiceProvider.overrideWithValue(
+              notificationService,
+            ),
+            mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
+            authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+            forumModeSettingsRepositoryProvider.overrideWithValue(
+              _FakeForumModeSettingsRepository(),
+            ),
+            forumWebViewDriverFactoryProvider.overrideWithValue(
+              () => webViewDriver,
+            ),
+            cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
+          ],
+          child: const MaterialApp(home: MainShellPage()),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('MainShellPage warms up Yamibo profile session on startup', (
     tester,
@@ -343,73 +388,92 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('MainShellPage switches bottom bar when selection becomes active', (
+  testWidgets(
+    'MainShellPage switches bottom bar when selection becomes active',
+    (tester) async {
+      final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+        ComicSearchRefreshQueueSnapshot.empty,
+      );
+      final selectionHost = ShelfSelectionHostController();
+      final webViewDriver = _FakeForumWebViewDriver();
+      addTearDown(queueSnapshot.dispose);
+      addTearDown(selectionHost.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+            novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+            libraryStateRepositoryProvider.overrideWithValue(
+              _FakeLibraryStateRepository(),
+            ),
+            localFavoriteRepositoryProvider.overrideWith(
+              (ref) => _FakeLocalFavoriteRepository(),
+            ),
+            favoriteSyncServiceProvider.overrideWith(
+              (ref) => _FakeFavoriteSyncService(),
+            ),
+            comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+              queueSnapshot,
+            ),
+            mainShellBackgroundTaskStarterProvider.overrideWithValue(
+              () async {},
+            ),
+            mainShellNotificationInitializerProvider.overrideWithValue(
+              () async {},
+            ),
+            mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
+            authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+            shelfSelectionHostControllerProvider.overrideWithValue(
+              selectionHost,
+            ),
+            forumModeSettingsRepositoryProvider.overrideWithValue(
+              _FakeForumModeSettingsRepository(),
+            ),
+            forumWebViewDriverFactoryProvider.overrideWithValue(
+              () => webViewDriver,
+            ),
+            cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
+          ],
+          child: const MaterialApp(home: MainShellPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.byKey(const Key('selection-action-bar')), findsNothing);
+
+      selectionHost.activate(
+        ownerToken: Object(),
+        moduleKey: LibraryModuleKey.comic,
+        moduleTitle: '漫画',
+        activeCategoryId: 'default',
+        selectedCount: 1,
+        selectedWorkIds: const <String>{'comic-1'},
+        selectionActions: const <SelectionAction>[
+          SelectionAction(
+            id: SelectionActionIds.download,
+            icon: Icons.download_outlined,
+            label: '下载',
+          ),
+        ],
+        delegate: _selectionDelegate(),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(NavigationBar), findsNothing);
+      expect(find.byKey(const Key('selection-action-bar')), findsOneWidget);
+
+      selectionHost.deactivate(selectionHost.state!.ownerToken);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.byKey(const Key('selection-action-bar')), findsNothing);
+    },
+  );
+
+  testWidgets('MainShellPage selection action bar delegates button taps', (
     tester,
   ) async {
-    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
-      ComicSearchRefreshQueueSnapshot.empty,
-    );
-    final selectionHost = ShelfSelectionHostController();
-    final webViewDriver = _FakeForumWebViewDriver();
-    addTearDown(queueSnapshot.dispose);
-    addTearDown(selectionHost.dispose);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
-          novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
-          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
-          localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository()),
-          favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
-          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
-          mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
-          mainShellNotificationInitializerProvider.overrideWithValue(() async {}),
-          mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
-          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
-          shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
-          ),
-          forumWebViewDriverFactoryProvider.overrideWithValue(() => webViewDriver),
-          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
-        ],
-        child: const MaterialApp(home: MainShellPage()),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byType(NavigationBar), findsOneWidget);
-    expect(find.byKey(const Key('selection-action-bar')), findsNothing);
-
-    selectionHost.activate(
-      ownerToken: Object(),
-      moduleKey: LibraryModuleKey.comic,
-      moduleTitle: '漫画',
-      activeCategoryId: 'default',
-      selectedCount: 1,
-      selectedWorkIds: const <String>{'comic-1'},
-      selectionActions: const <SelectionAction>[
-        SelectionAction(
-          id: SelectionActionIds.download,
-          icon: Icons.download_outlined,
-          label: '下载',
-        ),
-      ],
-      delegate: _selectionDelegate(),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byType(NavigationBar), findsNothing);
-    expect(find.byKey(const Key('selection-action-bar')), findsOneWidget);
-
-    selectionHost.deactivate(selectionHost.state!.ownerToken);
-    await tester.pumpAndSettle();
-
-    expect(find.byType(NavigationBar), findsOneWidget);
-    expect(find.byKey(const Key('selection-action-bar')), findsNothing);
-  });
-
-  testWidgets('MainShellPage selection action bar delegates button taps', (tester) async {
     final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
       ComicSearchRefreshQueueSnapshot.empty,
     );
@@ -423,19 +487,31 @@ void main() {
         overrides: [
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
-          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
-          localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository()),
-          favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
-          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
+          localFavoriteRepositoryProvider.overrideWith(
+            (ref) => _FakeLocalFavoriteRepository(),
+          ),
+          favoriteSyncServiceProvider.overrideWith(
+            (ref) => _FakeFavoriteSyncService(),
+          ),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+            queueSnapshot,
+          ),
           mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
-          mainShellNotificationInitializerProvider.overrideWithValue(() async {}),
+          mainShellNotificationInitializerProvider.overrideWithValue(
+            () async {},
+          ),
           mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
           authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
           shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
-          forumWebViewDriverFactoryProvider.overrideWithValue(() => webViewDriver),
+          forumWebViewDriverFactoryProvider.overrideWithValue(
+            () => webViewDriver,
+          ),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
         child: const MaterialApp(home: MainShellPage()),
@@ -466,14 +542,18 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey<String>('selection-action-download')));
+    await tester.tap(
+      find.byKey(const ValueKey<String>('selection-action-download')),
+    );
     await tester.pumpAndSettle();
 
     expect(calls, <String>[SelectionActionIds.download]);
     expect(selectionHost.isActive, isTrue);
   });
 
-  testWidgets('MainShellPage unfavorite action requires confirmation', (tester) async {
+  testWidgets('MainShellPage unfavorite action requires confirmation', (
+    tester,
+  ) async {
     final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
       ComicSearchRefreshQueueSnapshot.empty,
     );
@@ -487,19 +567,31 @@ void main() {
         overrides: [
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
-          libraryStateRepositoryProvider.overrideWithValue(_FakeLibraryStateRepository()),
-          localFavoriteRepositoryProvider.overrideWith((ref) => _FakeLocalFavoriteRepository()),
-          favoriteSyncServiceProvider.overrideWith((ref) => _FakeFavoriteSyncService()),
-          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(queueSnapshot),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
+          localFavoriteRepositoryProvider.overrideWith(
+            (ref) => _FakeLocalFavoriteRepository(),
+          ),
+          favoriteSyncServiceProvider.overrideWith(
+            (ref) => _FakeFavoriteSyncService(),
+          ),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+            queueSnapshot,
+          ),
           mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
-          mainShellNotificationInitializerProvider.overrideWithValue(() async {}),
+          mainShellNotificationInitializerProvider.overrideWithValue(
+            () async {},
+          ),
           mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
           authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
           shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
-          forumWebViewDriverFactoryProvider.overrideWithValue(() => webViewDriver),
+          forumWebViewDriverFactoryProvider.overrideWithValue(
+            () => webViewDriver,
+          ),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
         child: const MaterialApp(home: MainShellPage()),
@@ -526,10 +618,7 @@ void main() {
       delegate: _selectionDelegate(
         onRun: (request) async {
           runCount += 1;
-          return const SelectionActionResult(
-            message: 'done',
-            changed: true,
-          );
+          return const SelectionActionResult(message: 'done', changed: true);
         },
       ),
     );
@@ -564,7 +653,8 @@ void main() {
 ShelfSelectionHostDelegate _selectionDelegate({
   Future<SelectionActionResult> Function(
     SelectionActionExecutionRequest request,
-  )? onRun,
+  )?
+  onRun,
 }) {
   return ShelfSelectionHostDelegate(
     exitSelection: () async {},
@@ -572,7 +662,8 @@ ShelfSelectionHostDelegate _selectionDelegate({
     invertVisible: () async {},
     loadAvailableCategories: () async => const <LibraryCategory>[],
     createCategory: (name) async => 'created',
-    runSelectionAction: onRun ??
+    runSelectionAction:
+        onRun ??
         (request) async {
           return const SelectionActionResult(message: 'noop');
         },
@@ -594,8 +685,8 @@ class _FakeLibraryTaskNotificationService
   int ensurePermissionCalls = 0;
 
   @override
-  ValueListenable<LibraryTaskNotificationPermissionState?> get permissionState =>
-      _permissionState;
+  ValueListenable<LibraryTaskNotificationPermissionState?>
+  get permissionState => _permissionState;
 
   @override
   Future<void> clear(LibraryTaskNotificationKey key) async {}
@@ -732,7 +823,8 @@ class _FakeComicRepository implements ComicRepository {
   Future<void> purgeWork({required String comicId}) async {}
 
   @override
-  Future<String> createCategory({required String name}) async => 'mock-category';
+  Future<String> createCategory({required String name}) async =>
+      'mock-category';
 
   @override
   Future<void> clearEpisodeImageCache({required String episodeId}) async {}
@@ -744,12 +836,17 @@ class _FakeComicRepository implements ComicRepository {
   Future<ComicDetail?> getComicDetail({required String comicId}) async => null;
 
   @override
-  Future<List<ComicEpisodeItem>> getComicEpisodes({required String comicId, bool descending = true}) async {
+  Future<List<ComicEpisodeItem>> getComicEpisodes({
+    required String comicId,
+    bool descending = true,
+  }) async {
     return const <ComicEpisodeItem>[];
   }
 
   @override
-  Future<List<ComicEpisodeImageItem>> getEpisodeImages({required String episodeId}) async {
+  Future<List<ComicEpisodeImageItem>> getEpisodeImages({
+    required String episodeId,
+  }) async {
     return const <ComicEpisodeImageItem>[];
   }
 
@@ -771,7 +868,9 @@ class _FakeComicRepository implements ComicRepository {
   }
 
   @override
-  Future<List<ComicShelfItem>> getShelfItems({String categoryId = 'default'}) async {
+  Future<List<ComicShelfItem>> getShelfItems({
+    String categoryId = 'default',
+  }) async {
     return const <ComicShelfItem>[];
   }
 
@@ -781,7 +880,20 @@ class _FakeComicRepository implements ComicRepository {
   }
 
   @override
-  Future<ComicReadingProgress?> getLastReadProgress({required String comicId}) async => null;
+  Future<ComicReadingProgress?> getLastReadProgress({
+    required String comicId,
+  }) async => null;
+
+  @override
+  Future<ComicReadingProgress?> getReadingProgressForEpisode({
+    required String comicId,
+    required String episodeId,
+  }) async => null;
+
+  @override
+  Future<List<ComicReadingProgress>> getReadingProgresses({
+    required String comicId,
+  }) async => const <ComicReadingProgress>[];
 
   @override
   Future<ComicEpisodeRefreshResult> mergeEpisodesFromLinks({
@@ -789,7 +901,11 @@ class _FakeComicRepository implements ComicRepository {
     required List<ComicEpisodeLink> episodeLinks,
     required String fallbackSourceTid,
   }) async {
-    return const ComicEpisodeRefreshResult(insertedCount: 0, updatedCount: 0, totalCount: 0);
+    return const ComicEpisodeRefreshResult(
+      insertedCount: 0,
+      updatedCount: 0,
+      totalCount: 0,
+    );
   }
 
   @override
@@ -800,28 +916,61 @@ class _FakeComicRepository implements ComicRepository {
   }) async {}
 
   @override
-  Future<void> renameCategory({required String categoryId, required String newName}) async {}
+  Future<void> renameCategory({
+    required String categoryId,
+    required String newName,
+  }) async {}
 
   @override
-  Future<void> updateCustomCover({required String comicId, required String? customCoverImageUrl}) async {}
+  Future<void> updateCustomCover({
+    required String comicId,
+    required String? customCoverImageUrl,
+  }) async {}
 
   @override
-  Future<void> updateCustomCoverFromLocalFile({required String comicId, required String localCoverPath, String? sourceEpisodeId, int? sourceImageIndex, String? sourceImageUrl, double? focusX, double? focusY}) async {}
+  Future<void> updateCustomCoverFromLocalFile({
+    required String comicId,
+    required String localCoverPath,
+    String? sourceEpisodeId,
+    int? sourceImageIndex,
+    String? sourceImageUrl,
+    double? focusX,
+    double? focusY,
+  }) async {}
 
   @override
-  Future<void> updateCustomCoverFocus({required String comicId, required double? focusX, required double? focusY}) async {}
+  Future<void> updateCustomCoverFocus({
+    required String comicId,
+    required double? focusX,
+    required double? focusY,
+  }) async {}
 
   @override
-  Future<void> updateCustomMetadata({required String comicId, String? customTitle, String? customAuthor, String? customTranslationGroup, String? customSearchTitle}) async {}
+  Future<void> updateCustomMetadata({
+    required String comicId,
+    String? customTitle,
+    String? customAuthor,
+    String? customTranslationGroup,
+    String? customSearchTitle,
+  }) async {}
 
   @override
-  Future<void> clearCustomMetadata({required String comicId, bool title = false, bool author = false, bool translationGroup = false, bool searchTitle = false}) async {}
+  Future<void> clearCustomMetadata({
+    required String comicId,
+    bool title = false,
+    bool author = false,
+    bool translationGroup = false,
+    bool searchTitle = false,
+  }) async {}
 
   @override
   Future<void> updateGridColumnCount({required int columnCount}) async {}
 
   @override
-  Future<void> saveEpisodeImages({required String episodeId, required List<String> imageUrls}) async {}
+  Future<void> saveEpisodeImages({
+    required String episodeId,
+    required List<String> imageUrls,
+  }) async {}
 
   @override
   Future<void> updateEpisodeImageCacheStatus({
@@ -840,10 +989,14 @@ class _FakeComicRepository implements ComicRepository {
   }) async {}
 
   @override
-  Future<void> updateCatalogUrl({required String comicId, required String catalogUrl}) async {}
+  Future<void> updateCatalogUrl({
+    required String comicId,
+    required String catalogUrl,
+  }) async {}
 
   @override
-  Future<Set<String>> getKnownEpisodeTids({required String comicId}) async => <String>{};
+  Future<Set<String>> getKnownEpisodeTids({required String comicId}) async =>
+      <String>{};
 }
 
 class _FakeNovelRepository implements NovelRepository {
@@ -869,10 +1022,15 @@ class _FakeNovelRepository implements NovelRepository {
   Future<NovelItem?> getDetail({required String novelId}) async => null;
 
   @override
-  Future<NovelChapterContent?> getChapterContent({required String episodeId}) async => null;
+  Future<NovelChapterContent?> getChapterContent({
+    required String episodeId,
+  }) async => null;
 
   @override
-  Future<List<NovelEpisodeItem>> getEpisodes({required String novelId, bool descending = false}) async {
+  Future<List<NovelEpisodeItem>> getEpisodes({
+    required String novelId,
+    bool descending = false,
+  }) async {
     return const <NovelEpisodeItem>[];
   }
 
@@ -894,14 +1052,20 @@ class _FakeNovelRepository implements NovelRepository {
   }) async {}
 
   @override
-  Future<NovelReadingProgress?> getReadingProgress({required String novelId}) async => null;
+  Future<NovelReadingProgress?> getReadingProgress({
+    required String novelId,
+  }) async => null;
 
   Future<NovelEpisodeRefreshResult> refreshEpisodes({
     required String novelId,
     NovelEpisodeRefreshMode mode = NovelEpisodeRefreshMode.full,
     FavoriteSyncExecutionContext? executionContext,
   }) async {
-    return const NovelEpisodeRefreshResult(insertedCount: 0, updatedCount: 0, totalCount: 0);
+    return const NovelEpisodeRefreshResult(
+      insertedCount: 0,
+      updatedCount: 0,
+      totalCount: 0,
+    );
   }
 
   @override
@@ -911,7 +1075,10 @@ class _FakeNovelRepository implements NovelRepository {
   Future<void> purgeWork({required String novelId}) async {}
 
   @override
-  Future<void> renameCategory({required String categoryId, required String newName}) async {}
+  Future<void> renameCategory({
+    required String categoryId,
+    required String newName,
+  }) async {}
 
   @override
   Future<void> saveReadingProgress({
@@ -930,10 +1097,14 @@ class _FakeNovelRepository implements NovelRepository {
   }) async {}
 
   @override
-  Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {}
+  Future<void> upsertReaderPreferences(
+    NovelReaderPreferences preferences,
+  ) async {}
 
   @override
-  Future<void> addReaderBookmark({required NovelReaderBookmark bookmark}) async {}
+  Future<void> addReaderBookmark({
+    required NovelReaderBookmark bookmark,
+  }) async {}
 
   @override
   Future<List<NovelReaderBookmark>> listReaderBookmarks({
@@ -954,7 +1125,9 @@ class _FakeNovelRepository implements NovelRepository {
 }
 
 class _FakeFavoriteSyncService implements FavoriteSyncService {
-  final _progress = ValueNotifier<FavoriteSyncProgress>(FavoriteSyncProgress.idle);
+  final _progress = ValueNotifier<FavoriteSyncProgress>(
+    FavoriteSyncProgress.idle,
+  );
 
   @override
   ValueListenable<FavoriteSyncProgress> get progress => _progress;
@@ -976,9 +1149,7 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
   }
 
   @override
-  Future<FavoriteSyncResult> syncRecentlyAddedThread({
-    required String tid,
-  }) {
+  Future<FavoriteSyncResult> syncRecentlyAddedThread({required String tid}) {
     return sync();
   }
 }
@@ -1060,7 +1231,8 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   Future<Set<String>> getActiveTids() async => const <String>{'100'};
 
   @override
-  Future<List<FavoriteThreadCacheRecord>> getActiveThreadsForSnapshot() async => const <FavoriteThreadCacheRecord>[];
+  Future<List<FavoriteThreadCacheRecord>> getActiveThreadsForSnapshot() async =>
+      const <FavoriteThreadCacheRecord>[];
 
   @override
   Future<bool> hasCompletedComicAutoRefreshBackfill() async => true;
@@ -1072,13 +1244,13 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   }) async {}
 
   @override
-  Future<FavoriteThreadCacheRecord?> getActiveThreadByTid(String tid) async => null;
+  Future<FavoriteThreadCacheRecord?> getActiveThreadByTid(String tid) async =>
+      null;
 
   @override
   Future<List<FavoriteThreadCacheRecord>> getActiveThreadsByWorkId(
     String workId,
-  ) async =>
-      const <FavoriteThreadCacheRecord>[];
+  ) async => const <FavoriteThreadCacheRecord>[];
 
   @override
   Future<bool> hasActiveThreadForWorkId(String workId) async => false;
@@ -1098,7 +1270,8 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   }
 
   @override
-  Future<List<FavoriteThreadCacheRecord>> getComicAutoRefreshBackfillCandidates({
+  Future<List<FavoriteThreadCacheRecord>>
+  getComicAutoRefreshBackfillCandidates({
     int limit = 20,
     Set<String> excludedTids = const <String>{},
   }) async {
@@ -1106,7 +1279,9 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   }
 
   @override
-  Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(String workId) async {
+  Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(
+    String workId,
+  ) async {
     return const FavoriteRouteTarget(
       tid: '100',
       title: '收藏帖',
@@ -1139,15 +1314,21 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   Future<void> markSyncFailure(String message) async {}
 
   @override
-  Future<List<FavoriteThreadCacheRecord>> markRemovedTids(Set<String> activeRemoteTids) async {
+  Future<List<FavoriteThreadCacheRecord>> markRemovedTids(
+    Set<String> activeRemoteTids,
+  ) async {
     return const <FavoriteThreadCacheRecord>[];
   }
 
   @override
-  Future<void> moveThreadToCategory({required String tid, required String toCategoryId}) async {}
+  Future<void> moveThreadToCategory({
+    required String tid,
+    required String toCategoryId,
+  }) async {}
 
   @override
-  Future<String?> pickRandomWorkId({required String categoryId}) async => _item.workId;
+  Future<String?> pickRandomWorkId({required String categoryId}) async =>
+      _item.workId;
 
   @override
   Future<Map<String, List<LibraryWorkItem>>> queryItems({
@@ -1157,12 +1338,16 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
     required String keyword,
   }) async {
     return <String, List<LibraryWorkItem>>{
-      for (final category in categories) category.categoryId: <LibraryWorkItem>[_item],
+      for (final category in categories)
+        category.categoryId: <LibraryWorkItem>[_item],
     };
   }
 
   @override
-  Future<void> renameCategory({required String categoryId, required String newName}) async {}
+  Future<void> renameCategory({
+    required String categoryId,
+    required String newName,
+  }) async {}
 
   @override
   Future<void> updateThreadDetailMeta({

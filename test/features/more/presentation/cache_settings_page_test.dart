@@ -68,6 +68,49 @@ void main() {
     );
   });
 
+  testWidgets('DataStoragePage commits cache limit once after slider release', (
+    tester,
+  ) async {
+    final repo = _FakeDataStorageSettingsRepository(
+      defaultPath: '/tmp/default-downloads',
+      customPath: null,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+          cacheMaintenanceServiceProvider.overrideWithValue(
+            _FakeCacheMaintenanceService(),
+          ),
+          storageAccountingServiceProvider.overrideWithValue(
+            _FakeStorageAccountingService(),
+          ),
+          cacheDiagnosticExportServiceProvider.overrideWithValue(
+            _FakeCacheDiagnosticExportService(),
+          ),
+          downloadStorageServiceProvider.overrideWithValue(
+            _FakeDownloadStorageService(repo: repo),
+          ),
+        ],
+        child: const MaterialApp(home: DataStoragePage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final slider = find.byKey(const Key('data-storage-image-cache-max-slider'));
+    final gesture = await tester.startGesture(tester.getCenter(slider));
+    await gesture.moveBy(const Offset(80, 0));
+    await tester.pump();
+
+    expect(repo.setImageCacheMaxBytesCalls, 0);
+
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(repo.setImageCacheMaxBytesCalls, 1);
+  });
+
   testWidgets(
     'DataStoragePage renders default and effective storage directory',
     (tester) async {
@@ -547,6 +590,7 @@ class _FakeDataStorageSettingsRepository
   String? _customPath;
   final String? pickedPath;
   int _maxBytes = DataStorageSettingsRepositoryImpl.defaultImageCacheMaxBytes;
+  int setImageCacheMaxBytesCalls = 0;
 
   String? get customPath => _customPath;
 
@@ -569,6 +613,7 @@ class _FakeDataStorageSettingsRepository
 
   @override
   Future<void> setImageCacheMaxBytes(int bytes) async {
+    setImageCacheMaxBytesCalls += 1;
     _maxBytes = bytes;
   }
 }

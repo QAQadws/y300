@@ -23,7 +23,6 @@ class DataStoragePage extends ConsumerWidget {
           ),
         ),
         data: (viewState) {
-          final maxMb = (viewState.imageCacheMaxBytes / (1024 * 1024)).round();
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -62,24 +61,12 @@ class DataStoragePage extends ConsumerWidget {
               const SizedBox(height: 12),
               buildDataStorageDebugOverview(viewState.usageReport),
               const SizedBox(height: 8),
-              Text(
-                '最大缓存：$maxMb MB',
-                key: const Key('data-storage-image-cache-max-label'),
-              ),
-              Slider(
-                key: const Key('data-storage-image-cache-max-slider'),
-                value: maxMb.toDouble().clamp(128.0, 2048.0).toDouble(),
-                min: 128,
-                max: 2048,
-                divisions: 15,
-                label: '$maxMb MB',
-                onChanged: viewState.isUpdating
-                    ? null
-                    : (value) => ref
-                          .read(dataStorageControllerProvider.notifier)
-                          .updateImageCacheMaxBytes(
-                            value.round() * 1024 * 1024,
-                          ),
+              _ImageCacheLimitControl(
+                valueBytes: viewState.imageCacheMaxBytes,
+                enabled: !viewState.isUpdating,
+                onCommit: (bytes) => ref
+                    .read(dataStorageControllerProvider.notifier)
+                    .updateImageCacheMaxBytes(bytes),
               ),
               Text(
                 '清理页面缓存（帖子列表/详情）与漫画页、帖子图片缓存；封面、头像、表情、已下载内容不会被清除。',
@@ -148,5 +135,95 @@ class DataStoragePage extends ConsumerWidget {
         },
       ),
     );
+  }
+}
+
+class _ImageCacheLimitControl extends StatefulWidget {
+  const _ImageCacheLimitControl({
+    required this.valueBytes,
+    required this.enabled,
+    required this.onCommit,
+  });
+
+  static const int _megabyte = 1024 * 1024;
+  static const double _minMb = 128;
+  static const double _maxMb = 2048;
+
+  final int valueBytes;
+  final bool enabled;
+  final ValueChanged<int> onCommit;
+
+  @override
+  State<_ImageCacheLimitControl> createState() =>
+      _ImageCacheLimitControlState();
+}
+
+class _ImageCacheLimitControlState extends State<_ImageCacheLimitControl> {
+  late double _valueMb;
+  late int _committedMb;
+  bool _dragging = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncFromBytes(widget.valueBytes);
+  }
+
+  @override
+  void didUpdateWidget(_ImageCacheLimitControl oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.enabled) {
+      _dragging = false;
+    }
+    if (!_dragging && oldWidget.valueBytes != widget.valueBytes) {
+      _syncFromBytes(widget.valueBytes);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final valueMb = _valueMb.round();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '最大缓存：$valueMb MB',
+          key: const Key('data-storage-image-cache-max-label'),
+        ),
+        Slider(
+          key: const Key('data-storage-image-cache-max-slider'),
+          value: _valueMb,
+          min: _ImageCacheLimitControl._minMb,
+          max: _ImageCacheLimitControl._maxMb,
+          divisions: 15,
+          label: '$valueMb MB',
+          onChangeStart: widget.enabled ? (_) => _dragging = true : null,
+          onChanged: widget.enabled
+              ? (value) => setState(() => _valueMb = value)
+              : null,
+          onChangeEnd: widget.enabled ? _commit : null,
+        ),
+      ],
+    );
+  }
+
+  void _commit(double value) {
+    _dragging = false;
+    final nextMb = value.round();
+    if (nextMb == _committedMb) {
+      return;
+    }
+    _committedMb = nextMb;
+    widget.onCommit(nextMb * _ImageCacheLimitControl._megabyte);
+  }
+
+  void _syncFromBytes(int bytes) {
+    final megabytes = (bytes / _ImageCacheLimitControl._megabyte)
+        .round()
+        .toDouble()
+        .clamp(_ImageCacheLimitControl._minMb, _ImageCacheLimitControl._maxMb)
+        .toDouble();
+    _valueMb = megabytes;
+    _committedMb = megabytes.round();
   }
 }

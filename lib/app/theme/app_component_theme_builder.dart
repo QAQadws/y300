@@ -136,10 +136,25 @@ final class AppComponentThemeBuilder {
 
   static SliderThemeData sliderTheme(ColorScheme scheme) {
     return SliderThemeData(
+      trackHeight: 4,
       activeTrackColor: scheme.primary,
       inactiveTrackColor: scheme.surfaceContainerHighest,
+      disabledActiveTrackColor: scheme.primary,
+      disabledInactiveTrackColor: scheme.surfaceContainerHighest,
+      activeTickMarkColor: scheme.onPrimary.withValues(alpha: 0.38),
+      inactiveTickMarkColor: scheme.onSurfaceVariant.withValues(alpha: 0.38),
+      disabledActiveTickMarkColor: scheme.onPrimary.withValues(alpha: 0.38),
+      disabledInactiveTickMarkColor: scheme.onSurfaceVariant.withValues(
+        alpha: 0.38,
+      ),
       thumbColor: scheme.primary,
-      overlayColor: scheme.primary.withValues(alpha: 0.12),
+      disabledThumbColor: scheme.primary,
+      // Keep the track geometry stable while pressing or dragging. The
+      // default Material overlay is a transient halo that reads as a flash
+      // on the compact reader and cache controls.
+      overlayColor: Colors.transparent,
+      overlayShape: SliderComponentShape.noOverlay,
+      showValueIndicator: ShowValueIndicator.never,
       valueIndicatorColor: scheme.primary,
       valueIndicatorTextStyle: TextStyle(color: scheme.onPrimary),
     );

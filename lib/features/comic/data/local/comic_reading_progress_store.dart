@@ -29,10 +29,7 @@ class ComicReadingProgressStore {
       );
       await txn.update(
         ComicLocalDb.comicsTable,
-        <String, Object?>{
-          'last_read_episode_id': episodeId,
-          'updated_at': now,
-        },
+        <String, Object?>{'last_read_episode_id': episodeId, 'updated_at': now},
         where: 'comic_id = ?',
         whereArgs: <Object>[comicId],
       );
@@ -47,14 +44,41 @@ class ComicReadingProgressStore {
       ComicLocalDb.readingProgressTable,
       where: 'comic_id = ?',
       whereArgs: <Object>[comicId],
+      orderBy: 'updated_at DESC, rowid DESC',
       limit: 1,
     );
 
-    if (rows.isEmpty) {
-      return null;
-    }
+    return rows.isEmpty ? null : _fromRow(rows.first);
+  }
 
-    final row = rows.first;
+  Future<ComicReadingProgress?> getReadingProgressForEpisode({
+    required String comicId,
+    required String episodeId,
+  }) async {
+    final db = await _dbFuture;
+    final rows = await db.query(
+      ComicLocalDb.readingProgressTable,
+      where: 'comic_id = ? AND episode_id = ?',
+      whereArgs: <Object>[comicId, episodeId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : _fromRow(rows.first);
+  }
+
+  Future<List<ComicReadingProgress>> getReadingProgresses({
+    required String comicId,
+  }) async {
+    final db = await _dbFuture;
+    final rows = await db.query(
+      ComicLocalDb.readingProgressTable,
+      where: 'comic_id = ?',
+      whereArgs: <Object>[comicId],
+      orderBy: 'updated_at DESC, rowid DESC',
+    );
+    return rows.map(_fromRow).toList(growable: false);
+  }
+
+  ComicReadingProgress _fromRow(Map<String, Object?> row) {
     return ComicReadingProgress(
       comicId: row['comic_id'] as String,
       episodeId: row['episode_id'] as String,

@@ -61,14 +61,19 @@ class ReaderChapterNavSpec {
   final IconData nextIcon;
 }
 
-/// 引擎暴露给能力的可调用动作（打开内置抽屉）。
+/// 引擎暴露给能力的可调用动作。
 ///
-/// 让能力在构造工具栏动作时复用引擎内置的"显示设置 / 阅读模式"抽屉，而由能力
+/// 让能力在构造工具栏动作时复用引擎内置的显示设置、模式切换与导出动作，而由能力
 /// 自己决定把它们放在工具栏的哪个位置、配什么图标——漫画与帖子的工具栏布局因此
 /// 可以不同，引擎不必硬编码任何一栏。
 abstract interface class ReaderEngineActions {
   void openDisplaySettings();
+
+  void cycleReaderMode();
+
+  /// 保留给需要显式选择模式的通用阅读器入口。
   void openModeSheet();
+
   void exportCurrentImage();
 }
 
@@ -87,7 +92,7 @@ class ReaderEngineContext {
   final int totalCount;
   final ContinuousImageReaderMode mode;
 
-  /// 引擎内置动作句柄（打开显示设置 / 阅读模式抽屉）。
+  /// 引擎内置动作句柄（显示设置、模式切换和图片导出）。
   final ReaderEngineActions actions;
 }
 

@@ -47,6 +47,28 @@ void main() {
     expect(events, containsAllInOrder(['start', 'change', 'end']));
   });
 
+  testWidgets(
+    'locked ReaderProgressControl preserves the enabled slider style',
+    (tester) async {
+      await tester.pumpWidget(
+        _buildProgress(
+          config: ReaderProgressConfig(
+            current: 2,
+            total: 5,
+            interactionLocked: true,
+            onChanged: (_) {},
+            onChangeEnd: (_) {},
+          ),
+        ),
+      );
+
+      final slider = tester.widget<Slider>(
+        find.byKey(const Key('shared-reader-progress-slider')),
+      );
+      expect(slider.onChanged, isNotNull);
+    },
+  );
+
   testWidgets('ReaderProgressControl disables previous and next buttons', (
     tester,
   ) async {
