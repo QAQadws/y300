@@ -16,13 +16,7 @@ import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 import 'package:y300/features/reader_shared/presentation/reader_preferences/reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
-enum _ComicReaderMoreAction {
-  markReadToggle,
-  setCurrentPageAsCover,
-  cacheEpisode,
-  cacheUnread,
-  clearEpisodeCache,
-}
+enum _ComicReaderMoreAction { markReadToggle, setCurrentPageAsCover }
 
 /// 漫画阅读器页面。
 ///
@@ -199,12 +193,6 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
         await controller.setCurrentEpisodeRead(!viewState.isCurrentEpisodeRead);
       case _ComicReaderMoreAction.setCurrentPageAsCover:
         await _handleSetCoverWithFocus();
-      case _ComicReaderMoreAction.cacheEpisode:
-        await controller.cacheCurrentEpisode();
-      case _ComicReaderMoreAction.cacheUnread:
-        await controller.cacheAllUnread();
-      case _ComicReaderMoreAction.clearEpisodeCache:
-        await controller.clearCurrentEpisodeCache();
     }
   }
 
@@ -247,24 +235,6 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
             value: _ComicReaderMoreAction.setCurrentPageAsCover,
             icon: Icons.image_outlined,
             label: '将当前页设为封面',
-          ),
-          const ReaderActionSheetItem<_ComicReaderMoreAction>(
-            id: 'cache-episode',
-            value: _ComicReaderMoreAction.cacheEpisode,
-            icon: Icons.download_for_offline_outlined,
-            label: '缓存本章',
-          ),
-          const ReaderActionSheetItem<_ComicReaderMoreAction>(
-            id: 'cache-unread',
-            value: _ComicReaderMoreAction.cacheUnread,
-            icon: Icons.download_done_outlined,
-            label: '缓存未读章节',
-          ),
-          const ReaderActionSheetItem<_ComicReaderMoreAction>(
-            id: 'clear-cache',
-            value: _ComicReaderMoreAction.clearEpisodeCache,
-            icon: Icons.cleaning_services_outlined,
-            label: '清除本章缓存',
           ),
         ],
       ),

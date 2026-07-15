@@ -126,43 +126,6 @@ void main() {
   });
 
   test(
-    'cacheCurrentEpisode persists local file path from cache service',
-    () async {
-      final repository = _ReaderRepoForControllerTest();
-      final service = _ReaderServiceSpy();
-      final writer = _ReadingStateWriterSpy(repository);
-      final container = ProviderContainer(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(repository),
-          comicReadingStateWriterProvider.overrideWithValue(writer),
-          comicReaderServiceProvider.overrideWith((ref) async => service),
-          comicDownloadServiceProvider.overrideWithValue(
-            _NoopComicDownloadService(),
-          ),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-        ],
-      );
-      addTearDown(container.dispose);
-
-      final args = const ComicReaderArgs(
-        comicId: 'yamibo:100',
-        episodeId: 'yamibo:100:101',
-      );
-      await container.read(comicReaderControllerProvider(args).future);
-
-      await container
-          .read(comicReaderControllerProvider(args).notifier)
-          .cacheCurrentEpisode();
-
-      expect(repository.cacheStatusWrites, isNotEmpty);
-      final doneWrite = repository.cacheStatusWrites.firstWhere(
-        (item) => item.cacheStatus == 'done',
-      );
-      expect(doneWrite.cacheLocalPath, '/cache/mock.jpg');
-    },
-  );
-
-  test(
     'loadState prefers downloaded CBZ images before repository cache',
     () async {
       final repository = _ReaderRepoForControllerTest();
@@ -632,38 +595,6 @@ void main() {
     final state = container.read(comicReaderControllerProvider(args)).value!;
     expect(state.isCurrentEpisodeRead, isTrue);
     expect(state.chapters.first.isRead, isTrue);
-  });
-
-  test('clearCurrentEpisodeCache resets image cache summary', () async {
-    final repository = _ReaderRepoForControllerTest(cachedFirstImage: true);
-    final service = _ReaderServiceSpy();
-    final writer = _ReadingStateWriterSpy(repository);
-    final container = ProviderContainer(
-      overrides: [
-        comicRepositoryProvider.overrideWithValue(repository),
-        comicReadingStateWriterProvider.overrideWithValue(writer),
-        comicReaderServiceProvider.overrideWith((ref) async => service),
-        comicDownloadServiceProvider.overrideWithValue(
-          _NoopComicDownloadService(),
-        ),
-        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-      ],
-    );
-    addTearDown(container.dispose);
-
-    final args = const ComicReaderArgs(
-      comicId: 'yamibo:100',
-      episodeId: 'yamibo:100:101',
-    );
-    await container.read(comicReaderControllerProvider(args).future);
-
-    await container
-        .read(comicReaderControllerProvider(args).notifier)
-        .clearCurrentEpisodeCache();
-
-    final state = container.read(comicReaderControllerProvider(args)).value!;
-    expect(state.cacheSummary.cachedCount, 0);
-    expect(repository.clearedEpisodeIds, <String>['yamibo:100:101']);
   });
 
   test(
@@ -1161,7 +1092,6 @@ class _ReaderRepoForControllerTest
         ComicEpisodeImageCacheMetadataWriter {
   _ReaderRepoForControllerTest({
     this.singlePage = false,
-    this.cachedFirstImage = false,
     this.lastImageWidth,
     this.lastImageHeight,
     this.imageCount = 5,
@@ -1169,7 +1099,6 @@ class _ReaderRepoForControllerTest
   });
 
   final bool singlePage;
-  final bool cachedFirstImage;
   final int? lastImageWidth;
   final int? lastImageHeight;
   final int imageCount;
@@ -1179,7 +1108,6 @@ class _ReaderRepoForControllerTest
   final List<_ProgressWrite> progressWrites = <_ProgressWrite>[];
   final List<_CacheStatusWrite> cacheStatusWrites = <_CacheStatusWrite>[];
   final List<_ImageMetadataWrite> imageMetadataWrites = <_ImageMetadataWrite>[];
-  final List<String> clearedEpisodeIds = <String>[];
 
   /// 追踪每个 episode 通过 [saveEpisodeImages] 持久化的 URL，做断言用。
   final Map<String, List<String>> savedImageUrlsByEpisode =
@@ -1206,9 +1134,7 @@ class _ReaderRepoForControllerTest
   Future<String> createCategory({required String name}) async => 'mock';
 
   @override
-  Future<void> clearEpisodeImageCache({required String episodeId}) async {
-    clearedEpisodeIds.add(episodeId);
-  }
+  Future<void> clearEpisodeImageCache({required String episodeId}) async {}
 
   @override
   Future<void> updateCoverCache({
@@ -1342,14 +1268,7 @@ class _ReaderRepoForControllerTest
         episodeId: episodeId,
         imageUrl: 'https://img.test/$sourceTid-$page.jpg',
         imageIndex: index,
-        cacheStatus:
-            episodeId == 'yamibo:100:101' && index == 0 && cachedFirstImage
-            ? 'done'
-            : 'none',
-        cacheLocalPath:
-            episodeId == 'yamibo:100:101' && index == 0 && cachedFirstImage
-            ? '/cache/101-1.jpg'
-            : null,
+        cacheStatus: 'none',
         width: index == imageCount - 1 ? lastImageWidth : null,
         height: index == imageCount - 1 ? lastImageHeight : null,
       );
