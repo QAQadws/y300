@@ -102,6 +102,7 @@ class ReaderImageBuildSpec {
     required this.fit,
     required this.sessionBinding,
     required this.expectedDisplaySize,
+    required this.onRetry,
   });
 
   final ContinuousImageItem item;
@@ -112,6 +113,7 @@ class ReaderImageBuildSpec {
   final BoxFit fit;
   final ReaderImageSessionBinding sessionBinding;
   final Size expectedDisplaySize;
+  final VoidCallback onRetry;
 }
 
 /// 一台具体阅读器的"专属能力"。[ImageReaderEngine] 只认这个抽象。

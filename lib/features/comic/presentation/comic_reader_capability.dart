@@ -5,7 +5,6 @@ import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
-import 'package:y300/features/comic/domain/services/comic_reader_chapter_preload.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/comic/presentation/services/comic_reader_continuous_image_adapter.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
@@ -31,7 +30,6 @@ class ComicReaderCapability extends ReaderCapability {
     required this.onShowMoreActions,
     required this.onShowChapterList,
     required this.onOpenSourceThread,
-    required this.onCacheCurrentEpisode,
     required this.onToggleBookmark,
     required this.onOpenAdjacentEpisode,
     required this.buildNextChapterTransition,
@@ -57,7 +55,6 @@ class ComicReaderCapability extends ReaderCapability {
   final VoidCallback onShowMoreActions;
   final VoidCallback onShowChapterList;
   final VoidCallback onOpenSourceThread;
-  final VoidCallback onCacheCurrentEpisode;
   final VoidCallback onToggleBookmark;
   final void Function({required bool previous}) onOpenAdjacentEpisode;
   final WidgetBuilder buildNextChapterTransition;
@@ -141,12 +138,6 @@ class ComicReaderCapability extends ReaderCapability {
         label: '显示',
         onPressed: context.actions.openDisplaySettings,
       ),
-      ReaderToolbarAction(
-        id: 'cache',
-        icon: Icons.download_for_offline_outlined,
-        label: '缓存',
-        onPressed: onCacheCurrentEpisode,
-      ),
     ];
   }
 
@@ -158,44 +149,8 @@ class ComicReaderCapability extends ReaderCapability {
       onPrevious: () => onOpenAdjacentEpisode(previous: true),
       onNext: () => onOpenAdjacentEpisode(previous: false),
       previousTooltip: viewState.hasPreviousEpisode ? '上一话' : '已是第一话',
-      nextTooltip: _nextEpisodeTooltip(),
-      nextIcon: _nextEpisodeIcon(viewState.nextChapterPreload.status),
+      nextTooltip: viewState.hasNextEpisode ? '下一话' : '已是最后一话',
     );
-  }
-
-  IconData _nextEpisodeIcon(ComicReaderChapterPreloadStatus status) {
-    switch (status) {
-      case ComicReaderChapterPreloadStatus.loadingImages:
-      case ComicReaderChapterPreloadStatus.preloadingPages:
-        return Icons.downloading_outlined;
-      case ComicReaderChapterPreloadStatus.ready:
-        return Icons.offline_bolt_outlined;
-      case ComicReaderChapterPreloadStatus.failed:
-        return Icons.error_outline;
-      case ComicReaderChapterPreloadStatus.unavailable:
-      case ComicReaderChapterPreloadStatus.idle:
-      case ComicReaderChapterPreloadStatus.imagesReady:
-        return Icons.skip_next;
-    }
-  }
-
-  String _nextEpisodeTooltip() {
-    if (!viewState.hasNextEpisode) {
-      return '已是最后一话';
-    }
-    switch (viewState.nextChapterPreload.status) {
-      case ComicReaderChapterPreloadStatus.loadingImages:
-      case ComicReaderChapterPreloadStatus.preloadingPages:
-        return '下一话预加载中';
-      case ComicReaderChapterPreloadStatus.ready:
-        return '下一话已预加载';
-      case ComicReaderChapterPreloadStatus.failed:
-        return '下一话预加载失败，点击加载';
-      case ComicReaderChapterPreloadStatus.unavailable:
-      case ComicReaderChapterPreloadStatus.idle:
-      case ComicReaderChapterPreloadStatus.imagesReady:
-        return '下一话';
-    }
   }
 
   @override
@@ -290,7 +245,7 @@ class ComicReaderCapability extends ReaderCapability {
       errorPlaceholder: _ComicReaderImageErrorPlaceholder(
         imageUrl: imageUrl,
         paged: spec.paged,
-        onRetry: () => controller.retryImage(imageUrl),
+        onRetry: spec.onRetry,
       ),
       headerBuilder: imageHeaderBuilder,
       onImageResolved: (size) => controller.onImageResolved(

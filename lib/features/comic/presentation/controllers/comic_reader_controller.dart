@@ -11,13 +11,10 @@ import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_unavailable.dart';
-import 'package:y300/features/comic/domain/services/comic_reader_chapter_preload.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_events.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
-import 'package:y300/features/comic/domain/services/comic_reader_preload_queue.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
-import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reader_shared/domain/image_session/reader_image_session.dart';
 
 class ComicReaderArgs {
@@ -159,9 +156,6 @@ class ComicReaderViewState {
       downloadedCount: 0,
       failedCount: 0,
     ),
-    this.nextChapterPreload = const ComicReaderChapterPreloadState(
-      status: ComicReaderChapterPreloadStatus.unavailable,
-    ),
     this.isSwitchingEpisode = false,
     this.hint,
   });
@@ -181,9 +175,16 @@ class ComicReaderViewState {
   final bool isBookmarked;
   final int failedImageCount;
   final ComicReaderCacheSummary cacheSummary;
-  final ComicReaderChapterPreloadState nextChapterPreload;
   final bool isSwitchingEpisode;
   final String? hint;
+
+  ComicReaderChapterEntry? get nextChapter {
+    final currentIndex = chapters.indexWhere((chapter) => chapter.isCurrent);
+    if (currentIndex < 0 || currentIndex + 1 >= chapters.length) {
+      return null;
+    }
+    return chapters[currentIndex + 1];
+  }
 
   ComicReaderImageState? get currentImage {
     if (images.isEmpty) {
@@ -203,7 +204,6 @@ class ComicReaderViewState {
     bool? isBookmarked,
     int? failedImageCount,
     ComicReaderCacheSummary? cacheSummary,
-    ComicReaderChapterPreloadState? nextChapterPreload,
     bool? isSwitchingEpisode,
     String? hint,
     bool clearHint = false,
@@ -224,7 +224,6 @@ class ComicReaderViewState {
       isBookmarked: isBookmarked ?? this.isBookmarked,
       failedImageCount: failedImageCount ?? this.failedImageCount,
       cacheSummary: cacheSummary ?? this.cacheSummary,
-      nextChapterPreload: nextChapterPreload ?? this.nextChapterPreload,
       isSwitchingEpisode: isSwitchingEpisode ?? this.isSwitchingEpisode,
       hint: clearHint ? null : (hint ?? this.hint),
     );
@@ -240,10 +239,6 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   ComicReaderController(this._args);
 
   final ComicReaderArgs _args;
-  static const ComicReaderChapterPreloadPolicy _chapterPreloadPolicy =
-      ComicReaderChapterPreloadPolicy();
-  static const ContinuousImagePrefetchCoordinator _prefetchCoordinator =
-      ContinuousImagePrefetchCoordinator();
   late ComicRepository _repository;
   late ComicReaderService _readerService;
   late ComicDownloadService _downloadService;
@@ -251,16 +246,13 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   late ImageCacheService _imageCacheService;
   late ComicReaderEventLogger _eventLogger;
   late ComicReaderFeatureFlags _featureFlags;
-  late ComicReaderPreloadQueue _preloadQueue;
   Timer? _progressPersistDebounceTimer;
   int _persistVersion = 0;
   final Set<String> _completedEpisodeIds = <String>{};
   final Set<String> _completingEpisodeIds = <String>{};
   final Set<int> _visibleImageIndexes = <int>{};
   final Set<int> _resolvedImageIndexes = <int>{};
-  int _lastPreloadCenterIndex = 0;
   late String _currentEpisodeId;
-  Future<void>? _nextChapterPreloadFuture;
   DateTime? _openedAt;
   bool _firstImageVisibleLogged = false;
 
@@ -295,52 +287,12 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     _imageCacheService = ref.read(imageCacheServiceProvider);
     _eventLogger = ref.read(comicReaderEventLoggerProvider);
     _featureFlags = ref.read(comicReaderFeatureFlagsProvider);
-    _preloadQueue = ComicReaderPreloadQueue(
-      runner: _runPreloadTask,
-      onStart: _handlePreloadStart,
-      onResult: _handlePreloadResult,
-      onSnapshot: _logPreloadSnapshot,
-    );
     _openedAt = DateTime.now();
     _currentEpisodeId = _args.episodeId;
     ref.onDispose(() {
       _progressPersistDebounceTimer?.cancel();
-      _preloadQueue.dispose();
     });
-    final viewState = await _loadState(episodeId: _currentEpisodeId);
-    scheduleMicrotask(() {
-      if (!ref.mounted) {
-        return;
-      }
-      _enqueueInitialWindow(viewState.currentImageIndex, viewState.images);
-    });
-    return viewState;
-  }
-
-  Future<void> retryImage(String imageUrl) async {
-    final current = state.value;
-    if (current == null) {
-      return;
-    }
-    final idx = current.images.indexWhere(
-      (element) => element.imageUrl == imageUrl,
-    );
-    if (idx < 0) {
-      return;
-    }
-    final task = _readerTaskForImage(
-      current.images[idx],
-      priority: ComicReaderPreloadPriority.retry,
-      force: true,
-    );
-    if (task == null) {
-      return;
-    }
-    await _enqueuePreloadTasks(
-      <ComicReaderPreloadTask>[task],
-      cancelOldWindow: false,
-      hint: '图片已加入重试队列',
-    );
+    return _loadState(episodeId: _currentEpisodeId);
   }
 
   Future<void> cacheCurrentEpisode() async {
@@ -348,7 +300,6 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (current == null || current.images.isEmpty) {
       return;
     }
-    _preloadQueue.cancelExcept(const <String>{});
     for (final image in current.images) {
       await _repository.updateEpisodeImageCacheStatus(
         episodeId: current.episodeId,
@@ -406,7 +357,6 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   }
 
   Future<void> cacheAllUnread() async {
-    _preloadQueue.cancelExcept(const <String>{});
     final episodes = await _repository.getComicEpisodes(
       comicId: _args.comicId,
       descending: false,
@@ -480,32 +430,11 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     state = AsyncData(nextState.copyWith(hint: '未读章节缓存完成'));
   }
 
-  Future<void> retryFailedImages() async {
-    final current = state.value;
-    if (current == null) {
-      return;
-    }
-    final failedImages = current.images
-        .where((image) => image.failed || image.cacheStatus == 'failed')
-        .toList(growable: false);
-    if (failedImages.isEmpty) {
-      state = AsyncData(current.copyWith(hint: '没有需要重试的图片'));
-      return;
-    }
-    for (final image in failedImages) {
-      await retryImage(image.imageUrl);
-      if (!ref.mounted) {
-        return;
-      }
-    }
-  }
-
   Future<void> clearCurrentEpisodeCache() async {
     final current = state.value;
     if (current == null) {
       return;
     }
-    _preloadQueue.cancelExcept(const <String>{});
     await _repository.clearEpisodeImageCache(episodeId: current.episodeId);
     final clearedImages = current.images
         .map(
@@ -718,7 +647,6 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       scrollOffset: nextOffset,
       source: ComicReaderProgressSource.jump,
     );
-    unawaited(_enqueueJumpWindow(clampedIndex));
   }
 
   Future<bool> goToEpisode(String episodeId) async {
@@ -731,26 +659,14 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       return false;
     }
     state = AsyncData(
-      current.copyWith(
-        isSwitchingEpisode: true,
-        hint:
-            current.nextChapterPreload.episodeId == targetEpisodeId &&
-                current.nextChapterPreload.hasLoadedImageList
-            ? '正在切换章节'
-            : '正在加载章节',
-      ),
+      current.copyWith(isSwitchingEpisode: true, hint: '正在加载章节'),
     );
-    _preloadQueue.cancelExcept(const <String>{});
     _cancelScheduledProgressPersistence();
-    final previousPreloadCenterIndex = _lastPreloadCenterIndex;
     final previousVisibleImageIndexes = Set<int>.of(_visibleImageIndexes);
     final previousResolvedImageIndexes = Set<int>.of(_resolvedImageIndexes);
-    final previousPreloadFuture = _nextChapterPreloadFuture;
     _currentEpisodeId = targetEpisodeId;
     _visibleImageIndexes.clear();
     _resolvedImageIndexes.clear();
-    _lastPreloadCenterIndex = 0;
-    _nextChapterPreloadFuture = null;
     _firstImageVisibleLogged = false;
 
     try {
@@ -770,7 +686,6 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         totalPages: nextState.images.length,
         extra: <String, Object?>{'targetEpisodeId': targetEpisodeId},
       );
-      _enqueueInitialWindow(nextState.currentImageIndex, nextState.images);
       return true;
     } catch (error) {
       _currentEpisodeId = current.episodeId;
@@ -780,8 +695,6 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       _resolvedImageIndexes
         ..clear()
         ..addAll(previousResolvedImageIndexes);
-      _lastPreloadCenterIndex = previousPreloadCenterIndex;
-      _nextChapterPreloadFuture = previousPreloadFuture;
       if (!ref.mounted) {
         return false;
       }
@@ -816,7 +729,6 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       source: ComicReaderProgressSource.initialVisible,
       checkCompletion: false,
     );
-    unawaited(_enqueueReadingWindow(clampedIndex));
     await _markEpisodeCompletedIfNeeded(
       currentIndex: clampedIndex,
       scrollOffset: current.lastScrollOffset,
@@ -1023,7 +935,6 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     bool checkCompletion = true,
   }) {
     _visibleImageIndexes.add(currentIndex);
-    unawaited(_enqueueReadingWindow(currentIndex));
     _scheduleProgressPersistence(
       currentIndex: currentIndex,
       scrollOffset: scrollOffset,
@@ -1139,688 +1050,6 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
           isRead: true,
         ),
       ),
-    );
-  }
-
-  void _enqueueInitialWindow(
-    int centerIndex,
-    List<ComicReaderImageState> images,
-  ) {
-    if (!_featureFlags.readerPreloadQueueEnabled) {
-      return;
-    }
-    if (images.isEmpty) {
-      return;
-    }
-    final plan = _prefetchCoordinator.windowForIndex(
-      focusIndex: centerIndex,
-      itemCount: images.length,
-      policy: ContinuousImageFlowPolicy.comicVerticalReading,
-    );
-    final tasks = _buildWindowTasks(
-      images,
-      plan: plan,
-      visiblePriority: ComicReaderPreloadPriority.visible,
-      preferredDirection: ContinuousImageScrollDirection.forward,
-    );
-    unawaited(_enqueuePreloadTasks(tasks, cancelOldWindow: false));
-  }
-
-  Future<void> _enqueueReadingWindow(int centerIndex) async {
-    if (!_featureFlags.readerPreloadQueueEnabled) {
-      return;
-    }
-    final current = state.value;
-    if (current == null || current.images.isEmpty) {
-      return;
-    }
-    if (centerIndex == _lastPreloadCenterIndex &&
-        _preloadQueue.snapshot.pendingCount > 0) {
-      return;
-    }
-    final scrollDirection = centerIndex < _lastPreloadCenterIndex
-        ? ContinuousImageScrollDirection.reverse
-        : ContinuousImageScrollDirection.forward;
-    _lastPreloadCenterIndex = centerIndex;
-    final tasks = _buildDirectionalWindowTasks(
-      current.images,
-      centerIndex: centerIndex,
-      scrollDirection: scrollDirection,
-    );
-    await _enqueuePreloadTasks(tasks, cancelOldWindow: false);
-    if (_featureFlags.readerNextChapterPreloadEnabled &&
-        _chapterPreloadPolicy.shouldPreloadNextChapter(
-          currentImageIndex: centerIndex,
-          totalImages: current.images.length,
-        )) {
-      unawaited(ensureNextChapterPreloaded());
-    }
-  }
-
-  Future<void> _enqueueJumpWindow(int centerIndex) async {
-    if (!_featureFlags.readerPreloadQueueEnabled) {
-      return;
-    }
-    final current = state.value;
-    if (current == null || current.images.isEmpty) {
-      return;
-    }
-    _lastPreloadCenterIndex = centerIndex;
-    final plan = _prefetchCoordinator.windowForIndex(
-      focusIndex: centerIndex,
-      itemCount: current.images.length,
-      policy: ContinuousImageFlowPolicy.comicVerticalReading,
-    );
-    final tasks = _buildWindowTasks(
-      current.images,
-      plan: plan,
-      visiblePriority: ComicReaderPreloadPriority.jumpTarget,
-      preferredDirection: ContinuousImageScrollDirection.forward,
-    );
-    await _enqueuePreloadTasks(tasks, cancelOldWindow: true);
-  }
-
-  List<ComicReaderPreloadTask> _buildDirectionalWindowTasks(
-    List<ComicReaderImageState> images, {
-    required int centerIndex,
-    required ContinuousImageScrollDirection scrollDirection,
-  }) {
-    final plan = _prefetchCoordinator.windowForIndex(
-      focusIndex: centerIndex,
-      itemCount: images.length,
-      policy: ContinuousImageFlowPolicy.comicVerticalReading,
-      scrollDirection: scrollDirection,
-    );
-    return _buildWindowTasks(
-      images,
-      plan: plan,
-      visiblePriority: ComicReaderPreloadPriority.visible,
-      preferredDirection: scrollDirection,
-    );
-  }
-
-  List<ComicReaderPreloadTask> _buildWindowTasks(
-    List<ComicReaderImageState> images, {
-    required ContinuousImagePrefetchPlan plan,
-    required ComicReaderPreloadPriority visiblePriority,
-    required ContinuousImageScrollDirection preferredDirection,
-  }) {
-    final focusIndex = plan.focusIndex;
-    if (focusIndex == null || images.isEmpty) {
-      return const <ComicReaderPreloadTask>[];
-    }
-    final tasks = <ComicReaderPreloadTask>[];
-    for (final index in plan.indices) {
-      if (index < 0 || index >= images.length) {
-        continue;
-      }
-      _addReaderTask(
-        tasks,
-        images[index],
-        priority: _priorityForWindowIndex(
-          index: index,
-          focusIndex: focusIndex,
-          visiblePriority: visiblePriority,
-          preferredDirection: preferredDirection,
-        ),
-      );
-    }
-    return tasks;
-  }
-
-  ComicReaderPreloadPriority _priorityForWindowIndex({
-    required int index,
-    required int focusIndex,
-    required ComicReaderPreloadPriority visiblePriority,
-    required ContinuousImageScrollDirection preferredDirection,
-  }) {
-    if (index == focusIndex) {
-      return visiblePriority;
-    }
-    if (preferredDirection == ContinuousImageScrollDirection.reverse) {
-      return index < focusIndex
-          ? ComicReaderPreloadPriority.adjacentForward
-          : ComicReaderPreloadPriority.adjacentBackward;
-    }
-    if (index > focusIndex) {
-      return ComicReaderPreloadPriority.adjacentForward;
-    }
-    return ComicReaderPreloadPriority.adjacentBackward;
-  }
-
-  Future<void> ensureNextChapterPreloaded({bool force = false}) {
-    if (!_featureFlags.readerPreloadQueueEnabled ||
-        !_featureFlags.readerNextChapterPreloadEnabled) {
-      _logReaderEvent('next_chapter_preload_disabled');
-      return Future<void>.value();
-    }
-    final current = state.value;
-    if (current == null || !current.hasNextEpisode) {
-      _patchNextChapterPreload(ComicReaderChapterPreloadState.unavailable());
-      _logReaderEvent('next_chapter_unavailable');
-      return Future<void>.value();
-    }
-    if (!force &&
-        current.nextChapterPreload.status ==
-            ComicReaderChapterPreloadStatus.ready) {
-      return Future<void>.value();
-    }
-    final existing = _nextChapterPreloadFuture;
-    if (!force && existing != null) {
-      return existing;
-    }
-    final future = _preloadNextChapterFor(current);
-    _nextChapterPreloadFuture = future;
-    return future.whenComplete(() {
-      if (identical(_nextChapterPreloadFuture, future)) {
-        _nextChapterPreloadFuture = null;
-      }
-    });
-  }
-
-  void _patchNextChapterPreload(ComicReaderChapterPreloadState preloadState) {
-    if (!ref.mounted) {
-      return;
-    }
-    final current = state.value;
-    if (current == null) {
-      return;
-    }
-    state = AsyncData(current.copyWith(nextChapterPreload: preloadState));
-  }
-
-  Future<void> _preloadNextChapterFor(ComicReaderViewState baseState) async {
-    final episodes = await _repository.getComicEpisodes(
-      comicId: _args.comicId,
-      descending: false,
-    );
-    final currentIndex = episodes.indexWhere(
-      (e) => e.episodeId == baseState.episodeId,
-    );
-    if (currentIndex < 0 || currentIndex + 1 >= episodes.length) {
-      _patchNextChapterPreload(ComicReaderChapterPreloadState.unavailable());
-      _logReaderEvent('next_chapter_unavailable');
-      return;
-    }
-    if (!ref.mounted || _activeEpisodeId != baseState.episodeId) {
-      return;
-    }
-    final nextEpisode = episodes[currentIndex + 1];
-    final nextEpisodeState = ComicReaderChapterPreloadState.idle(nextEpisode);
-    _patchNextChapterPreload(
-      nextEpisodeState.copyWith(
-        status: ComicReaderChapterPreloadStatus.loadingImages,
-        message: '正在预加载下一章',
-      ),
-    );
-    _logReaderEvent(
-      'next_chapter_preload_start',
-      extra: <String, Object?>{
-        'nextEpisodeId': nextEpisode.episodeId,
-        'sourceTid': nextEpisode.sourceTid,
-      },
-    );
-    List<ComicEpisodeImageItem> images;
-    try {
-      images = await _ensureEpisodeImages(nextEpisode);
-    } catch (error) {
-      if (!ref.mounted || _activeEpisodeId != baseState.episodeId) {
-        return;
-      }
-      _patchNextChapterPreload(
-        nextEpisodeState.copyWith(
-          status: ComicReaderChapterPreloadStatus.failed,
-          message: '下一章预加载失败',
-        ),
-      );
-      _logReaderEvent(
-        'next_chapter_preload_failed',
-        extra: <String, Object?>{
-          'nextEpisodeId': nextEpisode.episodeId,
-          'error': error,
-        },
-      );
-      return;
-    }
-    if (!ref.mounted || _activeEpisodeId != baseState.episodeId) {
-      return;
-    }
-    if (images.isEmpty) {
-      _patchNextChapterPreload(
-        nextEpisodeState.copyWith(
-          status: ComicReaderChapterPreloadStatus.failed,
-          message: '下一章图片列表为空',
-        ),
-      );
-      return;
-    }
-    _patchNextChapterPreload(
-      nextEpisodeState.copyWith(
-        status: ComicReaderChapterPreloadStatus.imagesReady,
-        imageCount: images.length,
-        firstPageCacheStatus: images.first.cacheStatus,
-        clearMessage: true,
-      ),
-    );
-    final limit = _chapterPreloadPolicy.firstPageWindowLength(images.length);
-    final tasks = <ComicReaderPreloadTask>[];
-    for (var i = 0; i < limit; i++) {
-      _addEpisodeTask(
-        tasks,
-        images[i],
-        priority: ComicReaderPreloadPriority.nextChapter,
-      );
-    }
-    if (tasks.isEmpty) {
-      _patchNextChapterPreload(
-        nextEpisodeState.copyWith(
-          status: ComicReaderChapterPreloadStatus.ready,
-          imageCount: images.length,
-          cachedPageCount: limit,
-          firstPageCacheStatus: images.first.cacheStatus,
-          message: '下一章已准备好',
-        ),
-      );
-      _logReaderEvent(
-        'next_chapter_preload_ready',
-        extra: <String, Object?>{
-          'nextEpisodeId': nextEpisode.episodeId,
-          'imageCount': images.length,
-          'cachedPages': limit,
-          'fromCache': true,
-        },
-      );
-      return;
-    }
-    _patchNextChapterPreload(
-      nextEpisodeState.copyWith(
-        status: ComicReaderChapterPreloadStatus.preloadingPages,
-        imageCount: images.length,
-        firstPageCacheStatus: images.first.cacheStatus,
-        clearMessage: true,
-      ),
-    );
-    await _enqueuePreloadTasks(tasks, cancelOldWindow: false);
-    if (!ref.mounted || _activeEpisodeId != baseState.episodeId) {
-      return;
-    }
-    _logReaderEvent(
-      'next_chapter_preload_queued',
-      extra: <String, Object?>{
-        'nextEpisodeId': nextEpisode.episodeId,
-        'imageCount': images.length,
-        'targetCachedPages': limit,
-      },
-    );
-  }
-
-  Future<void> _enqueuePreloadTasks(
-    List<ComicReaderPreloadTask> tasks, {
-    required bool cancelOldWindow,
-    String? hint,
-  }) async {
-    if (!_featureFlags.readerPreloadQueueEnabled) {
-      return;
-    }
-    if (tasks.isEmpty) {
-      return;
-    }
-    if (cancelOldWindow) {
-      _preloadQueue.cancelExcept(tasks.map((task) => task.dedupeKey).toSet());
-      _logReaderEvent(
-        'preload_window_cancelled',
-        extra: <String, Object?>{'keep': tasks.length, 'reason': 'jump_window'},
-      );
-    }
-    final accepted = _preloadQueue.enqueueAll(tasks, schedule: false);
-    if (accepted.isEmpty && hint == null) {
-      return;
-    }
-    for (final task in accepted) {
-      await _repository.updateEpisodeImageCacheStatus(
-        episodeId: task.episodeId,
-        imageUrl: task.storageImageUrl,
-        cacheStatus: 'queued',
-      );
-    }
-    if (!ref.mounted) {
-      return;
-    }
-    _patchCurrentEpisodeImageStates(
-      accepted,
-      cacheStatus: 'queued',
-      failed: false,
-      hint: hint,
-      clearHint: hint == null,
-    );
-    _patchNextChapterQueuedTasks(accepted);
-    _preloadQueue.schedule();
-  }
-
-  void _addReaderTask(
-    List<ComicReaderPreloadTask> tasks,
-    ComicReaderImageState image, {
-    required ComicReaderPreloadPriority priority,
-  }) {
-    final task = _readerTaskForImage(image, priority: priority);
-    if (task != null) {
-      tasks.add(task);
-    }
-  }
-
-  void _addEpisodeTask(
-    List<ComicReaderPreloadTask> tasks,
-    ComicEpisodeImageItem image, {
-    required ComicReaderPreloadPriority priority,
-  }) {
-    final task = _episodeTaskForImage(image, priority: priority);
-    if (task != null) {
-      tasks.add(task);
-    }
-  }
-
-  ComicReaderPreloadTask? _readerTaskForImage(
-    ComicReaderImageState image, {
-    required ComicReaderPreloadPriority priority,
-    bool force = false,
-  }) {
-    // Once a page failed in the display layer, keep it stable until the user
-    // explicitly retries. Background windows should not silently overwrite the
-    // failure state and make the page look recoverable before it renders again.
-    if (!force && (image.failed || image.cacheStatus == 'failed')) {
-      return null;
-    }
-    if (!force &&
-        (_isDownloadedReaderImage(image) || image.hasCachedLocalFile)) {
-      return null;
-    }
-    final current = state.value;
-    final episodeId = current?.episodeId ?? _activeEpisodeId;
-    return ComicReaderPreloadTask(
-      episodeId: episodeId,
-      imageUrl: image.imageUrl,
-      storageImageUrl: image.imageUrl,
-      imageIndex: image.imageIndex,
-      cacheKey: image.cacheKey ?? _stableKeyForIndex(image.imageIndex),
-      priority: priority,
-      ownerId: _args.comicId,
-      lastSourceUrl: image.imageUrl,
-    );
-  }
-
-  ComicReaderPreloadTask? _episodeTaskForImage(
-    ComicEpisodeImageItem image, {
-    required ComicReaderPreloadPriority priority,
-  }) {
-    if (_isDownloadedEpisodeImage(image) ||
-        (image.cacheStatus == 'done' && image.effectiveLocalPath != null)) {
-      return null;
-    }
-    return ComicReaderPreloadTask(
-      episodeId: image.episodeId,
-      imageUrl: image.effectiveSourceUrl,
-      storageImageUrl: image.imageUrl,
-      imageIndex: image.imageIndex,
-      cacheKey: _stableKeyForEpisodeImage(image),
-      priority: priority,
-      ownerId: _args.comicId,
-      lastSourceUrl: image.effectiveSourceUrl,
-    );
-  }
-
-  Future<ComicImageCacheResult> _runPreloadTask(ComicReaderPreloadTask task) {
-    return _readerService.cacheImage(
-      imageUrl: task.imageUrl,
-      cacheKey: task.cacheKey,
-      ownerType: ImageCacheOwnerType.comic,
-      ownerId: task.ownerId ?? _args.comicId,
-      role: ImageCacheRole.comicPage,
-      episodeId: task.episodeId,
-      imageIndex: task.imageIndex,
-    );
-  }
-
-  Future<void> _handlePreloadStart(ComicReaderPreloadTask task) async {
-    if (!ref.mounted) {
-      return;
-    }
-    if (_isBlockedByDisplayFailure(task)) {
-      return;
-    }
-    await _repository.updateEpisodeImageCacheStatus(
-      episodeId: task.episodeId,
-      imageUrl: task.storageImageUrl,
-      cacheStatus: 'downloading',
-    );
-    _patchCurrentEpisodeImageStates(
-      <ComicReaderPreloadTask>[task],
-      cacheStatus: 'downloading',
-      failed: false,
-      clearHint: true,
-    );
-    final current = state.value;
-    if (current != null &&
-        current.nextChapterPreload.episodeId == task.episodeId) {
-      state = AsyncData(
-        current.copyWith(
-          nextChapterPreload: current.nextChapterPreload.copyWith(
-            status: ComicReaderChapterPreloadStatus.preloadingPages,
-            firstPageCacheStatus: task.imageIndex == 0
-                ? 'downloading'
-                : current.nextChapterPreload.firstPageCacheStatus,
-            clearMessage: true,
-          ),
-        ),
-      );
-    }
-  }
-
-  Future<void> _handlePreloadResult(
-    ComicReaderPreloadResult preloadResult,
-  ) async {
-    final task = preloadResult.task;
-    final cacheResult = preloadResult.cacheResult;
-    final done = cacheResult.success;
-    final localPath = done ? cacheResult.localPath : null;
-    if (!ref.mounted) {
-      return;
-    }
-    if (_isBlockedByDisplayFailure(task)) {
-      return;
-    }
-    await _repository.updateEpisodeImageCacheStatus(
-      episodeId: task.episodeId,
-      imageUrl: task.storageImageUrl,
-      cacheStatus: done ? 'done' : 'failed',
-      cacheLocalPath: localPath,
-    );
-    await _updateImageCacheMetadata(
-      episodeId: task.episodeId,
-      imageUrl: task.storageImageUrl,
-      stableCacheKey: cacheResult.cacheKey ?? task.cacheKey,
-      lastSourceUrl: task.lastSourceUrl ?? task.imageUrl,
-      localPath: localPath,
-      bytes: done ? cacheResult.bytes : null,
-      lastAccessedAt: done ? DateTime.now() : null,
-    );
-    _patchCurrentEpisodeImageStates(
-      <ComicReaderPreloadTask>[task],
-      cacheStatus: done ? 'done' : 'failed',
-      localPath: localPath,
-      cacheLocalPath: localPath,
-      failed: !done,
-      hint: task.priority == ComicReaderPreloadPriority.retry
-          ? (done ? '图片重试成功' : '图片重试失败')
-          : null,
-      clearHint: task.priority != ComicReaderPreloadPriority.retry,
-    );
-    _logReaderEvent(
-      done ? 'preload_success' : 'preload_failed',
-      pageIndex: task.imageIndex,
-      extra: <String, Object?>{
-        'priority': task.priority.name,
-        'episodeId': task.episodeId,
-        'fromCache': cacheResult.fromCache,
-        'bytes': cacheResult.bytes,
-      },
-    );
-    _logReaderEvent(
-      cacheResult.fromCache ? 'image_cache_hit' : 'image_cache_miss',
-      pageIndex: task.imageIndex,
-      extra: <String, Object?>{
-        'priority': task.priority.name,
-        'episodeId': task.episodeId,
-      },
-    );
-    _patchNextChapterTaskResult(task: task, done: done);
-  }
-
-  void _patchCurrentEpisodeImageStates(
-    List<ComicReaderPreloadTask> tasks, {
-    required String cacheStatus,
-    String? localPath,
-    String? cacheLocalPath,
-    bool? failed,
-    String? hint,
-    bool clearHint = false,
-  }) {
-    final current = state.value;
-    if (current == null || tasks.isEmpty) {
-      return;
-    }
-    final byIndex = {
-      for (final task in tasks.where(
-        (task) => task.episodeId == current.episodeId,
-      ))
-        task.imageIndex: task,
-    };
-    if (byIndex.isEmpty) {
-      return;
-    }
-    final patched = current.images
-        .map((image) {
-          final task = byIndex[image.imageIndex];
-          if (task == null) {
-            return image;
-          }
-          if (image.cacheStatus == 'downloaded') {
-            return image;
-          }
-          if ((image.failed || image.cacheStatus == 'failed') &&
-              task.priority != ComicReaderPreloadPriority.retry &&
-              cacheStatus != 'failed') {
-            return image;
-          }
-          return image.copyWith(
-            cacheStatus: cacheStatus,
-            localPath: localPath,
-            cacheLocalPath: cacheLocalPath,
-            failed: failed,
-          );
-        })
-        .toList(growable: false);
-    state = AsyncData(
-      current.copyWith(
-        images: patched,
-        failedImageCount: _countFailedImages(patched),
-        cacheSummary: _buildCacheSummary(patched),
-        hint: hint,
-        clearHint: clearHint,
-      ),
-    );
-  }
-
-  void _patchNextChapterQueuedTasks(List<ComicReaderPreloadTask> tasks) {
-    final current = state.value;
-    if (current == null || tasks.isEmpty) {
-      return;
-    }
-    final preload = current.nextChapterPreload;
-    final nextEpisodeId = preload.episodeId;
-    if (nextEpisodeId == null) {
-      return;
-    }
-    final queued = tasks
-        .where((task) => task.episodeId == nextEpisodeId)
-        .length;
-    if (queued == 0) {
-      return;
-    }
-    state = AsyncData(
-      current.copyWith(
-        nextChapterPreload: preload.copyWith(
-          status: ComicReaderChapterPreloadStatus.preloadingPages,
-          firstPageCacheStatus: 'queued',
-          clearMessage: true,
-        ),
-      ),
-    );
-  }
-
-  void _patchNextChapterTaskResult({
-    required ComicReaderPreloadTask task,
-    required bool done,
-  }) {
-    if (task.priority != ComicReaderPreloadPriority.nextChapter) {
-      return;
-    }
-    final current = state.value;
-    if (current == null) {
-      return;
-    }
-    final preload = current.nextChapterPreload;
-    if (preload.episodeId != task.episodeId) {
-      return;
-    }
-    if (preload.status == ComicReaderChapterPreloadStatus.ready) {
-      return;
-    }
-    final targetCachedCount = _chapterPreloadPolicy.firstPageWindowLength(
-      preload.imageCount,
-    );
-    final cachedPageCount = done
-        ? (preload.cachedPageCount + 1).clamp(0, targetCachedCount).toInt()
-        : preload.cachedPageCount;
-    final ready = targetCachedCount > 0 && cachedPageCount >= targetCachedCount;
-    final firstPageFailed = task.imageIndex == 0 && !done;
-    state = AsyncData(
-      current.copyWith(
-        nextChapterPreload: preload.copyWith(
-          status: ready
-              ? ComicReaderChapterPreloadStatus.ready
-              : (firstPageFailed
-                    ? ComicReaderChapterPreloadStatus.failed
-                    : ComicReaderChapterPreloadStatus.preloadingPages),
-          cachedPageCount: cachedPageCount,
-          firstPageCacheStatus: task.imageIndex == 0
-              ? (done ? 'done' : 'failed')
-              : preload.firstPageCacheStatus,
-          message: ready ? '下一章已准备好' : (firstPageFailed ? '下一章首图预加载失败' : null),
-          clearMessage: !ready && !firstPageFailed,
-        ),
-      ),
-    );
-    if (ready && preload.status != ComicReaderChapterPreloadStatus.ready) {
-      _logReaderEvent(
-        'next_chapter_preload_ready',
-        extra: <String, Object?>{
-          'nextEpisodeId': task.episodeId,
-          'cachedPages': cachedPageCount,
-        },
-      );
-    }
-  }
-
-  void _logPreloadSnapshot(ComicReaderPreloadQueueSnapshot snapshot) {
-    _logReaderEvent(
-      'preload_queue',
-      extra: <String, Object?>{
-        'pending': snapshot.pendingCount,
-        'running': snapshot.runningCount,
-        'success': snapshot.successCount,
-        'failed': snapshot.failureCount,
-        'cancelled': snapshot.cancelledCount,
-      },
     );
   }
 
@@ -2003,9 +1232,6 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       isBookmarked: isBookmarked,
       failedImageCount: _countFailedImages(imageStates),
       cacheSummary: _buildCacheSummary(imageStates),
-      nextChapterPreload: episodeIndex < episodes.length - 1
-          ? ComicReaderChapterPreloadState.idle(episodes[episodeIndex + 1])
-          : ComicReaderChapterPreloadState.unavailable(),
     );
     _logReaderEvent(
       'open',
@@ -2131,22 +1357,6 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
 
   bool _isImageResolvedInCurrentSession(int imageIndex) {
     return _resolvedImageIndexes.contains(imageIndex);
-  }
-
-  bool _isBlockedByDisplayFailure(ComicReaderPreloadTask task) {
-    if (task.priority == ComicReaderPreloadPriority.retry) {
-      return false;
-    }
-    final current = state.value;
-    if (current == null || current.episodeId != task.episodeId) {
-      return false;
-    }
-    for (final image in current.images) {
-      if (image.imageIndex == task.imageIndex) {
-        return image.failed || image.cacheStatus == 'failed';
-      }
-    }
-    return false;
   }
 
   int _countFailedImages(List<ComicReaderImageState> images) {

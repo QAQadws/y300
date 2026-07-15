@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_reader_exit_result.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_unavailable.dart';
-import 'package:y300/features/comic/domain/services/comic_reader_chapter_preload.dart';
 import 'package:y300/features/comic/presentation/comic_reader_capability.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
@@ -23,7 +22,6 @@ enum _ComicReaderMoreAction {
   cacheEpisode,
   cacheUnread,
   clearEpisodeCache,
-  retryFailedImages,
 }
 
 /// 漫画阅读器页面。
@@ -87,8 +85,6 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
               exitResult: _exitResultFor(viewState),
               onToggleBookmark: () => unawaited(controller.toggleBookmark()),
               onOpenSourceThread: () => _openSourceThread(viewState),
-              onCacheCurrentEpisode: () =>
-                  unawaited(controller.cacheCurrentEpisode()),
               onShowMoreActions: () =>
                   unawaited(_showMoreActionSheet(viewState)),
               onShowChapterList: () =>
@@ -98,8 +94,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
               ),
               buildNextChapterTransition: (context) =>
                   _ReaderNextChapterTransition(
-                    preload: viewState.nextChapterPreload,
-                    hasNextEpisode: viewState.hasNextEpisode,
+                    nextChapter: viewState.nextChapter,
                     isSwitchingEpisode: viewState.isSwitchingEpisode,
                     onOpenNext: () => unawaited(
                       _openAdjacentEpisode(viewState, previous: false),
@@ -190,12 +185,6 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     if (targetEpisodeId == null || !mounted) {
       return;
     }
-    if (!previous) {
-      await controller.ensureNextChapterPreloaded();
-      if (!mounted) {
-        return;
-      }
-    }
     // 引擎按 ownerId（episodeId）变化自动复位滚动/索引，这里无需手动重置位置。
     await controller.goToEpisode(targetEpisodeId);
   }
@@ -216,8 +205,6 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
         await controller.cacheAllUnread();
       case _ComicReaderMoreAction.clearEpisodeCache:
         await controller.clearCurrentEpisodeCache();
-      case _ComicReaderMoreAction.retryFailedImages:
-        await controller.retryFailedImages();
     }
   }
 
@@ -279,15 +266,6 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
             icon: Icons.cleaning_services_outlined,
             label: '清除本章缓存',
           ),
-          ReaderActionSheetItem<_ComicReaderMoreAction>(
-            id: 'retry-failed',
-            value: _ComicReaderMoreAction.retryFailedImages,
-            icon: Icons.refresh,
-            label: viewState.failedImageCount > 0
-                ? '重试失败图片（${viewState.failedImageCount}）'
-                : '重试失败图片',
-            enabled: viewState.failedImageCount > 0,
-          ),
         ],
       ),
     );
@@ -332,35 +310,27 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     if (selected == null || selected.isCurrent || !mounted) {
       return;
     }
-    final controller = _controller();
-    if (selected.episodeId == viewState.nextChapterPreload.episodeId) {
-      await controller.ensureNextChapterPreloaded();
-      if (!mounted) {
-        return;
-      }
-    }
-    await controller.goToEpisode(selected.episodeId);
+    await _controller().goToEpisode(selected.episodeId);
   }
 }
 
-/// 垂直模式列表尾部的"下一章过场卡"。依赖漫画专属的预加载状态，因此留在漫画层，
-/// 通过 [ComicReaderCapability.verticalTrailingBuilder] 注入引擎。
+/// 垂直模式列表尾部的"下一章过场卡"。只展示已加载的章节元数据；图片列表和
+/// owner session 均在用户确认切换后创建。
 class _ReaderNextChapterTransition extends StatelessWidget {
   const _ReaderNextChapterTransition({
-    required this.preload,
-    required this.hasNextEpisode,
+    required this.nextChapter,
     required this.isSwitchingEpisode,
     required this.onOpenNext,
   });
 
-  final ComicReaderChapterPreloadState preload;
-  final bool hasNextEpisode;
+  final ComicReaderChapterEntry? nextChapter;
   final bool isSwitchingEpisode;
   final VoidCallback onOpenNext;
 
   @override
   Widget build(BuildContext context) {
-    if (!hasNextEpisode) {
+    final chapter = nextChapter;
+    if (chapter == null) {
       return const SizedBox.shrink(
         key: Key('comic-reader-next-chapter-transition-empty'),
       );
@@ -368,7 +338,7 @@ class _ReaderNextChapterTransition extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final chromePalette = const ReaderChromePaletteResolver().resolve(theme);
-    final canOpen = preload.canOpen && !isSwitchingEpisode;
+    final canOpen = !isSwitchingEpisode;
     return Padding(
       key: const Key('comic-reader-next-chapter-transition'),
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 56),
@@ -383,7 +353,7 @@ class _ReaderNextChapterTransition extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: Row(
               children: [
-                Icon(_iconFor(preload.status), color: scheme.primary),
+                Icon(Icons.skip_next, color: scheme.primary),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -391,14 +361,14 @@ class _ReaderNextChapterTransition extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '下一章：${preload.displayTitle}',
+                        '下一章：${chapter.title}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleSmall,
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        _subtitle(),
+                        isSwitchingEpisode ? '正在切换章节' : '点击进入下一章',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -425,47 +395,6 @@ class _ReaderNextChapterTransition extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  IconData _iconFor(ComicReaderChapterPreloadStatus status) {
-    switch (status) {
-      case ComicReaderChapterPreloadStatus.loadingImages:
-      case ComicReaderChapterPreloadStatus.preloadingPages:
-        return Icons.downloading_outlined;
-      case ComicReaderChapterPreloadStatus.ready:
-        return Icons.offline_bolt_outlined;
-      case ComicReaderChapterPreloadStatus.failed:
-        return Icons.error_outline;
-      case ComicReaderChapterPreloadStatus.unavailable:
-        return Icons.done_all;
-      case ComicReaderChapterPreloadStatus.idle:
-      case ComicReaderChapterPreloadStatus.imagesReady:
-        return Icons.skip_next;
-    }
-  }
-
-  String _subtitle() {
-    if (isSwitchingEpisode) {
-      return '正在切换章节';
-    }
-    switch (preload.status) {
-      case ComicReaderChapterPreloadStatus.loadingImages:
-        return '正在获取图片列表';
-      case ComicReaderChapterPreloadStatus.imagesReady:
-        return '图片列表已就绪';
-      case ComicReaderChapterPreloadStatus.preloadingPages:
-        return '正在缓存下一章前几页';
-      case ComicReaderChapterPreloadStatus.ready:
-        return preload.cachedPageCount > 0
-            ? '已预加载 ${preload.cachedPageCount} 页'
-            : '已准备好';
-      case ComicReaderChapterPreloadStatus.failed:
-        return preload.message ?? '预加载失败，点击后重新加载';
-      case ComicReaderChapterPreloadStatus.unavailable:
-        return preload.message ?? '没有更多章节';
-      case ComicReaderChapterPreloadStatus.idle:
-        return '点击进入下一章';
-    }
   }
 }
 

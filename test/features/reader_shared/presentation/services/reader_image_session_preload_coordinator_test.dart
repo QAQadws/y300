@@ -124,7 +124,7 @@ void main() {
       expect(taskIdentities, hasLength(scheduled.length));
     });
 
-    testWidgets('upgrades disk-only scheduled image to decoded when focused', (
+    testWidgets('upgrades pending disk work to decoded without stale work', (
       tester,
     ) async {
       final service = _RecordingPrecacheService();
@@ -155,12 +155,12 @@ void main() {
       );
       await tester.pump();
 
-      expect(service.diskSpecs.map((spec) => spec.imageIndex), contains(3));
-      expect(service.decodedSpecs.map((spec) => spec.imageIndex), contains(3));
       expect(
-        service.diskSpecs.where((spec) => spec.imageIndex == 3),
-        hasLength(1),
+        service.diskSpecs.map((spec) => spec.imageIndex),
+        isNot(contains(3)),
       );
+      expect(service.decodedSpecs.map((spec) => spec.imageIndex), contains(3));
+      expect(service.diskSpecs.where((spec) => spec.imageIndex == 3), isEmpty);
       expect(
         service.decodedSpecs.where((spec) => spec.imageIndex == 3),
         hasLength(1),
@@ -237,6 +237,135 @@ void main() {
       expect(binding.value.localPath, '/cache/0.jpg');
       expect(sink.records, hasLength(1));
       expect(sink.records.single.itemId, content.items.single.id);
+    });
+
+    testWidgets('rapid windows stay bounded and latest seek is promoted', (
+      tester,
+    ) async {
+      final service = _BlockingPrecacheService();
+      final coordinator = ReaderImageSessionPreloadCoordinator(
+        policy: const ReaderImageSessionPreloadPolicy(
+          decodedRadius: 1,
+          diskRadius: 3,
+          maxConcurrentTasks: 2,
+        ),
+      );
+      addTearDown(coordinator.dispose);
+      final content = _content(count: 20);
+      late BuildContext readerContext;
+      await tester.pumpWidget(
+        Builder(
+          builder: (context) {
+            readerContext = context;
+            return const SizedBox.shrink();
+          },
+        ),
+      );
+
+      for (var index = 0; index < 10; index++) {
+        coordinator.submitWindow(
+          context: readerContext,
+          content: content,
+          focusIndex: index,
+          scrollDirection: ContinuousImageScrollDirection.forward,
+          capability: _TestCapability(),
+          precacheService: service,
+        );
+      }
+      coordinator.promoteSeekTarget(
+        context: readerContext,
+        content: content,
+        index: 15,
+        capability: _TestCapability(),
+        precacheService: service,
+      );
+      coordinator.promoteSeekTarget(
+        context: readerContext,
+        content: content,
+        index: 16,
+        capability: _TestCapability(),
+        precacheService: service,
+      );
+
+      expect(coordinator.runningTaskCount, 2);
+      expect(coordinator.pendingTaskCount, lessThanOrEqualTo(8));
+      expect(service.startedSpecs, hasLength(2));
+
+      service.completeNext();
+      await tester.pump();
+
+      expect(service.startedSpecs.map((spec) => spec.imageIndex), contains(16));
+      expect(
+        service.startedSpecs.map((spec) => spec.imageIndex),
+        isNot(contains(15)),
+      );
+      expect(coordinator.runningTaskCount, lessThanOrEqualTo(2));
+      expect(coordinator.pendingTaskCount, lessThanOrEqualTo(7));
+    });
+
+    testWidgets('forced prepareOne retries through store and metadata sink', (
+      tester,
+    ) async {
+      final store = ReaderImageSessionStore();
+      addTearDown(store.dispose);
+      final sink = _RecordingPreparationSink();
+      final coordinator = ReaderImageSessionPreloadCoordinator(
+        sessionStore: store,
+      );
+      addTearDown(coordinator.dispose);
+      final content = _content(count: 1);
+      coordinator.resetSession(
+        readerOwnerId: content.ownerId,
+        items: content.items,
+      );
+      final binding = store.bindingFor(content.items.single);
+      final service = _SequentialPrecacheService(<ForumImagePrecacheResult>[
+        const ForumImagePrecacheResult(
+          success: false,
+          failureReason: 'decode_failed',
+        ),
+        const ForumImagePrecacheResult(
+          success: true,
+          decoded: true,
+          cacheKey: 'cache-0',
+          localPath: '/cache/retried.jpg',
+        ),
+      ]);
+      late BuildContext readerContext;
+      await tester.pumpWidget(
+        Builder(
+          builder: (context) {
+            readerContext = context;
+            return const SizedBox.shrink();
+          },
+        ),
+      );
+
+      final first = await coordinator.prepareOne(
+        context: readerContext,
+        content: content,
+        index: 0,
+        capability: _SinkCapability(sink),
+        precacheService: service,
+      );
+      expect(first?.result.success, isFalse);
+      expect(binding.value.status, ReaderImageSessionStatus.failed);
+
+      final retried = await coordinator.prepareOne(
+        context: readerContext,
+        content: content,
+        index: 0,
+        capability: _SinkCapability(sink),
+        precacheService: service,
+        force: true,
+      );
+
+      expect(retried?.result.success, isTrue);
+      expect(binding.value.status, ReaderImageSessionStatus.decoded);
+      expect(binding.value.localPath, '/cache/retried.jpg');
+      expect(service.decodedSpecs, hasLength(2));
+      expect(sink.records, hasLength(1));
+      expect(sink.records.single.localPath, '/cache/retried.jpg');
     });
 
     testWidgets('dispose suppresses future submissions', (tester) async {
@@ -383,5 +512,60 @@ class _RecordingPrecacheService implements ForumImagePrecacheService {
         localPath: '/cache/${spec.imageIndex}.jpg',
       ),
     );
+  }
+}
+
+class _BlockingPrecacheService implements ForumImagePrecacheService {
+  final startedSpecs = <ForumImageLoadSpec>[];
+  final _completers = <Completer<ForumImagePrecacheResult>>[];
+
+  void completeNext() {
+    final completer = _completers.firstWhere((item) => !item.isCompleted);
+    completer.complete(const ForumImagePrecacheResult(success: true));
+  }
+
+  @override
+  Future<ForumImagePrecacheResult> ensureDiskCached(ForumImageLoadSpec spec) {
+    return _start(spec);
+  }
+
+  @override
+  Future<ForumImagePrecacheResult> precacheDecoded({
+    required BuildContext context,
+    required ForumImageLoadSpec spec,
+    Size? expectedDisplaySize,
+  }) {
+    return _start(spec);
+  }
+
+  Future<ForumImagePrecacheResult> _start(ForumImageLoadSpec spec) {
+    startedSpecs.add(spec);
+    final completer = Completer<ForumImagePrecacheResult>();
+    _completers.add(completer);
+    return completer.future;
+  }
+}
+
+class _SequentialPrecacheService implements ForumImagePrecacheService {
+  _SequentialPrecacheService(this.results);
+
+  final List<ForumImagePrecacheResult> results;
+  final decodedSpecs = <ForumImageLoadSpec>[];
+
+  @override
+  Future<ForumImagePrecacheResult> ensureDiskCached(
+    ForumImageLoadSpec spec,
+  ) async {
+    throw StateError('Unexpected disk-only request');
+  }
+
+  @override
+  Future<ForumImagePrecacheResult> precacheDecoded({
+    required BuildContext context,
+    required ForumImageLoadSpec spec,
+    Size? expectedDisplaySize,
+  }) async {
+    decodedSpecs.add(spec);
+    return results.removeAt(0);
   }
 }

@@ -305,6 +305,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
           preferences,
           paged: paged,
         ),
+        onRetry: () => unawaited(_retrySessionImage(index)),
       ),
     );
     if (!paged) {
@@ -920,12 +921,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (target == current) {
       return;
     }
-    _submitSessionPreloadWindow(
-      focusIndex: target,
-      scrollDirection: delta < 0
-          ? ContinuousImageScrollDirection.reverse
-          : ContinuousImageScrollDirection.forward,
-    );
+    _promoteSessionSeekTarget(target);
     pageController.animateToPage(
       target,
       duration: const Duration(milliseconds: 180),
@@ -1023,6 +1019,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       _sliderPreviewIndex = targetIndex;
       _lastKnownIndex = targetIndex;
     });
+    _promoteSessionSeekTarget(targetIndex);
 
     try {
       var reached = false;
@@ -1047,12 +1044,6 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         );
       }
 
-      _submitSessionPreloadWindow(
-        focusIndex: targetIndex,
-        scrollDirection: targetIndex < previousIndex
-            ? ContinuousImageScrollDirection.reverse
-            : ContinuousImageScrollDirection.forward,
-      );
       if (!_isCurrentPositionState(positionState, total)) {
         _recordSeekSuperseded(
           seekGeneration: seekGeneration,
@@ -1222,6 +1213,45 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       capability: _capability,
       precacheService: ref.read(forumImagePrecacheServiceProvider),
       expectedDisplaySize: _expectedPreloadDisplaySize(),
+    );
+  }
+
+  void _promoteSessionSeekTarget(int index) {
+    final items = _latestItems;
+    if (!mounted || items.isEmpty) {
+      return;
+    }
+    _sessionPreloadCoordinator.promoteSeekTarget(
+      context: context,
+      content: ReaderContent(
+        ownerId: _lastOwnerId ?? _capability.content.ownerId,
+        items: items,
+        initialIndex: _capability.content.initialIndex,
+      ),
+      index: index,
+      capability: _capability,
+      precacheService: ref.read(forumImagePrecacheServiceProvider),
+      expectedDisplaySize: _expectedPreloadDisplaySize(),
+    );
+  }
+
+  Future<void> _retrySessionImage(int index) async {
+    final items = _latestItems;
+    if (!mounted || items.isEmpty) {
+      return;
+    }
+    await _sessionPreloadCoordinator.prepareOne(
+      context: context,
+      content: ReaderContent(
+        ownerId: _lastOwnerId ?? _capability.content.ownerId,
+        items: items,
+        initialIndex: _capability.content.initialIndex,
+      ),
+      index: index,
+      capability: _capability,
+      precacheService: ref.read(forumImagePrecacheServiceProvider),
+      expectedDisplaySize: _expectedPreloadDisplaySize(),
+      force: true,
     );
   }
 

@@ -97,7 +97,7 @@ void main() {
     await tester.dragFrom(center, offset);
   }
 
-  testWidgets('ComicReaderPage renders images and cache actions', (
+  testWidgets('ComicReaderPage renders images and shared reader actions', (
     tester,
   ) async {
     await prepareLargeViewport(tester);
@@ -179,7 +179,7 @@ void main() {
     );
     expect(
       find.byKey(const Key('shared-reader-bottom-action-cache')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.byKey(const Key('shared-reader-progress-slider')),

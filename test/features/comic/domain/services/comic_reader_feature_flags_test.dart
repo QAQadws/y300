@@ -3,24 +3,20 @@ import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.d
 
 void main() {
   group('ComicReaderFeatureFlags', () {
-    test('defaults keep Phase 10 safe rollout switches enabled', () {
+    test('defaults keep active comic capabilities stable', () {
       const flags = ComicReaderFeatureFlags.defaults;
 
       expect(flags.readerStrictCompleteRead, isTrue);
-      expect(flags.readerPreloadQueueEnabled, isTrue);
-      expect(flags.readerNextChapterPreloadEnabled, isTrue);
       expect(flags.readerCustomMetadataEnabled, isTrue);
       expect(flags.readerRefreshMultiKeywordEnabled, isFalse);
     });
 
-    test('copyWith can disable one reader capability at a time', () {
+    test('copyWith can disable an active capability independently', () {
       final flags = ComicReaderFeatureFlags.defaults.copyWith(
-        readerPreloadQueueEnabled: false,
+        readerStrictCompleteRead: false,
       );
 
-      expect(flags.readerStrictCompleteRead, isTrue);
-      expect(flags.readerPreloadQueueEnabled, isFalse);
-      expect(flags.readerNextChapterPreloadEnabled, isTrue);
+      expect(flags.readerStrictCompleteRead, isFalse);
       expect(flags.readerCustomMetadataEnabled, isTrue);
       expect(flags.readerRefreshMultiKeywordEnabled, isFalse);
     });

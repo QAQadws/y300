@@ -12,7 +12,6 @@ import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_unavailable.dart';
-import 'package:y300/features/comic/domain/services/comic_reader_chapter_preload.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
@@ -35,122 +34,52 @@ void main() {
     expect(episodes.last.episodeId, 'yamibo:100:103');
   });
 
-  test('jumpToImageIndex prefetches around target index', () async {
-    final repository = _ReaderRepoForControllerTest(imageCount: 10);
-    final service = _ReaderServiceSpy();
-    final writer = _ReadingStateWriterSpy(repository);
-    final container = ProviderContainer(
-      overrides: [
-        comicRepositoryProvider.overrideWithValue(repository),
-        comicReadingStateWriterProvider.overrideWithValue(writer),
-        comicReaderServiceProvider.overrideWith((ref) async => service),
-        comicDownloadServiceProvider.overrideWithValue(
-          _NoopComicDownloadService(),
-        ),
-        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-      ],
-    );
-    addTearDown(container.dispose);
+  test(
+    'page visibility and jumps leave image preparation to shared engine',
+    () async {
+      final repository = _ReaderRepoForControllerTest(imageCount: 10);
+      final service = _ReaderServiceSpy();
+      final writer = _ReadingStateWriterSpy(repository);
+      final container = ProviderContainer(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(repository),
+          comicReadingStateWriterProvider.overrideWithValue(writer),
+          comicReaderServiceProvider.overrideWith((ref) async => service),
+          comicDownloadServiceProvider.overrideWithValue(
+            _NoopComicDownloadService(),
+          ),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+        ],
+      );
+      addTearDown(container.dispose);
 
-    final args = const ComicReaderArgs(
-      comicId: 'yamibo:100',
-      episodeId: 'yamibo:100:101',
-    );
-    final subscription = container.listen<AsyncValue<ComicReaderViewState>>(
-      comicReaderControllerProvider(args),
-      (previous, next) {},
-      fireImmediately: true,
-    );
-    addTearDown(subscription.close);
-    await container.read(comicReaderControllerProvider(args).future);
-    await _waitForCacheStatusWrites(
-      repository: repository,
-      imageUrls: _readerImageUrls(1, 4),
-      cacheStatus: 'done',
-      label: 'initial reader preload',
-    );
-    service.cachedImageUrls.clear();
-    repository.cacheStatusWrites.clear();
+      final args = const ComicReaderArgs(
+        comicId: 'yamibo:100',
+        episodeId: 'yamibo:100:101',
+      );
+      final subscription = container.listen<AsyncValue<ComicReaderViewState>>(
+        comicReaderControllerProvider(args),
+        (previous, next) {},
+        fireImmediately: true,
+      );
+      addTearDown(subscription.close);
+      final initialState = await container.read(
+        comicReaderControllerProvider(args).future,
+      );
 
-    await container
-        .read(comicReaderControllerProvider(args).notifier)
-        .jumpToImageIndex(6, scrollOffset: 120);
-    await _waitForCondition(() {
-      final doneUrls = repository.cacheStatusWrites
-          .where((item) => item.cacheStatus == 'done')
-          .map((item) => item.imageUrl)
-          .toSet();
-      return doneUrls.contains('https://img.test/101-6.jpg') &&
-          doneUrls.contains('https://img.test/101-9.jpg');
-    }, label: 'jump target preload');
+      final controller = container.read(
+        comicReaderControllerProvider(args).notifier,
+      );
+      await controller.onImageVisible(3);
+      await controller.jumpToImageIndex(6, scrollOffset: 120);
 
-    expect(service.cachedImageUrls, isNotEmpty);
-    expect(service.cachedImageUrls.length, greaterThanOrEqualTo(4));
-    expect(service.cachedImageUrls, contains('https://img.test/101-6.jpg'));
-    expect(service.cachedImageUrls, contains('https://img.test/101-9.jpg'));
-    expect(
-      repository.cacheStatusWrites.map((item) => item.cacheStatus),
-      containsAll(<String>['queued', 'downloading', 'done']),
-    );
-  });
-
-  test('retryImage enqueues failed page with retry status updates', () async {
-    final repository = _ReaderRepoForControllerTest(failedImageIndex: 2);
-    final service = _ReaderServiceSpy();
-    final writer = _ReadingStateWriterSpy(repository);
-    final container = ProviderContainer(
-      overrides: [
-        comicRepositoryProvider.overrideWithValue(repository),
-        comicReadingStateWriterProvider.overrideWithValue(writer),
-        comicReaderServiceProvider.overrideWith((ref) async => service),
-        comicDownloadServiceProvider.overrideWithValue(
-          _NoopComicDownloadService(),
-        ),
-        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-      ],
-    );
-    addTearDown(container.dispose);
-
-    final args = const ComicReaderArgs(
-      comicId: 'yamibo:100',
-      episodeId: 'yamibo:100:101',
-    );
-    final subscription = container.listen<AsyncValue<ComicReaderViewState>>(
-      comicReaderControllerProvider(args),
-      (previous, next) {},
-      fireImmediately: true,
-    );
-    addTearDown(subscription.close);
-    await container.read(comicReaderControllerProvider(args).future);
-    await _waitForCacheStatusWrites(
-      repository: repository,
-      imageUrls: <String>[..._readerImageUrls(1, 2), ..._readerImageUrls(4, 4)],
-      cacheStatus: 'done',
-      label: 'initial reader preload',
-    );
-    service.cachedImageUrls.clear();
-    repository.cacheStatusWrites.clear();
-
-    await container
-        .read(comicReaderControllerProvider(args).notifier)
-        .retryImage('https://img.test/101-3.jpg');
-    await _waitForCondition(
-      () => repository.cacheStatusWrites.any(
-        (item) =>
-            item.imageUrl == 'https://img.test/101-3.jpg' &&
-            item.cacheStatus == 'done',
-      ),
-      label: 'retry image done status',
-    );
-
-    expect(service.cachedImageUrls, <String>['https://img.test/101-3.jpg']);
-    expect(
-      repository.cacheStatusWrites
-          .where((item) => item.imageUrl == 'https://img.test/101-3.jpg')
-          .map((item) => item.cacheStatus),
-      containsAllInOrder(<String>['queued', 'downloading', 'done']),
-    );
-  });
+      expect(service.cachedImageUrls, isEmpty);
+      expect(service.fetchEpisodeImagesCalls, isEmpty);
+      expect(repository.cacheStatusWrites, isEmpty);
+      expect(repository.progressWrites.last.imageIndex, 6);
+      expect(initialState.nextChapter?.episodeId, 'yamibo:100:102');
+    },
+  );
 
   test('onScrollProgress persists with debounce', () async {
     final repository = _ReaderRepoForControllerTest();
@@ -641,106 +570,6 @@ void main() {
     },
   );
 
-  test('preload queue feature flag disables reader cache window', () async {
-    final repository = _ReaderRepoForControllerTest(imageCount: 10);
-    final service = _ReaderServiceSpy();
-    final writer = _ReadingStateWriterSpy(repository);
-    final container = ProviderContainer(
-      overrides: [
-        comicRepositoryProvider.overrideWithValue(repository),
-        comicReadingStateWriterProvider.overrideWithValue(writer),
-        comicReaderFeatureFlagsProvider.overrideWithValue(
-          ComicReaderFeatureFlags.defaults.copyWith(
-            readerPreloadQueueEnabled: false,
-          ),
-        ),
-        comicReaderServiceProvider.overrideWith((ref) async => service),
-        comicDownloadServiceProvider.overrideWithValue(
-          _NoopComicDownloadService(),
-        ),
-        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-      ],
-    );
-    addTearDown(container.dispose);
-
-    final args = const ComicReaderArgs(
-      comicId: 'yamibo:100',
-      episodeId: 'yamibo:100:101',
-    );
-    await container.read(comicReaderControllerProvider(args).future);
-
-    await container
-        .read(comicReaderControllerProvider(args).notifier)
-        .onImageVisible(6);
-    await Future<void>.delayed(Duration.zero);
-
-    expect(service.cachedImageUrls, isEmpty);
-    expect(
-      repository.cacheStatusWrites.map((item) => item.cacheStatus),
-      isNot(contains('queued')),
-    );
-  });
-
-  test(
-    'next chapter feature flag keeps next episode idle near chapter end',
-    () async {
-      final repository = _ReaderRepoForControllerTest(imageCount: 10);
-      final service = _ReaderServiceSpy();
-      final writer = _ReadingStateWriterSpy(repository);
-      final container = ProviderContainer(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(repository),
-          comicReadingStateWriterProvider.overrideWithValue(writer),
-          comicReaderFeatureFlagsProvider.overrideWithValue(
-            ComicReaderFeatureFlags.defaults.copyWith(
-              readerNextChapterPreloadEnabled: false,
-            ),
-          ),
-          comicReaderServiceProvider.overrideWith((ref) async => service),
-          comicDownloadServiceProvider.overrideWithValue(
-            _NoopComicDownloadService(),
-          ),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-        ],
-      );
-      addTearDown(container.dispose);
-
-      final args = const ComicReaderArgs(
-        comicId: 'yamibo:100',
-        episodeId: 'yamibo:100:101',
-      );
-      await container.read(comicReaderControllerProvider(args).future);
-
-      await container
-          .read(comicReaderControllerProvider(args).notifier)
-          .onImageVisible(6);
-      await Future<void>.delayed(Duration.zero);
-
-      final state = await container.read(
-        comicReaderControllerProvider(args).future,
-      );
-      expect(state.nextChapterPreload.episodeId, 'yamibo:100:102');
-      expect(
-        state.nextChapterPreload.status,
-        ComicReaderChapterPreloadStatus.idle,
-      );
-      await container
-          .read(comicReaderControllerProvider(args).notifier)
-          .ensureNextChapterPreloaded(force: true);
-      final forcedState = await container.read(
-        comicReaderControllerProvider(args).future,
-      );
-      expect(
-        forcedState.nextChapterPreload.status,
-        ComicReaderChapterPreloadStatus.idle,
-      );
-      expect(
-        service.cachedImageUrls,
-        isNot(contains('https://img.test/102-1.jpg')),
-      );
-    },
-  );
-
   test('toggleBookmark persists bookmark state', () async {
     final repository = _ReaderRepoForControllerTest();
     final service = _ReaderServiceSpy();
@@ -869,70 +698,6 @@ void main() {
 
       expect(imageCache.lastLocalCopyRequest?.role, ImageCacheRole.customCover);
       expect(repository.lastCustomCoverLocalPath, '/protected/cover.jpg');
-    },
-  );
-
-  test(
-    'near chapter end preloads next episode image list and first pages',
-    () async {
-      final repository = _ReaderRepoForControllerTest(imageCount: 10);
-      final service = _ReaderServiceSpy();
-      final writer = _ReadingStateWriterSpy(repository);
-      final container = ProviderContainer(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(repository),
-          comicReadingStateWriterProvider.overrideWithValue(writer),
-          comicReaderServiceProvider.overrideWith((ref) async => service),
-          comicDownloadServiceProvider.overrideWithValue(
-            _NoopComicDownloadService(),
-          ),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-        ],
-      );
-      addTearDown(container.dispose);
-
-      final args = const ComicReaderArgs(
-        comicId: 'yamibo:100',
-        episodeId: 'yamibo:100:101',
-      );
-      final subscription = container.listen<AsyncValue<ComicReaderViewState>>(
-        comicReaderControllerProvider(args),
-        (previous, next) {},
-        fireImmediately: true,
-      );
-      addTearDown(subscription.close);
-      await container.read(comicReaderControllerProvider(args).future);
-      service.cachedImageUrls.clear();
-      repository.cacheStatusWrites.clear();
-
-      await container
-          .read(comicReaderControllerProvider(args).notifier)
-          .onImageVisible(6);
-      await _waitForCondition(() {
-        final nextDoneUrls = repository.cacheStatusWrites
-            .where(
-              (item) =>
-                  item.episodeId == 'yamibo:100:102' &&
-                  item.cacheStatus == 'done',
-            )
-            .map((item) => item.imageUrl)
-            .toSet();
-        return nextDoneUrls.contains('https://img.test/102-1.jpg') &&
-            nextDoneUrls.contains('https://img.test/102-3.jpg');
-      }, label: 'next chapter first pages preload');
-
-      final state = await _waitForReaderState(
-        container,
-        args,
-        (state) =>
-            state.nextChapterPreload.episodeId == 'yamibo:100:102' &&
-            state.nextChapterPreload.hasLoadedImageList,
-        label: 'next chapter preload state',
-      );
-      expect(state.nextChapterPreload.episodeId, 'yamibo:100:102');
-      expect(state.nextChapterPreload.hasLoadedImageList, isTrue);
-      expect(service.cachedImageUrls, contains('https://img.test/102-1.jpg'));
-      expect(service.cachedImageUrls, contains('https://img.test/102-3.jpg'));
     },
   );
 
@@ -1397,7 +1162,6 @@ class _ReaderRepoForControllerTest
   _ReaderRepoForControllerTest({
     this.singlePage = false,
     this.cachedFirstImage = false,
-    this.failedImageIndex,
     this.lastImageWidth,
     this.lastImageHeight,
     this.imageCount = 5,
@@ -1406,7 +1170,6 @@ class _ReaderRepoForControllerTest
 
   final bool singlePage;
   final bool cachedFirstImage;
-  final int? failedImageIndex;
   final int? lastImageWidth;
   final int? lastImageHeight;
   final int imageCount;
@@ -1582,9 +1345,7 @@ class _ReaderRepoForControllerTest
         cacheStatus:
             episodeId == 'yamibo:100:101' && index == 0 && cachedFirstImage
             ? 'done'
-            : (episodeId == 'yamibo:100:101' && failedImageIndex == index
-                  ? 'failed'
-                  : 'none'),
+            : 'none',
         cacheLocalPath:
             episodeId == 'yamibo:100:101' && index == 0 && cachedFirstImage
             ? '/cache/101-1.jpg'
@@ -1745,28 +1506,6 @@ class _ReaderRepoForControllerTest
       <String>{};
 }
 
-Future<void> _waitForCacheStatusWrites({
-  required _ReaderRepoForControllerTest repository,
-  required List<String> imageUrls,
-  required String cacheStatus,
-  required String label,
-}) {
-  return _waitForCondition(() {
-    final writtenUrls = repository.cacheStatusWrites
-        .where((item) => item.cacheStatus == cacheStatus)
-        .map((item) => item.imageUrl)
-        .toSet();
-    return imageUrls.every(writtenUrls.contains);
-  }, label: label);
-}
-
-List<String> _readerImageUrls(int firstPage, int lastPage) {
-  return List<String>.generate(
-    lastPage - firstPage + 1,
-    (index) => 'https://img.test/101-${firstPage + index}.jpg',
-  );
-}
-
 Future<void> _waitForCondition(
   bool Function() isReady, {
   required String label,
@@ -1775,23 +1514,6 @@ Future<void> _waitForCondition(
   for (var i = 0; i < attempts; i++) {
     if (isReady()) {
       return;
-    }
-    await Future<void>.delayed(Duration.zero);
-  }
-  fail('Timed out waiting for $label');
-}
-
-Future<ComicReaderViewState> _waitForReaderState(
-  ProviderContainer container,
-  ComicReaderArgs args,
-  bool Function(ComicReaderViewState state) isReady, {
-  required String label,
-  int attempts = 80,
-}) async {
-  for (var i = 0; i < attempts; i++) {
-    final value = container.read(comicReaderControllerProvider(args)).value;
-    if (value != null && isReady(value)) {
-      return value;
     }
     await Future<void>.delayed(Duration.zero);
   }

@@ -54,8 +54,8 @@ typedef ImagePrefetcherSnapshotHandler = void Function(
 /// - **business-agnostic**：具体如何下载/写回由注入的 [ImagePrefetchRunner] 决定，
 ///   预取器只管优先级、去重、并发。
 ///
-/// 它有意复用 `ComicReaderPreloadQueue` 已验证的调度结构（优先级排序 + dedupe +
-/// 并发上限 + 微任务泵），但保持通用，可被书架/帖子等多处复用。
+/// 调度结构包含优先级排序、去重、并发上限和微任务泵，并保持通用，可被书架、
+/// 帖子等多处复用。
 abstract class ImagePrefetcher {
   /// 提交一个新的“可见窗口”请求集合。
   ///
