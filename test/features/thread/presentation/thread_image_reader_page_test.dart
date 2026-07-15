@@ -73,6 +73,14 @@ void main() {
       find.byKey(const Key('shared-reader-bottom-action-display')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const Key('shared-reader-bottom-action-export-current-image')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('shared-reader-bottom-action-export-current-image')),
+      findsOneWidget,
+    );
 
     // detail 强相关项不应出现：书签 / 原帖 / 章节 / 缓存 / 翻章。
     expect(

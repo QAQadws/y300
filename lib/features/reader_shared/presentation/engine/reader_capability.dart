@@ -4,6 +4,7 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
+import 'package:y300/features/reader_shared/domain/export/reader_image_export.dart';
 import 'package:y300/features/reader_shared/domain/image_session/reader_image_session.dart';
 import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_reader_view.dart';
 import 'package:y300/features/reader_shared/presentation/services/reader_image_session_store.dart';
@@ -68,6 +69,7 @@ class ReaderChapterNavSpec {
 abstract interface class ReaderEngineActions {
   void openDisplaySettings();
   void openModeSheet();
+  void exportCurrentImage();
 }
 
 /// 引擎向能力提供方暴露的只读上下文快照。
@@ -137,6 +139,11 @@ abstract class ReaderCapability {
 
   /// Optional non-blocking business metadata writer for prepared images.
   ReaderImagePreparationSink? get imagePreparationSink => null;
+
+  /// Export metadata for the current image. Returning null disables the shared
+  /// export action without making the engine aware of business types.
+  ReaderImageExportMetadata? exportMetadataFor(ContinuousImageItem item) =>
+      null;
 
   /// 顶部标题/副标题。
   ReaderTitleSpec titleFor(ReaderEngineContext context);

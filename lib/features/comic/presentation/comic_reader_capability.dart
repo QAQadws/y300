@@ -9,6 +9,7 @@ import 'package:y300/features/comic/presentation/controllers/comic_reader_contro
 import 'package:y300/features/comic/presentation/services/comic_reader_continuous_image_adapter.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
+import 'package:y300/features/reader_shared/domain/export/reader_image_export.dart';
 import 'package:y300/features/reader_shared/domain/image_session/reader_image_session.dart';
 import 'package:y300/features/reader_shared/domain/reader_preferences/reader_preferences.dart';
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
@@ -138,7 +139,22 @@ class ComicReaderCapability extends ReaderCapability {
         label: '显示',
         onPressed: context.actions.openDisplaySettings,
       ),
+      ReaderToolbarAction(
+        id: 'export-current-image',
+        icon: Icons.download_outlined,
+        label: '下载当前图片',
+        onPressed: context.actions.exportCurrentImage,
+      ),
     ];
+  }
+
+  @override
+  ReaderImageExportMetadata? exportMetadataFor(ContinuousImageItem item) {
+    return ReaderImageExportMetadata(
+      baseName:
+          '${viewState.comicTitle}-${viewState.episodeTitle}-${item.index + 1}',
+      albumName: 'Y300',
+    );
   }
 
   @override

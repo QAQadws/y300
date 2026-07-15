@@ -4,6 +4,7 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
+import 'package:y300/features/reader_shared/domain/export/reader_image_export.dart';
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 
@@ -53,7 +54,7 @@ class ThreadImageReaderCapability extends ReaderCapability {
   }
 
   // 帖子图片阅读器不提供书签/原帖/更多、章节/缓存、上一话下一话、过场卡、阅读
-  // 进度落地——全部沿用 ReaderCapability 的默认空实现。底部仅保留"显示设置"。
+  // 进度落地——全部沿用 ReaderCapability 的默认空实现。
   @override
   List<ReaderToolbarAction> bottomActions(ReaderEngineContext context) {
     return [
@@ -63,7 +64,22 @@ class ThreadImageReaderCapability extends ReaderCapability {
         label: '显示',
         onPressed: context.actions.openDisplaySettings,
       ),
+      ReaderToolbarAction(
+        id: 'export-current-image',
+        icon: Icons.download_outlined,
+        label: '下载当前图片',
+        onPressed: context.actions.exportCurrentImage,
+      ),
     ];
+  }
+
+  @override
+  ReaderImageExportMetadata? exportMetadataFor(ContinuousImageItem item) {
+    return ReaderImageExportMetadata(
+      baseName:
+          'Y300-thread-${request.tid}-post-${request.pid}-${item.index + 1}',
+      albumName: 'Y300',
+    );
   }
 
   @override

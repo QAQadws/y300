@@ -96,4 +96,7 @@ class _NoopEngineActions implements ReaderEngineActions {
 
   @override
   void openModeSheet() {}
+
+  @override
+  void exportCurrentImage() {}
 }

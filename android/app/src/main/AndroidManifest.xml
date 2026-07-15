@@ -1,5 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
     <!-- Android 13+ (API 33) requires runtime permission to post the library
          task progress notifications introduced in stage 3. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

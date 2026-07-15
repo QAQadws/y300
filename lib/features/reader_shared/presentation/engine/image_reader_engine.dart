@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
+import 'package:y300/features/reader_shared/domain/export/reader_image_export.dart';
 import 'package:y300/features/reader_shared/domain/reader_preferences/reader_preferences.dart';
 import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_presentation.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_capability.dart';
@@ -14,6 +15,7 @@ import 'package:y300/features/reader_shared/presentation/engine/reader_page_indi
 import 'package:y300/features/reader_shared/presentation/engine/reader_position_state.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_zoomable_image.dart';
 import 'package:y300/features/reader_shared/presentation/reader_preferences/reader_preferences_provider.dart';
+import 'package:y300/features/reader_shared/data/export/reader_image_export_providers.dart';
 import 'package:y300/features/reader_shared/presentation/services/reader_image_session_preload_coordinator.dart';
 import 'package:y300/features/reader_shared/presentation/services/reader_image_session_store.dart';
 
@@ -80,6 +82,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   int _seekGeneration = 0;
   ReaderModePreference _diagnosticMode = ReaderModePreference.vertical;
   bool _positionRetryScheduled = false;
+  String? _exportingIdentity;
 
   // 连续图片高度/锚定基础设施（迁移自 ComicReaderPage）。
   static const ContinuousImageLayoutResolver _layoutResolver =
@@ -1331,6 +1334,75 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   @override
   void openModeSheet() {
     unawaited(_showModeSheet());
+  }
+
+  @override
+  void exportCurrentImage() {
+    unawaited(_exportCurrentImage());
+  }
+
+  Future<void> _exportCurrentImage() async {
+    final content = _capability.content;
+    if (content.isEmpty) {
+      return;
+    }
+    final index = _lastKnownIndex.clamp(0, content.length - 1).toInt();
+    final item = content.items[index];
+    final metadata = _capability.exportMetadataFor(item);
+    if (metadata == null) {
+      _showExportMessage('当前图片不支持下载');
+      return;
+    }
+    final identity = '${content.ownerId}:${item.id}';
+    if (_exportingIdentity == identity) {
+      return;
+    }
+    _exportingIdentity = identity;
+    _overlayController.hideMenu();
+    _showExportMessage('正在保存当前图片');
+    try {
+      final result = await ref
+          .read(readerImageExportServiceProvider)
+          .export(
+            ReaderImageExportRequest(
+              cacheRequest: _capability.cacheRequestFor(item),
+              metadata: metadata,
+            ),
+          );
+      if (!mounted || _exportingIdentity != identity) {
+        return;
+      }
+      _showExportMessage(
+        result.success
+            ? '已保存到${result.destination?.displayLocation ?? '系统照片'}'
+            : _exportFailureMessage(result.failureReason),
+      );
+    } finally {
+      if (_exportingIdentity == identity) {
+        _exportingIdentity = null;
+      }
+    }
+  }
+
+  void _showExportMessage(String message) {
+    if (!mounted) {
+      return;
+    }
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _exportFailureMessage(ReaderImageExportFailureReason? reason) {
+    return switch (reason) {
+      ReaderImageExportFailureReason.cacheUnavailable => '图片暂不可用，请重试',
+      ReaderImageExportFailureReason.permissionDenied => '没有照片库写入权限，请在系统设置中允许',
+      ReaderImageExportFailureReason.permissionRestricted => '照片库权限受系统限制',
+      ReaderImageExportFailureReason.unsupportedPlatform => '当前平台不支持保存图片',
+      ReaderImageExportFailureReason.unsupportedFormat => '当前图片格式不支持保存',
+      ReaderImageExportFailureReason.mediaWriteFailed || null => '保存图片失败，请重试',
+    };
   }
 
   Future<void> _showDisplaySettingsSheet() async {

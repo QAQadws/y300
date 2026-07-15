@@ -178,6 +178,10 @@ void main() {
       findsOneWidget,
     );
     expect(
+      find.byKey(const Key('shared-reader-bottom-action-export-current-image')),
+      findsOneWidget,
+    );
+    expect(
       find.byKey(const Key('shared-reader-bottom-action-cache')),
       findsNothing,
     );
