@@ -7,7 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/services/comic_download_service.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
@@ -19,6 +21,7 @@ import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_r
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/comic_reader_page.dart';
+import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_zoomable_image.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
@@ -185,6 +188,71 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const Key('shared-reader-total-label')), findsOneWidget);
+  });
+
+  testWidgets('ComicReaderPage records preload tasks without duplicates', (
+    tester,
+  ) async {
+    await prepareLargeViewport(tester);
+    final recorder = _RecordingContinuousImageDiagnosticRecorder();
+    final precacheService = _RecordingForumImagePrecacheService();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+          comicReadingStateWriterProvider.overrideWithValue(
+            _NoopReadingStateWriter(),
+          ),
+          comicReaderServiceProvider.overrideWith(
+            (ref) async => _ReaderFakeService(),
+          ),
+          comicDownloadServiceProvider.overrideWithValue(
+            _NoopComicDownloadService(),
+          ),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+          forumImagePrecacheServiceProvider.overrideWithValue(precacheService),
+        ],
+        child: MaterialApp(
+          home: ComicReaderPage(
+            comicId: 'yamibo:100',
+            episodeId: 'yamibo:100:101',
+            diagnosticRecorder: recorder,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.pump();
+
+    final scheduled = recorder.events
+        .where(
+          (event) =>
+              event.type ==
+              ContinuousImageDiagnosticEventType.prefetchScheduled,
+        )
+        .toList(growable: false);
+    final completed = recorder.events
+        .where(
+          (event) =>
+              event.type ==
+              ContinuousImageDiagnosticEventType.prefetchCompleted,
+        )
+        .toList(growable: false);
+    final taskIdentities = scheduled
+        .map((event) => '${event.itemId}:${event.preloadKind}')
+        .toSet();
+
+    expect(scheduled, hasLength(2));
+    expect(completed, hasLength(2));
+    expect(scheduled.length - taskIdentities.length, 0);
+    expect(scheduled.map((event) => event.readerKind).toSet(), <String>{
+      'comic',
+    });
+    expect(scheduled.map((event) => event.ownerId).toSet(), <String>{
+      'yamibo:100:101',
+    });
+    expect(completed.every((event) => event.applied == true), isTrue);
   });
 
   testWidgets(
@@ -954,6 +1022,51 @@ class _ReaderFakeService implements ComicReaderService {
 
   @override
   Future<void> prefetchImages({required List<String> imageUrls}) async {}
+}
+
+class _RecordingContinuousImageDiagnosticRecorder
+    implements ContinuousImageDiagnosticRecorder {
+  final events = <ContinuousImageDiagnosticEvent>[];
+
+  @override
+  bool get enabled => true;
+
+  @override
+  void recordContinuousImage(ContinuousImageDiagnosticEvent event) {
+    events.add(event);
+  }
+}
+
+class _RecordingForumImagePrecacheService implements ForumImagePrecacheService {
+  final decodedSpecs = <ForumImageLoadSpec>[];
+  final diskSpecs = <ForumImageLoadSpec>[];
+
+  @override
+  Future<ForumImagePrecacheResult> ensureDiskCached(
+    ForumImageLoadSpec spec,
+  ) async {
+    diskSpecs.add(spec);
+    return ForumImagePrecacheResult(
+      success: true,
+      cacheKey: spec.cacheKey,
+      localPath: '/cache/${spec.imageIndex}.jpg',
+    );
+  }
+
+  @override
+  Future<ForumImagePrecacheResult> precacheDecoded({
+    required BuildContext context,
+    required ForumImageLoadSpec spec,
+    Size? expectedDisplaySize,
+  }) async {
+    decodedSpecs.add(spec);
+    return ForumImagePrecacheResult(
+      success: true,
+      decoded: true,
+      cacheKey: spec.cacheKey,
+      localPath: '/cache/${spec.imageIndex}.jpg',
+    );
+  }
 }
 
 class _FakeImageCacheService implements ImageCacheService {

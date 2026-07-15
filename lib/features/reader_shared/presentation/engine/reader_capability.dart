@@ -6,6 +6,8 @@ import 'package:y300/features/library_shared/presentation/reader/reader_models.d
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_reader_view.dart';
 
+enum ReaderKind { generic, thread, comic }
+
 /// 阅读内容来源：已由各业务 adapter 映射好的连续图片项 + 初始位置 + owner 标识。
 ///
 /// 引擎只消费 [ContinuousImageItem]，不感知漫画页或帖子图片的业务差异。
@@ -113,6 +115,8 @@ class ReaderImageBuildSpec {
 /// 帖子图片阅读器对大多数方法返回空/`null`，UI 据此自动瘦身——去掉 detail 强
 /// 相关项靠"能力为空"，而非引擎内 if-else。
 abstract class ReaderCapability {
+  ReaderKind get readerKind => ReaderKind.generic;
+
   /// 阅读内容来源。
   ReaderContent get content;
 

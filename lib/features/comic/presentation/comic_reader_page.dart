@@ -11,6 +11,7 @@ import 'package:y300/features/comic/presentation/comic_reader_capability.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/library_shared/presentation/widgets/cover_focal_point_picker.dart';
+import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reader_shared/domain/reader_preferences/reader_preferences.dart';
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 import 'package:y300/features/reader_shared/presentation/reader_preferences/reader_preferences_provider.dart';
@@ -35,10 +36,12 @@ class ComicReaderPage extends ConsumerStatefulWidget {
     super.key,
     required this.comicId,
     required this.episodeId,
+    this.diagnosticRecorder = const NoopContinuousImageDiagnosticRecorder(),
   });
 
   final String comicId;
   final String episodeId;
+  final ContinuousImageDiagnosticRecorder diagnosticRecorder;
 
   @override
   ConsumerState<ComicReaderPage> createState() => _ComicReaderPageState();
@@ -80,22 +83,27 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
               preferences: preferences,
               imageHeaderBuilder: imageHeaderBuilder,
               controller: controller,
+              diagnosticRecorder: widget.diagnosticRecorder,
               exitResult: _exitResultFor(viewState),
               onToggleBookmark: () => unawaited(controller.toggleBookmark()),
               onOpenSourceThread: () => _openSourceThread(viewState),
               onCacheCurrentEpisode: () =>
                   unawaited(controller.cacheCurrentEpisode()),
-              onShowMoreActions: () => unawaited(_showMoreActionSheet(viewState)),
-              onShowChapterList: () => unawaited(_showChapterListSheet(viewState)),
-              onOpenAdjacentEpisode: ({required bool previous}) =>
-                  unawaited(_openAdjacentEpisode(viewState, previous: previous)),
+              onShowMoreActions: () =>
+                  unawaited(_showMoreActionSheet(viewState)),
+              onShowChapterList: () =>
+                  unawaited(_showChapterListSheet(viewState)),
+              onOpenAdjacentEpisode: ({required bool previous}) => unawaited(
+                _openAdjacentEpisode(viewState, previous: previous),
+              ),
               buildNextChapterTransition: (context) =>
                   _ReaderNextChapterTransition(
                     preload: viewState.nextChapterPreload,
                     hasNextEpisode: viewState.hasNextEpisode,
                     isSwitchingEpisode: viewState.isSwitchingEpisode,
-                    onOpenNext: () =>
-                        unawaited(_openAdjacentEpisode(viewState, previous: false)),
+                    onOpenNext: () => unawaited(
+                      _openAdjacentEpisode(viewState, previous: false),
+                    ),
                   ),
             ),
           );
@@ -229,10 +237,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
       // 取消选区则不改动封面。
       return;
     }
-    await controller.setCurrentImageAsCover(
-      focusX: focus.x,
-      focusY: focus.y,
-    );
+    await controller.setCurrentImageAsCover(focusX: focus.x, focusY: focus.y);
   }
 
   Future<void> _showMoreActionSheet(ComicReaderViewState viewState) async {
@@ -511,4 +516,3 @@ class _ReaderOpeningPlaceholderState extends State<_ReaderOpeningPlaceholder> {
     );
   }
 }
-

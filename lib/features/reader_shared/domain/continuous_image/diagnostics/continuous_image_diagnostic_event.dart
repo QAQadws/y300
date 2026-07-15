@@ -1,4 +1,14 @@
 enum ContinuousImageDiagnosticEventType {
+  readerSessionCreated,
+  initialRestoreStarted,
+  initialRestoreCompleted,
+  seekPreviewChanged,
+  seekStarted,
+  seekReached,
+  seekFailed,
+  pageChanged,
+  zoomActivated,
+  zoomDeactivated,
   imageItemBuilt,
   imagePlaceholderLaidOut,
   imageDecodeResolved,
@@ -25,6 +35,14 @@ class ContinuousImageDiagnosticEvent {
     this.aspectRatio,
     this.width,
     this.height,
+    this.readerKind,
+    this.mode,
+    this.generation,
+    this.targetIndex,
+    this.status,
+    this.result,
+    this.preloadKind,
+    this.applied,
     this.message = '',
   });
 
@@ -37,14 +55,32 @@ class ContinuousImageDiagnosticEvent {
   final double? aspectRatio;
   final int? width;
   final int? height;
+  final String? readerKind;
+  final String? mode;
+  final int? generation;
+  final int? targetIndex;
+  final String? status;
+  final String? result;
+  final String? preloadKind;
+  final bool? applied;
   final String message;
 
   String toLogFields() {
     final fields = <String>[
       'continuous=${type.name}',
       'owner=$ownerId',
+      'ownerId=$ownerId',
       'item=$itemId',
       'index=$index',
+      'logicalIndex=$index',
+      if (readerKind?.trim().isNotEmpty == true) 'readerKind=$readerKind',
+      if (mode?.trim().isNotEmpty == true) 'mode=$mode',
+      if (generation != null) 'generation=$generation',
+      if (targetIndex != null) 'target=$targetIndex',
+      if (status?.trim().isNotEmpty == true) 'status=$status',
+      if (result?.trim().isNotEmpty == true) 'result=$result',
+      if (preloadKind?.trim().isNotEmpty == true) 'kind=$preloadKind',
+      if (applied != null) 'applied=$applied',
       if (source?.trim().isNotEmpty == true) 'source=$source',
       if (aspectRatio != null) 'ratio=${aspectRatio!.toStringAsFixed(4)}',
       if (width != null && height != null) 'size=${width}x$height',

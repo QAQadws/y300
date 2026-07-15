@@ -73,7 +73,10 @@ void main() {
       tester,
     ) async {
       final service = _RecordingPrecacheService();
-      final coordinator = ReaderImageSessionPreloadCoordinator();
+      final scheduled = <ReaderImageSessionPreloadScheduled>[];
+      final coordinator = ReaderImageSessionPreloadCoordinator(
+        onScheduled: scheduled.add,
+      );
       await tester.pumpWidget(
         Builder(
           builder: (context) {
@@ -108,6 +111,15 @@ void main() {
       ]);
       expect(service.diskSpecs.map((spec) => spec.imageIndex), <int>[4, 0]);
       expect(service.displaySizes.toSet(), <Size>{const Size(300, 500)});
+      expect(scheduled, hasLength(5));
+      expect(scheduled.map((event) => event.readerOwnerId).toSet(), <String>{
+        'reader-owner',
+      });
+      expect(scheduled.map((event) => event.generation).toSet(), <int>{0});
+      final taskIdentities = scheduled
+          .map((event) => '${event.spec.cacheKey}:${event.kind.name}')
+          .toSet();
+      expect(taskIdentities, hasLength(scheduled.length));
     });
 
     testWidgets('upgrades disk-only scheduled image to decoded when focused', (

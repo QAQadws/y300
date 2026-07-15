@@ -130,37 +130,288 @@ void main() {
     expect(precacheService.decodedSpecs.first.ownerId, 'thread:100:post:p1');
     expect(precacheService.decodedSpecs.first.cacheKey, 'thread/inline/page-1');
   });
+
+  for (final mode in <String>['ltr', 'rtl']) {
+    testWidgets(
+      'ThreadImageReaderPage $mode uses logical indexes for swipe and taps',
+      (tester) async {
+        await _pumpHorizontalReader(tester, mode: mode);
+        final controller = _pageController(tester);
+        expect(controller.page, closeTo(2, 0.01));
+
+        await tester.drag(
+          find.byKey(const Key('thread-image-reader-page-view')),
+          Offset(mode == 'ltr' ? -900 : 900, 0),
+        );
+        await tester.pumpAndSettle();
+        expect(controller.page, closeTo(3, 0.01));
+        expect(
+          tester
+              .widget<Text>(find.byKey(const Key('shared-reader-top-subtitle')))
+              .data,
+          '4 / 5',
+        );
+
+        await _tapReaderZone(
+          tester,
+          mode == 'ltr'
+              ? const Key('shared-reader-left-tap-zone')
+              : const Key('shared-reader-right-tap-zone'),
+        );
+        expect(controller.page, closeTo(2, 0.01));
+        expect(
+          tester
+              .widget<Text>(find.byKey(const Key('shared-reader-top-subtitle')))
+              .data,
+          '3 / 5',
+        );
+
+        await _tapReaderZone(
+          tester,
+          mode == 'ltr'
+              ? const Key('shared-reader-right-tap-zone')
+              : const Key('shared-reader-left-tap-zone'),
+        );
+        expect(controller.page, closeTo(3, 0.01));
+      },
+    );
+
+    testWidgets(
+      'ThreadImageReaderPage $mode slider previews a non-initial target',
+      (tester) async {
+        final recorder = _RecordingContinuousImageDiagnosticRecorder();
+        await _pumpHorizontalReader(
+          tester,
+          mode: mode,
+          diagnosticRecorder: recorder,
+        );
+        await _openReaderMenu(tester);
+
+        final slider = find.byKey(const Key('shared-reader-progress-slider'));
+        final gesture = await tester.startGesture(tester.getCenter(slider));
+        await gesture.moveBy(Offset(tester.getSize(slider).width * 0.42, 0));
+        await tester.pump();
+
+        expect(
+          tester
+              .widget<Text>(
+                find.byKey(const Key('shared-reader-current-label')),
+              )
+              .data,
+          '5',
+        );
+        await gesture.up();
+        await tester.pump();
+        await tester.pump();
+
+        expect(
+          recorder.events.any(
+            (event) =>
+                event.type ==
+                    ContinuousImageDiagnosticEventType.readerSessionCreated &&
+                event.ownerId == 'thread:100:post:p1' &&
+                event.mode == 'vertical' &&
+                event.index == 2,
+          ),
+          isTrue,
+        );
+        expect(
+          recorder.events.any(
+            (event) =>
+                event.type ==
+                    ContinuousImageDiagnosticEventType
+                        .initialRestoreCompleted &&
+                event.generation != null &&
+                event.status == 'consumed',
+          ),
+          isTrue,
+        );
+        expect(
+          recorder.events.any(
+            (event) =>
+                event.type == ContinuousImageDiagnosticEventType.seekStarted &&
+                event.mode == mode &&
+                event.generation == 1 &&
+                event.targetIndex == 4 &&
+                event.result == 'pending',
+          ),
+          isTrue,
+        );
+        expect(
+          recorder.events.any(
+            (event) =>
+                event.type == ContinuousImageDiagnosticEventType.seekReached &&
+                event.generation == 1 &&
+                event.targetIndex == 4,
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    testWidgets(
+      'ThreadImageReaderPage $mode slider seek remains at the released page '
+      '[known Phase 1 defect]',
+      (tester) async {
+        await _pumpHorizontalReader(tester, mode: mode);
+        await _openReaderMenu(tester);
+        final slider = find.byKey(const Key('shared-reader-progress-slider'));
+        final gesture = await tester.startGesture(tester.getCenter(slider));
+        await gesture.moveBy(Offset(tester.getSize(slider).width * 0.42, 0));
+        await tester.pump();
+        expect(find.text('5'), findsWidgets);
+
+        await gesture.up();
+        await tester.pump();
+        expect(_pageController(tester).page, closeTo(4, 0.01));
+
+        await tester.pump(const Duration(milliseconds: 16));
+        await tester.pump(const Duration(milliseconds: 16));
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(_pageController(tester).page, closeTo(4, 0.01));
+        expect(
+          tester
+              .widget<Text>(
+                find.byKey(const Key('shared-reader-current-label')),
+              )
+              .data,
+          '5',
+        );
+        expect(
+          tester
+              .widget<Text>(find.byKey(const Key('shared-reader-top-subtitle')))
+              .data,
+          '5 / 5',
+        );
+      },
+      // Phase 1 removes this skip after initial restore no longer overwrites a
+      // completed paged seek.
+      skip: true,
+    );
+  }
+
+  testWidgets(
+    'ThreadImageReaderPage records preload tasks without duplicates',
+    (tester) async {
+      final recorder = _RecordingContinuousImageDiagnosticRecorder();
+      final precacheService = _RecordingForumImagePrecacheService();
+      await _pumpHorizontalReader(
+        tester,
+        mode: 'ltr',
+        diagnosticRecorder: recorder,
+        precacheService: precacheService,
+      );
+      await tester.pump();
+
+      final scheduled = recorder.events
+          .where(
+            (event) =>
+                event.type ==
+                ContinuousImageDiagnosticEventType.prefetchScheduled,
+          )
+          .toList(growable: false);
+      final completed = recorder.events
+          .where(
+            (event) =>
+                event.type ==
+                ContinuousImageDiagnosticEventType.prefetchCompleted,
+          )
+          .toList(growable: false);
+      final taskIdentities = scheduled
+          .map((event) => '${event.itemId}:${event.preloadKind}')
+          .toSet();
+
+      expect(scheduled, hasLength(5));
+      expect(completed, hasLength(5));
+      expect(scheduled.length - taskIdentities.length, 0);
+      expect(scheduled.map((event) => event.readerKind).toSet(), <String>{
+        'thread',
+      });
+      expect(scheduled.map((event) => event.mode).toSet(), <String>{
+        'vertical',
+      });
+      expect(completed.every((event) => event.applied == true), isTrue);
+    },
+  );
+
+  testWidgets('ThreadImageReaderPage double tap zoom does not show overlay', (
+    tester,
+  ) async {
+    final recorder = _RecordingContinuousImageDiagnosticRecorder();
+    await _pumpHorizontalReader(
+      tester,
+      mode: 'ltr',
+      diagnosticRecorder: recorder,
+    );
+    final center = tester.getCenter(
+      find.byKey(const Key('shared-reader-center-tap-zone')),
+    );
+
+    await tester.tapAt(center);
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.tapAt(center);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 240));
+    await tester.pump(const Duration(milliseconds: 360));
+
+    final topGate = tester.widget<IgnorePointer>(
+      find.byKey(const Key('shared-reader-top-overlay-hit-test-gate')),
+    );
+    final bottomGate = tester.widget<IgnorePointer>(
+      find.byKey(const Key('shared-reader-bottom-overlay-hit-test-gate')),
+    );
+    expect(topGate.ignoring, isTrue);
+    expect(bottomGate.ignoring, isTrue);
+    expect(
+      recorder.events.any(
+        (event) =>
+            event.type == ContinuousImageDiagnosticEventType.zoomActivated,
+      ),
+      isTrue,
+    );
+
+    await tester.tapAt(center);
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.tapAt(center);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 240));
+    await tester.pump(const Duration(milliseconds: 360));
+
+    expect(
+      recorder.events.any(
+        (event) =>
+            event.type == ContinuousImageDiagnosticEventType.zoomDeactivated,
+      ),
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<IgnorePointer>(
+            find.byKey(const Key('shared-reader-top-overlay-hit-test-gate')),
+          )
+          .ignoring,
+      isTrue,
+    );
+  });
 }
 
-ThreadImageOpenRequest _request() {
-  final items = <ContinuousImageItem>[
-    const ContinuousImageItem(
+ThreadImageOpenRequest _request({int initialIndex = 0, int count = 5}) {
+  final items = List<ContinuousImageItem>.generate(count, (index) {
+    final page = index + 1;
+    return ContinuousImageItem(
       ownerId: 'thread:100:post:p1',
-      id: 'thread:100:post:p1:0:thread/inline/page-1',
-      url: 'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
-      cacheKey: 'thread/inline/page-1',
-      index: 0,
+      id: 'thread:100:post:p1:$index:thread/inline/page-$page',
+      url: 'https://bbs.yamibo.com/data/attachment/forum/page-$page.jpg',
+      cacheKey: 'thread/inline/page-$page',
+      index: index,
       sourceKind: ContinuousImageSourceKind.threadImageReader,
       knownWidth: 200,
       knownHeight: 120,
       knownDimensionSource: ContinuousImageDimensionSource.html,
       fallbackAspectRatio: 0.7,
       spacingAfter: 10,
-    ),
-    const ContinuousImageItem(
-      ownerId: 'thread:100:post:p1',
-      id: 'thread:100:post:p1:1:thread/inline/page-2',
-      url: 'https://bbs.yamibo.com/data/attachment/forum/page-2.jpg',
-      cacheKey: 'thread/inline/page-2',
-      index: 1,
-      sourceKind: ContinuousImageSourceKind.threadImageReader,
-      knownWidth: 200,
-      knownHeight: 120,
-      knownDimensionSource: ContinuousImageDimensionSource.html,
-      fallbackAspectRatio: 0.7,
-      spacingAfter: 10,
-    ),
-  ];
+    );
+  });
   return ThreadImageOpenRequest(
     tid: '100',
     pid: 'p1',
@@ -172,9 +423,80 @@ ThreadImageOpenRequest _request() {
       postNumber: 1,
       entries: <ThreadPostImageEntry>[],
     ),
-    initialIndex: 0,
+    initialIndex: initialIndex,
     continuousImages: items,
   );
+}
+
+Future<void> _pumpHorizontalReader(
+  WidgetTester tester, {
+  required String mode,
+  ContinuousImageDiagnosticRecorder diagnosticRecorder =
+      const NoopContinuousImageDiagnosticRecorder(),
+  ForumImagePrecacheService? precacheService,
+}) async {
+  SharedPreferences.setMockInitialValues(<String, Object>{
+    'reader_pref_mode': mode,
+  });
+  tester.view.physicalSize = const Size(1200, 1800);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        imageCacheServiceProvider.overrideWithValue(
+          _RecordingImageCacheService(),
+        ),
+        if (precacheService != null)
+          forumImagePrecacheServiceProvider.overrideWithValue(precacheService),
+      ],
+      child: MaterialApp(
+        home: ThreadImageReaderPage(
+          request: _request(initialIndex: 2),
+          diagnosticRecorder: diagnosticRecorder,
+        ),
+      ),
+    ),
+  );
+  await tester.pump();
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 20));
+}
+
+PageController _pageController(WidgetTester tester) {
+  final pageView = tester.widget<PageView>(
+    find.byKey(const Key('thread-image-reader-page-view')),
+  );
+  return pageView.controller!;
+}
+
+Future<void> _openReaderMenu(WidgetTester tester) async {
+  await tester.tapAt(
+    tester.getCenter(find.byKey(const Key('shared-reader-center-tap-zone'))),
+  );
+  await tester.pump(const Duration(milliseconds: 330));
+  await tester.pump(const Duration(milliseconds: 260));
+}
+
+Future<void> _tapReaderZone(WidgetTester tester, Key key) async {
+  await tester.tapAt(tester.getCenter(find.byKey(key)));
+  await tester.pump(const Duration(milliseconds: 330));
+  await tester.pumpAndSettle();
+}
+
+class _RecordingContinuousImageDiagnosticRecorder
+    implements ContinuousImageDiagnosticRecorder {
+  final events = <ContinuousImageDiagnosticEvent>[];
+
+  @override
+  bool get enabled => true;
+
+  @override
+  void recordContinuousImage(ContinuousImageDiagnosticEvent event) {
+    events.add(event);
+  }
 }
 
 class _RecordingImageCacheService implements ImageCacheService {

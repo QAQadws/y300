@@ -36,6 +36,7 @@ class ComicReaderCapability extends ReaderCapability {
     required this.onOpenAdjacentEpisode,
     required this.buildNextChapterTransition,
     required this.exitResult,
+    this.diagnosticRecorder = const NoopContinuousImageDiagnosticRecorder(),
   });
 
   final ComicReaderViewState viewState;
@@ -43,6 +44,11 @@ class ComicReaderCapability extends ReaderCapability {
   @override
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ComicReaderController controller;
+  @override
+  final ContinuousImageDiagnosticRecorder diagnosticRecorder;
+
+  @override
+  ReaderKind get readerKind => ReaderKind.comic;
 
   final VoidCallback onShowMoreActions;
   final VoidCallback onShowChapterList;

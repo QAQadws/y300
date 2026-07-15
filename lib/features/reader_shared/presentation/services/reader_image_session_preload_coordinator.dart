@@ -23,6 +23,7 @@ enum ReaderImageSessionPreloadKind { decoded, disk }
 
 class ReaderImageSessionPreloadResult {
   const ReaderImageSessionPreloadResult({
+    required this.readerOwnerId,
     required this.spec,
     required this.kind,
     required this.result,
@@ -30,6 +31,7 @@ class ReaderImageSessionPreloadResult {
     required this.applied,
   });
 
+  final String readerOwnerId;
   final ForumImageLoadSpec spec;
   final ReaderImageSessionPreloadKind kind;
   final ForumImagePrecacheResult result;
@@ -37,15 +39,33 @@ class ReaderImageSessionPreloadResult {
   final bool applied;
 }
 
+class ReaderImageSessionPreloadScheduled {
+  const ReaderImageSessionPreloadScheduled({
+    required this.readerOwnerId,
+    required this.spec,
+    required this.kind,
+    required this.generation,
+  });
+
+  final String readerOwnerId;
+  final ForumImageLoadSpec spec;
+  final ReaderImageSessionPreloadKind kind;
+  final int generation;
+}
+
 class ReaderImageSessionPreloadCoordinator {
   ReaderImageSessionPreloadCoordinator({
     ReaderImageSessionPreloadPolicy policy =
         ReaderImageSessionPreloadPolicy.aggressiveReaderSession,
+    void Function(ReaderImageSessionPreloadScheduled scheduled)? onScheduled,
     void Function(ReaderImageSessionPreloadResult result)? onResult,
   }) : _policy = policy,
+       _onScheduled = onScheduled,
        _onResult = onResult;
 
   final ReaderImageSessionPreloadPolicy _policy;
+  final void Function(ReaderImageSessionPreloadScheduled scheduled)?
+  _onScheduled;
   final void Function(ReaderImageSessionPreloadResult result)? _onResult;
   final Map<String, ReaderImageSessionPreloadKind> _scheduledByIdentity =
       <String, ReaderImageSessionPreloadKind>{};
@@ -96,6 +116,7 @@ class ReaderImageSessionPreloadCoordinator {
       final distance = (index - clampedFocus).abs();
       requests.add(
         ReaderImageSessionPreloadRequest(
+          readerOwnerId: content.ownerId,
           index: index,
           spec: spec,
           kind: distance <= _policy.decodedRadius
@@ -130,6 +151,7 @@ class ReaderImageSessionPreloadCoordinator {
       if (!_markScheduled(request)) {
         continue;
       }
+      _notifyScheduled(request: request, generation: generation);
       switch (request.kind) {
         case ReaderImageSessionPreloadKind.decoded:
           unawaited(
@@ -173,6 +195,24 @@ class ReaderImageSessionPreloadCoordinator {
     _notifyResult(request: request, generation: generation, result: result);
   }
 
+  void _notifyScheduled({
+    required ReaderImageSessionPreloadRequest request,
+    required int generation,
+  }) {
+    try {
+      _onScheduled?.call(
+        ReaderImageSessionPreloadScheduled(
+          readerOwnerId: request.readerOwnerId,
+          spec: request.spec,
+          kind: request.kind,
+          generation: generation,
+        ),
+      );
+    } catch (_) {
+      // Observability callbacks must not prevent the preload from starting.
+    }
+  }
+
   Future<void> _runDisk({
     required ReaderImageSessionPreloadRequest request,
     required int generation,
@@ -194,6 +234,7 @@ class ReaderImageSessionPreloadCoordinator {
   }) {
     _onResult?.call(
       ReaderImageSessionPreloadResult(
+        readerOwnerId: request.readerOwnerId,
         spec: request.spec,
         kind: request.kind,
         result: result,
@@ -262,11 +303,13 @@ class ReaderImageSessionPreloadCoordinator {
 
 class ReaderImageSessionPreloadRequest {
   const ReaderImageSessionPreloadRequest({
+    required this.readerOwnerId,
     required this.index,
     required this.spec,
     required this.kind,
   });
 
+  final String readerOwnerId;
   final int index;
   final ForumImageLoadSpec spec;
   final ReaderImageSessionPreloadKind kind;

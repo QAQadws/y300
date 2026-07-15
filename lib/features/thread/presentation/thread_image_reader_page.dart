@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_presentation.dart';
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
@@ -17,11 +18,13 @@ class ThreadImageReaderPage extends StatelessWidget {
     required this.request,
     this.imageHeaderBuilder,
     this.mode = ContinuousImageReaderMode.vertical,
+    this.diagnosticRecorder = const NoopContinuousImageDiagnosticRecorder(),
   });
 
   final ThreadImageOpenRequest request;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ContinuousImageReaderMode mode;
+  final ContinuousImageDiagnosticRecorder diagnosticRecorder;
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +36,7 @@ class ThreadImageReaderPage extends StatelessWidget {
       capability: ThreadImageReaderCapability(
         request: request,
         imageHeaderBuilder: imageHeaderBuilder,
+        diagnosticRecorder: diagnosticRecorder,
       ),
     );
   }

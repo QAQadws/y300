@@ -546,6 +546,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         builder: (_) => ThreadImageReaderPage(
           request: readerRequest,
           imageHeaderBuilder: _latestImageHeaderBuilder,
+          diagnosticRecorder: ref.read(threadDetailDiagnosticRecorderProvider),
         ),
       ),
     );

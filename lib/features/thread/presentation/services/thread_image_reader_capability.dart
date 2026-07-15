@@ -19,13 +19,19 @@ class ThreadImageReaderCapability extends ReaderCapability {
   ThreadImageReaderCapability({
     required this.request,
     required this.imageHeaderBuilder,
+    this.diagnosticRecorder = const NoopContinuousImageDiagnosticRecorder(),
     this.title = '图片阅读',
   });
 
   final ThreadImageOpenRequest request;
   @override
+  final ContinuousImageDiagnosticRecorder diagnosticRecorder;
+  @override
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final String title;
+
+  @override
+  ReaderKind get readerKind => ReaderKind.thread;
 
   @override
   ReaderContent get content {
