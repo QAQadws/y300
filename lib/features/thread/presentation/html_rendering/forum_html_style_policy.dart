@@ -6,17 +6,21 @@ import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/reader_shared/domain/rich_text/typography/discuz_font_size_policy.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/css_inline_style_declarations.dart';
 
 class ForumHtmlStylePolicy {
   const ForumHtmlStylePolicy(
     this.preferences, {
     this.quoteBackgroundColor = const Color(0xFFF2F2F2),
     this.quoteAccentColor = const Color(0xFFBDBDBD),
-  });
+    CssInlineStyleDeclarationCodec inlineStyleDeclarationCodec =
+        const CssInlineStyleDeclarationCodec(),
+  }) : _inlineStyleDeclarationCodec = inlineStyleDeclarationCodec;
 
   final ForumHtmlReaderPreferences preferences;
   final Color quoteBackgroundColor;
   final Color quoteAccentColor;
+  final CssInlineStyleDeclarationCodec _inlineStyleDeclarationCodec;
 
   TextStyle baseTextStyle(BuildContext context) {
     final fallback = Theme.of(context).textTheme.bodyMedium;
@@ -96,14 +100,26 @@ class ForumHtmlStylePolicy {
 
   String prepareHtml(String html) {
     final fragment = html_parser.parseFragment(html);
+    prepareFragment(fragment);
+    return fragment.nodes.map(_serializeNode).join();
+  }
+
+  void prepareFragment(html_dom.DocumentFragment fragment) {
+    normalizeStructure(fragment);
+    normalizeAuthorStyles(fragment);
+  }
+
+  void normalizeStructure(html_dom.DocumentFragment fragment) {
     for (final editStatus in fragment.querySelectorAll('.pstatus')) {
       _normalizeEditStatusSpacing(editStatus);
     }
+  }
+
+  void normalizeAuthorStyles(html_dom.DocumentFragment fragment) {
     for (final element in fragment.querySelectorAll('[style],font')) {
       _sanitizeStyle(element);
       _sanitizeFontElement(element);
     }
-    return fragment.nodes.map(_serializeNode).join();
   }
 
   void _normalizeEditStatusSpacing(html_dom.Element editStatus) {
@@ -222,29 +238,22 @@ class ForumHtmlStylePolicy {
     if (style == null || style.trim().isEmpty) {
       return;
     }
-
-    final kept = <String>[];
-    for (final declaration in style.split(';')) {
-      final trimmed = declaration.trim();
-      if (trimmed.isEmpty) {
-        continue;
-      }
-      final colonIndex = trimmed.indexOf(':');
-      if (colonIndex <= 0) {
-        kept.add(trimmed);
-        continue;
-      }
-      final property = trimmed.substring(0, colonIndex).trim().toLowerCase();
-      if (_shouldDropStyleProperty(property)) {
-        continue;
-      }
-      kept.add(trimmed);
+    final parsed = _inlineStyleDeclarationCodec.tryParse(style);
+    if (parsed == null) {
+      return;
     }
-
-    if (kept.isEmpty) {
+    final kept = CssInlineStyleDeclarationList(
+      parsed.declarations.where(
+        (declaration) => !_shouldDropStyleProperty(declaration.property),
+      ),
+    );
+    if (kept.declarations.length == parsed.declarations.length) {
+      return;
+    }
+    if (kept.declarations.isEmpty) {
       element.attributes.remove('style');
     } else {
-      element.attributes['style'] = kept.join('; ');
+      element.attributes['style'] = kept.toCss();
     }
   }
 
@@ -267,43 +276,31 @@ class ForumHtmlStylePolicy {
     if (size == null || size.isEmpty) {
       return;
     }
-    element.attributes.remove('size');
     final percent = DiscuzFontSizePolicy.cssPercentFor(size);
     if (percent == null) {
+      element.attributes.remove('size');
       return;
     }
-    _upsertStyleDeclaration(element, 'font-size', percent);
+    if (_upsertStyleDeclaration(element, 'font-size', percent)) {
+      element.attributes.remove('size');
+    }
   }
 
-  void _upsertStyleDeclaration(
+  bool _upsertStyleDeclaration(
     html_dom.Element element,
     String property,
     String value,
   ) {
-    final targetProperty = property.toLowerCase();
-    final declarations = <String>[];
-    final style = element.attributes['style'];
-    if (style != null && style.trim().isNotEmpty) {
-      for (final declaration in style.split(';')) {
-        final trimmed = declaration.trim();
-        if (trimmed.isEmpty) {
-          continue;
-        }
-        final colonIndex = trimmed.indexOf(':');
-        if (colonIndex > 0) {
-          final currentProperty = trimmed
-              .substring(0, colonIndex)
-              .trim()
-              .toLowerCase();
-          if (currentProperty == targetProperty) {
-            continue;
-          }
-        }
-        declarations.add(trimmed);
-      }
+    final parsed = _inlineStyleDeclarationCodec.tryParse(
+      element.attributes['style'] ?? '',
+    );
+    if (parsed == null) {
+      return false;
     }
-    declarations.add('$property: $value');
-    element.attributes['style'] = declarations.join('; ');
+    element.attributes['style'] = parsed
+        .upsert(property: property, value: value)
+        .toCss();
+    return true;
   }
 
   bool _shouldDropStyleProperty(String property) {

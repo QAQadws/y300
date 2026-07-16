@@ -1,12 +1,10 @@
-import 'dart:convert';
-
 import 'package:html/dom.dart' as html_dom;
-import 'package:html/parser.dart' as html_parser;
 import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_fragment_codec.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_image_deduplicator.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
@@ -28,13 +26,17 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
         const DefaultForumImageRequestResolver(),
     ForumHtmlImageDeduplicator imageDeduplicator =
         const ForumHtmlImageDeduplicator(),
+    ForumHtmlFragmentCodec fragmentCodec =
+        const HtmlPackageForumHtmlFragmentCodec(),
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
   }) : _imageRequestResolver = imageRequestResolver,
        _imageDeduplicator = imageDeduplicator,
+       _fragmentCodec = fragmentCodec,
        _urlResolver = urlResolver;
 
   final ForumImageRequestResolver _imageRequestResolver;
   final ForumHtmlImageDeduplicator _imageDeduplicator;
+  final ForumHtmlFragmentCodec _fragmentCodec;
   final SiteUrlResolver _urlResolver;
 
   @override
@@ -46,11 +48,10 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
     required String? imageCacheOwnerId,
   }) {
     final stylePolicy = ForumHtmlStylePolicy(preferences);
-    final sanitized = stylePolicy.prepareHtml(html);
-    final deduplicated = _imageDeduplicator.deduplicateAttachmentImages(
-      sanitized,
-    );
-    final fragment = html_parser.parseFragment(deduplicated);
+    final fragment = _fragmentCodec.parse(html);
+    stylePolicy.normalizeStructure(fragment);
+    stylePolicy.normalizeAuthorStyles(fragment);
+    _imageDeduplicator.deduplicateAttachmentImagesInFragment(fragment);
     final entries = <ForumHtmlReadableImageEntry>[];
     final attachmentIdsByUrl = <String, String>{};
     final readableUrlCounts = <String, int>{};
@@ -154,7 +155,7 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
     }
 
     return ForumHtmlPreparedRenderDocument(
-      preparedHtml: fragment.nodes.map(_serializeNode).join(),
+      preparedHtml: _fragmentCodec.serialize(fragment),
       sequence: ForumHtmlReadableImageSequence(
         sourceId: sourceId,
         entries: List<ForumHtmlReadableImageEntry>.unmodifiable(entries),
@@ -252,15 +253,5 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
   bool _isForumStickerImage(String url) {
     return url.contains('/static/image/smiley/') ||
         url.contains('static/image/smiley/');
-  }
-
-  String _serializeNode(html_dom.Node node) {
-    if (node is html_dom.Element) {
-      return node.outerHtml;
-    }
-    if (node is html_dom.Text) {
-      return const HtmlEscape().convert(node.data);
-    }
-    return node.text ?? '';
   }
 }

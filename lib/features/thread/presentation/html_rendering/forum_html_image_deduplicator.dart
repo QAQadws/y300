@@ -25,8 +25,18 @@ class ForumHtmlImageDeduplicator {
     }
 
     final fragment = html_parser.parseFragment(html);
+    final removedCount = deduplicateAttachmentImagesInFragment(fragment);
+    if (removedCount == 0) {
+      return html;
+    }
+    return fragment.nodes.map(_serializeNode).join();
+  }
+
+  int deduplicateAttachmentImagesInFragment(
+    html_dom.DocumentFragment fragment,
+  ) {
     final seen = <String>{};
-    var removedAny = false;
+    var removedCount = 0;
 
     for (final image in fragment.querySelectorAll('img')) {
       final key = _attachmentImageKey(image);
@@ -37,13 +47,9 @@ class ForumHtmlImageDeduplicator {
         continue;
       }
       image.remove();
-      removedAny = true;
+      removedCount++;
     }
-
-    if (!removedAny) {
-      return html;
-    }
-    return fragment.nodes.map(_serializeNode).join();
+    return removedCount;
   }
 
   String? _attachmentImageKey(html_dom.Element image) {
