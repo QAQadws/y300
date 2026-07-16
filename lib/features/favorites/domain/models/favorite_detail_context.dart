@@ -15,3 +15,20 @@ class FavoriteDetailContext {
   final ThreadContentKind kind;
   final String? tagName;
 }
+
+sealed class FavoriteDetailResolution {
+  const FavoriteDetailResolution();
+}
+
+class ResolvedFavoriteDetail extends FavoriteDetailResolution {
+  const ResolvedFavoriteDetail(this.context);
+
+  final FavoriteDetailContext context;
+}
+
+class InvalidFavoriteDetail extends FavoriteDetailResolution {
+  const InvalidFavoriteDetail({required this.record, required this.detail});
+
+  final FavoriteThreadCacheRecord record;
+  final ThreadDetailData detail;
+}

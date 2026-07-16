@@ -831,6 +831,9 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   }) async {}
 
   @override
+  Future<void> markThreadDetailInvalid({required String tid}) async {}
+
+  @override
   Future<int> upsertRemotePage({
     required FavoriteThreadsPage page,
     required int pageStartOrder,

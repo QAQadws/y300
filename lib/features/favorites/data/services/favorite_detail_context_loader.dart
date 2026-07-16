@@ -17,7 +17,7 @@ abstract class FavoriteDetailContextLoader {
     FavoriteSyncExecutionContext? executionContext,
   });
 
-  Future<ApiResult<FavoriteDetailContext>> load(
+  Future<ApiResult<FavoriteDetailResolution>> load(
     FavoriteThreadCacheRecord record, {
     ThreadDetailData? preloadedDetail,
     FavoriteSyncExecutionContext? executionContext,
@@ -31,11 +31,11 @@ class DefaultFavoriteDetailContextLoader
     required FavoriteTagLookupLoader loadTagLookup,
     required ThreadContentClassifier classifier,
     SyncDiagnosticRecorder? diagnosticRecorder,
-  })  : _loadThreadDetail = loadThreadDetail,
-        _loadTagLookup = loadTagLookup,
-        _classifier = classifier,
-        _diagnosticRecorder =
-            diagnosticRecorder ?? const NoopSyncDiagnosticRecorder();
+  }) : _loadThreadDetail = loadThreadDetail,
+       _loadTagLookup = loadTagLookup,
+       _classifier = classifier,
+       _diagnosticRecorder =
+           diagnosticRecorder ?? const NoopSyncDiagnosticRecorder();
 
   final FavoriteThreadDetailLoader _loadThreadDetail;
   final FavoriteTagLookupLoader _loadTagLookup;
@@ -66,7 +66,7 @@ class DefaultFavoriteDetailContextLoader
   }
 
   @override
-  Future<ApiResult<FavoriteDetailContext>> load(
+  Future<ApiResult<FavoriteDetailResolution>> load(
     FavoriteThreadCacheRecord record, {
     ThreadDetailData? preloadedDetail,
     FavoriteSyncExecutionContext? executionContext,
@@ -81,30 +81,35 @@ class DefaultFavoriteDetailContextLoader
       );
     }
     if (detailResult is ApiFailure<ThreadDetailData>) {
-      return ApiFailure<FavoriteDetailContext>(detailResult.error);
+      return ApiFailure<FavoriteDetailResolution>(detailResult.error);
     }
     final detail = detailResult.dataOrNull;
     if (detail == null) {
-      return const ApiFailure<FavoriteDetailContext>(
+      return const ApiFailure<FavoriteDetailResolution>(
         ApiError(type: ApiErrorType.network, message: '加载帖子详情失败'),
       );
     }
 
-    final tagName = await _findTagName(
-      fid: detail.fid,
-      typeid: detail.typeid,
-    );
+    if (detail.posts.isEmpty) {
+      return ApiSuccess<FavoriteDetailResolution>(
+        InvalidFavoriteDetail(record: record, detail: detail),
+      );
+    }
+
+    final tagName = await _findTagName(fid: detail.fid, typeid: detail.typeid);
     final kind = _classifier.classify(
       fid: detail.fid,
       typeid: detail.typeid,
       tagName: tagName,
     );
-    return ApiSuccess(
-      FavoriteDetailContext(
-        record: record,
-        detail: detail,
-        kind: kind,
-        tagName: tagName,
+    return ApiSuccess<FavoriteDetailResolution>(
+      ResolvedFavoriteDetail(
+        FavoriteDetailContext(
+          record: record,
+          detail: detail,
+          kind: kind,
+          tagName: tagName,
+        ),
       ),
     );
   }

@@ -447,6 +447,9 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
     required ThreadContentKind contentKind,
     required String? workId,
   }) async {}
+
+  @override
+  Future<void> markThreadDetailInvalid({required String tid}) async {}
 }
 
 class _FakeWorkPurgeService implements WorkPurgeService {

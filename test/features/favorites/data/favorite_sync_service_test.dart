@@ -86,6 +86,142 @@ void main() {
   );
 
   test(
+    'first sync classifies empty postlist as a completed invalid detail',
+    () async {
+      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+        1: _page(
+          page: 1,
+          totalCount: 1,
+          items: <FavoriteThread>[_favoriteThread(tid: '404', title: '失效收藏')],
+        ),
+      });
+      final local = _MemoryLocalFavoriteRepository();
+      final comicIngest = _FakeComicIngestService();
+      final novelIngest = _FakeNovelIngestService();
+      final service = _service(
+        remoteRepository: remote,
+        localRepository: local,
+        detailContextLoader: _contextLoader(
+          loadThreadDetail: (tid) async =>
+              ApiSuccess(_invalidDetailForTid(tid)),
+        ),
+        comicIngestService: comicIngest,
+        novelIngestService: novelIngest,
+        detailBatchLimit: 10,
+      );
+
+      final result = await service.sync();
+
+      expect(result.mode, FavoriteSyncMode.fullDiff);
+      expect(result.detailLoadedCount, 1);
+      expect(result.failedDetailTids, isEmpty);
+      expect(local.records['404']?.detailState, FavoriteDetailState.invalid);
+      expect(local.records['404']?.contentKind, ThreadContentKind.unknown);
+      expect(local.records['404']?.workId, isNull);
+      expect(comicIngest.upsertedTids, isEmpty);
+      expect(novelIngest.upsertedTids, isEmpty);
+    },
+  );
+
+  test(
+    'incremental sync persists invalid detail without retrying it',
+    () async {
+      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+        1: _page(
+          page: 1,
+          totalCount: 2,
+          items: <FavoriteThread>[
+            _favoriteThread(tid: '404', title: '新增失效收藏'),
+            _favoriteThread(tid: '999', title: '旧收藏'),
+          ],
+        ),
+      });
+      final local = _MemoryLocalFavoriteRepository(
+        snapshot: FavoriteSyncSnapshot(
+          syncKey: favoriteSyncKey,
+          remoteCount: 1,
+          localActiveCount: 1,
+          lastSyncedAt: DateTime(2026, 1, 1),
+        ),
+        seedRecords: <FavoriteThreadCacheRecord>[
+          _cacheRecord(
+            tid: '999',
+            title: '旧收藏',
+            contentKind: ThreadContentKind.forum,
+            workId: 'thread:999',
+            detailLoadedAt: DateTime(2026, 1, 1),
+          ),
+        ],
+      );
+      var detailLoadCount = 0;
+      final service = _service(
+        remoteRepository: remote,
+        localRepository: local,
+        detailContextLoader: _contextLoader(
+          loadThreadDetail: (tid) async {
+            detailLoadCount++;
+            return ApiSuccess(_invalidDetailForTid(tid));
+          },
+        ),
+        detailBatchLimit: 10,
+      );
+
+      final first = await service.sync();
+      final second = await service.sync();
+
+      expect(first.mode, FavoriteSyncMode.incremental);
+      expect(first.failedDetailTids, isEmpty);
+      expect(second.failedDetailTids, isEmpty);
+      expect(local.records['404']?.detailState, FavoriteDetailState.invalid);
+      expect(detailLoadCount, 1);
+    },
+  );
+
+  test('recently added sync accepts an empty postlist as invalid', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      1: _page(
+        page: 1,
+        totalCount: 2,
+        items: <FavoriteThread>[
+          _favoriteThread(tid: '404', title: '刚收藏的失效帖'),
+          _favoriteThread(tid: '999', title: '旧收藏'),
+        ],
+      ),
+    });
+    final local = _MemoryLocalFavoriteRepository(
+      snapshot: FavoriteSyncSnapshot(
+        syncKey: favoriteSyncKey,
+        remoteCount: 1,
+        localActiveCount: 1,
+        lastSyncedAt: DateTime(2026, 1, 1),
+      ),
+      seedRecords: <FavoriteThreadCacheRecord>[
+        _cacheRecord(
+          tid: '999',
+          title: '旧收藏',
+          contentKind: ThreadContentKind.forum,
+          workId: 'thread:999',
+          detailLoadedAt: DateTime(2026, 1, 1),
+        ),
+      ],
+    );
+    final service = _service(
+      remoteRepository: remote,
+      localRepository: local,
+      detailContextLoader: _contextLoader(
+        loadThreadDetail: (tid) async => ApiSuccess(_invalidDetailForTid(tid)),
+      ),
+      detailBatchLimit: 10,
+    );
+
+    final result = await service.syncRecentlyAddedThread(tid: '404');
+
+    expect(result.failedDetailTids, isEmpty);
+    expect(result.detailLoadedCount, 1);
+    expect(local.records['404']?.detailState, FavoriteDetailState.invalid);
+  });
+
+  test(
     'first sync creates and uses bootstrap governor when snapshot is null',
     () async {
       final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
@@ -1870,7 +2006,11 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
   @override
   Future<int> countMissingDetailRecords() async {
     return records.values
-        .where((record) => record.isActive && record.detailLoadedAt == null)
+        .where(
+          (record) =>
+              record.isActive &&
+              record.detailState == FavoriteDetailState.pending,
+        )
         .length;
   }
 
@@ -1959,6 +2099,7 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
         workId: record.workId,
         sourceTagName: record.sourceTagName,
         detailLoadedAt: record.detailLoadedAt,
+        detailState: record.detailState,
         removedAt: DateTime(2026, 1, 2),
       );
       changed++;
@@ -1981,6 +2122,7 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
         workId: record.workId,
         sourceTagName: record.sourceTagName,
         detailLoadedAt: record.detailLoadedAt,
+        detailState: record.detailState,
         removedAt: DateTime(2026, 1, 2),
       );
       changed++;
@@ -1997,7 +2139,7 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
         .where(
           (record) =>
               record.isActive &&
-              record.detailLoadedAt == null &&
+              record.detailState == FavoriteDetailState.pending &&
               !excludedTids.contains(record.tid),
         )
         .take(limit)
@@ -2060,6 +2202,8 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
         contentKind: record.contentKind,
         workId: record.workId,
         sourceTagName: record.sourceTagName,
+        detailLoadedAt: record.detailLoadedAt,
+        detailState: record.detailState,
         removedAt: DateTime(2026, 1, 2),
       );
     }
@@ -2106,6 +2250,19 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
       workId: workId,
       sourceTagName: tagName,
       detailLoadedAt: DateTime(2026, 1, 1),
+      detailState: FavoriteDetailState.resolved,
+    );
+  }
+
+  @override
+  Future<void> markThreadDetailInvalid({required String tid}) async {
+    final old = records[tid]!;
+    records[tid] = _cacheRecord(
+      tid: tid,
+      title: old.title,
+      contentKind: ThreadContentKind.unknown,
+      detailLoadedAt: DateTime(2026, 1, 1),
+      detailState: FavoriteDetailState.invalid,
     );
   }
 
@@ -2162,6 +2319,7 @@ FavoriteThreadCacheRecord _cacheRecord({
   String? sourceTypeid,
   String? sourceTagName,
   DateTime? detailLoadedAt,
+  FavoriteDetailState? detailState,
   DateTime? removedAt,
 }) {
   return FavoriteThreadCacheRecord(
@@ -2175,6 +2333,11 @@ FavoriteThreadCacheRecord _cacheRecord({
     contentKind: contentKind,
     workId: workId,
     detailLoadedAt: detailLoadedAt,
+    detailState:
+        detailState ??
+        (detailLoadedAt == null
+            ? FavoriteDetailState.pending
+            : FavoriteDetailState.resolved),
     firstSeenAt: DateTime(2026, 1, 1),
     lastSeenAt: DateTime(2026, 1, 1),
     removedAt: removedAt,
@@ -2213,6 +2376,21 @@ ThreadDetailData _detailForTid(String tid) {
         dateline: '2026-01-01',
       ),
     ],
+  );
+}
+
+ThreadDetailData _invalidDetailForTid(String tid) {
+  return ThreadDetailData(
+    tid: tid,
+    fid: '',
+    typeid: '',
+    subject: '失效主题$tid',
+    author: '',
+    replies: 0,
+    views: 0,
+    currentPage: 1,
+    perPage: 20,
+    posts: const <ThreadPost>[],
   );
 }
 

@@ -138,6 +138,62 @@ void main() {
       },
     );
 
+    test(
+      'database v32 backfills favorite detail state without data loss',
+      () async {
+        final legacyDb = await dbFuture;
+        await legacyDb
+            .insert(ComicLocalDb.favoriteThreadsTable, <String, Object?>{
+              'tid': 'resolved',
+              'title': '已补全收藏',
+              'detail_loaded_at': 1783900800000,
+              'first_seen_at': 1783900800000,
+              'last_seen_at': 1783900800000,
+            });
+        await legacyDb
+            .insert(ComicLocalDb.favoriteThreadsTable, <String, Object?>{
+              'tid': 'pending',
+              'title': '待补全收藏',
+              'first_seen_at': 1783900800000,
+              'last_seen_at': 1783900800000,
+            });
+        await legacyDb.execute(
+          'DROP INDEX idx_favorite_threads_active_detail_state_order',
+        );
+        await legacyDb.execute(
+          'ALTER TABLE ${ComicLocalDb.favoriteThreadsTable} '
+          'DROP COLUMN detail_state',
+        );
+        await legacyDb.setVersion(32);
+        await legacyDb.close();
+
+        final upgradedDb = await ComicLocalDb.open();
+        addTearDown(upgradedDb.close);
+        final columns = await upgradedDb.rawQuery(
+          'PRAGMA table_info(${ComicLocalDb.favoriteThreadsTable})',
+        );
+        final rows = await upgradedDb.query(
+          ComicLocalDb.favoriteThreadsTable,
+          orderBy: 'tid ASC',
+        );
+        final indexNames = (await upgradedDb.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type = 'index'",
+        )).map((row) => row['name']);
+
+        expect(
+          columns.map((column) => column['name']),
+          contains('detail_state'),
+        );
+        expect(rows.map((row) => row['tid']), <Object?>['pending', 'resolved']);
+        expect(rows[0]['detail_state'], 'pending');
+        expect(rows[1]['detail_state'], 'resolved');
+        expect(
+          indexNames,
+          contains('idx_favorite_threads_active_detail_state_order'),
+        );
+      },
+    );
+
     test('adds comic to shelf and can query shelf state', () async {
       await repository.addToShelf(
         comicId: 'yamibo:100',

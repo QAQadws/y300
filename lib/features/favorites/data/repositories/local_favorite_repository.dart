@@ -61,6 +61,8 @@ abstract class LocalFavoriteRepository {
     required String? workId,
   });
 
+  Future<void> markThreadDetailInvalid({required String tid});
+
   Future<List<FavoriteThreadCacheRecord>> markRemovedTids(
     Set<String> activeRemoteTids,
   );
@@ -139,6 +141,7 @@ class SqfliteLocalFavoriteRepository
     favoriteDefaultCategoryId,
     favoriteComicCategoryId,
     favoriteNovelCategoryId,
+    favoriteInvalidCategoryId,
   };
 
   @override
@@ -177,7 +180,7 @@ class SqfliteLocalFavoriteRepository
       SELECT COUNT(*) AS count
       FROM ${ComicLocalDb.favoriteThreadsTable}
       WHERE removed_at IS NULL
-        AND detail_loaded_at IS NULL
+        AND detail_state = 'pending'
       ''',
     );
     return rows.first['count'] as int? ?? 0;
@@ -347,6 +350,9 @@ class SqfliteLocalFavoriteRepository
               'content_kind': 'unknown',
               'work_id': null,
               'detail_loaded_at': null,
+              'detail_state': favoriteDetailStateToDb(
+                FavoriteDetailState.pending,
+              ),
             },
           );
         } else {
@@ -378,7 +384,7 @@ class SqfliteLocalFavoriteRepository
       LEFT JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
         ON fc.tid = ft.tid
       WHERE ft.removed_at IS NULL
-        AND ft.detail_loaded_at IS NULL
+        AND ft.detail_state = 'pending'
       ORDER BY ft.remote_order ASC, ft.last_seen_at DESC
       LIMIT ?
       ''',
@@ -448,6 +454,28 @@ class SqfliteLocalFavoriteRepository
         'content_kind': favoriteContentKindToDb(contentKind),
         'work_id': _normalizeNullable(workId),
         'detail_loaded_at': DateTime.now().millisecondsSinceEpoch,
+        'detail_state': favoriteDetailStateToDb(
+          FavoriteDetailState.resolved,
+        ),
+      },
+      where: 'tid = ?',
+      whereArgs: <Object>[tid.trim()],
+    );
+  }
+
+  @override
+  Future<void> markThreadDetailInvalid({required String tid}) async {
+    final db = await _dbFuture;
+    await db.update(
+      ComicLocalDb.favoriteThreadsTable,
+      <String, Object?>{
+        'source_fid': null,
+        'source_typeid': null,
+        'source_tag_name': null,
+        'content_kind': favoriteContentKindToDb(ThreadContentKind.unknown),
+        'work_id': null,
+        'detail_loaded_at': DateTime.now().millisecondsSinceEpoch,
+        'detail_state': favoriteDetailStateToDb(FavoriteDetailState.invalid),
       },
       where: 'tid = ?',
       whereArgs: <Object>[tid.trim()],
@@ -639,13 +667,29 @@ class SqfliteLocalFavoriteRepository
       );
     }
 
+    final invalidCount = await _countSystemCategory(
+      db,
+      favoriteInvalidCategoryId,
+    );
+    if (invalidCount > 0) {
+      categories.add(
+        LibraryCategory(
+          categoryId: favoriteInvalidCategoryId,
+          name: '无效',
+          sortOrder: 2,
+          createdAt: now,
+          visibleMatchCount: invalidCount,
+        ),
+      );
+    }
+
     final defaultCount = await _countSystemCategory(db, favoriteDefaultCategoryId);
     if (defaultCount > 0) {
       categories.add(
         LibraryCategory(
           categoryId: favoriteDefaultCategoryId,
           name: '默认',
-          sortOrder: 2,
+          sortOrder: 3,
           createdAt: now,
           visibleMatchCount: defaultCount,
         ),
@@ -897,7 +941,7 @@ class SqfliteLocalFavoriteRepository
       LEFT JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
         ON fc.tid = ft.tid
       WHERE ft.removed_at IS NULL
-        AND fc.category_id IS NULL
+        AND ${_systemCategoryAssignmentSqlCondition(categoryId)}
         AND ${_systemCategorySqlCondition(categoryId)}
       ''',
     );
@@ -913,6 +957,7 @@ class SqfliteLocalFavoriteRepository
         ON fc.tid = ft.tid
       WHERE ft.removed_at IS NULL
         AND fc.category_id = ?
+        AND ft.detail_state <> 'invalid'
       ''',
       <Object>[categoryId],
     );
@@ -932,7 +977,7 @@ class SqfliteLocalFavoriteRepository
         LEFT JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
           ON fc.tid = ft.tid
         WHERE ft.removed_at IS NULL
-          AND fc.category_id IS NULL
+          AND ${_systemCategoryAssignmentSqlCondition(categoryId)}
           AND ${_systemCategorySqlCondition(categoryId)}
         ORDER BY ft.remote_order ASC, ft.dateline DESC, ft.last_seen_at DESC
         ''',
@@ -946,6 +991,7 @@ class SqfliteLocalFavoriteRepository
           ON fc.tid = ft.tid
         WHERE ft.removed_at IS NULL
           AND fc.category_id = ?
+          AND ft.detail_state <> 'invalid'
         ORDER BY ft.remote_order ASC, ft.dateline DESC, ft.last_seen_at DESC
         ''',
         <Object>[categoryId],
@@ -987,13 +1033,26 @@ class SqfliteLocalFavoriteRepository
       );
     }
 
+    final invalidCount = rawCountByCategory[favoriteInvalidCategoryId] ?? 0;
+    if (invalidCount > 0) {
+      categories.add(
+        LibraryCategory(
+          categoryId: favoriteInvalidCategoryId,
+          name: '无效',
+          sortOrder: 2,
+          createdAt: now,
+          visibleMatchCount: invalidCount,
+        ),
+      );
+    }
+
     final defaultCount = rawCountByCategory[favoriteDefaultCategoryId] ?? 0;
     if (defaultCount > 0) {
       categories.add(
         LibraryCategory(
           categoryId: favoriteDefaultCategoryId,
           name: '默认',
-          sortOrder: 2,
+          sortOrder: 3,
           createdAt: now,
           visibleMatchCount: defaultCount,
         ),
@@ -1023,13 +1082,22 @@ class SqfliteLocalFavoriteRepository
   String _systemCategorySqlCondition(String categoryId) {
     switch (categoryId) {
       case favoriteComicCategoryId:
-        return "ft.content_kind = 'comic'";
+        return "ft.detail_state <> 'invalid' AND ft.content_kind = 'comic'";
       case favoriteNovelCategoryId:
-        return "ft.content_kind = 'novel'";
+        return "ft.detail_state <> 'invalid' AND ft.content_kind = 'novel'";
+      case favoriteInvalidCategoryId:
+        return "ft.detail_state = 'invalid'";
       case favoriteDefaultCategoryId:
       default:
-        return "(ft.content_kind IS NULL OR ft.content_kind NOT IN ('comic', 'novel'))";
+        return "ft.detail_state <> 'invalid' AND "
+            "(ft.content_kind IS NULL OR ft.content_kind NOT IN ('comic', 'novel'))";
     }
+  }
+
+  String _systemCategoryAssignmentSqlCondition(String categoryId) {
+    return categoryId == favoriteInvalidCategoryId
+        ? '1 = 1'
+        : 'fc.category_id IS NULL';
   }
 
   Future<LibraryWorkItem> _mapWorkItem(
@@ -1094,6 +1162,10 @@ class SqfliteLocalFavoriteRepository
   }
 
   String _resolvedCategoryIdFromRow(Map<String, Object?> row) {
+    if (favoriteDetailStateFromDb(row['detail_state'] as String?) ==
+        FavoriteDetailState.invalid) {
+      return favoriteInvalidCategoryId;
+    }
     final custom = _normalizeNullable(row['custom_category_id'] as String?);
     if (custom != null) {
       return custom;
@@ -1257,6 +1329,7 @@ class SqfliteLocalFavoriteRepository
       contentKind: favoriteContentKindFromDb(row['content_kind'] as String?),
       workId: row['work_id'] as String?,
       detailLoadedAt: _toDateTime(row['detail_loaded_at']),
+      detailState: favoriteDetailStateFromDb(row['detail_state'] as String?),
       firstSeenAt: _toDateTime(row['first_seen_at']) ?? DateTime.fromMillisecondsSinceEpoch(0),
       lastSeenAt: _toDateTime(row['last_seen_at']) ?? DateTime.fromMillisecondsSinceEpoch(0),
       removedAt: _toDateTime(row['removed_at']),

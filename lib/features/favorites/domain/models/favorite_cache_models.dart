@@ -6,8 +6,11 @@ const String favoriteComicAutoRefreshBackfillSyncKey =
 const String favoriteDefaultCategoryId = 'default';
 const String favoriteComicCategoryId = 'favorite:comic';
 const String favoriteNovelCategoryId = 'favorite:novel';
+const String favoriteInvalidCategoryId = 'favorite:invalid';
 
 enum FavoriteSyncMode { incremental, fullDiff }
+
+enum FavoriteDetailState { pending, resolved, invalid }
 
 class FavoriteSyncSnapshot {
   const FavoriteSyncSnapshot({
@@ -66,6 +69,7 @@ class FavoriteThreadCacheRecord {
     required this.contentKind,
     this.workId,
     this.detailLoadedAt,
+    this.detailState = FavoriteDetailState.pending,
     required this.firstSeenAt,
     required this.lastSeenAt,
     this.removedAt,
@@ -87,6 +91,7 @@ class FavoriteThreadCacheRecord {
   final ThreadContentKind contentKind;
   final String? workId;
   final DateTime? detailLoadedAt;
+  final FavoriteDetailState detailState;
   final DateTime firstSeenAt;
   final DateTime lastSeenAt;
   final DateTime? removedAt;
@@ -97,6 +102,9 @@ class FavoriteThreadCacheRecord {
   String get shelfWorkId => FavoriteShelfWorkId.fromTid(tid);
 
   String get resolvedCategoryId {
+    if (detailState == FavoriteDetailState.invalid) {
+      return favoriteInvalidCategoryId;
+    }
     final custom = customCategoryId?.trim();
     if (custom != null && custom.isNotEmpty) {
       return custom;
@@ -187,4 +195,24 @@ String favoriteContentKindToDb(ThreadContentKind kind) {
     case ThreadContentKind.forum:
       return 'forum';
   }
+}
+
+FavoriteDetailState favoriteDetailStateFromDb(String? value) {
+  switch (value) {
+    case 'resolved':
+      return FavoriteDetailState.resolved;
+    case 'invalid':
+      return FavoriteDetailState.invalid;
+    case 'pending':
+    default:
+      return FavoriteDetailState.pending;
+  }
+}
+
+String favoriteDetailStateToDb(FavoriteDetailState state) {
+  return switch (state) {
+    FavoriteDetailState.pending => 'pending',
+    FavoriteDetailState.resolved => 'resolved',
+    FavoriteDetailState.invalid => 'invalid',
+  };
 }

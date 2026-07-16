@@ -20,8 +20,8 @@ void main() {
 
       final result = await loader.load(_record(tid: '100'));
 
-      expect(result, isA<ApiSuccess<FavoriteDetailContext>>());
-      final context = result.dataOrNull!;
+      expect(result, isA<ApiSuccess<FavoriteDetailResolution>>());
+      final context = (result.dataOrNull! as ResolvedFavoriteDetail).context;
       expect(context.detail.tid, '100');
       expect(context.tagName, '韩国漫画');
       expect(context.kind, ThreadContentKind.comic);
@@ -45,8 +45,9 @@ void main() {
       );
 
       expect(detailLoadCount, 0);
-      expect(result.dataOrNull?.kind, ThreadContentKind.novel);
-      expect(identical(result.dataOrNull?.detail, preloadedDetail), isTrue);
+      final context = (result.dataOrNull! as ResolvedFavoriteDetail).context;
+      expect(context.kind, ThreadContentKind.novel);
+      expect(identical(context.detail, preloadedDetail), isTrue);
     });
 
     test(
@@ -61,8 +62,9 @@ void main() {
 
         final result = await loader.load(_record(tid: '300'));
 
-        expect(result.dataOrNull?.kind, ThreadContentKind.forum);
-        expect(result.dataOrNull?.tagName, isNull);
+        final context = (result.dataOrNull! as ResolvedFavoriteDetail).context;
+        expect(context.kind, ThreadContentKind.forum);
+        expect(context.tagName, isNull);
       },
     );
 
@@ -76,8 +78,8 @@ void main() {
 
       final result = await loader.load(_record(tid: '100'));
 
-      expect(result, isA<ApiSuccess<FavoriteDetailContext>>());
-      final context = result.dataOrNull!;
+      expect(result, isA<ApiSuccess<FavoriteDetailResolution>>());
+      final context = (result.dataOrNull! as ResolvedFavoriteDetail).context;
       expect(context.tagName, isNull);
       expect(context.kind, ThreadContentKind.comic);
     });
@@ -95,8 +97,33 @@ void main() {
 
         final result = await loader.load(_record(tid: '100'));
 
-        expect(result, isA<ApiFailure<FavoriteDetailContext>>());
+        expect(result, isA<ApiFailure<FavoriteDetailResolution>>());
         expect(result.errorOrNull?.message, 'boom');
+      },
+    );
+
+    test(
+      'empty postlist resolves as invalid before tag classification',
+      () async {
+        var tagLookupCount = 0;
+        final loader = DefaultFavoriteDetailContextLoader(
+          loadThreadDetail: (tid) async => ApiSuccess(
+            _detail(tid: tid, fid: '30', typeid: '398', hasPosts: false),
+          ),
+          loadTagLookup: () async {
+            tagLookupCount++;
+            return _lookup();
+          },
+          classifier: const _ThrowingClassifier(),
+        );
+
+        final result = await loader.load(_record(tid: '404'));
+
+        expect(result.dataOrNull, isA<InvalidFavoriteDetail>());
+        final invalid = result.dataOrNull! as InvalidFavoriteDetail;
+        expect(invalid.record.tid, '404');
+        expect(invalid.detail.posts, isEmpty);
+        expect(tagLookupCount, 0);
       },
     );
   });
@@ -118,6 +145,7 @@ ThreadDetailData _detail({
   required String tid,
   required String fid,
   String typeid = '',
+  bool hasPosts = true,
 }) {
   return ThreadDetailData(
     tid: tid,
@@ -129,8 +157,33 @@ ThreadDetailData _detail({
     views: 1,
     currentPage: 1,
     perPage: 20,
-    posts: const <ThreadPost>[],
+    posts: hasPosts
+        ? <ThreadPost>[
+            ThreadPost(
+              pid: '1',
+              author: '作者',
+              authorId: '1',
+              message: '<p>正文</p>',
+              number: 1,
+              isFirst: true,
+              dateline: '2026-01-01',
+            ),
+          ]
+        : const <ThreadPost>[],
   );
+}
+
+class _ThrowingClassifier extends ThreadContentClassifier {
+  const _ThrowingClassifier();
+
+  @override
+  ThreadContentKind classify({
+    required String fid,
+    required String typeid,
+    String? tagName,
+  }) {
+    throw StateError('invalid detail must not be classified');
+  }
 }
 
 ForumTagLookup _lookup({String comicTagName = '韩国漫画'}) {

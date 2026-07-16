@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 32;
+  static const int dbVersion = 33;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -89,6 +89,9 @@ class ComicLocalDb {
     if (oldVersion < 32 && newVersion >= 32) {
       await _upgradeFrom31To32(db);
     }
+    if (oldVersion < 33 && newVersion >= 33) {
+      await _upgradeFrom32To33(db);
+    }
   }
 
   static Future<void> _upgradeFrom27To28(Database db) async {
@@ -163,6 +166,22 @@ class ComicLocalDb {
       'ALTER TABLE $migratedTable RENAME TO $readingProgressTable',
     );
     await _createReadingProgressIndex(db);
+  }
+
+  static Future<void> _upgradeFrom32To33(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      table: favoriteThreadsTable,
+      column: 'detail_state',
+      definition: "TEXT NOT NULL DEFAULT 'pending'",
+    );
+    await db.execute('''
+      UPDATE $favoriteThreadsTable
+      SET detail_state = 'resolved'
+      WHERE detail_loaded_at IS NOT NULL
+        AND detail_state = 'pending'
+    ''');
+    await _createFavoriteDetailStateIndex(db);
   }
 
   static Future<void> _addColumnIfMissing(
@@ -706,6 +725,7 @@ class ComicLocalDb {
         content_kind TEXT NOT NULL DEFAULT 'unknown',
         work_id TEXT,
         detail_loaded_at INTEGER,
+        detail_state TEXT NOT NULL DEFAULT 'pending',
         first_seen_at INTEGER NOT NULL,
         last_seen_at INTEGER NOT NULL,
         removed_at INTEGER
@@ -746,6 +766,14 @@ class ComicLocalDb {
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_favorite_threads_active_kind_order ON '
       '$favoriteThreadsTable(removed_at, content_kind, remote_order)',
+    );
+    await _createFavoriteDetailStateIndex(db);
+  }
+
+  static Future<void> _createFavoriteDetailStateIndex(Database db) {
+    return db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_favorite_threads_active_detail_state_order ON '
+      '$favoriteThreadsTable(removed_at, detail_state, remote_order)',
     );
   }
 

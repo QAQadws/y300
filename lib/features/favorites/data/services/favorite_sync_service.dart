@@ -7,6 +7,7 @@ import 'package:y300/features/favorites/data/repositories/local_favorite_reposit
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/favorites/domain/models/favorite_content_ingest.dart';
+import 'package:y300/features/favorites/domain/models/favorite_detail_context.dart';
 import 'package:y300/features/favorites/domain/services/library_post_ingest_task_runner.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
@@ -753,7 +754,20 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       executionContext: context,
     );
     return result.when(
-      success: (detailContext) async {
+      success: (resolution) async {
+        if (resolution is InvalidFavoriteDetail) {
+          await _localRepository.markThreadDetailInvalid(
+            tid: resolution.record.tid,
+          );
+          _diagnosticRecorder.record(
+            scope: 'favorites',
+            event: 'invalid_thread_classified',
+            fields: <String, Object?>{'tid': resolution.record.tid},
+          );
+          return true;
+        }
+
+        final detailContext = (resolution as ResolvedFavoriteDetail).context;
         final ingestHandler = _contentIngestRegistry.handlerFor(
           detailContext.kind,
         );

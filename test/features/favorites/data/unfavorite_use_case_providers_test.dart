@@ -111,6 +111,9 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   }) async {}
 
   @override
+  Future<void> markThreadDetailInvalid({required String tid}) async {}
+
+  @override
   Future<List<FavoriteThreadCacheRecord>> markRemovedTids(
     Set<String> activeRemoteTids,
   ) async => const <FavoriteThreadCacheRecord>[];

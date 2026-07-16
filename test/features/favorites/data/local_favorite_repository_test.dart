@@ -111,6 +111,88 @@ void main() {
       expect(customItems.single.workId, FavoriteShelfWorkId.fromTid('100'));
     });
 
+    test(
+      'invalid system category appears on demand and preserves custom assignment',
+      () async {
+        await repository.upsertRemotePage(
+          page: FavoriteThreadsPage(
+            page: 1,
+            perPage: 20,
+            totalCount: 3,
+            items: <FavoriteThread>[
+              _thread(tid: '100', title: '自定义分类中的无效帖'),
+              _thread(tid: '200', title: '无效帖'),
+              _thread(tid: '300', title: '普通帖'),
+            ],
+          ),
+          pageStartOrder: 0,
+        );
+        final customId = await repository.createCategory(name: '保留分类');
+        await repository.moveThreadToCategory(
+          tid: '100',
+          toCategoryId: customId,
+        );
+        await repository.updateThreadDetailMeta(
+          tid: '300',
+          fid: '1',
+          typeid: '',
+          tagName: null,
+          contentKind: ThreadContentKind.forum,
+          workId: 'thread:300',
+        );
+
+        expect(
+          (await repository.loadVisibleCategories()).map(
+            (category) => category.categoryId,
+          ),
+          isNot(contains(favoriteInvalidCategoryId)),
+        );
+
+        await repository.markThreadDetailInvalid(tid: '100');
+        await repository.markThreadDetailInvalid(tid: '200');
+
+        final categories = await repository.loadVisibleCategories();
+        final invalidItems = await repository.loadCategoryItems(
+          favoriteInvalidCategoryId,
+        );
+        final defaultItems = await repository.loadCategoryItems(
+          favoriteDefaultCategoryId,
+        );
+        final customItems = await repository.loadCategoryItems(customId);
+
+        expect(
+          categories
+              .where(
+                (category) =>
+                    category.categoryId == favoriteInvalidCategoryId,
+              )
+              .single
+              .name,
+          '无效',
+        );
+        expect(invalidItems.map((item) => item.title), <String>[
+          '自定义分类中的无效帖',
+          '无效帖',
+        ]);
+        expect(defaultItems.single.title, '普通帖');
+        expect(customItems, isEmpty);
+
+        await repository.updateThreadDetailMeta(
+          tid: '100',
+          fid: '1',
+          typeid: '',
+          tagName: null,
+          contentKind: ThreadContentKind.forum,
+          workId: 'thread:100',
+        );
+
+        expect(
+          (await repository.loadCategoryItems(customId)).single.title,
+          '自定义分类中的无效帖',
+        );
+      },
+    );
+
     test('markRemovedTids returns removed active records', () async {
       await repository.upsertRemotePage(
         page: FavoriteThreadsPage(
