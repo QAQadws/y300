@@ -25,6 +25,9 @@ import 'package:y300/features/forum/data/repositories/forum_favorite_repository.
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
+import 'package:y300/features/history/data/providers/history_providers.dart';
+import 'package:y300/features/history/domain/models/history_models.dart';
+import 'package:y300/features/history/domain/services/history_visit_recorder.dart';
 import 'package:y300/features/library_shared/presentation/controllers/sync_diagnostic_mode_controller.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
@@ -67,6 +70,7 @@ import 'package:y300/features/thread/domain/models/thread_image_open_models.dart
 import 'package:y300/features/thread/domain/services/thread_detail_diagnostic_recorder.dart';
 import 'package:y300/features/thread/domain/services/thread_favorite_action_service.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
+import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_html_first_render_mode_controller.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
@@ -455,6 +459,7 @@ void main() {
       'Phase 0 baseline commits non-empty posts then changes pages in place',
       (tester) async {
         final firstPageResult = Completer<ApiResult<ThreadDetailData>>();
+        final historyRecorder = _RecordingHistoryVisitRecorder();
         var callCount = 0;
         final repository = _FakeThreadRepository((tid, page, query) async {
           callCount++;
@@ -492,11 +497,14 @@ void main() {
           );
         });
 
-        await tester.pumpWidget(_buildTestApp(repository));
+        await tester.pumpWidget(
+          _buildTestApp(repository, historyVisitRecorder: historyRecorder),
+        );
         await tester.pump();
 
         expect(find.byKey(const Key('thread-detail-list')), findsNothing);
         expect(callCount, 1);
+        expect(historyRecorder.drafts, isEmpty);
 
         firstPageResult.complete(
           ApiSuccess<ThreadDetailData>(
@@ -524,6 +532,7 @@ void main() {
                   number: 1,
                   isFirst: true,
                   dateline: 'today',
+                  avatarUrl: 'https://bbs.yamibo.com/avatar/alice.jpg',
                 ),
               ],
             ),
@@ -538,6 +547,19 @@ void main() {
           findsOneWidget,
         );
         expect(callCount, 1);
+        expect(historyRecorder.drafts, hasLength(1));
+        final draft = historyRecorder.drafts.single;
+        expect(
+          draft.target,
+          const HistoryTargetKey(type: HistoryTargetType.thread, id: '100'),
+        );
+        expect(draft.title, '测试主题');
+        expect(draft.forumName, '测试版块');
+        expect(draft.page, 1);
+        expect(
+          draft.thumbnail?.remoteUrl,
+          'https://bbs.yamibo.com/avatar/alice.jpg',
+        );
 
         await tester.dragUntilVisible(
           find.byKey(const Key('thread-detail-load-more-button')),
@@ -559,8 +581,263 @@ void main() {
           findsOneWidget,
         );
         expect(callCount, 2);
+        expect(historyRecorder.drafts, hasLength(1));
+
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(ThreadDetailPage)),
+        );
+        const args = ThreadDetailArgs(tid: '100', subject: '测试主题');
+        await container
+            .read(threadDetailControllerProvider(args).notifier)
+            .refresh();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+
+        expect(historyRecorder.drafts, hasLength(1));
       },
     );
+
+    for (final source in <String>['network', 'snapshot', 'document cache']) {
+      testWidgets('records one visible visit from $source content', (
+        tester,
+      ) async {
+        final historyRecorder = _RecordingHistoryVisitRecorder();
+        final sourceId = source.replaceAll(' ', '-');
+        final repository = _FakeThreadRepository((tid, page) async {
+          return ApiSuccess(
+            ThreadDetailData(
+              tid: tid,
+              fid: '2',
+              forumName: '测试版块',
+              subject: '$source 主题',
+              author: 'alice',
+              replies: 0,
+              views: 1,
+              currentPage: page,
+              lastPage: 1,
+              desktopUrl:
+                  'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=$tid&page=$page',
+              perPage: 20,
+              posts: <ThreadPost>[
+                ThreadPost(
+                  pid: '$sourceId-p1',
+                  author: 'alice',
+                  authorId: '1',
+                  message: '<p>可见正文</p>',
+                  number: 1,
+                  isFirst: true,
+                  dateline: 'today',
+                ),
+              ],
+            ),
+          );
+        });
+
+        await tester.pumpWidget(
+          _buildTestApp(repository, historyVisitRecorder: historyRecorder),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+
+        expect(
+          find.byKey(Key('thread-post-card-$sourceId-p1')),
+          findsOneWidget,
+        );
+        expect(historyRecorder.drafts, hasLength(1));
+        expect(historyRecorder.drafts.single.title, '$source 主题');
+      });
+    }
+
+    testWidgets('failed initial load records only after retry succeeds', (
+      tester,
+    ) async {
+      final historyRecorder = _RecordingHistoryVisitRecorder();
+      var callCount = 0;
+      final repository = _FakeThreadRepository((tid, page) async {
+        callCount++;
+        if (callCount == 1) {
+          return const ApiFailure<ThreadDetailData>(
+            ApiError(type: ApiErrorType.network, message: '加载失败'),
+          );
+        }
+        return ApiSuccess(
+          _threadDetailData(
+            tid: tid,
+            posts: <ThreadPost>[
+              ThreadPost(
+                pid: 'retry-p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>重试后的正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        _buildTestApp(repository, historyVisitRecorder: historyRecorder),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('thread-detail-retry-button')),
+        findsOneWidget,
+      );
+      expect(historyRecorder.drafts, isEmpty);
+
+      await tester.tap(find.byKey(const Key('thread-detail-retry-button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(
+        find.byKey(const Key('thread-post-card-retry-p1')),
+        findsOneWidget,
+      );
+      expect(historyRecorder.drafts, hasLength(1));
+    });
+
+    testWidgets('history failures never replace visible thread content', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          _threadDetailData(
+            tid: tid,
+            posts: <ThreadPost>[
+              ThreadPost(
+                pid: 'history-failure-p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>正文仍然可见</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          historyVisitRecorder: const _ThrowingHistoryVisitRecorder(),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(
+        find.byKey(const Key('thread-post-card-history-failure-p1')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('thread-detail-retry-button')), findsNothing);
+    });
+
+    testWidgets('late content after route disposal does not record', (
+      tester,
+    ) async {
+      final result = Completer<ApiResult<ThreadDetailData>>();
+      final historyRecorder = _RecordingHistoryVisitRecorder();
+      final repository = _FakeThreadRepository((tid, page) => result.future);
+
+      await tester.pumpWidget(
+        _buildTestApp(repository, historyVisitRecorder: historyRecorder),
+      );
+      await tester.pump();
+      expect(historyRecorder.drafts, isEmpty);
+
+      await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+      result.complete(
+        ApiSuccess(
+          _threadDetailData(
+            tid: '100',
+            posts: <ThreadPost>[
+              ThreadPost(
+                pid: 'late-p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>迟到正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(historyRecorder.drafts, isEmpty);
+    });
+
+    testWidgets('a new route records another visit to the same TID', (
+      tester,
+    ) async {
+      final historyRecorder = _RecordingHistoryVisitRecorder();
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          _threadDetailData(
+            tid: tid,
+            posts: <ThreadPost>[
+              ThreadPost(
+                pid: 'route-p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>路由正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          historyVisitRecorder: historyRecorder,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: FilledButton(
+                  key: const Key('open-native-thread-route'),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            const ThreadDetailPage(tid: '100', subject: '测试主题'),
+                      ),
+                    );
+                  },
+                  child: const Text('打开帖子'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('open-native-thread-route')));
+      await tester.pumpAndSettle();
+      expect(historyRecorder.drafts, hasLength(1));
+
+      Navigator.of(tester.element(find.byType(ThreadDetailPage))).pop();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('open-native-thread-route')));
+      await tester.pumpAndSettle();
+
+      expect(historyRecorder.drafts, hasLength(2));
+      expect(
+        historyRecorder.drafts.map((draft) => draft.target.id),
+        everyElement('100'),
+      );
+    });
 
     testWidgets('uses HTML-first body renderer by default', (tester) async {
       final repository = _FakeThreadRepository((tid, page, query) async {
@@ -1587,6 +1864,7 @@ void main() {
     testWidgets(
       'combines author filter with order switch and pins first post in reverse view',
       (tester) async {
+        final historyRecorder = _RecordingHistoryVisitRecorder();
         final repository = _FakeThreadRepository((tid, page, query) async {
           final isAuthorOnly = query['authorid'] == '1';
           final isReverse = query['ordertype'] == '1';
@@ -1649,9 +1927,12 @@ void main() {
           );
         });
 
-        await tester.pumpWidget(_buildTestApp(repository));
+        await tester.pumpWidget(
+          _buildTestApp(repository, historyVisitRecorder: historyRecorder),
+        );
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 120));
+        expect(historyRecorder.drafts, hasLength(1));
 
         await tester.tap(find.byKey(const Key('thread-detail-more-menu')));
         await tester.pumpAndSettle();
@@ -1703,6 +1984,7 @@ void main() {
 
         expect(repository.queryHistory.last.containsKey('authorid'), isFalse);
         expect(repository.queryHistory.last['ordertype'], '2');
+        expect(historyRecorder.drafts, hasLength(1));
       },
     );
 
@@ -2046,6 +2328,7 @@ void main() {
     testWidgets(
       'locates the second post after an exceptionally long first post',
       (tester) async {
+        final historyRecorder = _RecordingHistoryVisitRecorder();
         tester.view.physicalSize = const Size(390, 260);
         tester.view.devicePixelRatio = 1;
         addTearDown(() {
@@ -2095,6 +2378,7 @@ void main() {
         await tester.pumpWidget(
           _buildTestApp(
             repository,
+            historyVisitRecorder: historyRecorder,
             home: const ThreadDetailPage(
               tid: '556943',
               initialPage: 1,
@@ -2113,6 +2397,8 @@ void main() {
         );
         expect(targetTop.dy, closeTo(listTop.dy + 10, 28));
         expect(_richTextContaining('第一话 姐姐的日记'), findsOneWidget);
+        expect(historyRecorder.drafts, hasLength(1));
+        expect(historyRecorder.drafts.single.target.id, '556943');
       },
     );
 
@@ -2227,6 +2513,7 @@ void main() {
     testWidgets('locates findpost link before opening native thread page', (
       tester,
     ) async {
+      final historyRecorder = _RecordingHistoryVisitRecorder();
       final repository = _FakeThreadRepository((tid, page) async {
         return ApiSuccess(
           ThreadDetailData(
@@ -2276,10 +2563,16 @@ void main() {
       );
 
       await tester.pumpWidget(
-        _buildTestApp(repository, threadPostLocator: locator),
+        _buildTestApp(
+          repository,
+          threadPostLocator: locator,
+          historyVisitRecorder: historyRecorder,
+        ),
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
+      expect(historyRecorder.drafts, hasLength(1));
+      expect(historyRecorder.drafts.single.target.id, '100');
 
       await tester.tapAt(
         tester.getTopLeft(_richTextContaining('findpost')) + const Offset(4, 8),
@@ -2295,6 +2588,8 @@ void main() {
         findsOneWidget,
       );
       expect(_richTextContaining('定位后的楼层'), findsOneWidget);
+      expect(historyRecorder.drafts, hasLength(2));
+      expect(historyRecorder.drafts.last.target.id, '572057');
     });
 
     testWidgets('keeps large thread pages lazy built for smoother rendering', (
@@ -3883,6 +4178,7 @@ Widget _buildTestApp(
   bool diagnosticModeEnabled = false,
   ThreadDetailHtmlFirstRenderMode htmlFirstRenderMode =
       ThreadDetailHtmlFirstRenderMode.legacy,
+  HistoryVisitRecorder? historyVisitRecorder,
   Widget? home,
 }) {
   return ProviderScope(
@@ -3905,6 +4201,7 @@ Widget _buildTestApp(
       textConverterFactory: textConverterFactory,
       diagnosticModeEnabled: diagnosticModeEnabled,
       htmlFirstRenderMode: htmlFirstRenderMode,
+      historyVisitRecorder: historyVisitRecorder,
     ),
     child: MaterialApp(
       home: home ?? const ThreadDetailPage(tid: '100', subject: '测试主题'),
@@ -3931,8 +4228,12 @@ List<riverpod_misc.Override> _threadDetailOverrides(
   bool diagnosticModeEnabled = false,
   ThreadDetailHtmlFirstRenderMode htmlFirstRenderMode =
       ThreadDetailHtmlFirstRenderMode.legacy,
+  HistoryVisitRecorder? historyVisitRecorder,
 }) {
   return [
+    historyVisitRecorderProvider.overrideWithValue(
+      historyVisitRecorder ?? const _NoopHistoryVisitRecorder(),
+    ),
     threadRepositoryProvider.overrideWithValue(repository),
     if (forumHtmlReaderPreferencesRepository != null)
       forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
@@ -4006,6 +4307,31 @@ List<riverpod_misc.Override> _threadDetailOverrides(
       _NoopComposerUploadNotificationService(),
     ),
   ];
+}
+
+class _RecordingHistoryVisitRecorder implements HistoryVisitRecorder {
+  final List<HistoryVisitDraft> drafts = <HistoryVisitDraft>[];
+
+  @override
+  Future<void> record(HistoryVisitDraft draft) async {
+    drafts.add(draft);
+  }
+}
+
+class _ThrowingHistoryVisitRecorder implements HistoryVisitRecorder {
+  const _ThrowingHistoryVisitRecorder();
+
+  @override
+  Future<void> record(HistoryVisitDraft draft) {
+    throw StateError('history unavailable');
+  }
+}
+
+class _NoopHistoryVisitRecorder implements HistoryVisitRecorder {
+  const _NoopHistoryVisitRecorder();
+
+  @override
+  Future<void> record(HistoryVisitDraft draft) async {}
 }
 
 ThreadDetailData _threadDetailData({

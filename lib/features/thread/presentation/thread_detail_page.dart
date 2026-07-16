@@ -15,6 +15,8 @@ import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.d
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
+import 'package:y300/features/history/data/providers/history_providers.dart';
+import 'package:y300/features/history/domain/services/history_visit_recorder.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
@@ -34,6 +36,8 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_rend
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_selection_copy_page.dart';
+import 'package:y300/features/thread/presentation/mappers/thread_history_visit_mapper.dart';
+import 'package:y300/features/thread/presentation/services/thread_history_commit_guard.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_prewarmer.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
@@ -72,6 +76,8 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       ThreadPostImageDimensionStore();
   ThreadPostImageDimensionPrewarmer? _imageDimensionPrewarmer;
   String? _prewarmSignature;
+  final ThreadHistoryCommitGuard _historyCommitGuard =
+      ThreadHistoryCommitGuard();
 
   @override
   void initState() {
@@ -119,6 +125,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     final htmlFirstPrecacheService = ref.watch(
       forumImagePrecacheServiceProvider,
     );
+    final historyRecorder = ref.watch(historyVisitRecorderProvider);
     _latestImageHeaderBuilder = imageHeaderBuilder;
     ref.listen<AsyncValue<ThreadDetailPageState>>(
       threadDetailControllerProvider(args),
@@ -137,6 +144,11 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     );
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
     _schedulePrewarmImageDimensions(state);
+    _scheduleHistoryVisit(
+      asyncState: asyncState,
+      state: state,
+      recorder: historyRecorder,
+    );
 
     return Scaffold(
       backgroundColor: palette.background,
@@ -255,6 +267,48 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         ],
       ),
     );
+  }
+
+  void _scheduleHistoryVisit({
+    required AsyncValue<ThreadDetailPageState> asyncState,
+    required ThreadDetailPageState state,
+    required HistoryVisitRecorder recorder,
+  }) {
+    if (!asyncState.hasValue ||
+        state.isLoadingInitial ||
+        state.errorMessage != null ||
+        state.posts.isEmpty) {
+      return;
+    }
+    final routeTid = widget.tid.trim();
+    final visibleTid = state.tid.trim().isEmpty ? routeTid : state.tid.trim();
+    final routeSubject = widget.subject;
+    final routeForumName = widget.initialForumName;
+    final routePage = widget.initialPage;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || widget.tid.trim() != routeTid) {
+        return;
+      }
+      if (!_historyCommitGuard.tryCommit(visibleTid)) {
+        return;
+      }
+      try {
+        final draft = const ThreadHistoryVisitMapper().map(
+          state: state,
+          routeTid: routeTid,
+          routeSubject: routeSubject,
+          routeForumName: routeForumName,
+          routePage: routePage,
+        );
+        await recorder.record(draft);
+      } catch (error) {
+        debugPrint(
+          '[ThreadDetail][native][history_record_failure] '
+          'tid=$visibleTid error=${error.runtimeType}',
+        );
+      }
+    });
   }
 
   /// 进入阅读态前，用持久化缓存里的真实尺寸预热 [_imageDimensionStore]。
