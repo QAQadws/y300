@@ -111,6 +111,49 @@ void main() {
   });
 
   testWidgets(
+    'Phase 0 baseline commits initial detail content and refreshes in place',
+    (tester) async {
+      final adapter = _FakeDetailAdapter();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: UnifiedDetailPage(
+            adapter: adapter,
+            workId: 'work-1',
+            onOpenReader: (context, target) async {},
+            onOpenThread: (context, target) async {},
+          ),
+        ),
+      );
+
+      expect(
+        find.byKey(const Key('unified-detail-header-section')),
+        findsNothing,
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('unified-detail-header-section')),
+        findsOneWidget,
+      );
+      expect(adapter.loadHeaderCallCount, 1);
+      expect(adapter.loadChaptersCallCount, 1);
+      expect(adapter.refreshWorkCallCount, 0);
+
+      await tester.tap(find.text('更新').first);
+      await tester.pumpAndSettle();
+
+      expect(adapter.refreshWorkCallCount, 1);
+      expect(adapter.loadHeaderCallCount, 2);
+      expect(adapter.loadChaptersCallCount, 2);
+      expect(
+        find.byKey(const Key('unified-detail-header-section')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
     'UnifiedDetailPage edits custom metadata through optional adapter',
     (tester) async {
       final adapter = _EditableDetailAdapter();
@@ -1502,7 +1545,9 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
   });
 
   int markReadCallCount = 0;
+  int loadHeaderCallCount = 0;
   int loadChaptersCallCount = 0;
+  int refreshWorkCallCount = 0;
   String? lastBookmarkEpisodeId;
   String? lastDownloadedEpisodeId;
   String? lastDeletedDownloadEpisodeId;
@@ -1628,6 +1673,7 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
 
   @override
   Future<LibraryDetailHeader> loadHeader({required String workId}) async {
+    loadHeaderCallCount++;
     if (failLoadHeaderOnce) {
       failLoadHeaderOnce = false;
       throw StateError('header failed');
@@ -1683,6 +1729,7 @@ class _FakeDetailAdapter implements DetailModuleAdapter {
 
   @override
   Future<DetailRefreshResult> refreshWork({required String workId}) async {
+    refreshWorkCallCount++;
     return refreshResult;
   }
 

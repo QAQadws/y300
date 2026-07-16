@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -367,6 +368,45 @@ void main() {
             .toSet(),
         isNot(contains('cookie')),
       );
+    },
+  );
+
+  testWidgets(
+    'Phase 0 baseline ignores a stale page-finished navigation generation',
+    (tester) async {
+      const firstUrl =
+          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=101&mobile=2';
+      const secondUrl =
+          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=202&mobile=2';
+      final driver = _FakeForumWebViewDriver()..holdTitleReads = true;
+
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
+
+      await driver.dispatchPageStarted(firstUrl);
+      final firstFinish = driver.dispatchPageFinished(firstUrl);
+      await tester.pump();
+      expect(driver.pendingTitleReads, hasLength(1));
+
+      await driver.dispatchPageStarted(secondUrl);
+      final secondFinish = driver.dispatchPageFinished(secondUrl);
+      await tester.pump();
+      expect(driver.pendingTitleReads, hasLength(2));
+
+      driver.pendingTitleReads[1].complete('第二个主题');
+      await secondFinish;
+      await tester.pump();
+
+      expect(find.text('第二个主题'), findsOneWidget);
+      expect(driver.scripts, hasLength(1));
+
+      driver.pendingTitleReads[0].complete('迟到的第一个主题');
+      await firstFinish;
+      await tester.pump();
+
+      expect(find.text('第二个主题'), findsOneWidget);
+      expect(find.text('迟到的第一个主题'), findsNothing);
+      expect(driver.scripts, hasLength(1));
     },
   );
 
@@ -1820,6 +1860,8 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   final List<String> returningScripts = <String>[];
   final List<_SeededCookieRecord> seededCookies = <_SeededCookieRecord>[];
   String? title;
+  bool holdTitleReads = false;
+  final List<Completer<String?>> pendingTitleReads = <Completer<String?>>[];
   Object? javaScriptResult;
   bool canGoBackValue = false;
   int goBackCallCount = 0;
@@ -1918,6 +1960,11 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
 
   @override
   Future<String?> getTitle() async {
+    if (holdTitleReads) {
+      final completer = Completer<String?>();
+      pendingTitleReads.add(completer);
+      return completer.future;
+    }
     return title;
   }
 

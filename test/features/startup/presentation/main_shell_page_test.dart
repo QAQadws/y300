@@ -90,6 +90,19 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+    final initialNavigationBar = tester.widget<NavigationBar>(
+      find.byType(NavigationBar),
+    );
+    expect(
+      initialNavigationBar.destinations.cast<NavigationDestination>().map(
+        (destination) => destination.label,
+      ),
+      <String>['论坛', '收藏', '漫画', '小说', '更多'],
+    );
+    final initialStack = tester.widget<IndexedStack>(find.byType(IndexedStack));
+    expect(initialStack.children, hasLength(5));
+    expect(initialStack.children.whereType<TickerMode>(), hasLength(1));
+    expect((initialStack.children.first as TickerMode).enabled, isTrue);
 
     await tester.tap(find.text('收藏').last);
     await tester.pumpAndSettle();
@@ -113,6 +126,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('更多'), findsWidgets);
     expect(find.byKey(const Key('more-login-entry')), findsOneWidget);
+    final fullyBuiltStack = tester.widget<IndexedStack>(
+      find.byType(IndexedStack),
+    );
+    expect(fullyBuiltStack.children.whereType<TickerMode>(), hasLength(5));
+    expect(
+      fullyBuiltStack.children.cast<TickerMode>().map(
+        (tickerMode) => tickerMode.enabled,
+      ),
+      <bool>[false, false, false, false, true],
+    );
   });
 
   testWidgets('Novel tab icon changes after tap', (tester) async {

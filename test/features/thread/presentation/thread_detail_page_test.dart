@@ -451,6 +451,117 @@ void main() {
       expect(callCount, 3);
     });
 
+    testWidgets(
+      'Phase 0 baseline commits non-empty posts then changes pages in place',
+      (tester) async {
+        final firstPageResult = Completer<ApiResult<ThreadDetailData>>();
+        var callCount = 0;
+        final repository = _FakeThreadRepository((tid, page, query) async {
+          callCount++;
+          if (page == 1) {
+            return firstPageResult.future;
+          }
+          return ApiSuccess(
+            ThreadDetailData(
+              tid: tid,
+              fid: '2',
+              forumName: '测试版块',
+              subject: '测试主题',
+              author: 'alice',
+              replies: 2,
+              views: 12,
+              currentPage: 2,
+              lastPage: 2,
+              previousPageUrl:
+                  'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
+              desktopUrl:
+                  'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=2',
+              perPage: 1,
+              posts: <ThreadPost>[
+                ThreadPost(
+                  pid: 'phase0-p2',
+                  author: 'bob',
+                  authorId: '2',
+                  message: '<p>第二页正文</p>',
+                  number: 2,
+                  isFirst: false,
+                  dateline: 'today',
+                ),
+              ],
+            ),
+          );
+        });
+
+        await tester.pumpWidget(_buildTestApp(repository));
+        await tester.pump();
+
+        expect(find.byKey(const Key('thread-detail-list')), findsNothing);
+        expect(callCount, 1);
+
+        firstPageResult.complete(
+          ApiSuccess<ThreadDetailData>(
+            ThreadDetailData(
+              tid: '100',
+              fid: '2',
+              forumName: '测试版块',
+              subject: '测试主题',
+              author: 'alice',
+              replies: 2,
+              views: 12,
+              currentPage: 1,
+              lastPage: 2,
+              nextPageUrl:
+                  'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=2',
+              desktopUrl:
+                  'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
+              perPage: 1,
+              posts: <ThreadPost>[
+                ThreadPost(
+                  pid: 'phase0-p1',
+                  author: 'alice',
+                  authorId: '1',
+                  message: '<p>第一页正文</p>',
+                  number: 1,
+                  isFirst: true,
+                  dateline: 'today',
+                ),
+              ],
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+
+        expect(find.byKey(const Key('thread-detail-list')), findsOneWidget);
+        expect(
+          find.byKey(const Key('thread-post-card-phase0-p1')),
+          findsOneWidget,
+        );
+        expect(callCount, 1);
+
+        await tester.dragUntilVisible(
+          find.byKey(const Key('thread-detail-load-more-button')),
+          find.byKey(const Key('thread-detail-list')),
+          const Offset(0, -260),
+        );
+        await tester.tap(
+          find.byKey(const Key('thread-detail-load-more-button')),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 260));
+
+        expect(
+          find.byKey(const Key('thread-post-card-phase0-p1')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const Key('thread-post-card-phase0-p2')),
+          findsOneWidget,
+        );
+        expect(callCount, 2);
+      },
+    );
+
     testWidgets('uses HTML-first body renderer by default', (tester) async {
       final repository = _FakeThreadRepository((tid, page, query) async {
         return ApiSuccess(
