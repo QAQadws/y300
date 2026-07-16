@@ -11,6 +11,8 @@ void main() {
     int? capturedPage;
     final router = HistoryEntryRouter(
       loadForumMode: () async => ForumShellMode.native,
+      comicWorkExists: _workExists,
+      novelWorkExists: _workExists,
       nativeThreadPageBuilder: (tid, subject, page) {
         capturedTid = tid;
         capturedSubject = subject;
@@ -42,6 +44,8 @@ void main() {
     Uri? capturedUri;
     final router = HistoryEntryRouter(
       loadForumMode: () async => ForumShellMode.webview,
+      comicWorkExists: _workExists,
+      novelWorkExists: _workExists,
       webViewPageBuilder: (uri) {
         capturedUri = uri;
         return const _DestinationPage(label: 'webview-thread');
@@ -59,6 +63,10 @@ void main() {
         id: '527325',
         title: '帖子',
         page: 4,
+        canonicalUri: Uri.parse(
+          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=527325'
+          '&highlight=%D2%B2%CE%DE&auth=secret',
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -80,6 +88,8 @@ void main() {
     final opened = <String>[];
     final router = HistoryEntryRouter(
       loadForumMode: () async => ForumShellMode.native,
+      comicWorkExists: _workExists,
+      novelWorkExists: _workExists,
       comicPageBuilder: (workId) {
         opened.add('comic:$workId');
         return const _DestinationPage(label: 'comic-detail');
@@ -112,6 +122,130 @@ void main() {
     expect(find.text('novel-detail'), findsOneWidget);
     expect(opened, <String>['comic:comic-work', 'novel:novel-work']);
   });
+
+  testWidgets('old thread records follow forum mode changes', (tester) async {
+    var mode = ForumShellMode.native;
+    final destinations = <String>[];
+    final router = HistoryEntryRouter(
+      loadForumMode: () async => mode,
+      comicWorkExists: _workExists,
+      novelWorkExists: _workExists,
+      nativeThreadPageBuilder: (tid, subject, page) {
+        destinations.add('native:$tid');
+        return const _DestinationPage(label: 'native-thread');
+      },
+      webViewPageBuilder: (uri) {
+        destinations.add('webview:${uri.queryParameters['tid']}');
+        return const _DestinationPage(label: 'webview-thread');
+      },
+    );
+    late BuildContext context;
+    await tester.pumpWidget(
+      _routerHarness(onContext: (value) => context = value),
+    );
+    final entry = _entry(
+      type: HistoryTargetType.thread,
+      id: '527325',
+      title: '帖子',
+    );
+
+    await router.open(context, entry);
+    await tester.pumpAndSettle();
+    Navigator.of(tester.element(find.byType(_DestinationPage))).pop();
+    await tester.pumpAndSettle();
+
+    mode = ForumShellMode.webview;
+    await router.open(context, entry);
+    await tester.pumpAndSettle();
+
+    expect(destinations, <String>['native:527325', 'webview:527325']);
+  });
+
+  testWidgets('returns source fallback when a local work was removed', (
+    tester,
+  ) async {
+    final builtWorks = <String>[];
+    final router = HistoryEntryRouter(
+      loadForumMode: () async => ForumShellMode.native,
+      comicWorkExists: (_) async => false,
+      novelWorkExists: (_) async => false,
+      comicPageBuilder: (workId) {
+        builtWorks.add(workId);
+        return const _DestinationPage(label: 'comic-detail');
+      },
+      novelPageBuilder: (workId) {
+        builtWorks.add(workId);
+        return const _DestinationPage(label: 'novel-detail');
+      },
+    );
+    late BuildContext context;
+    await tester.pumpWidget(
+      _routerHarness(onContext: (value) => context = value),
+    );
+
+    final comicResult = await router.open(
+      context,
+      _entry(
+        type: HistoryTargetType.comic,
+        id: 'comic-work',
+        title: '漫画',
+        sourceTid: '000527325',
+      ),
+    );
+    final novelResult = await router.open(
+      context,
+      _entry(
+        type: HistoryTargetType.novel,
+        id: 'novel-work',
+        title: '小说',
+        sourceTid: 'bad-tid',
+      ),
+    );
+
+    expect(
+      comicResult,
+      isA<HistoryOpenUnavailable>()
+          .having((result) => result.message, 'message', '漫画作品已从本地移除')
+          .having((result) => result.fallbackTid, 'fallbackTid', '527325'),
+    );
+    expect(
+      novelResult,
+      isA<HistoryOpenUnavailable>()
+          .having((result) => result.message, 'message', '小说作品已从本地移除')
+          .having((result) => result.fallbackTid, 'fallbackTid', isNull),
+    );
+    expect(builtWorks, isEmpty);
+    expect(find.byType(_DestinationPage), findsNothing);
+  });
+
+  testWidgets('returns a structured failure when availability lookup fails', (
+    tester,
+  ) async {
+    final router = HistoryEntryRouter(
+      loadForumMode: () async => ForumShellMode.native,
+      comicWorkExists: (_) async => throw StateError('database unavailable'),
+      novelWorkExists: _workExists,
+    );
+    late BuildContext context;
+    await tester.pumpWidget(
+      _routerHarness(onContext: (value) => context = value),
+    );
+
+    final result = await router.open(
+      context,
+      _entry(type: HistoryTargetType.comic, id: 'comic-work', title: '漫画'),
+    );
+
+    expect(
+      result,
+      isA<HistoryOpenFailure>().having(
+        (value) => value.error,
+        'error',
+        isA<StateError>(),
+      ),
+    );
+    expect(find.byType(_DestinationPage), findsNothing);
+  });
 }
 
 Widget _routerHarness({required ValueChanged<BuildContext> onContext}) {
@@ -130,11 +264,15 @@ HistoryEntry _entry({
   required String id,
   required String title,
   int? page,
+  String? sourceTid,
+  Uri? canonicalUri,
 }) {
   return HistoryEntry(
     target: HistoryTargetKey(type: type, id: id),
     title: title,
     contextLabel: '详情',
+    sourceTid: sourceTid,
+    canonicalUri: canonicalUri,
     lastSurface: switch (type) {
       HistoryTargetType.thread => HistoryVisitSurface.threadNative,
       HistoryTargetType.comic => HistoryVisitSurface.comicDetail,
@@ -146,6 +284,8 @@ HistoryEntry _entry({
     visitCount: 1,
   );
 }
+
+Future<bool> _workExists(String workId) async => true;
 
 class _DestinationPage extends StatelessWidget {
   const _DestinationPage({required this.label});

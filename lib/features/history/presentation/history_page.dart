@@ -290,14 +290,75 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
     if (!mounted) {
       return;
     }
+    _handleOpenResult(entry, result);
+  }
+
+  void _handleOpenResult(HistoryEntry entry, HistoryOpenResult result) {
     switch (result) {
       case HistoryOpenSuccess():
         return;
-      case HistoryOpenUnavailable(:final message):
-        _showMessage(message);
+      case final HistoryOpenUnavailable unavailable:
+        _showUnavailable(entry, unavailable);
       case HistoryOpenFailure():
         _showMessage('打开失败，请稍后重试');
     }
+  }
+
+  void _showUnavailable(
+    HistoryEntry entry,
+    HistoryOpenUnavailable unavailable,
+  ) {
+    final fallbackTid = _normalizeTid(unavailable.fallbackTid);
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(unavailable.message),
+          action: fallbackTid != null
+              ? SnackBarAction(
+                  label: '打开原帖',
+                  onPressed: () {
+                    unawaited(_openSourceThread(entry, fallbackTid));
+                  },
+                )
+              : SnackBarAction(
+                  label: '删除记录',
+                  onPressed: () {
+                    unawaited(_deleteEntry(entry));
+                  },
+                ),
+        ),
+      );
+  }
+
+  Future<void> _openSourceThread(HistoryEntry source, String tid) async {
+    if (!mounted) {
+      return;
+    }
+    final fallback = HistoryEntry(
+      target: HistoryTargetKey(type: HistoryTargetType.thread, id: tid),
+      title: source.title,
+      contextLabel: source.forumName ?? '来源原帖',
+      forumName: source.forumName,
+      lastSurface: HistoryVisitSurface.threadNative,
+      firstVisitedAt: source.firstVisitedAt,
+      lastVisitedAt: source.lastVisitedAt,
+      visitCount: source.visitCount,
+    );
+    final result = await widget.onOpenEntry(context, fallback);
+    if (mounted) {
+      _handleOpenResult(source, result);
+    }
+  }
+
+  String? _normalizeTid(String? value) {
+    final normalized = value?.trim();
+    if (normalized == null || !RegExp(r'^\d+$').hasMatch(normalized)) {
+      return null;
+    }
+    final parsed = BigInt.tryParse(normalized);
+    return parsed != null && parsed > BigInt.zero ? parsed.toString() : null;
   }
 
   Future<void> _deleteEntry(HistoryEntry entry) async {
