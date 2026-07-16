@@ -208,3 +208,24 @@ class HistoryChange {
   final HistoryChangeKind kind;
   final HistoryTargetKey? target;
 }
+
+sealed class HistoryOpenResult {
+  const HistoryOpenResult();
+}
+
+final class HistoryOpenSuccess extends HistoryOpenResult {
+  const HistoryOpenSuccess();
+}
+
+final class HistoryOpenUnavailable extends HistoryOpenResult {
+  const HistoryOpenUnavailable({required this.message, this.fallbackTid});
+
+  final String message;
+  final String? fallbackTid;
+}
+
+final class HistoryOpenFailure extends HistoryOpenResult {
+  const HistoryOpenFailure({required this.error});
+
+  final Object error;
+}

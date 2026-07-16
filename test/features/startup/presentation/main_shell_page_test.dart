@@ -24,6 +24,9 @@ import 'package:y300/features/forum/data/repositories/forum_mode_settings_reposi
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
+import 'package:y300/features/history/data/providers/history_providers.dart';
+import 'package:y300/features/history/domain/models/history_models.dart';
+import 'package:y300/features/history/domain/repositories/history_repository.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/data/providers/library_task_notification_providers.dart';
@@ -44,14 +47,18 @@ import 'package:y300/features/startup/presentation/main_shell_page.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
-  testWidgets('MainShellPage can switch between forum/comic/novel/more tabs', (
+  testWidgets('MainShellPage can switch across all six lazy tabs', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
       ComicSearchRefreshQueueSnapshot.empty,
     );
+    final textScale = ValueNotifier<double>(2);
     final webViewDriver = _FakeForumWebViewDriver();
     addTearDown(queueSnapshot.dispose);
+    addTearDown(textScale.dispose);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -82,8 +89,26 @@ void main() {
             () => webViewDriver,
           ),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
+          historyRepositoryProvider.overrideWithValue(
+            const _FakeHistoryRepository(),
+          ),
         ],
-        child: const MaterialApp(home: MainShellPage()),
+        child: MaterialApp(
+          builder: (context, child) {
+            return ValueListenableBuilder<double>(
+              valueListenable: textScale,
+              builder: (context, scale, _) {
+                return MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                );
+              },
+            );
+          },
+          home: const MainShellPage(),
+        ),
       ),
     );
 
@@ -97,12 +122,17 @@ void main() {
       initialNavigationBar.destinations.cast<NavigationDestination>().map(
         (destination) => destination.label,
       ),
-      <String>['论坛', '收藏', '漫画', '小说', '更多'],
+      <String>['论坛', '收藏', '漫画', '小说', '记录', '更多'],
     );
     final initialStack = tester.widget<IndexedStack>(find.byType(IndexedStack));
-    expect(initialStack.children, hasLength(5));
+    expect(initialStack.children, hasLength(6));
     expect(initialStack.children.whereType<TickerMode>(), hasLength(1));
     expect((initialStack.children.first as TickerMode).enabled, isTrue);
+    expect(tester.takeException(), isNull);
+
+    textScale.value = 1;
+    await tester.binding.setSurfaceSize(const Size(800, 700));
+    await tester.pump();
 
     await tester.tap(find.text('收藏').last);
     await tester.pumpAndSettle();
@@ -122,6 +152,11 @@ void main() {
       findsOneWidget,
     );
 
+    await tester.tap(find.text('记录').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('history-page')), findsOneWidget);
+    expect(find.byKey(const Key('history-empty')), findsOneWidget);
+
     await tester.tap(find.text('更多'));
     await tester.pumpAndSettle();
     expect(find.text('更多'), findsWidgets);
@@ -129,12 +164,12 @@ void main() {
     final fullyBuiltStack = tester.widget<IndexedStack>(
       find.byType(IndexedStack),
     );
-    expect(fullyBuiltStack.children.whereType<TickerMode>(), hasLength(5));
+    expect(fullyBuiltStack.children.whereType<TickerMode>(), hasLength(6));
     expect(
       fullyBuiltStack.children.cast<TickerMode>().map(
         (tickerMode) => tickerMode.enabled,
       ),
-      <bool>[false, false, false, false, true],
+      <bool>[false, false, false, false, false, true],
     );
   });
 
@@ -692,6 +727,32 @@ ShelfSelectionHostDelegate _selectionDelegate({
         },
     refreshAfterAction: () async {},
   );
+}
+
+class _FakeHistoryRepository implements HistoryRepository {
+  const _FakeHistoryRepository();
+
+  @override
+  Future<void> recordVisit(HistoryEntry candidate) async {}
+
+  @override
+  Future<HistoryQueryPage> query(HistoryQuery query) async {
+    return const HistoryQueryPage(items: <HistoryEntry>[], hasMore: false);
+  }
+
+  @override
+  Future<void> delete(HistoryTargetKey target) async {}
+
+  @override
+  Future<void> clear() async {}
+
+  @override
+  Future<void> restore(HistoryEntry entry) async {}
+
+  @override
+  Stream<HistoryChange> watchChanges() {
+    return const Stream<HistoryChange>.empty();
+  }
 }
 
 class _FakeLibraryTaskNotificationService

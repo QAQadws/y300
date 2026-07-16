@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/app/navigation/history_entry_router.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/comic/data/providers/comic_refresh_workflow_providers.dart';
 import 'package:y300/features/comic/presentation/comic_tab_page.dart';
 import 'package:y300/features/library_shared/data/providers/library_task_workflow_providers.dart';
 import 'package:y300/features/favorites/presentation/favorite_shelf_page.dart';
 import 'package:y300/features/forum/presentation/forum_shell_page.dart';
+import 'package:y300/features/history/presentation/history_page.dart';
 import 'package:y300/features/library_shared/data/providers/library_task_notification_providers.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
 import 'package:y300/features/library_shared/presentation/selection/selection_action_bar.dart';
@@ -17,34 +19,35 @@ import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/features/novel/presentation/novel_tab_page.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 
-final mainShellBackgroundTaskStarterProvider = Provider<Future<void> Function()>((ref) {
-  return () => ref.read(comicSearchRefreshQueueServiceProvider).start();
-});
+final mainShellBackgroundTaskStarterProvider =
+    Provider<Future<void> Function()>((ref) {
+      return () => ref.read(comicSearchRefreshQueueServiceProvider).start();
+    });
 
 /// Best-effort startup hook for the system task notification service. Failures
 /// (including a denied permission) must never block the shell, so callers run
 /// it detached.
 final mainShellNotificationInitializerProvider =
     Provider<Future<void> Function()>((ref) {
-  return () async {
-    final service = ref.read(libraryTaskNotificationServiceProvider);
-    await service.initialize();
-    await service.ensurePermission();
-  };
-});
+      return () async {
+        final service = ref.read(libraryTaskNotificationServiceProvider);
+        await service.initialize();
+        await service.ensurePermission();
+      };
+    });
 
 final mainShellReplyDraftAttachmentMaintenanceStarterProvider =
     Provider<Future<void> Function()>((ref) {
-  return () async {
-    try {
-      await ref
-          .read(composerDraftAttachmentMaintenanceServiceProvider)
-          .maintain();
-    } catch (_) {
-      // 回复草稿附件维护是启动后的 best-effort 清理，失败不阻塞主壳。
-    }
-  };
-});
+      return () async {
+        try {
+          await ref
+              .read(composerDraftAttachmentMaintenanceServiceProvider)
+              .maintain();
+        } catch (_) {
+          // 回复草稿附件维护是启动后的 best-effort 清理，失败不阻塞主壳。
+        }
+      };
+    });
 
 final mainShellYamiboSessionWarmupProvider = Provider<Future<void> Function()>((
   ref,
@@ -59,7 +62,7 @@ final mainShellYamiboSessionWarmupProvider = Provider<Future<void> Function()>((
   };
 });
 
-/// 应用主壳：承载论坛、收藏、漫画、小说、更多五栏 Tab，避免业务页面相互耦合。
+/// 应用主壳：承载论坛、收藏、漫画、小说、记录、更多六栏 Tab。
 class MainShellPage extends ConsumerStatefulWidget {
   const MainShellPage({super.key});
 
@@ -80,9 +83,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     unawaited(ref.read(mainShellNotificationInitializerProvider).call());
     // 清理遗忘回复草稿中的过期临时附件，避免只依赖用户重新打开草稿。
     unawaited(
-      ref
-          .read(mainShellReplyDraftAttachmentMaintenanceStarterProvider)
-          .call(),
+      ref.read(mainShellReplyDraftAttachmentMaintenanceStarterProvider).call(),
     );
     // 首页 HTML 通常拿不到 formhash；启动后预热 profile API，让后续
     // 搜索/回复/收藏/发帖可以复用 YamiboSessionStore 中的新鲜 formhash。
@@ -99,10 +100,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     ref.watch(libraryTaskNotificationBridgeProvider);
     final selectionHost = ref.watch(shelfSelectionHostControllerProvider);
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _buildIndexedPages(),
-      ),
+      body: IndexedStack(index: _currentIndex, children: _buildIndexedPages()),
       bottomNavigationBar: ListenableBuilder(
         listenable: selectionHost,
         builder: (context, _) {
@@ -112,20 +110,19 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
               const begin = Offset(0, 1);
               return SlideTransition(
                 position: animation.drive(
-                  Tween<Offset>(begin: begin, end: Offset.zero).chain(
-                    CurveTween(curve: Curves.easeOutCubic),
-                  ),
+                  Tween<Offset>(
+                    begin: begin,
+                    end: Offset.zero,
+                  ).chain(CurveTween(curve: Curves.easeOutCubic)),
                 ),
-                child: FadeTransition(
-                  opacity: animation,
-                  child: child,
-                ),
+                child: FadeTransition(opacity: animation, child: child),
               );
             },
             child: selectionHost.isActive
                 ? SelectionActionBar(
                     key: const ValueKey<String>('main-shell-selection-bar'),
-                    actions: selectionHost.state?.selectionActions ??
+                    actions:
+                        selectionHost.state?.selectionActions ??
                         const <SelectionAction>[],
                     onActionTap: _handleSelectionActionTap,
                   )
@@ -158,7 +155,9 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
                         icon: SizedBox(
                           width: 24,
                           height: 24,
-                          child: Center(child: Icon(Icons.local_library_outlined)),
+                          child: Center(
+                            child: Icon(Icons.local_library_outlined),
+                          ),
                         ),
                         selectedIcon: SizedBox(
                           width: 24,
@@ -166,6 +165,11 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
                           child: Center(child: Icon(Icons.local_library)),
                         ),
                         label: '小说',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.history),
+                        selectedIcon: Icon(Icons.history),
+                        label: '记录',
                       ),
                       NavigationDestination(
                         icon: Icon(Icons.more_horiz_outlined),
@@ -286,7 +290,9 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
                 leading: const Icon(Icons.add),
                 title: const Text('新建分类'),
                 onTap: () {
-                  Navigator.of(sheetContext).pop(_createCategorySelectionSentinel);
+                  Navigator.of(
+                    sheetContext,
+                  ).pop(_createCategorySelectionSentinel);
                 },
               ),
             ],
@@ -361,7 +367,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     });
   }
 
-  int get _pageCount => 5;
+  int get _pageCount => 6;
 
   static const String _createCategorySelectionSentinel =
       '__create-selection-category__';
@@ -372,7 +378,11 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
       1 => FavoriteShelfPage(isActive: isActive),
       2 => ComicTabPage(isActive: isActive),
       3 => NovelTabPage(isActive: isActive),
-      4 => const MorePage(),
+      4 => HistoryPage(
+        onOpenEntry: ref.read(historyEntryRouterProvider).open,
+        imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
+      ),
+      5 => const MorePage(),
       _ => const SizedBox.shrink(),
     };
   }
