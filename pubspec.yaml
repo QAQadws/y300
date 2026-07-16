@@ -45,6 +45,7 @@ dependencies:
   flutter_html: ^3.0.0
   flutter_widget_from_html_core: ^0.17.2
   html: ^0.15.6
+  material_color_utilities: ^0.13.0
   archive: ^4.0.9
   path: ^1.9.1
   path_provider: ^2.1.5
