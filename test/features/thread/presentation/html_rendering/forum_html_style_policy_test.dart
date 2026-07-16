@@ -261,4 +261,27 @@ void main() {
     expect(result, isNot(contains('size="3"')));
     expect(result, isNot(contains('font-size: 40px')));
   });
+
+  test('normalizes structural breaks immediately after edit status', () {
+    final result = ForumHtmlStylePolicy(ForumHtmlReaderPreferences.defaults())
+        .prepareHtml(
+          '<i class="pstatus">本帖最后由作者编辑</i> \n<br> <br />'
+          '正文第一行<br>正文第二行',
+        );
+    final fragment = html_parser.parseFragment(result);
+
+    expect(fragment.querySelectorAll('br'), hasLength(1));
+    expect(fragment.text, contains('本帖最后由作者编辑正文第一行正文第二行'));
+  });
+
+  test(
+    'keeps whitespace after edit status when no structural break exists',
+    () {
+      final result = ForumHtmlStylePolicy(
+        ForumHtmlReaderPreferences.defaults(),
+      ).prepareHtml('<i class="pstatus">编辑提示</i> 正文');
+
+      expect(result, contains('</i> 正文'));
+    },
+  );
 }

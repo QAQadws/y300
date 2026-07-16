@@ -267,6 +267,40 @@ void main() {
     expect(ordinaryItalic?.style?.color?.a, bodyColor.a);
   });
 
+  testWidgets('uses compact deterministic spacing after Discuz edit status', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ForumHtmlWidgetPostRenderer(
+            sourceId: 'pstatus-spacing',
+            html:
+                '<i class="pstatus">本帖最后由作者编辑</i><br><br>'
+                '<span>正文紧随编辑提示</span>',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final htmlWidget = tester.widget<HtmlWidget>(
+      find.byKey(const Key('forum-html-renderer-pstatus-spacing')),
+    );
+    final prepared = html_parser.parseFragment(htmlWidget.html);
+    expect(prepared.querySelectorAll('br'), isEmpty);
+
+    final statusRect = tester.getRect(
+      find.byKey(const Key('forum-html-discuz-edit-status')),
+    );
+    final bodyFinder = find.byWidgetPredicate(
+      (widget) =>
+          widget is RichText && widget.text.toPlainText().contains('正文紧随编辑提示'),
+    );
+    final bodyRect = tester.getRect(bodyFinder);
+    expect(bodyRect.top - statusRect.bottom, inInclusiveRange(7, 10));
+  });
+
   testWidgets('renders forum collapse blocks and expands nested content', (
     tester,
   ) async {

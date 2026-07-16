@@ -96,11 +96,50 @@ class ForumHtmlStylePolicy {
 
   String prepareHtml(String html) {
     final fragment = html_parser.parseFragment(html);
+    for (final editStatus in fragment.querySelectorAll('.pstatus')) {
+      _normalizeEditStatusSpacing(editStatus);
+    }
     for (final element in fragment.querySelectorAll('[style],font')) {
       _sanitizeStyle(element);
       _sanitizeFontElement(element);
     }
     return fragment.nodes.map(_serializeNode).join();
+  }
+
+  void _normalizeEditStatusSpacing(html_dom.Element editStatus) {
+    final parent = editStatus.parentNode;
+    if (parent == null) {
+      return;
+    }
+    final editStatusIndex = parent.nodes.indexOf(editStatus);
+    if (editStatusIndex < 0) {
+      return;
+    }
+    final removable = <html_dom.Node>[];
+    var hasStructuralBreak = false;
+    for (
+      var index = editStatusIndex + 1;
+      index < parent.nodes.length;
+      index++
+    ) {
+      final sibling = parent.nodes[index];
+      final isWhitespace =
+          sibling is html_dom.Text && sibling.data.trim().isEmpty;
+      final isBreak =
+          sibling is html_dom.Element &&
+          sibling.localName?.toLowerCase() == 'br';
+      if (!isWhitespace && !isBreak) {
+        break;
+      }
+      removable.add(sibling);
+      hasStructuralBreak = hasStructuralBreak || isBreak;
+    }
+    if (!hasStructuralBreak) {
+      return;
+    }
+    for (final node in removable) {
+      node.remove();
+    }
   }
 
   bool _isParagraphLike(html_dom.Element element) {

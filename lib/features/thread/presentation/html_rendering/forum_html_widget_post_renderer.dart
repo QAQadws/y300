@@ -309,13 +309,16 @@ class _DiscuzEditStatusText extends StatelessWidget {
         source.color ??
         fallback.color ??
         Theme.of(context).colorScheme.onSurface;
-    return Text(
-      text,
-      key: const Key('forum-html-discuz-edit-status'),
-      style: source.copyWith(
-        fontSize: baseFontSize == null ? null : baseFontSize * 0.88,
-        fontStyle: FontStyle.italic,
-        color: baseColor.withValues(alpha: 0.62),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        text,
+        key: const Key('forum-html-discuz-edit-status'),
+        style: source.copyWith(
+          fontSize: baseFontSize == null ? null : baseFontSize * 0.88,
+          fontStyle: FontStyle.italic,
+          color: baseColor.withValues(alpha: 0.62),
+        ),
       ),
     );
   }
