@@ -370,33 +370,6 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
       }
       return;
     }
-    if (!mounted) {
-      return;
-    }
-    final messenger = ScaffoldMessenger.of(context);
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: const Text('已删除记录'),
-          action: SnackBarAction(
-            label: '撤销',
-            onPressed: () {
-              unawaited(_restoreEntry(entry));
-            },
-          ),
-        ),
-      );
-  }
-
-  Future<void> _restoreEntry(HistoryEntry entry) async {
-    try {
-      await _controller.restoreEntry(entry);
-    } catch (_) {
-      if (mounted) {
-        _showMessage('恢复记录失败');
-      }
-    }
   }
 
   Future<void> _confirmClearAll() async {

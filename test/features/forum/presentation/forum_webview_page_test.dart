@@ -449,6 +449,10 @@ void main() {
       expect(draft.title, '结构化主题');
       expect(draft.forumName, '中文百合漫画区');
       expect(draft.page, 3);
+      expect(
+        draft.thumbnail?.remoteUrl,
+        'https://bbs.yamibo.com/data/attachment/forum/cover.jpg',
+      );
       expect(draft.canonicalUri.toString(), isNot(contains('highlight')));
     },
   );
@@ -2028,7 +2032,7 @@ Object _threadDocumentResult({
     'title': title,
     'forumName': forumName,
     'canonicalHref': canonicalHref,
-    'firstPostAvatarHref': '/uc_server/avatar.jpg',
+    'firstPostImageHref': '/data/attachment/forum/cover.jpg',
     'postCount': postCount,
   });
 }

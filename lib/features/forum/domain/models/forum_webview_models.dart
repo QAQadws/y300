@@ -23,13 +23,13 @@ class ForumThreadDocumentSnapshot {
     this.title,
     this.forumName,
     this.canonicalUri,
-    this.firstPostAvatarUrl,
+    this.firstPostImageUrl,
   });
 
   final String? title;
   final String? forumName;
   final Uri? canonicalUri;
-  final String? firstPostAvatarUrl;
+  final String? firstPostImageUrl;
   final int postCount;
   final ForumThreadMenuSnapshot menu;
 

@@ -118,12 +118,21 @@ void main() {
     final initialNavigationBar = tester.widget<NavigationBar>(
       find.byType(NavigationBar),
     );
-    expect(
-      initialNavigationBar.destinations.cast<NavigationDestination>().map(
-        (destination) => destination.label,
-      ),
-      <String>['论坛', '收藏', '漫画', '小说', '记录', '更多'],
-    );
+    final destinations = initialNavigationBar.destinations
+        .cast<NavigationDestination>()
+        .toList(growable: false);
+    expect(destinations.map((destination) => destination.label), <String>[
+      '论坛',
+      '收藏',
+      '漫画',
+      '小说',
+      '记录',
+      '更多',
+    ]);
+    expect((destinations[1].icon as Icon).icon, Icons.explore_outlined);
+    expect((destinations[1].selectedIcon! as Icon).icon, Icons.explore);
+    expect((destinations[4].icon as Icon).icon, Icons.history_outlined);
+    expect((destinations[4].selectedIcon! as Icon).icon, Icons.history);
     final initialStack = tester.widget<IndexedStack>(find.byType(IndexedStack));
     expect(initialStack.children, hasLength(6));
     expect(initialStack.children.whereType<TickerMode>(), hasLength(1));

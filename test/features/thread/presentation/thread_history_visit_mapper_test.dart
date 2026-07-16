@@ -8,7 +8,7 @@ import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 void main() {
   const mapper = ThreadHistoryVisitMapper();
 
-  test('maps parsed thread metadata and the first-floor avatar', () {
+  test('maps parsed thread metadata and the first first-floor body image', () {
     final state = ThreadDetailPageState.initial(tid: '527325', subject: '')
         .copyWith(
           subject: '解析后的标题',
@@ -21,7 +21,10 @@ void main() {
               pid: 'first',
               author: 'alice',
               authorId: '1',
-              message: '<p>正文</p>',
+              message: '''
+                <p><img src="/static/image/smilies/default/smile.gif"></p>
+                <p><img data-original="/data/attachment/forum/cover.jpg"></p>
+              ''',
               number: 1,
               isFirst: true,
               dateline: 'today',
@@ -47,8 +50,33 @@ void main() {
     );
     expect(
       draft.thumbnail?.remoteUrl,
-      'https://bbs.yamibo.com/uc_server/data/avatar/1.jpg',
+      'https://bbs.yamibo.com/data/attachment/forum/cover.jpg',
     );
+  });
+
+  test('uses a placeholder when the first floor has no body image', () {
+    final state = ThreadDetailPageState.initial(tid: '527325', subject: '')
+        .copyWith(
+          subject: '没有正文图片',
+          currentPage: 1,
+          isLoadingInitial: false,
+          posts: <ThreadPost>[
+            ThreadPost(
+              pid: 'first',
+              author: 'alice',
+              authorId: '1',
+              message: '<p>纯文字正文</p>',
+              number: 1,
+              isFirst: true,
+              dateline: 'today',
+              avatarUrl: '/uc_server/data/avatar/1.jpg',
+            ),
+          ],
+        );
+
+    final draft = mapper.map(state: state, routeTid: '527325');
+
+    expect(draft.thumbnail, isNull);
   });
 
   test('uses route fallbacks without treating a reply as the first floor', () {

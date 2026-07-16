@@ -66,8 +66,19 @@ class DefaultForumWebViewThreadDocumentBridge
     return floorLabel === '1' || floorLabel === '1#' ||
       floorLabel === '1楼' || floorLabel === '楼主';
   }) || null;
-  const avatar = firstPost
-    ? firstPost.querySelector('.avatar img, .authi img, img.avatar')
+  const firstPostBody = firstPost
+    ? firstPost.querySelector('.message, [id^="postmessage_"], td.t_f')
+    : null;
+  const firstPostImage = firstPostBody
+    ? Array.from(firstPostBody.querySelectorAll('img')).find((image) => {
+        const source = normalizeText(
+          image.getAttribute('data-original') ||
+          image.getAttribute('data-src') ||
+          image.getAttribute('file') ||
+          image.getAttribute('src'),
+        );
+        return source && !/(smilies|static[/]image|emotion|avatar|uc_server[/]data[/]avatar)/i.test(source);
+      }) || null
     : null;
   const payload = {
     title,
@@ -75,11 +86,12 @@ class DefaultForumWebViewThreadDocumentBridge
     canonicalHref: canonical
       ? normalizeText(canonical.getAttribute('href')) || null
       : null,
-    firstPostAvatarHref: avatar
+    firstPostImageHref: firstPostImage
       ? normalizeText(
-          avatar.getAttribute('src') ||
-          avatar.getAttribute('data-src') ||
-          avatar.getAttribute('data-original'),
+          firstPostImage.getAttribute('data-original') ||
+          firstPostImage.getAttribute('data-src') ||
+          firstPostImage.getAttribute('file') ||
+          firstPostImage.getAttribute('src'),
         ) || null
       : null,
     postCount: posts.length,
@@ -134,8 +146,8 @@ class DefaultForumWebViewThreadDocumentBridge
         payload['canonicalHref'],
         navigator: navigator,
       ),
-      firstPostAvatarUrl: _resolveHttpUri(
-        payload['firstPostAvatarHref'],
+      firstPostImageUrl: _resolveHttpUri(
+        payload['firstPostImageHref'],
         navigator: navigator,
       )?.toString(),
       postCount: _parseNonNegativeInt(payload['postCount']),

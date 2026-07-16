@@ -12,7 +12,7 @@ class ForumWebViewHistoryVisitMapper {
   HistoryVisitDraft map(ForumWebViewHistoryCandidate candidate) {
     final page = _extractPage(candidate.finalUri);
     final forumName = _nonEmpty(candidate.forumName);
-    final avatarUrl = _nonEmpty(candidate.document.firstPostAvatarUrl);
+    final firstPostImageUrl = _nonEmpty(candidate.document.firstPostImageUrl);
     return HistoryVisitDraft(
       target: HistoryTargetKey(
         type: HistoryTargetType.thread,
@@ -22,9 +22,9 @@ class ForumWebViewHistoryVisitMapper {
       title: _nonEmpty(candidate.document.title),
       contextLabel:
           forumName ?? (page != null && page > 1 ? '第 $page 页' : null),
-      thumbnail: avatarUrl == null
+      thumbnail: firstPostImageUrl == null
           ? null
-          : HistoryThumbnailSnapshot(remoteUrl: avatarUrl),
+          : HistoryThumbnailSnapshot(remoteUrl: firstPostImageUrl),
       canonicalUri: _normalizedCanonicalUri(candidate),
       page: page,
       forumName: forumName,

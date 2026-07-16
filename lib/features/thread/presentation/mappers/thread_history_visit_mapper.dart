@@ -1,10 +1,16 @@
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/services/forum_post_image_source_collector.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 
 class ThreadHistoryVisitMapper {
-  const ThreadHistoryVisitMapper();
+  const ThreadHistoryVisitMapper({
+    ForumPostImageSourceCollector imageSourceCollector =
+        const ForumPostImageSourceCollector(),
+  }) : _imageSourceCollector = imageSourceCollector;
+
+  final ForumPostImageSourceCollector _imageSourceCollector;
 
   HistoryVisitDraft map({
     required ThreadDetailPageState state,
@@ -19,7 +25,9 @@ class ThreadHistoryVisitMapper {
         : (routePage != null && routePage > 0 ? routePage : null);
     final forumName = _nonEmpty(state.forumName) ?? _nonEmpty(routeForumName);
     final firstPost = _firstFloor(state.posts);
-    final avatarUrl = _resolveForumUrl(firstPost?.avatarUrl)?.toString();
+    final firstPostImageUrl = firstPost == null
+        ? null
+        : _firstOrNull(_imageSourceCollector.collect(firstPost));
 
     return HistoryVisitDraft(
       target: HistoryTargetKey(type: HistoryTargetType.thread, id: tid),
@@ -27,9 +35,9 @@ class ThreadHistoryVisitMapper {
       title: _nonEmpty(state.subject) ?? _nonEmpty(routeSubject),
       contextLabel:
           forumName ?? (page != null && page > 1 ? '第 $page 页' : null),
-      thumbnail: avatarUrl == null
+      thumbnail: firstPostImageUrl == null
           ? null
-          : HistoryThumbnailSnapshot(remoteUrl: avatarUrl),
+          : HistoryThumbnailSnapshot(remoteUrl: firstPostImageUrl),
       canonicalUri:
           _resolveForumUrl(state.desktopUrl) ?? _fallbackThreadUri(tid, page),
       page: page,
@@ -44,6 +52,10 @@ class ThreadHistoryVisitMapper {
       }
     }
     return null;
+  }
+
+  String? _firstOrNull(List<String> values) {
+    return values.isEmpty ? null : values.first;
   }
 
   Uri? _resolveForumUrl(String? value) {

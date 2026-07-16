@@ -26,6 +26,7 @@ class HistoryThumbnailResolver {
 
   HistoryResolvedThumbnail resolve(
     HistoryThumbnailSnapshot? snapshot, {
+    HistoryTargetType? targetType,
     HistoryLocalFileExists fileExists = _defaultFileExists,
   }) {
     if (snapshot == null) {
@@ -38,7 +39,10 @@ class HistoryThumbnailResolver {
             fileExists(localCandidate)
         ? localCandidate
         : null;
-    final remoteUrl = _validRemoteUrl(snapshot.remoteUrl);
+    final remoteUrl = _validRemoteUrl(
+      snapshot.remoteUrl,
+      targetType: targetType,
+    );
     return HistoryResolvedThumbnail(
       localPath: localPath,
       remoteUrl: remoteUrl,
@@ -51,7 +55,10 @@ class HistoryThumbnailResolver {
 
   static bool _defaultFileExists(String path) => io.File(path).existsSync();
 
-  String? _validRemoteUrl(String? value) {
+  String? _validRemoteUrl(
+    String? value, {
+    required HistoryTargetType? targetType,
+  }) {
     final normalized = value?.trim();
     if (normalized == null || normalized.isEmpty) {
       return null;
@@ -62,7 +69,18 @@ class HistoryThumbnailResolver {
         uri.host.isEmpty) {
       return null;
     }
+    if (targetType == HistoryTargetType.thread && _isForumAvatar(uri)) {
+      return null;
+    }
     return uri.toString();
+  }
+
+  bool _isForumAvatar(Uri uri) {
+    final path = uri.path.toLowerCase();
+    return path.contains('/avatar/') ||
+        path.contains('/data/avatar') ||
+        path.endsWith('/avatar.php') ||
+        RegExp(r'_avatar(?:_|\.)').hasMatch(path);
   }
 
   double _alignmentAxis(double? focus) {
@@ -90,7 +108,10 @@ class HistoryThumbnail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final resolved = resolver.resolve(entry.thumbnail);
+    final resolved = resolver.resolve(
+      entry.thumbnail,
+      targetType: entry.target.type,
+    );
     final fallback = _HistoryThumbnailFallback(type: entry.target.type);
     return ClipRRect(
       key: ValueKey<String>('history-thumbnail-${entry.target}'),

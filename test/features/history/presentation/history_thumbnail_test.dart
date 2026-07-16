@@ -50,4 +50,23 @@ void main() {
 
     expect(resolved.hasImage, isFalse);
   });
+
+  test('rejects legacy author avatars only for thread records', () {
+    const snapshot = HistoryThumbnailSnapshot(
+      remoteUrl:
+          'https://bbs.yamibo.com/uc_server/data/avatar/000/01/23/45_avatar_small.jpg',
+    );
+
+    final threadThumbnail = resolver.resolve(
+      snapshot,
+      targetType: HistoryTargetType.thread,
+    );
+    final comicThumbnail = resolver.resolve(
+      snapshot,
+      targetType: HistoryTargetType.comic,
+    );
+
+    expect(threadThumbnail.hasImage, isFalse);
+    expect(comicThumbnail.remoteUrl, snapshot.remoteUrl);
+  });
 }

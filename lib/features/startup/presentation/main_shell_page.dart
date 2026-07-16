@@ -142,8 +142,8 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
                         label: '论坛',
                       ),
                       NavigationDestination(
-                        icon: Icon(Icons.favorite_border),
-                        selectedIcon: Icon(Icons.favorite),
+                        icon: Icon(Icons.explore_outlined),
+                        selectedIcon: Icon(Icons.explore),
                         label: '收藏',
                       ),
                       NavigationDestination(
@@ -167,7 +167,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
                         label: '小说',
                       ),
                       NavigationDestination(
-                        icon: Icon(Icons.history),
+                        icon: Icon(Icons.history_outlined),
                         selectedIcon: Icon(Icons.history),
                         label: '记录',
                       ),

@@ -36,75 +36,73 @@ class HistoryEntryTile extends StatelessWidget {
     final semanticsLabel =
         '$typeLabel，${entry.title}，${entry.contextLabel}，$timeText';
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.45),
-          ),
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.only(left: 16, right: 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Semantics(
-                button: true,
-                label: semanticsLabel,
-                child: InkWell(
-                  key: ValueKey<String>('history-entry-open-${entry.target}'),
-                  onTap: onOpen,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
+    const borderRadius = BorderRadius.all(Radius.circular(8));
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Material(
+        key: ValueKey<String>('history-entry-surface-${entry.target}'),
+        color: Colors.transparent,
+        borderRadius: borderRadius,
+        clipBehavior: Clip.antiAlias,
+        child: Semantics(
+          button: true,
+          label: semanticsLabel,
+          child: InkWell(
+            key: ValueKey<String>('history-entry-open-${entry.target}'),
+            onTap: onOpen,
+            borderRadius: borderRadius,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child:
                         thumbnailBuilder?.call(context, entry) ??
-                            HistoryThumbnail(
-                              entry: entry,
-                              headerBuilder: headerBuilder,
-                            ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                entry.title,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                '${entry.contextLabel} · $timeText',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
+                        HistoryThumbnail(
+                          entry: entry,
+                          headerBuilder: headerBuilder,
+                        ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          entry.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${entry.contextLabel} · $timeText',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
                     ),
                   ),
-                ),
+                  IconButton(
+                    key: ValueKey<String>(
+                      'history-entry-delete-${entry.target}',
+                    ),
+                    tooltip: '删除记录',
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+                ],
               ),
             ),
-            IconButton(
-              key: ValueKey<String>('history-entry-delete-${entry.target}'),
-              tooltip: '删除记录',
-              onPressed: onDelete,
-              icon: const Icon(Icons.delete_outline),
-            ),
-          ],
+          ),
         ),
       ),
     );

@@ -18,7 +18,8 @@ void main() {
           canonicalUri: Uri.parse(
             'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=524596&highlight=%BC%AB%CF%DE',
           ),
-          firstPostAvatarUrl: 'https://bbs.yamibo.com/avatar.jpg',
+          firstPostImageUrl:
+              'https://bbs.yamibo.com/data/attachment/forum/cover.jpg',
           postCount: 20,
           menu: const ForumThreadMenuSnapshot(),
         ),
@@ -34,7 +35,10 @@ void main() {
     expect(draft.contextLabel, '中文百合小说区');
     expect(draft.page, 3);
     expect(draft.forumName, '中文百合小说区');
-    expect(draft.thumbnail?.remoteUrl, 'https://bbs.yamibo.com/avatar.jpg');
+    expect(
+      draft.thumbnail?.remoteUrl,
+      'https://bbs.yamibo.com/data/attachment/forum/cover.jpg',
+    );
     expect(
       draft.canonicalUri.toString(),
       'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=524596',

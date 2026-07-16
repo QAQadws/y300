@@ -47,6 +47,22 @@ void main() {
       expect(find.text('漫画作品'), findsOneWidget);
       expect(find.text('小说作品'), findsOneWidget);
       expect(find.byTooltip('删除记录'), findsNWidgets(3));
+      final openThread = find.byKey(
+        const ValueKey<String>('history-entry-open-thread:100'),
+      );
+      final deleteThread = find.byKey(
+        const ValueKey<String>('history-entry-delete-thread:100'),
+      );
+      expect(
+        find.descendant(of: openThread, matching: deleteThread),
+        findsOneWidget,
+      );
+      final surface = tester.widget<Material>(
+        find.byKey(const ValueKey<String>('history-entry-surface-thread:100')),
+      );
+      expect(surface.borderRadius, BorderRadius.circular(8));
+      expect(surface.clipBehavior, Clip.antiAlias);
+      expect(find.byType(Divider), findsNothing);
       expect(tester.takeException(), isNull);
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -57,7 +73,7 @@ void main() {
   });
 
   testWidgets(
-    'opens, searches, deletes with undo, and clears with confirmation',
+    'opens, searches, deletes silently, and clears with confirmation',
     (tester) async {
       final repository = MemoryHistoryRepository(_fixtures(now));
       final controller = buildHistoryController(repository);
@@ -100,11 +116,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('漫画作品'), findsNothing);
-      expect(find.text('已删除记录'), findsOneWidget);
-
-      await tester.tap(find.text('撤销'));
-      await tester.pumpAndSettle();
-      expect(find.text('漫画作品'), findsOneWidget);
+      expect(find.text('已删除记录'), findsNothing);
+      expect(find.text('撤销'), findsNothing);
 
       await tester.tap(find.byKey(const Key('history-search-button')));
       await tester.pump();
@@ -237,7 +250,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('小说作品'), findsNothing);
-    expect(find.text('已删除记录'), findsOneWidget);
+    expect(find.text('已删除记录'), findsNothing);
+    expect(find.byType(SnackBar), findsNothing);
   });
 
   testWidgets('keeps search state while a reopened visit moves to the top', (

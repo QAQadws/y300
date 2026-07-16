@@ -16,6 +16,9 @@ void main() {
     expect(bridge.extractScript, contains('link[rel="canonical"]'));
     expect(bridge.extractScript, contains('.display.pione'));
     expect(bridge.extractScript, contains("floorLabel === '楼主'"));
+    expect(bridge.extractScript, contains('.message, [id^="postmessage_"]'));
+    expect(bridge.extractScript, contains('firstPostImageHref'));
+    expect(bridge.extractScript, isNot(contains('firstPostAvatarHref')));
     expect(
       bridge.extractScript,
       contains('.header h2 a[href*="forumdisplay"]'),
@@ -35,7 +38,7 @@ void main() {
           'title': '  测试 主题  ',
           'forumName': ' 中文百合漫画区 ',
           'canonicalHref': '/thread-123-1-1.html',
-          'firstPostAvatarHref': '/uc_server/avatar.jpg',
+          'firstPostImageHref': '/data/attachment/forum/cover.jpg',
           'postCount': 20,
           'authorOnlyHref':
               'forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
@@ -58,8 +61,8 @@ void main() {
       'https://bbs.yamibo.com/thread-123-1-1.html',
     );
     expect(
-      snapshot?.firstPostAvatarUrl,
-      'https://bbs.yamibo.com/uc_server/avatar.jpg',
+      snapshot?.firstPostImageUrl,
+      'https://bbs.yamibo.com/data/attachment/forum/cover.jpg',
     );
     expect(
       snapshot?.menu.authorOnlyUri?.toString(),
