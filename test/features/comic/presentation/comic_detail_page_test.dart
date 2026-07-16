@@ -18,6 +18,9 @@ import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
 import 'package:y300/features/comic/presentation/comic_detail_page.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
+import 'package:y300/features/history/data/providers/history_providers.dart';
+import 'package:y300/features/history/domain/models/history_models.dart';
+import 'package:y300/features/history/domain/services/history_visit_recorder.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -29,9 +32,11 @@ void main() {
   testWidgets(
     'ComicDetailPage renders unified detail header and chapter list',
     (tester) async {
+      final historyRecorder = _RecordingHistoryVisitRecorder();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            historyVisitRecorderProvider.overrideWithValue(historyRecorder),
             comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
             comicEpisodeRefreshServiceProvider.overrideWithValue(
               _FakeComicEpisodeRefreshService(),
@@ -73,6 +78,13 @@ void main() {
         find.byKey(const Key('novel-chapter-open-mode-control')),
         findsNothing,
       );
+      expect(historyRecorder.drafts, hasLength(1));
+      expect(
+        historyRecorder.drafts.single.target,
+        const HistoryTargetKey(type: HistoryTargetType.comic, id: 'comic:1'),
+      );
+      expect(historyRecorder.drafts.single.title, 'Test Comic');
+      expect(historyRecorder.drafts.single.sourceTid, '100');
     },
   );
 
@@ -82,6 +94,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          historyVisitRecorderProvider.overrideWithValue(
+            const _NoopHistoryVisitRecorder(),
+          ),
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
           comicEpisodeRefreshServiceProvider.overrideWithValue(
             _FakeComicEpisodeRefreshService(),
@@ -120,9 +135,11 @@ void main() {
     tester,
   ) async {
     final observer = _CountingNavigatorObserver();
+    final historyRecorder = _RecordingHistoryVisitRecorder();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          historyVisitRecorderProvider.overrideWithValue(historyRecorder),
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
           comicEpisodeRefreshServiceProvider.overrideWithValue(
             _FakeComicEpisodeRefreshService(),
@@ -149,6 +166,7 @@ void main() {
     );
 
     await tester.pumpAndSettle();
+    expect(historyRecorder.drafts, hasLength(1));
     await _scrollFirstChapterIntoTapArea(tester);
     await tester.tap(find.text('Episode 1'));
     await tester.pump();
@@ -168,6 +186,7 @@ void main() {
 
     expect(observer.pushCount, 2);
     expect(find.byType(ComicDetailPage), findsOneWidget);
+    expect(historyRecorder.drafts, hasLength(1));
   });
 
   testWidgets(
@@ -177,6 +196,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            historyVisitRecorderProvider.overrideWithValue(
+              const _NoopHistoryVisitRecorder(),
+            ),
             comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
             comicEpisodeRefreshServiceProvider.overrideWithValue(
               _FakeComicEpisodeRefreshService(),
@@ -501,6 +523,22 @@ class _FakeImageCacheService implements ImageCacheService {
 
   @override
   Future<void> clearUnprotected() async {}
+}
+
+class _RecordingHistoryVisitRecorder implements HistoryVisitRecorder {
+  final List<HistoryVisitDraft> drafts = <HistoryVisitDraft>[];
+
+  @override
+  Future<void> record(HistoryVisitDraft draft) async {
+    drafts.add(draft);
+  }
+}
+
+class _NoopHistoryVisitRecorder implements HistoryVisitRecorder {
+  const _NoopHistoryVisitRecorder();
+
+  @override
+  Future<void> record(HistoryVisitDraft draft) async {}
 }
 
 class _FakeComicRepository implements ComicRepository {

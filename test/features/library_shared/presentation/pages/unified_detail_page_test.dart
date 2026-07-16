@@ -114,6 +114,7 @@ void main() {
     'Phase 0 baseline commits initial detail content and refreshes in place',
     (tester) async {
       final adapter = _FakeDetailAdapter();
+      var presentationCount = 0;
       await tester.pumpWidget(
         MaterialApp(
           home: UnifiedDetailPage(
@@ -121,6 +122,9 @@ void main() {
             workId: 'work-1',
             onOpenReader: (context, target) async {},
             onOpenThread: (context, target) async {},
+            onFirstContentPresented: (header, chapters) {
+              presentationCount++;
+            },
           ),
         ),
       );
@@ -139,6 +143,7 @@ void main() {
       expect(adapter.loadHeaderCallCount, 1);
       expect(adapter.loadChaptersCallCount, 1);
       expect(adapter.refreshWorkCallCount, 0);
+      expect(presentationCount, 1);
 
       await tester.tap(find.text('更新').first);
       await tester.pumpAndSettle();
@@ -150,6 +155,7 @@ void main() {
         find.byKey(const Key('unified-detail-header-section')),
         findsOneWidget,
       );
+      expect(presentationCount, 1);
     },
   );
 
@@ -1330,6 +1336,7 @@ void main() {
       final bus = LibraryShelfRefreshBus();
       addTearDown(bus.dispose);
       final adapter = _FakeDetailAdapter();
+      var presentationCount = 0;
       await tester.pumpWidget(
         MaterialApp(
           home: UnifiedDetailPage(
@@ -1338,11 +1345,15 @@ void main() {
             shelfRefreshBus: bus,
             onOpenReader: (context, target) async {},
             onOpenThread: (context, target) async {},
+            onFirstContentPresented: (header, chapters) {
+              presentationCount++;
+            },
           ),
         ),
       );
       await tester.pumpAndSettle();
       final initialLoadCount = adapter.loadChaptersCallCount;
+      expect(presentationCount, 1);
 
       bus.notify(
         modules: const <LibraryModuleKey>{LibraryModuleKey.novel},
@@ -1363,6 +1374,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(adapter.loadChaptersCallCount, initialLoadCount + 1);
+      expect(presentationCount, 1);
     },
   );
 
@@ -1370,6 +1382,7 @@ void main() {
     tester,
   ) async {
     final adapter = _FakeDetailAdapter()..failLoadHeaderOnce = true;
+    var presentationCount = 0;
     await tester.pumpWidget(
       MaterialApp(
         home: UnifiedDetailPage(
@@ -1377,6 +1390,9 @@ void main() {
           workId: 'work-1',
           onOpenReader: (context, target) async {},
           onOpenThread: (context, target) async {},
+          onFirstContentPresented: (header, chapters) {
+            presentationCount++;
+          },
         ),
       ),
     );
@@ -1386,6 +1402,7 @@ void main() {
     expect(find.byKey(const Key('unified-detail-error-panel')), findsOneWidget);
     expect(find.byKey(const Key('unified-detail-error-retry')), findsOneWidget);
     expect(find.textContaining('加载失败'), findsOneWidget);
+    expect(presentationCount, 0);
 
     await tester.ensureVisible(
       find.byKey(const Key('unified-detail-error-retry')),
@@ -1395,6 +1412,77 @@ void main() {
 
     expect(find.byKey(const Key('unified-detail-error-panel')), findsNothing);
     expect(find.text('测试作品'), findsWidgets);
+    expect(presentationCount, 1);
+  });
+
+  testWidgets('UnifiedDetailPage isolates first content callback failures', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: _FakeDetailAdapter(),
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+          onFirstContentPresented: (header, chapters) {
+            throw StateError('history unavailable');
+          },
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('测试作品'), findsWidgets);
+    expect(find.byKey(const Key('unified-detail-error-panel')), findsNothing);
+  });
+
+  testWidgets('each UnifiedDetailPage route presents the same work once', (
+    tester,
+  ) async {
+    var presentationCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: FilledButton(
+                key: const Key('open-detail-route'),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => UnifiedDetailPage(
+                        adapter: _FakeDetailAdapter(),
+                        workId: 'work-1',
+                        onOpenReader: (context, target) async {},
+                        onOpenThread: (context, target) async {},
+                        onFirstContentPresented: (header, chapters) {
+                          presentationCount++;
+                        },
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('打开详情'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('open-detail-route')));
+    await tester.pumpAndSettle();
+    expect(presentationCount, 1);
+
+    Navigator.of(tester.element(find.text('测试作品').first)).pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('open-detail-route')));
+    await tester.pumpAndSettle();
+
+    expect(presentationCount, 2);
   });
 
   testWidgets(

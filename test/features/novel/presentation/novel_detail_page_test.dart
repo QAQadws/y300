@@ -8,6 +8,9 @@ import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/history/data/providers/history_providers.dart';
+import 'package:y300/features/history/domain/models/history_models.dart';
+import 'package:y300/features/history/domain/services/history_visit_recorder.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -37,9 +40,11 @@ void main() {
   testWidgets(
     'NovelDetailPage renders unified detail header and chapter list',
     (tester) async {
+      final historyRecorder = _RecordingHistoryVisitRecorder();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            historyVisitRecorderProvider.overrideWithValue(historyRecorder),
             novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
             novelDownloadServiceProvider.overrideWithValue(
               _NoopNovelDownloadService(),
@@ -75,6 +80,13 @@ void main() {
       );
       expect(find.textContaining('Pid:5001'), findsOneWidget);
       expect(find.byIcon(Icons.file_download), findsAtLeastNWidgets(1));
+      expect(historyRecorder.drafts, hasLength(1));
+      expect(
+        historyRecorder.drafts.single.target,
+        const HistoryTargetKey(type: HistoryTargetType.novel, id: 'novel:1'),
+      );
+      expect(historyRecorder.drafts.single.title, 'Test Novel');
+      expect(historyRecorder.drafts.single.sourceTid, '100');
     },
   );
 
@@ -84,6 +96,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          historyVisitRecorderProvider.overrideWithValue(
+            const _NoopHistoryVisitRecorder(),
+          ),
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
           novelDownloadServiceProvider.overrideWithValue(
             _NoopNovelDownloadService(),
@@ -163,10 +178,12 @@ void main() {
   ) async {
     final sourceRepository = _HydrationNovelSourceStateRepository();
     final syncService = _ControlledNovelChapterSyncService();
+    final historyRecorder = _RecordingHistoryVisitRecorder();
     addTearDown(syncService.dispose);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          historyVisitRecorderProvider.overrideWithValue(historyRecorder),
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
           novelDownloadServiceProvider.overrideWithValue(
             _NoopNovelDownloadService(),
@@ -198,6 +215,7 @@ void main() {
     expect(find.textContaining('正在加载第 1/2 页'), findsOneWidget);
     expect(syncService.request?.publisherId, '406769');
     expect(syncService.request?.mode, NovelChapterSyncMode.initialFull);
+    expect(historyRecorder.drafts, hasLength(1));
 
     syncService.complete();
     await tester.pumpAndSettle();
@@ -206,6 +224,7 @@ void main() {
       find.byKey(const Key('novel-chapter-hydration-panel')),
       findsNothing,
     );
+    expect(historyRecorder.drafts, hasLength(1));
   });
 
   testWidgets('chapter open mode selection is persisted globally', (
@@ -440,6 +459,9 @@ Future<void> _pumpNovelDetail(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        historyVisitRecorderProvider.overrideWithValue(
+          const _NoopHistoryVisitRecorder(),
+        ),
         novelRepositoryProvider.overrideWithValue(
           repository ?? _FakeNovelRepository(),
         ),
@@ -470,6 +492,22 @@ Future<void> _pumpNovelDetail(
     ),
   );
   await tester.pumpAndSettle();
+}
+
+class _RecordingHistoryVisitRecorder implements HistoryVisitRecorder {
+  final List<HistoryVisitDraft> drafts = <HistoryVisitDraft>[];
+
+  @override
+  Future<void> record(HistoryVisitDraft draft) async {
+    drafts.add(draft);
+  }
+}
+
+class _NoopHistoryVisitRecorder implements HistoryVisitRecorder {
+  const _NoopHistoryVisitRecorder();
+
+  @override
+  Future<void> record(HistoryVisitDraft draft) async {}
 }
 
 Future<void> _scrollNovelChapterIntoTapArea(WidgetTester tester) async {

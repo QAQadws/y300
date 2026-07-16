@@ -2,8 +2,9 @@ import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/history/domain/repositories/history_repository.dart';
 import 'package:y300/features/history/domain/services/history_clock.dart';
 import 'package:y300/features/history/domain/services/history_visit_draft_normalizer.dart';
+import 'package:y300/features/history/domain/services/history_visit_recorder.dart';
 
-class RecordHistoryVisitUseCase {
+class RecordHistoryVisitUseCase implements HistoryVisitRecorder {
   const RecordHistoryVisitUseCase({
     required HistoryRepository repository,
     required HistoryVisitDraftNormalizer normalizer,
@@ -16,7 +17,10 @@ class RecordHistoryVisitUseCase {
   final HistoryVisitDraftNormalizer _normalizer;
   final HistoryClock _clock;
 
-  Future<void> call(HistoryVisitDraft draft) async {
+  Future<void> call(HistoryVisitDraft draft) => record(draft);
+
+  @override
+  Future<void> record(HistoryVisitDraft draft) async {
     final normalized = _normalizer.normalize(draft);
     final now = _clock.now().toUtc();
     await _repository.recordVisit(

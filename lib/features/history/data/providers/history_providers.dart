@@ -9,6 +9,7 @@ import 'package:y300/features/history/domain/services/history_clock.dart';
 import 'package:y300/features/history/domain/services/history_retention_policy.dart';
 import 'package:y300/features/history/domain/services/history_use_cases.dart';
 import 'package:y300/features/history/domain/services/history_visit_draft_normalizer.dart';
+import 'package:y300/features/history/domain/services/history_visit_recorder.dart';
 import 'package:y300/features/history/domain/services/record_history_visit_use_case.dart';
 
 final historyDatabaseNameProvider = Provider<String>((ref) {
@@ -55,6 +56,10 @@ final recordHistoryVisitUseCaseProvider = Provider<RecordHistoryVisitUseCase>((
     normalizer: ref.watch(historyVisitDraftNormalizerProvider),
     clock: ref.watch(historyClockProvider),
   );
+});
+
+final historyVisitRecorderProvider = Provider<HistoryVisitRecorder>((ref) {
+  return ref.watch(recordHistoryVisitUseCaseProvider);
 });
 
 final queryHistoryUseCaseProvider = Provider<QueryHistoryUseCase>((ref) {

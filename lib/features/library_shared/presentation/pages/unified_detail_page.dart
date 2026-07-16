@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' as io;
 
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ import 'package:y300/features/library_shared/presentation/detail/unified_detail_
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_metadata_sheet.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_misc_sections.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_palette.dart';
+import 'package:y300/features/library_shared/presentation/services/route_content_presentation_guard.dart';
 import 'package:y300/features/library_shared/presentation/widgets/cover_focal_point_picker.dart';
 import 'package:y300/features/library_shared/presentation/widgets/library_sort_option_tile.dart';
 
@@ -39,6 +41,7 @@ class UnifiedDetailPage extends StatefulWidget {
     this.onOpenChapter,
     this.onContinue,
     this.onRefreshCompleted,
+    this.onFirstContentPresented,
   });
 
   final DetailModuleAdapter adapter;
@@ -62,6 +65,11 @@ class UnifiedDetailPage extends StatefulWidget {
   final Future<void> Function(BuildContext context, ReaderRouteTarget target)?
   onContinue;
   final Future<void> Function(DetailRefreshResult result)? onRefreshCompleted;
+  final FutureOr<void> Function(
+    LibraryDetailHeader header,
+    List<LibraryChapterItem> chapters,
+  )?
+  onFirstContentPresented;
 
   @override
   State<UnifiedDetailPage> createState() => _UnifiedDetailPageState();
@@ -79,6 +87,8 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   bool _showCollapsedTitle = false;
   int _lastHandledRefreshSignalSequence = 0;
   final Set<String> _downloadingEpisodeIds = <String>{};
+  final RouteContentPresentationGuard _contentPresentationGuard =
+      RouteContentPresentationGuard();
 
   @override
   void initState() {
@@ -96,6 +106,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
         return;
       }
       setState(() {});
+      _scheduleFirstContentPresented();
     });
   }
 
@@ -149,6 +160,36 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       return;
     }
     setState(() {});
+  }
+
+  void _scheduleFirstContentPresented() {
+    if (widget.onFirstContentPresented == null) {
+      return;
+    }
+    final routeWorkId = widget.workId;
+    final state = _controller.state;
+    final header = state.header;
+    if (header == null || state.isLoading || state.errorMessage != null) {
+      return;
+    }
+    final chapters = List<LibraryChapterItem>.unmodifiable(state.chapters);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || widget.workId != routeWorkId) {
+        return;
+      }
+      if (!_contentPresentationGuard.tryCommit(routeWorkId)) {
+        return;
+      }
+      try {
+        await widget.onFirstContentPresented?.call(header, chapters);
+      } catch (error, stackTrace) {
+        debugPrint(
+          '[UnifiedDetailPage][first_content_callback_failure] '
+          'workId=$routeWorkId error=${error.runtimeType}\n$stackTrace',
+        );
+      }
+    });
   }
 
   @override
@@ -750,6 +791,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     await _controller.reload();
     if (mounted) {
       setState(() {});
+      _scheduleFirstContentPresented();
     }
   }
 

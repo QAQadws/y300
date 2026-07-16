@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
+import 'package:y300/features/history/data/providers/history_providers.dart';
+import 'package:y300/features/history/presentation/mappers/library_detail_history_visit_mapper.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -53,6 +55,7 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
     );
     final hydration = ref.watch(hydrationProvider);
     final openModeState = ref.watch(novelChapterOpenModeControllerProvider);
+    final historyRecorder = ref.watch(historyVisitRecorderProvider);
     final openMode = openModeState.value ?? NovelChapterOpenMode.reader;
     final adapter = NovelDetailAdapter(
       ref.watch(novelRepositoryProvider),
@@ -105,6 +108,14 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
         return path.isEmpty ? null : path;
       },
       chapterStatus: hydrationPanel,
+      onFirstContentPresented: (header, chapters) async {
+        final draft = const LibraryDetailHistoryVisitMapper().map(
+          module: LibraryModuleKey.novel,
+          header: header,
+          chapters: chapters,
+        );
+        await historyRecorder.record(draft);
+      },
       chapterModeControl: SegmentedButton<NovelChapterOpenMode>(
         key: const Key('novel-chapter-open-mode-control'),
         segments: const <ButtonSegment<NovelChapterOpenMode>>[

@@ -12,8 +12,11 @@ import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/adapters/comic_detail_adapter.dart';
 import 'package:y300/features/comic/presentation/comic_reader_page.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
+import 'package:y300/features/history/data/providers/history_providers.dart';
+import 'package:y300/features/history/presentation/mappers/library_detail_history_visit_mapper.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
+import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
@@ -27,6 +30,7 @@ class ComicDetailPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final searchQueue = ref.watch(comicSearchRefreshQueueServiceProvider);
+    final historyRecorder = ref.watch(historyVisitRecorderProvider);
     final adapter = ComicDetailAdapter(
       ref.watch(comicRepositoryProvider),
       refreshService: ref.watch(comicEpisodeRefreshServiceProvider),
@@ -60,6 +64,14 @@ class ComicDetailPage extends ConsumerWidget {
         }
         final path = picked.first.path.trim();
         return path.isEmpty ? null : path;
+      },
+      onFirstContentPresented: (header, chapters) async {
+        final draft = const LibraryDetailHistoryVisitMapper().map(
+          module: LibraryModuleKey.comic,
+          header: header,
+          chapters: chapters,
+        );
+        await historyRecorder.record(draft);
       },
       onOpenReader: (context, target) async {
         var nextTarget = target;
