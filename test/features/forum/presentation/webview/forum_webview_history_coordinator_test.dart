@@ -217,6 +217,48 @@ void main() {
       expect(attempts, 1);
     },
   );
+
+  test('reports structured reasons for skipped history visits', () async {
+    final skips = <ForumWebViewHistorySkipReason>[];
+    final coordinator = ForumWebViewHistoryCoordinator(
+      onCommit: (_) {},
+      onSkip: skips.add,
+    );
+
+    await _finishLegacy(
+      coordinator,
+      generation: 1,
+      uri: _threadUri('101'),
+      document: validDocument,
+    );
+    await _finishLegacy(
+      coordinator,
+      generation: 2,
+      uri: _threadUri('101', page: 2),
+      document: validDocument,
+    );
+    await _finishLegacy(
+      coordinator,
+      generation: 3,
+      uri: Uri.parse('https://bbs.yamibo.com/index.php?mobile=2'),
+      document: null,
+    );
+    coordinator.onPageStarted(generation: 4, uri: _threadUri('404'));
+    await coordinator.onPageFinished(
+      generation: 3,
+      finalUri: _threadUri('101'),
+      document: validDocument,
+    );
+
+    expect(
+      skips,
+      containsAll(<ForumWebViewHistorySkipReason>[
+        ForumWebViewHistorySkipReason.duplicateTarget,
+        ForumWebViewHistorySkipReason.nonThreadDocument,
+        ForumWebViewHistorySkipReason.staleGeneration,
+      ]),
+    );
+  });
 }
 
 Future<void> _finishLegacy(

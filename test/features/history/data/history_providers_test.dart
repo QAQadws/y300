@@ -37,11 +37,11 @@ void main() {
         .call(const HistoryQuery());
 
     expect(page.items.single.lastVisitedAt, now);
+    final manager = container.read(historyDatabaseManagerProvider);
     final db = await container.read(historyDatabaseProvider);
-    if (db.isOpen) {
-      await db.close();
-    }
     container.dispose();
+    await manager.dispose();
+    expect(db.isOpen, isFalse);
     await deleteDatabase(dbName);
   });
 

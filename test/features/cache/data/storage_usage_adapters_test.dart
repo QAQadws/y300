@@ -12,6 +12,7 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/features/history/data/local/history_local_db.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 
@@ -249,6 +250,49 @@ void main() {
       expect(section.clearable, isFalse);
       expect(section.slices.map((slice) => slice.label), contains('本地数据库'));
       expect(section.slices.map((slice) => slice.label), contains('漫画作品：1'));
+    },
+  );
+
+  test(
+    'HistoryStorageAccountingAdapter reports protected bytes and count',
+    () async {
+      const dbName = 'storage_usage_history_test.db';
+      await deleteDatabase(dbName);
+      final db = await HistoryLocalDb.open(databaseName: dbName);
+      final dbFile = io.File('${io.Directory.systemTemp.path}/$dbName-file.db');
+      await dbFile.writeAsBytes(List<int>.filled(17, 7));
+      addTearDown(() async {
+        await db.close();
+        await deleteDatabase(dbName);
+        if (await dbFile.exists()) {
+          await dbFile.delete();
+        }
+      });
+      final at = DateTime.utc(2026, 7, 16).millisecondsSinceEpoch;
+      await db.insert(HistoryLocalDb.entriesTable, <String, Object?>{
+        'target_type': 'thread',
+        'target_id': '100',
+        'title': '帖子',
+        'context_label': '详情',
+        'last_surface': 'threadNative',
+        'first_visited_at': at,
+        'last_visited_at': at,
+        'visit_count': 1,
+      });
+
+      final section = await HistoryStorageAccountingAdapter(
+        databaseFuture: Future<Database>.value(db),
+        databasePathFuture: Future<String>.value(dbFile.path),
+      ).calculateUsage();
+
+      expect(section.bucket, StorageBucket.history);
+      expect(section.bytes, 17);
+      expect(section.clearable, isFalse);
+      expect(section.slices.map((slice) => slice.label), <String>[
+        '记录数据库',
+        '浏览记录：1',
+      ]);
+      expect(section.slices.every((slice) => slice.protected), isTrue);
     },
   );
 }

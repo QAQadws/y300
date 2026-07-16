@@ -1,25 +1,50 @@
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/history/domain/repositories/history_repository.dart';
+import 'package:y300/features/history/domain/services/history_diagnostic_recorder.dart';
 import 'package:y300/features/history/domain/services/history_visit_draft_normalizer.dart';
 
 class QueryHistoryUseCase {
   const QueryHistoryUseCase({
     required HistoryRepository repository,
     required HistoryVisitDraftNormalizer normalizer,
+    HistoryDiagnosticRecorder diagnosticRecorder =
+        const NoopHistoryDiagnosticRecorder(),
   }) : _repository = repository,
-       _normalizer = normalizer;
+       _normalizer = normalizer,
+       _diagnosticRecorder = diagnosticRecorder;
 
   final HistoryRepository _repository;
   final HistoryVisitDraftNormalizer _normalizer;
+  final HistoryDiagnosticRecorder _diagnosticRecorder;
 
-  Future<HistoryQueryPage> call(HistoryQuery query) {
-    return _repository.query(
-      query.copyWith(
-        searchText: _normalizer.normalizeSearchText(query.searchText),
-        targetTypes: Set<HistoryTargetType>.unmodifiable(query.targetTypes),
-        limit: query.limit.clamp(1, 100),
-      ),
-    );
+  Future<HistoryQueryPage> call(HistoryQuery query) async {
+    final stopwatch = Stopwatch()..start();
+    final searching = query.searchText.trim().isNotEmpty;
+    try {
+      final page = await _repository.query(
+        query.copyWith(
+          searchText: _normalizer.normalizeSearchText(query.searchText),
+          targetTypes: Set<HistoryTargetType>.unmodifiable(query.targetTypes),
+          limit: query.limit.clamp(1, 100),
+        ),
+      );
+      _diagnosticRecorder.recordQuery(
+        outcome: HistoryDiagnosticOutcome.success,
+        elapsedMs: stopwatch.elapsedMilliseconds,
+        searching: searching,
+        itemCount: page.items.length,
+        hasMore: page.hasMore,
+      );
+      return page;
+    } catch (error) {
+      _diagnosticRecorder.recordQuery(
+        outcome: HistoryDiagnosticOutcome.failure,
+        elapsedMs: stopwatch.elapsedMilliseconds,
+        searching: searching,
+        errorType: error.runtimeType.toString(),
+      );
+      rethrow;
+    }
   }
 }
 

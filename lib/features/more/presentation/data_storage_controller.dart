@@ -126,7 +126,7 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
         imageCacheUsageBytes: _imageCacheUsageBytes(usageReport),
         usageReport: usageReport,
         isUpdating: false,
-        hint: '已清理页面缓存与漫画/帖子图片缓存',
+        hint: '已清理页面缓存与漫画/帖子图片缓存，浏览记录已保留',
       ),
     );
   }

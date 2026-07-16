@@ -2,6 +2,7 @@ enum StorageBucket {
   imageCache('image_cache', '图片缓存'),
   pageCache('page_cache', '页面缓存'),
   libraryMetadata('library_metadata', '书架数据'),
+  history('history', '浏览记录'),
   composerDraft('composer_draft', '草稿'),
   download('download', '下载内容'),
   appSettings('app_settings', '应用设置');

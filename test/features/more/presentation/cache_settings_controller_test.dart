@@ -209,14 +209,13 @@ void main() {
     addTearDown(subscription.close);
 
     await container.read(dataStorageControllerProvider.future);
-    await container
-        .read(dataStorageControllerProvider.notifier)
-        .clearCache();
+    await container.read(dataStorageControllerProvider.notifier).clearCache();
 
     final value = container.read(dataStorageControllerProvider).value!;
     expect(maintenance.clearImageCacheCalls, 1);
     expect(maintenance.lastClearScope, CacheClearScope.userCleanup);
     expect(value.imageCacheUsageBytes, 0);
+    expect(value.hint, contains('浏览记录已保留'));
   });
 
   test(

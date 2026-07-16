@@ -220,6 +220,20 @@ void main() {
                     bytes: 2048,
                     clearable: false,
                   ),
+                  StorageUsageSection(
+                    bucket: StorageBucket.history,
+                    label: '浏览记录',
+                    bytes: 1024,
+                    clearable: false,
+                    slices: <StorageUsageSlice>[
+                      StorageUsageSlice(
+                        id: 'history:entries',
+                        label: '浏览记录：12',
+                        bytes: 0,
+                        protected: true,
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -243,7 +257,8 @@ void main() {
     );
     expect(find.byKey(const Key('data-storage-usage-total')), findsOneWidget);
     expect(find.text('缓存与数据总览'), findsOneWidget);
-    expect(find.text('总计：6.0 KB'), findsOneWidget);
+    expect(find.text('总计：7.0 KB'), findsOneWidget);
+    expect(find.textContaining('浏览记录、封面'), findsOneWidget);
     expect(
       tester
           .widget<ExpansionTile>(
@@ -277,6 +292,11 @@ void main() {
       find.byKey(const Key('data-storage-usage-section-library_metadata')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const Key('data-storage-usage-section-history')),
+      findsOneWidget,
+    );
+    expect(find.text('浏览记录：12'), findsOneWidget);
     expect(find.text('帖子图片'), findsOneWidget);
     expect(
       find.byKey(const Key('data-storage-image-cache-category-clearable')),

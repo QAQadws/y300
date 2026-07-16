@@ -27,6 +27,7 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_driver.da
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
 import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
+import 'package:y300/features/history/domain/services/history_diagnostic_recorder.dart';
 import 'package:y300/features/history/domain/services/history_visit_recorder.dart';
 import 'package:y300/features/library_shared/presentation/controllers/sync_diagnostic_mode_controller.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
@@ -460,6 +461,7 @@ void main() {
       (tester) async {
         final firstPageResult = Completer<ApiResult<ThreadDetailData>>();
         final historyRecorder = _RecordingHistoryVisitRecorder();
+        final historyDiagnostics = _RecordingHistoryDiagnostics();
         var callCount = 0;
         final repository = _FakeThreadRepository((tid, page, query) async {
           callCount++;
@@ -498,7 +500,11 @@ void main() {
         });
 
         await tester.pumpWidget(
-          _buildTestApp(repository, historyVisitRecorder: historyRecorder),
+          _buildTestApp(
+            repository,
+            historyVisitRecorder: historyRecorder,
+            historyDiagnosticRecorder: historyDiagnostics,
+          ),
         );
         await tester.pump();
 
@@ -594,6 +600,10 @@ void main() {
         await tester.pump(const Duration(milliseconds: 120));
 
         expect(historyRecorder.drafts, hasLength(1));
+        expect(
+          historyDiagnostics.skipReasons,
+          contains('route_session_duplicate'),
+        );
       },
     );
 
@@ -4179,6 +4189,7 @@ Widget _buildTestApp(
   ThreadDetailHtmlFirstRenderMode htmlFirstRenderMode =
       ThreadDetailHtmlFirstRenderMode.legacy,
   HistoryVisitRecorder? historyVisitRecorder,
+  HistoryDiagnosticRecorder? historyDiagnosticRecorder,
   Widget? home,
 }) {
   return ProviderScope(
@@ -4202,6 +4213,7 @@ Widget _buildTestApp(
       diagnosticModeEnabled: diagnosticModeEnabled,
       htmlFirstRenderMode: htmlFirstRenderMode,
       historyVisitRecorder: historyVisitRecorder,
+      historyDiagnosticRecorder: historyDiagnosticRecorder,
     ),
     child: MaterialApp(
       home: home ?? const ThreadDetailPage(tid: '100', subject: '测试主题'),
@@ -4229,10 +4241,14 @@ List<riverpod_misc.Override> _threadDetailOverrides(
   ThreadDetailHtmlFirstRenderMode htmlFirstRenderMode =
       ThreadDetailHtmlFirstRenderMode.legacy,
   HistoryVisitRecorder? historyVisitRecorder,
+  HistoryDiagnosticRecorder? historyDiagnosticRecorder,
 }) {
   return [
     historyVisitRecorderProvider.overrideWithValue(
       historyVisitRecorder ?? const _NoopHistoryVisitRecorder(),
+    ),
+    historyDiagnosticRecorderProvider.overrideWithValue(
+      historyDiagnosticRecorder ?? const NoopHistoryDiagnosticRecorder(),
     ),
     threadRepositoryProvider.overrideWithValue(repository),
     if (forumHtmlReaderPreferencesRepository != null)
@@ -4332,6 +4348,37 @@ class _NoopHistoryVisitRecorder implements HistoryVisitRecorder {
 
   @override
   Future<void> record(HistoryVisitDraft draft) async {}
+}
+
+class _RecordingHistoryDiagnostics implements HistoryDiagnosticRecorder {
+  final List<String> skipReasons = <String>[];
+
+  @override
+  void recordQuery({
+    required HistoryDiagnosticOutcome outcome,
+    required int elapsedMs,
+    required bool searching,
+    int? itemCount,
+    bool? hasMore,
+    String? errorType,
+  }) {}
+
+  @override
+  void recordSkip({
+    required HistoryVisitSurface surface,
+    required String reason,
+  }) {
+    skipReasons.add(reason);
+  }
+
+  @override
+  void recordWrite({
+    required HistoryTargetType targetType,
+    required HistoryVisitSurface surface,
+    required HistoryDiagnosticOutcome outcome,
+    required int elapsedMs,
+    String? errorType,
+  }) {}
 }
 
 ThreadDetailData _threadDetailData({

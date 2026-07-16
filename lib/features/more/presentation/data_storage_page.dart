@@ -69,7 +69,7 @@ class DataStoragePage extends ConsumerWidget {
                     .updateImageCacheMaxBytes(bytes),
               ),
               Text(
-                '清理页面缓存（帖子列表/详情）与漫画页、帖子图片缓存；封面、头像、表情、已下载内容不会被清除。',
+                '清理页面缓存（帖子列表/详情）与漫画页、帖子图片缓存；浏览记录、封面、头像、表情和已下载内容不会被清除。',
                 key: const Key('data-storage-cache-hint'),
                 style: Theme.of(context).textTheme.bodySmall,
               ),

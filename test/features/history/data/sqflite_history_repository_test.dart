@@ -360,6 +360,58 @@ void main() {
       },
     );
 
+    test(
+      'queries, searches, and paginates 2000 entries without blocking',
+      () async {
+        const mapper = HistoryRowMapper();
+        final base = DateTime.utc(2026, 7, 1);
+        final batch = db.batch();
+        for (var index = 0; index < 2000; index++) {
+          final title = index == 1379 ? 'needle history entry' : '帖子 $index';
+          batch.insert(
+            HistoryLocalDb.entriesTable,
+            mapper.toRow(
+              _entry(
+                type: HistoryTargetType.thread,
+                id: '${index + 1}',
+                title: title,
+                at: base.add(Duration(milliseconds: index)),
+              ),
+            ),
+          );
+        }
+        await batch.commit(noResult: true);
+
+        final firstPageWatch = Stopwatch()..start();
+        final firstPage = await repository.query(const HistoryQuery(limit: 50));
+        firstPageWatch.stop();
+        final secondPage = await repository.query(
+          HistoryQuery(cursor: firstPage.nextCursor, limit: 50),
+        );
+        final searchWatch = Stopwatch()..start();
+        final searchPage = await repository.query(
+          const HistoryQuery(searchText: 'needle history entry', limit: 50),
+        );
+        searchWatch.stop();
+
+        expect(firstPage.items, hasLength(50));
+        expect(firstPage.hasMore, isTrue);
+        expect(secondPage.items, hasLength(50));
+        expect(
+          firstPage.items
+              .map((entry) => entry.target)
+              .toSet()
+              .intersection(
+                secondPage.items.map((entry) => entry.target).toSet(),
+              ),
+          isEmpty,
+        );
+        expect(searchPage.items.single.title, 'needle history entry');
+        expect(firstPageWatch.elapsed, lessThan(const Duration(seconds: 5)));
+        expect(searchWatch.elapsed, lessThan(const Duration(seconds: 5)));
+      },
+    );
+
     test('row mapper rejects unknown persisted enum values', () {
       const mapper = HistoryRowMapper();
       final row = mapper.toRow(

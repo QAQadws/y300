@@ -16,6 +16,8 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_controlle
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
 import 'package:y300/features/history/data/providers/history_providers.dart';
+import 'package:y300/features/history/domain/models/history_models.dart';
+import 'package:y300/features/history/domain/services/history_diagnostic_recorder.dart';
 import 'package:y300/features/history/domain/services/history_visit_recorder.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
@@ -78,6 +80,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   String? _prewarmSignature;
   final ThreadHistoryCommitGuard _historyCommitGuard =
       ThreadHistoryCommitGuard();
+  bool _didReportHistoryDuplicate = false;
 
   @override
   void initState() {
@@ -126,6 +129,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       forumImagePrecacheServiceProvider,
     );
     final historyRecorder = ref.watch(historyVisitRecorderProvider);
+    final historyDiagnostics = ref.watch(historyDiagnosticRecorderProvider);
     _latestImageHeaderBuilder = imageHeaderBuilder;
     ref.listen<AsyncValue<ThreadDetailPageState>>(
       threadDetailControllerProvider(args),
@@ -148,6 +152,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       asyncState: asyncState,
       state: state,
       recorder: historyRecorder,
+      diagnostics: historyDiagnostics,
     );
 
     return Scaffold(
@@ -273,6 +278,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     required AsyncValue<ThreadDetailPageState> asyncState,
     required ThreadDetailPageState state,
     required HistoryVisitRecorder recorder,
+    required HistoryDiagnosticRecorder diagnostics,
   }) {
     if (!asyncState.hasValue ||
         state.isLoadingInitial ||
@@ -291,6 +297,13 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         return;
       }
       if (!_historyCommitGuard.tryCommit(visibleTid)) {
+        if (!_didReportHistoryDuplicate) {
+          _didReportHistoryDuplicate = true;
+          diagnostics.recordSkip(
+            surface: HistoryVisitSurface.threadNative,
+            reason: 'route_session_duplicate',
+          );
+        }
         return;
       }
       try {
@@ -305,7 +318,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       } catch (error) {
         debugPrint(
           '[ThreadDetail][native][history_record_failure] '
-          'tid=$visibleTid error=${error.runtimeType}',
+          'error=${error.runtimeType}',
         );
       }
     });

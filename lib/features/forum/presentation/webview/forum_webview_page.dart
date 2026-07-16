@@ -30,6 +30,7 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_history_c
 import 'package:y300/features/forum/presentation/webview/forum_webview_resource_diagnostic_recorder.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_state.dart';
 import 'package:y300/features/history/data/providers/history_providers.dart';
+import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/posting/domain/models/posting_target.dart';
 import 'package:y300/features/posting/presentation/posting_composer_page.dart';
 import 'package:y300/features/posting/presentation/posting_composer_state.dart';
@@ -76,12 +77,19 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   @override
   void initState() {
     super.initState();
+    final historyDiagnostics = ref.read(historyDiagnosticRecorderProvider);
     _historyCoordinator = ForumWebViewHistoryCoordinator(
       onCommit: _recordHistoryVisit,
       onCommitFailure: (candidate, error, _) {
         debugPrint(
           '[ForumWebView][history_record_failure] '
-          'tid=${candidate.tid} error=${error.runtimeType}',
+          'error=${error.runtimeType}',
+        );
+      },
+      onSkip: (reason) {
+        historyDiagnostics.recordSkip(
+          surface: HistoryVisitSurface.threadWebView,
+          reason: 'webview_${reason.name}',
         );
       },
     );

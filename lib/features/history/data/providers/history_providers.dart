@@ -1,33 +1,54 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:y300/features/history/data/local/history_database_manager.dart';
 import 'package:y300/features/history/data/local/history_local_db.dart';
 import 'package:y300/features/history/data/repositories/sqflite_history_repository.dart';
+import 'package:y300/features/history/data/services/history_data_lifecycle_service.dart';
+import 'package:y300/features/history/data/services/debug_history_diagnostic_recorder.dart';
 import 'package:y300/features/history/domain/repositories/history_repository.dart';
 import 'package:y300/features/history/domain/services/history_clock.dart';
+import 'package:y300/features/history/domain/services/history_diagnostic_recorder.dart';
 import 'package:y300/features/history/domain/services/history_retention_policy.dart';
 import 'package:y300/features/history/domain/services/history_use_cases.dart';
 import 'package:y300/features/history/domain/services/history_visit_draft_normalizer.dart';
 import 'package:y300/features/history/domain/services/history_visit_recorder.dart';
 import 'package:y300/features/history/domain/services/record_history_visit_use_case.dart';
+import 'package:y300/features/library_shared/data/providers/sync_diagnostic_providers.dart';
 
 final historyDatabaseNameProvider = Provider<String>((ref) {
   return HistoryLocalDb.dbName;
 });
 
-final historyDatabaseProvider = Provider<Future<Database>>((ref) {
-  final database = HistoryLocalDb.open(
+final historyDatabaseManagerProvider = Provider<HistoryDatabaseManager>((ref) {
+  final manager = HistoryDatabaseManager(
     databaseName: ref.watch(historyDatabaseNameProvider),
   );
   ref.onDispose(() {
-    unawaited(_closeHistoryDatabase(database));
+    unawaited(manager.dispose());
   });
-  return database;
+  return manager;
+});
+
+final historyDatabaseProvider = Provider<Future<Database>>((ref) {
+  return ref.watch(historyDatabaseManagerProvider).open();
 });
 
 final historyClockProvider = Provider<HistoryClock>((ref) {
   return const SystemHistoryClock();
+});
+
+final historyDiagnosticRecorderProvider = Provider<HistoryDiagnosticRecorder>((
+  ref,
+) {
+  if (!kDebugMode) {
+    return const NoopHistoryDiagnosticRecorder();
+  }
+  return DebugHistoryDiagnosticRecorder(
+    structuredRecorder: ref.watch(syncDiagnosticRecorderProvider),
+  );
 });
 
 final historyRetentionPolicyProvider = Provider<HistoryRetentionPolicy>((ref) {
@@ -40,8 +61,9 @@ final historyVisitDraftNormalizerProvider =
     });
 
 final historyRepositoryProvider = Provider<HistoryRepository>((ref) {
-  final repository = SqfliteHistoryRepository(
-    ref.watch(historyDatabaseProvider),
+  final manager = ref.watch(historyDatabaseManagerProvider);
+  final repository = SqfliteHistoryRepository.withDatabaseProvider(
+    manager.open,
     retentionPolicy: ref.watch(historyRetentionPolicyProvider),
   );
   ref.onDispose(repository.dispose);
@@ -55,6 +77,7 @@ final recordHistoryVisitUseCaseProvider = Provider<RecordHistoryVisitUseCase>((
     repository: ref.watch(historyRepositoryProvider),
     normalizer: ref.watch(historyVisitDraftNormalizerProvider),
     clock: ref.watch(historyClockProvider),
+    diagnosticRecorder: ref.watch(historyDiagnosticRecorderProvider),
   );
 });
 
@@ -66,6 +89,7 @@ final queryHistoryUseCaseProvider = Provider<QueryHistoryUseCase>((ref) {
   return QueryHistoryUseCase(
     repository: ref.watch(historyRepositoryProvider),
     normalizer: ref.watch(historyVisitDraftNormalizerProvider),
+    diagnosticRecorder: ref.watch(historyDiagnosticRecorderProvider),
   );
 });
 
@@ -85,14 +109,10 @@ final clearHistoryUseCaseProvider = Provider<ClearHistoryUseCase>((ref) {
   return ClearHistoryUseCase(ref.watch(historyRepositoryProvider));
 });
 
-Future<void> _closeHistoryDatabase(Future<Database> database) async {
-  try {
-    final value = await database;
-    if (value.isOpen) {
-      await value.close();
-    }
-  } catch (_) {
-    // Opening errors are reported to consumers; disposal must not emit a
-    // second unhandled asynchronous error while the provider tree is closing.
-  }
-}
+final historyDataLifecycleServiceProvider =
+    Provider<HistoryDataLifecycleService>((ref) {
+      return HistoryDataLifecycleService(
+        databaseManager: ref.watch(historyDatabaseManagerProvider),
+        repository: ref.watch(historyRepositoryProvider),
+      );
+    });

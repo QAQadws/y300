@@ -13,6 +13,20 @@ typedef ForumWebViewHistoryCommitFailure =
       StackTrace stackTrace,
     );
 
+enum ForumWebViewHistorySkipReason {
+  disposed,
+  missingNavigation,
+  staleGeneration,
+  mismatchedNavigation,
+  missingFinalUri,
+  nonThreadDocument,
+  missingPostProof,
+  duplicateTarget,
+}
+
+typedef ForumWebViewHistorySkip =
+    void Function(ForumWebViewHistorySkipReason reason);
+
 class ForumWebViewHistoryCandidate {
   const ForumWebViewHistoryCandidate({
     required this.tid,
@@ -31,13 +45,16 @@ class ForumWebViewHistoryCoordinator {
   ForumWebViewHistoryCoordinator({
     required ForumWebViewHistoryCommit onCommit,
     ForumWebViewHistoryCommitFailure? onCommitFailure,
+    ForumWebViewHistorySkip? onSkip,
     ForumThreadUrlParser urlParser = const ForumThreadUrlParser(),
   }) : _onCommit = onCommit,
        _onCommitFailure = onCommitFailure,
+       _onSkip = onSkip,
        _urlParser = urlParser;
 
   final ForumWebViewHistoryCommit _onCommit;
   final ForumWebViewHistoryCommitFailure? _onCommitFailure;
+  final ForumWebViewHistorySkip? _onSkip;
   final ForumThreadUrlParser _urlParser;
 
   bool _supportsPageCommitVisible = false;
@@ -107,11 +124,20 @@ class ForumWebViewHistoryCoordinator {
     Uri eventUri,
   ) {
     final pending = _pending;
-    if (_disposed ||
-        pending == null ||
-        generation != _currentGeneration ||
-        generation != pending.generation ||
-        !_belongsToNavigation(pending.startedUri, eventUri)) {
+    if (_disposed) {
+      _skip(ForumWebViewHistorySkipReason.disposed);
+      return null;
+    }
+    if (pending == null) {
+      _skip(ForumWebViewHistorySkipReason.missingNavigation);
+      return null;
+    }
+    if (generation != _currentGeneration || generation != pending.generation) {
+      _skip(ForumWebViewHistorySkipReason.staleGeneration);
+      return null;
+    }
+    if (!_belongsToNavigation(pending.startedUri, eventUri)) {
+      _skip(ForumWebViewHistorySkipReason.mismatchedNavigation);
       return null;
     }
     return pending;
@@ -129,19 +155,23 @@ class ForumWebViewHistoryCoordinator {
     pending.isResolved = true;
     final finalUri = pending.finalUri;
     if (finalUri == null) {
+      _skip(ForumWebViewHistorySkipReason.missingFinalUri);
       return;
     }
     final tid = _urlParser.extractTid(finalUri.toString());
     if (tid == null) {
       _lastCommittedTid = null;
+      _skip(ForumWebViewHistorySkipReason.nonThreadDocument);
       return;
     }
 
     final document = pending.document;
     if (document == null || !document.hasPostProof) {
+      _skip(ForumWebViewHistorySkipReason.missingPostProof);
       return;
     }
     if (_lastCommittedTid == tid) {
+      _skip(ForumWebViewHistorySkipReason.duplicateTarget);
       return;
     }
 
@@ -157,6 +187,10 @@ class ForumWebViewHistoryCoordinator {
     } catch (error, stackTrace) {
       _onCommitFailure?.call(candidate, error, stackTrace);
     }
+  }
+
+  void _skip(ForumWebViewHistorySkipReason reason) {
+    _onSkip?.call(reason);
   }
 
   bool _belongsToNavigation(Uri startedUri, Uri eventUri) {
