@@ -117,14 +117,33 @@ class ForumWebViewThreadLinkRouter {
 
   Uri _withMobileParam(Uri uri) {
     final query = <String, String>{};
-    for (final entry in uri.queryParameters.entries) {
-      if (entry.value.trim().isEmpty) {
+    for (final segment in uri.query.split(RegExp(r'[&;]'))) {
+      if (segment.isEmpty) {
         continue;
       }
-      query[entry.key] = entry.value;
+      final separator = segment.indexOf('=');
+      final rawKey = separator < 0 ? segment : segment.substring(0, separator);
+      final rawValue = separator < 0 ? '' : segment.substring(separator + 1);
+      final key = _decodeQueryComponent(rawKey);
+      final value = _decodeQueryComponent(rawValue);
+      if (key == null ||
+          key.trim().isEmpty ||
+          value == null ||
+          value.trim().isEmpty) {
+        continue;
+      }
+      query[key] = value;
     }
     query['mobile'] = '2';
     return uri.replace(queryParameters: query);
+  }
+
+  String? _decodeQueryComponent(String value) {
+    try {
+      return Uri.decodeQueryComponent(value);
+    } on FormatException {
+      return null;
+    }
   }
 
   String? _extractFragmentPid(Uri uri) {

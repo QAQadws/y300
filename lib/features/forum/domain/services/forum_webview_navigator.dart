@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
+import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
 
 final forumWebViewNavigatorProvider = Provider<ForumWebViewNavigator>((ref) {
   return DefaultForumWebViewNavigator();
@@ -42,11 +43,12 @@ abstract class ForumWebViewNavigator {
 
 class DefaultForumWebViewNavigator implements ForumWebViewNavigator {
   DefaultForumWebViewNavigator()
-      : _siteRoot = Uri.parse('${AppConfig.siteBaseUrl}/'),
-        _siteHost = Uri.parse(AppConfig.siteBaseUrl).host;
+    : _siteRoot = Uri.parse('${AppConfig.siteBaseUrl}/'),
+      _siteHost = Uri.parse(AppConfig.siteBaseUrl).host;
 
   final Uri _siteRoot;
   final String _siteHost;
+  final ForumThreadUrlParser _threadUrlParser = const ForumThreadUrlParser();
 
   @override
   Uri get homeUri => _siteRoot.resolve('index.php?mobile=2');
@@ -66,8 +68,8 @@ class DefaultForumWebViewNavigator implements ForumWebViewNavigator {
     }
 
     final path = uri.path;
-    final mod = uri.queryParameters['mod'];
-    final mobile = uri.queryParameters['mobile'];
+    final mod = _queryValue(uri, 'mod');
+    final mobile = _queryValue(uri, 'mobile');
 
     if (path.endsWith('/index.php') && mobile == '2') {
       return ForumWebViewPageKind.home;
@@ -81,8 +83,11 @@ class DefaultForumWebViewNavigator implements ForumWebViewNavigator {
       return ForumWebViewPageKind.threadDetail;
     }
 
-    if (path.endsWith('/search.php') &&
-        (mod == 'forum' || mod == 'curforum')) {
+    if (_threadUrlParser.extractTid(uri.toString()) != null) {
+      return ForumWebViewPageKind.threadDetail;
+    }
+
+    if (path.endsWith('/search.php') && (mod == 'forum' || mod == 'curforum')) {
       return ForumWebViewPageKind.search;
     }
 
@@ -96,15 +101,15 @@ class DefaultForumWebViewNavigator implements ForumWebViewNavigator {
         kind != ForumWebViewPageKind.threadDetail) {
       return null;
     }
-    return _normalizeQueryValue(uri.queryParameters['fid']);
+    return _queryValue(uri, 'fid');
   }
 
   @override
   String? extractTid(Uri uri) {
-    if (classify(uri) != ForumWebViewPageKind.threadDetail) {
+    if (!isManagedSite(uri)) {
       return null;
     }
-    return _normalizeQueryValue(uri.queryParameters['tid']);
+    return _normalizeQueryValue(_threadUrlParser.extractTid(uri.toString()));
   }
 
   @override
@@ -112,7 +117,7 @@ class DefaultForumWebViewNavigator implements ForumWebViewNavigator {
     if (classify(uri) != ForumWebViewPageKind.threadDetail) {
       return null;
     }
-    return _normalizeQueryValue(uri.queryParameters['authorid']);
+    return _queryValue(uri, 'authorid');
   }
 
   @override
@@ -120,7 +125,7 @@ class DefaultForumWebViewNavigator implements ForumWebViewNavigator {
     if (classify(uri) != ForumWebViewPageKind.threadDetail) {
       return false;
     }
-    return _normalizeQueryValue(uri.queryParameters['ordertype']) == '1';
+    return _queryValue(uri, 'ordertype') == '1';
   }
 
   @override
@@ -128,14 +133,13 @@ class DefaultForumWebViewNavigator implements ForumWebViewNavigator {
     if (classify(uri) != ForumWebViewPageKind.search) {
       return null;
     }
-    final mod = uri.queryParameters['mod']?.trim();
+    final mod = _queryValue(uri, 'mod');
     if (mod == 'curforum') {
       return ForumWebViewSearchScope.curForum;
     }
     if (mod == 'forum') {
-      final hasSearchId = _normalizeQueryValue(uri.queryParameters['searchid']);
-      if (hasSearchId != null &&
-          _normalizeQueryValue(uri.queryParameters['srhfid']) == null) {
+      final hasSearchId = _queryValue(uri, 'searchid');
+      if (hasSearchId != null && _queryValue(uri, 'srhfid') == null) {
         return null;
       }
       return ForumWebViewSearchScope.forum;
@@ -148,7 +152,7 @@ class DefaultForumWebViewNavigator implements ForumWebViewNavigator {
     if (classify(uri) != ForumWebViewPageKind.search) {
       return null;
     }
-    return _normalizeQueryValue(uri.queryParameters['srhfid']);
+    return _queryValue(uri, 'srhfid');
   }
 
   @override
@@ -207,7 +211,24 @@ class DefaultForumWebViewNavigator implements ForumWebViewNavigator {
   }
 
   Map<String, String> _copyQueryParameters(Uri uri) {
-    return Map<String, String>.from(resolve(uri.toString()).queryParameters);
+    final output = <String, String>{};
+    for (final segment in resolve(
+      uri.toString(),
+    ).query.split(RegExp(r'[&;]'))) {
+      if (segment.isEmpty) {
+        continue;
+      }
+      final separator = segment.indexOf('=');
+      final rawKey = separator < 0 ? segment : segment.substring(0, separator);
+      final rawValue = separator < 0 ? '' : segment.substring(separator + 1);
+      final key = _decodeQueryComponent(rawKey);
+      final value = _decodeQueryComponent(rawValue);
+      if (key == null || key.trim().isEmpty || value == null) {
+        continue;
+      }
+      output[key] = value;
+    }
+    return output;
   }
 
   Uri _replaceQueryParameters(Uri currentUri, Map<String, String> params) {
@@ -221,5 +242,37 @@ class DefaultForumWebViewNavigator implements ForumWebViewNavigator {
       return null;
     }
     return trimmed;
+  }
+
+  String? _queryValue(Uri uri, String key) {
+    final rawValue = _rawQueryValue(uri.query, key);
+    return _normalizeQueryValue(_decodeQueryComponent(rawValue));
+  }
+
+  String? _rawQueryValue(String rawQuery, String key) {
+    final normalizedKey = key.toLowerCase();
+    for (final segment in rawQuery.split(RegExp(r'[&;]'))) {
+      final separator = segment.indexOf('=');
+      if (separator <= 0) {
+        continue;
+      }
+      final rawKey = _decodeQueryComponent(segment.substring(0, separator));
+      if (rawKey?.trim().toLowerCase() != normalizedKey) {
+        continue;
+      }
+      return segment.substring(separator + 1);
+    }
+    return null;
+  }
+
+  String? _decodeQueryComponent(String? value) {
+    if (value == null) {
+      return null;
+    }
+    try {
+      return Uri.decodeQueryComponent(value);
+    } on FormatException {
+      return null;
+    }
   }
 }

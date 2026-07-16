@@ -1,15 +1,6 @@
-enum ForumWebViewPageKind {
-  home,
-  forumDisplay,
-  threadDetail,
-  search,
-  other,
-}
+enum ForumWebViewPageKind { home, forumDisplay, threadDetail, search, other }
 
-enum ForumWebViewSearchScope {
-  forum,
-  curForum,
-}
+enum ForumWebViewSearchScope { forum, curForum }
 
 class ForumThreadMenuSnapshot {
   const ForumThreadMenuSnapshot({
@@ -23,6 +14,26 @@ class ForumThreadMenuSnapshot {
   final Uri? normalThreadUri;
   final Uri? reverseOrderUri;
   final Uri? normalOrderUri;
+}
+
+class ForumThreadDocumentSnapshot {
+  const ForumThreadDocumentSnapshot({
+    required this.postCount,
+    required this.menu,
+    this.title,
+    this.forumName,
+    this.canonicalUri,
+    this.firstPostAvatarUrl,
+  });
+
+  final String? title;
+  final String? forumName;
+  final Uri? canonicalUri;
+  final String? firstPostAvatarUrl;
+  final int postCount;
+  final ForumThreadMenuSnapshot menu;
+
+  bool get hasPostProof => postCount > 0 && (title?.trim().isNotEmpty ?? false);
 }
 
 class ForumThreadDetailMenuState {

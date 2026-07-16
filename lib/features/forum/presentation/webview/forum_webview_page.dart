@@ -18,15 +18,18 @@ import 'package:y300/features/forum/domain/services/forum_webview_network_policy
 import 'package:y300/features/forum/domain/services/forum_webview_post_navigator.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_reply_navigator.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_script_injector.dart';
-import 'package:y300/features/forum/domain/services/forum_webview_thread_menu_bridge.dart';
+import 'package:y300/features/forum/domain/services/forum_webview_thread_document_bridge.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_thread_link_router.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_visual_policy_resolver.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
+import 'package:y300/features/forum/presentation/mappers/forum_webview_history_visit_mapper.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_history_coordinator.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_resource_diagnostic_recorder.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_state.dart';
+import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/posting/domain/models/posting_target.dart';
 import 'package:y300/features/posting/presentation/posting_composer_page.dart';
 import 'package:y300/features/posting/presentation/posting_composer_state.dart';
@@ -68,10 +71,26 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   int _navigationGeneration = 0;
   Timer? _delayedCleanupTimer;
   ForumWebViewBootstrapConfig? _bootstrapConfig;
+  late final ForumWebViewHistoryCoordinator _historyCoordinator;
+
+  @override
+  void initState() {
+    super.initState();
+    _historyCoordinator = ForumWebViewHistoryCoordinator(
+      onCommit: _recordHistoryVisit,
+      onCommitFailure: (candidate, error, _) {
+        debugPrint(
+          '[ForumWebView][history_record_failure] '
+          'tid=${candidate.tid} error=${error.runtimeType}',
+        );
+      },
+    );
+  }
 
   @override
   void dispose() {
     _delayedCleanupTimer?.cancel();
+    _historyCoordinator.dispose();
     super.dispose();
   }
 
@@ -154,6 +173,9 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     if (!mounted) {
       return;
     }
+    _historyCoordinator.configure(
+      supportsPageCommitVisible: capabilityProfile.supportsPageCommitVisible,
+    );
 
     final visualPolicy = visualPolicyResolver.resolve(
       ForumWebViewPageKind.home,
@@ -184,6 +206,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       callbacks: ForumWebViewCallbacks(
         onPageStarted: _handlePageStarted,
         onPageFinished: _handlePageFinished,
+        onPageCommitVisible: _handlePageCommitVisible,
         onProgress: _handleProgress,
         onNavigationRequest: _handleNavigationRequest,
         onResourceDiagnostic: _handleResourceDiagnostic,
@@ -229,7 +252,25 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     _delayedCleanupTimer?.cancel();
     _delayedCleanupTimer = null;
     _navigationGeneration += 1;
+    final uri = ref.read(forumWebViewNavigatorProvider).resolve(url);
+    _historyCoordinator.onPageStarted(
+      generation: _navigationGeneration,
+      uri: uri,
+    );
     ref.read(forumWebViewControllerProvider.notifier).onPageStarted(url);
+  }
+
+  void _handlePageCommitVisible(String url) {
+    if (!mounted) {
+      return;
+    }
+    final uri = ref.read(forumWebViewNavigatorProvider).resolve(url);
+    unawaited(
+      _historyCoordinator.onPageCommitVisible(
+        generation: _navigationGeneration,
+        uri: uri,
+      ),
+    );
   }
 
   Future<void> _handlePageFinished(String url) async {
@@ -238,7 +279,9 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     }
     final navigator = ref.read(forumWebViewNavigatorProvider);
     final injector = ref.read(forumWebViewScriptInjectorProvider);
-    final threadMenuBridge = ref.read(forumWebViewThreadMenuBridgeProvider);
+    final threadDocumentBridge = ref.read(
+      forumWebViewThreadDocumentBridgeProvider,
+    );
     final visualPolicyResolver = ref.read(
       forumWebViewVisualPolicyResolverProvider,
     );
@@ -253,11 +296,11 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     if (!mounted || generation != _navigationGeneration) {
       return;
     }
-    final threadMenuSnapshot = pageKind == ForumWebViewPageKind.threadDetail
-        ? await _readThreadMenuSnapshot(
+    final threadDocumentSnapshot = pageKind == ForumWebViewPageKind.threadDetail
+        ? await _readThreadDocumentSnapshot(
             driver: driver,
             navigator: navigator,
-            threadMenuBridge: threadMenuBridge,
+            threadDocumentBridge: threadDocumentBridge,
           )
         : null;
     if (!mounted || generation != _navigationGeneration) {
@@ -269,11 +312,26 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           rawUrl: url,
           pageTitle: pageTitle,
           canGoBack: canGoBack,
-          threadMenuSnapshot: threadMenuSnapshot,
+          threadMenuSnapshot: threadDocumentSnapshot?.menu,
         );
     if (!mounted || generation != _navigationGeneration) {
       return;
     }
+    final completedState = ref
+        .read(forumWebViewControllerProvider)
+        .asData
+        ?.value;
+    final forumName =
+        threadDocumentSnapshot?.forumName ??
+        (completedState?.fid == null ? null : completedState?.boardName);
+    unawaited(
+      _historyCoordinator.onPageFinished(
+        generation: generation,
+        finalUri: uri,
+        document: threadDocumentSnapshot,
+        forumName: forumName,
+      ),
+    );
     if (!navigator.isManagedSite(uri)) {
       return;
     }
@@ -961,16 +1019,26 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     }
   }
 
-  Future<ForumThreadMenuSnapshot?> _readThreadMenuSnapshot({
+  Future<ForumThreadDocumentSnapshot?> _readThreadDocumentSnapshot({
     required ForumWebViewDriver driver,
     required ForumWebViewNavigator navigator,
-    required ForumWebViewThreadMenuBridge threadMenuBridge,
+    required ForumWebViewThreadDocumentBridge threadDocumentBridge,
   }) async {
     try {
-      return await threadMenuBridge.read(target: driver, navigator: navigator);
+      return await threadDocumentBridge.read(
+        target: driver,
+        navigator: navigator,
+      );
     } catch (_) {
       return null;
     }
+  }
+
+  Future<void> _recordHistoryVisit(
+    ForumWebViewHistoryCandidate candidate,
+  ) async {
+    final draft = const ForumWebViewHistoryVisitMapper().map(candidate);
+    await ref.read(historyVisitRecorderProvider).record(draft);
   }
 
   Future<void> _handleMoreMenuSelected(

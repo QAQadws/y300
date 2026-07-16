@@ -44,6 +44,19 @@ void main() {
     expect(navigator.isReverseOrder(uri), isTrue);
   });
 
+  test('thread detail tolerates legacy non-UTF8 highlight encoding', () {
+    final uri = Uri.parse(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=524596&highlight=%D2%B2%CE%DE&mobile=2',
+    );
+
+    expect(navigator.classify(uri), ForumWebViewPageKind.threadDetail);
+    expect(navigator.extractTid(uri), '524596');
+    expect(
+      navigator.buildReverseOrderUri(uri).toString(),
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=524596&mobile=2&ordertype=1',
+    );
+  });
+
   test('classify recognizes forum search', () {
     expect(
       navigator.classify(
@@ -174,6 +187,20 @@ void main() {
     expect(
       result.normalizedUri.toString(),
       'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=573279&page=2&mobile=2#pid41575705',
+    );
+  });
+
+  test('thread link router drops malformed legacy highlight locally', () {
+    final result = threadLinkRouter.resolve(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=524596&page=2&highlight=%D2%B2%CE%DE',
+    );
+
+    expect(result.kind, ForumWebViewThreadLinkKind.thread);
+    expect(result.tid, '524596');
+    expect(result.page, 2);
+    expect(
+      result.normalizedUri.toString(),
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=524596&page=2&mobile=2',
     );
   });
 

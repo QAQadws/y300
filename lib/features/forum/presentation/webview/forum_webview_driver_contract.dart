@@ -4,14 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_resource_diagnostic_models.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_runtime_models.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_script_injector.dart';
-import 'package:y300/features/forum/domain/services/forum_webview_thread_menu_bridge.dart';
+import 'package:y300/features/forum/domain/services/forum_webview_thread_document_bridge.dart';
 
 typedef ForumWebViewDriverFactory = ForumWebViewDriver Function();
 
-enum ForumWebViewNavigationDecision {
-  navigate,
-  prevent,
-}
+enum ForumWebViewNavigationDecision { navigate, prevent }
 
 class ForumWebViewCallbacks {
   const ForumWebViewCallbacks({
@@ -28,13 +25,13 @@ class ForumWebViewCallbacks {
   final void Function(int progress) onProgress;
   final void Function(String url)? onPageCommitVisible;
   final void Function(ForumWebViewResourceDiagnosticEvent event)?
-      onResourceDiagnostic;
+  onResourceDiagnostic;
   final FutureOr<ForumWebViewNavigationDecision> Function(String url)
-      onNavigationRequest;
+  onNavigationRequest;
 }
 
 abstract class ForumWebViewDriver
-    implements ForumWebViewScriptTarget, ForumWebViewThreadMenuTarget {
+    implements ForumWebViewScriptTarget, ForumWebViewThreadDocumentTarget {
   Future<ForumWebViewCapabilityProfile> probeCapabilities();
 
   Future<void> initialize({

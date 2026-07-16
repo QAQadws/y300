@@ -23,6 +23,9 @@ import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dar
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
+import 'package:y300/features/history/data/providers/history_providers.dart';
+import 'package:y300/features/history/domain/models/history_models.dart';
+import 'package:y300/features/history/domain/services/history_visit_recorder.dart';
 import 'package:y300/features/posting/data/repositories/new_thread_repository.dart';
 import 'package:y300/features/posting/data/repositories/posting_form_metadata_repository.dart';
 import 'package:y300/features/posting/data/providers/posting_providers.dart';
@@ -407,6 +410,161 @@ void main() {
       expect(find.text('第二个主题'), findsOneWidget);
       expect(find.text('迟到的第一个主题'), findsNothing);
       expect(driver.scripts, hasLength(1));
+    },
+  );
+
+  testWidgets(
+    'ForumWebViewPage advanced engine records only after visible commit and DOM proof',
+    (tester) async {
+      const url =
+          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=524596&page=3&highlight=%D2%B2%CE%DE&mobile=2';
+      final recorder = _RecordingHistoryVisitRecorder();
+      final driver = _FakeForumWebViewDriver()
+        ..title = '浏览器标题'
+        ..javaScriptResult = _threadDocumentResult(
+          title: '结构化主题',
+          forumName: '中文百合漫画区',
+          canonicalHref:
+              'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=524596&highlight=%BC%AB%CF%DE',
+          postCount: 20,
+        );
+
+      await tester.pumpWidget(
+        _buildTestApp(driver: driver, historyRecorder: recorder),
+      );
+      await tester.pump();
+
+      await driver.dispatchPageStarted(url);
+      await driver.dispatchPageFinished(url);
+      await tester.pump();
+      expect(recorder.drafts, isEmpty);
+
+      await driver.dispatchPageCommitVisible(url);
+      await tester.pump();
+
+      expect(recorder.drafts, hasLength(1));
+      final draft = recorder.drafts.single;
+      expect(draft.target.id, '524596');
+      expect(draft.surface, HistoryVisitSurface.threadWebView);
+      expect(draft.title, '结构化主题');
+      expect(draft.forumName, '中文百合漫画区');
+      expect(draft.page, 3);
+      expect(draft.canonicalUri.toString(), isNot(contains('highlight')));
+    },
+  );
+
+  testWidgets(
+    'ForumWebViewPage advanced engine handles visible commit before finish once',
+    (tester) async {
+      const url =
+          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=101&mobile=2';
+      final recorder = _RecordingHistoryVisitRecorder();
+      final driver = _FakeForumWebViewDriver()
+        ..title = '主题'
+        ..javaScriptResult = _threadDocumentResult(title: '主题');
+
+      await tester.pumpWidget(
+        _buildTestApp(driver: driver, historyRecorder: recorder),
+      );
+      await tester.pump();
+
+      await driver.dispatchPageStarted(url);
+      await driver.dispatchPageCommitVisible(url);
+      expect(recorder.drafts, isEmpty);
+      await driver.dispatchPageFinished(url);
+      await tester.pump();
+
+      expect(recorder.drafts, hasLength(1));
+      await driver.dispatchPageCommitVisible(url);
+      await tester.pump();
+      expect(recorder.drafts, hasLength(1));
+    },
+  );
+
+  testWidgets(
+    'ForumWebViewPage legacy engine uses finished plus DOM proof fallback',
+    (tester) async {
+      const url =
+          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=202&mobile=2';
+      final recorder = _RecordingHistoryVisitRecorder();
+      final driver = _FakeForumWebViewDriver()
+        ..capabilityProfile = const ForumWebViewCapabilityProfile(
+          engine: ForumWebViewEngine.legacy,
+          documentStartMode: ForumWebViewDocumentStartMode.unavailable,
+          supportsContentBlockers: false,
+          supportsTransparentBackground: false,
+          supportsPlatformScrollTuning: false,
+          supportsCookieHooks: false,
+          supportsPageCommitVisible: false,
+        )
+        ..title = '主题'
+        ..javaScriptResult = _threadDocumentResult(title: 'Legacy 主题');
+
+      await tester.pumpWidget(
+        _buildTestApp(driver: driver, historyRecorder: recorder),
+      );
+      await tester.pump();
+      await driver.dispatchPageStarted(url);
+      await driver.dispatchPageFinished(url);
+      await tester.pump();
+
+      expect(recorder.drafts, hasLength(1));
+      expect(recorder.drafts.single.target.id, '202');
+      expect(recorder.drafts.single.title, 'Legacy 主题');
+    },
+  );
+
+  testWidgets(
+    'ForumWebViewPage does not record thread error document without post proof',
+    (tester) async {
+      const url =
+          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=303&mobile=2';
+      final recorder = _RecordingHistoryVisitRecorder();
+      final driver = _FakeForumWebViewDriver()
+        ..title = '主题不存在'
+        ..javaScriptResult = _threadDocumentResult(
+          title: '主题不存在',
+          postCount: 0,
+        );
+
+      await tester.pumpWidget(
+        _buildTestApp(driver: driver, historyRecorder: recorder),
+      );
+      await tester.pump();
+      await driver.dispatchPageStarted(url);
+      await driver.dispatchPageCommitVisible(url);
+      await driver.dispatchPageFinished(url);
+      await tester.pump();
+
+      expect(recorder.drafts, isEmpty);
+      expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'ForumWebViewPage records the final visible thread after redirect generation',
+    (tester) async {
+      const redirectUrl =
+          'https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=404&pid=1&mobile=2';
+      const finalUrl =
+          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=404&page=2&mobile=2';
+      final recorder = _RecordingHistoryVisitRecorder();
+      final driver = _FakeForumWebViewDriver()
+        ..title = '落地主题'
+        ..javaScriptResult = _threadDocumentResult(title: '落地主题');
+
+      await tester.pumpWidget(
+        _buildTestApp(driver: driver, historyRecorder: recorder),
+      );
+      await tester.pump();
+      await driver.dispatchPageStarted(redirectUrl);
+      await driver.dispatchPageCommitVisible(finalUrl);
+      await driver.dispatchPageFinished(finalUrl);
+      await tester.pump();
+
+      expect(recorder.drafts, hasLength(1));
+      expect(recorder.drafts.single.target.id, '404');
+      expect(recorder.drafts.single.page, 2);
     },
   );
 
@@ -1730,6 +1888,7 @@ Widget _buildTestApp({
   ThreadRepository? threadRepository,
   ThreadPostLocator? threadPostLocator,
   ForumWebViewRedirectResolver? redirectResolver,
+  HistoryVisitRecorder? historyRecorder,
 }) {
   return ProviderScope(
     overrides: [
@@ -1769,6 +1928,9 @@ Widget _buildTestApp({
         redirectResolver ?? _FakeForumWebViewRedirectResolver(),
       ),
       imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
+      historyVisitRecorderProvider.overrideWithValue(
+        historyRecorder ?? _NoopHistoryVisitRecorder(),
+      ),
     ],
     child: const MaterialApp(home: ForumWebViewPage()),
   );
@@ -1788,6 +1950,7 @@ Widget _buildRoutedTestApp({
   ThreadRepository? threadRepository,
   ThreadPostLocator? threadPostLocator,
   ForumWebViewRedirectResolver? redirectResolver,
+  HistoryVisitRecorder? historyRecorder,
 }) {
   return ProviderScope(
     overrides: [
@@ -1827,6 +1990,9 @@ Widget _buildRoutedTestApp({
         redirectResolver ?? _FakeForumWebViewRedirectResolver(),
       ),
       imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
+      historyVisitRecorderProvider.overrideWithValue(
+        historyRecorder ?? _NoopHistoryVisitRecorder(),
+      ),
     ],
     child: MaterialApp(
       home: Builder(
@@ -1850,6 +2016,35 @@ Widget _buildRoutedTestApp({
       ),
     ),
   );
+}
+
+Object _threadDocumentResult({
+  required String title,
+  String? forumName,
+  String? canonicalHref,
+  int postCount = 1,
+}) {
+  return jsonEncode(<String, Object?>{
+    'title': title,
+    'forumName': forumName,
+    'canonicalHref': canonicalHref,
+    'firstPostAvatarHref': '/uc_server/avatar.jpg',
+    'postCount': postCount,
+  });
+}
+
+class _RecordingHistoryVisitRecorder implements HistoryVisitRecorder {
+  final List<HistoryVisitDraft> drafts = <HistoryVisitDraft>[];
+
+  @override
+  Future<void> record(HistoryVisitDraft draft) async {
+    drafts.add(draft);
+  }
+}
+
+class _NoopHistoryVisitRecorder implements HistoryVisitRecorder {
+  @override
+  Future<void> record(HistoryVisitDraft draft) async {}
 }
 
 class _FakeForumWebViewDriver implements ForumWebViewDriver {
