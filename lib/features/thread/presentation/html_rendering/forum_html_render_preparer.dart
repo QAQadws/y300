@@ -9,7 +9,6 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_imag
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adaptation_result.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adapter.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_color_adaptation_policy.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
@@ -19,7 +18,6 @@ abstract interface class ForumHtmlRenderPreparer {
     required String html,
     required ForumHtmlReaderPreferences preferences,
     required ForumHtmlThemeContext theme,
-    required ForumHtmlThemeAdaptationMode themeAdaptationMode,
     required String sourceId,
     required String? threadId,
     required String? imageCacheOwnerId,
@@ -53,7 +51,6 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
     required String html,
     required ForumHtmlReaderPreferences preferences,
     required ForumHtmlThemeContext theme,
-    required ForumHtmlThemeAdaptationMode themeAdaptationMode,
     required String sourceId,
     required String? threadId,
     required String? imageCacheOwnerId,
@@ -62,16 +59,13 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
     final fragment = _fragmentCodec.parse(html);
     stylePolicy.normalizeStructure(fragment);
     stylePolicy.normalizeAuthorStyles(fragment);
-    final themeAdaptationStats =
-        themeAdaptationMode == ForumHtmlThemeAdaptationMode.enabled
-        ? _themeAdapter
-              .adapt(
-                fragment: fragment,
-                theme: theme,
-                policy: ForumHtmlColorAdaptationPolicy.standard,
-              )
-              .stats
-        : ForumHtmlThemeAdaptationStats.none;
+    final themeAdaptationStats = _themeAdapter
+        .adapt(
+          fragment: fragment,
+          theme: theme,
+          policy: ForumHtmlColorAdaptationPolicy.standard,
+        )
+        .stats;
     _imageDeduplicator.deduplicateAttachmentImagesInFragment(fragment);
     final entries = <ForumHtmlReadableImageEntry>[];
     final attachmentIdsByUrl = <String, String>{};

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_fragment_codec.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
@@ -187,14 +188,13 @@ void main() {
     },
   );
 
-  test('sanitizes selected author inline styles and font attributes', () {
+  test('removes only disabled author font sizes', () {
     final preferences = ForumHtmlReaderPreferences.defaults().copyWith(
       preserveAuthorFontSize: false,
-      preserveAuthorColor: false,
-      preserveAuthorBackground: false,
     );
 
-    final result = _policy(preferences).prepareHtml(
+    final result = _prepareHtml(
+      _policy(preferences),
       '<p class="keep" style="font-size: 24px; color: red; '
       'background-color: yellow; text-align: center">'
       '<a href="/颜色" style="color: blue; text-decoration: underline">链接</a>'
@@ -204,16 +204,17 @@ void main() {
 
     expect(result, contains('class="keep"'));
     expect(result, contains('href="/颜色"'));
-    expect(result, contains('style="text-align: center"'));
-    expect(result, contains('style="text-decoration: underline"'));
+    expect(result, contains('text-align: center'));
+    expect(result, contains('text-decoration: underline'));
     expect(result, isNot(contains('font-size')));
-    expect(result, isNot(contains('color:')));
-    expect(result, isNot(contains('background-color')));
-    expect(result, contains('<font face="serif">字体</font>'));
+    expect(result, contains('color: red'));
+    expect(result, contains('background-color: yellow'));
+    expect(result, contains('<font color="#f00" face="serif">字体</font>'));
   });
 
   test('keeps enabled author styles', () {
-    final result = _policy(ForumHtmlReaderPreferences.defaults()).prepareHtml(
+    final result = _prepareHtml(
+      _policy(ForumHtmlReaderPreferences.defaults()),
       '<font size="5" color="#f00">字体</font>'
       '<span style="font-size: 20px; color: red; background: yellow">文本</span>',
     );
@@ -227,7 +228,8 @@ void main() {
   });
 
   test('normalizes Discuz font sizes to explicit percentages', () {
-    final result = _policy(ForumHtmlReaderPreferences.defaults()).prepareHtml(
+    final result = _prepareHtml(
+      _policy(ForumHtmlReaderPreferences.defaults()),
       '<font size="1">一</font>'
       '<font size="2">二</font>'
       '<font size="3">三</font>'
@@ -249,7 +251,8 @@ void main() {
   });
 
   test('font size normalization preserves unrelated inline styles', () {
-    final result = _policy(ForumHtmlReaderPreferences.defaults()).prepareHtml(
+    final result = _prepareHtml(
+      _policy(ForumHtmlReaderPreferences.defaults()),
       '<font size="3" style="color: blue; font-size: 40px">正文</font>',
     );
 
@@ -259,7 +262,8 @@ void main() {
   });
 
   test('normalizes structural breaks immediately after edit status', () {
-    final result = _policy(ForumHtmlReaderPreferences.defaults()).prepareHtml(
+    final result = _prepareHtml(
+      _policy(ForumHtmlReaderPreferences.defaults()),
       '<i class="pstatus">本帖最后由作者编辑</i> \n<br> <br />'
       '正文第一行<br>正文第二行',
     );
@@ -272,9 +276,10 @@ void main() {
   test(
     'keeps whitespace after edit status when no structural break exists',
     () {
-      final result = _policy(
-        ForumHtmlReaderPreferences.defaults(),
-      ).prepareHtml('<i class="pstatus">编辑提示</i> 正文');
+      final result = _prepareHtml(
+        _policy(ForumHtmlReaderPreferences.defaults()),
+        '<i class="pstatus">编辑提示</i> 正文',
+      );
 
       expect(result, contains('</i> 正文'));
     },
@@ -294,4 +299,11 @@ const _theme = ForumHtmlThemeContext(
 
 ForumHtmlStylePolicy _policy(ForumHtmlReaderPreferences preferences) {
   return ForumHtmlStylePolicy(preferences, theme: _theme);
+}
+
+String _prepareHtml(ForumHtmlStylePolicy policy, String html) {
+  const codec = HtmlPackageForumHtmlFragmentCodec();
+  final fragment = codec.parse(html);
+  policy.prepareFragment(fragment);
+  return codec.serialize(fragment);
 }

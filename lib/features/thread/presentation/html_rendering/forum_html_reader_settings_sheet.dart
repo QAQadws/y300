@@ -10,13 +10,11 @@ class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
     super.key,
     this.showConversionControls = false,
     this.showAuthorStyleControls = true,
-    this.showAuthorColorControls = true,
     this.showResetButton = true,
   });
 
   final bool showConversionControls;
   final bool showAuthorStyleControls;
-  final bool showAuthorColorControls;
   final bool showResetButton;
 
   @override
@@ -83,24 +81,6 @@ class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
                 value: preferences.preserveAuthorFontSize,
                 onChanged: controller.setPreserveAuthorFontSize,
               ),
-              if (showAuthorColorControls) ...[
-                SwitchListTile(
-                  key: const Key('forum-html-reader-preserve-color-switch'),
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('保留作者颜色'),
-                  value: preferences.preserveAuthorColor,
-                  onChanged: controller.setPreserveAuthorColor,
-                ),
-                SwitchListTile(
-                  key: const Key(
-                    'forum-html-reader-preserve-background-switch',
-                  ),
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('保留作者背景'),
-                  value: preferences.preserveAuthorBackground,
-                  onChanged: controller.setPreserveAuthorBackground,
-                ),
-              ],
             ],
             if (showResetButton) ...[
               const SizedBox(height: 8),
@@ -219,12 +199,4 @@ extension ForumHtmlReaderPreferencesDebugLabel on ForumHtmlReaderPreferences {
     return '字号 ${(typography.fontScale * 100).round()}% / '
         '间隔 ${typography.lineHeightScale.toStringAsFixed(1)}×';
   }
-
-  String get authorStyleDebugLabel {
-    return '作者样式：字号${_yesNo(preserveAuthorFontSize)} / '
-        '颜色${_yesNo(preserveAuthorColor)} / '
-        '背景${_yesNo(preserveAuthorBackground)}';
-  }
-
-  String _yesNo(bool value) => value ? '保留' : '忽略';
 }

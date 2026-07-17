@@ -4,7 +4,6 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adapter.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 class NovelHtmlPreparedChapter {
@@ -66,7 +65,6 @@ class NovelHtmlChapterRenderPreparer implements NovelHtmlChapterPreparer {
       html: html,
       preferences: preferences,
       theme: theme,
-      themeAdaptationMode: ForumHtmlThemeAdaptationMode.enabled,
       sourceId: sourceId,
       threadId: threadId,
       imageCacheOwnerId: imageCacheOwnerId,

@@ -148,7 +148,7 @@ void main() {
     expect(find.textContaining('引用正文', findRichText: true), findsOneWidget);
   });
 
-  testWidgets('renders sanitized html when author styles are disabled', (
+  testWidgets('renders adapted html when author font sizes are disabled', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -162,8 +162,6 @@ void main() {
             sourceId: 'sanitized',
             preferences: ForumHtmlReaderPreferences.defaults().copyWith(
               preserveAuthorFontSize: false,
-              preserveAuthorColor: false,
-              preserveAuthorBackground: false,
             ),
           ),
         ),
@@ -470,7 +468,6 @@ void main() {
           'alt="预览图" title="图片标题" width="640" height="480">',
       preferences: ForumHtmlReaderPreferences.defaults(),
       theme: forumHtmlTestTheme,
-      themeAdaptationMode: forumHtmlTestAdaptationMode,
       sourceId: 'p1',
       threadId: '573279',
       imageCacheOwnerId: '573279',
@@ -525,7 +522,6 @@ void main() {
       html: '<p>正文</p>',
       preferences: ForumHtmlReaderPreferences.defaults(),
       theme: forumHtmlTestTheme,
-      themeAdaptationMode: forumHtmlTestAdaptationMode,
       sourceId: 'theme-mismatch',
       threadId: '100',
       imageCacheOwnerId: '100',

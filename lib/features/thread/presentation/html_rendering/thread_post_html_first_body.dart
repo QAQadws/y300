@@ -15,7 +15,6 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_rend
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adapter.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_html_image_reader_bridge.dart';
 
@@ -144,7 +143,6 @@ class _ThreadPostHtmlFirstBodyState
         html: html,
         preferences: preferences,
         theme: widget.theme,
-        themeAdaptationMode: ForumHtmlThemeAdaptationMode.enabled,
         sourceId: sourceId,
         threadId: widget.threadId,
         imageCacheOwnerId: widget.threadId,

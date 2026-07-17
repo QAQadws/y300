@@ -12,8 +12,8 @@ import 'package:y300/features/cache/domain/services/forum_image_request_resolver
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_cached_image_widget_factory.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_image_deduplicator.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/html_rendering/widgets/forum_collapse_block.dart';
@@ -59,16 +59,23 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   onBlockImageResolved;
   final ForumHtmlPreparedRenderDocument? preparedDocument;
   final ForumImageKind contentImageKind;
-  static const _imageDeduplicator = ForumHtmlImageDeduplicator();
 
   @override
   Widget build(BuildContext context) {
     final resolvedPreferences =
         preferences ?? ForumHtmlReaderPreferences.defaults();
     final stylePolicy = ForumHtmlStylePolicy(resolvedPreferences, theme: theme);
-    final document = preparedDocument;
-    final themeMatches =
-        document == null || document.themeSignature == theme.signature;
+    final document =
+        preparedDocument ??
+        const DefaultForumHtmlRenderPreparer().prepare(
+          html: html,
+          preferences: resolvedPreferences,
+          theme: theme,
+          sourceId: sourceId ?? 'anonymous',
+          threadId: threadId,
+          imageCacheOwnerId: imageCacheOwnerId,
+        );
+    final themeMatches = document.themeSignature == theme.signature;
     assert(
       themeMatches,
       'Forum HTML prepared document theme mismatch for '
@@ -79,22 +86,20 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
         key: Key('forum-html-renderer-theme-mismatch'),
       );
     }
-    final preparedHtml =
-        document?.preparedHtml ??
-        _imageDeduplicator.deduplicateAttachmentImages(
-          stylePolicy.prepareHtml(html),
-        );
-    final imageAttachmentIdsByUrl =
-        document?.attachmentIdsByUrl ??
-        _collectImageAttachmentIds(preparedHtml);
+    final preparedHtml = document.preparedHtml;
+    final imageAttachmentIdsByUrl = document.attachmentIdsByUrl;
     final handlesImageTapInFactory = threadId?.trim().isNotEmpty == true;
     return HtmlWidget(
       preparedHtml,
       key: Key('forum-html-renderer-${sourceId ?? 'anonymous'}'),
       baseUrl: forumBaseUri,
       customStylesBuilder: stylePolicy.customStylesFor,
-      customWidgetBuilder: (element) =>
-          _buildCustomWidget(element, stylePolicy, resolvedPreferences),
+      customWidgetBuilder: (element) => _buildCustomWidget(
+        element,
+        stylePolicy,
+        resolvedPreferences,
+        document,
+      ),
       factoryBuilder: _cachedImageFactoryBuilder(),
       renderMode: RenderMode.column,
       textStyle: stylePolicy.baseTextStyle(context),
@@ -131,6 +136,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     html_dom.Element element,
     ForumHtmlStylePolicy stylePolicy,
     ForumHtmlReaderPreferences resolvedPreferences,
+    ForumHtmlPreparedRenderDocument document,
   ) {
     if (stylePolicy.isDiscuzEditStatusElement(element)) {
       return _DiscuzEditStatusText(
@@ -165,7 +171,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           imageFallbackAspectRatioFor: imageFallbackAspectRatioFor,
           onBlockImageResolved: onBlockImageResolved,
           contentImageKind: contentImageKind,
-          preparedDocument: preparedDocument?.copyWith(preparedHtml: html),
+          preparedDocument: document.copyWith(preparedHtml: html),
         );
       },
     );
@@ -225,34 +231,6 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       return const HtmlEscape().convert(node.data);
     }
     return node.text ?? '';
-  }
-
-  Map<String, String> _collectImageAttachmentIds(String html) {
-    final result = <String, String>{};
-    final fragment = html_parser.parseFragment(html);
-    for (final image in fragment.querySelectorAll('img')) {
-      final src = image.attributes['src'];
-      if (src == null || src.isEmpty) {
-        continue;
-      }
-      final attachmentId = _attachmentIdFromElement(image);
-      if (attachmentId == null) {
-        continue;
-      }
-      result[src] = attachmentId;
-      result[forumBaseUri.resolve(src).toString()] = attachmentId;
-    }
-    return result;
-  }
-
-  String? _attachmentIdFromElement(html_dom.Element element) {
-    final id = element.id;
-    final aimgMatch = RegExp(r'^aimg_(\d+)$').firstMatch(id);
-    if (aimgMatch != null) {
-      return aimgMatch.group(1);
-    }
-    final src = element.attributes['src'];
-    return src == null ? null : _attachmentIdFromUrl(src);
   }
 
   void _handleTapImage(

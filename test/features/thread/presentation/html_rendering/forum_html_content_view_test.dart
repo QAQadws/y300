@@ -8,7 +8,6 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_prep
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/css_author_color_parser.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adapter.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 void main() {
@@ -108,18 +107,15 @@ final class _CountingRenderPreparer implements ForumHtmlRenderPreparer {
     required String html,
     required ForumHtmlReaderPreferences preferences,
     required ForumHtmlThemeContext theme,
-    required ForumHtmlThemeAdaptationMode themeAdaptationMode,
     required String sourceId,
     required String? threadId,
     required String? imageCacheOwnerId,
   }) {
     callCount++;
-    expect(themeAdaptationMode, ForumHtmlThemeAdaptationMode.enabled);
     return _delegate.prepare(
       html: html,
       preferences: preferences,
       theme: theme,
-      themeAdaptationMode: themeAdaptationMode,
       sourceId: sourceId,
       threadId: threadId,
       imageCacheOwnerId: imageCacheOwnerId,

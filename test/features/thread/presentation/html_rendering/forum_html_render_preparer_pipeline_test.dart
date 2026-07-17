@@ -9,7 +9,6 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_prep
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/css_author_color_parser.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adapter.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'forum_html_test_theme.dart';
 
@@ -25,7 +24,6 @@ void main() {
             '<img src="data/attachment/forum/page.jpg">',
         preferences: ForumHtmlReaderPreferences.defaults(),
         theme: forumHtmlTestTheme,
-        themeAdaptationMode: forumHtmlTestAdaptationMode,
         sourceId: 'phase2-single-pass',
         threadId: '100',
         imageCacheOwnerId: '100',
@@ -49,7 +47,6 @@ void main() {
             'src="https://bbs.yamibo.com/data/attachment/forum/page.jpg">',
         preferences: ForumHtmlReaderPreferences.defaults(),
         theme: forumHtmlTestTheme,
-        themeAdaptationMode: forumHtmlTestAdaptationMode,
         sourceId: 'phase2-order',
         threadId: '100',
         imageCacheOwnerId: '100',
@@ -60,9 +57,10 @@ void main() {
 
       expect(fragment.querySelectorAll('br'), isEmpty);
       expect(font.attributes['size'], isNull);
-      expect(font.attributes['color'], 'black');
+      expect(font.attributes['color'], isNull);
       expect(font.attributes['style'], contains('text-align: center'));
       expect(font.attributes['style'], contains('font-size: 125%'));
+      expect(font.attributes['style'], contains('color:'));
       expect(images, hasLength(1));
       expect(
         images.single.attributes['src'],
@@ -76,7 +74,7 @@ void main() {
       expect(prepared.sequence.entries.single.attachmentId, '9');
       expect(prepared.totalImageCount, 1);
       expect(prepared.themeSignature, forumHtmlTestTheme.signature);
-      expect(prepared.themeAdaptationStats.remappedForegroundCount, 0);
+      expect(prepared.themeAdaptationStats.explicitForegroundCount, 1);
       expect(prepared.themeAdaptationStats.remappedBackgroundCount, 0);
     });
 
@@ -89,7 +87,6 @@ void main() {
             '<img id="aimg_9" src="data/attachment/forum/page.jpg">',
         preferences: ForumHtmlReaderPreferences.defaults(),
         theme: _darkTheme,
-        themeAdaptationMode: ForumHtmlThemeAdaptationMode.enabled,
         sourceId: 'phase4-adapt',
         threadId: '100',
         imageCacheOwnerId: '100',

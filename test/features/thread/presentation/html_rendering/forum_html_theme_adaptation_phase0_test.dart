@@ -9,6 +9,7 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/css_author_color_parser.dart';
 import 'forum_html_test_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 
@@ -32,7 +33,7 @@ void main() {
       expect(fragment.text!.trimRight(), '浅色强调\n深色主题不可读正文\n可能可保留的标题\n隐藏文字');
     });
 
-    test('default prepared HTML preserves unsafe authored colors', () {
+    test('default preparation adapts colors without mutating source HTML', () {
       final sourceBeforePrepare = fixtureHtml;
       final preferences = ForumHtmlReaderPreferences.defaults();
 
@@ -40,7 +41,6 @@ void main() {
         html: fixtureHtml,
         preferences: preferences,
         theme: forumHtmlTestTheme,
-        themeAdaptationMode: forumHtmlTestAdaptationMode,
         sourceId: 'phase0-author-colors',
         threadId: 'phase0',
         imageCacheOwnerId: null,
@@ -48,19 +48,25 @@ void main() {
       final fragment = html_parser.parseFragment(prepared.preparedHtml);
       final fonts = fragment.querySelectorAll('font');
       final concealedText = fragment.querySelector('span')!;
+      const colorParser = CsslibAuthorColorParser();
+      final highlightStyle = colorParser.parseOwn(fonts[0]);
+      final blackTextStyle = colorParser.parseOwn(fonts[1]);
+      final blueTitleStyle = colorParser.parseOwn(fonts[2]);
+      final concealedStyle = colorParser.parseOwn(concealedText);
 
-      expect(preferences.preserveAuthorColor, isTrue);
-      expect(preferences.preserveAuthorBackground, isTrue);
+      expect(highlightStyle.background, isNotNull);
+      expect(highlightStyle.background!.toARGB32(), isNot(0xFFFCF4CF));
+      expect(blackTextStyle.foreground?.toARGB32(), 0xFF000000);
+      expect(blueTitleStyle.foreground, isNotNull);
+      expect(fonts[1].attributes['color'], isNull);
+      expect(fonts[2].attributes['color'], isNull);
+      expect(concealedStyle.foreground, concealedStyle.background);
+      expect(prepared.themeAdaptationStats.remappedBackgroundCount, 2);
       expect(
-        fonts[0].attributes['style'],
-        'background-color: rgb(252, 244, 207)',
+        prepared.themeAdaptationStats.remappedForegroundCount,
+        greaterThan(0),
       );
-      expect(fonts[1].attributes['color'], 'black');
-      expect(fonts[2].attributes['color'], '#99BBF1');
-      expect(
-        concealedText.attributes['style'],
-        'color: white; background-color: white',
-      );
+      expect(prepared.themeAdaptationStats.concealedTextRangeCount, 1);
       expect(fixtureHtml, sourceBeforePrepare);
       expect(prepared.preparedHtml, contains('深色主题不可读正文'));
       expect(prepared.preparedHtml, contains('隐藏文字'));
@@ -149,7 +155,6 @@ void main() {
       html: longBody,
       preferences: ForumHtmlReaderPreferences.defaults(),
       theme: forumHtmlTestTheme,
-      themeAdaptationMode: forumHtmlTestAdaptationMode,
       sourceId: 'phase0-long-body',
       threadId: '573549',
       imageCacheOwnerId: null,
@@ -162,7 +167,6 @@ void main() {
       html: longBody,
       preferences: ForumHtmlReaderPreferences.defaults(),
       theme: forumHtmlTestTheme,
-      themeAdaptationMode: forumHtmlTestAdaptationMode,
       sourceId: 'phase0-long-body',
       threadId: '573549',
       imageCacheOwnerId: null,
@@ -186,9 +190,11 @@ void main() {
     expect(first.totalImageCount, greaterThan(100));
     expect(
       first.preparedHtml,
-      contains('background-color: rgb(252, 244, 207)'),
+      isNot(contains('background-color: rgb(252, 244, 207)')),
     );
-    expect(first.preparedHtml, contains('color="black"'));
+    expect(first.preparedHtml, isNot(contains('color="black"')));
+    expect(first.themeAdaptationStats.explicitForegroundCount, greaterThan(0));
+    expect(first.themeAdaptationStats.explicitBackgroundCount, greaterThan(0));
   });
 }
 

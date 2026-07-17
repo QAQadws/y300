@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adapter.dart';
-
-const forumHtmlTestAdaptationMode = ForumHtmlThemeAdaptationMode.disabled;
 
 const forumHtmlTestTheme = ForumHtmlThemeContext(
   brightness: ForumHtmlBrightness.light,

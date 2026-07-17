@@ -10,8 +10,6 @@ class ForumHtmlReaderPreferences {
     required this.typography,
     required this.conversionMode,
     this.preserveAuthorFontSize = true,
-    this.preserveAuthorColor = true,
-    this.preserveAuthorBackground = true,
   });
 
   factory ForumHtmlReaderPreferences.defaults() =>
@@ -23,24 +21,17 @@ class ForumHtmlReaderPreferences {
   final RichTextTypography typography;
   final TextConversionMode conversionMode;
   final bool preserveAuthorFontSize;
-  final bool preserveAuthorColor;
-  final bool preserveAuthorBackground;
 
   ForumHtmlReaderPreferences copyWith({
     RichTextTypography? typography,
     TextConversionMode? conversionMode,
     bool? preserveAuthorFontSize,
-    bool? preserveAuthorColor,
-    bool? preserveAuthorBackground,
   }) {
     return ForumHtmlReaderPreferences(
       typography: typography ?? this.typography,
       conversionMode: conversionMode ?? this.conversionMode,
       preserveAuthorFontSize:
           preserveAuthorFontSize ?? this.preserveAuthorFontSize,
-      preserveAuthorColor: preserveAuthorColor ?? this.preserveAuthorColor,
-      preserveAuthorBackground:
-          preserveAuthorBackground ?? this.preserveAuthorBackground,
     );
   }
 
@@ -49,19 +40,12 @@ class ForumHtmlReaderPreferences {
     return other is ForumHtmlReaderPreferences &&
         typography == other.typography &&
         conversionMode == other.conversionMode &&
-        preserveAuthorFontSize == other.preserveAuthorFontSize &&
-        preserveAuthorColor == other.preserveAuthorColor &&
-        preserveAuthorBackground == other.preserveAuthorBackground;
+        preserveAuthorFontSize == other.preserveAuthorFontSize;
   }
 
   @override
-  int get hashCode => Object.hash(
-    typography,
-    conversionMode,
-    preserveAuthorFontSize,
-    preserveAuthorColor,
-    preserveAuthorBackground,
-  );
+  int get hashCode =>
+      Object.hash(typography, conversionMode, preserveAuthorFontSize);
 }
 
 abstract class ForumHtmlReaderPreferencesRepository {
@@ -78,9 +62,6 @@ class SharedPrefsForumHtmlReaderPreferencesRepository
   static const _conversionModeKey = 'forum_html_reader_conversion_mode';
   static const _preserveFontSizeKey =
       'forum_html_reader_preserve_author_font_size';
-  static const _preserveColorKey = 'forum_html_reader_preserve_author_color';
-  static const _preserveBackgroundKey =
-      'forum_html_reader_preserve_author_background';
 
   @override
   Future<ForumHtmlReaderPreferences> load() async {
@@ -100,8 +81,6 @@ class SharedPrefsForumHtmlReaderPreferencesRepository
       ),
       conversionMode: _parseConversionMode(prefs.getString(_conversionModeKey)),
       preserveAuthorFontSize: prefs.getBool(_preserveFontSizeKey) ?? true,
-      preserveAuthorColor: prefs.getBool(_preserveColorKey) ?? true,
-      preserveAuthorBackground: prefs.getBool(_preserveBackgroundKey) ?? true,
     );
   }
 
@@ -122,11 +101,6 @@ class SharedPrefsForumHtmlReaderPreferencesRepository
     await prefs.setBool(
       _preserveFontSizeKey,
       preferences.preserveAuthorFontSize,
-    );
-    await prefs.setBool(_preserveColorKey, preferences.preserveAuthorColor);
-    await prefs.setBool(
-      _preserveBackgroundKey,
-      preferences.preserveAuthorBackground,
     );
   }
 
@@ -219,16 +193,6 @@ class ForumHtmlReaderPreferencesController
   Future<void> setPreserveAuthorFontSize(bool value) {
     final current = state.value ?? ForumHtmlReaderPreferences.defaults();
     return _persist(current.copyWith(preserveAuthorFontSize: value));
-  }
-
-  Future<void> setPreserveAuthorColor(bool value) {
-    final current = state.value ?? ForumHtmlReaderPreferences.defaults();
-    return _persist(current.copyWith(preserveAuthorColor: value));
-  }
-
-  Future<void> setPreserveAuthorBackground(bool value) {
-    final current = state.value ?? ForumHtmlReaderPreferences.defaults();
-    return _persist(current.copyWith(preserveAuthorBackground: value));
   }
 
   Future<void> reset() {

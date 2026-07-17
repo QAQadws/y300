@@ -12,8 +12,6 @@ import 'package:y300/features/thread/presentation/html_rendering/theme/forum_htm
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adaptation_result.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
-enum ForumHtmlThemeAdaptationMode { disabled, enabled }
-
 abstract interface class ForumHtmlThemeAdapter {
   ForumHtmlThemeAdaptationResult adapt({
     required html_dom.DocumentFragment fragment,

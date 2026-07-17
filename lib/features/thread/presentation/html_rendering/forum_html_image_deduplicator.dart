@@ -1,7 +1,4 @@
-import 'dart:convert';
-
 import 'package:html/dom.dart' as html_dom;
-import 'package:html/parser.dart' as html_parser;
 import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 
@@ -18,19 +15,6 @@ class ForumHtmlImageDeduplicator {
   }) : _urlResolver = urlResolver;
 
   final SiteUrlResolver _urlResolver;
-
-  String deduplicateAttachmentImages(String html) {
-    if (!html.contains('<img')) {
-      return html;
-    }
-
-    final fragment = html_parser.parseFragment(html);
-    final removedCount = deduplicateAttachmentImagesInFragment(fragment);
-    if (removedCount == 0) {
-      return html;
-    }
-    return fragment.nodes.map(_serializeNode).join();
-  }
 
   int deduplicateAttachmentImagesInFragment(
     html_dom.DocumentFragment fragment,
@@ -96,15 +80,5 @@ class ForumHtmlImageDeduplicator {
     }
     final uri = Uri.tryParse(normalizedUrl);
     return uri?.path.toLowerCase().startsWith('/data/attachment/') ?? false;
-  }
-
-  String _serializeNode(html_dom.Node node) {
-    if (node is html_dom.Element) {
-      return node.outerHtml;
-    }
-    if (node is html_dom.Text) {
-      return const HtmlEscape().convert(node.data);
-    }
-    return node.text ?? '';
   }
 }

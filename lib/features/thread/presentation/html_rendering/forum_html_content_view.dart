@@ -8,7 +8,6 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_rend
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adapter.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 class ForumHtmlContentView extends ConsumerStatefulWidget {
@@ -82,7 +81,6 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
         html: trimmedHtml,
         preferences: preferences,
         theme: renderTheme,
-        themeAdaptationMode: ForumHtmlThemeAdaptationMode.enabled,
         sourceId: sourceId,
         threadId: ownerId,
         imageCacheOwnerId: ownerId,

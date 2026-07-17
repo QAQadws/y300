@@ -11,7 +11,6 @@ import 'package:y300/features/novel/presentation/widgets/novel_reader_html_docum
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adapter.dart';
 
 void main() {
   testWidgets(
@@ -142,7 +141,6 @@ NovelHtmlPreparedChapter _prepared({
     html: html,
     preferences: ForumHtmlReaderPreferences.defaults(),
     theme: theme,
-    themeAdaptationMode: ForumHtmlThemeAdaptationMode.enabled,
     sourceId: _episode.episodeId,
     threadId: _episode.sourceTid,
     imageCacheOwnerId: _episode.sourceTid,

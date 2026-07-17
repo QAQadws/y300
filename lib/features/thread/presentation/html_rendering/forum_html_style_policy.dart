@@ -1,9 +1,6 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/dom.dart' as html_dom;
-import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/reader_shared/domain/rich_text/typography/discuz_font_size_policy.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/css_inline_style_declarations.dart';
@@ -101,12 +98,6 @@ class ForumHtmlStylePolicy {
     return element.classes.contains('showcollapse_active');
   }
 
-  String prepareHtml(String html) {
-    final fragment = html_parser.parseFragment(html);
-    prepareFragment(fragment);
-    return fragment.nodes.map(_serializeNode).join();
-  }
-
   void prepareFragment(html_dom.DocumentFragment fragment) {
     normalizeStructure(fragment);
     normalizeAuthorStyles(fragment);
@@ -119,8 +110,12 @@ class ForumHtmlStylePolicy {
   }
 
   void normalizeAuthorStyles(html_dom.DocumentFragment fragment) {
-    for (final element in fragment.querySelectorAll('[style],font')) {
-      _sanitizeStyle(element);
+    if (!preferences.preserveAuthorFontSize) {
+      for (final element in fragment.querySelectorAll('[style]')) {
+        _sanitizeStyle(element);
+      }
+    }
+    for (final element in fragment.querySelectorAll('font')) {
       _sanitizeFontElement(element);
     }
   }
@@ -269,9 +264,6 @@ class ForumHtmlStylePolicy {
     } else {
       _normalizeDiscuzFontSize(element);
     }
-    if (!preferences.preserveAuthorColor) {
-      element.attributes.remove('color');
-    }
   }
 
   void _normalizeDiscuzFontSize(html_dom.Element element) {
@@ -307,27 +299,6 @@ class ForumHtmlStylePolicy {
   }
 
   bool _shouldDropStyleProperty(String property) {
-    if (!preferences.preserveAuthorFontSize && property == 'font-size') {
-      return true;
-    }
-    if (!preferences.preserveAuthorColor &&
-        (property == 'color' || property == 'font-color')) {
-      return true;
-    }
-    if (!preferences.preserveAuthorBackground &&
-        (property == 'background' || property == 'background-color')) {
-      return true;
-    }
-    return false;
-  }
-
-  String _serializeNode(html_dom.Node node) {
-    if (node is html_dom.Element) {
-      return node.outerHtml;
-    }
-    if (node is html_dom.Text) {
-      return const HtmlEscape().convert(node.data);
-    }
-    return node.text ?? '';
+    return !preferences.preserveAuthorFontSize && property == 'font-size';
   }
 }

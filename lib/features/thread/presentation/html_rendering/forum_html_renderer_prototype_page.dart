@@ -18,7 +18,6 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_rend
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adaptation_result.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adapter.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
@@ -197,8 +196,7 @@ class _ForumHtmlRendererPrototypePageState
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: false,
-      builder: (context) =>
-          const ForumHtmlReaderSettingsSheet(showAuthorColorControls: false),
+      builder: (context) => const ForumHtmlReaderSettingsSheet(),
     );
   }
 
@@ -487,7 +485,6 @@ class _LoadedSampleView extends StatelessWidget {
       html: conversionResult.html,
       preferences: preferences,
       theme: renderTheme,
-      themeAdaptationMode: ForumHtmlThemeAdaptationMode.enabled,
       sourceId: input.sourceId,
       threadId: null,
       imageCacheOwnerId: null,
