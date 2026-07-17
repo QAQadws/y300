@@ -106,6 +106,8 @@ void main() {
     await tester.tap(find.byIcon(Icons.filter_list).first);
     await tester.pumpAndSettle();
 
+    expect(find.text('已添加标签'), findsNothing);
+
     // 切到第 3 个 tab（显示），避免依赖具体文案。
     await tester.tap(find.byType(TextButton).at(2));
     await tester.pumpAndSettle();
@@ -121,7 +123,7 @@ void main() {
     expect(find.byKey(const Key('unified-shelf-list-view')), findsOneWidget);
   });
 
-  testWidgets('public shelf sort sheet exposes three fields and asc default', (
+  testWidgets('public shelf sort sheet exposes three fields and desc default', (
     tester,
   ) async {
     LibraryShelfSortOption? queriedSort;
@@ -154,7 +156,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(queriedSort?.field, LibraryShelfSortField.favoriteAddedAt);
-    expect(queriedSort?.direction, LibrarySortDirection.asc);
+    expect(queriedSort?.direction, LibrarySortDirection.desc);
 
     await tester.tap(find.byIcon(Icons.filter_list).first);
     await tester.pumpAndSettle();
@@ -177,7 +179,7 @@ void main() {
     expect(
       find.descendant(
         of: favoriteTile,
-        matching: find.byIcon(Icons.arrow_upward),
+        matching: find.byIcon(Icons.arrow_downward),
       ),
       findsOneWidget,
     );

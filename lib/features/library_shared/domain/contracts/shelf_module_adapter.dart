@@ -106,6 +106,7 @@ class ShelfModuleCapabilities {
     return filters.copyWith(
       unread: supportsReadState ? filters.unread : TriStateFilterValue.ignore,
       read: supportsReadState ? filters.read : TriStateFilterValue.ignore,
+      hasTags: TriStateFilterValue.ignore,
       bookmarked: supportsBookmarkFilter
           ? filters.bookmarked
           : TriStateFilterValue.ignore,

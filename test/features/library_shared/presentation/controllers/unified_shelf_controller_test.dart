@@ -64,7 +64,10 @@ void main() {
           controller.state.sortOption.field,
           LibraryShelfSortField.favoriteAddedAt,
         );
-        expect(controller.state.sortOption.direction, LibrarySortDirection.asc);
+        expect(
+          controller.state.sortOption.direction,
+          LibrarySortDirection.desc,
+        );
 
         await controller.updateSortOption(
           const LibraryShelfSortOption(
@@ -77,7 +80,16 @@ void main() {
           controller.state.sortOption.field,
           LibraryShelfSortField.favoriteAddedAt,
         );
-        expect(controller.state.sortOption.direction, LibrarySortDirection.asc);
+        expect(
+          controller.state.sortOption.direction,
+          LibrarySortDirection.desc,
+        );
+
+        await controller.updateFilters(
+          const LibraryFilterSet(hasTags: TriStateFilterValue.include),
+        );
+
+        expect(controller.state.filters.hasTags, TriStateFilterValue.ignore);
       },
     );
 

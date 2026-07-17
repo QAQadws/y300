@@ -25,7 +25,7 @@ class LibraryShelfSortOption {
 
   static const LibraryShelfSortOption defaults = LibraryShelfSortOption(
     field: LibraryShelfSortField.favoriteAddedAt,
-    direction: LibrarySortDirection.asc,
+    direction: LibrarySortDirection.desc,
   );
 
   /// 公共书架允许用户选择的排序字段，顺序同时作为排序面板展示顺序。

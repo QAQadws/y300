@@ -94,6 +94,7 @@ void main() {
     expect(find.text('未读'), findsNothing);
     expect(find.text('阅读过'), findsNothing);
     expect(find.text('有书签'), findsOneWidget);
+    expect(find.text('已添加标签'), findsNothing);
 
     await tester.tap(find.byType(TextButton).at(1));
     await tester.pumpAndSettle();

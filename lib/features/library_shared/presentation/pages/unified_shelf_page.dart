@@ -1481,11 +1481,6 @@ class _FilterTab extends StatelessWidget {
             value: filters.bookmarked,
             onChanged: (v) => onChanged(filters.copyWith(bookmarked: v)),
           ),
-        _TriStateLine(
-          label: '已添加标签',
-          value: filters.hasTags,
-          onChanged: (v) => onChanged(filters.copyWith(hasTags: v)),
-        ),
       ],
     );
   }
