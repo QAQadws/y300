@@ -60,7 +60,6 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
     final adapter = NovelDetailAdapter(
       ref.watch(novelRepositoryProvider),
       imageCacheService: ref.watch(imageCacheServiceProvider),
-      readingStateBatchWriter: ref.watch(readingStateBatchWriterProvider),
       stateRepository: ref.watch(libraryStateRepositoryProvider),
       sourceStateRepository: ref.watch(novelSourceStateRepositoryProvider),
       chapterUpdateServiceFactory: () =>

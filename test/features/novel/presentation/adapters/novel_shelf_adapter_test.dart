@@ -8,10 +8,10 @@ import 'package:y300/features/library_shared/data/repositories/library_state_rep
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
-import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
@@ -35,15 +35,21 @@ void main() {
       ],
     );
     final cache = _FakeImageCacheService(localPath: '/cache/novel-1.jpg');
+    final stateRepository = _FakeLibraryStateRepository(hasBookmarks: true);
     final adapter = NovelShelfAdapter(
       repository,
-      stateRepository: _FakeLibraryStateRepository(),
+      stateRepository: stateRepository,
       imageCacheService: cache,
     );
 
     final items = await adapter.loadCategoryItems(categoryId: 'default');
 
     expect(items.single.coverLocalPath, isNull);
+    expect(items.single.unreadCount, 0);
+    expect(items.single.readChapterCount, 0);
+    expect(items.single.hasBookmarks, isTrue);
+    expect(stateRepository.countUnreadCalls, 0);
+    expect(stateRepository.countReadCalls, 0);
     expect(cache.lastRequest, isNull);
 
     final requests = await adapter.buildCoverWarmupRequests(
@@ -123,7 +129,6 @@ void main() {
       _FakeNovelRepository(shelfItems: const <NovelItem>[]),
       stateRepository: _FakeLibraryStateRepository(),
       categoryAssignUseCase: _FakeShelfCategoryAssignUseCase(),
-      readingStateBatchWriter: _FakeReadingStateBatchWriter(),
       unfavoriteWorkUseCase: _FakeUnfavoriteWorkUseCase(),
     );
 
@@ -131,47 +136,47 @@ void main() {
       adapter.selectionActions.map((action) => action.id).toList(),
       <String>[
         SelectionActionIds.assignCategory,
-        SelectionActionIds.markAllRead,
-        SelectionActionIds.markAllUnread,
         SelectionActionIds.unfavorite,
       ],
     );
   });
 
   test(
-    'NovelShelfAdapter forwards category and reading-state actions',
-    () async {
-      final assignUseCase = _FakeShelfCategoryAssignUseCase();
-      final writer = _FakeReadingStateBatchWriter();
+    'NovelShelfAdapter disables read status and enables bookmark filter',
+    () {
       final adapter = NovelShelfAdapter(
         _FakeNovelRepository(shelfItems: const <NovelItem>[]),
         stateRepository: _FakeLibraryStateRepository(),
-        categoryAssignUseCase: assignUseCase,
-        readingStateBatchWriter: writer,
       );
 
-      await adapter.runSelectionAction(
-        const SelectionActionExecutionRequest(
-          actionId: SelectionActionIds.assignCategory,
-          workIds: <String>{'novel-a'},
-          activeCategoryId: 'default',
-          targetCategoryId: 'archive',
-        ),
-      );
-      await adapter.runSelectionAction(
-        const SelectionActionExecutionRequest(
-          actionId: SelectionActionIds.markAllUnread,
-          workIds: <String>{'novel-a'},
-          activeCategoryId: 'default',
-        ),
-      );
-
-      expect(assignUseCase.lastSourceCategoryId, 'default');
-      expect(assignUseCase.lastTargetCategoryId, 'archive');
-      expect(writer.calls.single.module, LibraryModuleKey.novel);
-      expect(writer.calls.single.isRead, isFalse);
+      expect(adapter.capabilities.supportsReadState, isFalse);
+      expect(adapter.capabilities.supportsBookmarkFilter, isTrue);
+      expect(adapter.capabilities.availableSortFields, <LibraryShelfSortField>[
+        LibraryShelfSortField.chapterCount,
+        LibraryShelfSortField.favoriteAddedAt,
+      ]);
     },
   );
+
+  test('NovelShelfAdapter forwards category actions', () async {
+    final assignUseCase = _FakeShelfCategoryAssignUseCase();
+    final adapter = NovelShelfAdapter(
+      _FakeNovelRepository(shelfItems: const <NovelItem>[]),
+      stateRepository: _FakeLibraryStateRepository(),
+      categoryAssignUseCase: assignUseCase,
+    );
+
+    await adapter.runSelectionAction(
+      const SelectionActionExecutionRequest(
+        actionId: SelectionActionIds.assignCategory,
+        workIds: <String>{'novel-a'},
+        activeCategoryId: 'default',
+        targetCategoryId: 'archive',
+      ),
+    );
+    expect(assignUseCase.lastSourceCategoryId, 'default');
+    expect(assignUseCase.lastTargetCategoryId, 'archive');
+  });
 
   test('NovelShelfAdapter delegates unfavorite with novel kind', () async {
     final useCase = _FakeUnfavoriteWorkUseCase();
@@ -272,7 +277,20 @@ class _FakeImageCacheService implements ImageCacheService {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-class _FakeLibraryStateRepository implements LibraryStateRepository {
+class _FakeLibraryStateRepository
+    implements LibraryStateRepository, LibraryBookmarkStateQuery {
+  _FakeLibraryStateRepository({this.hasBookmarks = false});
+
+  final bool hasBookmarks;
+  int countReadCalls = 0;
+  int countUnreadCalls = 0;
+
+  @override
+  Future<bool> hasAnyBookmarkedEpisode({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async => hasBookmarks;
+
   @override
   Future<int> countDownloadedEpisodes({
     required LibraryModuleKey moduleKey,
@@ -286,6 +304,7 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
     required LibraryModuleKey moduleKey,
     required String workId,
   }) async {
+    countReadCalls++;
     return 0;
   }
 
@@ -294,6 +313,7 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
     required LibraryModuleKey moduleKey,
     required String workId,
   }) async {
+    countUnreadCalls++;
     return 0;
   }
 
@@ -346,38 +366,6 @@ class _FakeShelfCategoryAssignUseCase implements ShelfCategoryAssignUseCase {
       failedWorkIds: const <String>[],
       targetCategoryId: targetCategoryId,
     );
-  }
-}
-
-class _ReadStateCall {
-  const _ReadStateCall({
-    required this.module,
-    required this.workIds,
-    required this.isRead,
-  });
-
-  final LibraryModuleKey module;
-  final Set<String> workIds;
-  final bool isRead;
-}
-
-class _FakeReadingStateBatchWriter implements ReadingStateBatchWriter {
-  final List<_ReadStateCall> calls = <_ReadStateCall>[];
-
-  @override
-  Future<void> setWorkRead({
-    required LibraryModuleKey module,
-    required String workId,
-    required bool isRead,
-  }) async {}
-
-  @override
-  Future<void> setWorksRead({
-    required LibraryModuleKey module,
-    required Set<String> workIds,
-    required bool isRead,
-  }) async {
-    calls.add(_ReadStateCall(module: module, workIds: workIds, isRead: isRead));
   }
 }
 

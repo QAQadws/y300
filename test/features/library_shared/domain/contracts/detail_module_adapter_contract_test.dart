@@ -20,7 +20,10 @@ void main() {
 }
 
 class _FakeDetailModuleAdapter
-    implements DetailModuleAdapter, DetailChapterDownloadAdapter {
+    implements
+        DetailModuleAdapter,
+        DetailChapterReadStateAdapter,
+        DetailChapterDownloadAdapter {
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
 

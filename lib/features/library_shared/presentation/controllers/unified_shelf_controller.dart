@@ -318,13 +318,15 @@ class UnifiedShelfController {
   }
 
   Future<void> updateFilters(LibraryFilterSet filters) async {
-    _setState(_state.copyWith(filters: filters));
+    final capabilities = resolveShelfModuleCapabilities(_adapter);
+    _setState(_state.copyWith(filters: capabilities.normalizeFilters(filters)));
     await _reload();
   }
 
   Future<void> updateSortOption(LibraryShelfSortOption option) async {
+    final capabilities = resolveShelfModuleCapabilities(_adapter);
     _setState(
-      _state.copyWith(sortOption: LibraryShelfSortOption.normalize(option)),
+      _state.copyWith(sortOption: capabilities.normalizeSortOption(option)),
     );
     await _reload();
   }

@@ -99,6 +99,15 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
 
   bool get _supportsChapterDownloads => _downloadAdapter != null;
 
+  DetailChapterReadStateAdapter? get _readStateAdapter {
+    final adapter = widget.adapter;
+    return adapter is DetailChapterReadStateAdapter
+        ? adapter as DetailChapterReadStateAdapter
+        : null;
+  }
+
+  bool get _supportsChapterReadState => _readStateAdapter != null;
+
   @override
   void initState() {
     super.initState();
@@ -546,7 +555,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     final labels = <String>[
       if (_supportsChapterDownloads)
         ?_filterSummaryPart('已下载', filters.downloaded),
-      ?_filterSummaryPart('未读', filters.unread),
+      if (_supportsChapterReadState) ?_filterSummaryPart('未读', filters.unread),
       ?_filterSummaryPart('已加书签', filters.bookmarked),
     ];
     return labels.isEmpty ? '全部章节' : labels.join(' / ');
@@ -566,6 +575,12 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
         selectedFilters.downloaded != TriStateFilterValue.ignore) {
       selectedFilters = selectedFilters.copyWith(
         downloaded: TriStateFilterValue.ignore,
+      );
+    }
+    if (!_supportsChapterReadState &&
+        selectedFilters.unread != TriStateFilterValue.ignore) {
+      selectedFilters = selectedFilters.copyWith(
+        unread: TriStateFilterValue.ignore,
       );
     }
     var selectedDirection = _controller.state.chapterSortOption.direction;
@@ -601,16 +616,17 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                               ),
                             ),
                           ),
-                        UnifiedDetailTriStateLine(
-                          lineKey: const Key('unified-detail-filter-unread'),
-                          label: '未读',
-                          value: selectedFilters.unread,
-                          onChanged: (v) => setSheetState(
-                            () => selectedFilters = selectedFilters.copyWith(
-                              unread: v,
+                        if (_supportsChapterReadState)
+                          UnifiedDetailTriStateLine(
+                            lineKey: const Key('unified-detail-filter-unread'),
+                            label: '未读',
+                            value: selectedFilters.unread,
+                            onChanged: (v) => setSheetState(
+                              () => selectedFilters = selectedFilters.copyWith(
+                                unread: v,
+                              ),
                             ),
                           ),
-                        ),
                         UnifiedDetailTriStateLine(
                           lineKey: const Key(
                             'unified-detail-filter-bookmarked',
@@ -717,18 +733,19 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                     setState(() {});
                   },
                 ),
-                ListTile(
-                  leading: const Icon(Icons.remove_done),
-                  title: const Text('取消全部已读'),
-                  onTap: () async {
-                    await _controller.clearAllReadState();
-                    if (!mounted || !sheetContext.mounted) {
-                      return;
-                    }
-                    Navigator.of(sheetContext).pop();
-                    setState(() {});
-                  },
-                ),
+                if (_supportsChapterReadState)
+                  ListTile(
+                    leading: const Icon(Icons.remove_done),
+                    title: const Text('取消全部已读'),
+                    onTap: () async {
+                      await _controller.clearAllReadState();
+                      if (!mounted || !sheetContext.mounted) {
+                        return;
+                      }
+                      Navigator.of(sheetContext).pop();
+                      setState(() {});
+                    },
+                  ),
                 if (_supportsChapterDownloads && chapter.isDownloaded)
                   ListTile(
                     leading: const Icon(Icons.delete_outline),

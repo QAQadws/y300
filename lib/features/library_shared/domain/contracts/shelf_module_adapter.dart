@@ -82,6 +82,55 @@ abstract class ShelfModuleAdapter {
   Future<String?> pickRandomWorkId({required String categoryId});
 }
 
+class ShelfModuleCapabilities {
+  const ShelfModuleCapabilities({
+    this.supportsReadState = true,
+    this.supportsBookmarkFilter = false,
+  });
+
+  const ShelfModuleCapabilities.defaults()
+    : supportsReadState = true,
+      supportsBookmarkFilter = false;
+
+  final bool supportsReadState;
+  final bool supportsBookmarkFilter;
+
+  List<LibraryShelfSortField> get availableSortFields =>
+      <LibraryShelfSortField>[
+        LibraryShelfSortField.chapterCount,
+        if (supportsReadState) LibraryShelfSortField.unreadCount,
+        LibraryShelfSortField.favoriteAddedAt,
+      ];
+
+  LibraryFilterSet normalizeFilters(LibraryFilterSet filters) {
+    return filters.copyWith(
+      unread: supportsReadState ? filters.unread : TriStateFilterValue.ignore,
+      read: supportsReadState ? filters.read : TriStateFilterValue.ignore,
+      bookmarked: supportsBookmarkFilter
+          ? filters.bookmarked
+          : TriStateFilterValue.ignore,
+    );
+  }
+
+  LibraryShelfSortOption normalizeSortOption(LibraryShelfSortOption option) {
+    return availableSortFields.contains(option.field)
+        ? option
+        : LibraryShelfSortOption.defaults;
+  }
+}
+
+abstract interface class ShelfModuleCapabilitiesAdapter {
+  ShelfModuleCapabilities get capabilities;
+}
+
+ShelfModuleCapabilities resolveShelfModuleCapabilities(
+  ShelfModuleAdapter adapter,
+) {
+  return adapter is ShelfModuleCapabilitiesAdapter
+      ? (adapter as ShelfModuleCapabilitiesAdapter).capabilities
+      : const ShelfModuleCapabilities.defaults();
+}
+
 /// 可选的聚合快照能力。
 ///
 /// 支持该合同的模块可以把分类、筛选后作品、命中数量一次性返回给控制器。

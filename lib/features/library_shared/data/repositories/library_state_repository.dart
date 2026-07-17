@@ -61,7 +61,9 @@ abstract class LibraryStateRepository {
     required bool isRead,
     DateTime? readAt,
   }) {
-    throw UnimplementedError('setWorksReadState($moduleKey, $workIds, $isRead)');
+    throw UnimplementedError(
+      'setWorksReadState($moduleKey, $workIds, $isRead)',
+    );
   }
 
   /// 删除一个作品在 shared 状态表里的全部状态和标签绑定。
@@ -87,10 +89,7 @@ abstract class LibraryStateRepository {
 
   Future<List<LibraryTag>> getTags();
 
-  Future<void> renameTag({
-    required String tagId,
-    required String newName,
-  });
+  Future<void> renameTag({required String tagId, required String newName});
 
   Future<void> deleteTag({required String tagId});
 
@@ -112,6 +111,15 @@ abstract class LibraryStateRepository {
   });
 
   Future<bool> hasAnyTag({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  });
+}
+
+/// Optional aggregate query used by shelf adapters that expose work-level
+/// chapter bookmark filtering.
+abstract interface class LibraryBookmarkStateQuery {
+  Future<bool> hasAnyBookmarkedEpisode({
     required LibraryModuleKey moduleKey,
     required String workId,
   });

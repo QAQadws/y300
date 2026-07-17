@@ -33,9 +33,12 @@ class LibraryShelfQueryUtils {
     required String keyword,
   }) {
     final normalizedKeyword = keyword.trim().toLowerCase();
-    final filtered = source.where((item) {
-      return matchesKeyword(item, normalizedKeyword) && matchesFilters(item, filters);
-    }).toList(growable: false);
+    final filtered = source
+        .where((item) {
+          return matchesKeyword(item, normalizedKeyword) &&
+              matchesFilters(item, filters);
+        })
+        .toList(growable: false);
     return sortItems(filtered, sortOption);
   }
 
@@ -45,14 +48,16 @@ class LibraryShelfQueryUtils {
     }
     final title = item.title.toLowerCase();
     final secondary = (item.secondaryName ?? '').toLowerCase();
-    return title.contains(normalizedKeyword) || secondary.contains(normalizedKeyword);
+    return title.contains(normalizedKeyword) ||
+        secondary.contains(normalizedKeyword);
   }
 
   static bool matchesFilters(LibraryWorkItem item, LibraryFilterSet filters) {
     return _matchesTriState(filters.downloaded, item.isDownloaded) &&
         _matchesTriState(filters.unread, item.unreadCount > 0) &&
         _matchesTriState(filters.read, item.readChapterCount > 0) &&
-        _matchesTriState(filters.hasTags, item.hasTags);
+        _matchesTriState(filters.hasTags, item.hasTags) &&
+        _matchesTriState(filters.bookmarked, item.hasBookmarks);
   }
 
   static List<LibraryWorkItem> sortItems(
@@ -73,16 +78,24 @@ class LibraryShelfQueryUtils {
           cmp = a.unreadCount.compareTo(b.unreadCount);
           break;
         case LibraryShelfSortField.workUpdatedAt:
-          cmp = _dateOrEpoch(a.workUpdatedAt).compareTo(_dateOrEpoch(b.workUpdatedAt));
+          cmp = _dateOrEpoch(
+            a.workUpdatedAt,
+          ).compareTo(_dateOrEpoch(b.workUpdatedAt));
           break;
         case LibraryShelfSortField.fetchedAt:
-          cmp = _dateOrEpoch(a.lastFetchedAt).compareTo(_dateOrEpoch(b.lastFetchedAt));
+          cmp = _dateOrEpoch(
+            a.lastFetchedAt,
+          ).compareTo(_dateOrEpoch(b.lastFetchedAt));
           break;
         case LibraryShelfSortField.lastCheckedAt:
-          cmp = _dateOrEpoch(a.lastCheckedAt).compareTo(_dateOrEpoch(b.lastCheckedAt));
+          cmp = _dateOrEpoch(
+            a.lastCheckedAt,
+          ).compareTo(_dateOrEpoch(b.lastCheckedAt));
           break;
         case LibraryShelfSortField.lastReadAt:
-          cmp = _dateOrEpoch(a.lastReadAt).compareTo(_dateOrEpoch(b.lastReadAt));
+          cmp = _dateOrEpoch(
+            a.lastReadAt,
+          ).compareTo(_dateOrEpoch(b.lastReadAt));
           break;
         case LibraryShelfSortField.favoriteAddedAt:
           cmp = a.addedAt.compareTo(b.addedAt);
@@ -97,7 +110,8 @@ class LibraryShelfQueryUtils {
     Map<String, List<LibraryWorkItem>> itemsByCategory,
   ) {
     return <String, int>{
-      for (final entry in itemsByCategory.entries) entry.key: entry.value.length,
+      for (final entry in itemsByCategory.entries)
+        entry.key: entry.value.length,
     };
   }
 

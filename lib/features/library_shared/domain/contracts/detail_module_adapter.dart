@@ -66,20 +66,11 @@ abstract class DetailModuleAdapter {
     required LibraryChapterSortOption sortOption,
   });
 
-  /// 章节状态动作。
-  Future<void> markChapterRead({
-    required String workId,
-    required String episodeId,
-    required bool isRead,
-  });
-
   Future<void> markChapterBookmarked({
     required String workId,
     required String episodeId,
     required bool isBookmarked,
   });
-
-  Future<void> clearAllReadState({required String workId});
 
   /// 作品级动作。
   Future<DetailRefreshResult> refreshWork({required String workId});
@@ -103,6 +94,21 @@ abstract class DetailModuleAdapter {
     required String workId,
     required bool preferContinue,
   });
+}
+
+/// Optional chapter read-state capability.
+///
+/// Modules such as novels that cannot reliably infer read completion do not
+/// implement this contract. Shared detail UI must discover the capability
+/// before exposing read filters or mutations.
+abstract interface class DetailChapterReadStateAdapter {
+  Future<void> markChapterRead({
+    required String workId,
+    required String episodeId,
+    required bool isRead,
+  });
+
+  Future<void> clearAllReadState({required String workId});
 }
 
 /// 章节下载可选能力。

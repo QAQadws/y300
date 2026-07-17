@@ -3,11 +3,11 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
-import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
@@ -19,42 +19,14 @@ import 'package:y300/features/novel/domain/services/novel_chapter_update_service
 import 'package:y300/features/novel/presentation/adapters/novel_detail_adapter.dart';
 
 void main() {
-  test(
-    'clearAllReadState delegates to ReadingStateBatchWriter when injected',
-    () async {
-      final writer = _RecordingReadingStateBatchWriter();
-      final adapter = NovelDetailAdapter(
-        _FakeNovelRepository(),
-        readingStateBatchWriter: writer,
-        stateRepository: _RecordingLibraryStateRepository(),
-      );
+  test('NovelDetailAdapter does not expose chapter read-state capability', () {
+    final adapter = NovelDetailAdapter(
+      _FakeNovelRepository(),
+      stateRepository: _RecordingLibraryStateRepository(),
+    );
 
-      await adapter.clearAllReadState(workId: 'novel:1');
-
-      expect(writer.calls, hasLength(1));
-      expect(writer.calls.single.module, LibraryModuleKey.novel);
-      expect(writer.calls.single.workIds, <String>{'novel:1'});
-      expect(writer.calls.single.isRead, isFalse);
-    },
-  );
-
-  test(
-    'clearAllReadState keeps fallback per-episode loop without writer',
-    () async {
-      final stateRepository = _RecordingLibraryStateRepository();
-      final adapter = NovelDetailAdapter(
-        _FakeNovelRepository(),
-        stateRepository: stateRepository,
-      );
-
-      await adapter.clearAllReadState(workId: 'novel:1');
-
-      expect(stateRepository.unreadEpisodeIds, <String>[
-        'novel:1:1',
-        'novel:1:2',
-      ]);
-    },
-  );
+    expect(adapter, isNot(isA<DetailChapterReadStateAdapter>()));
+  });
 
   test('loadChapters sorts novel sources by numeric pid', () async {
     final adapter = NovelDetailAdapter(
@@ -192,6 +164,12 @@ void main() {
             .progressInfo
             ?.label,
         '上次阅读',
+      );
+      expect(
+        readChapters
+            .singleWhere((chapter) => chapter.episodeId == 'novel:1:1')
+            .isRead,
+        isFalse,
       );
     },
   );
@@ -732,7 +710,6 @@ class _RecordingLibraryStateRepository implements LibraryStateRepository {
     this.episodeStates = const <String, LibraryEpisodeState>{},
   });
 
-  final List<String> unreadEpisodeIds = <String>[];
   final Map<String, LibraryEpisodeState> episodeStates;
   LibraryWorkState? workState;
 
@@ -851,11 +828,7 @@ class _RecordingLibraryStateRepository implements LibraryStateRepository {
     bool? isBookmarked,
     DateTime? readAt,
     DateTime? downloadedAt,
-  }) async {
-    if (isRead == false) {
-      unreadEpisodeIds.add(episodeId);
-    }
-  }
+  }) async {}
 
   @override
   Future<void> upsertWorkState({
@@ -880,46 +853,4 @@ class _RecordingLibraryStateRepository implements LibraryStateRepository {
       updatedAt: DateTime(2026, 1, 1),
     );
   }
-}
-
-class _RecordingReadingStateBatchWriter implements ReadingStateBatchWriter {
-  final List<_ReadingStateBatchCall> calls = <_ReadingStateBatchCall>[];
-
-  @override
-  Future<void> setWorkRead({
-    required LibraryModuleKey module,
-    required String workId,
-    required bool isRead,
-  }) async {
-    calls.add(
-      _ReadingStateBatchCall(
-        module: module,
-        workIds: <String>{workId},
-        isRead: isRead,
-      ),
-    );
-  }
-
-  @override
-  Future<void> setWorksRead({
-    required LibraryModuleKey module,
-    required Set<String> workIds,
-    required bool isRead,
-  }) async {
-    calls.add(
-      _ReadingStateBatchCall(module: module, workIds: workIds, isRead: isRead),
-    );
-  }
-}
-
-class _ReadingStateBatchCall {
-  const _ReadingStateBatchCall({
-    required this.module,
-    required this.workIds,
-    required this.isRead,
-  });
-
-  final LibraryModuleKey module;
-  final Set<String> workIds;
-  final bool isRead;
 }

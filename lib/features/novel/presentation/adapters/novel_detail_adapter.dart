@@ -3,7 +3,6 @@ import 'package:y300/features/library_shared/domain/contracts/detail_module_adap
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
-import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
 import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
@@ -21,19 +20,16 @@ class NovelDetailAdapter
   NovelDetailAdapter(
     this._repository, {
     ImageCacheService? imageCacheService,
-    ReadingStateBatchWriter? readingStateBatchWriter,
     required LibraryStateRepository stateRepository,
     NovelSourceStateRepository? sourceStateRepository,
     NovelChapterUpdateService Function()? chapterUpdateServiceFactory,
   }) : _coverCacheService = LibraryCoverCacheService(imageCacheService),
-       _readingStateBatchWriter = readingStateBatchWriter,
        _stateRepository = stateRepository,
        _sourceStateRepository = sourceStateRepository,
        _chapterUpdateServiceFactory = chapterUpdateServiceFactory;
 
   final NovelRepository _repository;
   final LibraryCoverCacheService _coverCacheService;
-  final ReadingStateBatchWriter? _readingStateBatchWriter;
   final LibraryStateRepository _stateRepository;
   final NovelSourceStateRepository? _sourceStateRepository;
   final NovelChapterUpdateService Function()? _chapterUpdateServiceFactory;
@@ -126,7 +122,6 @@ class NovelDetailAdapter
         moduleKey: LibraryModuleKey.novel,
         episodeId: item.episodeId,
       );
-      final isRead = state?.isRead ?? false;
       mapped.add(
         LibraryChapterItem(
           episodeId: item.episodeId,
@@ -136,7 +131,7 @@ class NovelDetailAdapter
           sourceTid: item.sourceTid,
           sourcePid: item.sourcePid,
           publishTimeText: item.datelineText,
-          isRead: isRead,
+          isRead: false,
           isBookmarked: state?.isBookmarked ?? false,
           progressInfo: _progressInfoForEpisode(
             episodeId: item.episodeId,
@@ -165,32 +160,6 @@ class NovelDetailAdapter
       fraction: fraction,
       semanticLabel: '上次阅读的章节',
     );
-  }
-
-  @override
-  Future<void> clearAllReadState({required String workId}) async {
-    final writer = _readingStateBatchWriter;
-    if (writer != null) {
-      await writer.setWorkRead(
-        module: LibraryModuleKey.novel,
-        workId: workId,
-        isRead: false,
-      );
-      return;
-    }
-    final episodes = await _repository.getEpisodes(
-      novelId: workId,
-      descending: false,
-    );
-    for (final episode in episodes) {
-      await _stateRepository.upsertEpisodeState(
-        moduleKey: LibraryModuleKey.novel,
-        episodeId: episode.episodeId,
-        workId: workId,
-        isRead: false,
-        readAt: null,
-      );
-    }
   }
 
   @override
@@ -239,21 +208,6 @@ class NovelDetailAdapter
       episodeId: episodeId,
       workId: workId,
       isBookmarked: isBookmarked,
-    );
-  }
-
-  @override
-  Future<void> markChapterRead({
-    required String workId,
-    required String episodeId,
-    required bool isRead,
-  }) async {
-    await _stateRepository.upsertEpisodeState(
-      moduleKey: LibraryModuleKey.novel,
-      episodeId: episodeId,
-      workId: workId,
-      isRead: isRead,
-      readAt: isRead ? DateTime.now() : null,
     );
   }
 
@@ -427,9 +381,6 @@ class NovelDetailAdapter
   ) {
     return source
         .where((chapter) {
-          if (!_matchTriState(filters.unread, !chapter.isRead)) {
-            return false;
-          }
           if (!_matchTriState(filters.bookmarked, chapter.isBookmarked)) {
             return false;
           }

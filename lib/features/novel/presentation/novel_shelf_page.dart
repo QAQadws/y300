@@ -31,8 +31,6 @@ class NovelShelfPage extends ConsumerWidget {
       taskProgressHub: taskProgressHub,
       categoryAssignUseCaseResolver: () =>
           ref.read(novelShelfCategoryAssignUseCaseProvider),
-      readingStateBatchWriterResolver: () =>
-          ref.read(readingStateBatchWriterProvider),
       unfavoriteWorkUseCaseResolver: () =>
           ref.read(unfavoriteWorkUseCaseProvider),
     );

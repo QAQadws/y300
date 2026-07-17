@@ -44,7 +44,7 @@ void main() {
     );
   });
 
-  testWidgets('NovelShelfPage long press activates 4 selection actions', (
+  testWidgets('NovelShelfPage long press omits read-state selection actions', (
     tester,
   ) async {
     final selectionHost = ShelfSelectionHostController();
@@ -68,10 +68,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(selectionHost.state?.selectionActions.length, 4);
+    expect(selectionHost.state?.selectionActions.length, 2);
   });
 
-  testWidgets('NovelShelfPage omits downloaded filter', (tester) async {
+  testWidgets('NovelShelfPage exposes bookmark filter without read status', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -89,7 +91,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('已下载'), findsNothing);
-    expect(find.text('未读'), findsOneWidget);
+    expect(find.text('未读'), findsNothing);
+    expect(find.text('阅读过'), findsNothing);
+    expect(find.text('有书签'), findsOneWidget);
+
+    await tester.tap(find.byType(TextButton).at(1));
+    await tester.pumpAndSettle();
+    expect(find.text('未读章节数'), findsNothing);
+    expect(find.text('章节数'), findsOneWidget);
+    expect(find.text('收藏日期'), findsOneWidget);
   });
 }
 

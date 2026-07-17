@@ -387,48 +387,71 @@ void main() {
       },
     );
 
-    test('queryShelfSnapshot ignores legacy novel download state', () async {
-      await repository.upsertNovelBySeed(
-        seed: const NovelRefreshSeed(fid: '49', tid: '200'),
-      );
-      await repository.refreshEpisodes(novelId: 'novel:49:200');
-      final episodes = await repository.getEpisodes(novelId: 'novel:49:200');
-      final stateRepository = LocalLibraryStateRepository(dbFuture);
-      await stateRepository.upsertEpisodeState(
-        moduleKey: LibraryModuleKey.novel,
-        episodeId: episodes.first.episodeId,
-        workId: 'novel:49:200',
-        isRead: false,
-        isDownloaded: true,
-      );
-      await stateRepository.upsertEpisodeState(
-        moduleKey: LibraryModuleKey.novel,
-        episodeId: episodes.last.episodeId,
-        workId: 'novel:49:200',
-        isRead: true,
-      );
-      final tagId = await stateRepository.createTag(name: '连载');
-      await stateRepository.bindTagToWork(
-        moduleKey: LibraryModuleKey.novel,
-        workId: 'novel:49:200',
-        tagId: tagId,
-      );
+    test(
+      'queryShelfSnapshot ignores novel read state and aggregates bookmarks',
+      () async {
+        await repository.upsertNovelBySeed(
+          seed: const NovelRefreshSeed(fid: '49', tid: '200'),
+        );
+        await repository.refreshEpisodes(novelId: 'novel:49:200');
+        final episodes = await repository.getEpisodes(novelId: 'novel:49:200');
+        final stateRepository = LocalLibraryStateRepository(dbFuture);
+        await stateRepository.upsertEpisodeState(
+          moduleKey: LibraryModuleKey.novel,
+          episodeId: episodes.first.episodeId,
+          workId: 'novel:49:200',
+          isRead: false,
+          isDownloaded: true,
+          isBookmarked: true,
+        );
+        await stateRepository.upsertEpisodeState(
+          moduleKey: LibraryModuleKey.novel,
+          episodeId: episodes.last.episodeId,
+          workId: 'novel:49:200',
+          isRead: true,
+        );
+        final tagId = await stateRepository.createTag(name: '连载');
+        await stateRepository.bindTagToWork(
+          moduleKey: LibraryModuleKey.novel,
+          workId: 'novel:49:200',
+          tagId: tagId,
+        );
 
-      final snapshot = await repository.queryShelfSnapshot(
-        filters: LibraryFilterSet.defaults,
-        sortOption: LibraryShelfSortOption.defaults,
-        keyword: '测试小说',
-      );
-      final item = snapshot.itemsByCategory['default']!.single;
+        final snapshot = await repository.queryShelfSnapshot(
+          filters: LibraryFilterSet.defaults,
+          sortOption: LibraryShelfSortOption.defaults,
+          keyword: '测试小说',
+        );
+        final item = snapshot.itemsByCategory['default']!.single;
 
-      expect(snapshot.visibleMatchCountByCategory['default'], 1);
-      expect(item.title, '测试小说标题');
-      expect(item.unreadCount, 1);
-      expect(item.readChapterCount, 1);
-      expect(item.totalChapterCount, greaterThanOrEqualTo(episodes.length));
-      expect(item.isDownloaded, isFalse);
-      expect(item.hasTags, isTrue);
-    });
+        expect(snapshot.visibleMatchCountByCategory['default'], 1);
+        expect(item.title, '测试小说标题');
+        expect(item.unreadCount, 0);
+        expect(item.readChapterCount, 0);
+        expect(item.totalChapterCount, episodes.length);
+        expect(item.isDownloaded, isFalse);
+        expect(item.hasTags, isTrue);
+        expect(item.hasBookmarks, isTrue);
+
+        final bookmarked = await repository.queryShelfSnapshot(
+          filters: const LibraryFilterSet(
+            bookmarked: TriStateFilterValue.include,
+          ),
+          sortOption: LibraryShelfSortOption.defaults,
+          keyword: '',
+        );
+        final withoutBookmarks = await repository.queryShelfSnapshot(
+          filters: const LibraryFilterSet(
+            bookmarked: TriStateFilterValue.exclude,
+          ),
+          sortOption: LibraryShelfSortOption.defaults,
+          keyword: '',
+        );
+
+        expect(bookmarked.itemsByCategory['default'], hasLength(1));
+        expect(withoutBookmarks.itemsByCategory['default'], isEmpty);
+      },
+    );
 
     test('refreshEpisodes removes stale parsed episode rows', () async {
       await repository.upsertNovelBySeed(

@@ -95,6 +95,7 @@ class LibraryWorkItem {
     this.lastCheckedAt,
     this.lastFetchedAt,
     this.hasTags = false,
+    this.hasBookmarks = false,
     this.isDownloaded = false,
   });
 
@@ -122,6 +123,7 @@ class LibraryWorkItem {
   final DateTime? lastCheckedAt;
   final DateTime? lastFetchedAt;
   final bool hasTags;
+  final bool hasBookmarks;
   final bool isDownloaded;
 
   LibraryWorkItem copyWith({
@@ -142,6 +144,7 @@ class LibraryWorkItem {
     DateTime? lastCheckedAt,
     DateTime? lastFetchedAt,
     bool? hasTags,
+    bool? hasBookmarks,
     bool? isDownloaded,
     bool clearCoverLocalPath = false,
     bool clearCustomCoverLocalPath = false,
@@ -175,6 +178,7 @@ class LibraryWorkItem {
       lastCheckedAt: lastCheckedAt ?? this.lastCheckedAt,
       lastFetchedAt: lastFetchedAt ?? this.lastFetchedAt,
       hasTags: hasTags ?? this.hasTags,
+      hasBookmarks: hasBookmarks ?? this.hasBookmarks,
       isDownloaded: isDownloaded ?? this.isDownloaded,
     );
   }

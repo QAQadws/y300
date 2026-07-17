@@ -35,6 +35,7 @@ import 'package:y300/features/library_shared/domain/services/reading_state_batch
 class ComicDetailAdapter
     implements
         DetailModuleAdapter,
+        DetailChapterReadStateAdapter,
         DetailChapterDownloadAdapter,
         DetailMetadataEditor,
         DetailCatalogEditor,

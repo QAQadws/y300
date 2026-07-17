@@ -87,6 +87,10 @@ void main() {
       );
       expect(
         find.byKey(const Key('unified-detail-filter-unread')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('unified-detail-filter-bookmarked')),
         findsOneWidget,
       );
       Navigator.of(
@@ -94,6 +98,15 @@ void main() {
           find.byKey(const Key('unified-detail-chapter-filter-sheet')),
         ),
       ).pop();
+      await tester.pumpAndSettle();
+
+      await tester.longPress(
+        find.byKey(const ValueKey<String>('unified-detail-chapter-novel:1:e1')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('取消全部已读'), findsNothing);
+      expect(find.text('添加书签'), findsOneWidget);
+      Navigator.of(tester.element(find.text('添加书签'))).pop();
       await tester.pumpAndSettle();
       expect(historyRecorder.drafts, hasLength(1));
       expect(

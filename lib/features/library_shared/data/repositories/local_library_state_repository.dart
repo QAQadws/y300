@@ -7,7 +7,8 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 
 /// 基于 SQLite 的统一状态仓储实现。
-class LocalLibraryStateRepository implements LibraryStateRepository {
+class LocalLibraryStateRepository
+    implements LibraryStateRepository, LibraryBookmarkStateQuery {
   LocalLibraryStateRepository(this._dbFuture);
 
   final Future<Database> _dbFuture;
@@ -32,11 +33,15 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
         'content_type': contentType,
         'work_id': workId,
         'last_read_episode_id': lastReadEpisodeId ?? old?.lastReadEpisodeId,
-        'last_read_at': lastReadAt?.millisecondsSinceEpoch ?? old?.lastReadAt?.millisecondsSinceEpoch,
+        'last_read_at':
+            lastReadAt?.millisecondsSinceEpoch ??
+            old?.lastReadAt?.millisecondsSinceEpoch,
         'check_updated_at':
-            checkUpdatedAt?.millisecondsSinceEpoch ?? old?.checkUpdatedAt?.millisecondsSinceEpoch,
+            checkUpdatedAt?.millisecondsSinceEpoch ??
+            old?.checkUpdatedAt?.millisecondsSinceEpoch,
         'fetched_updated_at':
-            fetchedUpdatedAt?.millisecondsSinceEpoch ?? old?.fetchedUpdatedAt?.millisecondsSinceEpoch,
+            fetchedUpdatedAt?.millisecondsSinceEpoch ??
+            old?.fetchedUpdatedAt?.millisecondsSinceEpoch,
         'intro_text': introText ?? old?.introText,
         'created_at': old?.createdAt.millisecondsSinceEpoch ?? now,
         'updated_at': now,
@@ -54,10 +59,7 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
     final rows = await db.query(
       ComicLocalDb.libraryWorkStateTable,
       where: 'content_type = ? AND work_id = ?',
-      whereArgs: <Object>[
-        _moduleKeyToContentType(moduleKey),
-        workId,
-      ],
+      whereArgs: <Object>[_moduleKeyToContentType(moduleKey), workId],
       limit: 1,
     );
     if (rows.isEmpty) {
@@ -72,8 +74,12 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
       checkUpdatedAt: _toDateTime(row['check_updated_at']),
       fetchedUpdatedAt: _toDateTime(row['fetched_updated_at']),
       introText: row['intro_text'] as String?,
-      createdAt: _toDateTime(row['created_at']) ?? DateTime.fromMillisecondsSinceEpoch(0),
-      updatedAt: _toDateTime(row['updated_at']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+      createdAt:
+          _toDateTime(row['created_at']) ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      updatedAt:
+          _toDateTime(row['updated_at']) ??
+          DateTime.fromMillisecondsSinceEpoch(0),
     );
   }
 
@@ -89,7 +95,10 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
     DateTime? downloadedAt,
   }) async {
     final db = await _dbFuture;
-    final old = await getEpisodeState(moduleKey: moduleKey, episodeId: episodeId);
+    final old = await getEpisodeState(
+      moduleKey: moduleKey,
+      episodeId: episodeId,
+    );
     final nextRead = isRead ?? old?.isRead ?? false;
     final nextDownloaded = isDownloaded ?? old?.isDownloaded ?? false;
     final nextBookmarked = isBookmarked ?? old?.isBookmarked ?? false;
@@ -99,7 +108,7 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
     final nextDownloadedAt = isDownloaded == false
         ? null
         : downloadedAt?.millisecondsSinceEpoch ??
-            old?.downloadedAt?.millisecondsSinceEpoch;
+              old?.downloadedAt?.millisecondsSinceEpoch;
 
     await db.insert(
       ComicLocalDb.libraryEpisodeStateTable,
@@ -126,10 +135,7 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
     final rows = await db.query(
       ComicLocalDb.libraryEpisodeStateTable,
       where: 'content_type = ? AND episode_id = ?',
-      whereArgs: <Object>[
-        _moduleKeyToContentType(moduleKey),
-        episodeId,
-      ],
+      whereArgs: <Object>[_moduleKeyToContentType(moduleKey), episodeId],
       limit: 1,
     );
     if (rows.isEmpty) {
@@ -160,10 +166,7 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
       FROM ${ComicLocalDb.libraryEpisodeStateTable}
       WHERE content_type = ? AND work_id = ? AND is_read = 0
       ''',
-      <Object>[
-        _moduleKeyToContentType(moduleKey),
-        workId,
-      ],
+      <Object>[_moduleKeyToContentType(moduleKey), workId],
     );
     return rows.first['count'] as int? ?? 0;
   }
@@ -180,10 +183,7 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
       FROM ${ComicLocalDb.libraryEpisodeStateTable}
       WHERE content_type = ? AND work_id = ? AND is_read = 1
       ''',
-      <Object>[
-        _moduleKeyToContentType(moduleKey),
-        workId,
-      ],
+      <Object>[_moduleKeyToContentType(moduleKey), workId],
     );
     return rows.first['count'] as int? ?? 0;
   }
@@ -200,10 +200,7 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
       FROM ${ComicLocalDb.libraryEpisodeStateTable}
       WHERE content_type = ? AND work_id = ? AND is_downloaded = 1
       ''',
-      <Object>[
-        _moduleKeyToContentType(moduleKey),
-        workId,
-      ],
+      <Object>[_moduleKeyToContentType(moduleKey), workId],
     );
     return rows.first['count'] as int? ?? 0;
   }
@@ -224,9 +221,13 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
     }
     final db = await _dbFuture;
     final contentType = _moduleKeyToContentType(moduleKey);
-    final readAtMillis =
-        isRead ? (readAt ?? DateTime.now()).millisecondsSinceEpoch : null;
-    final placeholders = List<String>.filled(normalizedWorkIds.length, '?').join(', ');
+    final readAtMillis = isRead
+        ? (readAt ?? DateTime.now()).millisecondsSinceEpoch
+        : null;
+    final placeholders = List<String>.filled(
+      normalizedWorkIds.length,
+      '?',
+    ).join(', ');
     final workIdArgs = normalizedWorkIds.toList(growable: false);
     final sourceTable = switch (moduleKey) {
       LibraryModuleKey.comic => ComicLocalDb.episodesTable,
@@ -236,8 +237,9 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
     if (sourceTable == null) {
       throw UnsupportedError('收藏模块不支持批量阅读状态写入');
     }
-    final sourceWorkColumn =
-        moduleKey == LibraryModuleKey.comic ? 'comic_id' : 'work_id';
+    final sourceWorkColumn = moduleKey == LibraryModuleKey.comic
+        ? 'comic_id'
+        : 'work_id';
     final sourceFilters = moduleKey == LibraryModuleKey.novel
         ? 'AND src.content_type = ?'
         : '';
@@ -271,14 +273,14 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
         WHERE src.$sourceWorkColumn IN ($placeholders)
         $sourceFilters
         ''',
-          <Object?>[
-            contentType,
-            isRead ? 1 : 0,
-            readAtMillis,
-            contentType,
-            ...workIdArgs,
-            if (moduleKey == LibraryModuleKey.novel) contentType,
-          ],
+        <Object?>[
+          contentType,
+          isRead ? 1 : 0,
+          readAtMillis,
+          contentType,
+          ...workIdArgs,
+          if (moduleKey == LibraryModuleKey.novel) contentType,
+        ],
       );
     });
   }
@@ -353,7 +355,9 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
       moduleKey: moduleKey,
       displayMode: _displayModeFromDbValue(row['display_mode'] as String?),
       gridColumns: _normalizeGridColumns(row['grid_columns'] as int? ?? 3),
-      updatedAt: _toDateTime(row['updated_at']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+      updatedAt:
+          _toDateTime(row['updated_at']) ??
+          DateTime.fromMillisecondsSinceEpoch(0),
     );
   }
 
@@ -366,14 +370,11 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
     final db = await _dbFuture;
     final now = DateTime.now().millisecondsSinceEpoch;
     final tagId = 'tag_$now${Random().nextInt(1000)}';
-    await db.insert(
-      ComicLocalDb.libraryTagsTable,
-      <String, Object?>{
-        'tag_id': tagId,
-        'name': trimmed,
-        'created_at': now,
-      },
-    );
+    await db.insert(ComicLocalDb.libraryTagsTable, <String, Object?>{
+      'tag_id': tagId,
+      'name': trimmed,
+      'created_at': now,
+    });
     return tagId;
   }
 
@@ -389,7 +390,9 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
           (row) => LibraryTag(
             tagId: row['tag_id'] as String,
             name: row['name'] as String,
-            createdAt: _toDateTime(row['created_at']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+            createdAt:
+                _toDateTime(row['created_at']) ??
+                DateTime.fromMillisecondsSinceEpoch(0),
           ),
         )
         .toList(growable: false);
@@ -458,11 +461,7 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
     await db.delete(
       ComicLocalDb.libraryWorkTagsTable,
       where: 'content_type = ? AND work_id = ? AND tag_id = ?',
-      whereArgs: <Object>[
-        _moduleKeyToContentType(moduleKey),
-        workId,
-        tagId,
-      ],
+      whereArgs: <Object>[_moduleKeyToContentType(moduleKey), workId, tagId],
     );
   }
 
@@ -481,17 +480,16 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
       WHERE wt.content_type = ? AND wt.work_id = ?
       ORDER BY t.created_at ASC
       ''',
-      <Object>[
-        _moduleKeyToContentType(moduleKey),
-        workId,
-      ],
+      <Object>[_moduleKeyToContentType(moduleKey), workId],
     );
     return rows
         .map(
           (row) => LibraryTag(
             tagId: row['tag_id'] as String,
             name: row['name'] as String,
-            createdAt: _toDateTime(row['created_at']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+            createdAt:
+                _toDateTime(row['created_at']) ??
+                DateTime.fromMillisecondsSinceEpoch(0),
           ),
         )
         .toList(growable: false);
@@ -510,10 +508,25 @@ class LocalLibraryStateRepository implements LibraryStateRepository {
       WHERE content_type = ? AND work_id = ?
       LIMIT 1
       ''',
-      <Object>[
-        _moduleKeyToContentType(moduleKey),
-        workId,
-      ],
+      <Object>[_moduleKeyToContentType(moduleKey), workId],
+    );
+    return rows.isNotEmpty;
+  }
+
+  @override
+  Future<bool> hasAnyBookmarkedEpisode({
+    required LibraryModuleKey moduleKey,
+    required String workId,
+  }) async {
+    final db = await _dbFuture;
+    final rows = await db.rawQuery(
+      '''
+      SELECT 1
+      FROM ${ComicLocalDb.libraryEpisodeStateTable}
+      WHERE content_type = ? AND work_id = ? AND is_bookmarked = 1
+      LIMIT 1
+      ''',
+      <Object>[_moduleKeyToContentType(moduleKey), workId],
     );
     return rows.isNotEmpty;
   }

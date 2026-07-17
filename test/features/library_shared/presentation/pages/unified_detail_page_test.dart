@@ -1628,7 +1628,10 @@ void main() {
 }
 
 class _FakeDetailAdapter
-    implements DetailModuleAdapter, DetailChapterDownloadAdapter {
+    implements
+        DetailModuleAdapter,
+        DetailChapterReadStateAdapter,
+        DetailChapterDownloadAdapter {
   _FakeDetailAdapter({
     this.module = LibraryModuleKey.novel,
     this.coverLocalPath,

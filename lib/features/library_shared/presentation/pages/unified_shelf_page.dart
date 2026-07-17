@@ -272,6 +272,10 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                                       useShelfCoverImage: widget
                                           .featureFlags
                                           .useShelfCoverImage,
+                                      showUnreadBadge:
+                                          resolveShelfModuleCapabilities(
+                                            widget.adapter,
+                                          ).supportsReadState,
                                       selectedWorkIds:
                                           _selectionController.selectedWorkIds,
                                       selectionEnabled: _selectionEnabled,
@@ -596,7 +600,8 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
 
   Future<void> _showFilterSheet() async {
     final state = _controller.state;
-    var selectedFilter = state.filters;
+    final capabilities = resolveShelfModuleCapabilities(widget.adapter);
+    var selectedFilter = capabilities.normalizeFilters(state.filters);
     final supportsDownloadedFilter =
         widget.adapter is ShelfDownloadStatusAdapter;
     if (!supportsDownloadedFilter &&
@@ -605,7 +610,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
         downloaded: TriStateFilterValue.ignore,
       );
     }
-    var selectedSort = state.sortOption;
+    var selectedSort = capabilities.normalizeSortOption(state.sortOption);
     var selectedMode = state.displayMode;
     var selectedColumns = state.gridColumnCount.toDouble();
     var tabIndex = 0;
@@ -647,12 +652,15 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                       _FilterTab(
                         filters: selectedFilter,
                         showDownloaded: supportsDownloadedFilter,
+                        showReadState: capabilities.supportsReadState,
+                        showBookmarked: capabilities.supportsBookmarkFilter,
                         onChanged: (next) =>
                             setSheetState(() => selectedFilter = next),
                       ),
                     if (tabIndex == 1)
                       _SortTab(
                         sortOption: selectedSort,
+                        availableFields: capabilities.availableSortFields,
                         onChanged: (next) =>
                             setSheetState(() => selectedSort = next),
                       ),
@@ -926,6 +934,7 @@ class _ShelfCategoryPage extends StatefulWidget {
     required this.gridColumns,
     this.imageHeaderBuilder,
     required this.useShelfCoverImage,
+    required this.showUnreadBadge,
     required this.onTapItem,
     required this.onLongPressItem,
     required this.selectionEnabled,
@@ -939,6 +948,7 @@ class _ShelfCategoryPage extends StatefulWidget {
   final int gridColumns;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final bool useShelfCoverImage;
+  final bool showUnreadBadge;
   final Future<void> Function(String workId) onTapItem;
   final Future<void> Function(String workId) onLongPressItem;
   final bool selectionEnabled;
@@ -985,6 +995,7 @@ class _ShelfCategoryPageState extends State<_ShelfCategoryPage>
             items: widget.items,
             imageHeaderBuilder: widget.imageHeaderBuilder,
             useShelfCoverImage: widget.useShelfCoverImage,
+            showUnreadBadge: widget.showUnreadBadge,
             onTapItem: widget.onTapItem,
             onLongPressItem: widget.onLongPressItem,
             selectionEnabled: widget.selectionEnabled,
@@ -996,6 +1007,7 @@ class _ShelfCategoryPageState extends State<_ShelfCategoryPage>
             gridColumns: widget.gridColumns,
             imageHeaderBuilder: widget.imageHeaderBuilder,
             useShelfCoverImage: widget.useShelfCoverImage,
+            showUnreadBadge: widget.showUnreadBadge,
             onTapItem: widget.onTapItem,
             onLongPressItem: widget.onLongPressItem,
             selectionEnabled: widget.selectionEnabled,
@@ -1074,6 +1086,7 @@ class _WorkGrid extends StatelessWidget {
     required this.gridColumns,
     this.imageHeaderBuilder,
     required this.useShelfCoverImage,
+    required this.showUnreadBadge,
     required this.onTapItem,
     required this.onLongPressItem,
     required this.selectionEnabled,
@@ -1085,6 +1098,7 @@ class _WorkGrid extends StatelessWidget {
   final int gridColumns;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final bool useShelfCoverImage;
+  final bool showUnreadBadge;
   final Future<void> Function(String workId) onTapItem;
   final Future<void> Function(String workId) onLongPressItem;
   final bool selectionEnabled;
@@ -1129,7 +1143,9 @@ class _WorkGrid extends StatelessWidget {
             onLongPress: selectionEnabled
                 ? () async => onLongPressItem(item.workId)
                 : null,
-            topLeftBadge: _UnreadBadge(count: item.unreadCount),
+            topLeftBadge: showUnreadBadge
+                ? _UnreadBadge(count: item.unreadCount)
+                : null,
             showTwoLineCustomEllipsis: true,
             selected: selectedWorkIds.contains(item.workId),
           );
@@ -1219,6 +1235,7 @@ class _WorkList extends StatelessWidget {
     required this.items,
     this.imageHeaderBuilder,
     required this.useShelfCoverImage,
+    required this.showUnreadBadge,
     required this.onTapItem,
     required this.onLongPressItem,
     required this.selectionEnabled,
@@ -1229,6 +1246,7 @@ class _WorkList extends StatelessWidget {
   final List<LibraryWorkItem> items;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final bool useShelfCoverImage;
+  final bool showUnreadBadge;
   final Future<void> Function(String workId) onTapItem;
   final Future<void> Function(String workId) onLongPressItem;
   final bool selectionEnabled;
@@ -1298,7 +1316,9 @@ class _WorkList extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  trailing: _UnreadBadge(count: item.unreadCount),
+                  trailing: showUnreadBadge
+                      ? _UnreadBadge(count: item.unreadCount)
+                      : null,
                 ),
               ),
             ),
@@ -1422,11 +1442,15 @@ class _FilterTab extends StatelessWidget {
   const _FilterTab({
     required this.filters,
     required this.showDownloaded,
+    required this.showReadState,
+    required this.showBookmarked,
     required this.onChanged,
   });
 
   final LibraryFilterSet filters;
   final bool showDownloaded;
+  final bool showReadState;
+  final bool showBookmarked;
   final ValueChanged<LibraryFilterSet> onChanged;
 
   @override
@@ -1439,16 +1463,24 @@ class _FilterTab extends StatelessWidget {
             value: filters.downloaded,
             onChanged: (v) => onChanged(filters.copyWith(downloaded: v)),
           ),
-        _TriStateLine(
-          label: '未读',
-          value: filters.unread,
-          onChanged: (v) => onChanged(filters.copyWith(unread: v)),
-        ),
-        _TriStateLine(
-          label: '阅读过',
-          value: filters.read,
-          onChanged: (v) => onChanged(filters.copyWith(read: v)),
-        ),
+        if (showReadState) ...[
+          _TriStateLine(
+            label: '未读',
+            value: filters.unread,
+            onChanged: (v) => onChanged(filters.copyWith(unread: v)),
+          ),
+          _TriStateLine(
+            label: '阅读过',
+            value: filters.read,
+            onChanged: (v) => onChanged(filters.copyWith(read: v)),
+          ),
+        ],
+        if (showBookmarked)
+          _TriStateLine(
+            label: '有书签',
+            value: filters.bookmarked,
+            onChanged: (v) => onChanged(filters.copyWith(bookmarked: v)),
+          ),
         _TriStateLine(
           label: '已添加标签',
           value: filters.hasTags,
@@ -1460,9 +1492,14 @@ class _FilterTab extends StatelessWidget {
 }
 
 class _SortTab extends StatelessWidget {
-  const _SortTab({required this.sortOption, required this.onChanged});
+  const _SortTab({
+    required this.sortOption,
+    required this.availableFields,
+    required this.onChanged,
+  });
 
   final LibraryShelfSortOption sortOption;
+  final List<LibraryShelfSortField> availableFields;
   final ValueChanged<LibraryShelfSortOption> onChanged;
 
   @override
@@ -1473,7 +1510,7 @@ class _SortTab extends StatelessWidget {
       LibraryShelfSortField.favoriteAddedAt: '收藏日期',
     };
     return Column(
-      children: LibraryShelfSortOption.availableFields
+      children: availableFields
           .map((field) {
             final selected = field == sortOption.field;
             return LibrarySortOptionTile(

@@ -125,7 +125,11 @@ class UnifiedDetailController {
     required String episodeId,
     required bool isRead,
   }) async {
-    await _adapter.markChapterRead(
+    final readStateAdapter = _readStateAdapter;
+    if (readStateAdapter == null) {
+      throw UnsupportedError('当前作品不支持章节已读状态');
+    }
+    await readStateAdapter.markChapterRead(
       workId: _workId,
       episodeId: episodeId,
       isRead: isRead,
@@ -162,7 +166,11 @@ class UnifiedDetailController {
   }
 
   Future<void> clearAllReadState() async {
-    await _adapter.clearAllReadState(workId: _workId);
+    final readStateAdapter = _readStateAdapter;
+    if (readStateAdapter == null) {
+      throw UnsupportedError('当前作品不支持章节已读状态');
+    }
+    await readStateAdapter.clearAllReadState(workId: _workId);
     await _loadChaptersOnly();
   }
 
@@ -182,6 +190,13 @@ class UnifiedDetailController {
     final adapter = _adapter;
     return adapter is DetailChapterDownloadAdapter
         ? adapter as DetailChapterDownloadAdapter
+        : null;
+  }
+
+  DetailChapterReadStateAdapter? get _readStateAdapter {
+    final adapter = _adapter;
+    return adapter is DetailChapterReadStateAdapter
+        ? adapter as DetailChapterReadStateAdapter
         : null;
   }
 

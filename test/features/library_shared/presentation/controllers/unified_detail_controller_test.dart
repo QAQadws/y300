@@ -132,7 +132,10 @@ void main() {
 }
 
 class _FakeDetailAdapter
-    implements DetailModuleAdapter, DetailChapterDownloadAdapter {
+    implements
+        DetailModuleAdapter,
+        DetailChapterReadStateAdapter,
+        DetailChapterDownloadAdapter {
   int loadHeaderCount = 0;
   int loadChaptersCount = 0;
   int refreshWorkCount = 0;

@@ -285,14 +285,10 @@ class LocalNovelRepository
         WHERE content_type = ?
         GROUP BY work_id
       ),
-      state_stats AS (
-        SELECT
-          work_id,
-          COUNT(*) AS state_count,
-          SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END) AS unread_count,
-          SUM(CASE WHEN is_read = 1 THEN 1 ELSE 0 END) AS read_count
+      bookmark_stats AS (
+        SELECT work_id, 1 AS has_bookmarks
         FROM ${ComicLocalDb.libraryEpisodeStateTable}
-        WHERE content_type = ?
+        WHERE content_type = ? AND is_bookmarked = 1
         GROUP BY work_id
       ),
       tag_stats AS (
@@ -329,9 +325,8 @@ class LocalNovelRepository
         w.custom_cover_focus_y,
         w.cover_hidden,
         w.updated_at AS work_updated_at,
-        COALESCE(es.total_count, ss.state_count, 0) AS total_count,
-        COALESCE(ss.unread_count, 0) AS unread_count,
-        COALESCE(ss.read_count, 0) AS read_count,
+        COALESCE(es.total_count, 0) AS total_count,
+        COALESCE(bs.has_bookmarks, 0) AS has_bookmarks,
         COALESCE(ts.has_tags, 0) AS has_tags,
         ws.last_read_at,
         ws.check_updated_at,
@@ -341,8 +336,8 @@ class LocalNovelRepository
         ON si.novel_id = w.work_id
       LEFT JOIN episode_stats es
         ON es.work_id = w.work_id
-      LEFT JOIN state_stats ss
-        ON ss.work_id = w.work_id
+      LEFT JOIN bookmark_stats bs
+        ON bs.work_id = w.work_id
       LEFT JOIN tag_stats ts
         ON ts.work_id = w.work_id
       LEFT JOIN work_state ws
@@ -1326,8 +1321,6 @@ class LocalNovelRepository
   }
 
   LibraryWorkItem _rowToLibraryWorkItem(Map<String, Object?> row) {
-    final unreadCount = row['unread_count'] as int? ?? 0;
-    final readCount = row['read_count'] as int? ?? 0;
     final coverHidden = (row['cover_hidden'] as int? ?? 0) == 1;
     return LibraryWorkItem(
       workId: row['work_id'] as String,
@@ -1345,9 +1338,9 @@ class LocalNovelRepository
       customCoverFocusY: coverHidden
           ? null
           : (row['custom_cover_focus_y'] as num?)?.toDouble(),
-      unreadCount: unreadCount,
-      totalChapterCount: row['total_count'] as int? ?? unreadCount + readCount,
-      readChapterCount: readCount,
+      unreadCount: 0,
+      totalChapterCount: row['total_count'] as int? ?? 0,
+      readChapterCount: 0,
       addedAt: DateTime.fromMillisecondsSinceEpoch(
         row['added_at'] as int? ?? 0,
       ),
@@ -1356,6 +1349,7 @@ class LocalNovelRepository
       lastCheckedAt: _toDateTime(row['check_updated_at']),
       lastFetchedAt: _toDateTime(row['fetched_updated_at']),
       hasTags: (row['has_tags'] as int? ?? 0) == 1,
+      hasBookmarks: (row['has_bookmarks'] as int? ?? 0) == 1,
     );
   }
 

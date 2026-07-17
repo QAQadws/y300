@@ -109,6 +109,36 @@ void main() {
       expect(downloaded, 1);
     });
 
+    test('can detect bookmarked episodes without using read state', () async {
+      await repository.upsertEpisodeState(
+        moduleKey: LibraryModuleKey.novel,
+        episodeId: 'ep1',
+        workId: 'novel:49:1',
+        isBookmarked: true,
+      );
+      await repository.upsertEpisodeState(
+        moduleKey: LibraryModuleKey.novel,
+        episodeId: 'ep2',
+        workId: 'novel:49:2',
+        isRead: false,
+      );
+
+      expect(
+        await repository.hasAnyBookmarkedEpisode(
+          moduleKey: LibraryModuleKey.novel,
+          workId: 'novel:49:1',
+        ),
+        isTrue,
+      );
+      expect(
+        await repository.hasAnyBookmarkedEpisode(
+          moduleKey: LibraryModuleKey.novel,
+          workId: 'novel:49:2',
+        ),
+        isFalse,
+      );
+    });
+
     test('marking episode unread clears readAt', () async {
       await repository.upsertEpisodeState(
         moduleKey: LibraryModuleKey.comic,

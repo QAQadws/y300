@@ -50,9 +50,15 @@ class LibraryShelfSnapshotDiffer {
       ...next.itemsByCategory.keys,
     };
     for (final categoryId in categoryIds) {
-      final previousOrder = previous.itemsByCategory[categoryId]?.map((item) => item.workId).toList() ??
+      final previousOrder =
+          previous.itemsByCategory[categoryId]
+              ?.map((item) => item.workId)
+              .toList() ??
           const <String>[];
-      final nextOrder = next.itemsByCategory[categoryId]?.map((item) => item.workId).toList() ??
+      final nextOrder =
+          next.itemsByCategory[categoryId]
+              ?.map((item) => item.workId)
+              .toList() ??
           const <String>[];
       if (!_sameStringList(previousOrder, nextOrder)) {
         orderChanged.add(categoryId);
@@ -96,6 +102,7 @@ class LibraryShelfSnapshotDiffer {
         a.lastCheckedAt == b.lastCheckedAt &&
         a.lastFetchedAt == b.lastFetchedAt &&
         a.hasTags == b.hasTags &&
+        a.hasBookmarks == b.hasBookmarks &&
         a.isDownloaded == b.isDownloaded;
   }
 

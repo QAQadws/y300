@@ -1,4 +1,4 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,7 +23,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: UnifiedShelfPage(
-          adapter: _FakeShelfAdapter(initialDisplayMode: LibraryDisplayMode.grid),
+          adapter: _FakeShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.grid,
+          ),
           onOpenWork: (context, workId) async {},
         ),
       ),
@@ -42,26 +44,25 @@ void main() {
   testWidgets('search updates category match count label', (tester) async {
     final adapter = _FakeShelfAdapter(
       initialDisplayMode: LibraryDisplayMode.grid,
-      onQuery: ({
-        required List<LibraryCategory> categories,
-        required LibraryFilterSet filters,
-        required LibraryShelfSortOption sortOption,
-        required String keyword,
-      }) async {
-        if (keyword.trim().isEmpty) {
-          return {
-            'default': [
-              _item(workId: '1', title: 'Comic A'),
-            ],
-          };
-        }
-        return {
-          'default': [
-            _item(workId: '1', title: 'Comic A'),
-            _item(workId: '2', title: 'Comic B'),
-          ],
-        };
-      },
+      onQuery:
+          ({
+            required List<LibraryCategory> categories,
+            required LibraryFilterSet filters,
+            required LibraryShelfSortOption sortOption,
+            required String keyword,
+          }) async {
+            if (keyword.trim().isEmpty) {
+              return {
+                'default': [_item(workId: '1', title: 'Comic A')],
+              };
+            }
+            return {
+              'default': [
+                _item(workId: '1', title: 'Comic A'),
+                _item(workId: '2', title: 'Comic B'),
+              ],
+            };
+          },
     );
 
     await tester.pumpWidget(
@@ -76,7 +77,10 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.search));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('unified-shelf-search-input')), 'Comic');
+    await tester.enterText(
+      find.byKey(const Key('unified-shelf-search-input')),
+      'Comic',
+    );
     // UnifiedShelfController 对关键词查询有 250ms 防抖，等待防抖触发 reload。
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
@@ -88,7 +92,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: UnifiedShelfPage(
-          adapter: _FakeShelfAdapter(initialDisplayMode: LibraryDisplayMode.grid),
+          adapter: _FakeShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.grid,
+          ),
           onOpenWork: (context, workId) async {},
         ),
       ),
@@ -121,17 +127,20 @@ void main() {
     LibraryShelfSortOption? queriedSort;
     final adapter = _FakeShelfAdapter(
       initialDisplayMode: LibraryDisplayMode.grid,
-      onQuery: ({
-        required List<LibraryCategory> categories,
-        required LibraryFilterSet filters,
-        required LibraryShelfSortOption sortOption,
-        required String keyword,
-      }) async {
-        queriedSort = sortOption;
-        return <String, List<LibraryWorkItem>>{
-          'default': <LibraryWorkItem>[_item(workId: '1', title: 'Comic A')],
-        };
-      },
+      onQuery:
+          ({
+            required List<LibraryCategory> categories,
+            required LibraryFilterSet filters,
+            required LibraryShelfSortOption sortOption,
+            required String keyword,
+          }) async {
+            queriedSort = sortOption;
+            return <String, List<LibraryWorkItem>>{
+              'default': <LibraryWorkItem>[
+                _item(workId: '1', title: 'Comic A'),
+              ],
+            };
+          },
     );
 
     await tester.pumpWidget(
@@ -184,60 +193,135 @@ void main() {
     expect(queriedSort?.direction, LibrarySortDirection.asc);
   });
 
-  testWidgets('pull to refresh triggers adapter refresh in grid/list container', (tester) async {
-    final adapter = _FakeShelfAdapter(initialDisplayMode: LibraryDisplayMode.grid);
+  testWidgets('shelf capabilities hide read status and expose bookmarks', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         home: UnifiedShelfPage(
-          adapter: adapter,
+          adapter: _FakeShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.list,
+            capabilities: const ShelfModuleCapabilities(
+              supportsReadState: false,
+              supportsBookmarkFilter: true,
+            ),
+            itemsByCategory: <String, List<LibraryWorkItem>>{
+              'default': <LibraryWorkItem>[
+                _item(
+                  workId: 'novel-1',
+                  title: 'Novel A',
+                  unreadCount: 7,
+                  hasBookmarks: true,
+                ),
+              ],
+            },
+          ),
           onOpenWork: (context, workId) async {},
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(adapter.refreshCalls, 0);
-    // 下拉目标使用列表滚动容器，避免依赖页面结构中是否存在 CustomScrollView。
-    await tester.drag(find.byKey(const Key('unified-shelf-grid-view')), const Offset(0, 300));
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.pumpAndSettle();
-
-    expect(adapter.refreshCalls, 1);
-  });
-
-  testWidgets('grid and list have scrollCacheExtent for large shelf scrolling', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: UnifiedShelfPage(
-          adapter: _FakeShelfAdapter(initialDisplayMode: LibraryDisplayMode.grid),
-          onOpenWork: (context, workId) async {},
+    expect(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey<String>('unified-shelf-list-item-novel-1'),
         ),
+        matching: find.text('7'),
       ),
+      findsNothing,
     );
-    await tester.pumpAndSettle();
-
-    final grid = tester.widget<GridView>(find.byKey(const Key('unified-shelf-grid-view')));
-    expect(grid.scrollCacheExtent, const ScrollCacheExtent.pixels(900));
 
     await tester.tap(find.byIcon(Icons.filter_list).first);
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(TextButton).at(2));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byType(Radio<LibraryDisplayMode>).at(1));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byType(FilledButton).first);
-    await tester.pumpAndSettle();
+    expect(find.text('未读'), findsNothing);
+    expect(find.text('阅读过'), findsNothing);
+    expect(find.text('有书签'), findsOneWidget);
 
-    final list = tester.widget<ListView>(find.byKey(const Key('unified-shelf-list-view')));
-    expect(list.scrollCacheExtent, const ScrollCacheExtent.pixels(900));
+    await tester.tap(find.byType(TextButton).at(1));
+    await tester.pumpAndSettle();
+    expect(find.text('章节数'), findsOneWidget);
+    expect(find.text('未读章节数'), findsNothing);
+    expect(find.text('收藏日期'), findsOneWidget);
   });
 
-  testWidgets('cover image feature flag can fall back to LibraryCachedImage', (tester) async {
+  testWidgets(
+    'pull to refresh triggers adapter refresh in grid/list container',
+    (tester) async {
+      final adapter = _FakeShelfAdapter(
+        initialDisplayMode: LibraryDisplayMode.grid,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: UnifiedShelfPage(
+            adapter: adapter,
+            onOpenWork: (context, workId) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(adapter.refreshCalls, 0);
+      // 下拉目标使用列表滚动容器，避免依赖页面结构中是否存在 CustomScrollView。
+      await tester.drag(
+        find.byKey(const Key('unified-shelf-grid-view')),
+        const Offset(0, 300),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pumpAndSettle();
+
+      expect(adapter.refreshCalls, 1);
+    },
+  );
+
+  testWidgets(
+    'grid and list have scrollCacheExtent for large shelf scrolling',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: UnifiedShelfPage(
+            adapter: _FakeShelfAdapter(
+              initialDisplayMode: LibraryDisplayMode.grid,
+            ),
+            onOpenWork: (context, workId) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final grid = tester.widget<GridView>(
+        find.byKey(const Key('unified-shelf-grid-view')),
+      );
+      expect(grid.scrollCacheExtent, const ScrollCacheExtent.pixels(900));
+
+      await tester.tap(find.byIcon(Icons.filter_list).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(TextButton).at(2));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Radio<LibraryDisplayMode>).at(1));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(FilledButton).first);
+      await tester.pumpAndSettle();
+
+      final list = tester.widget<ListView>(
+        find.byKey(const Key('unified-shelf-list-view')),
+      );
+      expect(list.scrollCacheExtent, const ScrollCacheExtent.pixels(900));
+    },
+  );
+
+  testWidgets('cover image feature flag can fall back to LibraryCachedImage', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         home: UnifiedShelfPage(
-          adapter: _FakeShelfAdapter(initialDisplayMode: LibraryDisplayMode.grid),
-          featureFlags: ShelfFeatureFlags.defaults.copyWith(useShelfCoverImage: false),
+          adapter: _FakeShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.grid,
+          ),
+          featureFlags: ShelfFeatureFlags.defaults.copyWith(
+            useShelfCoverImage: false,
+          ),
           onOpenWork: (context, workId) async {},
         ),
       ),
@@ -248,57 +332,64 @@ void main() {
     expect(find.byType(ShelfCoverImage), findsNothing);
   });
 
-  testWidgets('list mode hides cover placeholder when item has no cover source', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: UnifiedShelfPage(
-          adapter: _FakeShelfAdapter(initialDisplayMode: LibraryDisplayMode.list),
-          onOpenWork: (context, workId) async {},
+  testWidgets(
+    'list mode hides cover placeholder when item has no cover source',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: UnifiedShelfPage(
+            adapter: _FakeShelfAdapter(
+              initialDisplayMode: LibraryDisplayMode.list,
+            ),
+            onOpenWork: (context, workId) async {},
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    final listItem = find.byKey(const ValueKey<String>('unified-shelf-list-item-1'));
-    expect(
-      find.descendant(
-        of: listItem,
-        matching: find.byIcon(Icons.image_not_supported_outlined),
-      ),
-      findsNothing,
-    );
-    expect(
-      find.descendant(
-        of: listItem,
-        matching: find.byType(ShelfCoverImage),
-      ),
-      findsNothing,
-    );
-  });
+      final listItem = find.byKey(
+        const ValueKey<String>('unified-shelf-list-item-1'),
+      );
+      expect(
+        find.descendant(
+          of: listItem,
+          matching: find.byIcon(Icons.image_not_supported_outlined),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: listItem, matching: find.byType(ShelfCoverImage)),
+        findsNothing,
+      );
+    },
+  );
 
-  testWidgets('list mode keeps leading cover when item has cover source', (tester) async {
+  testWidgets('list mode keeps leading cover when item has cover source', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
           home: UnifiedShelfPage(
             adapter: _FakeShelfAdapter(
               initialDisplayMode: LibraryDisplayMode.list,
-              onQuery: ({
-                required List<LibraryCategory> categories,
-                required LibraryFilterSet filters,
-                required LibraryShelfSortOption sortOption,
-                required String keyword,
-              }) async {
-                return {
-                  'default': [
-                    _item(
-                      workId: 'covered',
-                      title: 'Covered Comic',
-                      coverImageUrl: 'https://example.com/covered.jpg',
-                    ),
-                  ],
-                };
-              },
+              onQuery:
+                  ({
+                    required List<LibraryCategory> categories,
+                    required LibraryFilterSet filters,
+                    required LibraryShelfSortOption sortOption,
+                    required String keyword,
+                  }) async {
+                    return {
+                      'default': [
+                        _item(
+                          workId: 'covered',
+                          title: 'Covered Comic',
+                          coverImageUrl: 'https://example.com/covered.jpg',
+                        ),
+                      ],
+                    };
+                  },
             ),
             onOpenWork: (context, workId) async {},
           ),
@@ -309,7 +400,9 @@ void main() {
 
     expect(
       find.descendant(
-        of: find.byKey(const ValueKey<String>('unified-shelf-list-item-covered')),
+        of: find.byKey(
+          const ValueKey<String>('unified-shelf-list-item-covered'),
+        ),
         matching: find.byType(ShelfCoverImage),
       ),
       findsOneWidget,
@@ -322,26 +415,27 @@ void main() {
         home: UnifiedShelfPage(
           adapter: _FakeShelfAdapter(
             initialDisplayMode: LibraryDisplayMode.list,
-            onQuery: ({
-              required List<LibraryCategory> categories,
-              required LibraryFilterSet filters,
-              required LibraryShelfSortOption sortOption,
-              required String keyword,
-            }) async {
-              return {
-                'default': [
-                  LibraryWorkItem(
-                    workId: 'badge-work',
-                    categoryId: 'default',
-                    title: 'Badge Comic',
-                    unreadCount: 7,
-                    totalChapterCount: 10,
-                    readChapterCount: 3,
-                    addedAt: DateTime(2026, 1, 1),
-                  ),
-                ],
-              };
-            },
+            onQuery:
+                ({
+                  required List<LibraryCategory> categories,
+                  required LibraryFilterSet filters,
+                  required LibraryShelfSortOption sortOption,
+                  required String keyword,
+                }) async {
+                  return {
+                    'default': [
+                      LibraryWorkItem(
+                        workId: 'badge-work',
+                        categoryId: 'default',
+                        title: 'Badge Comic',
+                        unreadCount: 7,
+                        totalChapterCount: 10,
+                        readChapterCount: 3,
+                        addedAt: DateTime(2026, 1, 1),
+                      ),
+                    ],
+                  };
+                },
           ),
           onOpenWork: (context, workId) async {},
         ),
@@ -351,35 +445,48 @@ void main() {
 
     expect(
       find.descendant(
-        of: find.byKey(const ValueKey<String>('unified-shelf-list-item-badge-work')),
+        of: find.byKey(
+          const ValueKey<String>('unified-shelf-list-item-badge-work'),
+        ),
         matching: find.text('7'),
       ),
       findsOneWidget,
     );
   });
 
-  testWidgets('category pages keep stable PageStorage keys for scroll restoration', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: UnifiedShelfPage(
-          adapter: _FakeShelfAdapter(initialDisplayMode: LibraryDisplayMode.grid),
-          onOpenWork: (context, workId) async {},
+  testWidgets(
+    'category pages keep stable PageStorage keys for scroll restoration',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: UnifiedShelfPage(
+            adapter: _FakeShelfAdapter(
+              initialDisplayMode: LibraryDisplayMode.grid,
+            ),
+            onOpenWork: (context, workId) async {},
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(const PageStorageKey<String>('unified-shelf-category-page-default')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const PageStorageKey<String>('unified-shelf-grid-storage-default')),
-      findsOneWidget,
-    );
-  });
+      expect(
+        find.byKey(
+          const PageStorageKey<String>('unified-shelf-category-page-default'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(
+          const PageStorageKey<String>('unified-shelf-grid-storage-default'),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
 
-  testWidgets('optional task progress renders above shelf content', (tester) async {
+  testWidgets('optional task progress renders above shelf content', (
+    tester,
+  ) async {
     final progress = ValueNotifier<LibraryShelfTaskProgress?>(
       const LibraryShelfTaskProgress(
         message: '正在解析: 收藏帖',
@@ -400,14 +507,20 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('unified-shelf-task-progress-bar')), findsOneWidget);
+    expect(
+      find.byKey(const Key('unified-shelf-task-progress-bar')),
+      findsOneWidget,
+    );
     expect(find.text('正在解析: 收藏帖'), findsOneWidget);
     expect(find.text('3/10'), findsOneWidget);
 
     progress.value = null;
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('unified-shelf-task-progress-bar')), findsNothing);
+    expect(
+      find.byKey(const Key('unified-shelf-task-progress-bar')),
+      findsNothing,
+    );
   });
 
   testWidgets('dark theme shelf surfaces use shelf palette', (tester) async {
@@ -430,22 +543,23 @@ void main() {
             adapter: _FakeShelfAdapter(
               initialDisplayMode: LibraryDisplayMode.list,
               taskProgress: progress,
-              onQuery: ({
-                required List<LibraryCategory> categories,
-                required LibraryFilterSet filters,
-                required LibraryShelfSortOption sortOption,
-                required String keyword,
-              }) async {
-                return {
-                  'default': [
-                    _item(
-                      workId: 'covered',
-                      title: 'Covered Comic',
-                      coverImageUrl: 'https://example.com/covered.jpg',
-                    ),
-                  ],
-                };
-              },
+              onQuery:
+                  ({
+                    required List<LibraryCategory> categories,
+                    required LibraryFilterSet filters,
+                    required LibraryShelfSortOption sortOption,
+                    required String keyword,
+                  }) async {
+                    return {
+                      'default': [
+                        _item(
+                          workId: 'covered',
+                          title: 'Covered Comic',
+                          coverImageUrl: 'https://example.com/covered.jpg',
+                        ),
+                      ],
+                    };
+                  },
             ),
             onOpenWork: (context, workId) async {},
           ),
@@ -455,26 +569,32 @@ void main() {
     await tester.pumpAndSettle();
 
     final headerMaterial = tester.widget<Material>(
-      find.ancestor(
-        of: find.byKey(
-          const ValueKey<String>('unified-shelf-category-tab-default'),
-        ),
-        matching: find.byType(Material),
-      ).first,
+      find
+          .ancestor(
+            of: find.byKey(
+              const ValueKey<String>('unified-shelf-category-tab-default'),
+            ),
+            matching: find.byType(Material),
+          )
+          .first,
     );
     final bannerMaterial = tester.widget<Material>(
-      find.ancestor(
-        of: find.byKey(const Key('unified-shelf-task-progress-bar')),
-        matching: find.byType(Material),
-      ).first,
+      find
+          .ancestor(
+            of: find.byKey(const Key('unified-shelf-task-progress-bar')),
+            matching: find.byType(Material),
+          )
+          .first,
     );
     final listItemMaterial = tester.widget<Material>(
-      find.descendant(
-        of: find.byKey(
-          const ValueKey<String>('unified-shelf-list-item-covered'),
-        ),
-        matching: find.byType(Material),
-      ).first,
+      find
+          .descendant(
+            of: find.byKey(
+              const ValueKey<String>('unified-shelf-list-item-covered'),
+            ),
+            matching: find.byType(Material),
+          )
+          .first,
     );
 
     expect(headerMaterial.color, palette.categoryBarBackground);
@@ -492,11 +612,11 @@ void main() {
     expect(find.text('列表'), findsOneWidget);
   });
 
-  testWidgets('task progress without total keeps banner indeterminate', (tester) async {
+  testWidgets('task progress without total keeps banner indeterminate', (
+    tester,
+  ) async {
     final progress = ValueNotifier<LibraryShelfTaskProgress?>(
-      const LibraryShelfTaskProgress(
-        message: '排队漫画 正在等待搜索 预计耗时21s',
-      ),
+      const LibraryShelfTaskProgress(message: '排队漫画 正在等待搜索 预计耗时21s'),
     );
     addTearDown(progress.dispose);
     await tester.pumpWidget(
@@ -517,7 +637,10 @@ void main() {
       find.byKey(const Key('unified-shelf-task-progress-bar')),
     );
     expect(bar.value, isNull);
-    expect(find.byKey(const Key('unified-shelf-task-progress-count')), findsNothing);
+    expect(
+      find.byKey(const Key('unified-shelf-task-progress-count')),
+      findsNothing,
+    );
     expect(find.text('排队漫画 正在等待搜索 预计耗时21s'), findsOneWidget);
   });
 
@@ -543,24 +666,30 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('unified-shelf-task-progress-bar')), findsNothing);
+    expect(
+      find.byKey(const Key('unified-shelf-task-progress-bar')),
+      findsNothing,
+    );
     expect(find.text('正在预热封面'), findsNothing);
   });
 
-  testWidgets('initial loading does not flash empty shelf state', (tester) async {
+  testWidgets('initial loading does not flash empty shelf state', (
+    tester,
+  ) async {
     final adapter = _FakeShelfAdapter(
       initialDisplayMode: LibraryDisplayMode.grid,
-      onQuery: ({
-        required List<LibraryCategory> categories,
-        required LibraryFilterSet filters,
-        required LibraryShelfSortOption sortOption,
-        required String keyword,
-      }) async {
-        await Future<void>.delayed(const Duration(milliseconds: 50));
-        return {
-          'default': [_item(workId: '1', title: 'Comic A')],
-        };
-      },
+      onQuery:
+          ({
+            required List<LibraryCategory> categories,
+            required LibraryFilterSet filters,
+            required LibraryShelfSortOption sortOption,
+            required String keyword,
+          }) async {
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            return {
+              'default': [_item(workId: '1', title: 'Comic A')],
+            };
+          },
     );
 
     await tester.pumpWidget(
@@ -579,36 +708,37 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('long press enters selection mode and selected grid item is highlighted', (
-    tester,
-  ) async {
-    final host = ShelfSelectionHostController();
-    addTearDown(host.dispose);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: UnifiedShelfPage(
-          adapter: _FakeSelectableShelfAdapter(
-            initialDisplayMode: LibraryDisplayMode.grid,
+  testWidgets(
+    'long press enters selection mode and selected grid item is highlighted',
+    (tester) async {
+      final host = ShelfSelectionHostController();
+      addTearDown(host.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: UnifiedShelfPage(
+            adapter: _FakeSelectableShelfAdapter(
+              initialDisplayMode: LibraryDisplayMode.grid,
+            ),
+            selectionHost: host,
+            onOpenWork: (context, workId) async {},
           ),
-          selectionHost: host,
-          onOpenWork: (context, workId) async {},
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    await tester.longPress(
-      find.byKey(const ValueKey<String>('unified-shelf-grid-item-1')),
-    );
-    await tester.pumpAndSettle();
+      await tester.longPress(
+        find.byKey(const ValueKey<String>('unified-shelf-grid-item-1')),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('selection-app-bar')), findsOneWidget);
-    expect(host.state?.selectedCount, 1);
-    final card = tester.widget<ShelfCoverCard>(
-      find.byKey(const ValueKey<String>('unified-shelf-grid-item-1')),
-    );
-    expect(card.selected, isTrue);
-  });
+      expect(find.byKey(const Key('selection-app-bar')), findsOneWidget);
+      expect(host.state?.selectedCount, 1);
+      final card = tester.widget<ShelfCoverCard>(
+        find.byKey(const ValueKey<String>('unified-shelf-grid-item-1')),
+      );
+      expect(card.selected, isTrue);
+    },
+  );
 
   testWidgets('selection mode tap toggles item without opening detail', (
     tester,
@@ -631,8 +761,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final itemFinder =
-        find.byKey(const ValueKey<String>('unified-shelf-grid-item-1'));
+    final itemFinder = find.byKey(
+      const ValueKey<String>('unified-shelf-grid-item-1'),
+    );
     await tester.longPress(itemFinder);
     await tester.pumpAndSettle();
     await tester.tap(itemFinder);
@@ -643,7 +774,9 @@ void main() {
     expect(host.isActive, isFalse);
   });
 
-  testWidgets('selection mode disables category tap and page swipe', (tester) async {
+  testWidgets('selection mode disables category tap and page swipe', (
+    tester,
+  ) async {
     final host = ShelfSelectionHostController();
     addTearDown(host.dispose);
     await tester.pumpWidget(
@@ -749,8 +882,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final itemFinder =
-        find.byKey(const ValueKey<String>('unified-shelf-list-item-1'));
+    final itemFinder = find.byKey(
+      const ValueKey<String>('unified-shelf-list-item-1'),
+    );
     final sizeBefore = tester.getSize(itemFinder);
     await tester.longPress(itemFinder);
     await tester.pumpAndSettle();
@@ -766,10 +900,15 @@ void main() {
       ),
     );
     expect(tile.selected, isTrue);
-    expect(_borderColorForListItem(tester, itemFinder), isNot(Colors.transparent));
+    expect(
+      _borderColorForListItem(tester, itemFinder),
+      isNot(Colors.transparent),
+    );
   });
 
-  testWidgets('list mode select all highlights all visible items', (tester) async {
+  testWidgets('list mode select all highlights all visible items', (
+    tester,
+  ) async {
     final host = ShelfSelectionHostController();
     addTearDown(host.dispose);
     await tester.pumpWidget(
@@ -802,8 +941,9 @@ void main() {
 
     expect(find.text('已选 3 项'), findsOneWidget);
     for (final workId in ['1', '2', '3']) {
-      final itemFinder =
-          find.byKey(ValueKey<String>('unified-shelf-list-item-$workId'));
+      final itemFinder = find.byKey(
+        ValueKey<String>('unified-shelf-list-item-$workId'),
+      );
       final tileFinder = find.descendant(
         of: itemFinder,
         matching: find.byKey(
@@ -811,7 +951,10 @@ void main() {
         ),
       );
       expect(tester.widget<ListTile>(tileFinder).selected, isTrue);
-      expect(_borderColorForListItem(tester, itemFinder), isNot(Colors.transparent));
+      expect(
+        _borderColorForListItem(tester, itemFinder),
+        isNot(Colors.transparent),
+      );
     }
   });
 
@@ -848,98 +991,9 @@ void main() {
 
     expect(find.text('已选 2 项'), findsOneWidget);
     for (final workId in ['2', '3']) {
-      final itemFinder =
-          find.byKey(ValueKey<String>('unified-shelf-list-item-$workId'));
-      final tileFinder = find.descendant(
-        of: itemFinder,
-        matching: find.byKey(
-          ValueKey<String>('unified-shelf-list-tile-$workId'),
-        ),
+      final itemFinder = find.byKey(
+        ValueKey<String>('unified-shelf-list-item-$workId'),
       );
-      expect(tester.widget<ListTile>(tileFinder).selected, isTrue);
-      expect(_borderColorForListItem(tester, itemFinder), isNot(Colors.transparent));
-    }
-
-    final firstItemFinder =
-        find.byKey(const ValueKey<String>('unified-shelf-list-item-1'));
-    final firstTileFinder = find.descendant(
-      of: firstItemFinder,
-      matching: find.byKey(
-        const ValueKey<String>('unified-shelf-list-tile-1'),
-      ),
-    );
-    expect(tester.widget<ListTile>(firstTileFinder).selected, isFalse);
-    expect(_borderColorForListItem(tester, firstItemFinder), Colors.transparent);
-  });
-
-  testWidgets('initial selection uses first visible category when controller starts empty', (
-    tester,
-  ) async {
-    final host = ShelfSelectionHostController();
-    addTearDown(host.dispose);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: UnifiedShelfPage(
-          adapter: _FakeSelectableShelfAdapter(
-            initialDisplayMode: LibraryDisplayMode.list,
-            categories: [
-              LibraryCategory(
-                categoryId: 'comic',
-                name: 'Comic',
-                sortOrder: 0,
-                createdAt: DateTime(2026, 1, 1),
-              ),
-              LibraryCategory(
-                categoryId: 'novel',
-                name: 'Novel',
-                sortOrder: 1,
-                createdAt: DateTime(2026, 1, 2),
-              ),
-              LibraryCategory(
-                categoryId: 'default',
-                name: 'Default',
-                sortOrder: 2,
-                createdAt: DateTime(2026, 1, 3),
-              ),
-            ],
-            itemsByCategory: {
-              'comic': [
-                _item(workId: 'comic-1', title: 'Comic A'),
-                _item(workId: 'comic-2', title: 'Comic B'),
-              ],
-              'novel': [
-                _item(workId: 'novel-1', title: 'Novel A'),
-              ],
-              'default': List<LibraryWorkItem>.generate(
-                15,
-                (index) => _item(
-                  workId: 'default-${index + 1}',
-                  title: 'Default ${index + 1}',
-                ),
-              ),
-            },
-          ),
-          selectionHost: host,
-          onOpenWork: (context, workId) async {},
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.longPress(
-      find.byKey(const ValueKey<String>('unified-shelf-list-item-comic-1')),
-    );
-    await tester.pumpAndSettle();
-
-    expect(host.state?.activeCategoryId, 'comic');
-
-    await tester.tap(find.byKey(const Key('selection-app-bar-select-all')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('已选 2 项'), findsOneWidget);
-    for (final workId in ['comic-1', 'comic-2']) {
-      final itemFinder =
-          find.byKey(ValueKey<String>('unified-shelf-list-item-$workId'));
       final tileFinder = find.descendant(
         of: itemFinder,
         matching: find.byKey(
@@ -952,11 +1006,106 @@ void main() {
         isNot(Colors.transparent),
       );
     }
+
+    final firstItemFinder = find.byKey(
+      const ValueKey<String>('unified-shelf-list-item-1'),
+    );
+    final firstTileFinder = find.descendant(
+      of: firstItemFinder,
+      matching: find.byKey(const ValueKey<String>('unified-shelf-list-tile-1')),
+    );
+    expect(tester.widget<ListTile>(firstTileFinder).selected, isFalse);
     expect(
-      find.byKey(const ValueKey<String>('unified-shelf-list-item-default-1')),
-      findsNothing,
+      _borderColorForListItem(tester, firstItemFinder),
+      Colors.transparent,
     );
   });
+
+  testWidgets(
+    'initial selection uses first visible category when controller starts empty',
+    (tester) async {
+      final host = ShelfSelectionHostController();
+      addTearDown(host.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: UnifiedShelfPage(
+            adapter: _FakeSelectableShelfAdapter(
+              initialDisplayMode: LibraryDisplayMode.list,
+              categories: [
+                LibraryCategory(
+                  categoryId: 'comic',
+                  name: 'Comic',
+                  sortOrder: 0,
+                  createdAt: DateTime(2026, 1, 1),
+                ),
+                LibraryCategory(
+                  categoryId: 'novel',
+                  name: 'Novel',
+                  sortOrder: 1,
+                  createdAt: DateTime(2026, 1, 2),
+                ),
+                LibraryCategory(
+                  categoryId: 'default',
+                  name: 'Default',
+                  sortOrder: 2,
+                  createdAt: DateTime(2026, 1, 3),
+                ),
+              ],
+              itemsByCategory: {
+                'comic': [
+                  _item(workId: 'comic-1', title: 'Comic A'),
+                  _item(workId: 'comic-2', title: 'Comic B'),
+                ],
+                'novel': [_item(workId: 'novel-1', title: 'Novel A')],
+                'default': List<LibraryWorkItem>.generate(
+                  15,
+                  (index) => _item(
+                    workId: 'default-${index + 1}',
+                    title: 'Default ${index + 1}',
+                  ),
+                ),
+              },
+            ),
+            selectionHost: host,
+            onOpenWork: (context, workId) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(
+        find.byKey(const ValueKey<String>('unified-shelf-list-item-comic-1')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(host.state?.activeCategoryId, 'comic');
+
+      await tester.tap(find.byKey(const Key('selection-app-bar-select-all')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('已选 2 项'), findsOneWidget);
+      for (final workId in ['comic-1', 'comic-2']) {
+        final itemFinder = find.byKey(
+          ValueKey<String>('unified-shelf-list-item-$workId'),
+        );
+        final tileFinder = find.descendant(
+          of: itemFinder,
+          matching: find.byKey(
+            ValueKey<String>('unified-shelf-list-tile-$workId'),
+          ),
+        );
+        expect(tester.widget<ListTile>(tileFinder).selected, isTrue);
+        expect(
+          _borderColorForListItem(tester, itemFinder),
+          isNot(Colors.transparent),
+        );
+      }
+      expect(
+        find.byKey(const ValueKey<String>('unified-shelf-list-item-default-1')),
+        findsNothing,
+      );
+    },
+  );
 }
 
 Color _borderColorForListItem(WidgetTester tester, Finder itemFinder) {
@@ -970,42 +1119,53 @@ LibraryWorkItem _item({
   required String workId,
   required String title,
   String? coverImageUrl,
+  int unreadCount = 1,
+  bool hasBookmarks = false,
 }) {
   return LibraryWorkItem(
     workId: workId,
     categoryId: 'default',
     title: title,
     coverImageUrl: coverImageUrl,
-    unreadCount: 1,
+    unreadCount: unreadCount,
     totalChapterCount: 3,
     readChapterCount: 2,
     addedAt: DateTime(2026, 1, 1),
+    hasBookmarks: hasBookmarks,
   );
 }
 
 class _FakeShelfAdapter
-    implements ShelfModuleAdapter, ShelfDownloadStatusAdapter {
+    implements
+        ShelfModuleAdapter,
+        ShelfModuleCapabilitiesAdapter,
+        ShelfDownloadStatusAdapter {
   _FakeShelfAdapter({
     required this.initialDisplayMode,
     this.onQuery,
     this.taskProgress,
+    this.capabilities = const ShelfModuleCapabilities.defaults(),
     List<LibraryCategory>? categories,
     Map<String, List<LibraryWorkItem>>? itemsByCategory,
-  })  : categories = categories ??
-            [
-              LibraryCategory(
-                categoryId: 'default',
-                name: 'Default',
-                sortOrder: 0,
-                createdAt: DateTime(2026, 1, 1),
-              ),
-            ],
-        itemsByCategory = itemsByCategory ??
-            {
-              'default': [_item(workId: '1', title: 'Comic A')],
-            };
+  }) : categories =
+           categories ??
+           [
+             LibraryCategory(
+               categoryId: 'default',
+               name: 'Default',
+               sortOrder: 0,
+               createdAt: DateTime(2026, 1, 1),
+             ),
+           ],
+       itemsByCategory =
+           itemsByCategory ??
+           {
+             'default': [_item(workId: '1', title: 'Comic A')],
+           };
 
   final LibraryDisplayMode initialDisplayMode;
+  @override
+  final ShelfModuleCapabilities capabilities;
   @override
   final ValueListenable<LibraryShelfTaskProgress?>? taskProgress;
   @override
@@ -1017,7 +1177,8 @@ class _FakeShelfAdapter
     required LibraryFilterSet filters,
     required LibraryShelfSortOption sortOption,
     required String keyword,
-  })? onQuery;
+  })?
+  onQuery;
   final List<LibraryCategory> categories;
   final Map<String, List<LibraryWorkItem>> itemsByCategory;
 
@@ -1031,7 +1192,8 @@ class _FakeShelfAdapter
   String get moduleTitle => 'Comic';
 
   @override
-  Future<Object> buildDetailRouteArgument({required String workId}) async => workId;
+  Future<Object> buildDetailRouteArgument({required String workId}) async =>
+      workId;
 
   @override
   Future<String> createCategory({required String name}) async => 'created';
@@ -1045,7 +1207,9 @@ class _FakeShelfAdapter
   }
 
   @override
-  Future<List<LibraryWorkItem>> loadCategoryItems({required String categoryId}) async {
+  Future<List<LibraryWorkItem>> loadCategoryItems({
+    required String categoryId,
+  }) async {
     return itemsByCategory[categoryId] ?? const <LibraryWorkItem>[];
   }
 
@@ -1125,17 +1289,17 @@ class _FakeSelectableShelfAdapter extends _FakeShelfAdapter
 
   @override
   List<SelectionAction> get selectionActions => const <SelectionAction>[
-        SelectionAction(
-          id: SelectionActionIds.assignCategory,
-          icon: Icons.edit_outlined,
-          label: '设置分类',
-        ),
-        SelectionAction(
-          id: SelectionActionIds.download,
-          icon: Icons.download_outlined,
-          label: '下载',
-        ),
-      ];
+    SelectionAction(
+      id: SelectionActionIds.assignCategory,
+      icon: Icons.edit_outlined,
+      label: '设置分类',
+    ),
+    SelectionAction(
+      id: SelectionActionIds.download,
+      icon: Icons.download_outlined,
+      label: '下载',
+    ),
+  ];
 
   @override
   Future<SelectionActionResult> runSelectionAction(
