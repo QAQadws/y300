@@ -41,6 +41,12 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('测试作品'), findsWidgets);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('unified-detail-hero-title')))
+          .maxLines,
+      3,
+    );
     expect(find.byKey(const Key('unified-detail-author-row')), findsOneWidget);
     expect(find.text('UID: 10001'), findsOneWidget);
     expect(

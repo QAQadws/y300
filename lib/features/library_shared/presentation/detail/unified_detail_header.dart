@@ -320,7 +320,7 @@ class _HeroMetaColumn extends StatelessWidget {
           Text(
             title,
             key: const Key('unified-detail-hero-title'),
-            maxLines: 2,
+            maxLines: 3,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
               color: foregroundColor,
