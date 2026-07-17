@@ -70,6 +70,27 @@ void main() {
 
     expect(selectionHost.state?.selectionActions.length, 4);
   });
+
+  testWidgets('NovelShelfPage omits downloaded filter', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+          libraryStateRepositoryProvider.overrideWithValue(
+            _FakeLibraryStateRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: NovelShelfPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.filter_list).first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('已下载'), findsNothing);
+    expect(find.text('未读'), findsOneWidget);
+  });
 }
 
 class _FakeNovelRepository implements NovelRepository {
@@ -92,8 +113,9 @@ class _FakeNovelRepository implements NovelRepository {
   }
 
   @override
-  Future<NovelChapterContent?> getChapterContent({required String episodeId}) async =>
-      null;
+  Future<NovelChapterContent?> getChapterContent({
+    required String episodeId,
+  }) async => null;
 
   @override
   Future<NovelItem?> getDetail({required String novelId}) async => null;
@@ -111,8 +133,9 @@ class _FakeNovelRepository implements NovelRepository {
       NovelReaderPreferences.defaults();
 
   @override
-  Future<NovelReadingProgress?> getReadingProgress({required String novelId}) async =>
-      null;
+  Future<NovelReadingProgress?> getReadingProgress({
+    required String novelId,
+  }) async => null;
 
   @override
   Future<List<NovelItem>> getShelfItems({String categoryId = 'default'}) async {
@@ -179,10 +202,14 @@ class _FakeNovelRepository implements NovelRepository {
   }) async {}
 
   @override
-  Future<void> upsertReaderPreferences(NovelReaderPreferences preferences) async {}
+  Future<void> upsertReaderPreferences(
+    NovelReaderPreferences preferences,
+  ) async {}
 
   @override
-  Future<void> addReaderBookmark({required NovelReaderBookmark bookmark}) async {}
+  Future<void> addReaderBookmark({
+    required NovelReaderBookmark bookmark,
+  }) async {}
 
   @override
   Future<List<NovelReaderBookmark>> listReaderBookmarks({

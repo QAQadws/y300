@@ -13,7 +13,10 @@ void main() {
     tester,
   ) async {
     ReaderRouteTarget? openedTarget;
-    final adapter = _FakeDetailAdapter(module: LibraryModuleKey.comic);
+    final adapter = _FakeDetailAdapter(
+      module: LibraryModuleKey.comic,
+      isDownloaded: true,
+    );
     await tester.pumpWidget(
       MaterialApp(
         home: UnifiedDetailPage(
@@ -1624,7 +1627,8 @@ void main() {
   );
 }
 
-class _FakeDetailAdapter implements DetailModuleAdapter {
+class _FakeDetailAdapter
+    implements DetailModuleAdapter, DetailChapterDownloadAdapter {
   _FakeDetailAdapter({
     this.module = LibraryModuleKey.novel,
     this.coverLocalPath,

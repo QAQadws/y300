@@ -31,9 +31,7 @@ abstract class ShelfModuleAdapter {
   Future<List<LibraryCategory>> loadCategories();
 
   /// 加载指定分类的作品。
-  Future<List<LibraryWorkItem>> loadCategoryItems({
-    required String categoryId,
-  });
+  Future<List<LibraryWorkItem>> loadCategoryItems({required String categoryId});
 
   /// 按关键词搜索（作品名/作者/汉化组等模块定义字段）。
   Future<Map<String, List<LibraryWorkItem>>> searchItemsByKeyword({
@@ -52,9 +50,7 @@ abstract class ShelfModuleAdapter {
   Future<void> refreshShelf();
 
   /// 进入详情页时使用的路由目标（统一页不关心具体 Route 类型）。
-  Future<Object> buildDetailRouteArgument({
-    required String workId,
-  });
+  Future<Object> buildDetailRouteArgument({required String workId});
 
   /// 分类管理。
   Future<String> createCategory({required String name});
@@ -83,9 +79,7 @@ abstract class ShelfModuleAdapter {
   Future<LibraryDisplayPreference> loadDisplayPreference();
 
   /// 随机打开一个作品（more 菜单行为）。
-  Future<String?> pickRandomWorkId({
-    required String categoryId,
-  });
+  Future<String?> pickRandomWorkId({required String categoryId});
 }
 
 /// 可选的聚合快照能力。
@@ -100,11 +94,13 @@ abstract class ShelfSnapshotAdapter {
   });
 }
 
+/// 书架作品拥有独立下载状态时实现的标记能力。
+///
+/// 统一书架据此展示“已下载”筛选；水合内容天然可离线的模块无需实现。
+abstract interface class ShelfDownloadStatusAdapter {}
+
 class ShelfModuleActionResult {
-  const ShelfModuleActionResult({
-    required this.message,
-    this.changed = false,
-  });
+  const ShelfModuleActionResult({required this.message, this.changed = false});
 
   final String message;
   final bool changed;
@@ -117,10 +113,7 @@ abstract class ShelfModuleActionAdapter {
 }
 
 class LibraryShelfMenuAction {
-  const LibraryShelfMenuAction({
-    required this.id,
-    required this.label,
-  });
+  const LibraryShelfMenuAction({required this.id, required this.label});
 
   final String id;
   final String label;

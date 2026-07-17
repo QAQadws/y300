@@ -597,6 +597,14 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
   Future<void> _showFilterSheet() async {
     final state = _controller.state;
     var selectedFilter = state.filters;
+    final supportsDownloadedFilter =
+        widget.adapter is ShelfDownloadStatusAdapter;
+    if (!supportsDownloadedFilter &&
+        selectedFilter.downloaded != TriStateFilterValue.ignore) {
+      selectedFilter = selectedFilter.copyWith(
+        downloaded: TriStateFilterValue.ignore,
+      );
+    }
     var selectedSort = state.sortOption;
     var selectedMode = state.displayMode;
     var selectedColumns = state.gridColumnCount.toDouble();
@@ -638,6 +646,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                     if (tabIndex == 0)
                       _FilterTab(
                         filters: selectedFilter,
+                        showDownloaded: supportsDownloadedFilter,
                         onChanged: (next) =>
                             setSheetState(() => selectedFilter = next),
                       ),
@@ -1410,20 +1419,26 @@ class _AlwaysScrollableEmptyState extends StatelessWidget {
 }
 
 class _FilterTab extends StatelessWidget {
-  const _FilterTab({required this.filters, required this.onChanged});
+  const _FilterTab({
+    required this.filters,
+    required this.showDownloaded,
+    required this.onChanged,
+  });
 
   final LibraryFilterSet filters;
+  final bool showDownloaded;
   final ValueChanged<LibraryFilterSet> onChanged;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _TriStateLine(
-          label: '已下载',
-          value: filters.downloaded,
-          onChanged: (v) => onChanged(filters.copyWith(downloaded: v)),
-        ),
+        if (showDownloaded)
+          _TriStateLine(
+            label: '已下载',
+            value: filters.downloaded,
+            onChanged: (v) => onChanged(filters.copyWith(downloaded: v)),
+          ),
         _TriStateLine(
           label: '未读',
           value: filters.unread,

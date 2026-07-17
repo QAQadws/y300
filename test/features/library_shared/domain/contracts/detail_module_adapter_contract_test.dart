@@ -19,7 +19,8 @@ void main() {
   });
 }
 
-class _FakeDetailModuleAdapter implements DetailModuleAdapter {
+class _FakeDetailModuleAdapter
+    implements DetailModuleAdapter, DetailChapterDownloadAdapter {
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
 
@@ -47,7 +48,9 @@ class _FakeDetailModuleAdapter implements DetailModuleAdapter {
   }
 
   @override
-  Future<ThreadRouteTarget?> getThreadRouteTarget({required String workId}) async {
+  Future<ThreadRouteTarget?> getThreadRouteTarget({
+    required String workId,
+  }) async {
     return const ThreadRouteTarget(tid: '1', subject: 's');
   }
 

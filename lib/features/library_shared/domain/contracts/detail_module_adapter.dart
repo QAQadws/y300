@@ -79,23 +79,7 @@ abstract class DetailModuleAdapter {
     required bool isBookmarked,
   });
 
-  Future<void> markChapterDownloaded({
-    required String workId,
-    required String episodeId,
-    required bool isDownloaded,
-  });
-
   Future<void> clearAllReadState({required String workId});
-
-  Future<void> deleteChapterDownload({
-    required String workId,
-    required String episodeId,
-  });
-
-  /// 下载动作。
-  Future<void> downloadUnread({required String workId});
-
-  Future<void> downloadAll({required String workId});
 
   /// 作品级动作。
   Future<DetailRefreshResult> refreshWork({required String workId});
@@ -119,6 +103,27 @@ abstract class DetailModuleAdapter {
     required String workId,
     required bool preferContinue,
   });
+}
+
+/// 章节下载可选能力。
+///
+/// 只有拥有独立下载产物的模块实现该合同。共享详情页通过能力发现决定是否
+/// 展示下载入口与下载筛选，避免要求水合即离线的模块维护重复副本。
+abstract interface class DetailChapterDownloadAdapter {
+  Future<void> markChapterDownloaded({
+    required String workId,
+    required String episodeId,
+    required bool isDownloaded,
+  });
+
+  Future<void> deleteChapterDownload({
+    required String workId,
+    required String episodeId,
+  });
+
+  Future<void> downloadUnread({required String workId});
+
+  Future<void> downloadAll({required String workId});
 }
 
 /// 作品元数据编辑能力。

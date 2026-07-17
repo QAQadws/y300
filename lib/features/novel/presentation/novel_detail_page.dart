@@ -59,7 +59,6 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
     final openMode = openModeState.value ?? NovelChapterOpenMode.reader;
     final adapter = NovelDetailAdapter(
       ref.watch(novelRepositoryProvider),
-      downloadService: ref.watch(novelDownloadServiceProvider),
       imageCacheService: ref.watch(imageCacheServiceProvider),
       readingStateBatchWriter: ref.watch(readingStateBatchWriterProvider),
       stateRepository: ref.watch(libraryStateRepositoryProvider),

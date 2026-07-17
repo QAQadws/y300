@@ -33,6 +33,7 @@ typedef UnfavoriteThreadUseCaseResolver = UnfavoriteThreadUseCase? Function();
 class FavoriteShelfAdapter
     implements
         ShelfModuleAdapter,
+        ShelfDownloadStatusAdapter,
         ShelfSnapshotAdapter,
         ShelfCoverWarmupAdapter,
         ShelfSelectionActionAdapter {

@@ -15,7 +15,6 @@ import 'package:y300/features/library_shared/data/providers/library_state_provid
 import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
-import 'package:y300/features/novel/data/services/novel_download_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
@@ -31,7 +30,6 @@ import 'package:y300/features/novel/domain/services/novel_chapter_sync_service.d
 import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 import 'package:y300/features/novel/presentation/novel_detail_page.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
-import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
@@ -46,9 +44,6 @@ void main() {
           overrides: [
             historyVisitRecorderProvider.overrideWithValue(historyRecorder),
             novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
-            novelDownloadServiceProvider.overrideWithValue(
-              _NoopNovelDownloadService(),
-            ),
             libraryStateRepositoryProvider.overrideWithValue(
               _FakeLibraryStateRepository(),
             ),
@@ -79,7 +74,27 @@ void main() {
         findsOneWidget,
       );
       expect(find.textContaining('Pid:5001'), findsOneWidget);
-      expect(find.byIcon(Icons.file_download), findsAtLeastNWidgets(1));
+      expect(
+        find.byKey(const Key('unified-detail-appbar-download')),
+        findsNothing,
+      );
+      expect(find.byTooltip('下载该章节'), findsNothing);
+      await tester.tap(find.byKey(const Key('unified-detail-appbar-filter')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('unified-detail-filter-downloaded')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('unified-detail-filter-unread')),
+        findsOneWidget,
+      );
+      Navigator.of(
+        tester.element(
+          find.byKey(const Key('unified-detail-chapter-filter-sheet')),
+        ),
+      ).pop();
+      await tester.pumpAndSettle();
       expect(historyRecorder.drafts, hasLength(1));
       expect(
         historyRecorder.drafts.single.target,
@@ -100,9 +115,6 @@ void main() {
             const _NoopHistoryVisitRecorder(),
           ),
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
-          novelDownloadServiceProvider.overrideWithValue(
-            _NoopNovelDownloadService(),
-          ),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
           ),
@@ -185,9 +197,6 @@ void main() {
         overrides: [
           historyVisitRecorderProvider.overrideWithValue(historyRecorder),
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
-          novelDownloadServiceProvider.overrideWithValue(
-            _NoopNovelDownloadService(),
-          ),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
           ),
@@ -464,9 +473,6 @@ Future<void> _pumpNovelDetail(
         ),
         novelRepositoryProvider.overrideWithValue(
           repository ?? _FakeNovelRepository(),
-        ),
-        novelDownloadServiceProvider.overrideWithValue(
-          _NoopNovelDownloadService(),
         ),
         libraryStateRepositoryProvider.overrideWithValue(
           libraryStateRepository ?? _FakeLibraryStateRepository(),
@@ -831,30 +837,6 @@ class _NoopImageCacheService implements ImageCacheService {
 
   @override
   Future<void> clearUnprotected() async {}
-}
-
-class _NoopNovelDownloadService implements NovelDownloadService {
-  @override
-  Future<void> deleteChapterDownload({
-    required String novelId,
-    required String episodeId,
-  }) async {}
-
-  @override
-  Future<DownloadedNovelChapter> downloadChapter({
-    required String novelId,
-    required String episodeId,
-  }) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<NovelChapterContent?> getDownloadedChapterContent({
-    required String novelId,
-    required String episodeId,
-  }) async {
-    return null;
-  }
 }
 
 class _FakeNovelRepository implements NovelRepository {

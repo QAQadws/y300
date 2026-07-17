@@ -11,7 +11,7 @@ class UnifiedDetailChapterTile extends StatelessWidget {
     required this.downloadIconSize,
     required this.onTap,
     required this.onLongPress,
-    required this.onToggleDownload,
+    this.onToggleDownload,
   });
 
   final Key tileKey;
@@ -21,7 +21,7 @@ class UnifiedDetailChapterTile extends StatelessWidget {
   final double downloadIconSize;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
-  final VoidCallback onToggleDownload;
+  final VoidCallback? onToggleDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -94,26 +94,28 @@ class UnifiedDetailChapterTile extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              IconButton(
-                tooltip: chapter.isDownloaded ? '已下载，点击删除下载' : '下载该章节',
-                iconSize: downloadIconSize,
-                onPressed: isDownloading ? null : onToggleDownload,
-                icon: isDownloading
-                    ? SizedBox(
-                        width: downloadIconSize,
-                        height: downloadIconSize,
-                        child: const CircularProgressIndicator(
-                          strokeWidth: 2.2,
+              if (onToggleDownload != null) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: chapter.isDownloaded ? '已下载，点击删除下载' : '下载该章节',
+                  iconSize: downloadIconSize,
+                  onPressed: isDownloading ? null : onToggleDownload,
+                  icon: isDownloading
+                      ? SizedBox(
+                          width: downloadIconSize,
+                          height: downloadIconSize,
+                          child: const CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                          ),
+                        )
+                      : Icon(
+                          chapter.isDownloaded
+                              ? Icons.check_circle_outline
+                              : Icons.arrow_circle_down,
+                          size: downloadIconSize,
                         ),
-                      )
-                    : Icon(
-                        chapter.isDownloaded
-                            ? Icons.check_circle_outline
-                            : Icons.arrow_circle_down,
-                        size: downloadIconSize,
-                      ),
-              ),
+                ),
+              ],
             ],
           ),
         ),

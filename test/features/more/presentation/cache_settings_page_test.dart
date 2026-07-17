@@ -666,14 +666,6 @@ class _FakeDownloadStorageService implements DownloadStorageService {
   }
 
   @override
-  Future<io.Directory> prepareNovelDirectory({
-    required String novelId,
-    required String title,
-  }) {
-    throw UnimplementedError();
-  }
-
-  @override
   Future<bool> deleteComicDownloads({required String workId}) async => false;
 
   @override
@@ -708,14 +700,6 @@ class _FakeDownloadStorageService implements DownloadStorageService {
     return null;
   }
 
-  @override
-  Future<DownloadedNovelChapter?> findDownloadedNovelChapter({
-    required String novelId,
-    required String title,
-    required String episodeId,
-  }) async {
-    return null;
-  }
 }
 
 class _FakeImageCacheService implements ImageCacheService {

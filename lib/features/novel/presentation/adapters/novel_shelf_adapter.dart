@@ -210,12 +210,15 @@ class NovelShelfAdapter
     required LibraryShelfSortOption sortOption,
     required String keyword,
   }) async {
+    final effectiveFilters = filters.copyWith(
+      downloaded: TriStateFilterValue.ignore,
+    );
     final snapshotRepository = _repository is NovelShelfSnapshotRepository
         ? _repository as NovelShelfSnapshotRepository
         : null;
     if (snapshotRepository != null) {
       return snapshotRepository.queryShelfSnapshot(
-        filters: filters,
+        filters: effectiveFilters,
         sortOption: sortOption,
         keyword: keyword,
       );
@@ -224,7 +227,7 @@ class NovelShelfAdapter
     final categories = await loadCategories();
     final itemsByCategory = await queryItems(
       categories: categories,
-      filters: filters,
+      filters: effectiveFilters,
       sortOption: sortOption,
       keyword: keyword,
     );
@@ -446,10 +449,6 @@ class NovelShelfAdapter
       moduleKey: LibraryModuleKey.novel,
       workId: source.novelId,
     );
-    final downloaded = await _stateRepository.countDownloadedEpisodes(
-      moduleKey: LibraryModuleKey.novel,
-      workId: source.novelId,
-    );
     final hasTags = await _stateRepository.hasAnyTag(
       moduleKey: LibraryModuleKey.novel,
       workId: source.novelId,
@@ -472,7 +471,6 @@ class NovelShelfAdapter
       addedAt: source.updatedAt,
       workUpdatedAt: source.updatedAt,
       hasTags: hasTags,
-      isDownloaded: downloaded > 0,
     );
   }
 

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
-import 'package:y300/features/novel/data/services/novel_reader_cache_service.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
@@ -50,13 +49,8 @@ class NovelReaderViewState {
     this.searchResults = const <NovelReaderSearchResult>[],
     this.currentSearchIndex = -1,
     this.searchKeyword = '',
-    this.downloadedEpisodeIds = const <String>{},
     this.transition,
     this.isHydratingSupplemental = false,
-    this.isCachingEpisodes = false,
-    this.cacheCurrent = 0,
-    this.cacheTotal = 0,
-    this.cacheError,
   });
 
   final NovelItem? novel;
@@ -74,13 +68,8 @@ class NovelReaderViewState {
   final List<NovelReaderSearchResult> searchResults;
   final int currentSearchIndex;
   final String searchKeyword;
-  final Set<String> downloadedEpisodeIds;
   final NovelReaderTransitionState? transition;
   final bool isHydratingSupplemental;
-  final bool isCachingEpisodes;
-  final int cacheCurrent;
-  final int cacheTotal;
-  final String? cacheError;
 
   int get currentEpisodeIndex {
     return episodes.indexWhere(
@@ -107,10 +96,6 @@ class NovelReaderViewState {
   bool get hasPreviousEpisode => previousEpisode != null;
 
   bool get hasNextEpisode => nextEpisode != null;
-
-  bool get isCurrentEpisodeDownloaded {
-    return downloadedEpisodeIds.contains(currentEpisode.episodeId);
-  }
 
   bool get hasCurrentEpisodeBookmark {
     return currentEpisodeBookmarks.any(
@@ -149,15 +134,9 @@ class NovelReaderViewState {
     List<NovelReaderSearchResult>? searchResults,
     int? currentSearchIndex,
     String? searchKeyword,
-    Set<String>? downloadedEpisodeIds,
     NovelReaderTransitionState? transition,
     bool clearTransition = false,
     bool? isHydratingSupplemental,
-    bool? isCachingEpisodes,
-    int? cacheCurrent,
-    int? cacheTotal,
-    String? cacheError,
-    bool clearCacheError = false,
   }) {
     return NovelReaderViewState(
       novel: clearNovel ? null : (novel ?? this.novel),
@@ -178,14 +157,9 @@ class NovelReaderViewState {
       searchResults: searchResults ?? this.searchResults,
       currentSearchIndex: currentSearchIndex ?? this.currentSearchIndex,
       searchKeyword: searchKeyword ?? this.searchKeyword,
-      downloadedEpisodeIds: downloadedEpisodeIds ?? this.downloadedEpisodeIds,
       transition: clearTransition ? null : (transition ?? this.transition),
       isHydratingSupplemental:
           isHydratingSupplemental ?? this.isHydratingSupplemental,
-      isCachingEpisodes: isCachingEpisodes ?? this.isCachingEpisodes,
-      cacheCurrent: cacheCurrent ?? this.cacheCurrent,
-      cacheTotal: cacheTotal ?? this.cacheTotal,
-      cacheError: clearCacheError ? null : (cacheError ?? this.cacheError),
     );
   }
 }
@@ -552,37 +526,6 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     await _reloadBookmarks(repository);
   }
 
-  Future<NovelReaderCacheResult> cacheCurrentEpisode() {
-    return _runCacheOperation(
-      (service, current) => service.cacheCurrentEpisode(
-        novelId: _args.novelId,
-        episodeId: current.currentEpisode.episodeId,
-        onProgress: _updateCacheProgress,
-      ),
-    );
-  }
-
-  Future<NovelReaderCacheResult> cacheFollowingEpisodes({int count = 5}) {
-    return _runCacheOperation(
-      (service, current) => service.cacheFollowingEpisodes(
-        novelId: _args.novelId,
-        episodeId: current.currentEpisode.episodeId,
-        count: count,
-        onProgress: _updateCacheProgress,
-      ),
-    );
-  }
-
-  Future<NovelReaderCacheResult> deleteCurrentEpisodeCache() {
-    return _runCacheOperation(
-      (service, current) => service.deleteCurrentEpisodeCache(
-        novelId: _args.novelId,
-        episodeId: current.currentEpisode.episodeId,
-        onProgress: _updateCacheProgress,
-      ),
-    );
-  }
-
   Future<bool> updateWork() async {
     final current = state.value;
     if (current == null) {
@@ -733,25 +676,6 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     }
 
     try {
-      final downloadedEpisodeIds = await hydrationService
-          .loadDownloadedEpisodeIds(
-            novelId: context.novelId,
-            episodeIds: critical.episodes.map((episode) => episode.episodeId),
-          );
-      _mergeSupplementalDownloadedEpisodes(
-        sessionToken: sessionToken,
-        episodeId: critical.currentEpisode.episodeId,
-        downloadedEpisodeIds: downloadedEpisodeIds,
-      );
-    } catch (_) {}
-    if (!_isSupplementalRequestCurrent(
-      sessionToken: sessionToken,
-      episodeId: critical.currentEpisode.episodeId,
-    )) {
-      return;
-    }
-
-    try {
       final novel = await hydrationService.loadNovel(novelId: context.novelId);
       _mergeSupplementalNovel(
         sessionToken: sessionToken,
@@ -827,28 +751,6 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     );
   }
 
-  void _mergeSupplementalDownloadedEpisodes({
-    required int sessionToken,
-    required String episodeId,
-    required Set<String> downloadedEpisodeIds,
-  }) {
-    if (!ref.mounted) {
-      return;
-    }
-    final current = state.value;
-    if (current == null ||
-        !_canApplySupplemental(
-          current: current,
-          sessionToken: sessionToken,
-          episodeId: episodeId,
-        )) {
-      return;
-    }
-    state = AsyncData(
-      current.copyWith(downloadedEpisodeIds: downloadedEpisodeIds),
-    );
-  }
-
   void _mergeSupplementalNovel({
     required int sessionToken,
     required String episodeId,
@@ -907,7 +809,6 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       searchResults: const <NovelReaderSearchResult>[],
       currentSearchIndex: -1,
       searchKeyword: '',
-      downloadedEpisodeIds: const <String>{},
       transition: null,
       isHydratingSupplemental: true,
     );
@@ -1065,73 +966,5 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       return '当前位置';
     }
     return plainText.length <= 36 ? plainText : plainText.substring(0, 36);
-  }
-
-  Future<NovelReaderCacheResult> _runCacheOperation(
-    Future<NovelReaderCacheResult> Function(
-      NovelReaderCacheService service,
-      NovelReaderViewState current,
-    )
-    operation,
-  ) async {
-    final current = state.value;
-    if (current == null || current.isCachingEpisodes) {
-      return const NovelReaderCacheResult.empty();
-    }
-    state = AsyncData(
-      current.copyWith(
-        isCachingEpisodes: true,
-        cacheCurrent: 0,
-        cacheTotal: 0,
-        clearCacheError: true,
-      ),
-    );
-    final service = ref.read(novelReaderCacheServiceProvider);
-    late final NovelReaderCacheResult result;
-    try {
-      result = await operation(service, current);
-    } catch (error) {
-      result = NovelReaderCacheResult(
-        totalCount: 1,
-        successCount: 0,
-        failureCount: 1,
-        errorMessage: error.toString(),
-      );
-    }
-    final latest = state.value ?? current;
-    var downloadedEpisodeIds = latest.downloadedEpisodeIds;
-    try {
-      downloadedEpisodeIds = await service.getDownloadedEpisodeIds(
-        novelId: _args.novelId,
-        episodeIds: latest.episodes.map((episode) => episode.episodeId),
-      );
-    } catch (_) {}
-    state = AsyncData(
-      latest.copyWith(
-        downloadedEpisodeIds: downloadedEpisodeIds,
-        isCachingEpisodes: false,
-        cacheCurrent: result.totalCount,
-        cacheTotal: result.totalCount,
-        cacheError: result.hasFailures
-            ? result.errorMessage ?? '部分章节缓存失败'
-            : null,
-        clearCacheError: !result.hasFailures,
-      ),
-    );
-    return result;
-  }
-
-  void _updateCacheProgress(int current, int total) {
-    final viewState = state.value;
-    if (viewState == null) {
-      return;
-    }
-    state = AsyncData(
-      viewState.copyWith(
-        isCachingEpisodes: true,
-        cacheCurrent: current,
-        cacheTotal: total,
-      ),
-    );
   }
 }

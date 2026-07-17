@@ -13,7 +13,6 @@ import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
-import 'package:y300/features/novel/data/services/novel_reader_cache_service.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 import 'package:y300/features/novel/presentation/services/novel_forum_html_render_theme_factory.dart';
@@ -337,16 +336,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         icon: Icons.tune,
         label: '显示',
         onPressed: () => _showDisplaySettingsSheet(viewState, controller),
-      ),
-      ReaderToolbarAction(
-        id: 'cache',
-        icon: viewState.isCurrentEpisodeDownloaded
-            ? Icons.download_done
-            : Icons.download_for_offline_outlined,
-        label: '缓存',
-        onPressed: () {
-          unawaited(_showCacheSheet(viewState, controller));
-        },
       ),
       ReaderToolbarAction(
         id: 'mode',
@@ -745,93 +734,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           break;
       }
     });
-  }
-
-  Future<void> _showCacheSheet(
-    NovelReaderViewState viewState,
-    NovelReaderController controller,
-  ) async {
-    _overlayController.hideMenu();
-    await _runWithReaderSemanticsSuspended(() async {
-      await showModalBottomSheet<void>(
-        context: context,
-        showDragHandle: true,
-        builder: (context) => Consumer(
-          builder: (context, ref, _) {
-            final latest =
-                ref.watch(novelReaderControllerProvider(_args)).value ??
-                viewState;
-            return NovelReaderCacheSheet(
-              viewState: latest,
-              onCacheCurrent: () => unawaited(
-                _handleCacheAction(_CacheSheetAction.cacheCurrent, controller),
-              ),
-              onCacheFollowing: () => unawaited(
-                _handleCacheAction(
-                  _CacheSheetAction.cacheFollowing,
-                  controller,
-                ),
-              ),
-              onDeleteCurrent: () => unawaited(
-                _handleCacheAction(_CacheSheetAction.deleteCurrent, controller),
-              ),
-            );
-          },
-        ),
-      );
-    });
-  }
-
-  Future<void> _handleCacheAction(
-    _CacheSheetAction action,
-    NovelReaderController controller,
-  ) async {
-    switch (action) {
-      case _CacheSheetAction.cacheCurrent:
-        final result = await controller.cacheCurrentEpisode();
-        if (!mounted) {
-          return;
-        }
-        _showReaderSnackBar(_cacheResultMessage(result, success: '本章已缓存'));
-        break;
-      case _CacheSheetAction.cacheFollowing:
-        final result = await controller.cacheFollowingEpisodes();
-        if (!mounted) {
-          return;
-        }
-        _showReaderSnackBar(
-          _cacheResultMessage(
-            result,
-            success: result.totalCount == 0
-                ? '没有后续章节'
-                : '已缓存 ${result.successCount}/${result.totalCount} 章',
-          ),
-        );
-        break;
-      case _CacheSheetAction.deleteCurrent:
-        final result = await controller.deleteCurrentEpisodeCache();
-        if (!mounted) {
-          return;
-        }
-        _showReaderSnackBar(_cacheResultMessage(result, success: '已删除本章缓存'));
-        break;
-    }
-  }
-
-  String _cacheResultMessage(
-    NovelReaderCacheResult result, {
-    required String success,
-  }) {
-    if (result.totalCount == 0) {
-      return success;
-    }
-    if (result.failureCount == 0 && result.successCount > 0) {
-      return success;
-    }
-    if (result.successCount > 0) {
-      return '已完成 ${result.successCount} 章，失败 ${result.failureCount} 章';
-    }
-    return result.errorMessage ?? '缓存操作失败';
   }
 
   Future<void> _showDisplaySettingsSheet(
@@ -1256,7 +1158,6 @@ class _NovelReaderChapterListSheetState
                           readingProgressEpisodeId:
                               viewState.readingProgress?.episodeId,
                           bookmarkEpisodeIds: viewState.bookmarkEpisodeIds,
-                          downloadedEpisodeIds: viewState.downloadedEpisodeIds,
                         );
                       },
                     ),
@@ -1309,14 +1210,12 @@ class _ChapterListTile extends StatelessWidget {
     required this.currentEpisodeId,
     required this.readingProgressEpisodeId,
     required this.bookmarkEpisodeIds,
-    required this.downloadedEpisodeIds,
   });
 
   final NovelEpisodeItem episode;
   final String currentEpisodeId;
   final String? readingProgressEpisodeId;
   final Set<String> bookmarkEpisodeIds;
-  final Set<String> downloadedEpisodeIds;
 
   @override
   Widget build(BuildContext context) {
@@ -1324,7 +1223,6 @@ class _ChapterListTile extends StatelessWidget {
     final isLastRead =
         !isCurrent && episode.episodeId == readingProgressEpisodeId;
     final isBookmarked = bookmarkEpisodeIds.contains(episode.episodeId);
-    final isDownloaded = downloadedEpisodeIds.contains(episode.episodeId);
     return ListTile(
       key: Key('novel-reader-chapter-${episode.episodeId}'),
       selected: isCurrent,
@@ -1354,11 +1252,6 @@ class _ChapterListTile extends StatelessWidget {
             Text(
               '书签',
               key: Key('novel-reader-chapter-bookmark-${episode.episodeId}'),
-            ),
-          if (isDownloaded)
-            Text(
-              '已缓存',
-              key: Key('novel-reader-chapter-downloaded-${episode.episodeId}'),
             ),
           if (isCurrent)
             const Text('当前')
@@ -1469,109 +1362,6 @@ class NovelReaderErrorView extends StatelessWidget {
     );
   }
 }
-
-class NovelReaderCacheSheet extends StatelessWidget {
-  const NovelReaderCacheSheet({
-    super.key,
-    required this.viewState,
-    required this.onCacheCurrent,
-    required this.onCacheFollowing,
-    required this.onDeleteCurrent,
-  });
-
-  final NovelReaderViewState viewState;
-  final VoidCallback onCacheCurrent;
-  final VoidCallback onCacheFollowing;
-  final VoidCallback onDeleteCurrent;
-
-  @override
-  Widget build(BuildContext context) {
-    final isCaching = viewState.isCachingEpisodes;
-    final progressText = viewState.cacheTotal <= 0
-        ? '准备缓存'
-        : '第 ${viewState.cacheCurrent}/${viewState.cacheTotal} 章';
-    return SafeArea(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * 0.72,
-        ),
-        child: SingleChildScrollView(
-          key: const Key('novel-reader-cache-sheet'),
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ReaderSheetTitle(title: '章节缓存'),
-              ListTile(
-                key: const Key('novel-reader-cache-status'),
-                leading: Icon(
-                  viewState.isCurrentEpisodeDownloaded
-                      ? Icons.download_done
-                      : Icons.download_for_offline_outlined,
-                ),
-                title: Text(
-                  viewState.isCurrentEpisodeDownloaded ? '本章已缓存' : '本章未缓存',
-                ),
-                subtitle: Text(viewState.currentEpisode.episodeTitle),
-              ),
-              if (isCaching) ...[
-                const SizedBox(height: 8),
-                LinearProgressIndicator(
-                  key: const Key('novel-reader-cache-progress'),
-                  value: viewState.cacheTotal <= 0
-                      ? null
-                      : (viewState.cacheCurrent / viewState.cacheTotal)
-                            .clamp(0.0, 1.0)
-                            .toDouble(),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  progressText,
-                  key: const Key('novel-reader-cache-progress-label'),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-              if (viewState.cacheError != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  viewState.cacheError!,
-                  key: const Key('novel-reader-cache-error'),
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ],
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                key: const Key('novel-reader-cache-current'),
-                onPressed: isCaching ? null : onCacheCurrent,
-                icon: const Icon(Icons.download_for_offline),
-                label: const Text('缓存本章'),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                key: const Key('novel-reader-cache-following'),
-                onPressed: isCaching ? null : onCacheFollowing,
-                icon: const Icon(Icons.playlist_add_check),
-                label: const Text('缓存后续 5 章'),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                key: const Key('novel-reader-cache-delete-current'),
-                onPressed: isCaching || !viewState.isCurrentEpisodeDownloaded
-                    ? null
-                    : onDeleteCurrent,
-                icon: const Icon(Icons.delete_outline),
-                label: const Text('删除本章缓存'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-enum _CacheSheetAction { cacheCurrent, cacheFollowing, deleteCurrent }
 
 class NovelReaderSearchSheet extends StatefulWidget {
   const NovelReaderSearchSheet({

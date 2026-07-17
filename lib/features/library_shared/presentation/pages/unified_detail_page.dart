@@ -90,6 +90,15 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   final RouteContentPresentationGuard _contentPresentationGuard =
       RouteContentPresentationGuard();
 
+  DetailChapterDownloadAdapter? get _downloadAdapter {
+    final adapter = widget.adapter;
+    return adapter is DetailChapterDownloadAdapter
+        ? adapter as DetailChapterDownloadAdapter
+        : null;
+  }
+
+  bool get _supportsChapterDownloads => _downloadAdapter != null;
+
   @override
   void initState() {
     super.initState();
@@ -244,13 +253,14 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                 ),
               ),
               actions: [
-                PopupMenuButton<String>(
-                  key: const Key('unified-detail-appbar-download'),
-                  tooltip: '下载',
-                  icon: const Icon(Icons.file_download),
-                  onSelected: _handleDownloadMenuAction,
-                  itemBuilder: _downloadMenuItems,
-                ),
+                if (_supportsChapterDownloads)
+                  PopupMenuButton<String>(
+                    key: const Key('unified-detail-appbar-download'),
+                    tooltip: '下载',
+                    icon: const Icon(Icons.file_download),
+                    onSelected: _handleDownloadMenuAction,
+                    itemBuilder: _downloadMenuItems,
+                  ),
                 IconButton(
                   key: const Key('unified-detail-appbar-filter'),
                   tooltip: '筛选与排序',
@@ -395,7 +405,9 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         downloadIconSize: _chapterDownloadIconSize,
                         onTap: () => _openChapter(chapter),
                         onLongPress: () => _showChapterActions(chapter),
-                        onToggleDownload: () => _toggleChapterDownload(chapter),
+                        onToggleDownload: _supportsChapterDownloads
+                            ? () => _toggleChapterDownload(chapter)
+                            : null,
                       );
                     },
                   ),
@@ -506,14 +518,18 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   }
 
   Future<void> _handleDownloadMenuAction(String value) async {
+    final downloadAdapter = _downloadAdapter;
+    if (downloadAdapter == null) {
+      return;
+    }
     try {
       if (value == 'download-unread') {
-        await widget.adapter.downloadUnread(workId: widget.workId);
+        await downloadAdapter.downloadUnread(workId: widget.workId);
         _showDetailSnackBar('已开始下载未读章节');
         return;
       }
       if (value == 'download-all') {
-        await widget.adapter.downloadAll(workId: widget.workId);
+        await downloadAdapter.downloadAll(workId: widget.workId);
         _showDetailSnackBar('已开始下载全部章节');
       }
     } catch (error) {
@@ -528,7 +544,8 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       return '全部章节';
     }
     final labels = <String>[
-      ?_filterSummaryPart('已下载', filters.downloaded),
+      if (_supportsChapterDownloads)
+        ?_filterSummaryPart('已下载', filters.downloaded),
       ?_filterSummaryPart('未读', filters.unread),
       ?_filterSummaryPart('已加书签', filters.bookmarked),
     ];
@@ -545,6 +562,12 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
 
   Future<void> _showChapterFilterSheet() async {
     var selectedFilters = _controller.state.filters;
+    if (!_supportsChapterDownloads &&
+        selectedFilters.downloaded != TriStateFilterValue.ignore) {
+      selectedFilters = selectedFilters.copyWith(
+        downloaded: TriStateFilterValue.ignore,
+      );
+    }
     var selectedDirection = _controller.state.chapterSortOption.direction;
 
     await showModalBottomSheet<void>(
@@ -565,18 +588,19 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         const UnifiedDetailSheetSectionHeader(title: '筛选'),
-                        UnifiedDetailTriStateLine(
-                          lineKey: const Key(
-                            'unified-detail-filter-downloaded',
-                          ),
-                          label: '已下载',
-                          value: selectedFilters.downloaded,
-                          onChanged: (v) => setSheetState(
-                            () => selectedFilters = selectedFilters.copyWith(
-                              downloaded: v,
+                        if (_supportsChapterDownloads)
+                          UnifiedDetailTriStateLine(
+                            lineKey: const Key(
+                              'unified-detail-filter-downloaded',
+                            ),
+                            label: '已下载',
+                            value: selectedFilters.downloaded,
+                            onChanged: (v) => setSheetState(
+                              () => selectedFilters = selectedFilters.copyWith(
+                                downloaded: v,
+                              ),
                             ),
                           ),
-                        ),
                         UnifiedDetailTriStateLine(
                           lineKey: const Key('unified-detail-filter-unread'),
                           label: '未读',
@@ -705,20 +729,21 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                     setState(() {});
                   },
                 ),
-                ListTile(
-                  leading: const Icon(Icons.delete_outline),
-                  title: const Text('删除该章节下载'),
-                  onTap: () async {
-                    await _controller.deleteChapterDownload(
-                      episodeId: chapter.episodeId,
-                    );
-                    if (!mounted || !sheetContext.mounted) {
-                      return;
-                    }
-                    Navigator.of(sheetContext).pop();
-                    setState(() {});
-                  },
-                ),
+                if (_supportsChapterDownloads && chapter.isDownloaded)
+                  ListTile(
+                    leading: const Icon(Icons.delete_outline),
+                    title: const Text('删除该章节下载'),
+                    onTap: () async {
+                      await _controller.deleteChapterDownload(
+                        episodeId: chapter.episodeId,
+                      );
+                      if (!mounted || !sheetContext.mounted) {
+                        return;
+                      }
+                      Navigator.of(sheetContext).pop();
+                      setState(() {});
+                    },
+                  ),
               ],
             ),
           ),

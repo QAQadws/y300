@@ -10,7 +10,6 @@ import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
 import 'package:y300/features/library_shared/domain/services/library_source_id_comparator.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
-import 'package:y300/features/novel/data/services/novel_download_service.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
@@ -21,21 +20,18 @@ class NovelDetailAdapter
     implements DetailModuleAdapter, DetailMetadataEditor, DetailCoverEditor {
   NovelDetailAdapter(
     this._repository, {
-    NovelDownloadService? downloadService,
     ImageCacheService? imageCacheService,
     ReadingStateBatchWriter? readingStateBatchWriter,
     required LibraryStateRepository stateRepository,
     NovelSourceStateRepository? sourceStateRepository,
     NovelChapterUpdateService Function()? chapterUpdateServiceFactory,
-  }) : _downloadService = downloadService,
-       _coverCacheService = LibraryCoverCacheService(imageCacheService),
+  }) : _coverCacheService = LibraryCoverCacheService(imageCacheService),
        _readingStateBatchWriter = readingStateBatchWriter,
        _stateRepository = stateRepository,
        _sourceStateRepository = sourceStateRepository,
        _chapterUpdateServiceFactory = chapterUpdateServiceFactory;
 
   final NovelRepository _repository;
-  final NovelDownloadService? _downloadService;
   final LibraryCoverCacheService _coverCacheService;
   final ReadingStateBatchWriter? _readingStateBatchWriter;
   final LibraryStateRepository _stateRepository;
@@ -141,7 +137,6 @@ class NovelDetailAdapter
           sourcePid: item.sourcePid,
           publishTimeText: item.datelineText,
           isRead: isRead,
-          isDownloaded: state?.isDownloaded ?? false,
           isBookmarked: state?.isBookmarked ?? false,
           progressInfo: _progressInfoForEpisode(
             episodeId: item.episodeId,
@@ -199,60 +194,6 @@ class NovelDetailAdapter
   }
 
   @override
-  Future<void> deleteChapterDownload({
-    required String workId,
-    required String episodeId,
-  }) async {
-    await _downloadService?.deleteChapterDownload(
-      novelId: workId,
-      episodeId: episodeId,
-    );
-    await _stateRepository.upsertEpisodeState(
-      moduleKey: LibraryModuleKey.novel,
-      episodeId: episodeId,
-      workId: workId,
-      isDownloaded: false,
-      downloadedAt: null,
-    );
-  }
-
-  @override
-  Future<void> downloadAll({required String workId}) async {
-    final episodes = await _repository.getEpisodes(
-      novelId: workId,
-      descending: false,
-    );
-    for (final episode in episodes) {
-      await markChapterDownloaded(
-        workId: workId,
-        episodeId: episode.episodeId,
-        isDownloaded: true,
-      );
-    }
-  }
-
-  @override
-  Future<void> downloadUnread({required String workId}) async {
-    final episodes = await _repository.getEpisodes(
-      novelId: workId,
-      descending: false,
-    );
-    for (final episode in episodes) {
-      final state = await _stateRepository.getEpisodeState(
-        moduleKey: LibraryModuleKey.novel,
-        episodeId: episode.episodeId,
-      );
-      if (!(state?.isRead ?? false)) {
-        await markChapterDownloaded(
-          workId: workId,
-          episodeId: episode.episodeId,
-          isDownloaded: true,
-        );
-      }
-    }
-  }
-
-  @override
   Future<ReaderRouteTarget?> getReaderRouteTarget({
     required String workId,
     required bool preferContinue,
@@ -298,27 +239,6 @@ class NovelDetailAdapter
       episodeId: episodeId,
       workId: workId,
       isBookmarked: isBookmarked,
-    );
-  }
-
-  @override
-  Future<void> markChapterDownloaded({
-    required String workId,
-    required String episodeId,
-    required bool isDownloaded,
-  }) async {
-    if (isDownloaded) {
-      await _downloadService?.downloadChapter(
-        novelId: workId,
-        episodeId: episodeId,
-      );
-    }
-    await _stateRepository.upsertEpisodeState(
-      moduleKey: LibraryModuleKey.novel,
-      episodeId: episodeId,
-      workId: workId,
-      isDownloaded: isDownloaded,
-      downloadedAt: isDownloaded ? DateTime.now() : null,
     );
   }
 
@@ -507,9 +427,6 @@ class NovelDetailAdapter
   ) {
     return source
         .where((chapter) {
-          if (!_matchTriState(filters.downloaded, chapter.isDownloaded)) {
-            return false;
-          }
           if (!_matchTriState(filters.unread, !chapter.isRead)) {
             return false;
           }

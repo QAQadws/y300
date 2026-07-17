@@ -390,7 +390,7 @@ void main() {
       },
     );
 
-    test('queryShelfSnapshot aggregates episode state and tags', () async {
+    test('queryShelfSnapshot ignores legacy novel download state', () async {
       await repository.upsertNovelBySeed(
         seed: const NovelRefreshSeed(fid: '49', tid: '200'),
       );
@@ -429,7 +429,7 @@ void main() {
       expect(item.unreadCount, 1);
       expect(item.readChapterCount, 1);
       expect(item.totalChapterCount, greaterThanOrEqualTo(episodes.length));
-      expect(item.isDownloaded, isTrue);
+      expect(item.isDownloaded, isFalse);
       expect(item.hasTags, isTrue);
     });
 

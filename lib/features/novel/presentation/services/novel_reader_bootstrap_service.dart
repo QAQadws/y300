@@ -1,5 +1,4 @@
 import 'package:y300/features/novel/data/models/novel_models.dart';
-import 'package:y300/features/novel/data/services/novel_download_service.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
@@ -53,17 +52,14 @@ class DefaultNovelReaderBootstrapService
     implements NovelReaderBootstrapService {
   DefaultNovelReaderBootstrapService({
     required NovelRepository repository,
-    required NovelDownloadService downloadService,
     required NovelReaderDocumentBuildService documentBuildService,
     NovelReaderProgressPolicy progressPolicy =
         const NovelReaderProgressPolicy(),
   }) : _repository = repository,
-       _downloadService = downloadService,
        _documentBuildService = documentBuildService,
        _progressPolicy = progressPolicy;
 
   final NovelRepository _repository;
-  final NovelDownloadService _downloadService;
   final NovelReaderDocumentBuildService _documentBuildService;
   final NovelReaderProgressPolicy _progressPolicy;
 
@@ -83,14 +79,9 @@ class DefaultNovelReaderBootstrapService
       orElse: () => episodes.first,
     );
 
-    final content =
-        await _downloadService.getDownloadedChapterContent(
-          novelId: context.novelId,
-          episodeId: currentEpisode.episodeId,
-        ) ??
-        await _repository.getChapterContent(
-          episodeId: currentEpisode.episodeId,
-        );
+    final content = await _repository.getChapterContent(
+      episodeId: currentEpisode.episodeId,
+    );
     if (content == null) {
       throw StateError('章节内容不存在');
     }

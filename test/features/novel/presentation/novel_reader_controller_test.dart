@@ -8,7 +8,6 @@ import 'package:y300/features/library_shared/data/repositories/library_state_rep
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
-import 'package:y300/features/novel/data/services/novel_download_service.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
@@ -23,7 +22,6 @@ import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_progress_committer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
-import 'package:y300/features/storage/domain/download_storage_models.dart';
 
 void main() {
   test('NovelReaderViewState derives episode boundaries', () {
@@ -426,15 +424,7 @@ void main() {
       var hydrated = container.read(provider).value!;
       expect(hydrated.bookmarks, isNotEmpty);
       expect(hydrated.currentEpisodeBookmarks, isNotEmpty);
-      expect(hydrated.downloadedEpisodeIds, isEmpty);
       expect(hydrated.novel, isNull);
-
-      hydrationService.completeInitialDownloadedEpisodeIds(const <String>{
-        'novel:49:100:5001',
-      });
-      await Future<void>.delayed(Duration.zero);
-      hydrated = container.read(provider).value!;
-      expect(hydrated.downloadedEpisodeIds, contains('novel:49:100:5001'));
 
       hydrationService.completeInitialNovel(_supplementalNovel());
       await Future<void>.delayed(Duration.zero);
@@ -442,7 +432,6 @@ void main() {
       hydrated = container.read(provider).value!;
       expect(hydrated.isHydratingSupplemental, isFalse);
       expect(hydrated.novel?.title, '测试小说');
-      expect(hydrated.downloadedEpisodeIds, contains('novel:49:100:5001'));
     },
   );
 
@@ -473,9 +462,6 @@ void main() {
       hydrationService.completeInitialBookmarks(
         _supplementalBookmarks(episodeId: 'novel:49:100:5001'),
       );
-      hydrationService.completeInitialDownloadedEpisodeIds(const <String>{
-        'novel:49:100:5001',
-      });
       hydrationService.completeInitialNovel(_supplementalNovel());
       await Future<void>.delayed(Duration.zero);
 
@@ -587,9 +573,6 @@ void main() {
     hydrationService.completeInitialBookmarks(
       _supplementalBookmarks(episodeId: 'novel:49:100:5001'),
     );
-    hydrationService.completeInitialDownloadedEpisodeIds(const <String>{
-      'novel:49:100:5001',
-    });
     hydrationService.completeInitialNovel(
       _supplementalNovel(novelTitle: '旧章节小说'),
     );
@@ -598,7 +581,6 @@ void main() {
     final state = container.read(provider).value!;
     expect(state.currentEpisode.episodeId, 'novel:49:100:5002');
     expect(state.novel, isNull);
-    expect(state.downloadedEpisodeIds, isEmpty);
   });
 
   test('supplemental phase failure does not block later phases', () async {
@@ -624,15 +606,11 @@ void main() {
     addTearDown(subscription.close);
 
     await container.read(provider.future);
-    hydrationService.completeInitialDownloadedEpisodeIds(const <String>{
-      'novel:49:100:5001',
-    });
     hydrationService.completeInitialNovel(_supplementalNovel());
     await Future<void>.delayed(Duration.zero);
 
     final state = container.read(provider).value!;
     expect(state.bookmarks, isEmpty);
-    expect(state.downloadedEpisodeIds, contains('novel:49:100:5001'));
     expect(state.novel?.title, '测试小说');
     expect(state.isHydratingSupplemental, isFalse);
   });
@@ -737,77 +715,6 @@ void main() {
     state = container.read(provider).value!;
     expect(state.currentEpisodeBookmarks.length, 1);
   });
-
-  test('cacheCurrentEpisode updates downloaded state', () async {
-    final repository = _ControllerNovelRepository();
-    final downloadService = _RecordingNovelDownloadService();
-    final stateRepository = _MemoryLibraryStateRepository();
-    final container = _buildContainer(
-      repository: repository,
-      downloadService: downloadService,
-      stateRepository: stateRepository,
-    );
-    addTearDown(container.dispose);
-    const args = NovelReaderArgs(
-      novelId: 'novel:49:100',
-      episodeId: 'novel:49:100:5001',
-    );
-    final provider = novelReaderControllerProvider(args);
-    final subscription = _keepReaderAlive(container, args);
-    addTearDown(subscription.close);
-
-    final initial = await container.read(provider.future);
-    expect(initial.isHydratingSupplemental, isTrue);
-    expect(initial.isCurrentEpisodeDownloaded, isFalse);
-    final result = await container
-        .read(provider.notifier)
-        .cacheCurrentEpisode();
-    final state = container.read(provider).value!;
-
-    expect(result.successCount, 1);
-    expect(downloadService.downloadedEpisodeIds, <String>['novel:49:100:5001']);
-    expect(state.isCurrentEpisodeDownloaded, isTrue);
-    expect(state.isCachingEpisodes, isFalse);
-  });
-
-  test('deleteCurrentEpisodeCache clears downloaded state', () async {
-    final repository = _ControllerNovelRepository();
-    final downloadService = _RecordingNovelDownloadService();
-    final stateRepository = _MemoryLibraryStateRepository();
-    await stateRepository.upsertEpisodeState(
-      moduleKey: LibraryModuleKey.novel,
-      episodeId: 'novel:49:100:5001',
-      workId: 'novel:49:100',
-      isDownloaded: true,
-      downloadedAt: DateTime(2026, 6, 8),
-    );
-    final container = _buildContainer(
-      repository: repository,
-      downloadService: downloadService,
-      stateRepository: stateRepository,
-    );
-    addTearDown(container.dispose);
-    const args = NovelReaderArgs(
-      novelId: 'novel:49:100',
-      episodeId: 'novel:49:100:5001',
-    );
-    final provider = novelReaderControllerProvider(args);
-    final subscription = _keepReaderAlive(container, args);
-    addTearDown(subscription.close);
-
-    final initial = await container.read(provider.future);
-    expect(initial.isHydratingSupplemental, isTrue);
-    expect(initial.isCurrentEpisodeDownloaded, isFalse);
-
-    final result = await container
-        .read(provider.notifier)
-        .deleteCurrentEpisodeCache();
-    final state = container.read(provider).value!;
-
-    expect(result.successCount, 1);
-    expect(downloadService.deletedEpisodeIds, <String>['novel:49:100:5001']);
-    expect(state.isCurrentEpisodeDownloaded, isFalse);
-  });
 }
 
 ProviderSubscription<AsyncValue<NovelReaderViewState>> _keepReaderAlive(
@@ -822,7 +729,6 @@ ProviderSubscription<AsyncValue<NovelReaderViewState>> _keepReaderAlive(
 
 ProviderContainer _buildContainer({
   required _ControllerNovelRepository repository,
-  NovelDownloadService? downloadService,
   LibraryStateRepository? stateRepository,
   NovelReaderBootstrapService? bootstrapService,
   NovelReaderSupplementalHydrationService? supplementalHydrationService,
@@ -835,9 +741,6 @@ ProviderContainer _buildContainer({
       novelRepositoryProvider.overrideWithValue(repository),
       novelChapterUpdateServiceProvider.overrideWithValue(
         chapterUpdateService ?? _RecordingNovelChapterUpdateService(),
-      ),
-      novelDownloadServiceProvider.overrideWithValue(
-        downloadService ?? _NoopNovelDownloadService(),
       ),
       libraryStateRepositoryProvider.overrideWithValue(
         stateRepository ?? _MemoryLibraryStateRepository(),
@@ -906,64 +809,6 @@ NovelReaderViewState _viewState({
     ),
     currentOffset: 0,
   );
-}
-
-class _NoopNovelDownloadService implements NovelDownloadService {
-  @override
-  Future<void> deleteChapterDownload({
-    required String novelId,
-    required String episodeId,
-  }) async {}
-
-  @override
-  Future<DownloadedNovelChapter> downloadChapter({
-    required String novelId,
-    required String episodeId,
-  }) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<NovelChapterContent?> getDownloadedChapterContent({
-    required String novelId,
-    required String episodeId,
-  }) async {
-    return null;
-  }
-}
-
-class _RecordingNovelDownloadService implements NovelDownloadService {
-  final downloadedEpisodeIds = <String>[];
-  final deletedEpisodeIds = <String>[];
-
-  @override
-  Future<void> deleteChapterDownload({
-    required String novelId,
-    required String episodeId,
-  }) async {
-    deletedEpisodeIds.add(episodeId);
-  }
-
-  @override
-  Future<DownloadedNovelChapter> downloadChapter({
-    required String novelId,
-    required String episodeId,
-  }) async {
-    downloadedEpisodeIds.add(episodeId);
-    return DownloadedNovelChapter(
-      novelId: novelId,
-      episodeId: episodeId,
-      chapterPath: '/tmp/$episodeId.json',
-    );
-  }
-
-  @override
-  Future<NovelChapterContent?> getDownloadedChapterContent({
-    required String novelId,
-    required String episodeId,
-  }) async {
-    return null;
-  }
 }
 
 class _MemoryLibraryStateRepository implements LibraryStateRepository {
@@ -1514,22 +1359,12 @@ class _ControlledNovelReaderSupplementalHydrationService
     implements NovelReaderSupplementalHydrationService {
   final _HydrationSequence<List<NovelReaderBookmark>> _bookmarkSequence =
       _HydrationSequence<List<NovelReaderBookmark>>();
-  final _HydrationSequence<Set<String>> _downloadedEpisodeIdsSequence =
-      _HydrationSequence<Set<String>>();
   final _HydrationSequence<NovelItem?> _novelSequence =
       _HydrationSequence<NovelItem?>();
 
   @override
   Future<List<NovelReaderBookmark>> loadBookmarks({required String novelId}) {
     return _bookmarkSequence.take();
-  }
-
-  @override
-  Future<Set<String>> loadDownloadedEpisodeIds({
-    required String novelId,
-    required Iterable<String> episodeIds,
-  }) {
-    return _downloadedEpisodeIdsSequence.take();
   }
 
   @override
@@ -1543,10 +1378,6 @@ class _ControlledNovelReaderSupplementalHydrationService
 
   void failInitialBookmarks(Object error) {
     _bookmarkSequence.completeErrorAt(0, error);
-  }
-
-  void completeInitialDownloadedEpisodeIds(Set<String> value) {
-    _downloadedEpisodeIdsSequence.completeAt(0, value);
   }
 
   void completeInitialNovel(NovelItem? value) {

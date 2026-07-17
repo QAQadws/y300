@@ -290,8 +290,7 @@ class LocalNovelRepository
           work_id,
           COUNT(*) AS state_count,
           SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END) AS unread_count,
-          SUM(CASE WHEN is_read = 1 THEN 1 ELSE 0 END) AS read_count,
-          SUM(CASE WHEN is_downloaded = 1 THEN 1 ELSE 0 END) AS downloaded_count
+          SUM(CASE WHEN is_read = 1 THEN 1 ELSE 0 END) AS read_count
         FROM ${ComicLocalDb.libraryEpisodeStateTable}
         WHERE content_type = ?
         GROUP BY work_id
@@ -333,7 +332,6 @@ class LocalNovelRepository
         COALESCE(es.total_count, ss.state_count, 0) AS total_count,
         COALESCE(ss.unread_count, 0) AS unread_count,
         COALESCE(ss.read_count, 0) AS read_count,
-        COALESCE(ss.downloaded_count, 0) AS downloaded_count,
         COALESCE(ts.has_tags, 0) AS has_tags,
         ws.last_read_at,
         ws.check_updated_at,
@@ -1363,7 +1361,6 @@ class LocalNovelRepository
       lastCheckedAt: _toDateTime(row['check_updated_at']),
       lastFetchedAt: _toDateTime(row['fetched_updated_at']),
       hasTags: (row['has_tags'] as int? ?? 0) == 1,
-      isDownloaded: (row['downloaded_count'] as int? ?? 0) > 0,
     );
   }
 

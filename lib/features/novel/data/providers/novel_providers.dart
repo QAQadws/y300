@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
@@ -13,8 +12,6 @@ import 'package:y300/features/novel/data/services/default_novel_chapter_sync_ser
 import 'package:y300/features/novel/data/services/default_novel_chapter_update_service.dart';
 import 'package:y300/features/novel/data/services/default_novel_sync_request_governor.dart';
 import 'package:y300/features/novel/data/services/default_novel_source_metadata_recovery_service.dart';
-import 'package:y300/features/novel/data/services/novel_download_service.dart';
-import 'package:y300/features/novel/data/services/novel_reader_cache_service.dart';
 import 'package:y300/features/novel/data/services/novel_source_metadata_ingest_service.dart';
 import 'package:y300/features/novel/data/services/novel_source_metadata_recovery_gateway.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
@@ -43,7 +40,6 @@ import 'package:y300/features/novel/presentation/services/novel_reader_document_
 import 'package:y300/features/novel/presentation/services/novel_reader_layout_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_progress_committer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
-import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 import 'package:y300/features/thread/domain/services/forum_post_image_source_collector.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
@@ -176,29 +172,10 @@ final novelReaderDocumentBuildServiceProvider =
       );
     });
 
-final novelDownloadServiceProvider = Provider<NovelDownloadService>((ref) {
-  return DefaultNovelDownloadService(
-    repository: ref.watch(novelRepositoryProvider),
-    storageService: ref.watch(downloadStorageServiceProvider),
-    imageCacheService: ref.watch(imageCacheServiceProvider),
-  );
-});
-
-final novelReaderCacheServiceProvider = Provider<NovelReaderCacheService>((
-  ref,
-) {
-  return DefaultNovelReaderCacheService(
-    downloadService: ref.watch(novelDownloadServiceProvider),
-    repository: ref.watch(novelRepositoryProvider),
-    stateRepository: ref.watch(libraryStateRepositoryProvider),
-  );
-});
-
 final novelReaderSupplementalHydrationServiceProvider =
     Provider<NovelReaderSupplementalHydrationService>((ref) {
       return DefaultNovelReaderSupplementalHydrationService(
         repository: ref.watch(novelRepositoryProvider),
-        cacheService: ref.watch(novelReaderCacheServiceProvider),
       );
     });
 
@@ -206,7 +183,6 @@ final novelReaderBootstrapServiceProvider =
     Provider<NovelReaderBootstrapService>((ref) {
       return DefaultNovelReaderBootstrapService(
         repository: ref.watch(novelRepositoryProvider),
-        downloadService: ref.watch(novelDownloadServiceProvider),
         documentBuildService: ref.watch(
           novelReaderDocumentBuildServiceProvider,
         ),

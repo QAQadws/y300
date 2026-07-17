@@ -85,7 +85,7 @@ void main() {
   );
 
   test(
-    'choose storage directory creates download storage nomedia files',
+    'choose storage directory creates active download storage files',
     () async {
       final temp = await io.Directory.systemTemp.createTemp(
         'y300-data-storage-',
@@ -133,8 +133,8 @@ void main() {
         isTrue,
       );
       expect(
-        await io.File(p.join(value.storagePath, 'novels', '.nomedia')).exists(),
-        isTrue,
+        await io.Directory(p.join(value.storagePath, 'novels')).exists(),
+        isFalse,
       );
       expect(
         await io.File(p.join(value.storagePath, 'favorites.json')).exists(),
@@ -435,14 +435,6 @@ class _FakeDownloadStorageService implements DownloadStorageService {
   }
 
   @override
-  Future<io.Directory> prepareNovelDirectory({
-    required String novelId,
-    required String title,
-  }) {
-    throw UnimplementedError();
-  }
-
-  @override
   Future<bool> deleteComicDownloads({required String workId}) async => false;
 
   @override
@@ -477,14 +469,6 @@ class _FakeDownloadStorageService implements DownloadStorageService {
     return null;
   }
 
-  @override
-  Future<DownloadedNovelChapter?> findDownloadedNovelChapter({
-    required String novelId,
-    required String title,
-    required String episodeId,
-  }) async {
-    return null;
-  }
 }
 
 class _FakeStorageLocationRepository implements StorageLocationRepository {

@@ -17,7 +17,6 @@ import 'package:y300/features/library_shared/data/providers/library_state_provid
 import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
-import 'package:y300/features/novel/data/services/novel_download_service.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
@@ -36,7 +35,6 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/ide
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_layout_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
-import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
@@ -1054,9 +1052,6 @@ void main() {
             imageRequestHeaderBuilderProvider.overrideWithValue(
               const _StaticImageHeaderBuilder(),
             ),
-            novelDownloadServiceProvider.overrideWithValue(
-              _NoopNovelDownloadService(),
-            ),
             libraryStateRepositoryProvider.overrideWithValue(
               _MemoryLibraryStateRepository(),
             ),
@@ -1096,9 +1091,6 @@ void main() {
             novelRepositoryProvider.overrideWithValue(repository),
             imageRequestHeaderBuilderProvider.overrideWithValue(
               const _StaticImageHeaderBuilder(),
-            ),
-            novelDownloadServiceProvider.overrideWithValue(
-              _NoopNovelDownloadService(),
             ),
             libraryStateRepositoryProvider.overrideWithValue(
               _MemoryLibraryStateRepository(),
@@ -1191,60 +1183,6 @@ void main() {
     expect(
       find.byKey(const Key('novel-reader-next-chapter-transition')),
       findsNothing,
-    );
-  });
-
-  testWidgets('NovelReaderPage prefers downloaded chapter json', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _buildReaderApp(
-        repository: _FakeNovelRepository(),
-        downloadService: _DownloadedNovelServiceFake(
-          const NovelChapterContent(
-            episodeId: 'novel:49:100:5001',
-            rawHtml: '<p>离线段。</p>',
-            plainText: '离线段。',
-            paragraphs: <String>['离线段。'],
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(_readerText('离线段。'), findsOneWidget);
-    expect(_readerText('第一段。'), findsNothing);
-  });
-
-  testWidgets('NovelReaderPage renders downloaded chapter html document', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _buildReaderApp(
-        repository: _FakeNovelRepository(),
-        downloadService: _DownloadedNovelServiceFake(
-          const NovelChapterContent(
-            episodeId: 'novel:49:100:5001',
-            rawHtml: '''
-<h2>离线标题</h2>
-<blockquote>离线引用</blockquote>
-<p>离线正文</p>
-<img src="https://img.test/offline.jpg">
-''',
-            plainText: '离线标题\n离线引用\n离线正文',
-            paragraphs: <String>['旧离线段'],
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(_readerText('离线标题'), findsOneWidget);
-    expect(_readerText('离线引用'), findsOneWidget);
-    expect(_readerText('离线正文'), findsOneWidget);
-    expect(
-      find.byKey(const Key('novel-reader-html-document-view')),
-      findsOneWidget,
     );
   });
 
@@ -1396,122 +1334,42 @@ void main() {
     );
   });
 
-  testWidgets('NovelReaderPage opens cache sheet and caches current chapter', (
+  testWidgets('NovelReaderPage has no duplicate chapter cache action', (
     tester,
   ) async {
-    final repository = _FakeNovelRepository();
-    final downloadService = _RecordingNovelDownloadService();
-    final stateRepository = _MemoryLibraryStateRepository();
+    await tester.pumpWidget(
+      _buildReaderApp(repository: _FakeNovelRepository()),
+    );
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+
+    expect(
+      find.byKey(const Key('shared-reader-bottom-action-cache')),
+      findsNothing,
+    );
+    expect(find.text('缓存'), findsNothing);
+  });
+
+  testWidgets('NovelReaderPage renders hydrated repository content', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       _buildReaderApp(
-        repository: repository,
-        downloadService: downloadService,
-        stateRepository: stateRepository,
+        repository: _FakeNovelRepository(
+          firstRawHtml: '<h2>水合标题</h2><p>水合正文。</p>',
+          firstParagraphs: const <String>['水合标题', '水合正文。'],
+        ),
       ),
     );
     await tester.pumpAndSettle();
 
-    await _showReaderMenu(tester);
-    await tester.tap(
-      find.byKey(const Key('shared-reader-bottom-action-cache')),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('novel-reader-cache-sheet')), findsOneWidget);
-    expect(find.text('本章未缓存'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('novel-reader-cache-current')));
-    await tester.pumpAndSettle();
-
-    expect(downloadService.downloadedEpisodeIds, <String>['novel:49:100:5001']);
-    expect(find.text('本章已缓存'), findsAtLeastNWidgets(1));
-    await _closeBottomSheet(tester);
-    await _showReaderMenu(tester);
-    final bottomGate = tester.widget<IgnorePointer>(
-      find.byKey(const Key('shared-reader-bottom-overlay-hit-test-gate')),
-    );
-    expect(bottomGate.ignoring, isFalse);
-    await tester.tap(
-      find.byKey(const Key('shared-reader-bottom-action-catalog')),
-    );
-    await tester.pumpAndSettle();
+    expect(_readerText('水合标题'), findsOneWidget);
+    expect(_readerText('水合正文。'), findsOneWidget);
     expect(
-      find.byKey(
-        const Key('novel-reader-chapter-downloaded-novel:49:100:5001'),
-      ),
+      find.byKey(const Key('novel-reader-html-document-view')),
       findsOneWidget,
     );
-  });
-
-  testWidgets('NovelReaderPage deletes current chapter cache', (tester) async {
-    final repository = _FakeNovelRepository();
-    final downloadService = _RecordingNovelDownloadService();
-    final stateRepository = _MemoryLibraryStateRepository();
-    await stateRepository.upsertEpisodeState(
-      moduleKey: LibraryModuleKey.novel,
-      episodeId: 'novel:49:100:5001',
-      workId: 'novel:49:100',
-      isDownloaded: true,
-      downloadedAt: DateTime(2026, 6, 8),
-    );
-    await tester.pumpWidget(
-      _buildReaderApp(
-        repository: repository,
-        downloadService: downloadService,
-        stateRepository: stateRepository,
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await _showReaderMenu(tester);
-    await tester.tap(
-      find.byKey(const Key('shared-reader-bottom-action-cache')),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('本章已缓存'), findsOneWidget);
-    await tester.tap(
-      find.byKey(const Key('novel-reader-cache-delete-current')),
-    );
-    await tester.pumpAndSettle();
-
-    expect(downloadService.deletedEpisodeIds, <String>['novel:49:100:5001']);
-    expect(find.text('本章未缓存'), findsOneWidget);
-    final state = await stateRepository.getEpisodeState(
-      moduleKey: LibraryModuleKey.novel,
-      episodeId: 'novel:49:100:5001',
-    );
-    expect(state?.isDownloaded, isFalse);
-  });
-
-  testWidgets('NovelReaderPage caches following chapters from cache sheet', (
-    tester,
-  ) async {
-    final repository = _FakeNovelRepository.threeEpisodes();
-    final downloadService = _RecordingNovelDownloadService();
-    final stateRepository = _MemoryLibraryStateRepository();
-    await tester.pumpWidget(
-      _buildReaderApp(
-        repository: repository,
-        downloadService: downloadService,
-        stateRepository: stateRepository,
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await _showReaderMenu(tester);
-    await tester.tap(
-      find.byKey(const Key('shared-reader-bottom-action-cache')),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('novel-reader-cache-following')));
-    await tester.pumpAndSettle();
-
-    expect(downloadService.downloadedEpisodeIds, <String>[
-      'novel:49:100:5002',
-      'novel:49:100:5003',
-    ]);
-    expect(find.text('已缓存 2/2 章'), findsOneWidget);
   });
 
   testWidgets('NovelReaderPage error view can update the work', (tester) async {
@@ -1610,21 +1468,12 @@ void main() {
           updatedAt: DateTime(2026, 6, 8),
         ),
       ]);
-      hydrationService.completeDownloadedEpisodeIds(const <String>{
-        'novel:49:100:5001',
-      });
       hydrationService.completeNovelTitle('测试小说');
       await tester.pumpAndSettle();
 
       expect(
         find.byKey(
           const Key('novel-reader-chapter-bookmark-novel:49:100:5001'),
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(
-          const Key('novel-reader-chapter-downloaded-novel:49:100:5001'),
         ),
         findsOneWidget,
       );
@@ -1669,7 +1518,6 @@ void main() {
         updatedAt: DateTime(2026, 6, 8),
       ),
     ]);
-    hydrationService.completeDownloadedEpisodeIds(const <String>{});
     hydrationService.completeNovelTitle('测试小说');
     await tester.pumpAndSettle();
 
@@ -1685,14 +1533,6 @@ Future<void> _showReaderMenu(WidgetTester tester) async {
   await tester.pump();
 }
 
-Future<void> _closeBottomSheet(WidgetTester tester) async {
-  final sheet = find.byKey(const Key('novel-reader-cache-sheet'));
-  expect(sheet, findsOneWidget);
-  Navigator.of(tester.element(sheet)).pop();
-  await tester.pumpAndSettle();
-  expect(find.byKey(const Key('novel-reader-cache-sheet')), findsNothing);
-}
-
 Finder _readerText(String text) {
   return find.byWidgetPredicate((widget) {
     return widget is RichText && widget.text.toPlainText().contains(text);
@@ -1701,7 +1541,6 @@ Finder _readerText(String text) {
 
 Widget _buildReaderApp({
   required _FakeNovelRepository repository,
-  NovelDownloadService? downloadService,
   LibraryStateRepository? stateRepository,
   ThreadRepository? threadRepository,
   NovelReaderLayoutService? layoutService,
@@ -1724,9 +1563,6 @@ Widget _buildReaderApp({
         const _StaticImageHeaderBuilder(),
       ),
       imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
-      novelDownloadServiceProvider.overrideWithValue(
-        downloadService ?? _NoopNovelDownloadService(),
-      ),
       if (layoutService != null)
         novelReaderLayoutServiceProvider.overrideWithValue(layoutService),
       if (documentBuildService != null)
@@ -1856,70 +1692,6 @@ class _FakeThreadRepository implements ThreadRepository {
         posts: const <ThreadPost>[],
       ),
     );
-  }
-}
-
-class _NoopNovelDownloadService implements NovelDownloadService {
-  @override
-  Future<void> deleteChapterDownload({
-    required String novelId,
-    required String episodeId,
-  }) async {}
-
-  @override
-  Future<DownloadedNovelChapter> downloadChapter({
-    required String novelId,
-    required String episodeId,
-  }) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<NovelChapterContent?> getDownloadedChapterContent({
-    required String novelId,
-    required String episodeId,
-  }) async {
-    return null;
-  }
-}
-
-class _DownloadedNovelServiceFake extends _NoopNovelDownloadService {
-  _DownloadedNovelServiceFake(this.content);
-
-  final NovelChapterContent content;
-
-  @override
-  Future<NovelChapterContent?> getDownloadedChapterContent({
-    required String novelId,
-    required String episodeId,
-  }) async {
-    return content.episodeId == episodeId ? content : null;
-  }
-}
-
-class _RecordingNovelDownloadService extends _NoopNovelDownloadService {
-  final downloadedEpisodeIds = <String>[];
-  final deletedEpisodeIds = <String>[];
-
-  @override
-  Future<DownloadedNovelChapter> downloadChapter({
-    required String novelId,
-    required String episodeId,
-  }) async {
-    downloadedEpisodeIds.add(episodeId);
-    return DownloadedNovelChapter(
-      novelId: novelId,
-      episodeId: episodeId,
-      chapterPath: '/tmp/$episodeId.json',
-    );
-  }
-
-  @override
-  Future<void> deleteChapterDownload({
-    required String novelId,
-    required String episodeId,
-  }) async {
-    deletedEpisodeIds.add(episodeId);
   }
 }
 
@@ -2615,21 +2387,11 @@ class _ControlledNovelReaderSupplementalHydrationService
     implements NovelReaderSupplementalHydrationService {
   final Completer<List<NovelReaderBookmark>> _bookmarksCompleter =
       Completer<List<NovelReaderBookmark>>();
-  final Completer<Set<String>> _downloadedEpisodeIdsCompleter =
-      Completer<Set<String>>();
   final Completer<NovelItem?> _novelCompleter = Completer<NovelItem?>();
 
   @override
   Future<List<NovelReaderBookmark>> loadBookmarks({required String novelId}) {
     return _bookmarksCompleter.future;
-  }
-
-  @override
-  Future<Set<String>> loadDownloadedEpisodeIds({
-    required String novelId,
-    required Iterable<String> episodeIds,
-  }) {
-    return _downloadedEpisodeIdsCompleter.future;
   }
 
   @override
@@ -2640,12 +2402,6 @@ class _ControlledNovelReaderSupplementalHydrationService
   void completeBookmarks(List<NovelReaderBookmark> value) {
     if (!_bookmarksCompleter.isCompleted) {
       _bookmarksCompleter.complete(value);
-    }
-  }
-
-  void completeDownloadedEpisodeIds(Set<String> value) {
-    if (!_downloadedEpisodeIdsCompleter.isCompleted) {
-      _downloadedEpisodeIdsCompleter.complete(value);
     }
   }
 

@@ -35,6 +35,7 @@ typedef UnfavoriteWorkUseCaseResolver = UnfavoriteWorkUseCase? Function();
 class ComicShelfAdapter
     implements
         ShelfModuleAdapter,
+        ShelfDownloadStatusAdapter,
         ShelfSnapshotAdapter,
         ShelfCoverWarmupAdapter,
         ShelfModuleActionAdapter,

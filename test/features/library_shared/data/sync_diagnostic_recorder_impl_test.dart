@@ -122,14 +122,6 @@ class _FakeDownloadStorageService implements DownloadStorageService {
   }
 
   @override
-  Future<io.Directory> prepareNovelDirectory({
-    required String novelId,
-    required String title,
-  }) {
-    throw UnimplementedError();
-  }
-
-  @override
   String safeFileName(String value, {String fallback = 'untitled'}) {
     throw UnimplementedError();
   }
@@ -156,15 +148,6 @@ class _FakeDownloadStorageService implements DownloadStorageService {
   @override
   Future<DownloadedComicEpisode?> findDownloadedComicEpisode({
     required String workId,
-    required String title,
-    required String episodeId,
-  }) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<DownloadedNovelChapter?> findDownloadedNovelChapter({
-    required String novelId,
     required String title,
     required String episodeId,
   }) {

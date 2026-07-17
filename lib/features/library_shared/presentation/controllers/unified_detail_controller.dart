@@ -149,7 +149,11 @@ class UnifiedDetailController {
     required String episodeId,
     required bool isDownloaded,
   }) async {
-    await _adapter.markChapterDownloaded(
+    final downloadAdapter = _downloadAdapter;
+    if (downloadAdapter == null) {
+      throw UnsupportedError('当前作品不支持章节下载');
+    }
+    await downloadAdapter.markChapterDownloaded(
       workId: _workId,
       episodeId: episodeId,
       isDownloaded: isDownloaded,
@@ -163,8 +167,22 @@ class UnifiedDetailController {
   }
 
   Future<void> deleteChapterDownload({required String episodeId}) async {
-    await _adapter.deleteChapterDownload(workId: _workId, episodeId: episodeId);
+    final downloadAdapter = _downloadAdapter;
+    if (downloadAdapter == null) {
+      throw UnsupportedError('当前作品不支持章节下载');
+    }
+    await downloadAdapter.deleteChapterDownload(
+      workId: _workId,
+      episodeId: episodeId,
+    );
     await _loadChaptersOnly();
+  }
+
+  DetailChapterDownloadAdapter? get _downloadAdapter {
+    final adapter = _adapter;
+    return adapter is DetailChapterDownloadAdapter
+        ? adapter as DetailChapterDownloadAdapter
+        : null;
   }
 
   Future<void> _load() async {

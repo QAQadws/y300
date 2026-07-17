@@ -39,13 +39,13 @@ abstract class NovelRepository {
 
   Future<NovelReaderPreferences> getReaderPreferences();
 
-  /// 从小说书架移除作品，但保留作品数据和已缓存章节正文。
+  /// 从小说书架移除作品，但保留作品数据和已水合章节正文。
   Future<void> removeFromShelf({required String novelId});
 
   /// 破坏性清除小说作品的本地数据。
   ///
   /// 这里删除小说主行、章节、正文和小说侧阅读进度；shared 状态、收藏行、
-  /// 缓存和下载由上层 WorkPurgeService 继续编排。
+  /// 封面缓存和遗留下载目录由上层 WorkPurgeService 继续编排。
   Future<void> purgeWork({required String novelId}) {
     throw UnimplementedError('purgeWork($novelId)');
   }

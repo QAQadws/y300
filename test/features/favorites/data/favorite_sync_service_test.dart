@@ -1518,21 +1518,10 @@ class _FavoriteSnapshotStorageSpy implements DownloadStorageService {
     required String episodeId,
   }) async => null;
   @override
-  Future<DownloadedNovelChapter?> findDownloadedNovelChapter({
-    required String novelId,
-    required String title,
-    required String episodeId,
-  }) async => null;
-  @override
   Future<DownloadStorageRoot> prepareRoot() => throw UnimplementedError();
   @override
   Future<io.Directory> prepareComicDirectory({
     required String workId,
-    required String title,
-  }) => throw UnimplementedError();
-  @override
-  Future<io.Directory> prepareNovelDirectory({
-    required String novelId,
     required String title,
   }) => throw UnimplementedError();
   @override

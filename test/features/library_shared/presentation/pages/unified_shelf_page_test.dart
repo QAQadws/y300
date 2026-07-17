@@ -983,7 +983,8 @@ LibraryWorkItem _item({
   );
 }
 
-class _FakeShelfAdapter implements ShelfModuleAdapter {
+class _FakeShelfAdapter
+    implements ShelfModuleAdapter, ShelfDownloadStatusAdapter {
   _FakeShelfAdapter({
     required this.initialDisplayMode,
     this.onQuery,

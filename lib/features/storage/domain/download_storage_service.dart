@@ -14,11 +14,6 @@ abstract class DownloadStorageService {
     required String title,
   });
 
-  Future<io.Directory> prepareNovelDirectory({
-    required String novelId,
-    required String title,
-  });
-
   Future<bool> deleteComicDownloads({required String workId}) {
     throw UnimplementedError('deleteComicDownloads($workId)');
   }
@@ -44,20 +39,14 @@ abstract class DownloadStorageService {
     required String title,
     required String episodeId,
   });
-
-  Future<DownloadedNovelChapter?> findDownloadedNovelChapter({
-    required String novelId,
-    required String title,
-    required String episodeId,
-  });
 }
 
 class DefaultDownloadStorageService implements DownloadStorageService {
   DefaultDownloadStorageService({
     required StorageLocationRepository locationRepository,
     Random? random,
-  })  : _locationRepository = locationRepository,
-        _random = random ?? Random.secure();
+  }) : _locationRepository = locationRepository,
+       _random = random ?? Random.secure();
 
   final StorageLocationRepository _locationRepository;
   final Random _random;
@@ -65,26 +54,23 @@ class DefaultDownloadStorageService implements DownloadStorageService {
   @override
   Future<DownloadStorageRoot> prepareRoot() async {
     final custom = await _locationRepository.getCustomStorageRoot();
-    final rootPath = custom ?? await _locationRepository.getDefaultStorageRoot();
+    final rootPath =
+        custom ?? await _locationRepository.getDefaultStorageRoot();
     final root = io.Directory(rootPath);
     final comics = io.Directory(p.join(root.path, 'comics'));
     final novels = io.Directory(p.join(root.path, 'novels'));
 
     await _prepareDirectory(root);
     await _prepareDirectory(comics);
-    await _prepareDirectory(novels);
 
     final favorites = io.File(p.join(root.path, 'favorites.json'));
     if (!await favorites.exists()) {
-      await writeJsonAtomically(
-        favorites,
-        <String, Object?>{
-          'schemaVersion': 1,
-          'remoteCount': 0,
-          'syncedAt': null,
-          'threads': <Object?>[],
-        },
-      );
+      await writeJsonAtomically(favorites, <String, Object?>{
+        'schemaVersion': 1,
+        'remoteCount': 0,
+        'syncedAt': null,
+        'threads': <Object?>[],
+      });
     }
 
     return DownloadStorageRoot(
@@ -105,21 +91,6 @@ class DefaultDownloadStorageService implements DownloadStorageService {
       p.join(root.comicsPath, _workDirectoryName(title: title, id: workId)),
     );
     await _prepareDirectory(directory);
-    return directory;
-  }
-
-  @override
-  Future<io.Directory> prepareNovelDirectory({
-    required String novelId,
-    required String title,
-  }) async {
-    final root = await prepareRoot();
-    final directory = io.Directory(
-      p.join(root.novelsPath, _workDirectoryName(title: title, id: novelId)),
-    );
-    await _prepareDirectory(directory);
-    await _prepareDirectory(io.Directory(p.join(directory.path, 'chapters')));
-    await _prepareDirectory(io.Directory(p.join(directory.path, 'images')));
     return directory;
   }
 
@@ -173,14 +144,18 @@ class DefaultDownloadStorageService implements DownloadStorageService {
   }) {
     final padded = (index + 1).toString().padLeft(3, '0');
     final cleanedTitle = safeFileName(title, fallback: 'chapter');
-    final normalizedExtension = extension.startsWith('.') ? extension : '.$extension';
+    final normalizedExtension = extension.startsWith('.')
+        ? extension
+        : '.$extension';
     return '$padded-$cleanedTitle$normalizedExtension';
   }
 
   @override
   Future<void> writeJsonAtomically(io.File file, Object? value) async {
     await file.parent.create(recursive: true);
-    final tmp = io.File('${file.path}.tmp-${DateTime.now().microsecondsSinceEpoch}-${_random.nextInt(1 << 20)}');
+    final tmp = io.File(
+      '${file.path}.tmp-${DateTime.now().microsecondsSinceEpoch}-${_random.nextInt(1 << 20)}',
+    );
     const encoder = JsonEncoder.withIndent('  ');
     await tmp.writeAsString('${encoder.convert(value)}\n', encoding: utf8);
     if (await file.exists()) {
@@ -202,7 +177,9 @@ class DefaultDownloadStorageService implements DownloadStorageService {
     required String episodeId,
   }) async {
     final directory = await prepareComicDirectory(workId: workId, title: title);
-    final meta = await _readJsonFile(io.File(p.join(directory.path, 'meta.json')));
+    final meta = await _readJsonFile(
+      io.File(p.join(directory.path, 'meta.json')),
+    );
     final chapters = meta?['chapters'];
     if (chapters is! List) {
       return null;
@@ -219,7 +196,8 @@ class DefaultDownloadStorageService implements DownloadStorageService {
       if (!await cbz.exists()) {
         return null;
       }
-      final imageFiles = (chapter['imageFiles'] as List?)
+      final imageFiles =
+          (chapter['imageFiles'] as List?)
               ?.map((item) => item.toString())
               .toList(growable: false) ??
           const <String>[];
@@ -233,46 +211,7 @@ class DefaultDownloadStorageService implements DownloadStorageService {
     return null;
   }
 
-  @override
-  Future<DownloadedNovelChapter?> findDownloadedNovelChapter({
-    required String novelId,
-    required String title,
-    required String episodeId,
-  }) async {
-    final directory = await prepareNovelDirectory(novelId: novelId, title: title);
-    final meta = await _readJsonFile(io.File(p.join(directory.path, 'meta.json')));
-    final chapters = meta?['chapters'];
-    if (chapters is! List) {
-      return null;
-    }
-    for (final chapter in chapters.whereType<Map>()) {
-      if (chapter['episodeId'] != episodeId) {
-        continue;
-      }
-      final relativePath = chapter['file'] as String?;
-      if (relativePath == null || relativePath.trim().isEmpty) {
-        return null;
-      }
-      final file = io.File(p.joinAll(<String>[
-        directory.path,
-        ...p.posix.split(relativePath),
-      ]));
-      if (!await file.exists()) {
-        return null;
-      }
-      return DownloadedNovelChapter(
-        novelId: novelId,
-        episodeId: episodeId,
-        chapterPath: file.path,
-      );
-    }
-    return null;
-  }
-
-  String _workDirectoryName({
-    required String title,
-    required String id,
-  }) {
+  String _workDirectoryName({required String title, required String id}) {
     final name = safeFileName(title, fallback: 'work');
     return '$name-${_shortHash(id)}';
   }
