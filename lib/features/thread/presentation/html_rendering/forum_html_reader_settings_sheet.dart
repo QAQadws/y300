@@ -10,11 +10,13 @@ class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
     super.key,
     this.showConversionControls = false,
     this.showAuthorStyleControls = true,
+    this.showAuthorColorControls = true,
     this.showResetButton = true,
   });
 
   final bool showConversionControls;
   final bool showAuthorStyleControls;
+  final bool showAuthorColorControls;
   final bool showResetButton;
 
   @override
@@ -81,20 +83,24 @@ class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
                 value: preferences.preserveAuthorFontSize,
                 onChanged: controller.setPreserveAuthorFontSize,
               ),
-              SwitchListTile(
-                key: const Key('forum-html-reader-preserve-color-switch'),
-                contentPadding: EdgeInsets.zero,
-                title: const Text('保留作者颜色'),
-                value: preferences.preserveAuthorColor,
-                onChanged: controller.setPreserveAuthorColor,
-              ),
-              SwitchListTile(
-                key: const Key('forum-html-reader-preserve-background-switch'),
-                contentPadding: EdgeInsets.zero,
-                title: const Text('保留作者背景'),
-                value: preferences.preserveAuthorBackground,
-                onChanged: controller.setPreserveAuthorBackground,
-              ),
+              if (showAuthorColorControls) ...[
+                SwitchListTile(
+                  key: const Key('forum-html-reader-preserve-color-switch'),
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('保留作者颜色'),
+                  value: preferences.preserveAuthorColor,
+                  onChanged: controller.setPreserveAuthorColor,
+                ),
+                SwitchListTile(
+                  key: const Key(
+                    'forum-html-reader-preserve-background-switch',
+                  ),
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('保留作者背景'),
+                  value: preferences.preserveAuthorBackground,
+                  onChanged: controller.setPreserveAuthorBackground,
+                ),
+              ],
             ],
             if (showResetButton) ...[
               const SizedBox(height: 8),

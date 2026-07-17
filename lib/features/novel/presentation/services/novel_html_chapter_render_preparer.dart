@@ -66,7 +66,7 @@ class NovelHtmlChapterRenderPreparer implements NovelHtmlChapterPreparer {
       html: html,
       preferences: preferences,
       theme: theme,
-      themeAdaptationMode: ForumHtmlThemeAdaptationMode.disabled,
+      themeAdaptationMode: ForumHtmlThemeAdaptationMode.enabled,
       sourceId: sourceId,
       threadId: threadId,
       imageCacheOwnerId: imageCacheOwnerId,

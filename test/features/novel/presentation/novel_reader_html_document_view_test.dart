@@ -80,18 +80,50 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('深色正文', findRichText: true), findsOneWidget);
   });
+
+  testWidgets(
+    'reuses equal preparation identity and invalidates on font size',
+    (tester) async {
+      final preparer = _DeferredNovelHtmlChapterPreparer();
+      final preferences = NovelReaderPreferences.defaults();
+
+      await tester.pumpWidget(
+        _host(theme: _lightTheme, preparer: preparer, preferences: preferences),
+      );
+      expect(preparer.calls, hasLength(1));
+
+      await tester.pumpWidget(
+        _host(
+          theme: _lightTheme,
+          preparer: preparer,
+          preferences: preferences.copyWith(),
+        ),
+      );
+      expect(preparer.calls, hasLength(1));
+
+      await tester.pumpWidget(
+        _host(
+          theme: _lightTheme,
+          preparer: preparer,
+          preferences: preferences.copyWith(fontSize: 22),
+        ),
+      );
+      expect(preparer.calls, hasLength(2));
+    },
+  );
 }
 
 Widget _host({
   required ForumHtmlThemeContext theme,
   required NovelHtmlChapterPreparer preparer,
+  NovelReaderPreferences? preferences,
 }) {
   return ProviderScope(
     child: MaterialApp(
       home: NovelReaderHtmlDocumentView(
         rawHtml: '<p>待准备正文</p>',
         episode: _episode,
-        preferences: NovelReaderPreferences.defaults(),
+        preferences: preferences ?? NovelReaderPreferences.defaults(),
         typography: _typography,
         theme: theme,
         imageReferer: 'https://bbs.yamibo.com/thread-100-1-1.html',
@@ -110,7 +142,7 @@ NovelHtmlPreparedChapter _prepared({
     html: html,
     preferences: ForumHtmlReaderPreferences.defaults(),
     theme: theme,
-    themeAdaptationMode: ForumHtmlThemeAdaptationMode.disabled,
+    themeAdaptationMode: ForumHtmlThemeAdaptationMode.enabled,
     sourceId: _episode.episodeId,
     threadId: _episode.sourceTid,
     imageCacheOwnerId: _episode.sourceTid,

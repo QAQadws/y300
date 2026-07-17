@@ -5,12 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
+import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/thread/domain/html_rendering/forum_html_sample_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/css_author_color_parser.dart';
 import 'package:y300/features/thread/presentation/html_rendering/widgets/forum_collapse_block.dart';
 
 void main() {
@@ -84,7 +86,19 @@ void main() {
     expect(find.textContaining('转换模式：原文'), findsOneWidget);
     expect(find.textContaining('转换文本节点：0 个'), findsOneWidget);
     expect(find.textContaining('字号 100%'), findsOneWidget);
-    expect(find.textContaining('作者样式：字号保留'), findsOneWidget);
+    expect(find.textContaining('主题适配：始终启用 / 作者字号保留'), findsOneWidget);
+    expect(
+      find.byKey(const Key('forum-html-prototype-theme-preview-selector')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('forum-html-prototype-adaptation-counts')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('forum-html-prototype-minimum-contrast')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const Key('forum-html-prototype-reader-settings-button')),
       findsOneWidget,
@@ -108,6 +122,52 @@ void main() {
     expect(find.textContaining('第一个样例', findRichText: true), findsOneWidget);
 
     expect(find.byKey(const Key('forum-html-renderer-one')), findsOneWidget);
+  });
+
+  testWidgets('switches between real light and dark adapted previews', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrapWithProviders(
+        ForumHtmlRendererPrototypePage(
+          samples: samples,
+          assetBundle: _FakeAssetBundle(
+            assets: const <String, String>{
+              'assets/prototypes/forum_html/one.html':
+                  '<html><body><div class="message">'
+                  '<font id="preview-body" color="black">正文</font>'
+                  '</div></body></html>',
+              'assets/prototypes/forum_html/two.html':
+                  '<html><body><div class="message">第二个样例</div></body></html>',
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    HtmlWidget renderer() => tester.widget<HtmlWidget>(
+      find.byKey(const Key('forum-html-renderer-one')),
+    );
+    final lightColor = const CsslibAuthorColorParser().parseOwn(
+      html_parser
+          .parseFragment(renderer().html)
+          .querySelector('#preview-body')!,
+    );
+    expect(lightColor.foreground?.toARGB32(), 0xFF000000);
+    expect(find.text('预览主题：浅色'), findsOneWidget);
+
+    await tester.tap(find.text('深色'));
+    await tester.pumpAndSettle();
+
+    final darkColor = const CsslibAuthorColorParser().parseOwn(
+      html_parser
+          .parseFragment(renderer().html)
+          .querySelector('#preview-body')!,
+    );
+    expect(darkColor.foreground?.toARGB32(), isNot(0xFF000000));
+    expect(find.text('预览主题：深色'), findsOneWidget);
+    expect(find.textContaining('适配前景：1/1'), findsOneWidget);
   });
 
   testWidgets('switches selected sample and reloads asset', (tester) async {
@@ -362,6 +422,18 @@ void main() {
       find.byKey(const Key('forum-html-reader-paragraph-spacing-slider')),
       findsNothing,
     );
+    expect(
+      find.byKey(const Key('forum-html-reader-preserve-font-size-switch')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('forum-html-reader-preserve-color-switch')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('forum-html-reader-preserve-background-switch')),
+      findsNothing,
+    );
 
     final slider = tester.widget<Slider>(
       find.descendant(
@@ -375,19 +447,13 @@ void main() {
     await tester.tap(
       find.byKey(const Key('forum-html-reader-preserve-font-size-switch')),
     );
-    await tester.tap(
-      find.byKey(const Key('forum-html-reader-preserve-color-switch')),
-    );
-    await tester.tap(
-      find.byKey(const Key('forum-html-reader-preserve-background-switch')),
-    );
     await tester.pumpAndSettle();
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     expect(find.textContaining('间隔 2.0'), findsOneWidget);
-    expect(find.textContaining('作者样式：字号忽略 / 颜色忽略 / 背景忽略'), findsOneWidget);
+    expect(find.textContaining('主题适配：始终启用 / 作者字号统一'), findsOneWidget);
   });
 
   testWidgets('shows missing local asset message', (tester) async {

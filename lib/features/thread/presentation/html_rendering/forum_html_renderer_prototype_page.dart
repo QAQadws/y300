@@ -13,9 +13,13 @@ import 'package:y300/features/thread/domain/models/thread_image_open_models.dart
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_settings_sheet.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adaptation_result.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adapter.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 
@@ -39,6 +43,7 @@ class ForumHtmlRendererPrototypePage extends ConsumerStatefulWidget {
 class _ForumHtmlRendererPrototypePageState
     extends ConsumerState<ForumHtmlRendererPrototypePage> {
   late ForumHtmlSampleDocument _selectedSample;
+  ForumHtmlBrightness _previewBrightness = ForumHtmlBrightness.light;
   ForumHtmlReaderPreferences? _loadPreferences;
   Future<_ForumHtmlPrototypeLoadResult>? _loadFuture;
 
@@ -99,6 +104,10 @@ class _ForumHtmlRendererPrototypePageState
               mode: preferences.conversionMode,
               onSelected: _selectConversionMode,
             ),
+            _ThemePreviewSelector(
+              brightness: _previewBrightness,
+              onSelected: _selectPreviewBrightness,
+            ),
             Expanded(
               child: FutureBuilder<_ForumHtmlPrototypeLoadResult>(
                 future: _loadFuture,
@@ -132,10 +141,17 @@ class _ForumHtmlRendererPrototypePageState
                           '复制到 ${_selectedSample.assetPath}',
                     );
                   }
-                  return _LoadedSampleView(
-                    sample: _selectedSample,
-                    result: result,
-                    onTapUrl: _handleTapUrl,
+                  final previewTheme = _previewThemeData(_previewBrightness);
+                  return Theme(
+                    data: previewTheme,
+                    child: ColoredBox(
+                      color: previewTheme.scaffoldBackgroundColor,
+                      child: _LoadedSampleView(
+                        sample: _selectedSample,
+                        result: result,
+                        onTapUrl: _handleTapUrl,
+                      ),
+                    ),
                   );
                 },
               ),
@@ -170,11 +186,19 @@ class _ForumHtmlRendererPrototypePageState
         .setConversionMode(mode);
   }
 
+  void _selectPreviewBrightness(ForumHtmlBrightness brightness) {
+    if (brightness == _previewBrightness) {
+      return;
+    }
+    setState(() => _previewBrightness = brightness);
+  }
+
   void _openReaderSettings() {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: false,
-      builder: (context) => const ForumHtmlReaderSettingsSheet(),
+      builder: (context) =>
+          const ForumHtmlReaderSettingsSheet(showAuthorColorControls: false),
     );
   }
 
@@ -358,6 +382,43 @@ class _ConversionSelector extends StatelessWidget {
   }
 }
 
+class _ThemePreviewSelector extends StatelessWidget {
+  const _ThemePreviewSelector({
+    required this.brightness,
+    required this.onSelected,
+  });
+
+  final ForumHtmlBrightness brightness;
+  final ValueChanged<ForumHtmlBrightness> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: SizedBox(
+        width: double.infinity,
+        child: SegmentedButton<ForumHtmlBrightness>(
+          key: const Key('forum-html-prototype-theme-preview-selector'),
+          segments: const [
+            ButtonSegment(
+              value: ForumHtmlBrightness.light,
+              icon: Icon(Icons.light_mode_outlined),
+              label: Text('浅色'),
+            ),
+            ButtonSegment(
+              value: ForumHtmlBrightness.dark,
+              icon: Icon(Icons.dark_mode_outlined),
+              label: Text('深色'),
+            ),
+          ],
+          selected: {brightness},
+          onSelectionChanged: (selection) => onSelected(selection.single),
+        ),
+      ),
+    );
+  }
+}
+
 class _SampleSelector extends StatelessWidget {
   const _SampleSelector({
     required this.samples,
@@ -417,6 +478,20 @@ class _LoadedSampleView extends StatelessWidget {
     final input = result.input!;
     final conversionResult = result.conversionResult!;
     final preferences = result.preferences!;
+    final materialTheme = Theme.of(context);
+    final renderTheme = const ForumHtmlRenderThemeFactory().fromMaterialTheme(
+      theme: materialTheme,
+      surface: materialTheme.scaffoldBackgroundColor,
+    );
+    final prepared = const DefaultForumHtmlRenderPreparer().prepare(
+      html: conversionResult.html,
+      preferences: preferences,
+      theme: renderTheme,
+      themeAdaptationMode: ForumHtmlThemeAdaptationMode.enabled,
+      sourceId: input.sourceId,
+      threadId: null,
+      imageCacheOwnerId: null,
+    );
     return ListView(
       key: const Key('forum-html-prototype-loaded-view'),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -427,16 +502,16 @@ class _LoadedSampleView extends StatelessWidget {
           preferences: preferences,
           conversionMode: result.conversionMode!,
           conversionResult: conversionResult,
+          theme: renderTheme,
+          adaptationStats: prepared.themeAdaptationStats,
         ),
         const SizedBox(height: 12),
         ForumHtmlWidgetPostRenderer(
           html: conversionResult.html,
-          theme: const ForumHtmlRenderThemeFactory().fromMaterialTheme(
-            theme: Theme.of(context),
-            surface: Theme.of(context).scaffoldBackgroundColor,
-          ),
+          theme: renderTheme,
           sourceId: input.sourceId,
           preferences: preferences,
+          preparedDocument: prepared,
           callbacks: ForumHtmlRenderCallbacks(onTapUrl: onTapUrl),
         ),
       ],
@@ -859,8 +934,13 @@ class _ThreadDebugSummary extends StatelessWidget {
                 Text('转换模式：${_conversionModeLabel(conversionMode)}'),
                 Text('转换器：${conversionResult.converterId}'),
                 Text('转换文本节点：${conversionResult.convertedTextNodeCount} 个'),
+                Text(
+                  '预览主题：${Theme.of(context).brightness == Brightness.dark ? '深色' : '浅色'}',
+                ),
                 Text(preferences.typographyDebugLabel),
-                Text(preferences.authorStyleDebugLabel),
+                Text(
+                  '主题适配：始终启用 / 作者字号${preferences.preserveAuthorFontSize ? '保留' : '统一'}',
+                ),
               ],
             ),
           ),
@@ -885,6 +965,8 @@ class _DebugSummary extends StatelessWidget {
     required this.preferences,
     required this.conversionMode,
     required this.conversionResult,
+    required this.theme,
+    required this.adaptationStats,
   });
 
   final ForumHtmlSampleDocument sample;
@@ -892,6 +974,8 @@ class _DebugSummary extends StatelessWidget {
   final ForumHtmlReaderPreferences preferences;
   final TextConversionMode conversionMode;
   final HtmlTextNodeConversionResult conversionResult;
+  final ForumHtmlThemeContext theme;
+  final ForumHtmlThemeAdaptationStats adaptationStats;
 
   @override
   Widget build(BuildContext context) {
@@ -917,8 +1001,31 @@ class _DebugSummary extends StatelessWidget {
                 Text('转换模式：${_conversionModeLabel(conversionMode)}'),
                 Text('转换器：${conversionResult.converterId}'),
                 Text('转换文本节点：${conversionResult.convertedTextNodeCount} 个'),
+                Text(
+                  '预览主题：${theme.brightness == ForumHtmlBrightness.dark ? '深色' : '浅色'}',
+                  key: const Key('forum-html-prototype-preview-theme'),
+                ),
+                Text(
+                  '适配前景：${adaptationStats.remappedForegroundCount}/'
+                  '${adaptationStats.explicitForegroundCount} · '
+                  '适配背景：${adaptationStats.remappedBackgroundCount}/'
+                  '${adaptationStats.explicitBackgroundCount}',
+                  key: const Key('forum-html-prototype-adaptation-counts'),
+                ),
+                Text(
+                  '语义回退：${adaptationStats.semanticFallbackCount} · '
+                  '不支持：${adaptationStats.unsupportedColorCount} · '
+                  '隐藏：${adaptationStats.concealedTextRangeCount}',
+                ),
+                Text(
+                  '最低可见对比度：'
+                  '${adaptationStats.minimumResultContrast?.toStringAsFixed(2) ?? '-'}',
+                  key: const Key('forum-html-prototype-minimum-contrast'),
+                ),
                 Text(preferences.typographyDebugLabel),
-                Text(preferences.authorStyleDebugLabel),
+                Text(
+                  '主题适配：始终启用 / 作者字号${preferences.preserveAuthorFontSize ? '保留' : '统一'}',
+                ),
               ],
             ),
           ),
@@ -934,6 +1041,12 @@ class _DebugSummary extends StatelessWidget {
       TextConversionMode.toTraditional => '转繁',
     };
   }
+}
+
+ThemeData _previewThemeData(ForumHtmlBrightness brightness) {
+  return brightness == ForumHtmlBrightness.dark
+      ? ThemeData.dark(useMaterial3: true)
+      : ThemeData.light(useMaterial3: true);
 }
 
 class _ErrorState extends StatelessWidget {
