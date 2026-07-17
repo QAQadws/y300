@@ -93,6 +93,36 @@ void main() {
       },
     );
 
+    test('module capabilities can override the default shelf sort', () async {
+      final adapter = _CapabilityShelfAdapter(
+        categories: const <LibraryCategory>[],
+        queriedItems: const <String, List<LibraryWorkItem>>{},
+        capabilities: const ShelfModuleCapabilities(
+          defaultSortOption: LibraryShelfSortOption(
+            field: LibraryShelfSortField.favoriteAddedAt,
+            direction: LibrarySortDirection.asc,
+          ),
+        ),
+      );
+      final controller = UnifiedShelfController(adapter: adapter);
+      addTearDown(controller.dispose);
+
+      expect(
+        controller.state.sortOption.field,
+        LibraryShelfSortField.favoriteAddedAt,
+      );
+      expect(controller.state.sortOption.direction, LibrarySortDirection.asc);
+
+      await controller.updateSortOption(
+        const LibraryShelfSortOption(
+          field: LibraryShelfSortField.name,
+          direction: LibrarySortDirection.desc,
+        ),
+      );
+
+      expect(controller.state.sortOption.direction, LibrarySortDirection.asc);
+    });
+
     test(
       'initialize prefers snapshot adapter without loading categories separately',
       () async {
@@ -868,6 +898,18 @@ void main() {
       },
     );
   });
+}
+
+class _CapabilityShelfAdapter extends _FakeShelfAdapter
+    implements ShelfModuleCapabilitiesAdapter {
+  _CapabilityShelfAdapter({
+    required super.categories,
+    required super.queriedItems,
+    required this.capabilities,
+  });
+
+  @override
+  final ShelfModuleCapabilities capabilities;
 }
 
 class _FakeShelfAdapter implements ShelfModuleAdapter {

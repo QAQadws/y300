@@ -86,14 +86,17 @@ class ShelfModuleCapabilities {
   const ShelfModuleCapabilities({
     this.supportsReadState = true,
     this.supportsBookmarkFilter = false,
+    this.defaultSortOption = LibraryShelfSortOption.defaults,
   });
 
   const ShelfModuleCapabilities.defaults()
     : supportsReadState = true,
-      supportsBookmarkFilter = false;
+      supportsBookmarkFilter = false,
+      defaultSortOption = LibraryShelfSortOption.defaults;
 
   final bool supportsReadState;
   final bool supportsBookmarkFilter;
+  final LibraryShelfSortOption defaultSortOption;
 
   List<LibraryShelfSortField> get availableSortFields =>
       <LibraryShelfSortField>[
@@ -116,7 +119,7 @@ class ShelfModuleCapabilities {
   LibraryShelfSortOption normalizeSortOption(LibraryShelfSortOption option) {
     return availableSortFields.contains(option.field)
         ? option
-        : LibraryShelfSortOption.defaults;
+        : defaultSortOption;
   }
 }
 

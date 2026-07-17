@@ -24,6 +24,22 @@ import 'package:y300/features/library_shared/domain/services/shelf_category_assi
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
+  test('ComicShelfAdapter defaults to ascending favorite date', () {
+    final adapter = ComicShelfAdapter(
+      _FakeComicRepository(shelfItems: const <ComicShelfItem>[]),
+      stateRepository: _FakeLibraryStateRepository(),
+    );
+
+    expect(
+      adapter.capabilities.defaultSortOption.field,
+      LibraryShelfSortField.favoriteAddedAt,
+    );
+    expect(
+      adapter.capabilities.defaultSortOption.direction,
+      LibrarySortDirection.asc,
+    );
+  });
+
   test('ComicShelfAdapter returns metadata before cover warmup', () async {
     final repository = _FakeComicRepository(
       shelfItems: <ComicShelfItem>[

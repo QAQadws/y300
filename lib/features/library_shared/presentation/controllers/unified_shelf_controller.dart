@@ -54,6 +54,7 @@ class UnifiedShelfState {
     required LibraryModuleKey moduleKey,
     required String moduleTitle,
     required LibraryDisplayMode defaultDisplayMode,
+    LibraryShelfSortOption defaultSortOption = LibraryShelfSortOption.defaults,
   }) {
     return UnifiedShelfState(
       moduleKey: moduleKey,
@@ -62,7 +63,7 @@ class UnifiedShelfState {
       isSearchMode: false,
       keyword: '',
       filters: LibraryFilterSet.defaults,
-      sortOption: LibraryShelfSortOption.defaults,
+      sortOption: defaultSortOption,
       displayMode: defaultDisplayMode,
       gridColumnCount: 3,
       categories: const <LibraryCategory>[],
@@ -200,10 +201,12 @@ class UnifiedShelfController {
   ValueListenable<UnifiedShelfState> get stateListenable => _stateListenable;
 
   static UnifiedShelfState _initialState(ShelfModuleAdapter adapter) {
+    final capabilities = resolveShelfModuleCapabilities(adapter);
     return UnifiedShelfState.initial(
       moduleKey: adapter.moduleKey,
       moduleTitle: adapter.moduleTitle,
       defaultDisplayMode: adapter.defaultDisplayMode,
+      defaultSortOption: capabilities.defaultSortOption,
     );
   }
 

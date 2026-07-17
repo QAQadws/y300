@@ -35,6 +35,7 @@ typedef UnfavoriteWorkUseCaseResolver = UnfavoriteWorkUseCase? Function();
 class ComicShelfAdapter
     implements
         ShelfModuleAdapter,
+        ShelfModuleCapabilitiesAdapter,
         ShelfDownloadStatusAdapter,
         ShelfSnapshotAdapter,
         ShelfCoverWarmupAdapter,
@@ -117,6 +118,14 @@ class ComicShelfAdapter
 
   @override
   String get moduleTitle => _moduleTitle;
+
+  @override
+  ShelfModuleCapabilities get capabilities => const ShelfModuleCapabilities(
+    defaultSortOption: LibraryShelfSortOption(
+      field: LibraryShelfSortField.favoriteAddedAt,
+      direction: LibrarySortDirection.asc,
+    ),
+  );
 
   @override
   LibraryDisplayMode get defaultDisplayMode => LibraryDisplayMode.grid;

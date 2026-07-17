@@ -151,6 +151,14 @@ void main() {
 
       expect(adapter.capabilities.supportsReadState, isFalse);
       expect(adapter.capabilities.supportsBookmarkFilter, isTrue);
+      expect(
+        adapter.capabilities.defaultSortOption.field,
+        LibraryShelfSortField.favoriteAddedAt,
+      );
+      expect(
+        adapter.capabilities.defaultSortOption.direction,
+        LibrarySortDirection.asc,
+      );
       expect(adapter.capabilities.availableSortFields, <LibraryShelfSortField>[
         LibraryShelfSortField.chapterCount,
         LibraryShelfSortField.favoriteAddedAt,
