@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' as riverpod_misc;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
+import 'package:html/parser.dart' as html_parser;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -74,6 +76,7 @@ import 'package:y300/features/thread/presentation/thread_detail_diagnostic_contr
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_html_first_render_mode_controller.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/css_author_color_parser.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
@@ -927,6 +930,74 @@ void main() {
         expect(find.byKey(const Key('thread-poll-card')), findsOneWidget);
         expect(find.text('投票选项'), findsOneWidget);
         expect(_richTextContaining('HTML-first 正文'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'HTML-first theme changes reprepare colors without reloading the thread',
+      (tester) async {
+        var requestCount = 0;
+        final repository = _FakeThreadRepository((tid, page, query) async {
+          requestCount++;
+          return ApiSuccess(
+            _threadDetailData(
+              tid: tid,
+              posts: [
+                ThreadPost(
+                  pid: 'theme-p1',
+                  author: 'alice',
+                  authorId: '1',
+                  message: '<font id="theme-body" color="black">正文</font>',
+                  number: 1,
+                  isFirst: true,
+                  dateline: 'today',
+                ),
+              ],
+            ),
+          );
+        });
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            theme: AppTheme.dark(),
+            htmlFirstRenderMode: ThreadDetailHtmlFirstRenderMode.htmlFirst,
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+
+        final darkHtml = tester
+            .widget<HtmlWidget>(
+              find.byKey(const Key('forum-html-renderer-theme-p1')),
+            )
+            .html;
+        final darkBody = const CsslibAuthorColorParser().parseOwn(
+          html_parser.parseFragment(darkHtml).querySelector('#theme-body')!,
+        );
+        expect(darkBody.foreground?.toARGB32(), isNot(0xFF000000));
+        expect(requestCount, 1);
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            theme: AppTheme.light(),
+            htmlFirstRenderMode: ThreadDetailHtmlFirstRenderMode.htmlFirst,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final lightHtml = tester
+            .widget<HtmlWidget>(
+              find.byKey(const Key('forum-html-renderer-theme-p1')),
+            )
+            .html;
+        final lightBody = const CsslibAuthorColorParser().parseOwn(
+          html_parser.parseFragment(lightHtml).querySelector('#theme-body')!,
+        );
+        expect(lightBody.foreground?.toARGB32(), 0xFF000000);
+        expect(lightHtml, isNot(darkHtml));
+        expect(requestCount, 1);
       },
     );
 
@@ -4188,6 +4259,7 @@ Widget _buildTestApp(
   HistoryVisitRecorder? historyVisitRecorder,
   HistoryDiagnosticRecorder? historyDiagnosticRecorder,
   Widget? home,
+  ThemeData? theme,
 }) {
   return ProviderScope(
     overrides: _threadDetailOverrides(
@@ -4213,6 +4285,7 @@ Widget _buildTestApp(
       historyDiagnosticRecorder: historyDiagnosticRecorder,
     ),
     child: MaterialApp(
+      theme: theme,
       home: home ?? const ThreadDetailPage(tid: '100', subject: '测试主题'),
     ),
   );

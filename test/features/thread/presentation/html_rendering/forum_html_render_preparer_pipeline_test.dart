@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
@@ -6,6 +8,9 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_imag
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/css_author_color_parser.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adapter.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'forum_html_test_theme.dart';
 
 void main() {
@@ -20,6 +25,7 @@ void main() {
             '<img src="data/attachment/forum/page.jpg">',
         preferences: ForumHtmlReaderPreferences.defaults(),
         theme: forumHtmlTestTheme,
+        themeAdaptationMode: forumHtmlTestAdaptationMode,
         sourceId: 'phase2-single-pass',
         threadId: '100',
         imageCacheOwnerId: '100',
@@ -43,6 +49,7 @@ void main() {
             'src="https://bbs.yamibo.com/data/attachment/forum/page.jpg">',
         preferences: ForumHtmlReaderPreferences.defaults(),
         theme: forumHtmlTestTheme,
+        themeAdaptationMode: forumHtmlTestAdaptationMode,
         sourceId: 'phase2-order',
         threadId: '100',
         imageCacheOwnerId: '100',
@@ -72,6 +79,32 @@ void main() {
       expect(prepared.themeAdaptationStats.remappedForegroundCount, 0);
       expect(prepared.themeAdaptationStats.remappedBackgroundCount, 0);
     });
+
+    test('adapts colors before preserving the image sequence', () {
+      const preparer = DefaultForumHtmlRenderPreparer();
+
+      final prepared = preparer.prepare(
+        html:
+            '<font id="body" color="black">正文</font>'
+            '<img id="aimg_9" src="data/attachment/forum/page.jpg">',
+        preferences: ForumHtmlReaderPreferences.defaults(),
+        theme: _darkTheme,
+        themeAdaptationMode: ForumHtmlThemeAdaptationMode.enabled,
+        sourceId: 'phase4-adapt',
+        threadId: '100',
+        imageCacheOwnerId: '100',
+      );
+      final fragment = html_parser.parseFragment(prepared.preparedHtml);
+      final body = const CsslibAuthorColorParser().parseOwn(
+        fragment.querySelector('#body')!,
+      );
+
+      expect(body.foreground?.toARGB32(), isNot(0xFF000000));
+      expect(prepared.themeAdaptationStats.explicitForegroundCount, 1);
+      expect(prepared.themeAdaptationStats.remappedForegroundCount, 1);
+      expect(prepared.sequence.entries, hasLength(1));
+      expect(prepared.sequence.entries.single.attachmentId, '9');
+    });
   });
 
   test('fragment deduplication mutates the existing DOM without reparsing', () {
@@ -87,6 +120,17 @@ void main() {
     expect(fragment.querySelectorAll('img'), hasLength(1));
   });
 }
+
+const _darkTheme = ForumHtmlThemeContext(
+  brightness: ForumHtmlBrightness.dark,
+  surface: Color(0xFF241916),
+  foreground: Color(0xFFF6E8DD),
+  link: Color(0xFF8DB7FF),
+  quoteSurface: Color(0xFF30231F),
+  quoteForeground: Color(0xFFF6E8DD),
+  codeSurface: Color(0xFF332622),
+  codeForeground: Color(0xFFF6E8DD),
+);
 
 final class _CountingFragmentCodec implements ForumHtmlFragmentCodec {
   final _delegate = const HtmlPackageForumHtmlFragmentCodec();

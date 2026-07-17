@@ -1,4 +1,15 @@
 import 'package:flutter/foundation.dart';
+import 'package:html/dom.dart' as html_dom;
+
+final class ForumHtmlThemeAdaptationResult {
+  const ForumHtmlThemeAdaptationResult({
+    required this.fragment,
+    required this.stats,
+  });
+
+  final html_dom.DocumentFragment fragment;
+  final ForumHtmlThemeAdaptationStats stats;
+}
 
 @immutable
 final class ForumHtmlThemeAdaptationStats {

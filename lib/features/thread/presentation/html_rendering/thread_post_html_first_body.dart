@@ -15,6 +15,7 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_rend
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adapter.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_html_image_reader_bridge.dart';
 
@@ -143,6 +144,7 @@ class _ThreadPostHtmlFirstBodyState
         html: html,
         preferences: preferences,
         theme: widget.theme,
+        themeAdaptationMode: ForumHtmlThemeAdaptationMode.enabled,
         sourceId: sourceId,
         threadId: widget.threadId,
         imageCacheOwnerId: widget.threadId,
@@ -200,11 +202,14 @@ class _ThreadPostHtmlFirstBodyState
       preparedDocument.preparedHtml.length,
       preparedDocument.sequence.entries.length,
       preparedDocument.totalImageCount,
+      preparedDocument.themeSignature,
     ].join(':');
     if (_lastPreparedLogKey == key) {
       return;
     }
     _lastPreparedLogKey = key;
+    final themeStats = preparedDocument.themeAdaptationStats;
+    final minimumContrast = themeStats.minimumResultContrast;
     _logNative(
       'render_prepare_success',
       'tid=${widget.threadId} pid=${widget.post.pid} postNo=${widget.post.number} '
@@ -214,7 +219,15 @@ class _ThreadPostHtmlFirstBodyState
           'stickers=${preparedDocument.skippedStickerCount} '
           'nonNetwork=${preparedDocument.skippedNonNetworkCount} '
           'duplicates=${preparedDocument.duplicatedReadableUrlCount} '
-          'attachments=${preparedDocument.attachmentTaggedCount}',
+          'attachments=${preparedDocument.attachmentTaggedCount} '
+          'theme=${widget.theme.brightness.name} '
+          'foregrounds=${themeStats.explicitForegroundCount} '
+          'foregroundRemapped=${themeStats.remappedForegroundCount} '
+          'backgrounds=${themeStats.explicitBackgroundCount} '
+          'backgroundRemapped=${themeStats.remappedBackgroundCount} '
+          'unsupported=${themeStats.unsupportedColorCount} '
+          'concealed=${themeStats.concealedTextRangeCount} '
+          'minimumContrast=${minimumContrast?.toStringAsFixed(2) ?? '-'}',
     );
   }
 

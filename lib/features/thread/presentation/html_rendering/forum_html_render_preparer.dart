@@ -10,6 +10,8 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_prep
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adaptation_result.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adapter.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_color_adaptation_policy.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 abstract interface class ForumHtmlRenderPreparer {
@@ -17,6 +19,7 @@ abstract interface class ForumHtmlRenderPreparer {
     required String html,
     required ForumHtmlReaderPreferences preferences,
     required ForumHtmlThemeContext theme,
+    required ForumHtmlThemeAdaptationMode themeAdaptationMode,
     required String sourceId,
     required String? threadId,
     required String? imageCacheOwnerId,
@@ -31,15 +34,18 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
         const ForumHtmlImageDeduplicator(),
     ForumHtmlFragmentCodec fragmentCodec =
         const HtmlPackageForumHtmlFragmentCodec(),
+    ForumHtmlThemeAdapter themeAdapter = const DefaultForumHtmlThemeAdapter(),
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
   }) : _imageRequestResolver = imageRequestResolver,
        _imageDeduplicator = imageDeduplicator,
        _fragmentCodec = fragmentCodec,
+       _themeAdapter = themeAdapter,
        _urlResolver = urlResolver;
 
   final ForumImageRequestResolver _imageRequestResolver;
   final ForumHtmlImageDeduplicator _imageDeduplicator;
   final ForumHtmlFragmentCodec _fragmentCodec;
+  final ForumHtmlThemeAdapter _themeAdapter;
   final SiteUrlResolver _urlResolver;
 
   @override
@@ -47,6 +53,7 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
     required String html,
     required ForumHtmlReaderPreferences preferences,
     required ForumHtmlThemeContext theme,
+    required ForumHtmlThemeAdaptationMode themeAdaptationMode,
     required String sourceId,
     required String? threadId,
     required String? imageCacheOwnerId,
@@ -55,6 +62,16 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
     final fragment = _fragmentCodec.parse(html);
     stylePolicy.normalizeStructure(fragment);
     stylePolicy.normalizeAuthorStyles(fragment);
+    final themeAdaptationStats =
+        themeAdaptationMode == ForumHtmlThemeAdaptationMode.enabled
+        ? _themeAdapter
+              .adapt(
+                fragment: fragment,
+                theme: theme,
+                policy: ForumHtmlColorAdaptationPolicy.standard,
+              )
+              .stats
+        : ForumHtmlThemeAdaptationStats.none;
     _imageDeduplicator.deduplicateAttachmentImagesInFragment(fragment);
     final entries = <ForumHtmlReadableImageEntry>[];
     final attachmentIdsByUrl = <String, String>{};
@@ -171,7 +188,7 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
       duplicatedReadableUrlCount: _duplicateCount(readableUrlCounts),
       attachmentTaggedCount: attachmentTaggedCount,
       themeSignature: theme.signature,
-      themeAdaptationStats: ForumHtmlThemeAdaptationStats.none,
+      themeAdaptationStats: themeAdaptationStats,
     );
   }
 

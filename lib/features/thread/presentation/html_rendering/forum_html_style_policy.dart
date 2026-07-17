@@ -51,6 +51,8 @@ class ForumHtmlStylePolicy {
     }
     if (_isCodeLike(element)) {
       return {
+        'background-color': _toCssHex(theme.codeSurface),
+        'color': _toCssHex(theme.codeForeground),
         'font-family': 'monospace',
         'white-space': 'pre-wrap',
         'overflow-wrap': 'anywhere',

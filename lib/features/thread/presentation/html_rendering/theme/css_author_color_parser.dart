@@ -7,6 +7,8 @@ import 'package:y300/features/thread/presentation/html_rendering/theme/forum_htm
 
 abstract interface class CssAuthorColorParser {
   ForumHtmlAuthorColorStyle parse(html_dom.Element element);
+
+  ForumHtmlAuthorColorStyle parseOwn(html_dom.Element element);
 }
 
 final class CsslibAuthorColorParser implements CssAuthorColorParser {
@@ -41,7 +43,7 @@ final class CsslibAuthorColorParser implements CssAuthorColorParser {
 
   @override
   ForumHtmlAuthorColorStyle parse(html_dom.Element element) {
-    final own = _parseOwn(element);
+    final own = parseOwn(element);
     var foreground = own.foreground;
     var foregroundSource = own.foregroundSource;
     var background = own.background;
@@ -50,7 +52,7 @@ final class CsslibAuthorColorParser implements CssAuthorColorParser {
     html_dom.Node? ancestor = element.parentNode;
     while (ancestor is html_dom.Element &&
         (foreground == null || background == null)) {
-      final ancestorStyle = _parseOwn(ancestor);
+      final ancestorStyle = parseOwn(ancestor);
       if (foreground == null && ancestorStyle.foreground != null) {
         foreground = ancestorStyle.foreground;
         foregroundSource = ForumHtmlColorSource.inherited;
@@ -67,6 +69,22 @@ final class CsslibAuthorColorParser implements CssAuthorColorParser {
       background: background,
       foregroundSource: foregroundSource,
       backgroundSource: backgroundSource,
+      backgroundRole: _backgroundRoleFor(element),
+      unsupportedForeground: own.unsupportedForeground,
+      unsupportedBackground: own.unsupportedBackground,
+      transparentForeground: own.transparentForeground,
+      transparentBackground: own.transparentBackground,
+    );
+  }
+
+  @override
+  ForumHtmlAuthorColorStyle parseOwn(html_dom.Element element) {
+    final own = _parseOwn(element);
+    return ForumHtmlAuthorColorStyle(
+      foreground: own.foreground,
+      background: own.background,
+      foregroundSource: own.foregroundSource,
+      backgroundSource: own.backgroundSource,
       backgroundRole: _backgroundRoleFor(element),
       unsupportedForeground: own.unsupportedForeground,
       unsupportedBackground: own.unsupportedBackground,

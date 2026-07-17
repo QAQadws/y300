@@ -147,6 +147,21 @@ void main() {
       expect(leaf.backgroundSource, ForumHtmlColorSource.inherited);
     });
 
+    test('parseOwn excludes ancestor colors for traversal adapters', () {
+      final fragment = html_parser.parseFragment(
+        '<div style="color: red; background-color: blue">'
+        '<span id="child">正文</span>'
+        '</div>',
+      );
+
+      final own = parser.parseOwn(fragment.querySelector('#child')!);
+
+      expect(own.foreground, isNull);
+      expect(own.background, isNull);
+      expect(own.foregroundSource, isNull);
+      expect(own.backgroundSource, isNull);
+    });
+
     test('isolates malformed color declarations without throwing', () {
       final element = _element(
         '<span style="color: rgb(1, 2); background: url(image.png)">'
