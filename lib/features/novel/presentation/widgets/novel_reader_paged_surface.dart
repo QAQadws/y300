@@ -342,10 +342,6 @@ class _NovelReaderPagedSurfaceState
         widget.typography.chapterTitle.fontSize ?? preferences.fontSize + 4;
     final headingLineHeight =
         widget.typography.chapterTitle.height ?? preferences.lineHeight;
-    final firstPageReservedHeight = preferences.showChapterTitle
-        ? headingFontSize * headingLineHeight +
-              preferences.paragraphSpacing * 1.6
-        : 0.0;
     return NovelReaderLayoutRequest(
       episodeId: widget.viewState.currentEpisode.episodeId,
       rawHtmlHash: widget.viewState.document.rawHtmlHash,
@@ -360,7 +356,7 @@ class _NovelReaderPagedSurfaceState
         headingFontSize: headingFontSize,
         headingLineHeight: headingLineHeight,
         paragraphSpacing: preferences.paragraphSpacing,
-        firstPageReservedHeight: firstPageReservedHeight,
+        firstPageReservedHeight: 0,
       ),
       pagePadding: preferences.pagePadding,
       contentMaxWidth: contentMaxWidth,
@@ -368,7 +364,6 @@ class _NovelReaderPagedSurfaceState
       fontFamily: preferences.fontFamily,
       textAlign: preferences.textAlign.storageValue,
       firstLineIndent: preferences.firstLineIndent,
-      showChapterTitle: preferences.showChapterTitle,
     );
   }
 
@@ -548,19 +543,6 @@ class _NovelReaderPagedSurfaceState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (index == 0 &&
-                      widget.viewState.preferences.showChapterTitle) ...[
-                    Text(
-                      widget.viewState.currentEpisode.episodeTitle,
-                      key: const Key('novel-reader-inline-chapter-title'),
-                      style: widget.typography.chapterTitle,
-                      textAlign: TextAlign.center,
-                    ),
-                    SizedBox(
-                      height:
-                          widget.viewState.preferences.paragraphSpacing * 1.6,
-                    ),
-                  ],
                   NovelReaderDocumentView(
                     document: layout.documentForPage(index),
                     typography: widget.typography,

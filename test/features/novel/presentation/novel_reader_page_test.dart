@@ -305,57 +305,50 @@ void main() {
     );
   });
 
-  testWidgets('NovelReaderPage bottom buttons and slider switch chapters', (
+  testWidgets('NovelReaderPage bottom menu omits progress and bookmarks', (
     tester,
   ) async {
-    final repository = _FakeNovelRepository.threeEpisodes(
-      chapterLoadDelay: const Duration(milliseconds: 120),
-    );
+    final repository = _FakeNovelRepository.threeEpisodes();
     await tester.pumpWidget(_buildReaderApp(repository: repository));
     await tester.pumpAndSettle();
 
     await _showReaderMenu(tester);
-    final previousButton = tester.widget<IconButton>(
-      find.byKey(const Key('shared-reader-prev-button')),
-    );
-    final nextButton = tester.widget<IconButton>(
-      find.byKey(const Key('shared-reader-next-button')),
-    );
-    expect(previousButton.onPressed, isNull);
-    expect(nextButton.onPressed, isNotNull);
-
-    await tester.tap(find.byKey(const Key('shared-reader-next-button')));
-    await tester.pump();
-
     expect(
-      find.byKey(const Key('novel-reader-transition-mask')),
-      findsOneWidget,
-    );
-    expect(_readerText('第一段。'), findsOneWidget);
-
-    await tester.pump(const Duration(milliseconds: 140));
-    await tester.pumpAndSettle();
-
-    expect(_readerText('第三段。'), findsOneWidget);
-    await _showReaderMenu(tester);
-    final previousAfterSwitch = tester.widget<IconButton>(
-      find.byKey(const Key('shared-reader-prev-button')),
-    );
-    expect(previousAfterSwitch.onPressed, isNotNull);
-
-    await tester.drag(
       find.byKey(const Key('shared-reader-progress-slider')),
-      const Offset(300, 0),
+      findsNothing,
     );
-    await tester.pump();
+    expect(find.byKey(const Key('shared-reader-prev-button')), findsNothing);
+    expect(find.byKey(const Key('shared-reader-next-button')), findsNothing);
     expect(
-      find.byKey(const Key('novel-reader-transition-mask')),
+      find.byKey(const Key('shared-reader-bottom-action-bookmark')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('shared-reader-top-action-bookmark')),
       findsOneWidget,
     );
-    await tester.pump(const Duration(milliseconds: 140));
+    expect(
+      find.byKey(const Key('shared-reader-bottom-action-catalog')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('shared-reader-bottom-action-display')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const Key('shared-reader-bottom-action-display')),
+    );
     await tester.pumpAndSettle();
 
-    expect(_readerText('第五段。'), findsOneWidget);
+    expect(
+      find.byKey(const Key('novel-reader-show-progress-switch')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('novel-reader-show-chapter-title-switch')),
+      findsNothing,
+    );
   });
 
   testWidgets('NovelReaderPage transition chrome follows reader palette', (
@@ -372,7 +365,13 @@ void main() {
     await tester.pumpAndSettle();
 
     await _showReaderMenu(tester);
-    await tester.tap(find.byKey(const Key('shared-reader-next-button')));
+    await tester.tap(
+      find.byKey(const Key('shared-reader-bottom-action-catalog')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('novel-reader-chapter-novel:49:100:5002')),
+    );
     await tester.pump();
 
     final mask = tester.widget<ColoredBox>(
@@ -848,7 +847,13 @@ void main() {
     expect(layoutService.requestCountByEpisodeId, isEmpty);
 
     await _showReaderMenu(tester);
-    await tester.tap(find.byKey(const Key('shared-reader-next-button')));
+    await tester.tap(
+      find.byKey(const Key('shared-reader-bottom-action-catalog')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('novel-reader-chapter-novel:49:100:5002')),
+    );
     await tester.pumpAndSettle();
 
     await _showReaderMenu(tester);
@@ -888,10 +893,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await _showReaderMenu(tester);
-    final currentLabel = tester.widget<Text>(
-      find.byKey(const Key('shared-reader-current-label')),
-    );
-    expect(currentLabel.data, '1');
+    expect(find.byKey(const Key('shared-reader-current-label')), findsNothing);
     expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
     expect(layoutService.requestCountByEpisodeId, isEmpty);
   });
@@ -1002,12 +1004,10 @@ void main() {
     expect(width, lessThanOrEqualTo(360));
   });
 
-  testWidgets('NovelReaderPage can hide inline chapter title', (tester) async {
-    final repository = _FakeNovelRepository(
-      preferences: NovelReaderPreferences.defaults().copyWith(
-        showChapterTitle: false,
-      ),
-    );
+  testWidgets('NovelReaderPage does not duplicate chapter title in body', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository();
     await tester.pumpWidget(_buildReaderApp(repository: repository));
     await tester.pumpAndSettle();
 
@@ -1015,6 +1015,7 @@ void main() {
       find.byKey(const Key('novel-reader-inline-chapter-title')),
       findsNothing,
     );
+    expect(_readerText('第一段。'), findsOneWidget);
   });
 
   testWidgets('NovelReaderPage open thread uses novel detail source tid', (
@@ -1172,14 +1173,8 @@ void main() {
 
     expect(_readerText('第五段。'), findsOneWidget);
     await _showReaderMenu(tester);
-    final previousButton = tester.widget<IconButton>(
-      find.byKey(const Key('shared-reader-prev-button')),
-    );
-    final nextButton = tester.widget<IconButton>(
-      find.byKey(const Key('shared-reader-next-button')),
-    );
-    expect(previousButton.onPressed, isNotNull);
-    expect(nextButton.onPressed, isNull);
+    expect(find.byKey(const Key('shared-reader-prev-button')), findsNothing);
+    expect(find.byKey(const Key('shared-reader-next-button')), findsNothing);
     expect(
       find.byKey(const Key('novel-reader-next-chapter-transition')),
       findsNothing,
@@ -1290,47 +1285,6 @@ void main() {
     expect(
       find.byKey(const Key('novel-reader-chapter-bookmark-novel:49:100:5001')),
       findsOneWidget,
-    );
-  });
-
-  testWidgets('NovelReaderPage adds and removes position bookmark', (
-    tester,
-  ) async {
-    final repository = _FakeNovelRepository();
-    await tester.pumpWidget(_buildReaderApp(repository: repository));
-    await tester.pumpAndSettle();
-
-    await _showReaderMenu(tester);
-    await tester.tap(
-      find.byKey(const Key('shared-reader-bottom-action-bookmark')),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const Key('novel-reader-add-position-bookmark')),
-    );
-    await tester.pumpAndSettle();
-
-    final position = repository.bookmarks.singleWhere(
-      (bookmark) => bookmark.bookmarkId.startsWith('reader-bookmark:'),
-    );
-
-    await tester.pump(const Duration(seconds: 4));
-    await tester.pumpAndSettle();
-    await _showReaderMenu(tester);
-    await tester.tap(
-      find.byKey(const Key('shared-reader-bottom-action-bookmark')),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(Key('novel-reader-remove-bookmark-${position.bookmarkId}')),
-    );
-    await tester.pumpAndSettle();
-
-    expect(
-      repository.bookmarks.where(
-        (bookmark) => bookmark.bookmarkId == position.bookmarkId,
-      ),
-      isEmpty,
     );
   });
 
@@ -1479,51 +1433,6 @@ void main() {
       );
     },
   );
-
-  testWidgets('NovelReaderPage bookmark sheet updates after late hydration', (
-    tester,
-  ) async {
-    final repository = _FakeNovelRepository.threeEpisodes();
-    final hydrationService =
-        _ControlledNovelReaderSupplementalHydrationService();
-
-    await tester.pumpWidget(
-      _buildReaderApp(
-        repository: repository,
-        supplementalHydrationService: hydrationService,
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await _showReaderMenu(tester);
-    await tester.tap(
-      find.byKey(const Key('shared-reader-bottom-action-bookmark')),
-    );
-    await tester.pumpAndSettle();
-
-    expect(
-      find.byKey(const Key('novel-reader-bookmark-empty')),
-      findsOneWidget,
-    );
-
-    hydrationService.completeBookmarks(<NovelReaderBookmark>[
-      NovelReaderBookmark(
-        bookmarkId: 'reader-bookmark:1',
-        novelId: 'novel:49:100',
-        episodeId: 'novel:49:100:5001',
-        anchor: const NovelReaderTextAnchor(episodeId: 'novel:49:100:5001'),
-        title: '第1章',
-        snippet: '晚到位置书签',
-        createdAt: DateTime(2026, 6, 8),
-        updatedAt: DateTime(2026, 6, 8),
-      ),
-    ]);
-    hydrationService.completeNovelTitle('测试小说');
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('novel-reader-bookmark-empty')), findsNothing);
-    expect(find.text('晚到位置书签'), findsOneWidget);
-  });
 }
 
 Future<void> _showReaderMenu(WidgetTester tester) async {

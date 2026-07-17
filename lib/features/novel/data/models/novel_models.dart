@@ -229,7 +229,6 @@ class NovelReaderPreferences {
     this.fontWeight = 400,
     this.textAlign = NovelReaderTextAlignMode.start,
     this.showProgressIndicator = true,
-    this.showChapterTitle = true,
     this.conversionMode = NovelReaderConversionMode.none,
     String? themeMode,
   }) : themePreset = themeMode == null
@@ -249,7 +248,6 @@ class NovelReaderPreferences {
     required this.fontWeight,
     required this.textAlign,
     required this.showProgressIndicator,
-    required this.showChapterTitle,
     required this.conversionMode,
   });
 
@@ -267,7 +265,6 @@ class NovelReaderPreferences {
       fontWeight: 400,
       textAlign: NovelReaderTextAlignMode.start,
       showProgressIndicator: true,
-      showChapterTitle: true,
       conversionMode: NovelReaderConversionMode.none,
     );
   }
@@ -284,7 +281,6 @@ class NovelReaderPreferences {
   final int fontWeight;
   final NovelReaderTextAlignMode textAlign;
   final bool showProgressIndicator;
-  final bool showChapterTitle;
   final NovelReaderConversionMode conversionMode;
 
   String get themeMode => themePreset.storageValue;
@@ -307,7 +303,6 @@ class NovelReaderPreferences {
         other.fontWeight == fontWeight &&
         other.textAlign == textAlign &&
         other.showProgressIndicator == showProgressIndicator &&
-        other.showChapterTitle == showChapterTitle &&
         other.conversionMode == conversionMode;
   }
 
@@ -325,7 +320,6 @@ class NovelReaderPreferences {
     fontWeight,
     textAlign,
     showProgressIndicator,
-    showChapterTitle,
     conversionMode,
   );
 
@@ -343,7 +337,6 @@ class NovelReaderPreferences {
     int? fontWeight,
     NovelReaderTextAlignMode? textAlign,
     bool? showProgressIndicator,
-    bool? showChapterTitle,
     NovelReaderConversionMode? conversionMode,
   }) {
     return NovelReaderPreferences._(
@@ -362,7 +355,6 @@ class NovelReaderPreferences {
       textAlign: textAlign ?? this.textAlign,
       showProgressIndicator:
           showProgressIndicator ?? this.showProgressIndicator,
-      showChapterTitle: showChapterTitle ?? this.showChapterTitle,
       conversionMode: conversionMode ?? this.conversionMode,
     );
   }

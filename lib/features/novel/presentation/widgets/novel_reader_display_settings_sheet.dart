@@ -161,22 +161,6 @@ class _NovelReaderDisplaySettingsSheetState
                       _draft.copyWith(conversionMode: value),
                     ),
                   ),
-                  SwitchListTile(
-                    key: const Key('novel-reader-show-progress-switch'),
-                    title: const Text('显示进度控件'),
-                    value: _draft.showProgressIndicator,
-                    onChanged: (value) => _applyPreferences(
-                      _draft.copyWith(showProgressIndicator: value),
-                    ),
-                  ),
-                  SwitchListTile(
-                    key: const Key('novel-reader-show-chapter-title-switch'),
-                    title: const Text('正文显示章节标题'),
-                    value: _draft.showChapterTitle,
-                    onChanged: (value) => _applyPreferences(
-                      _draft.copyWith(showChapterTitle: value),
-                    ),
-                  ),
                 ],
               ),
             ],

@@ -45,7 +45,9 @@ class DefaultNovelReaderPreferenceImpactAnalyzer
       return NovelReaderPreferenceDiff(
         previous: previous,
         next: next,
-        impacts: const <NovelReaderPreferenceImpact>{NovelReaderPreferenceImpact.none},
+        impacts: const <NovelReaderPreferenceImpact>{
+          NovelReaderPreferenceImpact.none,
+        },
       );
     }
 
@@ -68,8 +70,7 @@ class DefaultNovelReaderPreferenceImpactAnalyzer
         previous.contentMaxWidth != next.contentMaxWidth ||
         previous.firstLineIndent != next.firstLineIndent ||
         previous.fontWeight != next.fontWeight ||
-        previous.textAlign != next.textAlign ||
-        previous.showChapterTitle != next.showChapterTitle) {
+        previous.textAlign != next.textAlign) {
       impacts.add(NovelReaderPreferenceImpact.relayout);
     }
     if (impacts.isEmpty) {

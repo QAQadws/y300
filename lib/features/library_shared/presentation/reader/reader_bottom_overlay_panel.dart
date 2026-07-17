@@ -5,17 +5,16 @@ import 'package:y300/features/library_shared/presentation/reader/reader_progress
 import 'package:y300/features/library_shared/presentation/reader/reader_tool_button.dart';
 
 class ReaderBottomOverlayPanel extends StatelessWidget {
-  const ReaderBottomOverlayPanel({
-    super.key,
-    required this.config,
-  });
+  const ReaderBottomOverlayPanel({super.key, required this.config});
 
   final ReaderBottomBarConfig config;
 
   @override
   Widget build(BuildContext context) {
-    final palette =
-        const ReaderChromePaletteResolver().resolve(Theme.of(context));
+    final palette = const ReaderChromePaletteResolver().resolve(
+      Theme.of(context),
+    );
+    final progress = config.progress;
     return Material(
       key: const Key('shared-reader-bottom-overlay-panel'),
       color: palette.chromeBackground,
@@ -26,9 +25,9 @@ class ReaderBottomOverlayPanel extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (config.showProgress) ReaderProgressControl(config: config.progress),
+              if (progress != null) ReaderProgressControl(config: progress),
               if (config.actions.isNotEmpty) ...[
-                if (config.showProgress) const SizedBox(height: 6),
+                if (progress != null) const SizedBox(height: 6),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [

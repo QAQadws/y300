@@ -15,7 +15,6 @@ class NovelReaderLayoutRequest {
     required this.fontFamily,
     required this.textAlign,
     required this.firstLineIndent,
-    required this.showChapterTitle,
   });
 
   final String episodeId;
@@ -29,7 +28,6 @@ class NovelReaderLayoutRequest {
   final String fontFamily;
   final String textAlign;
   final double firstLineIndent;
-  final bool showChapterTitle;
 
   NovelReaderLayoutKey get key {
     return NovelReaderLayoutKey(
@@ -48,7 +46,6 @@ class NovelReaderLayoutRequest {
       fontFamily: fontFamily,
       textAlign: textAlign,
       firstLineIndentX10: (firstLineIndent * 10).round(),
-      showChapterTitle: showChapterTitle,
     );
   }
 }

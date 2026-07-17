@@ -15,7 +15,6 @@ class NovelReaderLayoutKey {
     required this.fontFamily,
     required this.textAlign,
     required this.firstLineIndentX10,
-    required this.showChapterTitle,
   });
 
   final String episodeId;
@@ -33,7 +32,6 @@ class NovelReaderLayoutKey {
   final String fontFamily;
   final String textAlign;
   final int firstLineIndentX10;
-  final bool showChapterTitle;
 
   bool hasSameContentIdentity(NovelReaderLayoutKey other) {
     return episodeId == other.episodeId && rawHtmlHash == other.rawHtmlHash;
@@ -59,27 +57,25 @@ class NovelReaderLayoutKey {
         other.fontWeight == fontWeight &&
         other.fontFamily == fontFamily &&
         other.textAlign == textAlign &&
-        other.firstLineIndentX10 == firstLineIndentX10 &&
-        other.showChapterTitle == showChapterTitle;
+        other.firstLineIndentX10 == firstLineIndentX10;
   }
 
   @override
   int get hashCode => Object.hash(
-        episodeId,
-        rawHtmlHash,
-        viewportWidthPx,
-        viewportHeightPx,
-        bodyFontSizeX10,
-        bodyLineHeightX100,
-        headingFontSizeX10,
-        headingLineHeightX100,
-        paragraphSpacingX10,
-        pagePaddingX10,
-        contentMaxWidthX10,
-        fontWeight,
-        fontFamily,
-        textAlign,
-        firstLineIndentX10,
-        showChapterTitle,
-      );
+    episodeId,
+    rawHtmlHash,
+    viewportWidthPx,
+    viewportHeightPx,
+    bodyFontSizeX10,
+    bodyLineHeightX100,
+    headingFontSizeX10,
+    headingLineHeightX100,
+    paragraphSpacingX10,
+    pagePaddingX10,
+    contentMaxWidthX10,
+    fontWeight,
+    fontFamily,
+    textAlign,
+    firstLineIndentX10,
+  );
 }

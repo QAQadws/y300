@@ -139,7 +139,6 @@ void main() {
           fontWeight: 500,
           textAlign: NovelReaderTextAlignMode.justify,
           showProgressIndicator: false,
-          showChapterTitle: false,
         ),
       );
       await repository.saveReadingProgress(
@@ -166,7 +165,6 @@ void main() {
       expect(preferences.fontWeight, 500);
       expect(preferences.textAlign, NovelReaderTextAlignMode.justify);
       expect(preferences.showProgressIndicator, isFalse);
-      expect(preferences.showChapterTitle, isFalse);
       expect(progress, isNotNull);
       expect(progress!.episodeId, episodes.first.episodeId);
       expect(progress.scrollOffset, 222.5);
@@ -307,7 +305,6 @@ void main() {
       expect(preferences.fontWeight, 400);
       expect(preferences.textAlign, NovelReaderTextAlignMode.start);
       expect(preferences.showProgressIndicator, isTrue);
-      expect(preferences.showChapterTitle, isTrue);
     });
 
     test(

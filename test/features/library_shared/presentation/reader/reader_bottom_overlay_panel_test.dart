@@ -48,7 +48,9 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const Key('shared-reader-bottom-action-cache')));
+    await tester.tap(
+      find.byKey(const Key('shared-reader-bottom-action-cache')),
+    );
     await tester.pump();
 
     expect(taps, 0);
@@ -59,21 +61,25 @@ void main() {
   ) async {
     await tester.pumpWidget(
       _buildPanel(
-        showProgress: false,
-        actions: [
-          _action(id: 'catalog', icon: Icons.list, label: '目录'),
-        ],
+        includeProgress: false,
+        actions: [_action(id: 'catalog', icon: Icons.list, label: '目录')],
       ),
     );
 
-    expect(find.byKey(const Key('shared-reader-progress-slider')), findsNothing);
-    expect(find.byKey(const Key('shared-reader-bottom-action-catalog')), findsOneWidget);
+    expect(
+      find.byKey(const Key('shared-reader-progress-slider')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('shared-reader-bottom-action-catalog')),
+      findsOneWidget,
+    );
   });
 }
 
 Widget _buildPanel({
   required List<ReaderToolbarAction> actions,
-  bool showProgress = true,
+  bool includeProgress = true,
 }) {
   return MaterialApp(
     home: Scaffold(
@@ -81,14 +87,15 @@ Widget _buildPanel({
         alignment: Alignment.bottomCenter,
         child: ReaderBottomOverlayPanel(
           config: ReaderBottomBarConfig(
-            showProgress: showProgress,
-            progress: ReaderProgressConfig(
-              current: 1,
-              total: 10,
-              onChanged: (_) {},
-              onChangeEnd: (_) {},
-            ),
             actions: actions,
+            progress: includeProgress
+                ? ReaderProgressConfig(
+                    current: 1,
+                    total: 10,
+                    onChanged: (_) {},
+                    onChangeEnd: (_) {},
+                  )
+                : null,
           ),
         ),
       ),
