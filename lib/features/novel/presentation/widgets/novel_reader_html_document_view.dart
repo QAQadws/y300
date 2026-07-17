@@ -11,6 +11,7 @@ import 'package:y300/features/thread/domain/models/thread_image_open_models.dart
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
   const NovelReaderHtmlDocumentView({
@@ -19,6 +20,7 @@ class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
     required this.episode,
     required this.preferences,
     required this.typography,
+    required this.theme,
     required this.imageReferer,
     this.imageHeaderBuilder,
     this.onLinkTap,
@@ -33,13 +35,14 @@ class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
   final NovelEpisodeItem episode;
   final NovelReaderPreferences preferences;
   final NovelReaderTypography typography;
+  final ForumHtmlThemeContext theme;
   final String imageReferer;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<NovelReaderLink>? onLinkTap;
   final void Function(ThreadImageOpenRequest request)? onOpenImage;
   final ValueChanged<ForumHtmlImageRequest>? onImageFallback;
   final NovelHtmlReaderPreferencesAdapter preferencesAdapter;
-  final NovelHtmlChapterRenderPreparer preparer;
+  final NovelHtmlChapterPreparer preparer;
   final NovelHtmlImageReaderBridge imageReaderBridge;
 
   @override
@@ -50,7 +53,7 @@ class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
 class _NovelReaderHtmlDocumentViewState
     extends ConsumerState<NovelReaderHtmlDocumentView> {
   Future<NovelHtmlPreparedChapter>? _future;
-  String? _signature;
+  Object? _signature;
 
   @override
   void initState() {
@@ -75,7 +78,8 @@ class _NovelReaderHtmlDocumentViewState
           future: _future,
           builder: (context, snapshot) {
             final prepared = snapshot.data;
-            if (prepared == null) {
+            if (prepared == null ||
+                prepared.document.themeSignature != widget.theme.signature) {
               return const SizedBox(
                 key: Key('novel-reader-html-loading'),
                 height: 96,
@@ -85,6 +89,7 @@ class _NovelReaderHtmlDocumentViewState
             return ForumHtmlWidgetPostRenderer(
               key: const Key('novel-reader-html-renderer'),
               html: prepared.html,
+              theme: widget.theme,
               preparedDocument: prepared.document,
               preferences: preferences,
               sourceId: widget.episode.episodeId,
@@ -110,12 +115,13 @@ class _NovelReaderHtmlDocumentViewState
 
   void _ensureFuture() {
     final preferences = widget.preferencesAdapter.map(widget.preferences);
-    final signature = Object.hash(
-      widget.rawHtml,
-      widget.episode.episodeId,
-      widget.episode.sourceTid,
-      preferences,
-    ).toString();
+    final signature = (
+      rawHtml: widget.rawHtml,
+      episodeId: widget.episode.episodeId,
+      sourceTid: widget.episode.sourceTid,
+      preferences: preferences,
+      themeSignature: widget.theme.signature,
+    );
     if (_signature == signature) {
       return;
     }
@@ -123,6 +129,7 @@ class _NovelReaderHtmlDocumentViewState
     _future = widget.preparer.prepare(
       rawHtml: widget.rawHtml,
       preferences: preferences,
+      theme: widget.theme,
       sourceId: widget.episode.episodeId,
       threadId: widget.episode.sourceTid,
       imageCacheOwnerId: widget.episode.sourceTid,

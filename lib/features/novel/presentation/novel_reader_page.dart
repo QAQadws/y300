@@ -16,10 +16,12 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/services/novel_reader_cache_service.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
+import 'package:y300/features/novel/presentation/services/novel_forum_html_render_theme_factory.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_display_settings_sheet.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_paged_surface.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 
@@ -153,6 +155,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                     child: _buildReaderList(
                       viewState,
                       typography,
+                      const NovelForumHtmlRenderThemeFactory().fromPalette(
+                        palette,
+                      ),
                       imageHeaderBuilder,
                       externalLauncher,
                     ),
@@ -355,6 +360,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   Widget _buildReaderList(
     NovelReaderViewState viewState,
     NovelReaderTypography typography,
+    ForumHtmlThemeContext htmlTheme,
     ImageRequestHeaderBuilder imageHeaderBuilder,
     ForumWebViewExternalLauncher externalLauncher,
   ) {
@@ -373,6 +379,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         episode: viewState.currentEpisode,
         preferences: viewState.preferences,
         typography: typography,
+        theme: htmlTheme,
         imageReferer: _imageRefererFor(viewState),
         imageHeaderBuilder: imageHeaderBuilder,
         onLinkTap: (link) => _openReaderLink(link, externalLauncher),

@@ -3,6 +3,7 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 
 class NovelReaderPalette {
   const NovelReaderPalette({
+    required this.brightness,
     required this.background,
     required this.foreground,
     required this.muted,
@@ -12,6 +13,7 @@ class NovelReaderPalette {
     required this.quoteBackground,
   });
 
+  final Brightness brightness;
   final Color background;
   final Color foreground;
   final Color muted;
@@ -29,14 +31,16 @@ class NovelReaderThemeResolver {
     required ThemeData theme,
     required Brightness platformBrightness,
   }) {
-    final preset = preferences.themePreset == NovelReaderThemePreset.followSystem
+    final preset =
+        preferences.themePreset == NovelReaderThemePreset.followSystem
         ? (platformBrightness == Brightness.dark
-            ? NovelReaderThemePreset.dark
-            : NovelReaderThemePreset.light)
+              ? NovelReaderThemePreset.dark
+              : NovelReaderThemePreset.light)
         : preferences.themePreset;
     switch (preset) {
       case NovelReaderThemePreset.dark:
         return NovelReaderPalette(
+          brightness: Brightness.dark,
           background: const Color(0xFF141414),
           foreground: const Color(0xFFE9E9E9),
           muted: const Color(0xFFAAA39A),
@@ -47,6 +51,7 @@ class NovelReaderThemeResolver {
         );
       case NovelReaderThemePreset.sepia:
         return NovelReaderPalette(
+          brightness: Brightness.light,
           background: const Color(0xFFF4EAD7),
           foreground: const Color(0xFF4C3A21),
           muted: const Color(0xFF8B7355),
@@ -58,6 +63,7 @@ class NovelReaderThemeResolver {
       case NovelReaderThemePreset.followSystem:
       case NovelReaderThemePreset.light:
         return NovelReaderPalette(
+          brightness: Brightness.light,
           background: const Color(0xFFFDFDFD),
           foreground: const Color(0xFF1F1F1F),
           muted: const Color(0xFF737373),
@@ -98,8 +104,9 @@ class NovelReaderTypographyResolver {
     required ThemeData theme,
     required NovelReaderPalette palette,
   }) {
-    final fontFamily =
-        preferences.fontFamily == 'system' ? null : preferences.fontFamily;
+    final fontFamily = preferences.fontFamily == 'system'
+        ? null
+        : preferences.fontFamily;
     final body = TextStyle(
       color: palette.foreground,
       fontSize: preferences.fontSize,
@@ -109,7 +116,8 @@ class NovelReaderTypographyResolver {
     );
     return NovelReaderTypography(
       body: body,
-      chapterTitle: theme.textTheme.headlineSmall?.copyWith(
+      chapterTitle:
+          theme.textTheme.headlineSmall?.copyWith(
             color: palette.foreground,
             fontFamily: fontFamily,
             fontWeight: FontWeight.w700,

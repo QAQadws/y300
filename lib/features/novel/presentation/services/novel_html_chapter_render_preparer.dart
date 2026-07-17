@@ -4,6 +4,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 class NovelHtmlPreparedChapter {
   const NovelHtmlPreparedChapter({
@@ -17,7 +18,18 @@ class NovelHtmlPreparedChapter {
   final int convertedTextNodeCount;
 }
 
-class NovelHtmlChapterRenderPreparer {
+abstract interface class NovelHtmlChapterPreparer {
+  Future<NovelHtmlPreparedChapter> prepare({
+    required String rawHtml,
+    required ForumHtmlReaderPreferences preferences,
+    required ForumHtmlThemeContext theme,
+    required String sourceId,
+    required String? threadId,
+    required String? imageCacheOwnerId,
+  });
+}
+
+class NovelHtmlChapterRenderPreparer implements NovelHtmlChapterPreparer {
   const NovelHtmlChapterRenderPreparer({
     HtmlTextNodeConversionService? conversionService,
     ForumHtmlRenderPreparer renderPreparer =
@@ -28,9 +40,11 @@ class NovelHtmlChapterRenderPreparer {
   final HtmlTextNodeConversionService? _conversionService;
   final ForumHtmlRenderPreparer _renderPreparer;
 
+  @override
   Future<NovelHtmlPreparedChapter> prepare({
     required String rawHtml,
     required ForumHtmlReaderPreferences preferences,
+    required ForumHtmlThemeContext theme,
     required String sourceId,
     required String? threadId,
     required String? imageCacheOwnerId,
@@ -50,6 +64,7 @@ class NovelHtmlChapterRenderPreparer {
     final document = _renderPreparer.prepare(
       html: html,
       preferences: preferences,
+      theme: theme,
       sourceId: sourceId,
       threadId: threadId,
       imageCacheOwnerId: imageCacheOwnerId,

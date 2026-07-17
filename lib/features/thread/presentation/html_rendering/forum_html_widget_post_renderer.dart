@@ -15,12 +15,14 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_read
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_image_deduplicator.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/html_rendering/widgets/forum_collapse_block.dart';
 
 class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   const ForumHtmlWidgetPostRenderer({
     super.key,
     required this.html,
+    required this.theme,
     this.callbacks = const ForumHtmlRenderCallbacks(),
     this.preferences,
     this.sourceId,
@@ -38,6 +40,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   static final Uri forumBaseUri = Uri.parse('https://bbs.yamibo.com/');
 
   final String html;
+  final ForumHtmlThemeContext theme;
   final ForumHtmlRenderCallbacks callbacks;
   final ForumHtmlReaderPreferences? preferences;
   final String? sourceId;
@@ -62,21 +65,20 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   Widget build(BuildContext context) {
     final resolvedPreferences =
         preferences ?? ForumHtmlReaderPreferences.defaults();
-    final scheme = Theme.of(context).colorScheme;
-    final stylePolicy = ForumHtmlStylePolicy(
-      resolvedPreferences,
-      quoteBackgroundColor:
-          Color.lerp(
-            scheme.surfaceContainer,
-            scheme.surfaceContainerHighest,
-            0.72,
-          ) ??
-          scheme.surfaceContainerHighest,
-      quoteAccentColor:
-          Color.lerp(scheme.outlineVariant, scheme.primary, 0.45) ??
-          scheme.outlineVariant,
-    );
+    final stylePolicy = ForumHtmlStylePolicy(resolvedPreferences, theme: theme);
     final document = preparedDocument;
+    final themeMatches =
+        document == null || document.themeSignature == theme.signature;
+    assert(
+      themeMatches,
+      'Forum HTML prepared document theme mismatch for '
+      '${sourceId ?? 'anonymous'}.',
+    );
+    if (!themeMatches) {
+      return const SizedBox.shrink(
+        key: Key('forum-html-renderer-theme-mismatch'),
+      );
+    }
     final preparedHtml =
         document?.preparedHtml ??
         _imageDeduplicator.deduplicateAttachmentImages(
@@ -151,6 +153,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       nestedRendererBuilder: (html, {required sourceId}) {
         return ForumHtmlWidgetPostRenderer(
           html: html,
+          theme: theme,
           callbacks: callbacks,
           preferences: resolvedPreferences,
           sourceId: sourceId,

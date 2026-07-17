@@ -10,6 +10,7 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_prep
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
+import 'forum_html_test_theme.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_html_image_reader_bridge.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 
@@ -25,6 +26,7 @@ void main() {
             'width="640" height="480" alt="一">'
             '<img src="data/attachment/forum/page-2.jpg" alt="二">',
         preferences: ForumHtmlReaderPreferences.defaults(),
+        theme: forumHtmlTestTheme,
         sourceId: 'p1',
         threadId: '100',
         imageCacheOwnerId: '100',
@@ -59,6 +61,7 @@ void main() {
             '<img src="">'
             '<img src="data/attachment/forum/page-1.jpg">',
         preferences: ForumHtmlReaderPreferences.defaults(),
+        theme: forumHtmlTestTheme,
         sourceId: 'p1',
         threadId: '100',
         imageCacheOwnerId: '100',
@@ -76,6 +79,7 @@ void main() {
             '<img src="https://example.com/images/page-1.jpg">'
             '<img src="https://example.com/images/page-1.jpg">',
         preferences: ForumHtmlReaderPreferences.defaults(),
+        theme: forumHtmlTestTheme,
         sourceId: 'p1',
         threadId: '100',
         imageCacheOwnerId: '100',
@@ -102,6 +106,7 @@ void main() {
             '</div>'
             '</div>',
         preferences: ForumHtmlReaderPreferences.defaults(),
+        theme: forumHtmlTestTheme,
         sourceId: 'p1',
         threadId: '100',
         imageCacheOwnerId: '100',
@@ -220,6 +225,7 @@ ForumHtmlPreparedRenderDocument _prepared(String html) {
   return const DefaultForumHtmlRenderPreparer().prepare(
     html: html,
     preferences: ForumHtmlReaderPreferences.defaults(),
+    theme: forumHtmlTestTheme,
     sourceId: 'p1',
     threadId: '100',
     imageCacheOwnerId: '100',

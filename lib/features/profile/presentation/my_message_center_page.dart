@@ -145,6 +145,8 @@ class _NotificationList extends StatelessWidget {
               imageCacheOwnerId: item.id,
               contentImageKind: ForumImageKind.blogInline,
               imageHeaderBuilder: imageHeaderBuilder,
+              surfaceColor: palette.card,
+              foregroundColor: palette.body,
               onOpenLink: (url) => ScaffoldMessenger.of(
                 context,
               ).showSnackBar(SnackBar(content: Text(url))),

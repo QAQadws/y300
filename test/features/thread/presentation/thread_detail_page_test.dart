@@ -562,10 +562,7 @@ void main() {
         expect(draft.title, '测试主题');
         expect(draft.forumName, '测试版块');
         expect(draft.page, 1);
-        expect(
-          draft.thumbnail?.remoteUrl,
-          'https://bbs.yamibo.com/avatar/alice.jpg',
-        );
+        expect(draft.thumbnail, isNull);
 
         await tester.dragUntilVisible(
           find.byKey(const Key('thread-detail-load-more-button')),

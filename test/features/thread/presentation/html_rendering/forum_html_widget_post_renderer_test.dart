@@ -18,7 +18,9 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_read
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/html_rendering/widgets/forum_collapse_block.dart';
+import 'forum_html_test_theme.dart';
 
 void main() {
   testWidgets('renders simple HTML text and inline formatting', (tester) async {
@@ -26,6 +28,7 @@ void main() {
       const MaterialApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
+            theme: forumHtmlTestTheme,
             html: '<p>普通 <strong>加粗</strong></p>',
             sourceId: 'unit',
           ),
@@ -45,6 +48,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
+            theme: forumHtmlTestTheme,
             html: '<a href="forum.php?mod=viewthread&tid=1">链接</a>',
             sourceId: 'link',
             callbacks: ForumHtmlRenderCallbacks(
@@ -83,6 +87,7 @@ void main() {
         ),
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
+            theme: forumHtmlTestTheme,
             html: '<p>段落</p>',
             sourceId: 'prefs',
             preferences: preferences,
@@ -102,23 +107,12 @@ void main() {
     });
   });
 
-  testWidgets('uses theme-aware quote surface colors', (tester) async {
-    const surface = Color(0xFFFBEFDE);
-    const surfaceHighest = Color(0xFFEBD7BC);
-    const outline = Color(0xFFD2B48C);
-    const primary = Color(0xFF7A4B24);
-    final colorScheme = ColorScheme.fromSeed(seedColor: primary).copyWith(
-      surfaceContainer: surface,
-      surfaceContainerHighest: surfaceHighest,
-      outlineVariant: outline,
-      primary: primary,
-    );
-
+  testWidgets('uses explicit render theme quote colors', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData(colorScheme: colorScheme),
-        home: const Scaffold(
+      const MaterialApp(
+        home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
+            theme: forumHtmlTestTheme,
             sourceId: 'quote-surface',
             html:
                 '<div class="quote"><blockquote>'
@@ -137,17 +131,19 @@ void main() {
     final quoteStyles = htmlWidget.customStylesBuilder?.call(
       _elementFrom('<div class="quote">引用正文</div>'),
     );
-    final expectedBackground =
-        Color.lerp(surface, surfaceHighest, 0.72) ?? surfaceHighest;
-    final expectedAccent = Color.lerp(outline, primary, 0.45) ?? outline;
-
     expect(
       quoteStyles,
-      containsPair('background-color', _cssHex(expectedBackground)),
+      containsPair(
+        'background-color',
+        _cssHex(forumHtmlTestTheme.quoteSurface),
+      ),
     );
     expect(
       quoteStyles,
-      containsPair('border-left', '3px solid ${_cssHex(expectedAccent)}'),
+      containsPair(
+        'border-left',
+        '3px solid ${_cssHex(forumHtmlTestTheme.link)}',
+      ),
     );
     expect(find.textContaining('引用正文', findRichText: true), findsOneWidget);
   });
@@ -159,6 +155,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
+            theme: forumHtmlTestTheme,
             html:
                 '<p style="font-size: 30px; color: red; '
                 'background-color: yellow">正文</p>',
@@ -187,6 +184,7 @@ void main() {
         ),
         home: const Scaffold(
           body: ForumHtmlWidgetPostRenderer(
+            theme: forumHtmlTestTheme,
             sourceId: 'font-size-three',
             html: '默认<font size="3">三号</font>',
           ),
@@ -212,6 +210,7 @@ void main() {
         ),
         home: const Scaffold(
           body: ForumHtmlWidgetPostRenderer(
+            theme: forumHtmlTestTheme,
             sourceId: 'font-size-ordering',
             html:
                 '默认'
@@ -243,6 +242,7 @@ void main() {
         ),
         home: const Scaffold(
           body: ForumHtmlWidgetPostRenderer(
+            theme: forumHtmlTestTheme,
             sourceId: 'pstatus',
             html:
                 '<i class="pstatus"> 本帖最后由 INCSKY16 于 2026-7-3 13:56 编辑 </i>'
@@ -274,6 +274,7 @@ void main() {
       const MaterialApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
+            theme: forumHtmlTestTheme,
             sourceId: 'pstatus-spacing',
             html:
                 '<i class="pstatus">本帖最后由作者编辑</i><br><br>'
@@ -309,6 +310,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
+            theme: forumHtmlTestTheme,
             sourceId: 'collapse',
             html:
                 '<div id="toc" class="showcollapse_box">'
@@ -366,6 +368,7 @@ void main() {
       const MaterialApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
+            theme: forumHtmlTestTheme,
             sourceId: 'active',
             html:
                 '<div id="toc" class="showcollapse_box showcollapse_active">'
@@ -392,6 +395,7 @@ void main() {
       const MaterialApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
+            theme: forumHtmlTestTheme,
             sourceId: 'ruby',
             html: '<p>冒险者<ruby>特莉丝<rt>トリス</rt></ruby></p>',
           ),
@@ -411,6 +415,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
+            theme: forumHtmlTestTheme,
             sourceId: 'image',
             html:
                 '<img id="aimg_286401" '
@@ -464,6 +469,7 @@ void main() {
           'src="data/attachment/forum/month_1110/pic.jpg" '
           'alt="预览图" title="图片标题" width="640" height="480">',
       preferences: ForumHtmlReaderPreferences.defaults(),
+      theme: forumHtmlTestTheme,
       sourceId: 'p1',
       threadId: '573279',
       imageCacheOwnerId: '573279',
@@ -479,6 +485,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
+              theme: forumHtmlTestTheme,
               sourceId: 'p1',
               threadId: '573279',
               preparedDocument: prepared,
@@ -510,6 +517,34 @@ void main() {
     );
   });
 
+  testWidgets('detects a prepared document theme signature mismatch', (
+    tester,
+  ) async {
+    final prepared = const DefaultForumHtmlRenderPreparer().prepare(
+      html: '<p>正文</p>',
+      preferences: ForumHtmlReaderPreferences.defaults(),
+      theme: forumHtmlTestTheme,
+      sourceId: 'theme-mismatch',
+      threadId: '100',
+      imageCacheOwnerId: '100',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ForumHtmlWidgetPostRenderer(
+            html: prepared.preparedHtml,
+            theme: _darkTestTheme,
+            sourceId: 'theme-mismatch',
+            preparedDocument: prepared,
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isA<AssertionError>());
+  });
+
   testWidgets('renders thread images through project cache pipeline', (
     tester,
   ) async {
@@ -522,6 +557,7 @@ void main() {
         child: const MaterialApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
+              theme: forumHtmlTestTheme,
               sourceId: 'cached-thread-image',
               threadId: '573279',
               imageHeaderBuilder: headerBuilder,
@@ -574,6 +610,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
+              theme: forumHtmlTestTheme,
               sourceId: 'spec-thread-image',
               threadId: '573279',
               imageRequestResolver: resolver,
@@ -611,6 +648,7 @@ void main() {
         child: const MaterialApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
+              theme: forumHtmlTestTheme,
               sourceId: 'cached-smiley',
               threadId: '573279',
               html: '<img src="static/image/smiley/gexing/008.gif" alt="">',
@@ -650,6 +688,7 @@ void main() {
         child: const MaterialApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
+              theme: forumHtmlTestTheme,
               sourceId: 'unsized-smiley',
               threadId: '573279',
               html: '<img src="static/image/smiley/gexing/008.gif" alt="">',
@@ -691,6 +730,7 @@ void main() {
         child: const MaterialApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
+              theme: forumHtmlTestTheme,
               sourceId: 'sized-smiley',
               threadId: '573279',
               html:
@@ -736,6 +776,7 @@ void main() {
         child: const MaterialApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
+              theme: forumHtmlTestTheme,
               sourceId: 'cached-size-smiley',
               threadId: '573279',
               html: '<img src="static/image/smiley/gexing/008.gif" alt="">',
@@ -772,6 +813,7 @@ void main() {
         child: const MaterialApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
+              theme: forumHtmlTestTheme,
               sourceId: 'unsized-image',
               threadId: '573279',
               html: '<img src="data/attachment/forum/page-unsized.jpg">',
@@ -809,6 +851,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
+              theme: forumHtmlTestTheme,
               sourceId: 'learned-ratio-image',
               threadId: '573279',
               html: '<img src="data/attachment/forum/page-learned.jpg">',
@@ -865,6 +908,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
+              theme: forumHtmlTestTheme,
               sourceId: 'decoded-size-image',
               threadId: '573279',
               html: '<img src="data/attachment/forum/page-decoded.jpg">',
@@ -922,6 +966,7 @@ void main() {
                   child: SizedBox(
                     width: 320,
                     child: ForumHtmlWidgetPostRenderer(
+                      theme: forumHtmlTestTheme,
                       sourceId: 'consecutive-attachment-images',
                       threadId: '573549',
                       html:
@@ -993,6 +1038,7 @@ void main() {
         child: const MaterialApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
+              theme: forumHtmlTestTheme,
               sourceId: 'decoded-comic-ratio-image',
               threadId: '573279',
               html: '<img src="data/attachment/forum/page-comic.jpg">',
@@ -1044,6 +1090,7 @@ void main() {
         child: const MaterialApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
+              theme: forumHtmlTestTheme,
               sourceId: 'cached-ratio-image',
               threadId: '573279',
               html: '<img src="data/attachment/forum/page-cached.jpg">',
@@ -1106,6 +1153,7 @@ void main() {
         child: const MaterialApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
+              theme: forumHtmlTestTheme,
               sourceId: 'html-ratio-image',
               threadId: '573279',
               html:
@@ -1152,6 +1200,7 @@ void main() {
       const MaterialApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
+            theme: forumHtmlTestTheme,
             sourceId: 'data-image',
             threadId: '573279',
             html:
@@ -1174,6 +1223,7 @@ void main() {
         const MaterialApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
+              theme: forumHtmlTestTheme,
               sourceId: 'dedupe',
               html:
                   '<p>正文</p>'
@@ -1210,6 +1260,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
+            theme: forumHtmlTestTheme,
             sourceId: 'sticker',
             html: '<img src="static/image/smiley/gexing/008.gif" alt="">',
             callbacks: ForumHtmlRenderCallbacks(
@@ -1238,6 +1289,17 @@ void main() {
     expect(tappedImage?.attachmentId, isNull);
   });
 }
+
+const _darkTestTheme = ForumHtmlThemeContext(
+  brightness: ForumHtmlBrightness.dark,
+  surface: Color(0xFF141414),
+  foreground: Color(0xFFE9E9E9),
+  link: Color(0xFF8DB7FF),
+  quoteSurface: Color(0xFF242424),
+  quoteForeground: Color(0xFFAAA39A),
+  codeSurface: Color(0xFF202020),
+  codeForeground: Color(0xFFE9E9E9),
+);
 
 String _cssHex(Color color) {
   final rgb = color.toARGB32() & 0x00FFFFFF;

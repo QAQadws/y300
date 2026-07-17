@@ -6,6 +6,7 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_imag
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
+import 'forum_html_test_theme.dart';
 
 void main() {
   group('DefaultForumHtmlRenderPreparer pipeline', () {
@@ -18,6 +19,7 @@ void main() {
             '<p style="color: black">正文</p>'
             '<img src="data/attachment/forum/page.jpg">',
         preferences: ForumHtmlReaderPreferences.defaults(),
+        theme: forumHtmlTestTheme,
         sourceId: 'phase2-single-pass',
         threadId: '100',
         imageCacheOwnerId: '100',
@@ -40,6 +42,7 @@ void main() {
             '<img id="aimg_9" '
             'src="https://bbs.yamibo.com/data/attachment/forum/page.jpg">',
         preferences: ForumHtmlReaderPreferences.defaults(),
+        theme: forumHtmlTestTheme,
         sourceId: 'phase2-order',
         threadId: '100',
         imageCacheOwnerId: '100',
@@ -65,6 +68,9 @@ void main() {
       expect(prepared.sequence.entries, hasLength(1));
       expect(prepared.sequence.entries.single.attachmentId, '9');
       expect(prepared.totalImageCount, 1);
+      expect(prepared.themeSignature, forumHtmlTestTheme.signature);
+      expect(prepared.themeAdaptationStats.remappedForegroundCount, 0);
+      expect(prepared.themeAdaptationStats.remappedBackgroundCount, 0);
     });
   });
 

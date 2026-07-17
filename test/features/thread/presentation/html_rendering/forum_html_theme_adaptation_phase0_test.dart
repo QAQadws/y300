@@ -9,6 +9,7 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
+import 'forum_html_test_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 
 const _fixturePath =
@@ -38,6 +39,7 @@ void main() {
       final prepared = const DefaultForumHtmlRenderPreparer().prepare(
         html: fixtureHtml,
         preferences: preferences,
+        theme: forumHtmlTestTheme,
         sourceId: 'phase0-author-colors',
         threadId: 'phase0',
         imageCacheOwnerId: null,
@@ -145,6 +147,7 @@ void main() {
     final first = preparer.prepare(
       html: longBody,
       preferences: ForumHtmlReaderPreferences.defaults(),
+      theme: forumHtmlTestTheme,
       sourceId: 'phase0-long-body',
       threadId: '573549',
       imageCacheOwnerId: null,
@@ -156,6 +159,7 @@ void main() {
     final second = preparer.prepare(
       html: longBody,
       preferences: ForumHtmlReaderPreferences.defaults(),
+      theme: forumHtmlTestTheme,
       sourceId: 'phase0-long-body',
       threadId: '573549',
       imageCacheOwnerId: null,

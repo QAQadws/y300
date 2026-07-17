@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adaptation_result.dart';
 
 const forumHtmlReadableImageIndexAttribute = 'data-y300-readable-image-index';
 
@@ -14,6 +15,8 @@ class ForumHtmlPreparedRenderDocument {
     required this.skippedNonNetworkCount,
     required this.duplicatedReadableUrlCount,
     required this.attachmentTaggedCount,
+    required this.themeSignature,
+    required this.themeAdaptationStats,
   });
 
   final String preparedHtml;
@@ -24,6 +27,8 @@ class ForumHtmlPreparedRenderDocument {
   final int skippedNonNetworkCount;
   final int duplicatedReadableUrlCount;
   final int attachmentTaggedCount;
+  final String themeSignature;
+  final ForumHtmlThemeAdaptationStats themeAdaptationStats;
 
   int get readableImageCount => sequence.entries.length;
 
@@ -37,6 +42,8 @@ class ForumHtmlPreparedRenderDocument {
       skippedNonNetworkCount: skippedNonNetworkCount,
       duplicatedReadableUrlCount: duplicatedReadableUrlCount,
       attachmentTaggedCount: attachmentTaggedCount,
+      themeSignature: themeSignature,
+      themeAdaptationStats: themeAdaptationStats,
     );
   }
 }

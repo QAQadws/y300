@@ -4,6 +4,7 @@ import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 
@@ -62,6 +63,10 @@ class ThreadPostHtmlSelectionCopyPage extends StatelessWidget {
                   imageHeaderBuilder: imageHeaderBuilder,
                   onOpenPostLink: onOpenPostLink,
                   onOpenPostImage: onOpenPostImage,
+                  theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(
+                    palette: palette,
+                    brightness: Theme.of(context).brightness,
+                  ),
                   onImageFallback: onImageFallback,
                 ),
               ),

@@ -7,25 +7,25 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/reader_shared/domain/rich_text/typography/discuz_font_size_policy.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/css_inline_style_declarations.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 class ForumHtmlStylePolicy {
   const ForumHtmlStylePolicy(
     this.preferences, {
-    this.quoteBackgroundColor = const Color(0xFFF2F2F2),
-    this.quoteAccentColor = const Color(0xFFBDBDBD),
+    required this.theme,
     CssInlineStyleDeclarationCodec inlineStyleDeclarationCodec =
         const CssInlineStyleDeclarationCodec(),
   }) : _inlineStyleDeclarationCodec = inlineStyleDeclarationCodec;
 
   final ForumHtmlReaderPreferences preferences;
-  final Color quoteBackgroundColor;
-  final Color quoteAccentColor;
+  final ForumHtmlThemeContext theme;
   final CssInlineStyleDeclarationCodec _inlineStyleDeclarationCodec;
 
   TextStyle baseTextStyle(BuildContext context) {
     final fallback = Theme.of(context).textTheme.bodyMedium;
     final baseFontSize = fallback?.fontSize ?? 14;
     return (fallback ?? const TextStyle()).copyWith(
+      color: theme.foreground,
       fontSize: baseFontSize * preferences.typography.fontScale,
       height: preferences.typography.lineHeightScale,
     );
@@ -38,8 +38,9 @@ class ForumHtmlStylePolicy {
     }
     if (_isQuoteSurface(element)) {
       return {
-        'background-color': _toCssHex(quoteBackgroundColor),
-        'border-left': '3px solid ${_toCssHex(quoteAccentColor)}',
+        'background-color': _toCssHex(theme.quoteSurface),
+        'color': _toCssHex(theme.quoteForeground),
+        'border-left': '3px solid ${_toCssHex(theme.link)}',
         'border-radius': '6px',
         'padding': '8px 10px',
         'margin': '0 0 ${preferences.typography.paragraphSpacing}px',

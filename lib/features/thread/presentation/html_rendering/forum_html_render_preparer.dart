@@ -9,11 +9,14 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_imag
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adaptation_result.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 abstract interface class ForumHtmlRenderPreparer {
   ForumHtmlPreparedRenderDocument prepare({
     required String html,
     required ForumHtmlReaderPreferences preferences,
+    required ForumHtmlThemeContext theme,
     required String sourceId,
     required String? threadId,
     required String? imageCacheOwnerId,
@@ -43,11 +46,12 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
   ForumHtmlPreparedRenderDocument prepare({
     required String html,
     required ForumHtmlReaderPreferences preferences,
+    required ForumHtmlThemeContext theme,
     required String sourceId,
     required String? threadId,
     required String? imageCacheOwnerId,
   }) {
-    final stylePolicy = ForumHtmlStylePolicy(preferences);
+    final stylePolicy = ForumHtmlStylePolicy(preferences, theme: theme);
     final fragment = _fragmentCodec.parse(html);
     stylePolicy.normalizeStructure(fragment);
     stylePolicy.normalizeAuthorStyles(fragment);
@@ -166,6 +170,8 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
       skippedNonNetworkCount: skippedNonNetworkCount,
       duplicatedReadableUrlCount: _duplicateCount(readableUrlCounts),
       attachmentTaggedCount: attachmentTaggedCount,
+      themeSignature: theme.signature,
+      themeAdaptationStats: ForumHtmlThemeAdaptationStats.none,
     );
   }
 

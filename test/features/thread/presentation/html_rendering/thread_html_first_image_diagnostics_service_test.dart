@@ -7,6 +7,7 @@ import 'package:y300/features/thread/domain/models/thread_post_render_cache_key.
 import 'package:y300/features/thread/domain/models/thread_post_segmentation_config.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
+import 'forum_html_test_theme.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_html_first_image_diagnostics_service.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_html_image_reader_bridge.dart';
@@ -25,6 +26,7 @@ void main() {
             '<img src="static/image/smiley/comcom/2.gif">'
             '<img src="data:image/png;base64,abc">',
         preferences: ForumHtmlReaderPreferences.defaults(),
+        theme: forumHtmlTestTheme,
         sourceId: 'p1',
         threadId: '100',
         imageCacheOwnerId: '100',
@@ -65,6 +67,7 @@ void main() {
       final prepared = preparer.prepare(
         html: '<img src="data/attachment/forum/page-1.jpg">',
         preferences: ForumHtmlReaderPreferences.defaults(),
+        theme: forumHtmlTestTheme,
         sourceId: 'p1',
         threadId: '100',
         imageCacheOwnerId: '100',

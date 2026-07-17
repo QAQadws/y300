@@ -160,6 +160,10 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
             onOpenPostImage: onOpenPostImages == null
                 ? null
                 : (post, request) => onOpenPostImages!.call(post, request),
+            theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(
+              palette: palette,
+              brightness: Theme.of(context).brightness,
+            ),
             onImageFallback: onHtmlFirstImageFallback,
             onImageLayoutShift: onHtmlFirstImageLayoutShift,
             imageFallbackAspectRatioFor: (spec, request) =>
@@ -563,6 +567,10 @@ class ThreadPostCard extends StatelessWidget {
               imageHeaderBuilder: imageHeaderBuilder,
               onOpenPostLink: onOpenPostLink,
               onOpenPostImage: onOpenPostImages,
+              theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(
+                palette: palette,
+                brightness: Theme.of(context).brightness,
+              ),
               onImageFallback: (post, request) {
                 onCopyActionUrl('${post.number}# 图片', request.url);
               },

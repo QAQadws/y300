@@ -530,6 +530,8 @@ class _SignatureSection extends StatelessWidget {
               ? profile.username
               : profile.uid,
           imageHeaderBuilder: imageHeaderBuilder,
+          surfaceColor: palette.card,
+          foregroundColor: palette.body,
           onOpenLink: (url) => ScaffoldMessenger.of(
             context,
           ).showSnackBar(SnackBar(content: Text(url))),

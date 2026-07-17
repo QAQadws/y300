@@ -14,6 +14,7 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_settings_sheet.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
@@ -430,6 +431,10 @@ class _LoadedSampleView extends StatelessWidget {
         const SizedBox(height: 12),
         ForumHtmlWidgetPostRenderer(
           html: conversionResult.html,
+          theme: const ForumHtmlRenderThemeFactory().fromMaterialTheme(
+            theme: Theme.of(context),
+            surface: Theme.of(context).scaffoldBackgroundColor,
+          ),
           sourceId: input.sourceId,
           preferences: preferences,
           callbacks: ForumHtmlRenderCallbacks(onTapUrl: onTapUrl),

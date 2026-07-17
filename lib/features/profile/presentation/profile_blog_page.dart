@@ -636,6 +636,8 @@ class _BlogDetailCard extends StatelessWidget {
               imageHeaderBuilder: imageHeaderBuilder,
               imageCacheOwnerId: data.id,
               contentImageKind: ForumImageKind.blogInline,
+              surfaceColor: palette.card,
+              foregroundColor: palette.body,
               onOpenLink: (url) => ScaffoldMessenger.of(
                 context,
               ).showSnackBar(SnackBar(content: Text(url))),
@@ -711,6 +713,8 @@ class _CommentCard extends StatelessWidget {
               imageHeaderBuilder: imageHeaderBuilder,
               imageCacheOwnerId: comment.id,
               contentImageKind: ForumImageKind.blogInline,
+              surfaceColor: palette.card,
+              foregroundColor: palette.body,
               onOpenLink: (url) => ScaffoldMessenger.of(
                 context,
               ).showSnackBar(SnackBar(content: Text(url))),

@@ -15,6 +15,7 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_rend
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
+import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_html_image_reader_bridge.dart';
 
 typedef ThreadPostHtmlFirstImageFallback =
@@ -36,6 +37,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
     required this.imageHeaderBuilder,
     required this.onOpenPostLink,
     required this.onOpenPostImage,
+    required this.theme,
     this.onImageFallback,
     this.onImageDiagnostics,
     this.onImageLayoutShift,
@@ -54,6 +56,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
   final ValueChanged<String> onOpenPostLink;
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
   onOpenPostImage;
+  final ForumHtmlThemeContext theme;
   final ThreadPostHtmlFirstImageFallback? onImageFallback;
   final ThreadPostHtmlFirstImageDiagnostics? onImageDiagnostics;
   final void Function(ForumHtmlImageLayoutShift shift)? onImageLayoutShift;
@@ -139,6 +142,7 @@ class _ThreadPostHtmlFirstBodyState
       final preparedDocument = widget.renderPreparer.prepare(
         html: html,
         preferences: preferences,
+        theme: widget.theme,
         sourceId: sourceId,
         threadId: widget.threadId,
         imageCacheOwnerId: widget.threadId,
@@ -152,6 +156,7 @@ class _ThreadPostHtmlFirstBodyState
         key: Key('thread-post-html-first-body-${widget.post.pid}'),
         child: ForumHtmlWidgetPostRenderer(
           html: html,
+          theme: widget.theme,
           preparedDocument: preparedDocument,
           sourceId: sourceId,
           threadId: widget.threadId,
@@ -295,6 +300,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
     required this.imageHeaderBuilder,
     required this.onOpenPostLink,
     required this.onOpenPostImage,
+    required this.theme,
     this.onImageFallback,
     this.onImageDiagnostics,
     this.onImageLayoutShift,
@@ -312,6 +318,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
   final ValueChanged<String> onOpenPostLink;
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
   onOpenPostImage;
+  final ForumHtmlThemeContext theme;
   final ThreadPostHtmlFirstImageFallback? onImageFallback;
   final ThreadPostHtmlFirstImageDiagnostics? onImageDiagnostics;
   final void Function(ForumHtmlImageLayoutShift shift)? onImageLayoutShift;
@@ -336,6 +343,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
       imageHeaderBuilder: imageHeaderBuilder,
       onOpenPostLink: onOpenPostLink,
       onOpenPostImage: onOpenPostImage,
+      theme: theme,
       onImageFallback: onImageFallback,
       onImageDiagnostics: onImageDiagnostics,
       onImageLayoutShift: onImageLayoutShift,
