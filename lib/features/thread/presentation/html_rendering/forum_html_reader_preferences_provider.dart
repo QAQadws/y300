@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/core/preferences/preference_keys.dart';
+import 'package:y300/core/preferences/preferences_providers.dart';
+import 'package:y300/core/preferences/preferences_store.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
 
@@ -60,55 +62,71 @@ abstract class ForumHtmlReaderPreferencesRepository {
 
 class SharedPrefsForumHtmlReaderPreferencesRepository
     implements ForumHtmlReaderPreferencesRepository {
-  static const _fontScaleKey = 'forum_html_reader_font_scale';
-  static const _lineHeightScaleKey = 'forum_html_reader_line_height_scale';
-  static const _paragraphSpacingKey = 'forum_html_reader_paragraph_spacing';
-  static const _conversionModeKey = 'forum_html_reader_conversion_mode';
-  static const _preserveFontSizeKey =
-      'forum_html_reader_preserve_author_font_size';
+  SharedPrefsForumHtmlReaderPreferencesRepository({
+    PreferencesStore? preferencesStore,
+  }) : _preferencesStore = preferencesStore ?? SharedPreferencesStore();
+
+  final PreferencesStore _preferencesStore;
 
   @override
   Future<ForumHtmlReaderPreferences> load() async {
-    final prefs = await SharedPreferences.getInstance();
     final defaults = ForumHtmlReaderPreferences.defaults();
     final defaultTypography = defaults.typography;
     return ForumHtmlReaderPreferences(
       typography: RichTextTypography(
         fontScale: _clampFontScale(
-          prefs.getDouble(_fontScaleKey) ?? defaultTypography.fontScale,
+          await _preferencesStore.read(
+                PreferenceKeys.forumHtmlReaderFontScale,
+              ) ??
+              defaultTypography.fontScale,
         ),
         lineHeightScale: _clampLineHeight(
-          prefs.getDouble(_lineHeightScaleKey) ??
+          await _preferencesStore.read(
+                PreferenceKeys.forumHtmlReaderLineHeightScale,
+              ) ??
               defaultTypography.lineHeightScale,
         ),
         paragraphSpacing: _clampSpacing(
-          prefs.getDouble(_paragraphSpacingKey) ??
+          await _preferencesStore.read(
+                PreferenceKeys.forumHtmlReaderParagraphSpacing,
+              ) ??
               defaultTypography.paragraphSpacing,
         ),
       ),
-      conversionMode: _parseConversionMode(prefs.getString(_conversionModeKey)),
+      conversionMode: _parseConversionMode(
+        await _preferencesStore.read(
+          PreferenceKeys.forumHtmlReaderConversionMode,
+        ),
+      ),
       preserveAuthorFontSize:
-          prefs.getBool(_preserveFontSizeKey) ??
+          await _preferencesStore.read(
+            PreferenceKeys.forumHtmlReaderPreserveAuthorFontSize,
+          ) ??
           defaults.preserveAuthorFontSize,
     );
   }
 
   @override
   Future<void> save(ForumHtmlReaderPreferences preferences) async {
-    final prefs = await SharedPreferences.getInstance();
     final typography = preferences.typography;
-    await prefs.setDouble(_fontScaleKey, _clampFontScale(typography.fontScale));
-    await prefs.setDouble(
-      _lineHeightScaleKey,
+    await _preferencesStore.write(
+      PreferenceKeys.forumHtmlReaderFontScale,
+      _clampFontScale(typography.fontScale),
+    );
+    await _preferencesStore.write(
+      PreferenceKeys.forumHtmlReaderLineHeightScale,
       _clampLineHeight(typography.lineHeightScale),
     );
-    await prefs.setDouble(
-      _paragraphSpacingKey,
+    await _preferencesStore.write(
+      PreferenceKeys.forumHtmlReaderParagraphSpacing,
       _clampSpacing(typography.paragraphSpacing),
     );
-    await prefs.setString(_conversionModeKey, preferences.conversionMode.name);
-    await prefs.setBool(
-      _preserveFontSizeKey,
+    await _preferencesStore.write(
+      PreferenceKeys.forumHtmlReaderConversionMode,
+      preferences.conversionMode.name,
+    );
+    await _preferencesStore.write(
+      PreferenceKeys.forumHtmlReaderPreserveAuthorFontSize,
       preferences.preserveAuthorFontSize,
     );
   }
@@ -134,7 +152,9 @@ class SharedPrefsForumHtmlReaderPreferencesRepository
 
 final forumHtmlReaderPreferencesRepositoryProvider =
     Provider<ForumHtmlReaderPreferencesRepository>(
-      (ref) => SharedPrefsForumHtmlReaderPreferencesRepository(),
+      (ref) => SharedPrefsForumHtmlReaderPreferencesRepository(
+        preferencesStore: ref.watch(preferencesStoreProvider),
+      ),
     );
 
 final forumHtmlReaderPreferencesControllerProvider =

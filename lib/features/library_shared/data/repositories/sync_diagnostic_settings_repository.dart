@@ -1,5 +1,5 @@
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:y300/core/config/app_storage_keys.dart';
+import 'package:y300/core/preferences/preference_keys.dart';
+import 'package:y300/core/preferences/preferences_store.dart';
 
 abstract class SyncDiagnosticSettingsRepository {
   Future<bool> loadManualModeEnabled();
@@ -9,15 +9,25 @@ abstract class SyncDiagnosticSettingsRepository {
 
 class SharedPrefsSyncDiagnosticSettingsRepository
     implements SyncDiagnosticSettingsRepository {
+  SharedPrefsSyncDiagnosticSettingsRepository({
+    PreferencesStore? preferencesStore,
+  }) : _preferencesStore = preferencesStore ?? SharedPreferencesStore();
+
+  final PreferencesStore _preferencesStore;
+
   @override
   Future<bool> loadManualModeEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(AppStorageKeys.syncDiagnosticManualMode) ?? false;
+    return await _preferencesStore.read(
+          PreferenceKeys.syncDiagnosticManualMode,
+        ) ??
+        false;
   }
 
   @override
   Future<void> setManualModeEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(AppStorageKeys.syncDiagnosticManualMode, enabled);
+    await _preferencesStore.write(
+      PreferenceKeys.syncDiagnosticManualMode,
+      enabled,
+    );
   }
 }

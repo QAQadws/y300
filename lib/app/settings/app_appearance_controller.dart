@@ -1,16 +1,19 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/app/settings/app_appearance_settings_repository.dart';
+import 'package:y300/core/preferences/preferences_providers.dart';
 
 final appAppearanceSettingsRepositoryProvider =
     Provider<AppAppearanceSettingsRepository>((ref) {
-  return SharedPrefsAppAppearanceSettingsRepository();
-});
+      return SharedPrefsAppAppearanceSettingsRepository(
+        preferencesStore: ref.watch(preferencesStoreProvider),
+      );
+    });
 
 final appAppearanceControllerProvider =
     AsyncNotifierProvider<AppAppearanceController, AppAppearanceSettings>(
-  AppAppearanceController.new,
-);
+      AppAppearanceController.new,
+    );
 
 class AppAppearanceController extends AsyncNotifier<AppAppearanceSettings> {
   AppAppearanceSettingsRepository get _repository =>

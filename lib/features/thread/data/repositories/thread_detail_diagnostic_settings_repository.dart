@@ -1,5 +1,5 @@
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:y300/core/config/app_storage_keys.dart';
+import 'package:y300/core/preferences/preference_keys.dart';
+import 'package:y300/core/preferences/preferences_store.dart';
 
 abstract class ThreadDetailDiagnosticSettingsRepository {
   Future<bool> loadScrollDiagnosticEnabled();
@@ -9,20 +9,24 @@ abstract class ThreadDetailDiagnosticSettingsRepository {
 
 class SharedPrefsThreadDetailDiagnosticSettingsRepository
     implements ThreadDetailDiagnosticSettingsRepository {
-  const SharedPrefsThreadDetailDiagnosticSettingsRepository();
+  SharedPrefsThreadDetailDiagnosticSettingsRepository({
+    PreferencesStore? preferencesStore,
+  }) : _preferencesStore = preferencesStore ?? SharedPreferencesStore();
+
+  final PreferencesStore _preferencesStore;
 
   @override
   Future<bool> loadScrollDiagnosticEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(AppStorageKeys.threadDetailScrollDiagnosticEnabled) ??
+    return await _preferencesStore.read(
+          PreferenceKeys.threadDetailScrollDiagnosticEnabled,
+        ) ??
         false;
   }
 
   @override
   Future<void> setScrollDiagnosticEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(
-      AppStorageKeys.threadDetailScrollDiagnosticEnabled,
+    await _preferencesStore.write(
+      PreferenceKeys.threadDetailScrollDiagnosticEnabled,
       enabled,
     );
   }

@@ -4,6 +4,7 @@ import 'package:y300/features/cache/domain/models/cache_maintenance_models.dart'
 import 'package:y300/features/cache/domain/models/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/more/data/data_storage_settings_repository.dart';
+import 'package:y300/core/preferences/preferences_providers.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 
@@ -68,6 +69,7 @@ final dataStorageSettingsRepositoryProvider =
     Provider<DataStorageSettingsRepository>((ref) {
       return DataStorageSettingsRepositoryImpl(
         storageLocationRepository: ref.watch(storageLocationRepositoryProvider),
+        preferencesStore: ref.watch(preferencesStoreProvider),
       );
     });
 

@@ -1,5 +1,5 @@
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:y300/core/config/app_storage_keys.dart';
+import 'package:y300/core/preferences/preference_keys.dart';
+import 'package:y300/core/preferences/preferences_store.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 
 abstract class ForumModeSettingsRepository {
@@ -10,16 +10,21 @@ abstract class ForumModeSettingsRepository {
 
 class SharedPrefsForumModeSettingsRepository
     implements ForumModeSettingsRepository {
+  SharedPrefsForumModeSettingsRepository({PreferencesStore? preferencesStore})
+    : _preferencesStore = preferencesStore ?? SharedPreferencesStore();
+
+  final PreferencesStore _preferencesStore;
+
   @override
   Future<ForumShellMode> loadMode() async {
-    final prefs = await SharedPreferences.getInstance();
-    return _parseMode(prefs.getString(AppStorageKeys.forumShellMode));
+    return _parseMode(
+      await _preferencesStore.read(PreferenceKeys.forumShellMode),
+    );
   }
 
   @override
   Future<void> saveMode(ForumShellMode mode) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(AppStorageKeys.forumShellMode, mode.name);
+    await _preferencesStore.write(PreferenceKeys.forumShellMode, mode.name);
   }
 
   ForumShellMode _parseMode(String? raw) {

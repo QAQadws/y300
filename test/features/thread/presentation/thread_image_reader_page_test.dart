@@ -41,6 +41,39 @@ void main() {
     expect(find.byType(ReaderSessionImage), findsWidgets);
   });
 
+  testWidgets('ThreadImageReaderPage uses the shared default LTR snapshot', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const <String, Object>{});
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(
+            _RecordingImageCacheService(),
+          ),
+        ],
+        child: MaterialApp(home: ThreadImageReaderPage(request: _request())),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+
+    expect(
+      find.byKey(const Key('thread-image-reader-page-view')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('thread-image-reader-list')), findsNothing);
+    expect(
+      tester
+          .widget<PageView>(
+            find.byKey(const Key('thread-image-reader-page-view')),
+          )
+          .reverse,
+      isFalse,
+    );
+  });
+
   testWidgets('ThreadImageReaderPage exposes general reading chrome only', (
     tester,
   ) async {

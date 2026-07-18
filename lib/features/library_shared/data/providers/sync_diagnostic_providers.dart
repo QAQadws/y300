@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/preferences/preferences_providers.dart';
 import 'package:y300/features/library_shared/data/services/sync_diagnostic_recorder_impl.dart';
 import 'package:y300/features/library_shared/data/repositories/sync_diagnostic_settings_repository.dart';
 import 'package:y300/features/library_shared/domain/services/sync_diagnostic_recorder.dart';
@@ -9,7 +10,9 @@ final syncDiagnosticInitialManualModeProvider = Provider<bool>((ref) => false);
 
 final syncDiagnosticSettingsRepositoryProvider =
     Provider<SyncDiagnosticSettingsRepository>((ref) {
-      return SharedPrefsSyncDiagnosticSettingsRepository();
+      return SharedPrefsSyncDiagnosticSettingsRepository(
+        preferencesStore: ref.watch(preferencesStoreProvider),
+      );
     });
 
 final syncDiagnosticRecorderProvider = Provider<SyncDiagnosticRecorder>((ref) {

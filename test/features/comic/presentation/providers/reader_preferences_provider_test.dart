@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -23,7 +25,7 @@ void main() {
     expect(value.showPageIndicator, isTrue);
   });
 
-  test('repository reads the stable keys and supported enum codecs', () async {
+  test('repository reads legacy keys when the v1 snapshot is absent', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
       'reader_pref_mode': 'rtl',
       'reader_pref_page_fit': 'original',
@@ -42,7 +44,7 @@ void main() {
     expect(value.showPageIndicator, isFalse);
   });
 
-  test('repository falls back for unknown enum values', () async {
+  test('legacy fallback normalizes unknown values', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
       'reader_pref_mode': 'future-mode',
       'reader_pref_page_fit': 'future-fit',
@@ -60,7 +62,47 @@ void main() {
     expect(value.showPageIndicator, isTrue);
   });
 
-  test('repository writes stable enum names and preference keys', () async {
+  test('v1 snapshot wins over stale legacy keys', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'reader.image.v1': jsonEncode(<String, Object>{
+        'schemaVersion': 1,
+        'readerMode': 'ltr',
+        'pageFit': 'contain',
+        'background': 'white',
+        'pageSpacing': 3,
+        'showPageIndicator': false,
+      }),
+      'reader_pref_mode': 'rtl',
+      'reader_pref_page_spacing': 20.0,
+    });
+    final repository = SharedPrefsReaderPreferencesRepository();
+
+    final value = await repository.load();
+
+    expect(value.readerMode, ReaderModePreference.ltr);
+    expect(value.pageFit, ReaderPageFitPreference.contain);
+    expect(value.background, ReaderBackgroundPreference.white);
+    expect(value.pageSpacing, 3);
+    expect(value.showPageIndicator, isFalse);
+  });
+
+  test('invalid v1 snapshots do not revive stale legacy values', () async {
+    for (final snapshot in <Object>['{broken', true]) {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'reader.image.v1': snapshot,
+        'reader_pref_mode': 'rtl',
+        'reader_pref_page_spacing': 20.0,
+      });
+      final repository = SharedPrefsReaderPreferencesRepository();
+
+      final value = await repository.load();
+
+      expect(value.readerMode, ReaderModePreference.ltr);
+      expect(value.pageSpacing, 0);
+    }
+  });
+
+  test('repository writes one normalized v1 snapshot', () async {
     final repository = SharedPrefsReaderPreferencesRepository();
     const value = ReaderPreferences(
       readerMode: ReaderModePreference.rtl,
@@ -72,12 +114,17 @@ void main() {
 
     await repository.save(value);
     final prefs = await SharedPreferences.getInstance();
+    final snapshot =
+        jsonDecode(prefs.getString('reader.image.v1')!) as Map<String, dynamic>;
 
-    expect(prefs.getString('reader_pref_mode'), 'rtl');
-    expect(prefs.getString('reader_pref_page_fit'), 'contain');
-    expect(prefs.getString('reader_pref_background'), 'black');
-    expect(prefs.getDouble('reader_pref_page_spacing'), 7.5);
-    expect(prefs.getBool('reader_pref_show_page_indicator'), isFalse);
+    expect(snapshot['schemaVersion'], 1);
+    expect(snapshot['readerMode'], 'rtl');
+    expect(snapshot['pageFit'], 'contain');
+    expect(snapshot['background'], 'black');
+    expect(snapshot['pageSpacing'], 7.5);
+    expect(snapshot['showPageIndicator'], isFalse);
+    expect(prefs.containsKey('reader_pref_mode'), isFalse);
+    expect(prefs.containsKey('reader_pref_page_spacing'), isFalse);
   });
 
   test('controller persists and reloads updated reader mode', () async {

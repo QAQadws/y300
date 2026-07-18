@@ -1,5 +1,5 @@
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:y300/core/config/app_storage_keys.dart';
+import 'package:y300/core/preferences/preference_keys.dart';
+import 'package:y300/core/preferences/preferences_store.dart';
 
 abstract class StickerPickerPreferencesRepository {
   Future<String?> loadLastGroupId();
@@ -10,16 +10,16 @@ abstract class StickerPickerPreferencesRepository {
 class SharedPreferencesStickerPickerPreferencesRepository
     implements StickerPickerPreferencesRepository {
   SharedPreferencesStickerPickerPreferencesRepository({
-    SharedPreferences? sharedPreferences,
-  }) : _sharedPreferences = sharedPreferences;
+    PreferencesStore? preferencesStore,
+  }) : _preferencesStore = preferencesStore ?? SharedPreferencesStore();
 
-  final SharedPreferences? _sharedPreferences;
+  final PreferencesStore _preferencesStore;
 
   @override
   Future<String?> loadLastGroupId() async {
-    final raw = (await _prefs())
-        .getString(AppStorageKeys.replyStickerLastGroupId)
-        ?.trim();
+    final raw = (await _preferencesStore.read(
+      PreferenceKeys.replyStickerLastGroupId,
+    ))?.trim();
     return raw == null || raw.isEmpty ? null : raw;
   }
 
@@ -29,17 +29,9 @@ class SharedPreferencesStickerPickerPreferencesRepository
     if (normalized.isEmpty) {
       return;
     }
-    await (await _prefs()).setString(
-      AppStorageKeys.replyStickerLastGroupId,
+    await _preferencesStore.write(
+      PreferenceKeys.replyStickerLastGroupId,
       normalized,
     );
-  }
-
-  Future<SharedPreferences> _prefs() async {
-    final sharedPreferences = _sharedPreferences;
-    if (sharedPreferences != null) {
-      return sharedPreferences;
-    }
-    return SharedPreferences.getInstance();
   }
 }

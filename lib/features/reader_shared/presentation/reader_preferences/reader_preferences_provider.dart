@@ -1,5 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/core/preferences/preference_keys.dart';
+import 'package:y300/core/preferences/preferences_providers.dart';
+import 'package:y300/core/preferences/preferences_store.dart';
+import 'package:y300/features/reader_shared/data/reader_preferences/reader_preferences_snapshot_codec.dart';
 import 'package:y300/features/reader_shared/domain/reader_preferences/reader_preferences.dart';
 
 /// 持久化抽象，让存储实现与状态编排解耦。
@@ -11,78 +14,58 @@ abstract class ReaderPreferencesRepository {
 
 class SharedPrefsReaderPreferencesRepository
     implements ReaderPreferencesRepository {
-  static const String _readerModeKey = 'reader_pref_mode';
-  static const String _pageFitKey = 'reader_pref_page_fit';
-  static const String _backgroundKey = 'reader_pref_background';
-  static const String _pageSpacingKey = 'reader_pref_page_spacing';
-  static const String _showPageIndicatorKey = 'reader_pref_show_page_indicator';
+  SharedPrefsReaderPreferencesRepository({
+    PreferencesStore? preferencesStore,
+    ReaderPreferencesSnapshotCodec codec =
+        const ReaderPreferencesSnapshotCodec(),
+  }) : _preferencesStore = preferencesStore ?? SharedPreferencesStore(),
+       _codec = codec;
+
+  final PreferencesStore _preferencesStore;
+  final ReaderPreferencesSnapshotCodec _codec;
 
   @override
   Future<ReaderPreferences> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final defaults = ReaderPreferences.defaults();
-    final modeRaw = prefs.getString(_readerModeKey);
-    final mode = _parseMode(modeRaw);
-
-    return ReaderPreferences(
-      readerMode: mode,
-      pageFit: _parsePageFit(prefs.getString(_pageFitKey)),
-      background: _parseBackground(prefs.getString(_backgroundKey)),
-      pageSpacing: _normalizePageSpacing(prefs.getDouble(_pageSpacingKey)),
-      showPageIndicator:
-          prefs.getBool(_showPageIndicatorKey) ?? defaults.showPageIndicator,
+    if (await _preferencesStore.contains(
+      PreferenceKeys.imageReaderSnapshotV1,
+    )) {
+      return _codec.decode(
+        await _preferencesStore.read(PreferenceKeys.imageReaderSnapshotV1),
+      );
+    }
+    return _codec.normalize(
+      readerMode: await _preferencesStore.read(
+        PreferenceKeys.legacyImageReaderMode,
+      ),
+      pageFit: await _preferencesStore.read(
+        PreferenceKeys.legacyImageReaderPageFit,
+      ),
+      background: await _preferencesStore.read(
+        PreferenceKeys.legacyImageReaderBackground,
+      ),
+      pageSpacing: await _preferencesStore.read(
+        PreferenceKeys.legacyImageReaderPageSpacing,
+      ),
+      showPageIndicator: await _preferencesStore.read(
+        PreferenceKeys.legacyImageReaderShowPageIndicator,
+      ),
     );
   }
 
   @override
   Future<void> save(ReaderPreferences preferences) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_readerModeKey, preferences.readerMode.name);
-    await prefs.setString(_pageFitKey, preferences.pageFit.name);
-    await prefs.setString(_backgroundKey, preferences.background.name);
-    await prefs.setDouble(
-      _pageSpacingKey,
-      _normalizePageSpacing(preferences.pageSpacing),
+    await _preferencesStore.write(
+      PreferenceKeys.imageReaderSnapshotV1,
+      _codec.encode(preferences),
     );
-    await prefs.setBool(_showPageIndicatorKey, preferences.showPageIndicator);
-  }
-
-  static ReaderModePreference _parseMode(String? raw) {
-    for (final mode in ReaderModePreference.values) {
-      if (mode.name == raw) {
-        return mode;
-      }
-    }
-    return ReaderPreferences.defaults().readerMode;
-  }
-
-  static ReaderPageFitPreference _parsePageFit(String? raw) {
-    for (final value in ReaderPageFitPreference.values) {
-      if (value.name == raw) {
-        return value;
-      }
-    }
-    return ReaderPreferences.defaults().pageFit;
-  }
-
-  static ReaderBackgroundPreference _parseBackground(String? raw) {
-    for (final value in ReaderBackgroundPreference.values) {
-      if (value.name == raw) {
-        return value;
-      }
-    }
-    return ReaderPreferences.defaults().background;
-  }
-
-  static double _normalizePageSpacing(double? value) {
-    final raw = value ?? ReaderPreferences.defaults().pageSpacing;
-    return raw.clamp(0.0, 48.0).toDouble();
   }
 }
 
 final readerPreferencesRepositoryProvider =
     Provider<ReaderPreferencesRepository>(
-      (ref) => SharedPrefsReaderPreferencesRepository(),
+      (ref) => SharedPrefsReaderPreferencesRepository(
+        preferencesStore: ref.watch(preferencesStoreProvider),
+      ),
     );
 
 final readerPreferencesControllerProvider =

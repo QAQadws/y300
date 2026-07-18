@@ -1,19 +1,28 @@
+import 'package:y300/core/preferences/preference_key_names.dart';
+
 /// Shared storage keys used across features.
 ///
-/// Keeping keys in one place avoids string duplication and accidental drift
-/// between settings module and feature modules.
+/// Compatibility aliases for code that has not moved to typed preference keys.
+/// New preference repositories should use the typed preference registry.
 abstract final class AppStorageKeys {
-  static const String legacyComicCacheDirectory = 'comic_cache_dir';
+  static const String legacyComicCacheDirectory =
+      PreferenceKeyNames.legacyComicCacheDirectory;
   static const String comicCacheDirectory = legacyComicCacheDirectory;
-  static const String imageCacheMaxBytes = 'image_cache_max_bytes';
-  static const String imageCacheCustomDirectory = 'image_cache_custom_dir';
-  static const String downloadStorageDirectory = 'download_storage_dir';
-  static const String appThemePreference = 'app_theme_preference';
-  static const String forumShellMode = 'forum_shell_mode';
-  static const String syncDiagnosticManualMode = 'sync_diagnostic_manual_mode';
+  static const String imageCacheMaxBytes =
+      PreferenceKeyNames.imageCacheMaxBytes;
+  static const String imageCacheCustomDirectory =
+      PreferenceKeyNames.imageCacheCustomDirectory;
+  static const String downloadStorageDirectory =
+      PreferenceKeyNames.downloadStorageDirectory;
+  static const String appThemePreference =
+      PreferenceKeyNames.appThemePreference;
+  static const String forumShellMode = PreferenceKeyNames.forumShellMode;
+  static const String syncDiagnosticManualMode =
+      PreferenceKeyNames.syncDiagnosticManualMode;
   static const String threadDetailScrollDiagnosticEnabled =
-      'thread_detail_scroll_diagnostic_enabled';
+      PreferenceKeyNames.threadDetailScrollDiagnosticEnabled;
   static const String threadDetailHtmlFirstRenderMode =
-      'thread_detail_html_first_render_mode';
-  static const String replyStickerLastGroupId = 'reply_sticker_last_group_id';
+      PreferenceKeyNames.threadDetailHtmlFirstRenderMode;
+  static const String replyStickerLastGroupId =
+      PreferenceKeyNames.replyStickerLastGroupId;
 }

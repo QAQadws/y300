@@ -3,8 +3,8 @@ import 'dart:io' as io;
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:y300/core/config/app_storage_keys.dart';
+import 'package:y300/core/preferences/preference_keys.dart';
+import 'package:y300/core/preferences/preferences_store.dart';
 
 abstract class StorageLocationRepository {
   Future<String> getDefaultStorageRoot();
@@ -17,11 +17,14 @@ abstract class StorageLocationRepository {
 }
 
 class StorageLocationRepositoryImpl implements StorageLocationRepository {
-  const StorageLocationRepositoryImpl({
+  StorageLocationRepositoryImpl({
     String androidPackageName = 'com.example.y300',
-  }) : _androidPackageName = androidPackageName;
+    PreferencesStore? preferencesStore,
+  }) : _androidPackageName = androidPackageName,
+       _preferencesStore = preferencesStore ?? SharedPreferencesStore();
 
   final String _androidPackageName;
+  final PreferencesStore _preferencesStore;
 
   @override
   Future<String> getDefaultStorageRoot() async {
@@ -54,20 +57,27 @@ class StorageLocationRepositoryImpl implements StorageLocationRepository {
 
   @override
   Future<String?> getCustomStorageRoot() async {
-    final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getString(AppStorageKeys.downloadStorageDirectory)?.trim();
+    final value = (await _preferencesStore.read(
+      PreferenceKeys.downloadStorageDirectory,
+    ))?.trim();
     return value == null || value.isEmpty ? null : value;
   }
 
   @override
   Future<void> setCustomStorageRoot(String? path) async {
-    final prefs = await SharedPreferences.getInstance();
     final normalized = path?.trim();
     if (normalized == null || normalized.isEmpty) {
-      await prefs.remove(AppStorageKeys.downloadStorageDirectory);
+      if (await _preferencesStore.contains(
+        PreferenceKeys.downloadStorageDirectory,
+      )) {
+        await _preferencesStore.remove(PreferenceKeys.downloadStorageDirectory);
+      }
       return;
     }
-    await prefs.setString(AppStorageKeys.downloadStorageDirectory, normalized);
+    await _preferencesStore.write(
+      PreferenceKeys.downloadStorageDirectory,
+      normalized,
+    );
   }
 
   @override

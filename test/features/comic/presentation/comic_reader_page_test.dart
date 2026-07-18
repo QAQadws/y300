@@ -358,47 +358,48 @@ void main() {
     },
   );
 
-  testWidgets(
-    'ComicReaderPage uses paged renderer when persisted mode is ltr',
-    (tester) async {
-      await prepareLargeViewport(tester);
-      SharedPreferences.setMockInitialValues(const <String, Object>{
-        'reader_pref_mode': 'ltr',
-      });
+  testWidgets('ComicReaderPage uses the shared default LTR snapshot', (
+    tester,
+  ) async {
+    await prepareLargeViewport(tester);
+    SharedPreferences.setMockInitialValues(const <String, Object>{});
 
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
-            comicReadingStateWriterProvider.overrideWithValue(
-              _NoopReadingStateWriter(),
-            ),
-            comicReaderServiceProvider.overrideWith(
-              (ref) async => _ReaderFakeService(),
-            ),
-            comicDownloadServiceProvider.overrideWithValue(
-              _NoopComicDownloadService(),
-            ),
-            imageCacheServiceProvider.overrideWithValue(
-              _FakeImageCacheService(),
-            ),
-          ],
-          child: const MaterialApp(
-            home: ComicReaderPage(
-              comicId: 'yamibo:100',
-              episodeId: 'yamibo:100:101',
-            ),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+          comicReadingStateWriterProvider.overrideWithValue(
+            _NoopReadingStateWriter(),
+          ),
+          comicReaderServiceProvider.overrideWith(
+            (ref) async => _ReaderFakeService(),
+          ),
+          comicDownloadServiceProvider.overrideWithValue(
+            _NoopComicDownloadService(),
+          ),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+        ],
+        child: const MaterialApp(
+          home: ComicReaderPage(
+            comicId: 'yamibo:100',
+            episodeId: 'yamibo:100:101',
           ),
         ),
-      );
+      ),
+    );
 
-      await tester.pumpAndSettle();
+    await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('comic-reader-page-view')), findsOneWidget);
-      expect(find.byKey(const Key('comic-reader-image-list')), findsNothing);
-      expect(find.byType(ReaderZoomableImage), findsWidgets);
-    },
-  );
+    expect(find.byKey(const Key('comic-reader-page-view')), findsOneWidget);
+    expect(find.byKey(const Key('comic-reader-image-list')), findsNothing);
+    expect(find.byType(ReaderZoomableImage), findsWidgets);
+    expect(
+      tester
+          .widget<PageView>(find.byKey(const Key('comic-reader-page-view')))
+          .reverse,
+      isFalse,
+    );
+  });
 
   testWidgets(
     'ComicReaderPage restores vertical progress only once so top can be reached',

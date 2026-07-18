@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/config/app_storage_keys.dart';
+import 'package:y300/core/preferences/preference_keys.dart';
 
 void main() {
   test('phase-0 SharedPreferences keys remain stable', () {
@@ -25,6 +26,21 @@ void main() {
     expect(
       AppStorageKeys.replyStickerLastGroupId,
       'reply_sticker_last_group_id',
+    );
+  });
+
+  test('typed registry owns scalar, legacy, and snapshot names', () {
+    expect(PreferenceKeys.appThemePreference.name, 'app_theme_preference');
+    expect(PreferenceKeys.forumShellMode.name, 'forum_shell_mode');
+    expect(PreferenceKeys.imageReaderSnapshotV1.name, 'reader.image.v1');
+    expect(PreferenceKeys.legacyImageReaderMode.name, 'reader_pref_mode');
+    expect(
+      PreferenceKeys.forumHtmlReaderFontScale.name,
+      'forum_html_reader_font_scale',
+    );
+    expect(
+      PreferenceKeys.legacyThreadTextFontScale.name,
+      'thread_text_font_scale',
     );
   });
 }

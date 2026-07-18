@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/preferences/preferences_providers.dart';
 import 'package:y300/features/composer_shared/data/services/composer_attachment_remote_data_source.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_attachment_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_draft_attachment_maintenance_service.dart';
@@ -56,8 +57,10 @@ final composerStickerImageCacheLoaderProvider =
     });
 
 final stickerPickerPreferencesRepositoryProvider =
-    Provider<StickerPickerPreferencesRepository>((_) {
-      return SharedPreferencesStickerPickerPreferencesRepository();
+    Provider<StickerPickerPreferencesRepository>((ref) {
+      return SharedPreferencesStickerPickerPreferencesRepository(
+        preferencesStore: ref.watch(preferencesStoreProvider),
+      );
     });
 
 final stickerPickerLastGroupIdProvider = FutureProvider.autoDispose<String?>((

@@ -1,5 +1,5 @@
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:y300/core/config/app_storage_keys.dart';
+import 'package:y300/core/preferences/preference_keys.dart';
+import 'package:y300/core/preferences/preferences_store.dart';
 import 'package:y300/features/storage/data/storage_location_repository.dart';
 
 /// Settings facade for "More > Data and storage".
@@ -21,16 +21,20 @@ abstract class DataStorageSettingsRepository {
   Future<void> setImageCacheMaxBytes(int bytes);
 }
 
-class DataStorageSettingsRepositoryImpl implements DataStorageSettingsRepository {
+class DataStorageSettingsRepositoryImpl
+    implements DataStorageSettingsRepository {
   DataStorageSettingsRepositoryImpl({
     required StorageLocationRepository storageLocationRepository,
-  }) : _storageLocationRepository = storageLocationRepository;
+    PreferencesStore? preferencesStore,
+  }) : _storageLocationRepository = storageLocationRepository,
+       _preferencesStore = preferencesStore ?? SharedPreferencesStore();
 
   static const int minImageCacheMaxBytes = 128 * 1024 * 1024;
   static const int defaultImageCacheMaxBytes = 512 * 1024 * 1024;
   static const int maxImageCacheMaxBytes = 2048 * 1024 * 1024;
 
   final StorageLocationRepository _storageLocationRepository;
+  final PreferencesStore _preferencesStore;
 
   @override
   Future<String> getDefaultStoragePath() {
@@ -54,8 +58,9 @@ class DataStorageSettingsRepositoryImpl implements DataStorageSettingsRepository
 
   @override
   Future<int> getImageCacheMaxBytes() async {
-    final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getInt(AppStorageKeys.imageCacheMaxBytes);
+    final value = await _preferencesStore.read(
+      PreferenceKeys.imageCacheMaxBytes,
+    );
     if (value == null || value <= 0) {
       return defaultImageCacheMaxBytes;
     }
@@ -64,19 +69,13 @@ class DataStorageSettingsRepositoryImpl implements DataStorageSettingsRepository
 
   @override
   Future<void> setImageCacheMaxBytes(int bytes) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(
-      AppStorageKeys.imageCacheMaxBytes,
+    await _preferencesStore.write(
+      PreferenceKeys.imageCacheMaxBytes,
       _normalizeImageCacheMaxBytes(bytes),
     );
   }
 
   int _normalizeImageCacheMaxBytes(int bytes) {
-    return bytes
-        .clamp(
-          minImageCacheMaxBytes,
-          maxImageCacheMaxBytes,
-        )
-        .toInt();
+    return bytes.clamp(minImageCacheMaxBytes, maxImageCacheMaxBytes).toInt();
   }
 }

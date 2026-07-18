@@ -10,7 +10,7 @@ void main() {
   });
 
   test('custom download root uses the stable key and trims values', () async {
-    const repository = StorageLocationRepositoryImpl();
+    final repository = StorageLocationRepositoryImpl();
 
     expect(await repository.getCustomStorageRoot(), isNull);
 

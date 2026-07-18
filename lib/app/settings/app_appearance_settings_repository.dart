@@ -1,6 +1,6 @@
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
-import 'package:y300/core/config/app_storage_keys.dart';
+import 'package:y300/core/preferences/preference_keys.dart';
+import 'package:y300/core/preferences/preferences_store.dart';
 
 abstract class AppAppearanceSettingsRepository {
   Future<AppAppearanceSettings> load();
@@ -10,21 +10,25 @@ abstract class AppAppearanceSettingsRepository {
 
 class SharedPrefsAppAppearanceSettingsRepository
     implements AppAppearanceSettingsRepository {
+  SharedPrefsAppAppearanceSettingsRepository({
+    PreferencesStore? preferencesStore,
+  }) : _preferencesStore = preferencesStore ?? SharedPreferencesStore();
+
+  final PreferencesStore _preferencesStore;
+
   @override
   Future<AppAppearanceSettings> load() async {
-    final prefs = await SharedPreferences.getInstance();
     return AppAppearanceSettings(
       themePreference: _parseThemePreference(
-        prefs.getString(AppStorageKeys.appThemePreference),
+        await _preferencesStore.read(PreferenceKeys.appThemePreference),
       ),
     );
   }
 
   @override
   Future<void> save(AppAppearanceSettings settings) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      AppStorageKeys.appThemePreference,
+    await _preferencesStore.write(
+      PreferenceKeys.appThemePreference,
       settings.themePreference.name,
     );
   }

@@ -1509,7 +1509,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   void cycleReaderMode() {
     final currentMode =
         ref.read(readerPreferencesControllerProvider).value?.readerMode ??
-        ReaderModePreference.vertical;
+        ReaderPreferences.defaults().readerMode;
     final modes = ReaderModePreference.values;
     final nextMode = modes[(currentMode.index + 1) % modes.length];
     unawaited(_onReaderModeChanged(nextMode));
@@ -1612,7 +1612,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _overlayController.hideMenu();
     final currentMode =
         ref.read(readerPreferencesControllerProvider).value?.readerMode ??
-        ReaderModePreference.vertical;
+        ReaderPreferences.defaults().readerMode;
     final selected = await showModalBottomSheet<ReaderModePreference>(
       context: context,
       showDragHandle: true,
@@ -1627,7 +1627,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   Future<void> _onReaderModeChanged(ReaderModePreference nextMode) async {
     final currentMode =
         ref.read(readerPreferencesControllerProvider).value?.readerMode ??
-        ReaderModePreference.vertical;
+        ReaderPreferences.defaults().readerMode;
     if (currentMode == nextMode) {
       return;
     }
