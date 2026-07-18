@@ -74,7 +74,7 @@ void main() {
       expect(parser.parseCount, 1);
     });
 
-    test('keeps legacy render mode argument from re-enabling old segments', () {
+    test('production planner keeps each post as one stable entry', () {
       final planner = ThreadDetailRenderEntryPlanner(
         bodyRenderPlanner: const ThreadPostBodyRenderPlanner(
           maxSegmentTextLength: 6,

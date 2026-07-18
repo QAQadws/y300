@@ -6,12 +6,12 @@ abstract final class PreferenceKeyNames {
   static const forumHtmlReaderFontScale = 'forum_html_reader_font_scale';
   static const forumHtmlReaderLineHeightScale =
       'forum_html_reader_line_height_scale';
-  static const forumHtmlReaderParagraphSpacing =
-      'forum_html_reader_paragraph_spacing';
   static const forumHtmlReaderConversionMode =
       'forum_html_reader_conversion_mode';
   static const forumHtmlReaderPreserveAuthorFontSize =
       'forum_html_reader_preserve_author_font_size';
+  static const forumHtmlReaderMigrationVersion =
+      'forum_html_reader_migration_version';
 
   static const imageReaderSnapshotV1 = 'reader.image.v1';
   static const legacyImageReaderMode = 'reader_pref_mode';
@@ -47,11 +47,7 @@ abstract final class PreferenceKeyNames {
   static const threadDetailScrollDiagnosticEnabled =
       'thread_detail_scroll_diagnostic_enabled';
 
-  static const threadDetailHtmlFirstRenderMode =
-      'thread_detail_html_first_render_mode';
   static const legacyThreadTextFontScale = 'thread_text_font_scale';
   static const legacyThreadTextLineHeightScale =
       'thread_text_line_height_scale';
-  static const legacyThreadTextParagraphSpacing =
-      'thread_text_paragraph_spacing';
 }

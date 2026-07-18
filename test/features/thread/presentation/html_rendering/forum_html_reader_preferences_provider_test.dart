@@ -42,7 +42,7 @@ void main() {
   );
 
   test(
-    'repository loads supported values and ignores obsolete color keys',
+    'repository loads supported values and keeps spacing internal',
     () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
         'forum_html_reader_font_scale': 9.0,
@@ -59,11 +59,62 @@ void main() {
 
       expect(loaded.typography.fontScale, 2.0);
       expect(loaded.typography.lineHeightScale, 1.0);
-      expect(loaded.typography.paragraphSpacing, 40.0);
+      expect(loaded.typography.paragraphSpacing, 12.0);
       expect(loaded.conversionMode, TextConversionMode.toTraditional);
       expect(loaded.preserveAuthorFontSize, isFalse);
     },
   );
+
+  test('repository migrates supported legacy typography once', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'thread_text_font_scale': 0.9,
+      'thread_text_line_height_scale': 1.8,
+      'thread_text_paragraph_spacing': 30.0,
+    });
+    final repository = SharedPrefsForumHtmlReaderPreferencesRepository();
+
+    final loaded = await repository.load();
+    final preferences = await SharedPreferences.getInstance();
+
+    expect(loaded.typography.fontScale, 0.9);
+    expect(loaded.typography.lineHeightScale, 1.8);
+    expect(loaded.typography.paragraphSpacing, 12.0);
+    expect(preferences.getDouble('forum_html_reader_font_scale'), 0.9);
+    expect(preferences.getDouble('forum_html_reader_line_height_scale'), 1.8);
+    expect(
+      preferences.containsKey('forum_html_reader_paragraph_spacing'),
+      isFalse,
+    );
+    expect(preferences.getInt('forum_html_reader_migration_version'), 1);
+  });
+
+  test('canonical typography wins over legacy values field by field', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'forum_html_reader_font_scale': 1.3,
+      'thread_text_font_scale': 0.8,
+      'thread_text_line_height_scale': 1.9,
+    });
+    final repository = SharedPrefsForumHtmlReaderPreferencesRepository();
+
+    final loaded = await repository.load();
+
+    expect(loaded.typography.fontScale, 1.3);
+    expect(loaded.typography.lineHeightScale, 1.9);
+  });
+
+  test('completed migration does not resurrect legacy values', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'forum_html_reader_migration_version': 1,
+      'thread_text_font_scale': 0.8,
+      'thread_text_line_height_scale': 2.0,
+    });
+    final repository = SharedPrefsForumHtmlReaderPreferencesRepository();
+
+    final loaded = await repository.load();
+
+    expect(loaded.typography.fontScale, 1.15);
+    expect(loaded.typography.lineHeightScale, 1.5);
+  });
 
   test('repository saves values to shared preferences', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -84,7 +135,7 @@ void main() {
 
     expect(loaded.typography.fontScale, 1.25);
     expect(loaded.typography.lineHeightScale, 1.8);
-    expect(loaded.typography.paragraphSpacing, 18);
+    expect(loaded.typography.paragraphSpacing, 12);
     expect(loaded.conversionMode, TextConversionMode.toSimplified);
     expect(loaded.preserveAuthorFontSize, isFalse);
   });
@@ -108,7 +159,6 @@ void main() {
     await controller.setConversionMode(TextConversionMode.toTraditional);
     await controller.setFontScale(1.3);
     await controller.setLineHeightScale(1.9);
-    await controller.setParagraphSpacing(24);
     await controller.setPreserveAuthorFontSize(false);
 
     final state = container
@@ -117,7 +167,7 @@ void main() {
     expect(state.conversionMode, TextConversionMode.toTraditional);
     expect(state.typography.fontScale, 1.3);
     expect(state.typography.lineHeightScale, 1.9);
-    expect(state.typography.paragraphSpacing, 24);
+    expect(state.typography.paragraphSpacing, 12);
     expect(state.preserveAuthorFontSize, isFalse);
     expect(repository.saved.last, state);
 
@@ -127,18 +177,52 @@ void main() {
       ForumHtmlReaderPreferences.defaults(),
     );
   });
+
+  test(
+    'controller rolls back an optimistic update when saving fails',
+    () async {
+      final repository = _FakeForumHtmlReaderPreferencesRepository();
+      final container = ProviderContainer(
+        overrides: [
+          forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
+            repository,
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(forumHtmlReaderPreferencesControllerProvider.future);
+      repository.saveError = StateError('save failed');
+
+      await expectLater(
+        container
+            .read(forumHtmlReaderPreferencesControllerProvider.notifier)
+            .setFontScale(1.4),
+        throwsStateError,
+      );
+
+      expect(
+        container.read(forumHtmlReaderPreferencesControllerProvider).value,
+        ForumHtmlReaderPreferences.defaults(),
+      );
+    },
+  );
 }
 
 class _FakeForumHtmlReaderPreferencesRepository
     implements ForumHtmlReaderPreferencesRepository {
   ForumHtmlReaderPreferences current = ForumHtmlReaderPreferences.defaults();
   final saved = <ForumHtmlReaderPreferences>[];
+  Object? saveError;
 
   @override
   Future<ForumHtmlReaderPreferences> load() async => current;
 
   @override
   Future<void> save(ForumHtmlReaderPreferences preferences) async {
+    final error = saveError;
+    if (error != null) {
+      throw error;
+    }
     current = preferences;
     saved.add(preferences);
   }

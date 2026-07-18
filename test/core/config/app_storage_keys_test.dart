@@ -3,7 +3,7 @@ import 'package:y300/core/config/app_storage_keys.dart';
 import 'package:y300/core/preferences/preference_keys.dart';
 
 void main() {
-  test('phase-0 SharedPreferences keys remain stable', () {
+  test('active SharedPreferences compatibility aliases remain stable', () {
     expect(AppStorageKeys.legacyComicCacheDirectory, 'comic_cache_dir');
     expect(AppStorageKeys.comicCacheDirectory, 'comic_cache_dir');
     expect(AppStorageKeys.imageCacheMaxBytes, 'image_cache_max_bytes');
@@ -18,10 +18,6 @@ void main() {
     expect(
       AppStorageKeys.threadDetailScrollDiagnosticEnabled,
       'thread_detail_scroll_diagnostic_enabled',
-    );
-    expect(
-      AppStorageKeys.threadDetailHtmlFirstRenderMode,
-      'thread_detail_html_first_render_mode',
     );
     expect(
       AppStorageKeys.replyStickerLastGroupId,
@@ -53,6 +49,10 @@ void main() {
     expect(
       PreferenceKeys.legacyThreadTextFontScale.name,
       'thread_text_font_scale',
+    );
+    expect(
+      PreferenceKeys.forumHtmlReaderMigrationVersion.name,
+      'forum_html_reader_migration_version',
     );
   });
 }

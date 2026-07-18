@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_html_first_render_mode.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/models/thread_post_render_cache_key.dart';
@@ -16,10 +15,6 @@ class ThreadDetailRenderEntryPlanner {
         const ThreadPostBodyRenderPlanner(),
     ThreadPostBodyRenderSettings renderSettings =
         ThreadPostBodyRenderSettings.defaults,
-    // Kept temporarily so older tests and callers compile while the production
-    // path is permanently HTML-first.
-    ThreadDetailHtmlFirstRenderMode renderMode =
-        ThreadDetailHtmlFirstRenderMode.htmlFirst,
     ThreadDetailDiagnosticRecorder diagnosticRecorder =
         const NoopThreadDetailDiagnosticRecorder(),
   }) : _bodyRenderPlanner = bodyRenderPlanner,

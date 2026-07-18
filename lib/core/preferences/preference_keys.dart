@@ -19,14 +19,14 @@ abstract final class PreferenceKeys {
   static const forumHtmlReaderLineHeightScale = PreferenceKey<double>(
     PreferenceKeyNames.forumHtmlReaderLineHeightScale,
   );
-  static const forumHtmlReaderParagraphSpacing = PreferenceKey<double>(
-    PreferenceKeyNames.forumHtmlReaderParagraphSpacing,
-  );
   static const forumHtmlReaderConversionMode = PreferenceKey<String>(
     PreferenceKeyNames.forumHtmlReaderConversionMode,
   );
   static const forumHtmlReaderPreserveAuthorFontSize = PreferenceKey<bool>(
     PreferenceKeyNames.forumHtmlReaderPreserveAuthorFontSize,
+  );
+  static const forumHtmlReaderMigrationVersion = PreferenceKey<int>(
+    PreferenceKeyNames.forumHtmlReaderMigrationVersion,
   );
 
   static const imageReaderSnapshotV1 = PreferenceKey<String>(
@@ -103,17 +103,10 @@ abstract final class PreferenceKeys {
     PreferenceKeyNames.threadDetailScrollDiagnosticEnabled,
   );
 
-  /// Obsolete keys remain registered until their owning cleanup phase.
-  static const threadDetailHtmlFirstRenderMode = PreferenceKey<String>(
-    PreferenceKeyNames.threadDetailHtmlFirstRenderMode,
-  );
   static const legacyThreadTextFontScale = PreferenceKey<double>(
     PreferenceKeyNames.legacyThreadTextFontScale,
   );
   static const legacyThreadTextLineHeightScale = PreferenceKey<double>(
     PreferenceKeyNames.legacyThreadTextLineHeightScale,
-  );
-  static const legacyThreadTextParagraphSpacing = PreferenceKey<double>(
-    PreferenceKeyNames.legacyThreadTextParagraphSpacing,
   );
 }

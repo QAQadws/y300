@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/preferences/preference_key.dart';
 import 'package:y300/core/preferences/preference_keys.dart';
 import 'package:y300/core/preferences/preferences_providers.dart';
 import 'package:y300/core/preferences/preferences_store.dart';
@@ -19,10 +20,16 @@ class ForumHtmlReaderPreferences {
         typography: RichTextTypography(
           fontScale: 1.15,
           lineHeightScale: 1.5,
-          paragraphSpacing: 12,
+          paragraphSpacing: defaultParagraphSpacing,
         ),
         conversionMode: TextConversionMode.none,
       );
+
+  /// Paragraph spacing is intentionally an internal rendering default.
+  ///
+  /// There is no production control for it, so it must not become a hidden
+  /// device preference that users cannot inspect or reset.
+  static const double defaultParagraphSpacing = 12;
 
   final RichTextTypography typography;
   final TextConversionMode conversionMode;
@@ -68,8 +75,11 @@ class SharedPrefsForumHtmlReaderPreferencesRepository
 
   final PreferencesStore _preferencesStore;
 
+  static const int migrationVersion = 1;
+
   @override
   Future<ForumHtmlReaderPreferences> load() async {
+    await _migrateLegacyTypographyIfNeeded();
     final defaults = ForumHtmlReaderPreferences.defaults();
     final defaultTypography = defaults.typography;
     return ForumHtmlReaderPreferences(
@@ -86,12 +96,7 @@ class SharedPrefsForumHtmlReaderPreferencesRepository
               ) ??
               defaultTypography.lineHeightScale,
         ),
-        paragraphSpacing: _clampSpacing(
-          await _preferencesStore.read(
-                PreferenceKeys.forumHtmlReaderParagraphSpacing,
-              ) ??
-              defaultTypography.paragraphSpacing,
-        ),
+        paragraphSpacing: ForumHtmlReaderPreferences.defaultParagraphSpacing,
       ),
       conversionMode: _parseConversionMode(
         await _preferencesStore.read(
@@ -118,10 +123,6 @@ class SharedPrefsForumHtmlReaderPreferencesRepository
       _clampLineHeight(typography.lineHeightScale),
     );
     await _preferencesStore.write(
-      PreferenceKeys.forumHtmlReaderParagraphSpacing,
-      _clampSpacing(typography.paragraphSpacing),
-    );
-    await _preferencesStore.write(
       PreferenceKeys.forumHtmlReaderConversionMode,
       preferences.conversionMode.name,
     );
@@ -137,8 +138,46 @@ class SharedPrefsForumHtmlReaderPreferencesRepository
   static double _clampLineHeight(double value) =>
       value.clamp(1.0, 2.5).toDouble();
 
-  static double _clampSpacing(double value) =>
-      value.clamp(0.0, 40.0).toDouble();
+  Future<void> _migrateLegacyTypographyIfNeeded() async {
+    final completedVersion =
+        await _preferencesStore.read(
+          PreferenceKeys.forumHtmlReaderMigrationVersion,
+        ) ??
+        0;
+    if (completedVersion >= migrationVersion) {
+      return;
+    }
+
+    await _migrateLegacyDouble(
+      target: PreferenceKeys.forumHtmlReaderFontScale,
+      legacy: PreferenceKeys.legacyThreadTextFontScale,
+      normalize: _clampFontScale,
+    );
+    await _migrateLegacyDouble(
+      target: PreferenceKeys.forumHtmlReaderLineHeightScale,
+      legacy: PreferenceKeys.legacyThreadTextLineHeightScale,
+      normalize: _clampLineHeight,
+    );
+    await _preferencesStore.write(
+      PreferenceKeys.forumHtmlReaderMigrationVersion,
+      migrationVersion,
+    );
+  }
+
+  Future<void> _migrateLegacyDouble({
+    required PreferenceKey<double> target,
+    required PreferenceKey<double> legacy,
+    required double Function(double value) normalize,
+  }) async {
+    if (await _preferencesStore.contains(target)) {
+      return;
+    }
+    final legacyValue = await _preferencesStore.read(legacy);
+    if (legacyValue == null) {
+      return;
+    }
+    await _preferencesStore.write(target, normalize(legacyValue));
+  }
 
   static TextConversionMode _parseConversionMode(String? raw) {
     for (final mode in TextConversionMode.values) {
@@ -207,18 +246,6 @@ class ForumHtmlReaderPreferencesController
     );
   }
 
-  Future<void> setParagraphSpacing(double value) {
-    final current = state.value ?? ForumHtmlReaderPreferences.defaults();
-    return setTypography(
-      current.typography.copyWith(
-        paragraphSpacing:
-            SharedPrefsForumHtmlReaderPreferencesRepository._clampSpacing(
-              value,
-            ),
-      ),
-    );
-  }
-
   Future<void> setPreserveAuthorFontSize(bool value) {
     final current = state.value ?? ForumHtmlReaderPreferences.defaults();
     return _persist(current.copyWith(preserveAuthorFontSize: value));
@@ -230,8 +257,14 @@ class ForumHtmlReaderPreferencesController
 
   Future<void> _persist(ForumHtmlReaderPreferences next) async {
     final normalized = next.copyWith(typography: _normalize(next.typography));
+    final previous = state.value ?? ForumHtmlReaderPreferences.defaults();
     state = AsyncData(normalized);
-    await _repository.save(normalized);
+    try {
+      await _repository.save(normalized);
+    } catch (error, stackTrace) {
+      state = AsyncData(previous);
+      Error.throwWithStackTrace(error, stackTrace);
+    }
   }
 
   RichTextTypography _normalize(RichTextTypography typography) {
@@ -244,10 +277,7 @@ class ForumHtmlReaderPreferencesController
           SharedPrefsForumHtmlReaderPreferencesRepository._clampLineHeight(
             typography.lineHeightScale,
           ),
-      paragraphSpacing:
-          SharedPrefsForumHtmlReaderPreferencesRepository._clampSpacing(
-            typography.paragraphSpacing,
-          ),
+      paragraphSpacing: ForumHtmlReaderPreferences.defaultParagraphSpacing,
     );
   }
 }

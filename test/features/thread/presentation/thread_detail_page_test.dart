@@ -68,13 +68,11 @@ import 'package:y300/features/thread/data/repositories/thread_poll_vote_reposito
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_html_first_render_mode.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/services/thread_detail_diagnostic_recorder.dart';
 import 'package:y300/features/thread/domain/services/thread_favorite_action_service.dart';
 import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
-import 'package:y300/features/thread/presentation/thread_detail_html_first_render_mode_controller.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/css_author_color_parser.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
@@ -913,12 +911,7 @@ void main() {
           );
         });
 
-        await tester.pumpWidget(
-          _buildTestApp(
-            repository,
-            htmlFirstRenderMode: ThreadDetailHtmlFirstRenderMode.htmlFirst,
-          ),
-        );
+        await tester.pumpWidget(_buildTestApp(repository));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 120));
 
@@ -958,11 +951,7 @@ void main() {
         });
 
         await tester.pumpWidget(
-          _buildTestApp(
-            repository,
-            theme: AppTheme.dark(),
-            htmlFirstRenderMode: ThreadDetailHtmlFirstRenderMode.htmlFirst,
-          ),
+          _buildTestApp(repository, theme: AppTheme.dark()),
         );
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 120));
@@ -979,11 +968,7 @@ void main() {
         expect(requestCount, 1);
 
         await tester.pumpWidget(
-          _buildTestApp(
-            repository,
-            theme: AppTheme.light(),
-            htmlFirstRenderMode: ThreadDetailHtmlFirstRenderMode.htmlFirst,
-          ),
+          _buildTestApp(repository, theme: AppTheme.light()),
         );
         await tester.pumpAndSettle();
 
@@ -1026,11 +1011,7 @@ void main() {
       });
 
       await tester.pumpWidget(
-        _buildTestApp(
-          repository,
-          imageCacheService: imageCacheService,
-          htmlFirstRenderMode: ThreadDetailHtmlFirstRenderMode.htmlFirst,
-        ),
+        _buildTestApp(repository, imageCacheService: imageCacheService),
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
@@ -1086,7 +1067,6 @@ void main() {
           _buildTestApp(
             repository,
             imageCacheService: _RecordingImageCacheService(),
-            htmlFirstRenderMode: ThreadDetailHtmlFirstRenderMode.htmlFirst,
           ),
         );
         await tester.pump();
@@ -1102,7 +1082,7 @@ void main() {
 
         expect(find.byType(ThreadImageReaderPage), findsOneWidget);
         expect(
-          find.byKey(const Key('thread-image-reader-list')),
+          find.byKey(const Key('thread-image-reader-page-view')),
           findsOneWidget,
         );
       },
@@ -1135,7 +1115,6 @@ void main() {
         _buildTestApp(
           repository,
           imageCacheService: _RecordingImageCacheService(),
-          htmlFirstRenderMode: ThreadDetailHtmlFirstRenderMode.htmlFirst,
         ),
       );
       await tester.pump();
@@ -1175,11 +1154,7 @@ void main() {
       });
 
       await tester.pumpWidget(
-        _buildTestApp(
-          repository,
-          htmlFirstRenderMode: ThreadDetailHtmlFirstRenderMode.htmlFirst,
-          forumImagePrecacheService: precacheService,
-        ),
+        _buildTestApp(repository, forumImagePrecacheService: precacheService),
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
@@ -1193,7 +1168,7 @@ void main() {
     });
 
     testWidgets(
-      'legacy render mode switch no longer disables production preheat',
+      'production HTML-first renderer triggers lightweight image preheat',
       (tester) async {
         final precacheService = _RecordingForumImagePrecacheService();
         final repository = _FakeThreadRepository((tid, page, query) async {
@@ -1216,11 +1191,7 @@ void main() {
         });
 
         await tester.pumpWidget(
-          _buildTestApp(
-            repository,
-            htmlFirstRenderMode: ThreadDetailHtmlFirstRenderMode.legacy,
-            forumImagePrecacheService: precacheService,
-          ),
+          _buildTestApp(repository, forumImagePrecacheService: precacheService),
         );
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 120));
@@ -1778,7 +1749,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(ThreadImageReaderPage), findsOneWidget);
-      expect(find.byKey(const Key('thread-image-reader-list')), findsOneWidget);
+      expect(
+        find.byKey(const Key('thread-image-reader-page-view')),
+        findsOneWidget,
+      );
       expect(find.text('图片阅读'), findsOneWidget);
     });
 
@@ -4254,8 +4228,6 @@ Widget _buildTestApp(
   ForumHtmlReaderPreferencesRepository? forumHtmlReaderPreferencesRepository,
   TextConverter Function(TextConversionMode mode)? textConverterFactory,
   bool diagnosticModeEnabled = false,
-  ThreadDetailHtmlFirstRenderMode htmlFirstRenderMode =
-      ThreadDetailHtmlFirstRenderMode.legacy,
   HistoryVisitRecorder? historyVisitRecorder,
   HistoryDiagnosticRecorder? historyDiagnosticRecorder,
   Widget? home,
@@ -4280,7 +4252,6 @@ Widget _buildTestApp(
           forumHtmlReaderPreferencesRepository,
       textConverterFactory: textConverterFactory,
       diagnosticModeEnabled: diagnosticModeEnabled,
-      htmlFirstRenderMode: htmlFirstRenderMode,
       historyVisitRecorder: historyVisitRecorder,
       historyDiagnosticRecorder: historyDiagnosticRecorder,
     ),
@@ -4308,8 +4279,6 @@ List<riverpod_misc.Override> _threadDetailOverrides(
   ForumHtmlReaderPreferencesRepository? forumHtmlReaderPreferencesRepository,
   TextConverter Function(TextConversionMode mode)? textConverterFactory,
   bool diagnosticModeEnabled = false,
-  ThreadDetailHtmlFirstRenderMode htmlFirstRenderMode =
-      ThreadDetailHtmlFirstRenderMode.legacy,
   HistoryVisitRecorder? historyVisitRecorder,
   HistoryDiagnosticRecorder? historyDiagnosticRecorder,
 }) {
@@ -4376,11 +4345,6 @@ List<riverpod_misc.Override> _threadDetailOverrides(
     ),
     syncDiagnosticModeControllerProvider.overrideWith(
       () => _FakeSyncDiagnosticModeController(enabled: diagnosticModeEnabled),
-    ),
-    threadDetailHtmlFirstRenderModeControllerProvider.overrideWith(
-      () => _FakeThreadDetailHtmlFirstRenderModeController(
-        mode: htmlFirstRenderMode,
-      ),
     ),
     composerDraftRepositoryProvider.overrideWithValue(
       _MemoryComposerDraftRepository(),
@@ -4536,18 +4500,6 @@ class _FakeSyncDiagnosticModeController extends SyncDiagnosticModeController {
   @override
   Future<bool> build() async {
     return enabled;
-  }
-}
-
-class _FakeThreadDetailHtmlFirstRenderModeController
-    extends ThreadDetailHtmlFirstRenderModeController {
-  _FakeThreadDetailHtmlFirstRenderModeController({required this.mode});
-
-  final ThreadDetailHtmlFirstRenderMode mode;
-
-  @override
-  Future<ThreadDetailHtmlFirstRenderMode> build() async {
-    return mode;
   }
 }
 

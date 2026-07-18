@@ -21,8 +21,6 @@ abstract final class AppStorageKeys {
       PreferenceKeyNames.syncDiagnosticManualMode;
   static const String threadDetailScrollDiagnosticEnabled =
       PreferenceKeyNames.threadDetailScrollDiagnosticEnabled;
-  static const String threadDetailHtmlFirstRenderMode =
-      PreferenceKeyNames.threadDetailHtmlFirstRenderMode;
   static const String replyStickerLastGroupId =
       PreferenceKeyNames.replyStickerLastGroupId;
 }

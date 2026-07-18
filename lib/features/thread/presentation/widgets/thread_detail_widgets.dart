@@ -10,7 +10,6 @@ import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_html_first_render_mode.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/services/thread_detail_diagnostic_recorder.dart';
@@ -57,7 +56,6 @@ class ThreadDetailContent extends StatefulWidget {
     required this.onOpenPostLink,
     this.onOpenPostImages,
     required this.onOpenPostActions,
-    this.htmlFirstRenderMode = ThreadDetailHtmlFirstRenderMode.htmlFirst,
     this.diagnosticRecorder = const NoopThreadDetailDiagnosticRecorder(),
     this.htmlImagePrecacheService,
     this.onPostBuilt,
@@ -84,7 +82,6 @@ class ThreadDetailContent extends StatefulWidget {
   onOpenPostImages;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
   onOpenPostActions;
-  final ThreadDetailHtmlFirstRenderMode htmlFirstRenderMode;
   final ThreadDetailDiagnosticRecorder diagnosticRecorder;
   final ForumImagePrecacheService? htmlImagePrecacheService;
   final ValueChanged<int>? onPostBuilt;
@@ -133,8 +130,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       widget.imageDimensionStore?.addListener(_onImageDimensionsChanged);
     }
     if (!identical(oldWidget.diagnosticRecorder, widget.diagnosticRecorder) ||
-        !identical(oldWidget.imageDimensionStore, widget.imageDimensionStore) ||
-        oldWidget.htmlFirstRenderMode != widget.htmlFirstRenderMode) {
+        !identical(oldWidget.imageDimensionStore, widget.imageDimensionStore)) {
       _entryPlanner = _createEntryPlanner();
     }
     if (!identical(oldWidget.scrollController, widget.scrollController) ||
@@ -150,10 +146,9 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       );
     }
     if (!identical(
-          oldWidget.htmlImagePrecacheService,
-          widget.htmlImagePrecacheService,
-        ) ||
-        oldWidget.htmlFirstRenderMode != widget.htmlFirstRenderMode) {
+      oldWidget.htmlImagePrecacheService,
+      widget.htmlImagePrecacheService,
+    )) {
       _resetHtmlImagePreload();
     }
     if (!identical(oldWidget.state.posts, widget.state.posts) ||
