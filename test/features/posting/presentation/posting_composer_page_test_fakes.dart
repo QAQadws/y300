@@ -27,6 +27,7 @@ NewThreadFormMetadata _metadata({
 Widget _buildPage({
   PostingComposerArgs? args,
   ComposerDraftRepository? draftRepository,
+  ComposerPreferencesRepository? preferencesRepository,
   PostingFormMetadataRepository? metadataRepository,
   NewThreadRepository? newThreadRepository,
   ComposerImagePicker? imagePicker,
@@ -37,6 +38,9 @@ Widget _buildPage({
     overrides: [
       composerDraftRepositoryProvider.overrideWithValue(
         draftRepository ?? _MemoryDraftRepository(),
+      ),
+      composerPreferencesRepositoryProvider.overrideWithValue(
+        preferencesRepository ?? _FakeComposerPreferencesRepository(),
       ),
       composerImagePickerProvider.overrideWithValue(
         imagePicker ?? _FakeImagePicker(),
@@ -60,17 +64,28 @@ Widget _buildPage({
       stickerPickerPreferencesRepositoryProvider.overrideWithValue(
         _FakeStickerPickerPreferencesRepository(),
       ),
-      stickerPickerLastGroupIdProvider.overrideWith((ref) {
-        return ref
-            .read(stickerPickerPreferencesRepositoryProvider)
-            .loadLastGroupId();
-      }),
     ],
     child: MaterialApp(
       theme: theme,
       home: PostingComposerPage(args: args ?? _args()),
     ),
   );
+}
+
+class _FakeComposerPreferencesRepository
+    implements ComposerPreferencesRepository {
+  _FakeComposerPreferencesRepository({ComposerPreferences? preferences})
+    : preferences = preferences ?? ComposerPreferences.defaults();
+
+  ComposerPreferences preferences;
+
+  @override
+  Future<ComposerPreferences> load() async => preferences;
+
+  @override
+  Future<void> save(ComposerPreferences preferences) async {
+    this.preferences = preferences;
+  }
 }
 
 /// 通过一个 launcher 按钮把页面 push 到外层 Navigator——这样 PopScope 行为
@@ -90,6 +105,9 @@ Widget _buildLauncher({
       composerDraftRepositoryProvider.overrideWithValue(
         draftRepository ?? _MemoryDraftRepository(),
       ),
+      composerPreferencesRepositoryProvider.overrideWithValue(
+        _FakeComposerPreferencesRepository(),
+      ),
       composerImagePickerProvider.overrideWithValue(
         imagePicker ?? _FakeImagePicker(),
       ),
@@ -112,11 +130,6 @@ Widget _buildLauncher({
       stickerPickerPreferencesRepositoryProvider.overrideWithValue(
         _FakeStickerPickerPreferencesRepository(),
       ),
-      stickerPickerLastGroupIdProvider.overrideWith((ref) {
-        return ref
-            .read(stickerPickerPreferencesRepositoryProvider)
-            .loadLastGroupId();
-      }),
     ],
     child: MaterialApp(
       theme: theme,
@@ -129,10 +142,7 @@ Widget _buildLauncher({
 }
 
 class _PostingComposerLauncher extends StatelessWidget {
-  const _PostingComposerLauncher({
-    required this.args,
-    required this.onResult,
-  });
+  const _PostingComposerLauncher({required this.args, required this.onResult});
 
   final PostingComposerArgs args;
   final ValueChanged<PostingComposerResult> onResult;
@@ -144,12 +154,12 @@ class _PostingComposerLauncher extends StatelessWidget {
         child: FilledButton(
           key: const Key('open-posting-composer-page'),
           onPressed: () async {
-            final result =
-                await Navigator.of(context).push<PostingComposerResult>(
-              MaterialPageRoute<PostingComposerResult>(
-                builder: (_) => PostingComposerPage(args: args),
-              ),
-            );
+            final result = await Navigator.of(context)
+                .push<PostingComposerResult>(
+                  MaterialPageRoute<PostingComposerResult>(
+                    builder: (_) => PostingComposerPage(args: args),
+                  ),
+                );
             if (result != null) {
               onResult(result);
             }
@@ -176,7 +186,9 @@ class _MemoryDraftRepository implements ComposerDraftRepository {
     required String tid,
   }) async {
     return _drafts.values
-        .where((draft) => draft.identity.fid == fid && draft.identity.tid == tid)
+        .where(
+          (draft) => draft.identity.fid == fid && draft.identity.tid == tid,
+        )
         .toList(growable: false);
   }
 
@@ -192,10 +204,7 @@ class _MemoryDraftRepository implements ComposerDraftRepository {
     Duration maxAge = const Duration(days: 30),
     int maxCount = 100,
   }) async {
-    return ComposerDraftPruneResult(
-      removedCount: 0,
-      keptCount: _drafts.length,
-    );
+    return ComposerDraftPruneResult(removedCount: 0, keptCount: _drafts.length);
   }
 
   @override
@@ -227,10 +236,9 @@ class _FakeMetadataRepository implements PostingFormMetadataRepository {
     NewThreadFormMetadata metadata,
     Future<void> holdUntil,
   ) {
-    return _FakeMetadataRepository._(
-      [ApiSuccess<NewThreadFormMetadata>(metadata)],
-      holdUntil: holdUntil,
-    );
+    return _FakeMetadataRepository._([
+      ApiSuccess<NewThreadFormMetadata>(metadata),
+    ], holdUntil: holdUntil);
   }
 
   final List<ApiResult<NewThreadFormMetadata>> _queue;
@@ -260,19 +268,20 @@ class _FakeMetadataRepository implements PostingFormMetadataRepository {
 }
 
 class _FakeNewThreadRepository implements NewThreadRepository {
-  _FakeNewThreadRepository({
-    ApiResult<NewThreadSubmissionResult>? result,
-  }) : _result = result ??
-            const ApiSuccess<NewThreadSubmissionResult>(
-              NewThreadSubmissionResult(
-                tid: '900001',
-                pid: '910001',
-                message: '发布成功',
-              ),
-            );
+  _FakeNewThreadRepository({ApiResult<NewThreadSubmissionResult>? result})
+    : _result =
+          result ??
+          const ApiSuccess<NewThreadSubmissionResult>(
+            NewThreadSubmissionResult(
+              tid: '900001',
+              pid: '910001',
+              message: '发布成功',
+            ),
+          );
 
   final ApiResult<NewThreadSubmissionResult> _result;
-  final List<NewThreadDraftPayload> submittedPayloads = <NewThreadDraftPayload>[];
+  final List<NewThreadDraftPayload> submittedPayloads =
+      <NewThreadDraftPayload>[];
 
   @override
   Future<ApiResult<NewThreadSubmissionResult>> submit({
@@ -324,9 +333,9 @@ class _FakeUploadCoordinator implements ComposerImageUploadCoordinator {
       final localId = event.localId.isNotEmpty
           ? event.localId
           : attachments[(event.current - 1)
-                  .clamp(0, attachments.length - 1)
-                  .toInt()]
-              .localId;
+                    .clamp(0, attachments.length - 1)
+                    .toInt()]
+                .localId;
       yield switch (event.type) {
         ComposerImageUploadEventType.started =>
           ComposerImageUploadEvent.started(
@@ -352,13 +361,12 @@ class _FakeUploadCoordinator implements ComposerImageUploadCoordinator {
               uploadedAt: event.uploadedImage!.uploadedAt,
             ),
           ),
-        ComposerImageUploadEventType.failed =>
-          ComposerImageUploadEvent.failed(
-            localId: localId,
-            current: event.current,
-            total: event.total,
-            errorMessage: event.errorMessage ?? '上传失败',
-          ),
+        ComposerImageUploadEventType.failed => ComposerImageUploadEvent.failed(
+          localId: localId,
+          current: event.current,
+          total: event.total,
+          errorMessage: event.errorMessage ?? '上传失败',
+        ),
         ComposerImageUploadEventType.completed =>
           ComposerImageUploadEvent.completed(total: event.total),
       };
@@ -378,10 +386,7 @@ class _NoopUploadNotificationService
   }) async {}
 
   @override
-  Future<void> showProgress({
-    required int current,
-    required int total,
-  }) async {}
+  Future<void> showProgress({required int current, required int total}) async {}
 }
 
 class _FakeStickerPickerPreferencesRepository

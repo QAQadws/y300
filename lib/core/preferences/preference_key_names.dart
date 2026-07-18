@@ -27,6 +27,10 @@ abstract final class PreferenceKeyNames {
   static const novelChapterOpenModeMigrationVersion =
       'novel.chapter_open_mode.migration_version';
 
+  static const composerDefaultsSnapshotV1 = 'composer.defaults.v1';
+  static const composerDraftMigrationVersion =
+      'composer.drafts.migration_version';
+
   static const libraryShelfComicSnapshotV1 = 'library.shelf.comic.v1';
   static const libraryShelfNovelSnapshotV1 = 'library.shelf.novel.v1';
   static const libraryShelfFavoriteSnapshotV1 = 'library.shelf.favorite.v1';

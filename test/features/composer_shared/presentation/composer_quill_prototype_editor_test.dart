@@ -718,6 +718,56 @@ void main() {
     expect(find.byKey(const Key('test-quill-sticker-sheet')), findsOneWidget);
   });
 
+  testWidgets('sticker drawer restores and reports the shared group id', (
+    tester,
+  ) async {
+    String? selectedGroupId;
+    await tester.pumpWidget(
+      _buildEditor(
+        stickerGroups: _stickerGroups(),
+        initialStickerGroupId: 'azukisan',
+        onStickerGroupChanged: (groupId) => selectedGroupId = groupId,
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('test-quill-sticker-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('test-quill-sticker-item-{:6_1:}')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const Key('test-quill-sticker-group-tab-bugcat')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(selectedGroupId, 'bugcat');
+  });
+
+  testWidgets('unknown sticker group falls back to the first group', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildEditor(
+        stickerGroups: _stickerGroups(),
+        initialStickerGroupId: 'removed-group',
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('test-quill-sticker-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('test-quill-sticker-item-{:9_656:}')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('test-quill-sticker-item-{:6_1:}')),
+      findsNothing,
+    );
+  });
+
   testWidgets('inserted embeds can be deleted before continuing text', (
     tester,
   ) async {
@@ -831,6 +881,8 @@ Widget _buildEditor({
   ForumAttachPreviewFileExists? attachFileExists,
   List<StickerItem> stickers = const <StickerItem>[],
   List<StickerGroup> stickerGroups = const <StickerGroup>[],
+  String? initialStickerGroupId,
+  ValueChanged<String>? onStickerGroupChanged,
   EdgeInsets viewInsets = EdgeInsets.zero,
 }) {
   return ProviderScope(
@@ -867,6 +919,8 @@ Widget _buildEditor({
             attachFileExists: attachFileExists,
             stickers: stickers,
             stickerGroups: stickerGroups,
+            initialStickerGroupId: initialStickerGroupId,
+            onStickerGroupChanged: onStickerGroupChanged,
           ),
         ),
       ),

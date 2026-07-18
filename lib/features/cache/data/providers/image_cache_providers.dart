@@ -24,6 +24,7 @@ import 'package:y300/features/cache/domain/services/native_page_cache_invalidati
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/services/protected_cover_cache_maintenance.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
+import 'package:y300/features/composer_shared/data/providers/composer_draft_providers.dart';
 import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/cache/presentation/services/default_forum_image_precache_service.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
@@ -165,7 +166,9 @@ final storageAccountingServiceProvider = Provider<StorageAccountingService>((
         documentCacheService: ref.watch(documentCacheServiceProvider),
         snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
       ),
-      const ComposerDraftStorageAccountingAdapter(),
+      ComposerDraftStorageAccountingAdapter(
+        databaseProvider: ref.watch(composerDraftDatabaseManagerProvider).open,
+      ),
       DownloadStorageAccountingAdapter(
         storageService: ref.watch(downloadStorageServiceProvider),
       ),

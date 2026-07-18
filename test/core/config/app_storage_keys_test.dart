@@ -54,5 +54,13 @@ void main() {
       PreferenceKeys.forumHtmlReaderMigrationVersion.name,
       'forum_html_reader_migration_version',
     );
+    expect(
+      PreferenceKeys.composerDefaultsSnapshotV1.name,
+      'composer.defaults.v1',
+    );
+    expect(
+      PreferenceKeys.composerDraftMigrationVersion.name,
+      'composer.drafts.migration_version',
+    );
   });
 }

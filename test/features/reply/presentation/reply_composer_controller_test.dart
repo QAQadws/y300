@@ -9,6 +9,8 @@ import 'package:y300/features/composer_shared/data/providers/composer_providers.
 import 'package:y300/features/composer_shared/data/services/composer_upload_notification_service.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
+import 'package:y300/features/composer_shared/domain/repositories/composer_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
 import 'package:y300/features/reply/data/providers/reply_providers.dart';
 import 'package:y300/features/reply/data/repositories/reply_repository.dart';
@@ -40,7 +42,6 @@ void main() {
 
       expect(state.message, '恢复的草稿');
       expect(state.useSignature, isFalse);
-      expect(state.mode, ReplyComposerMode.source);
     });
 
     test('restores draft image attachment queue on build', () async {
@@ -73,8 +74,10 @@ void main() {
       expect(state.message, '正文\n[attach]123456[/attach]');
       expect(state.imageAttachments, hasLength(1));
       expect(state.imageAttachments.single.localId, 'image-1');
-      expect(state.imageAttachments.single.status,
-          ReplyImageAttachmentStatus.uploaded);
+      expect(
+        state.imageAttachments.single.status,
+        ReplyImageAttachmentStatus.uploaded,
+      );
     });
 
     test('different thread does not reuse draft', () async {
@@ -98,6 +101,29 @@ void main() {
       );
 
       expect(state.message, isEmpty);
+    });
+
+    test('new draft uses the device signature default', () async {
+      final preferencesRepository = _MemoryComposerPreferencesRepository(
+        preferences: const ComposerPreferences(
+          defaultSurface: ComposerSurfacePreference.quill,
+          newDraftUseSignature: false,
+        ),
+      );
+      final args = _threadArgs(tid: '572064');
+      final container = _buildContainer(
+        preferencesRepository: preferencesRepository,
+      );
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+
+      final state = await container.read(
+        replyComposerControllerProvider(args).future,
+      );
+
+      expect(state.restoredDraft, isFalse);
+      expect(state.useSignature, isFalse);
     });
 
     test('flushDraft saves latest message and signature state', () async {
@@ -170,8 +196,10 @@ void main() {
       expect(saved?.message, '[attach]123456[/attach]');
       expect(saved?.imageAttachments, hasLength(1));
       expect(saved?.imageAttachments.single.aid, '123456');
-      expect(saved?.imageAttachments.single.uploadedAt,
-          DateTime.utc(2026, 6, 8, 10));
+      expect(
+        saved?.imageAttachments.single.uploadedAt,
+        DateTime.utc(2026, 6, 8, 10),
+      );
     });
 
     test('empty input does not submit', () async {
@@ -190,7 +218,10 @@ void main() {
       expect(result.sent, isFalse);
       expect(replyRepository.sentDrafts, isEmpty);
       expect(
-        container.read(replyComposerControllerProvider(args)).value?.errorMessage,
+        container
+            .read(replyComposerControllerProvider(args))
+            .value
+            ?.errorMessage,
         contains('请输入回复内容'),
       );
     });
@@ -275,79 +306,88 @@ void main() {
       expect(state?.imageAttachments, isEmpty);
     });
 
-    test('submit binds uploaded attachment aid when attach code remains', () async {
-      final draftRepository = _MemoryReplyDraftRepository();
-      final replyRepository = _FakeReplyRepository();
-      final args = _threadArgs(tid: '572063');
-      await draftRepository.saveDraft(
-        ReplyDraftSnapshot(
-          identity: args.identity,
-          message: '正文\n[attach]123456[/attach]',
-          useSignature: true,
-          updatedAt: DateTime.utc(2026, 6, 8),
-          imageAttachments: [
-            _uploadedAttachment(
-              localId: 'image-1',
-              aid: '123456',
-              uploadedAt: DateTime.now(),
-            ),
-          ],
-        ),
-      );
-      final container = _buildContainer(
-        draftRepository: draftRepository,
-        replyRepository: replyRepository,
-      );
-      addTearDown(container.dispose);
-      final subscription = _keepComposerAlive(container, args);
-      addTearDown(subscription.close);
-      await container.read(replyComposerControllerProvider(args).future);
+    test(
+      'submit binds uploaded attachment aid when attach code remains',
+      () async {
+        final draftRepository = _MemoryReplyDraftRepository();
+        final replyRepository = _FakeReplyRepository();
+        final args = _threadArgs(tid: '572063');
+        await draftRepository.saveDraft(
+          ReplyDraftSnapshot(
+            identity: args.identity,
+            message: '正文\n[attach]123456[/attach]',
+            useSignature: true,
+            updatedAt: DateTime.utc(2026, 6, 8),
+            imageAttachments: [
+              _uploadedAttachment(
+                localId: 'image-1',
+                aid: '123456',
+                uploadedAt: DateTime.now(),
+              ),
+            ],
+          ),
+        );
+        final container = _buildContainer(
+          draftRepository: draftRepository,
+          replyRepository: replyRepository,
+        );
+        addTearDown(container.dispose);
+        final subscription = _keepComposerAlive(container, args);
+        addTearDown(subscription.close);
+        await container.read(replyComposerControllerProvider(args).future);
 
-      final result = await container
-          .read(replyComposerControllerProvider(args).notifier)
-          .submit();
+        final result = await container
+            .read(replyComposerControllerProvider(args).notifier)
+            .submit();
 
-      expect(result.sent, isTrue);
-      expect(replyRepository.sentDrafts.single.uploadedAttachmentAids, [
-        '123456',
-      ]);
-    });
+        expect(result.sent, isTrue);
+        expect(replyRepository.sentDrafts.single.uploadedAttachmentAids, [
+          '123456',
+        ]);
+      },
+    );
 
-    test('submit skips uploaded attachment aid when attach code is removed', () async {
-      final draftRepository = _MemoryReplyDraftRepository();
-      final replyRepository = _FakeReplyRepository();
-      final args = _threadArgs(tid: '572063');
-      await draftRepository.saveDraft(
-        ReplyDraftSnapshot(
-          identity: args.identity,
-          message: '正文',
-          useSignature: true,
-          updatedAt: DateTime.utc(2026, 6, 8),
-          imageAttachments: [
-            _uploadedAttachment(
-              localId: 'image-1',
-              aid: '123456',
-              uploadedAt: DateTime.now(),
-            ),
-          ],
-        ),
-      );
-      final container = _buildContainer(
-        draftRepository: draftRepository,
-        replyRepository: replyRepository,
-      );
-      addTearDown(container.dispose);
-      final subscription = _keepComposerAlive(container, args);
-      addTearDown(subscription.close);
-      await container.read(replyComposerControllerProvider(args).future);
+    test(
+      'submit skips uploaded attachment aid when attach code is removed',
+      () async {
+        final draftRepository = _MemoryReplyDraftRepository();
+        final replyRepository = _FakeReplyRepository();
+        final args = _threadArgs(tid: '572063');
+        await draftRepository.saveDraft(
+          ReplyDraftSnapshot(
+            identity: args.identity,
+            message: '正文',
+            useSignature: true,
+            updatedAt: DateTime.utc(2026, 6, 8),
+            imageAttachments: [
+              _uploadedAttachment(
+                localId: 'image-1',
+                aid: '123456',
+                uploadedAt: DateTime.now(),
+              ),
+            ],
+          ),
+        );
+        final container = _buildContainer(
+          draftRepository: draftRepository,
+          replyRepository: replyRepository,
+        );
+        addTearDown(container.dispose);
+        final subscription = _keepComposerAlive(container, args);
+        addTearDown(subscription.close);
+        await container.read(replyComposerControllerProvider(args).future);
 
-      final result = await container
-          .read(replyComposerControllerProvider(args).notifier)
-          .submit();
+        final result = await container
+            .read(replyComposerControllerProvider(args).notifier)
+            .submit();
 
-      expect(result.sent, isTrue);
-      expect(replyRepository.sentDrafts.single.uploadedAttachmentAids, isEmpty);
-    });
+        expect(result.sent, isTrue);
+        expect(
+          replyRepository.sentDrafts.single.uploadedAttachmentAids,
+          isEmpty,
+        );
+      },
+    );
 
     test('submit skips non-uploaded attachment statuses', () async {
       final draftRepository = _MemoryReplyDraftRepository();
@@ -390,49 +430,52 @@ void main() {
       expect(replyRepository.sentDrafts.single.uploadedAttachmentAids, isEmpty);
     });
 
-    test('submit binds multiple uploaded aids by attach code source order', () async {
-      final draftRepository = _MemoryReplyDraftRepository();
-      final replyRepository = _FakeReplyRepository();
-      final args = _threadArgs(tid: '572063');
-      await draftRepository.saveDraft(
-        ReplyDraftSnapshot(
-          identity: args.identity,
-          message: '[attach]222[/attach]\n正文\n[attach]111[/attach]',
-          useSignature: true,
-          updatedAt: DateTime.utc(2026, 6, 8),
-          imageAttachments: [
-            _uploadedAttachment(
-              localId: 'first',
-              aid: '111',
-              uploadedAt: DateTime.now(),
-            ),
-            _uploadedAttachment(
-              localId: 'second',
-              aid: '222',
-              uploadedAt: DateTime.now(),
-            ),
-          ],
-        ),
-      );
-      final container = _buildContainer(
-        draftRepository: draftRepository,
-        replyRepository: replyRepository,
-      );
-      addTearDown(container.dispose);
-      final subscription = _keepComposerAlive(container, args);
-      addTearDown(subscription.close);
-      await container.read(replyComposerControllerProvider(args).future);
+    test(
+      'submit binds multiple uploaded aids by attach code source order',
+      () async {
+        final draftRepository = _MemoryReplyDraftRepository();
+        final replyRepository = _FakeReplyRepository();
+        final args = _threadArgs(tid: '572063');
+        await draftRepository.saveDraft(
+          ReplyDraftSnapshot(
+            identity: args.identity,
+            message: '[attach]222[/attach]\n正文\n[attach]111[/attach]',
+            useSignature: true,
+            updatedAt: DateTime.utc(2026, 6, 8),
+            imageAttachments: [
+              _uploadedAttachment(
+                localId: 'first',
+                aid: '111',
+                uploadedAt: DateTime.now(),
+              ),
+              _uploadedAttachment(
+                localId: 'second',
+                aid: '222',
+                uploadedAt: DateTime.now(),
+              ),
+            ],
+          ),
+        );
+        final container = _buildContainer(
+          draftRepository: draftRepository,
+          replyRepository: replyRepository,
+        );
+        addTearDown(container.dispose);
+        final subscription = _keepComposerAlive(container, args);
+        addTearDown(subscription.close);
+        await container.read(replyComposerControllerProvider(args).future);
 
-      final result = await container
-          .read(replyComposerControllerProvider(args).notifier)
-          .submit();
+        final result = await container
+            .read(replyComposerControllerProvider(args).notifier)
+            .submit();
 
-      expect(result.sent, isTrue);
-      expect(replyRepository.sentDrafts.single.uploadedAttachmentAids, [
-        '222',
-        '111',
-      ]);
-    });
+        expect(result.sent, isTrue);
+        expect(replyRepository.sentDrafts.single.uploadedAttachmentAids, [
+          '222',
+          '111',
+        ]);
+      },
+    );
 
     test('failed submit keeps draft and exposes error', () async {
       final draftRepository = _MemoryReplyDraftRepository();
@@ -459,10 +502,16 @@ void main() {
 
       expect(result.sent, isFalse);
       expect(
-        container.read(replyComposerControllerProvider(args)).value?.errorMessage,
+        container
+            .read(replyComposerControllerProvider(args))
+            .value
+            ?.errorMessage,
         '网络异常，请稍后重试',
       );
-      expect((await draftRepository.loadDraft(args.identity))?.message, '失败也要保留');
+      expect(
+        (await draftRepository.loadDraft(args.identity))?.message,
+        '失败也要保留',
+      );
     });
 
     test('failed submit keeps uploaded attachment draft metadata', () async {
@@ -550,89 +599,83 @@ void main() {
       expect(state.restoredDraft, isTrue);
     });
 
-    test('pickImages uploads selected images and appends attach codes', () async {
-      final imagePicker = _FakeReplyImagePicker(
-        images: const [
-          ReplyPickedImage(
-            path: '/gallery/first.jpg',
-            fileName: 'first.jpg',
-            mimeType: 'image/jpeg',
-            originalIndex: 0,
-          ),
-          ReplyPickedImage(
-            path: '/gallery/second.png',
-            fileName: 'second.png',
-            mimeType: 'image/png',
-            originalIndex: 1,
-          ),
-        ],
-      );
-      final uploadCoordinator = _FakeReplyImageUploadCoordinator(
-        events: [
-          ComposerImageUploadEvent.started(
-            localId: '',
-            current: 1,
-            total: 2,
-          ),
-          ComposerImageUploadEvent.uploaded(
-            localId: '',
-            current: 1,
-            total: 2,
-            uploadedImage: ReplyUploadedImage(
-              localId: '',
-              aid: '111',
-              uploadedAt: DateTime.utc(2026, 6, 8),
+    test(
+      'pickImages uploads selected images and appends attach codes',
+      () async {
+        final imagePicker = _FakeReplyImagePicker(
+          images: const [
+            ReplyPickedImage(
+              path: '/gallery/first.jpg',
+              fileName: 'first.jpg',
+              mimeType: 'image/jpeg',
+              originalIndex: 0,
             ),
-          ),
-          ComposerImageUploadEvent.started(
-            localId: '',
-            current: 2,
-            total: 2,
-          ),
-          ComposerImageUploadEvent.uploaded(
-            localId: '',
-            current: 2,
-            total: 2,
-            uploadedImage: ReplyUploadedImage(
-              localId: '',
-              aid: '222',
-              uploadedAt: DateTime.utc(2026, 6, 8),
+            ReplyPickedImage(
+              path: '/gallery/second.png',
+              fileName: 'second.png',
+              mimeType: 'image/png',
+              originalIndex: 1,
             ),
-          ),
-          const ComposerImageUploadEvent.completed(total: 2),
-        ],
-      );
-      final args = _threadArgs(tid: '572063');
-      final container = _buildContainer(
-        imagePicker: imagePicker,
-        imageUploadCoordinator: uploadCoordinator,
-      );
-      addTearDown(container.dispose);
-      final subscription = _keepComposerAlive(container, args);
-      addTearDown(subscription.close);
-      await container.read(replyComposerControllerProvider(args).future);
+          ],
+        );
+        final uploadCoordinator = _FakeReplyImageUploadCoordinator(
+          events: [
+            ComposerImageUploadEvent.started(localId: '', current: 1, total: 2),
+            ComposerImageUploadEvent.uploaded(
+              localId: '',
+              current: 1,
+              total: 2,
+              uploadedImage: ReplyUploadedImage(
+                localId: '',
+                aid: '111',
+                uploadedAt: DateTime.utc(2026, 6, 8),
+              ),
+            ),
+            ComposerImageUploadEvent.started(localId: '', current: 2, total: 2),
+            ComposerImageUploadEvent.uploaded(
+              localId: '',
+              current: 2,
+              total: 2,
+              uploadedImage: ReplyUploadedImage(
+                localId: '',
+                aid: '222',
+                uploadedAt: DateTime.utc(2026, 6, 8),
+              ),
+            ),
+            const ComposerImageUploadEvent.completed(total: 2),
+          ],
+        );
+        final args = _threadArgs(tid: '572063');
+        final container = _buildContainer(
+          imagePicker: imagePicker,
+          imageUploadCoordinator: uploadCoordinator,
+        );
+        addTearDown(container.dispose);
+        final subscription = _keepComposerAlive(container, args);
+        addTearDown(subscription.close);
+        await container.read(replyComposerControllerProvider(args).future);
 
-      await container
-          .read(replyComposerControllerProvider(args).notifier)
-          .pickImages();
-      await _drainMicrotasks();
+        await container
+            .read(replyComposerControllerProvider(args).notifier)
+            .pickImages();
+        await _drainMicrotasks();
 
-      final state = container.read(replyComposerControllerProvider(args)).value!;
-      expect(imagePicker.pickCallCount, 1);
-      expect(state.imageAttachments, hasLength(2));
-      expect(state.imageAttachments.map((item) => item.fileName), [
-        'first.jpg',
-        'second.png',
-      ]);
-      expect(
-        state.imageAttachments.map((item) => item.status),
-        [
+        final state = container
+            .read(replyComposerControllerProvider(args))
+            .value!;
+        expect(imagePicker.pickCallCount, 1);
+        expect(state.imageAttachments, hasLength(2));
+        expect(state.imageAttachments.map((item) => item.fileName), [
+          'first.jpg',
+          'second.png',
+        ]);
+        expect(state.imageAttachments.map((item) => item.status), [
           ReplyImageAttachmentStatus.uploaded,
           ReplyImageAttachmentStatus.uploaded,
-        ],
-      );
-      expect(state.message, '[attach]111[/attach]\n[attach]222[/attach]');
-    });
+        ]);
+        expect(state.message, '[attach]111[/attach]\n[attach]222[/attach]');
+      },
+    );
 
     test('pickImages cancellation does not change state or draft', () async {
       final draftRepository = _MemoryReplyDraftRepository();
@@ -653,76 +696,80 @@ void main() {
 
       await controller.pickImages();
 
-      final state = container.read(replyComposerControllerProvider(args)).value!;
+      final state = container
+          .read(replyComposerControllerProvider(args))
+          .value!;
       expect(state.imageAttachments, isEmpty);
       expect(state.message, '正文');
       expect(await draftRepository.loadDraft(args.identity), isNull);
     });
 
-    test('pickImages marks failed upload and keeps failed aid out of message', () async {
-      final imagePicker = _FakeReplyImagePicker(
-        images: const [
-          ReplyPickedImage(
-            path: '/gallery/first.jpg',
-            fileName: 'first.jpg',
-            mimeType: 'image/jpeg',
-            originalIndex: 0,
-          ),
-          ReplyPickedImage(
-            path: '/gallery/second.jpg',
-            fileName: 'second.jpg',
-            mimeType: 'image/jpeg',
-            originalIndex: 1,
-          ),
-        ],
-      );
-      final uploadCoordinator = _FakeReplyImageUploadCoordinator(
-        events: [
-          ComposerImageUploadEvent.failed(
-            localId: '',
-            current: 1,
-            total: 2,
-            errorMessage: '第一张失败',
-          ),
-          ComposerImageUploadEvent.uploaded(
-            localId: '',
-            current: 2,
-            total: 2,
-            uploadedImage: ReplyUploadedImage(
-              localId: '',
-              aid: '222',
-              uploadedAt: DateTime.utc(2026, 6, 8),
+    test(
+      'pickImages marks failed upload and keeps failed aid out of message',
+      () async {
+        final imagePicker = _FakeReplyImagePicker(
+          images: const [
+            ReplyPickedImage(
+              path: '/gallery/first.jpg',
+              fileName: 'first.jpg',
+              mimeType: 'image/jpeg',
+              originalIndex: 0,
             ),
-          ),
-          const ComposerImageUploadEvent.completed(total: 2),
-        ],
-      );
-      final args = _threadArgs(tid: '572063');
-      final container = _buildContainer(
-        imagePicker: imagePicker,
-        imageUploadCoordinator: uploadCoordinator,
-      );
-      addTearDown(container.dispose);
-      final subscription = _keepComposerAlive(container, args);
-      addTearDown(subscription.close);
-      await container.read(replyComposerControllerProvider(args).future);
+            ReplyPickedImage(
+              path: '/gallery/second.jpg',
+              fileName: 'second.jpg',
+              mimeType: 'image/jpeg',
+              originalIndex: 1,
+            ),
+          ],
+        );
+        final uploadCoordinator = _FakeReplyImageUploadCoordinator(
+          events: [
+            ComposerImageUploadEvent.failed(
+              localId: '',
+              current: 1,
+              total: 2,
+              errorMessage: '第一张失败',
+            ),
+            ComposerImageUploadEvent.uploaded(
+              localId: '',
+              current: 2,
+              total: 2,
+              uploadedImage: ReplyUploadedImage(
+                localId: '',
+                aid: '222',
+                uploadedAt: DateTime.utc(2026, 6, 8),
+              ),
+            ),
+            const ComposerImageUploadEvent.completed(total: 2),
+          ],
+        );
+        final args = _threadArgs(tid: '572063');
+        final container = _buildContainer(
+          imagePicker: imagePicker,
+          imageUploadCoordinator: uploadCoordinator,
+        );
+        addTearDown(container.dispose);
+        final subscription = _keepComposerAlive(container, args);
+        addTearDown(subscription.close);
+        await container.read(replyComposerControllerProvider(args).future);
 
-      await container
-          .read(replyComposerControllerProvider(args).notifier)
-          .pickImages();
-      await _drainMicrotasks();
+        await container
+            .read(replyComposerControllerProvider(args).notifier)
+            .pickImages();
+        await _drainMicrotasks();
 
-      final state = container.read(replyComposerControllerProvider(args)).value!;
-      expect(
-        state.imageAttachments.map((attachment) => attachment.status),
-        [
+        final state = container
+            .read(replyComposerControllerProvider(args))
+            .value!;
+        expect(state.imageAttachments.map((attachment) => attachment.status), [
           ReplyImageAttachmentStatus.failed,
           ReplyImageAttachmentStatus.uploaded,
-        ],
-      );
-      expect(state.message, '[attach]222[/attach]');
-      expect(state.imageUploadError, '第一张失败');
-    });
+        ]);
+        expect(state.message, '[attach]222[/attach]');
+        expect(state.imageUploadError, '第一张失败');
+      },
+    );
 
     test('pickImages does not run while upload is active', () async {
       final uploadCompleter = Completer<void>();
@@ -738,11 +785,7 @@ void main() {
       );
       final uploadCoordinator = _FakeReplyImageUploadCoordinator(
         events: const [
-          ComposerImageUploadEvent.started(
-            localId: '',
-            current: 1,
-            total: 1,
-          ),
+          ComposerImageUploadEvent.started(localId: '', current: 1, total: 1),
         ],
         holdUntil: uploadCompleter.future,
       );
@@ -823,55 +866,39 @@ void main() {
       );
     });
 
-    test('duplicate submit while submitting does not call repository twice', () async {
-      final completer = Completer<ApiResult<ReplySubmissionResult>>();
-      final replyRepository = _FakeReplyRepository(asyncResult: completer.future);
-      final args = _threadArgs(tid: '572063');
-      final container = _buildContainer(replyRepository: replyRepository);
-      addTearDown(container.dispose);
-      final subscription = _keepComposerAlive(container, args);
-      addTearDown(subscription.close);
-      await container.read(replyComposerControllerProvider(args).future);
-      final controller = container.read(
-        replyComposerControllerProvider(args).notifier,
-      );
-      controller.updateMessage('提交内容');
+    test(
+      'duplicate submit while submitting does not call repository twice',
+      () async {
+        final completer = Completer<ApiResult<ReplySubmissionResult>>();
+        final replyRepository = _FakeReplyRepository(
+          asyncResult: completer.future,
+        );
+        final args = _threadArgs(tid: '572063');
+        final container = _buildContainer(replyRepository: replyRepository);
+        addTearDown(container.dispose);
+        final subscription = _keepComposerAlive(container, args);
+        addTearDown(subscription.close);
+        await container.read(replyComposerControllerProvider(args).future);
+        final controller = container.read(
+          replyComposerControllerProvider(args).notifier,
+        );
+        controller.updateMessage('提交内容');
 
-      final first = controller.submit();
-      final second = await controller.submit();
-      completer.complete(
-        const ApiSuccess<ReplySubmissionResult>(
-          ReplySubmissionResult(message: '回复成功'),
-        ),
-      );
-      await first;
+        final first = controller.submit();
+        final second = await controller.submit();
+        completer.complete(
+          const ApiSuccess<ReplySubmissionResult>(
+            ReplySubmissionResult(message: '回复成功'),
+          ),
+        );
+        await first;
 
-      expect(second.sent, isFalse);
-      expect(replyRepository.sentDrafts, hasLength(1));
-    });
+        expect(second.sent, isFalse);
+        expect(replyRepository.sentDrafts, hasLength(1));
+      },
+    );
 
-    test('switchMode updates mode without changing message or signature', () async {
-      final args = _threadArgs(tid: '572063');
-      final container = _buildContainer();
-      addTearDown(container.dispose);
-      final subscription = _keepComposerAlive(container, args);
-      addTearDown(subscription.close);
-      await container.read(replyComposerControllerProvider(args).future);
-      final controller = container.read(
-        replyComposerControllerProvider(args).notifier,
-      );
-
-      controller.updateMessage('[b]源码[/b]');
-      controller.toggleUseSignature(false);
-      controller.switchMode(ReplyComposerMode.preview);
-
-      final state = container.read(replyComposerControllerProvider(args)).value;
-      expect(state?.mode, ReplyComposerMode.preview);
-      expect(state?.message, '[b]源码[/b]');
-      expect(state?.useSignature, isFalse);
-    });
-
-    test('submit sends source message while in preview mode', () async {
+    test('submit sends BBCode source message unchanged', () async {
       final replyRepository = _FakeReplyRepository();
       final args = _threadArgs(tid: '572063');
       final container = _buildContainer(replyRepository: replyRepository);
@@ -884,7 +911,6 @@ void main() {
       );
 
       controller.updateMessage('[quote]源码内容[/quote]');
-      controller.switchMode(ReplyComposerMode.preview);
       final result = await controller.submit();
 
       expect(result.sent, isTrue);
@@ -918,11 +944,14 @@ void main() {
       expect(initialState.useSignature, isFalse);
 
       await _drainMicrotasks();
-      final preparedState = container.read(
-        replyComposerControllerProvider(args),
-      ).value;
+      final preparedState = container
+          .read(replyComposerControllerProvider(args))
+          .value;
       expect(replyRepository.prepareCallCount, 1);
-      expect(preparedState?.preparation?.reference.noticeTrimStr, '[quote]引用[/quote]');
+      expect(
+        preparedState?.preparation?.reference.noticeTrimStr,
+        '[quote]引用[/quote]',
+      );
     });
 
     test('post reply submit passes prepared reference fields', () async {
@@ -951,35 +980,41 @@ void main() {
       expect(draft.noticeAuthorMsg, '引用正文');
     });
 
-    test('post reply preparation failure disables submit and keeps draft', () async {
-      final draftRepository = _MemoryReplyDraftRepository();
-      final replyRepository = _FakeReplyRepository(
-        preparationResult: const ApiFailure<ReplyPreparation>(
-          ApiError(type: ApiErrorType.parse, message: '表单解析失败'),
-        ),
-      );
-      final args = _postArgs();
-      final container = _buildContainer(
-        draftRepository: draftRepository,
-        replyRepository: replyRepository,
-      );
-      addTearDown(container.dispose);
-      final subscription = _keepComposerAlive(container, args);
-      addTearDown(subscription.close);
-      await container.read(replyComposerControllerProvider(args).future);
-      await _drainMicrotasks();
-      final controller = container.read(
-        replyComposerControllerProvider(args).notifier,
-      );
-      controller.updateMessage('失败也保留');
+    test(
+      'post reply preparation failure disables submit and keeps draft',
+      () async {
+        final draftRepository = _MemoryReplyDraftRepository();
+        final replyRepository = _FakeReplyRepository(
+          preparationResult: const ApiFailure<ReplyPreparation>(
+            ApiError(type: ApiErrorType.parse, message: '表单解析失败'),
+          ),
+        );
+        final args = _postArgs();
+        final container = _buildContainer(
+          draftRepository: draftRepository,
+          replyRepository: replyRepository,
+        );
+        addTearDown(container.dispose);
+        final subscription = _keepComposerAlive(container, args);
+        addTearDown(subscription.close);
+        await container.read(replyComposerControllerProvider(args).future);
+        await _drainMicrotasks();
+        final controller = container.read(
+          replyComposerControllerProvider(args).notifier,
+        );
+        controller.updateMessage('失败也保留');
 
-      final result = await controller.submit();
+        final result = await controller.submit();
 
-      expect(result.sent, isFalse);
-      expect(replyRepository.sentDrafts, isEmpty);
-      await controller.flushDraft();
-      expect((await draftRepository.loadDraft(args.identity))?.message, '失败也保留');
-    });
+        expect(result.sent, isFalse);
+        expect(replyRepository.sentDrafts, isEmpty);
+        await controller.flushDraft();
+        expect(
+          (await draftRepository.loadDraft(args.identity))?.message,
+          '失败也保留',
+        );
+      },
+    );
   });
 }
 
@@ -1037,6 +1072,7 @@ ReplyComposerArgs _postArgs() {
 
 ProviderContainer _buildContainer({
   ComposerDraftRepository? draftRepository,
+  ComposerPreferencesRepository? preferencesRepository,
   ReplyRepository? replyRepository,
   ComposerImagePicker? imagePicker,
   ComposerImageUploadCoordinator? imageUploadCoordinator,
@@ -1046,6 +1082,9 @@ ProviderContainer _buildContainer({
     overrides: [
       composerDraftRepositoryProvider.overrideWithValue(
         draftRepository ?? _MemoryReplyDraftRepository(),
+      ),
+      composerPreferencesRepositoryProvider.overrideWithValue(
+        preferencesRepository ?? _MemoryComposerPreferencesRepository(),
       ),
       replyRepositoryProvider.overrideWithValue(
         replyRepository ?? _FakeReplyRepository(),
@@ -1079,6 +1118,22 @@ Future<void> _drainMicrotasks({int rounds = 4}) async {
   }
 }
 
+class _MemoryComposerPreferencesRepository
+    implements ComposerPreferencesRepository {
+  _MemoryComposerPreferencesRepository({ComposerPreferences? preferences})
+    : preferences = preferences ?? ComposerPreferences.defaults();
+
+  ComposerPreferences preferences;
+
+  @override
+  Future<ComposerPreferences> load() async => preferences;
+
+  @override
+  Future<void> save(ComposerPreferences preferences) async {
+    this.preferences = preferences;
+  }
+}
+
 class _MemoryReplyDraftRepository implements ComposerDraftRepository {
   final Map<String, ComposerDraftSnapshot> _drafts =
       <String, ComposerDraftSnapshot>{};
@@ -1096,12 +1151,16 @@ class _MemoryReplyDraftRepository implements ComposerDraftRepository {
     required String tid,
   }) async {
     return _drafts.values
-        .where((draft) => draft.identity.fid == fid && draft.identity.tid == tid)
+        .where(
+          (draft) => draft.identity.fid == fid && draft.identity.tid == tid,
+        )
         .toList(growable: false);
   }
 
   @override
-  Future<ComposerDraftSnapshot?> loadDraft(ComposerDraftIdentity identity) async {
+  Future<ComposerDraftSnapshot?> loadDraft(
+    ComposerDraftIdentity identity,
+  ) async {
     return _drafts[identity.storageKey];
   }
 
@@ -1114,10 +1173,7 @@ class _MemoryReplyDraftRepository implements ComposerDraftRepository {
     if (throwOnPrune) {
       throw StateError('prune failed');
     }
-    return ComposerDraftPruneResult(
-      removedCount: 0,
-      keptCount: _drafts.length,
-    );
+    return ComposerDraftPruneResult(removedCount: 0, keptCount: _drafts.length);
   }
 
   @override
@@ -1151,7 +1207,8 @@ class _FakeReplyImagePicker implements ComposerImagePicker {
   }
 }
 
-class _FakeReplyImageUploadCoordinator implements ComposerImageUploadCoordinator {
+class _FakeReplyImageUploadCoordinator
+    implements ComposerImageUploadCoordinator {
   _FakeReplyImageUploadCoordinator({
     this.events = const <ComposerImageUploadEvent>[],
     this.holdUntil,
@@ -1182,9 +1239,10 @@ class _FakeReplyImageUploadCoordinator implements ComposerImageUploadCoordinator
       }
       final localId = event.localId.isNotEmpty
           ? event.localId
-          : attachments[
-                  (event.current - 1).clamp(0, attachments.length - 1).toInt()]
-              .localId;
+          : attachments[(event.current - 1)
+                    .clamp(0, attachments.length - 1)
+                    .toInt()]
+                .localId;
       yield _eventWithLocalId(event, localId);
     }
     final holdUntil = this.holdUntil;
@@ -1199,17 +1257,19 @@ class _FakeReplyImageUploadCoordinator implements ComposerImageUploadCoordinator
   ) {
     return switch (event.type) {
       ComposerImageUploadEventType.started => ComposerImageUploadEvent.started(
-          localId: localId,
-          current: event.current,
-          total: event.total,
-        ),
-      ComposerImageUploadEventType.progress => ComposerImageUploadEvent.progress(
+        localId: localId,
+        current: event.current,
+        total: event.total,
+      ),
+      ComposerImageUploadEventType.progress =>
+        ComposerImageUploadEvent.progress(
           localId: localId,
           current: event.current,
           total: event.total,
           progress: event.progress ?? 0,
         ),
-      ComposerImageUploadEventType.uploaded => ComposerImageUploadEvent.uploaded(
+      ComposerImageUploadEventType.uploaded =>
+        ComposerImageUploadEvent.uploaded(
           localId: localId,
           current: event.current,
           total: event.total,
@@ -1220,14 +1280,13 @@ class _FakeReplyImageUploadCoordinator implements ComposerImageUploadCoordinator
           ),
         ),
       ComposerImageUploadEventType.failed => ComposerImageUploadEvent.failed(
-          localId: localId,
-          current: event.current,
-          total: event.total,
-          errorMessage: event.errorMessage ?? '上传失败',
-        ),
-      ComposerImageUploadEventType.completed => ComposerImageUploadEvent.completed(
-          total: event.total,
-        ),
+        localId: localId,
+        current: event.current,
+        total: event.total,
+        errorMessage: event.errorMessage ?? '上传失败',
+      ),
+      ComposerImageUploadEventType.completed =>
+        ComposerImageUploadEvent.completed(total: event.total),
     };
   }
 }
@@ -1250,10 +1309,7 @@ class _FakeReplyUploadNotificationService
   }
 
   @override
-  Future<void> showProgress({
-    required int current,
-    required int total,
-  }) async {
+  Future<void> showProgress({required int current, required int total}) async {
     calls.add('progress:$current/$total');
   }
 }
@@ -1264,29 +1320,29 @@ class _FakeReplyRepository implements ReplyRepository {
     this.asyncResult,
     ApiResult<ReplyPreparation>? preparationResult,
   }) : result =
-            result ??
-            const ApiSuccess<ReplySubmissionResult>(
-              ReplySubmissionResult(message: '回复成功'),
-            ),
-        preparationResult =
-            preparationResult ??
-            const ApiSuccess<ReplyPreparation>(
-              ReplyPreparation(
-                target: ReplyTarget.post(
-                  fid: '33',
-                  tid: '572063',
-                  pid: '41554317',
-                ),
-                reference: ReplyReference(
-                  formHash: 'prepared-formhash',
-                  noticeAuthor: 'notice-token',
-                  noticeTrimStr: '[quote]引用[/quote]',
-                  noticeAuthorMsg: '引用正文',
-                  repPid: '41554317',
-                  repPost: '41554317',
-                ),
-              ),
-            );
+           result ??
+           const ApiSuccess<ReplySubmissionResult>(
+             ReplySubmissionResult(message: '回复成功'),
+           ),
+       preparationResult =
+           preparationResult ??
+           const ApiSuccess<ReplyPreparation>(
+             ReplyPreparation(
+               target: ReplyTarget.post(
+                 fid: '33',
+                 tid: '572063',
+                 pid: '41554317',
+               ),
+               reference: ReplyReference(
+                 formHash: 'prepared-formhash',
+                 noticeAuthor: 'notice-token',
+                 noticeTrimStr: '[quote]引用[/quote]',
+                 noticeAuthorMsg: '引用正文',
+                 repPid: '41554317',
+                 repPost: '41554317',
+               ),
+             ),
+           );
 
   final ApiResult<ReplySubmissionResult> result;
   final Future<ApiResult<ReplySubmissionResult>>? asyncResult;

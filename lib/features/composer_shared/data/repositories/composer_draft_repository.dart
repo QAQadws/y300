@@ -22,8 +22,16 @@ class ComposerDraftPruneResult {
   const ComposerDraftPruneResult({
     required this.removedCount,
     required this.keptCount,
+    this.sanitizedCount = 0,
+    this.removedAttachmentCount = 0,
+    this.deletedCacheFileCount = 0,
+    this.failedCount = 0,
   });
 
   final int removedCount;
   final int keptCount;
+  final int sanitizedCount;
+  final int removedAttachmentCount;
+  final int deletedCacheFileCount;
+  final int failedCount;
 }

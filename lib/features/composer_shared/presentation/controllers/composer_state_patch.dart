@@ -1,5 +1,4 @@
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
-import 'package:y300/features/composer_shared/presentation/controllers/composer_editor_mode.dart';
 
 /// 基类向子类下发"状态增量"的值对象。
 ///
@@ -15,7 +14,6 @@ class ComposerStatePatch {
     this.message,
     this.useSignature,
     this.isSubmitting,
-    this.mode,
     this.restoredDraft,
     this.imageAttachments,
     this.isUploadingImages,
@@ -30,7 +28,6 @@ class ComposerStatePatch {
   final String? message;
   final bool? useSignature;
   final bool? isSubmitting;
-  final ComposerEditorMode? mode;
   final bool? restoredDraft;
   final List<ComposerImageAttachment>? imageAttachments;
   final bool? isUploadingImages;

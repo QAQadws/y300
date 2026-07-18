@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_app_bar_action_style.dart';
@@ -43,7 +44,8 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
   late final TextEditingController _subjectController;
   late final TextEditingController _messageController;
   PostingComposerController? _controller;
-  _PostingEditorSurface _editorSurface = _PostingEditorSurface.quill;
+  ComposerSurfacePreference _editorSurface = ComposerSurfacePreference.quill;
+  bool _didApplySurfacePreference = false;
   bool _didApplyRestoredDraft = false;
   bool _didNotifyRestoredDraft = false;
   bool _wasLoadingMetadata = false;
@@ -83,6 +85,16 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
           data: (groups) => groups,
           orElse: () => const <StickerGroup>[],
         );
+    final composerPreferences = ref.watch(
+      composerPreferencesControllerProvider,
+    );
+    if (!_didApplySurfacePreference && composerPreferences.hasValue) {
+      _didApplySurfacePreference = true;
+      _editorSurface = composerPreferences.value!.defaultSurface;
+    }
+    final lastStickerGroupId = ref
+        .watch(stickerPickerLastGroupIdControllerProvider)
+        .value;
     _controller = controller;
     final state = asyncState.value;
     if (state != null) {
@@ -99,13 +111,14 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
         unawaited(_confirmAndPop(context, controller));
       },
       child: Scaffold(
-        resizeToAvoidBottomInset: _editorSurface != _PostingEditorSurface.quill,
+        resizeToAvoidBottomInset:
+            _editorSurface != ComposerSurfacePreference.quill,
         appBar: AppBar(
           title: Text(_appBarTitle(state)),
           actions: [
             IconButton(
               key: const Key('posting-composer-source-button'),
-              tooltip: _editorSurface == _PostingEditorSurface.quill
+              tooltip: _editorSurface == ComposerSurfacePreference.quill
                   ? '源码'
                   : '返回编辑',
               onPressed: state == null
@@ -115,7 +128,7 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
                     },
               style: composerAppBarActionStyle(context),
               icon: Icon(
-                _editorSurface == _PostingEditorSurface.quill
+                _editorSurface == ComposerSurfacePreference.quill
                     ? Icons.code
                     : Icons.edit_outlined,
               ),
@@ -158,6 +171,14 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
             subjectController: _subjectController,
             messageController: _messageController,
             editorSurface: _editorSurface,
+            initialStickerGroupId: lastStickerGroupId,
+            onStickerGroupChanged: (groupId) {
+              unawaited(
+                ref
+                    .read(stickerPickerLastGroupIdControllerProvider.notifier)
+                    .selectGroup(groupId),
+              );
+            },
             onSubjectChanged: (value) {
               _lastAppliedStateSubject = value;
               controller.updateSubject(value);
@@ -183,15 +204,33 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
   }
 
   void _toggleEditorSurface(PostingComposerState state) {
+    final previous = _editorSurface;
+    final next = previous == ComposerSurfacePreference.quill
+        ? ComposerSurfacePreference.source
+        : ComposerSurfacePreference.quill;
     setState(() {
-      if (_editorSurface == _PostingEditorSurface.quill) {
+      if (previous == ComposerSurfacePreference.quill) {
         _messageController.text = state.message;
         _lastAppliedStateMessage = state.message;
-        _editorSurface = _PostingEditorSurface.source;
-        return;
       }
-      _editorSurface = _PostingEditorSurface.quill;
+      _editorSurface = next;
     });
+    unawaited(_persistEditorSurface(previous: previous, next: next));
+  }
+
+  Future<void> _persistEditorSurface({
+    required ComposerSurfacePreference previous,
+    required ComposerSurfacePreference next,
+  }) async {
+    try {
+      await ref
+          .read(composerPreferencesControllerProvider.notifier)
+          .setDefaultSurface(next);
+    } catch (_) {
+      if (mounted && _editorSurface == next) {
+        setState(() => _editorSurface = previous);
+      }
+    }
   }
 
   String _appBarTitle(PostingComposerState? state) {
@@ -435,6 +474,8 @@ class _PostingComposerBody extends StatefulWidget {
     required this.subjectController,
     required this.messageController,
     required this.editorSurface,
+    required this.initialStickerGroupId,
+    required this.onStickerGroupChanged,
     required this.onSubjectChanged,
     required this.onMessageChanged,
     required this.onSelectedTypeIdChanged,
@@ -455,7 +496,9 @@ class _PostingComposerBody extends StatefulWidget {
   final List<StickerItem> stickers;
   final TextEditingController subjectController;
   final TextEditingController messageController;
-  final _PostingEditorSurface editorSurface;
+  final ComposerSurfacePreference editorSurface;
+  final String? initialStickerGroupId;
+  final ValueChanged<String> onStickerGroupChanged;
   final ValueChanged<String> onSubjectChanged;
   final ValueChanged<String> onMessageChanged;
   final ValueChanged<String?> onSelectedTypeIdChanged;
@@ -509,10 +552,12 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
       stickerGroups: widget.stickerGroups,
       stickers: widget.stickers,
       messageController: widget.messageController,
+      initialStickerGroupId: widget.initialStickerGroupId,
+      onStickerGroupChanged: widget.onStickerGroupChanged,
       onMessageChanged: widget.onMessageChanged,
       onImagePressed: widget.onImagePressed,
     );
-    if (widget.editorSurface == _PostingEditorSurface.quill) {
+    if (widget.editorSurface == ComposerSurfacePreference.quill) {
       return SafeArea(
         bottom: false,
         child: CustomScrollView(
@@ -753,8 +798,6 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
   }
 }
 
-enum _PostingEditorSurface { quill, source }
-
 class _PostingMessageEditor extends StatelessWidget {
   const _PostingMessageEditor({
     required this.surface,
@@ -763,16 +806,20 @@ class _PostingMessageEditor extends StatelessWidget {
     required this.stickerGroups,
     required this.stickers,
     required this.messageController,
+    required this.initialStickerGroupId,
+    required this.onStickerGroupChanged,
     required this.onMessageChanged,
     required this.onImagePressed,
   });
 
-  final _PostingEditorSurface surface;
+  final ComposerSurfacePreference surface;
   final PostingComposerState state;
   final ForumBbCodeRenderer bbCodeRenderer;
   final List<StickerGroup> stickerGroups;
   final List<StickerItem> stickers;
   final TextEditingController messageController;
+  final String? initialStickerGroupId;
+  final ValueChanged<String> onStickerGroupChanged;
   final ValueChanged<String> onMessageChanged;
   final Future<void> Function() onImagePressed;
 
@@ -781,13 +828,15 @@ class _PostingMessageEditor extends StatelessWidget {
     final enabled = !state.isSubmitting;
     final renderer = bbCodeRenderer;
     return switch (surface) {
-      _PostingEditorSurface.quill => ComposerQuillEditorSurface(
+      ComposerSurfacePreference.quill => ComposerQuillEditorSurface(
         key: const Key('posting-composer-quill-editor'),
         keyPrefix: 'posting-composer',
         bbCode: state.message,
         enabled: enabled,
         stickers: stickers,
         stickerGroups: stickerGroups,
+        initialStickerGroupId: initialStickerGroupId,
+        onStickerGroupChanged: onStickerGroupChanged,
         imageAttachments: state.imageAttachments,
         attachImageBuilder: renderer is FlutterBbCodeForumRenderer
             ? renderer.attachImageBuilder
@@ -804,7 +853,7 @@ class _PostingMessageEditor extends StatelessWidget {
           return null;
         },
       ),
-      _PostingEditorSurface.source => ComposerBbCodeSourceEditor(
+      ComposerSurfacePreference.source => ComposerBbCodeSourceEditor(
         keyPrefix: 'posting-composer',
         viewKey: const Key('posting-composer-source-view'),
         inputKey: const Key('posting-composer-message-input'),

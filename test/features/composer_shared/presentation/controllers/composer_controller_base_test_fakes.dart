@@ -23,7 +23,6 @@ class _TestComposerState extends ComposerStateBase {
     required super.message,
     required super.useSignature,
     required super.isSubmitting,
-    required super.mode,
     required super.restoredDraft,
     required super.imageAttachments,
     required super.isUploadingImages,
@@ -43,7 +42,6 @@ class _TestComposerState extends ComposerStateBase {
       message: message,
       useSignature: useSignature,
       isSubmitting: false,
-      mode: ComposerEditorMode.source,
       restoredDraft: restoredDraft,
       imageAttachments: imageAttachments,
       isUploadingImages: false,
@@ -57,7 +55,6 @@ class _TestComposerState extends ComposerStateBase {
       message: patch.message ?? message,
       useSignature: patch.useSignature ?? useSignature,
       isSubmitting: patch.isSubmitting ?? isSubmitting,
-      mode: patch.mode ?? mode,
       restoredDraft: patch.restoredDraft ?? restoredDraft,
       imageAttachments: patch.imageAttachments ?? imageAttachments,
       isUploadingImages: patch.isUploadingImages ?? isUploadingImages,
@@ -78,8 +75,9 @@ class _TestComposerController
   _TestComposerController(this._args);
 
   final _TestArgs _args;
-  ComposerSubmissionOutcome outcome =
-      const ComposerSubmissionOutcome.success(message: 'ok');
+  ComposerSubmissionOutcome outcome = const ComposerSubmissionOutcome.success(
+    message: 'ok',
+  );
   Future<ComposerSubmissionOutcome>? outcomeFuture;
   int performSubmitCallCount = 0;
 
@@ -92,10 +90,12 @@ class _TestComposerController
   @override
   Future<_TestComposerState> buildInitialState({
     required ComposerDraftSnapshot? restoredDraft,
+    required ComposerPreferences preferences,
   }) async {
     return _TestComposerState.initial(
       message: restoredDraft?.message ?? '',
-      useSignature: restoredDraft?.useSignature ?? true,
+      useSignature:
+          restoredDraft?.useSignature ?? preferences.newDraftUseSignature,
       restoredDraft: restoredDraft != null,
       imageAttachments:
           restoredDraft?.imageAttachments ?? const <ComposerImageAttachment>[],
@@ -139,7 +139,9 @@ class _MemoryDraftRepository implements ComposerDraftRepository {
     required String tid,
   }) async {
     return _drafts.values
-        .where((draft) => draft.identity.fid == fid && draft.identity.tid == tid)
+        .where(
+          (draft) => draft.identity.fid == fid && draft.identity.tid == tid,
+        )
         .toList(growable: false);
   }
 
@@ -155,10 +157,7 @@ class _MemoryDraftRepository implements ComposerDraftRepository {
     Duration maxAge = const Duration(days: 30),
     int maxCount = 100,
   }) async {
-    return ComposerDraftPruneResult(
-      removedCount: 0,
-      keptCount: _drafts.length,
-    );
+    return ComposerDraftPruneResult(removedCount: 0, keptCount: _drafts.length);
   }
 
   @override
@@ -168,6 +167,19 @@ class _MemoryDraftRepository implements ComposerDraftRepository {
       return;
     }
     _drafts[draft.identity.storageKey] = draft;
+  }
+}
+
+class _MemoryComposerPreferencesRepository
+    implements ComposerPreferencesRepository {
+  ComposerPreferences preferences = ComposerPreferences.defaults();
+
+  @override
+  Future<ComposerPreferences> load() async => preferences;
+
+  @override
+  Future<void> save(ComposerPreferences preferences) async {
+    this.preferences = preferences;
   }
 }
 
@@ -204,22 +216,26 @@ class _FakeUploadCoordinator implements ComposerImageUploadCoordinator {
       }
       final localId = event.localId.isNotEmpty
           ? event.localId
-          : attachments[
-                  (event.current - 1).clamp(0, attachments.length - 1).toInt()]
-              .localId;
+          : attachments[(event.current - 1)
+                    .clamp(0, attachments.length - 1)
+                    .toInt()]
+                .localId;
       yield switch (event.type) {
-        ComposerImageUploadEventType.started => ComposerImageUploadEvent.started(
+        ComposerImageUploadEventType.started =>
+          ComposerImageUploadEvent.started(
             localId: localId,
             current: event.current,
             total: event.total,
           ),
-        ComposerImageUploadEventType.progress => ComposerImageUploadEvent.progress(
+        ComposerImageUploadEventType.progress =>
+          ComposerImageUploadEvent.progress(
             localId: localId,
             current: event.current,
             total: event.total,
             progress: event.progress ?? 0,
           ),
-        ComposerImageUploadEventType.uploaded => ComposerImageUploadEvent.uploaded(
+        ComposerImageUploadEventType.uploaded =>
+          ComposerImageUploadEvent.uploaded(
             localId: localId,
             current: event.current,
             total: event.total,
@@ -230,11 +246,11 @@ class _FakeUploadCoordinator implements ComposerImageUploadCoordinator {
             ),
           ),
         ComposerImageUploadEventType.failed => ComposerImageUploadEvent.failed(
-            localId: localId,
-            current: event.current,
-            total: event.total,
-            errorMessage: event.errorMessage ?? '上传失败',
-          ),
+          localId: localId,
+          current: event.current,
+          total: event.total,
+          errorMessage: event.errorMessage ?? '上传失败',
+        ),
         ComposerImageUploadEventType.completed =>
           ComposerImageUploadEvent.completed(total: event.total),
       };
@@ -254,21 +270,22 @@ class _NoopUploadNotificationService
   }) async {}
 
   @override
-  Future<void> showProgress({
-    required int current,
-    required int total,
-  }) async {}
+  Future<void> showProgress({required int current, required int total}) async {}
 }
 
 ProviderContainer _buildContainer({
   ComposerDraftRepository? draftRepository,
   ComposerImagePicker? imagePicker,
   ComposerImageUploadCoordinator? imageUploadCoordinator,
+  ComposerPreferencesRepository? composerPreferencesRepository,
 }) {
   return ProviderContainer(
     overrides: [
       composerDraftRepositoryProvider.overrideWithValue(
         draftRepository ?? _MemoryDraftRepository(),
+      ),
+      composerPreferencesRepositoryProvider.overrideWithValue(
+        composerPreferencesRepository ?? _MemoryComposerPreferencesRepository(),
       ),
       composerImagePickerProvider.overrideWithValue(
         imagePicker ?? _FakeImagePicker(),

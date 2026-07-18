@@ -7,10 +7,10 @@ import 'package:y300/features/composer_shared/data/providers/composer_providers.
 import 'package:y300/features/composer_shared/data/services/composer_upload_notification_service.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_service.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_draft_attachment_sanitizer.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
-import 'package:y300/features/composer_shared/presentation/controllers/composer_editor_mode.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_base.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_patch.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_submission_outcome.dart';
@@ -43,6 +43,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
   /// 由子类根据恢复出的草稿（可能为 null）构造初始 state。
   Future<TState> buildInitialState({
     required ComposerDraftSnapshot? restoredDraft,
+    required ComposerPreferences preferences,
   });
 
   /// 把基类生成的 patch 合并进具体 state。
@@ -88,8 +89,9 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     _draftRepository = ref.read(composerDraftRepositoryProvider);
     _imagePicker = ref.read(composerImagePickerProvider);
     _imageUploadCoordinator = ref.read(composerImageUploadCoordinatorProvider);
-    _uploadNotificationService =
-        ref.read(composerUploadNotificationServiceProvider);
+    _uploadNotificationService = ref.read(
+      composerUploadNotificationServiceProvider,
+    );
     _attachBbCodeService = ref.read(composerAttachBbCodeServiceProvider);
 
     ref.onDispose(() {
@@ -104,8 +106,12 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
 
     await _pruneDraftsIfNeeded();
     final snapshot = await _draftRepository!.loadDraft(draftIdentity);
+    final preferences = await ref.read(
+      composerPreferencesControllerProvider.future,
+    );
     final initial = await buildInitialState(
       restoredDraft: snapshot != null && !snapshot.isEmpty ? snapshot : null,
+      preferences: preferences,
     );
     _latestState = initial;
     onAfterBuild(initial);
@@ -123,13 +129,11 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
 
   /// 子类钩子：草稿落盘时把当前 state 中的"额外 KV"返回。
   /// reply 一直是空 map；posting 把 typeid / 选项等放进去。
-  Map<String, String> draftExtrasFor(TState value) =>
-      const <String, String>{};
+  Map<String, String> draftExtrasFor(TState value) => const <String, String>{};
 
   /// 子类钩子：提交成功后基类已经清空 message / 附件，子类可以在此把
   /// 业务专属字段（如发帖标题、所选分类）也重置到"空白"。默认 no-op。
   TState resetAfterSuccess(TState value) => value;
-
 
   // ── 通用 mutators ─────────────────────────────────────────────
   void updateMessage(String value) {
@@ -137,10 +141,12 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     if (current == null) {
       return;
     }
-    _setDataState(applyPatch(
-      current,
-      ComposerStatePatch(message: value, clearErrorMessage: true),
-    ));
+    _setDataState(
+      applyPatch(
+        current,
+        ComposerStatePatch(message: value, clearErrorMessage: true),
+      ),
+    );
     _scheduleDraftSave();
   }
 
@@ -149,19 +155,25 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     if (current == null) {
       return;
     }
-    _setDataState(applyPatch(
-      current,
-      ComposerStatePatch(useSignature: value, clearErrorMessage: true),
-    ));
+    _setDataState(
+      applyPatch(
+        current,
+        ComposerStatePatch(useSignature: value, clearErrorMessage: true),
+      ),
+    );
     _scheduleDraftSave();
+    unawaited(_saveNewDraftSignatureDefault(value));
   }
 
-  void switchMode(ComposerEditorMode mode) {
-    final current = state.value;
-    if (current == null || current.mode == mode) {
-      return;
+  Future<void> _saveNewDraftSignatureDefault(bool value) async {
+    try {
+      await ref
+          .read(composerPreferencesControllerProvider.notifier)
+          .setNewDraftUseSignature(value);
+    } catch (_) {
+      // The current draft keeps its explicit setting when saving the future
+      // new-draft default fails.
     }
-    _setDataState(applyPatch(current, ComposerStatePatch(mode: mode)));
   }
 
   // ── 草稿持久化 ───────────────────────────────────────────────
@@ -255,25 +267,29 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
             status: ComposerImageAttachmentStatus.local,
           ),
       ];
-      _setDataState(applyPatch(
-        latest,
-        ComposerStatePatch(
-          imageAttachments: attachments,
-          isUploadingImages: true,
-          imageUploadCurrent: 0,
-          imageUploadTotal: sortedPickedImages.length,
-          clearImageUploadError: true,
+      _setDataState(
+        applyPatch(
+          latest,
+          ComposerStatePatch(
+            imageAttachments: attachments,
+            isUploadingImages: true,
+            imageUploadCurrent: 0,
+            imageUploadTotal: sortedPickedImages.length,
+            clearImageUploadError: true,
+          ),
         ),
-      ));
+      );
       _startImageUpload(
         attachments.skip(existingCount).toList(growable: false),
       );
     } on ComposerImagePickerException catch (_) {
       final latest = state.value ?? current;
-      _setDataState(applyPatch(
-        latest,
-        const ComposerStatePatch(imageUploadError: '选择图片失败，请重试'),
-      ));
+      _setDataState(
+        applyPatch(
+          latest,
+          const ComposerStatePatch(imageUploadError: '选择图片失败，请重试'),
+        ),
+      );
     }
   }
 
@@ -297,13 +313,15 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
           return;
         }
         _activeUploadLocalIds = const <String>{};
-        _setDataState(applyPatch(
-          current,
-          const ComposerStatePatch(
-            isUploadingImages: false,
-            imageUploadError: '图片上传失败，请重试',
+        _setDataState(
+          applyPatch(
+            current,
+            const ComposerStatePatch(
+              isUploadingImages: false,
+              imageUploadError: '图片上传失败，请重试',
+            ),
           ),
-        ));
+        );
       },
     );
   }
@@ -315,37 +333,45 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     }
     switch (event.type) {
       case ComposerImageUploadEventType.started:
-        _setDataState(applyPatch(
-          current,
-          ComposerStatePatch(
-            imageAttachments: _replaceAttachmentStatus(
-              current.imageAttachments,
-              localId: event.localId,
-              status: ComposerImageAttachmentStatus.uploading,
+        _setDataState(
+          applyPatch(
+            current,
+            ComposerStatePatch(
+              imageAttachments: _replaceAttachmentStatus(
+                current.imageAttachments,
+                localId: event.localId,
+                status: ComposerImageAttachmentStatus.uploading,
+              ),
+              isUploadingImages: true,
+              imageUploadCurrent: event.current,
+              imageUploadTotal: event.total,
             ),
-            isUploadingImages: true,
-            imageUploadCurrent: event.current,
-            imageUploadTotal: event.total,
           ),
-        ));
-        unawaited(_uploadNotificationService?.showProgress(
-          current: event.current,
-          total: event.total,
-        ));
+        );
+        unawaited(
+          _uploadNotificationService?.showProgress(
+            current: event.current,
+            total: event.total,
+          ),
+        );
         break;
       case ComposerImageUploadEventType.progress:
-        _setDataState(applyPatch(
-          current,
-          ComposerStatePatch(
-            isUploadingImages: true,
-            imageUploadCurrent: event.current,
-            imageUploadTotal: event.total,
+        _setDataState(
+          applyPatch(
+            current,
+            ComposerStatePatch(
+              isUploadingImages: true,
+              imageUploadCurrent: event.current,
+              imageUploadTotal: event.total,
+            ),
           ),
-        ));
-        unawaited(_uploadNotificationService?.showProgress(
-          current: event.current,
-          total: event.total,
-        ));
+        );
+        unawaited(
+          _uploadNotificationService?.showProgress(
+            current: event.current,
+            total: event.total,
+          ),
+        );
         break;
       case ComposerImageUploadEventType.uploaded:
         final uploadedImage = event.uploadedImage;
@@ -356,49 +382,54 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
           current.message,
           [uploadedImage.aid],
         );
-        _setDataState(applyPatch(
-          current,
-          ComposerStatePatch(
-            message: nextMessage,
-            imageAttachments: _replaceAttachmentStatus(
-              current.imageAttachments,
-              localId: event.localId,
-              status: ComposerImageAttachmentStatus.uploaded,
-              aid: uploadedImage.aid,
-              uploadedAt: uploadedImage.uploadedAt,
-              clearErrorMessage: true,
+        _setDataState(
+          applyPatch(
+            current,
+            ComposerStatePatch(
+              message: nextMessage,
+              imageAttachments: _replaceAttachmentStatus(
+                current.imageAttachments,
+                localId: event.localId,
+                status: ComposerImageAttachmentStatus.uploaded,
+                aid: uploadedImage.aid,
+                uploadedAt: uploadedImage.uploadedAt,
+                clearErrorMessage: true,
+              ),
+              isUploadingImages: true,
+              imageUploadCurrent: event.current,
+              imageUploadTotal: event.total,
             ),
-            isUploadingImages: true,
-            imageUploadCurrent: event.current,
-            imageUploadTotal: event.total,
           ),
-        ));
+        );
         _scheduleDraftSave();
-        unawaited(_uploadNotificationService?.showProgress(
-          current: event.current,
-          total: event.total,
-        ));
+        unawaited(
+          _uploadNotificationService?.showProgress(
+            current: event.current,
+            total: event.total,
+          ),
+        );
         break;
       case ComposerImageUploadEventType.failed:
-        _setDataState(applyPatch(
-          current,
-          ComposerStatePatch(
-            imageAttachments: _replaceAttachmentStatus(
-              current.imageAttachments,
-              localId: event.localId,
-              status: ComposerImageAttachmentStatus.failed,
-              errorMessage: event.errorMessage ?? '图片上传失败',
+        _setDataState(
+          applyPatch(
+            current,
+            ComposerStatePatch(
+              imageAttachments: _replaceAttachmentStatus(
+                current.imageAttachments,
+                localId: event.localId,
+                status: ComposerImageAttachmentStatus.failed,
+                errorMessage: event.errorMessage ?? '图片上传失败',
+              ),
+              isUploadingImages: true,
+              imageUploadCurrent: event.current,
+              imageUploadTotal: event.total,
+              imageUploadError: event.errorMessage ?? '图片上传失败，请重试',
             ),
-            isUploadingImages: true,
-            imageUploadCurrent: event.current,
-            imageUploadTotal: event.total,
-            imageUploadError: event.errorMessage ?? '图片上传失败，请重试',
           ),
-        ));
+        );
         break;
       case ComposerImageUploadEventType.completed:
-        final failedCount = (state.value ?? current)
-            .imageAttachments
+        final failedCount = (state.value ?? current).imageAttachments
             .where(
               (attachment) =>
                   _activeUploadLocalIds.contains(attachment.localId) &&
@@ -406,19 +437,23 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
             )
             .length;
         _activeUploadLocalIds = const <String>{};
-        _setDataState(applyPatch(
-          current,
-          ComposerStatePatch(
-            isUploadingImages: false,
-            imageUploadCurrent: event.total,
-            imageUploadTotal: event.total,
+        _setDataState(
+          applyPatch(
+            current,
+            ComposerStatePatch(
+              isUploadingImages: false,
+              imageUploadCurrent: event.total,
+              imageUploadTotal: event.total,
+            ),
           ),
-        ));
+        );
         if (failedCount > 0) {
-          unawaited(_uploadNotificationService?.showFailure(
-            failedCount: failedCount,
-            total: event.total,
-          ));
+          unawaited(
+            _uploadNotificationService?.showFailure(
+              failedCount: failedCount,
+              total: event.total,
+            ),
+          );
         } else {
           unawaited(_uploadNotificationService?.clear());
         }
@@ -468,10 +503,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
 
     final marked = applyPatch(
       stateValue,
-      const ComposerStatePatch(
-        isSubmitting: true,
-        clearErrorMessage: true,
-      ),
+      const ComposerStatePatch(isSubmitting: true, clearErrorMessage: true),
     );
     _setDataState(marked);
 
@@ -479,10 +511,12 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
 
     final preflight = preflightValidate(sanitized);
     if (preflight != null) {
-      _setDataState(applyPatch(
-        sanitized,
-        ComposerStatePatch(isSubmitting: false, errorMessage: preflight),
-      ));
+      _setDataState(
+        applyPatch(
+          sanitized,
+          ComposerStatePatch(isSubmitting: false, errorMessage: preflight),
+        ),
+      );
       return ComposerSubmitInvocationResult.notSent(message: preflight);
     }
 
@@ -506,18 +540,13 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
         ),
       );
       _setDataState(resetAfterSuccess(reset));
-      return ComposerSubmitInvocationResult.sent(
-        outcome.successMessage ?? '',
-      );
+      return ComposerSubmitInvocationResult.sent(outcome.successMessage ?? '');
     }
 
     final errorMessage = outcome.errorMessage ?? '';
     final failed = applyPatch(
       afterSubmit,
-      ComposerStatePatch(
-        isSubmitting: false,
-        errorMessage: errorMessage,
-      ),
+      ComposerStatePatch(isSubmitting: false, errorMessage: errorMessage),
     );
     _setDataState(failed);
     await _saveSnapshot(failed);
@@ -580,4 +609,3 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
 
   void _setDataState(TState value) => setStateValue(value);
 }
-

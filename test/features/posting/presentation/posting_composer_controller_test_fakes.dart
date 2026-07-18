@@ -60,6 +60,9 @@ ProviderContainer _buildContainer({
       composerDraftRepositoryProvider.overrideWithValue(
         draftRepository ?? _MemoryDraftRepository(),
       ),
+      composerPreferencesRepositoryProvider.overrideWithValue(
+        _MemoryComposerPreferencesRepository(),
+      ),
       composerImagePickerProvider.overrideWithValue(
         imagePicker ?? _FakeImagePicker(),
       ),
@@ -70,13 +73,27 @@ ProviderContainer _buildContainer({
         _NoopUploadNotificationService(),
       ),
       postingFormMetadataRepositoryProvider.overrideWithValue(
-        metadataRepository ?? _FakeMetadataRepository.success(_metadataNoTypes()),
+        metadataRepository ??
+            _FakeMetadataRepository.success(_metadataNoTypes()),
       ),
       newThreadRepositoryProvider.overrideWithValue(
         newThreadRepository ?? _FakeNewThreadRepository(),
       ),
     ],
   );
+}
+
+class _MemoryComposerPreferencesRepository
+    implements ComposerPreferencesRepository {
+  ComposerPreferences preferences = ComposerPreferences.defaults();
+
+  @override
+  Future<ComposerPreferences> load() async => preferences;
+
+  @override
+  Future<void> save(ComposerPreferences preferences) async {
+    this.preferences = preferences;
+  }
 }
 
 ProviderSubscription<AsyncValue<PostingComposerState>> _keepAlive(
@@ -110,7 +127,9 @@ class _MemoryDraftRepository implements ComposerDraftRepository {
     required String tid,
   }) async {
     return _drafts.values
-        .where((draft) => draft.identity.fid == fid && draft.identity.tid == tid)
+        .where(
+          (draft) => draft.identity.fid == fid && draft.identity.tid == tid,
+        )
         .toList(growable: false);
   }
 
@@ -126,10 +145,7 @@ class _MemoryDraftRepository implements ComposerDraftRepository {
     Duration maxAge = const Duration(days: 30),
     int maxCount = 100,
   }) async {
-    return ComposerDraftPruneResult(
-      removedCount: 0,
-      keptCount: _drafts.length,
-    );
+    return ComposerDraftPruneResult(removedCount: 0, keptCount: _drafts.length);
   }
 
   @override
@@ -184,19 +200,21 @@ class _FakeNewThreadRepository implements NewThreadRepository {
   _FakeNewThreadRepository({
     ApiResult<NewThreadSubmissionResult>? result,
     Future<ApiResult<NewThreadSubmissionResult>>? asyncResult,
-  })  : _result = result ??
-            const ApiSuccess<NewThreadSubmissionResult>(
-              NewThreadSubmissionResult(
-                tid: '900001',
-                pid: '910001',
-                message: '发布成功',
-              ),
-            ),
-        _asyncResult = asyncResult;
+  }) : _result =
+           result ??
+           const ApiSuccess<NewThreadSubmissionResult>(
+             NewThreadSubmissionResult(
+               tid: '900001',
+               pid: '910001',
+               message: '发布成功',
+             ),
+           ),
+       _asyncResult = asyncResult;
 
   final ApiResult<NewThreadSubmissionResult> _result;
   final Future<ApiResult<NewThreadSubmissionResult>>? _asyncResult;
-  final List<NewThreadDraftPayload> submittedPayloads = <NewThreadDraftPayload>[];
+  final List<NewThreadDraftPayload> submittedPayloads =
+      <NewThreadDraftPayload>[];
 
   @override
   Future<ApiResult<NewThreadSubmissionResult>> submit({
@@ -249,9 +267,9 @@ class _FakeUploadCoordinator implements ComposerImageUploadCoordinator {
       final localId = event.localId.isNotEmpty
           ? event.localId
           : attachments[(event.current - 1)
-                  .clamp(0, attachments.length - 1)
-                  .toInt()]
-              .localId;
+                    .clamp(0, attachments.length - 1)
+                    .toInt()]
+                .localId;
       yield switch (event.type) {
         ComposerImageUploadEventType.started =>
           ComposerImageUploadEvent.started(
@@ -277,13 +295,12 @@ class _FakeUploadCoordinator implements ComposerImageUploadCoordinator {
               uploadedAt: event.uploadedImage!.uploadedAt,
             ),
           ),
-        ComposerImageUploadEventType.failed =>
-          ComposerImageUploadEvent.failed(
-            localId: localId,
-            current: event.current,
-            total: event.total,
-            errorMessage: event.errorMessage ?? '上传失败',
-          ),
+        ComposerImageUploadEventType.failed => ComposerImageUploadEvent.failed(
+          localId: localId,
+          current: event.current,
+          total: event.total,
+          errorMessage: event.errorMessage ?? '上传失败',
+        ),
         ComposerImageUploadEventType.completed =>
           ComposerImageUploadEvent.completed(total: event.total),
       };
@@ -303,8 +320,5 @@ class _NoopUploadNotificationService
   }) async {}
 
   @override
-  Future<void> showProgress({
-    required int current,
-    required int total,
-  }) async {}
+  Future<void> showProgress({required int current, required int total}) async {}
 }

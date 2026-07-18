@@ -1,5 +1,4 @@
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
-import 'package:y300/features/composer_shared/presentation/controllers/composer_editor_mode.dart';
 
 /// 编辑器通用状态字段。
 ///
@@ -11,7 +10,6 @@ abstract class ComposerStateBase {
     required this.message,
     required this.useSignature,
     required this.isSubmitting,
-    required this.mode,
     required this.restoredDraft,
     required this.imageAttachments,
     required this.isUploadingImages,
@@ -24,7 +22,6 @@ abstract class ComposerStateBase {
   final String message;
   final bool useSignature;
   final bool isSubmitting;
-  final ComposerEditorMode mode;
   final bool restoredDraft;
   final List<ComposerImageAttachment> imageAttachments;
   final bool isUploadingImages;

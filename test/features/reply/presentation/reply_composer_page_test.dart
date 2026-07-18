@@ -18,6 +18,8 @@ import 'package:y300/features/composer_shared/data/services/composer_upload_noti
 import 'package:y300/features/composer_shared/data/repositories/sticker_picker_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
+import 'package:y300/features/composer_shared/domain/repositories/composer_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_draft_attachment_sanitizer.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
@@ -89,6 +91,39 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const Key('reply-composer-send-button')), findsOneWidget);
+  });
+
+  testWidgets('ReplyComposerPage restores and updates the default surface', (
+    tester,
+  ) async {
+    final preferencesRepository = _FakeComposerPreferencesRepository(
+      preferences: const ComposerPreferences(
+        defaultSurface: ComposerSurfacePreference.source,
+        newDraftUseSignature: true,
+      ),
+    );
+    await tester.pumpWidget(
+      _buildPage(preferencesRepository: preferencesRepository),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('reply-composer-message-input')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('reply-composer-quill-editor')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('reply-composer-source-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('reply-composer-quill-editor')),
+      findsOneWidget,
+    );
+    expect(
+      preferencesRepository.preferences.defaultSurface,
+      ComposerSurfacePreference.quill,
+    );
   });
 
   testWidgets('ReplyComposerPage wraps selection with quote BBCode', (
@@ -923,6 +958,7 @@ void main() {
 Widget _buildPage({
   ReplyComposerArgs? args,
   ComposerDraftRepository? draftRepository,
+  ComposerPreferencesRepository? preferencesRepository,
   ReplyRepository? replyRepository,
   ComposerImagePicker? imagePicker,
   ComposerImageUploadCoordinator? imageUploadCoordinator,
@@ -933,6 +969,9 @@ Widget _buildPage({
     overrides: [
       composerDraftRepositoryProvider.overrideWithValue(
         draftRepository ?? _MemoryReplyDraftRepository(),
+      ),
+      composerPreferencesRepositoryProvider.overrideWithValue(
+        preferencesRepository ?? _FakeComposerPreferencesRepository(),
       ),
       replyRepositoryProvider.overrideWithValue(
         replyRepository ?? _FakeReplyRepository(),
@@ -951,11 +990,6 @@ Widget _buildPage({
       stickerPickerPreferencesRepositoryProvider.overrideWithValue(
         _FakeStickerPickerPreferencesRepository(),
       ),
-      stickerPickerLastGroupIdProvider.overrideWith((ref) {
-        return ref
-            .read(stickerPickerPreferencesRepositoryProvider)
-            .loadLastGroupId();
-      }),
       imageCacheServiceProvider.overrideWithValue(_FailingImageCacheService()),
     ],
     child: MaterialApp(
@@ -1031,6 +1065,9 @@ Widget _buildLauncher({
       composerDraftRepositoryProvider.overrideWithValue(
         draftRepository ?? _MemoryReplyDraftRepository(),
       ),
+      composerPreferencesRepositoryProvider.overrideWithValue(
+        _FakeComposerPreferencesRepository(),
+      ),
       replyRepositoryProvider.overrideWithValue(
         replyRepository ?? _FakeReplyRepository(),
       ),
@@ -1046,11 +1083,6 @@ Widget _buildLauncher({
       stickerPickerPreferencesRepositoryProvider.overrideWithValue(
         _FakeStickerPickerPreferencesRepository(),
       ),
-      stickerPickerLastGroupIdProvider.overrideWith((ref) {
-        return ref
-            .read(stickerPickerPreferencesRepositoryProvider)
-            .loadLastGroupId();
-      }),
       imageCacheServiceProvider.overrideWithValue(_FailingImageCacheService()),
     ],
     child: MaterialApp(
@@ -1067,6 +1099,22 @@ final _stickerGroups = [
     stickers: [_sticker(code: '{:9_656:}', imagePath: 'bugcat/Capoo16.gif')],
   ),
 ];
+
+class _FakeComposerPreferencesRepository
+    implements ComposerPreferencesRepository {
+  _FakeComposerPreferencesRepository({ComposerPreferences? preferences})
+    : preferences = preferences ?? ComposerPreferences.defaults();
+
+  ComposerPreferences preferences;
+
+  @override
+  Future<ComposerPreferences> load() async => preferences;
+
+  @override
+  Future<void> save(ComposerPreferences preferences) async {
+    this.preferences = preferences;
+  }
+}
 
 StickerItem _sticker({required String code, required String imagePath}) {
   return StickerItem(

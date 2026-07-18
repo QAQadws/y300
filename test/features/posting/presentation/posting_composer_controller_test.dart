@@ -9,8 +9,9 @@ import 'package:y300/features/composer_shared/data/providers/composer_providers.
 import 'package:y300/features/composer_shared/data/services/composer_upload_notification_service.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
+import 'package:y300/features/composer_shared/domain/repositories/composer_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
-import 'package:y300/features/composer_shared/presentation/controllers/composer_editor_mode.dart';
 import 'package:y300/features/posting/data/repositories/new_thread_repository.dart';
 import 'package:y300/features/posting/data/repositories/posting_form_metadata_repository.dart';
 import 'package:y300/features/posting/data/providers/posting_providers.dart';
@@ -28,9 +29,7 @@ void main() {
         _metadataWithTypes(typeRequired: false),
       );
       final args = _args();
-      final container = _buildContainer(
-        metadataRepository: metadataRepository,
-      );
+      final container = _buildContainer(metadataRepository: metadataRepository);
       addTearDown(container.dispose);
       final subscription = _keepAlive(container, args);
       addTearDown(subscription.close);
@@ -57,9 +56,7 @@ void main() {
         const ApiError(type: ApiErrorType.network, message: '网络挂了'),
       );
       final args = _args();
-      final container = _buildContainer(
-        metadataRepository: metadataRepository,
-      );
+      final container = _buildContainer(metadataRepository: metadataRepository);
       addTearDown(container.dispose);
       final subscription = _keepAlive(container, args);
       addTearDown(subscription.close);
@@ -127,7 +124,7 @@ void main() {
         expect(state.selectedTypeId, isNull);
       },
     );
-  // PLACEHOLDER_PHASE_4_TESTS_PART_TWO
+    // PLACEHOLDER_PHASE_4_TESTS_PART_TWO
     test('canSubmit blocks empty subject and required typeid', () async {
       final args = _args();
       final container = _buildContainer(
@@ -146,8 +143,9 @@ void main() {
         postingComposerControllerProvider(args).notifier,
       );
       controller.updateMessage('正文');
-      var state =
-          container.read(postingComposerControllerProvider(args)).value!;
+      var state = container
+          .read(postingComposerControllerProvider(args))
+          .value!;
       expect(state.canSubmit, isFalse, reason: 'subject 为空');
 
       controller.updateSubject('我的标题');
@@ -238,8 +236,9 @@ void main() {
       expect(newThreadRepository.submittedPayloads.single.message, '正文');
       expect(newThreadRepository.submittedPayloads.single.typeid, '111');
 
-      final state =
-          container.read(postingComposerControllerProvider(args)).value!;
+      final state = container
+          .read(postingComposerControllerProvider(args))
+          .value!;
       expect(state.subject, isEmpty);
       expect(state.message, isEmpty);
       expect(state.selectedTypeId, isNull);
@@ -348,8 +347,9 @@ void main() {
         await controller.pickImages();
         await _drain();
 
-        final state =
-            container.read(postingComposerControllerProvider(args)).value!;
+        final state = container
+            .read(postingComposerControllerProvider(args))
+            .value!;
         expect(state.message, '正文\n[attach]777[/attach]');
         expect(state.imageAttachments.single.aid, '777');
 
@@ -362,111 +362,87 @@ void main() {
       },
     );
 
-    test('legacy reply draft restored as reply does not bleed into new thread',
-        () async {
-      // 老 reply 草稿（无 kind / subject / extras）和新 newthread 草稿在同一个
-      // SharedPreferences 命名空间下应该各自独立——身份 key 不同就不会互相覆盖。
-      final draftRepository = _MemoryDraftRepository();
-      final replyArgs = const ComposerDraftIdentity.thread(
-        fid: '33',
-        tid: '572063',
-      );
-      await draftRepository.saveDraft(
-        ComposerDraftSnapshot(
-          identity: replyArgs,
-          message: '回复草稿',
-          useSignature: false,
-          updatedAt: DateTime.utc(2026, 6, 8),
-        ),
-      );
+    test(
+      'legacy reply draft restored as reply does not bleed into new thread',
+      () async {
+        // 老 reply 草稿（无 kind / subject / extras）和新 newthread 草稿在同一个
+        // SharedPreferences 命名空间下应该各自独立——身份 key 不同就不会互相覆盖。
+        final draftRepository = _MemoryDraftRepository();
+        final replyArgs = const ComposerDraftIdentity.thread(
+          fid: '33',
+          tid: '572063',
+        );
+        await draftRepository.saveDraft(
+          ComposerDraftSnapshot(
+            identity: replyArgs,
+            message: '回复草稿',
+            useSignature: false,
+            updatedAt: DateTime.utc(2026, 6, 8),
+          ),
+        );
 
-      final args = _args();
-      final container = _buildContainer(
-        draftRepository: draftRepository,
-        metadataRepository: _FakeMetadataRepository.success(
-          _metadataWithTypes(typeRequired: false),
-        ),
-      );
-      addTearDown(container.dispose);
-      final subscription = _keepAlive(container, args);
-      addTearDown(subscription.close);
+        final args = _args();
+        final container = _buildContainer(
+          draftRepository: draftRepository,
+          metadataRepository: _FakeMetadataRepository.success(
+            _metadataWithTypes(typeRequired: false),
+          ),
+        );
+        addTearDown(container.dispose);
+        final subscription = _keepAlive(container, args);
+        addTearDown(subscription.close);
 
-      final state = await container.read(
-        postingComposerControllerProvider(args).future,
-      );
+        final state = await container.read(
+          postingComposerControllerProvider(args).future,
+        );
 
-      expect(state.message, isEmpty);
-      expect(state.subject, isEmpty);
-      expect(state.selectedTypeId, isNull);
-      // reply 草稿没动。
-      final replyDraft = await draftRepository.loadDraft(replyArgs);
-      expect(replyDraft?.message, '回复草稿');
-    });
+        expect(state.message, isEmpty);
+        expect(state.subject, isEmpty);
+        expect(state.selectedTypeId, isNull);
+        // reply 草稿没动。
+        final replyDraft = await draftRepository.loadDraft(replyArgs);
+        expect(replyDraft?.message, '回复草稿');
+      },
+    );
 
-    test('switchMode does not reset subject or selected typeid', () async {
-      final args = _args();
-      final container = _buildContainer(
-        metadataRepository: _FakeMetadataRepository.success(
-          _metadataWithTypes(typeRequired: false),
-        ),
-      );
-      addTearDown(container.dispose);
-      final subscription = _keepAlive(container, args);
-      addTearDown(subscription.close);
-      await container.read(postingComposerControllerProvider(args).future);
-      await _drain();
+    test(
+      'canSubmit blocks when subject or message exceeds metadata limits',
+      () async {
+        final args = _args();
+        final metadata = _metadataWithLengthLimits(
+          maxSubjectLength: 5,
+          maxMessageLength: 10,
+        );
+        final container = _buildContainer(
+          metadataRepository: _FakeMetadataRepository.success(metadata),
+        );
+        addTearDown(container.dispose);
+        final subscription = _keepAlive(container, args);
+        addTearDown(subscription.close);
+        await container.read(postingComposerControllerProvider(args).future);
+        await _drain();
 
-      final controller = container.read(
-        postingComposerControllerProvider(args).notifier,
-      );
-      controller.updateSubject('标题');
-      controller.updateSelectedTypeId('111');
-      controller.updateMessage('[b]源码[/b]');
-      controller.switchMode(ComposerEditorMode.preview);
+        final controller = container.read(
+          postingComposerControllerProvider(args).notifier,
+        );
+        controller.updateSubject('在限内');
+        controller.updateMessage('正文不超长');
 
-      final state =
-          container.read(postingComposerControllerProvider(args)).value!;
-      expect(state.mode, ComposerEditorMode.preview);
-      expect(state.subject, '标题');
-      expect(state.selectedTypeId, '111');
-      expect(state.message, '[b]源码[/b]');
-    });
+        var state = container
+            .read(postingComposerControllerProvider(args))
+            .value!;
+        expect(state.canSubmit, isTrue);
 
-    test('canSubmit blocks when subject or message exceeds metadata limits',
-        () async {
-      final args = _args();
-      final metadata = _metadataWithLengthLimits(
-        maxSubjectLength: 5,
-        maxMessageLength: 10,
-      );
-      final container = _buildContainer(
-        metadataRepository: _FakeMetadataRepository.success(metadata),
-      );
-      addTearDown(container.dispose);
-      final subscription = _keepAlive(container, args);
-      addTearDown(subscription.close);
-      await container.read(postingComposerControllerProvider(args).future);
-      await _drain();
+        controller.updateSubject('这个标题太长会被拒绝');
+        state = container.read(postingComposerControllerProvider(args)).value!;
+        expect(state.canSubmit, isFalse, reason: '标题超出 maxSubjectLength=5');
 
-      final controller = container.read(
-        postingComposerControllerProvider(args).notifier,
-      );
-      controller.updateSubject('在限内');
-      controller.updateMessage('正文不超长');
-
-      var state =
-          container.read(postingComposerControllerProvider(args)).value!;
-      expect(state.canSubmit, isTrue);
-
-      controller.updateSubject('这个标题太长会被拒绝');
-      state = container.read(postingComposerControllerProvider(args)).value!;
-      expect(state.canSubmit, isFalse, reason: '标题超出 maxSubjectLength=5');
-
-      controller.updateSubject('短标题');
-      controller.updateMessage('这条正文超过版块的字数限制了哈哈');
-      state = container.read(postingComposerControllerProvider(args)).value!;
-      expect(state.canSubmit, isFalse, reason: '正文超出 maxMessageLength=10');
-    });
+        controller.updateSubject('短标题');
+        controller.updateMessage('这条正文超过版块的字数限制了哈哈');
+        state = container.read(postingComposerControllerProvider(args)).value!;
+        expect(state.canSubmit, isFalse, reason: '正文超出 maxMessageLength=10');
+      },
+    );
 
     test(
       'preflight returns over-limit message when subject exceeds threshold',
@@ -530,8 +506,9 @@ void main() {
       controller.updateTags(['  百合 ', '百合', '动画', '']);
       await controller.flushDraft();
 
-      final state =
-          container.read(postingComposerControllerProvider(args)).value!;
+      final state = container
+          .read(postingComposerControllerProvider(args))
+          .value!;
       expect(state.tags, ['百合', '动画']);
 
       final stored = await draftRepository.loadDraft(args.identity);
@@ -560,8 +537,9 @@ void main() {
       controller.updateSpecial(NewThreadSpecial.poll);
       await controller.flushDraft();
 
-      final state =
-          container.read(postingComposerControllerProvider(args)).value!;
+      final state = container
+          .read(postingComposerControllerProvider(args))
+          .value!;
       expect(state.special, NewThreadSpecial.poll);
       expect(state.poll, isNotNull);
 
@@ -569,33 +547,37 @@ void main() {
       expect(stored?.extras['special'], 'poll');
     });
 
-    test('poll preflight blocks submit when fewer than 2 valid options',
-        () async {
-      final newThreadRepository = _FakeNewThreadRepository();
-      final args = _args();
-      final container = _buildContainer(
-        metadataRepository: _FakeMetadataRepository.success(_metadataNoTypes()),
-        newThreadRepository: newThreadRepository,
-      );
-      addTearDown(container.dispose);
-      final subscription = _keepAlive(container, args);
-      addTearDown(subscription.close);
-      await container.read(postingComposerControllerProvider(args).future);
-      await _drain();
+    test(
+      'poll preflight blocks submit when fewer than 2 valid options',
+      () async {
+        final newThreadRepository = _FakeNewThreadRepository();
+        final args = _args();
+        final container = _buildContainer(
+          metadataRepository: _FakeMetadataRepository.success(
+            _metadataNoTypes(),
+          ),
+          newThreadRepository: newThreadRepository,
+        );
+        addTearDown(container.dispose);
+        final subscription = _keepAlive(container, args);
+        addTearDown(subscription.close);
+        await container.read(postingComposerControllerProvider(args).future);
+        await _drain();
 
-      final controller = container.read(
-        postingComposerControllerProvider(args).notifier,
-      );
-      controller.updateSubject('投票');
-      controller.updateMessage('说明');
-      controller.updateSpecial(NewThreadSpecial.poll);
-      controller.updatePollOptions(['只有一个']);
+        final controller = container.read(
+          postingComposerControllerProvider(args).notifier,
+        );
+        controller.updateSubject('投票');
+        controller.updateMessage('说明');
+        controller.updateSpecial(NewThreadSpecial.poll);
+        controller.updatePollOptions(['只有一个']);
 
-      final result = await controller.submit();
-      expect(result.sent, isFalse);
-      expect(newThreadRepository.submittedPayloads, isEmpty);
-      expect(result.message, contains('投票至少需要'));
-    });
+        final result = await controller.submit();
+        expect(result.sent, isFalse);
+        expect(newThreadRepository.submittedPayloads, isEmpty);
+        expect(result.message, contains('投票至少需要'));
+      },
+    );
 
     test('poll submit forwards normalized payload', () async {
       final newThreadRepository = _FakeNewThreadRepository();
@@ -635,8 +617,9 @@ void main() {
       expect(payload.poll!.overt, isTrue);
 
       // 成功后业务字段被 reset。
-      final state =
-          container.read(postingComposerControllerProvider(args)).value!;
+      final state = container
+          .read(postingComposerControllerProvider(args))
+          .value!;
       expect(state.special, NewThreadSpecial.normal);
       expect(state.poll, isNull);
       expect(state.tags, isEmpty);
@@ -683,6 +666,5 @@ void main() {
       expect(state.poll!.multiple, isTrue);
       expect(state.poll!.maxChoices, 2);
     });
-
   });
 }

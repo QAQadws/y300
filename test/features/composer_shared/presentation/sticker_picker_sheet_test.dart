@@ -57,11 +57,6 @@ void main() {
           stickerPickerPreferencesRepositoryProvider.overrideWithValue(
             preferencesRepository,
           ),
-          stickerPickerLastGroupIdProvider.overrideWith((ref) {
-            return ref
-                .read(stickerPickerPreferencesRepositoryProvider)
-                .loadLastGroupId();
-          }),
           imageCacheServiceProvider.overrideWithValue(
             _FailingImageCacheService(),
           ),
@@ -92,11 +87,6 @@ void main() {
           stickerPickerPreferencesRepositoryProvider.overrideWithValue(
             preferencesRepository,
           ),
-          stickerPickerLastGroupIdProvider.overrideWith((ref) {
-            return ref
-                .read(stickerPickerPreferencesRepositoryProvider)
-                .loadLastGroupId();
-          }),
           imageCacheServiceProvider.overrideWithValue(
             _FailingImageCacheService(),
           ),
@@ -180,11 +170,6 @@ Widget _buildSheet({
       stickerPickerPreferencesRepositoryProvider.overrideWithValue(
         resolvedPreferencesRepository,
       ),
-      stickerPickerLastGroupIdProvider.overrideWith((ref) {
-        return ref
-            .read(stickerPickerPreferencesRepositoryProvider)
-            .loadLastGroupId();
-      }),
       imageCacheServiceProvider.overrideWithValue(_FailingImageCacheService()),
       composerStickerImageCacheLoaderProvider.overrideWithValue(
         _testStickerImageLoader(),

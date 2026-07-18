@@ -9,6 +9,7 @@ import 'package:y300/features/composer_shared/presentation/quill/composer_quill_
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_size_mapping.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_color_picker_sheet.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_group_panel.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
 
 typedef ComposerQuillImagePicker =
@@ -38,6 +39,8 @@ class ComposerQuillPrototypeEditor extends StatelessWidget {
     this.onImagePressed,
     this.stickers = const <StickerItem>[],
     this.stickerGroups = const <StickerGroup>[],
+    this.initialStickerGroupId,
+    this.onStickerGroupChanged,
     this.imageAttachments = const <ComposerImageAttachment>[],
     this.attachImageBuilder = _defaultQuillAttachImageBuilder,
     this.attachFileExists = _defaultQuillAttachFileExists,
@@ -53,6 +56,8 @@ class ComposerQuillPrototypeEditor extends StatelessWidget {
   final ComposerQuillImagePicker? onImagePressed;
   final List<StickerItem> stickers;
   final List<StickerGroup> stickerGroups;
+  final String? initialStickerGroupId;
+  final ValueChanged<String>? onStickerGroupChanged;
   final List<ComposerImageAttachment> imageAttachments;
   final ForumAttachPreviewImageBuilder? attachImageBuilder;
   final ForumAttachPreviewFileExists? attachFileExists;
@@ -70,6 +75,8 @@ class ComposerQuillPrototypeEditor extends StatelessWidget {
       onImagePressed: onImagePressed,
       stickers: stickers,
       stickerGroups: stickerGroups,
+      initialStickerGroupId: initialStickerGroupId,
+      onStickerGroupChanged: onStickerGroupChanged,
       imageAttachments: imageAttachments,
       attachImageBuilder: attachImageBuilder,
       attachFileExists: attachFileExists,
@@ -91,6 +98,8 @@ class ComposerQuillEditorSurface extends StatefulWidget {
     this.onImagePressed,
     this.stickers = const <StickerItem>[],
     this.stickerGroups = const <StickerGroup>[],
+    this.initialStickerGroupId,
+    this.onStickerGroupChanged,
     this.imageAttachments = const <ComposerImageAttachment>[],
     this.attachImageBuilder = _defaultQuillAttachImageBuilder,
     this.attachFileExists = _defaultQuillAttachFileExists,
@@ -109,6 +118,8 @@ class ComposerQuillEditorSurface extends StatefulWidget {
   final ComposerQuillImagePicker? onImagePressed;
   final List<StickerItem> stickers;
   final List<StickerGroup> stickerGroups;
+  final String? initialStickerGroupId;
+  final ValueChanged<String>? onStickerGroupChanged;
   final List<ComposerImageAttachment> imageAttachments;
   final ForumAttachPreviewImageBuilder? attachImageBuilder;
   final ForumAttachPreviewFileExists? attachFileExists;
@@ -286,9 +297,11 @@ class _ComposerQuillEditorSurfaceState
         keyPrefix: widget.keyPrefix,
         onSubmitted: _applyLink,
       ),
-      ComposerQuillToolPanel.sticker => _StickerToolPanel(
+      ComposerQuillToolPanel.sticker => ComposerStickerGroupPanel(
         keyPrefix: widget.keyPrefix,
         groups: _visibleStickerGroups(),
+        initialGroupId: widget.initialStickerGroupId,
+        onGroupChanged: widget.onStickerGroupChanged ?? (_) {},
         onSelected: _insertStickerItem,
       ),
       null => const SizedBox.shrink(),
@@ -940,99 +953,6 @@ class _LinkPanelState extends State<_LinkPanel> {
     widget.onSubmitted(_LinkDraft(url: url, label: label));
     _urlController.clear();
     _labelController.clear();
-  }
-}
-
-class _StickerToolPanel extends StatelessWidget {
-  const _StickerToolPanel({
-    required this.keyPrefix,
-    required this.groups,
-    required this.onSelected,
-  });
-
-  final String keyPrefix;
-  final List<StickerGroup> groups;
-  final ValueChanged<StickerItem> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    if (groups.isEmpty) {
-      return const Center(child: Text('需要联网加载表情包'));
-    }
-    return DefaultTabController(
-      key: Key('$keyPrefix-sticker-sheet'),
-      length: groups.length,
-      child: Column(
-        children: [
-          TabBar(
-            key: Key('$keyPrefix-sticker-tabs'),
-            isScrollable: true,
-            tabs: [
-              for (final group in groups)
-                Tab(
-                  key: Key('$keyPrefix-sticker-group-tab-${group.id}'),
-                  text: group.title,
-                ),
-            ],
-          ),
-          Expanded(
-            child: TabBarView(
-              key: Key('$keyPrefix-sticker-pages'),
-              children: [
-                for (final group in groups)
-                  _QuillStickerGrid(
-                    keyPrefix: keyPrefix,
-                    stickers: group.stickers,
-                    onSelected: onSelected,
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _QuillStickerGrid extends StatelessWidget {
-  const _QuillStickerGrid({
-    required this.keyPrefix,
-    required this.stickers,
-    required this.onSelected,
-  });
-
-  final String keyPrefix;
-  final List<StickerItem> stickers;
-  final ValueChanged<StickerItem> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 64,
-        mainAxisSpacing: 4,
-        crossAxisSpacing: 4,
-      ),
-      itemCount: stickers.length,
-      itemBuilder: (context, index) {
-        final sticker = stickers[index];
-        return IconButton(
-          key: Key('$keyPrefix-sticker-item-${sticker.code}'),
-          constraints: const BoxConstraints.tightFor(width: 56, height: 56),
-          padding: EdgeInsets.zero,
-          onPressed: () => onSelected(sticker),
-          icon: ComposerStickerImage(
-            sticker: sticker,
-            width: 48,
-            height: 48,
-            fit: BoxFit.contain,
-            placeholder: const SizedBox.shrink(),
-            errorPlaceholder: const Icon(Icons.broken_image_outlined),
-          ),
-        );
-      },
-    );
   }
 }
 

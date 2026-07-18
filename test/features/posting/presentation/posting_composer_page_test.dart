@@ -12,6 +12,8 @@ import 'package:y300/features/composer_shared/data/services/composer_upload_noti
 import 'package:y300/features/composer_shared/data/repositories/sticker_picker_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
+import 'package:y300/features/composer_shared/domain/repositories/composer_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/posting/data/repositories/new_thread_repository.dart';
@@ -218,6 +220,45 @@ void main() {
       find.byKey(const Key('posting-composer-message-input')),
     );
     expect(restoredField.controller?.text, '[b]正文[/b]');
+  });
+
+  testWidgets('PostingComposerPage starts from the saved source surface', (
+    tester,
+  ) async {
+    final preferencesRepository = _FakeComposerPreferencesRepository(
+      preferences: const ComposerPreferences(
+        defaultSurface: ComposerSurfacePreference.source,
+        newDraftUseSignature: true,
+      ),
+    );
+    await tester.pumpWidget(
+      _buildPage(
+        preferencesRepository: preferencesRepository,
+        metadataRepository: _FakeMetadataRepository.success(_metadata()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('posting-composer-message-input')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('posting-composer-quill-editor')),
+      findsNothing,
+    );
+
+    await tester.tap(find.byKey(const Key('posting-composer-source-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('posting-composer-quill-editor')),
+      findsOneWidget,
+    );
+    expect(
+      preferencesRepository.preferences.defaultSurface,
+      ComposerSurfacePreference.quill,
+    );
   });
 
   testWidgets('PostingComposerPage source editor inserts link BBCode', (

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_app_bar_action_style.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_source_editor.dart';
@@ -29,7 +30,8 @@ class ReplyComposerPage extends ConsumerStatefulWidget {
 class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
   late final TextEditingController _messageController;
   ReplyComposerController? _controller;
-  _ReplyEditorSurface _editorSurface = _ReplyEditorSurface.quill;
+  ComposerSurfacePreference _editorSurface = ComposerSurfacePreference.quill;
+  bool _didApplySurfacePreference = false;
   bool _didApplyRestoredDraft = false;
   bool _didNotifyRestoredDraft = false;
   bool _allowPopWithoutConfirm = false;
@@ -64,6 +66,16 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
           data: (groups) => groups,
           orElse: () => const <StickerGroup>[],
         );
+    final composerPreferences = ref.watch(
+      composerPreferencesControllerProvider,
+    );
+    if (!_didApplySurfacePreference && composerPreferences.hasValue) {
+      _didApplySurfacePreference = true;
+      _editorSurface = composerPreferences.value!.defaultSurface;
+    }
+    final lastStickerGroupId = ref
+        .watch(stickerPickerLastGroupIdControllerProvider)
+        .value;
     _controller = controller;
     final state = asyncState.value;
     if (state != null) {
@@ -80,13 +92,14 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
         unawaited(_confirmAndPop(context, controller));
       },
       child: Scaffold(
-        resizeToAvoidBottomInset: _editorSurface != _ReplyEditorSurface.quill,
+        resizeToAvoidBottomInset:
+            _editorSurface != ComposerSurfacePreference.quill,
         appBar: AppBar(
           title: Text(widget.args.target.isPostReply ? '回复楼层' : '回复帖子'),
           actions: [
             IconButton(
               key: const Key('reply-composer-source-button'),
-              tooltip: _editorSurface == _ReplyEditorSurface.quill
+              tooltip: _editorSurface == ComposerSurfacePreference.quill
                   ? '源码'
                   : '返回编辑',
               onPressed: state == null
@@ -96,7 +109,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
                     },
               style: composerAppBarActionStyle(context),
               icon: Icon(
-                _editorSurface == _ReplyEditorSurface.quill
+                _editorSurface == ComposerSurfacePreference.quill
                     ? Icons.code
                     : Icons.edit_outlined,
               ),
@@ -137,6 +150,14 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
             stickerGroups: stickerGroups,
             messageController: _messageController,
             editorSurface: _editorSurface,
+            initialStickerGroupId: lastStickerGroupId,
+            onStickerGroupChanged: (groupId) {
+              unawaited(
+                ref
+                    .read(stickerPickerLastGroupIdControllerProvider.notifier)
+                    .selectGroup(groupId),
+              );
+            },
             onMessageChanged: (value) {
               _lastAppliedStateMessage = value;
               controller.updateMessage(value);
@@ -150,15 +171,33 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
   }
 
   void _toggleEditorSurface(ReplyComposerState state) {
+    final previous = _editorSurface;
+    final next = previous == ComposerSurfacePreference.quill
+        ? ComposerSurfacePreference.source
+        : ComposerSurfacePreference.quill;
     setState(() {
-      if (_editorSurface == _ReplyEditorSurface.quill) {
+      if (previous == ComposerSurfacePreference.quill) {
         _messageController.text = state.message;
         _lastAppliedStateMessage = state.message;
-        _editorSurface = _ReplyEditorSurface.source;
-        return;
       }
-      _editorSurface = _ReplyEditorSurface.quill;
+      _editorSurface = next;
     });
+    unawaited(_persistEditorSurface(previous: previous, next: next));
+  }
+
+  Future<void> _persistEditorSurface({
+    required ComposerSurfacePreference previous,
+    required ComposerSurfacePreference next,
+  }) async {
+    try {
+      await ref
+          .read(composerPreferencesControllerProvider.notifier)
+          .setDefaultSurface(next);
+    } catch (_) {
+      if (mounted && _editorSurface == next) {
+        setState(() => _editorSurface = previous);
+      }
+    }
   }
 
   void _syncMessageController(ReplyComposerState state) {
@@ -319,6 +358,8 @@ class _ReplyComposerBody extends StatelessWidget {
     required this.stickerGroups,
     required this.messageController,
     required this.editorSurface,
+    required this.initialStickerGroupId,
+    required this.onStickerGroupChanged,
     required this.onMessageChanged,
     required this.onRetryPrepare,
     required this.onImagePressed,
@@ -328,7 +369,9 @@ class _ReplyComposerBody extends StatelessWidget {
   final ForumBbCodeRenderer bbCodeRenderer;
   final List<StickerGroup> stickerGroups;
   final TextEditingController messageController;
-  final _ReplyEditorSurface editorSurface;
+  final ComposerSurfacePreference editorSurface;
+  final String? initialStickerGroupId;
+  final ValueChanged<String> onStickerGroupChanged;
   final ValueChanged<String> onMessageChanged;
   final VoidCallback onRetryPrepare;
   final Future<void> Function() onImagePressed;
@@ -344,11 +387,13 @@ class _ReplyComposerBody extends StatelessWidget {
       bbCodeRenderer: bbCodeRenderer,
       stickerGroups: stickerGroups,
       messageController: messageController,
+      initialStickerGroupId: initialStickerGroupId,
+      onStickerGroupChanged: onStickerGroupChanged,
       onMessageChanged: onMessageChanged,
       onImagePressed: onImagePressed,
     );
     final topFeedback = _buildFeedbackWidgets(context, visibleAttachments);
-    if (editorSurface == _ReplyEditorSurface.quill) {
+    if (editorSurface == ComposerSurfacePreference.quill) {
       return SafeArea(
         bottom: false,
         child: Column(
@@ -439,8 +484,6 @@ class _ReplyComposerBody extends StatelessWidget {
   }
 }
 
-enum _ReplyEditorSurface { quill, source }
-
 class _ReplyMessageEditor extends StatelessWidget {
   const _ReplyMessageEditor({
     required this.surface,
@@ -448,15 +491,19 @@ class _ReplyMessageEditor extends StatelessWidget {
     required this.bbCodeRenderer,
     required this.stickerGroups,
     required this.messageController,
+    required this.initialStickerGroupId,
+    required this.onStickerGroupChanged,
     required this.onMessageChanged,
     required this.onImagePressed,
   });
 
-  final _ReplyEditorSurface surface;
+  final ComposerSurfacePreference surface;
   final ReplyComposerState state;
   final ForumBbCodeRenderer bbCodeRenderer;
   final List<StickerGroup> stickerGroups;
   final TextEditingController messageController;
+  final String? initialStickerGroupId;
+  final ValueChanged<String> onStickerGroupChanged;
   final ValueChanged<String> onMessageChanged;
   final Future<void> Function() onImagePressed;
 
@@ -466,13 +513,15 @@ class _ReplyMessageEditor extends StatelessWidget {
     final stickers = [for (final group in stickerGroups) ...group.stickers];
     final renderer = bbCodeRenderer;
     return switch (surface) {
-      _ReplyEditorSurface.quill => ComposerQuillEditorSurface(
+      ComposerSurfacePreference.quill => ComposerQuillEditorSurface(
         key: const Key('reply-composer-quill-editor'),
         keyPrefix: 'reply-composer',
         bbCode: state.message,
         enabled: enabled,
         stickers: stickers,
         stickerGroups: stickerGroups,
+        initialStickerGroupId: initialStickerGroupId,
+        onStickerGroupChanged: onStickerGroupChanged,
         imageAttachments: state.imageAttachments,
         attachImageBuilder: renderer is FlutterBbCodeForumRenderer
             ? renderer.attachImageBuilder
@@ -488,7 +537,7 @@ class _ReplyMessageEditor extends StatelessWidget {
           return null;
         },
       ),
-      _ReplyEditorSurface.source => ComposerBbCodeSourceEditor(
+      ComposerSurfacePreference.source => ComposerBbCodeSourceEditor(
         keyPrefix: 'reply-composer',
         viewKey: const Key('reply-composer-source-view'),
         inputKey: const Key('reply-composer-message-input'),

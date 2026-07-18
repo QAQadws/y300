@@ -1,7 +1,6 @@
 import 'dart:io' as io;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/cache/data/services/document_cache_service.dart';
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
@@ -12,6 +11,9 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/features/composer_shared/data/local/composer_draft_local_db.dart';
+import 'package:y300/features/composer_shared/data/repositories/sqflite_composer_draft_repository.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/history/data/local/history_local_db.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
@@ -152,16 +154,29 @@ void main() {
   );
 
   test(
-    'ComposerDraftStorageAccountingAdapter counts draft preference bytes',
+    'ComposerDraftStorageAccountingAdapter counts SQLite snapshot bytes',
     () async {
-      SharedPreferences.setMockInitialValues(<String, Object>{
-        'reply_draft.thread:33:100': '百合 draft',
-        'unrelated': 'ignored',
+      const dbName = 'storage_usage_composer_draft_test.db';
+      await deleteDatabase(dbName);
+      final db = await ComposerDraftLocalDb.open(databaseName: dbName);
+      addTearDown(() async {
+        await db.close();
+        await deleteDatabase(dbName);
       });
-      final prefs = await SharedPreferences.getInstance();
+      final repository = SqfliteComposerDraftRepository(
+        databaseProvider: () async => db,
+      );
+      await repository.saveDraft(
+        ComposerDraftSnapshot(
+          identity: ComposerDraftIdentity.thread(fid: '33', tid: '100'),
+          message: '百合 draft',
+          useSignature: true,
+          updatedAt: DateTime.utc(2026, 7, 18),
+        ),
+      );
 
       final section = await ComposerDraftStorageAccountingAdapter(
-        sharedPreferences: prefs,
+        databaseProvider: () async => db,
       ).calculateUsage();
 
       expect(section.bucket, StorageBucket.composerDraft);
@@ -369,5 +384,4 @@ class _FakeDownloadStorageService implements DownloadStorageService {
   }) async {
     return null;
   }
-
 }

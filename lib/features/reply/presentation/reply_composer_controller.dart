@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_submission_error_presenter.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_controller_base.dart';
@@ -36,7 +37,6 @@ class ReplyComposerController
   String get uploadFid => _args.target.fid;
 
   @override
-  @override
   FutureOr<ReplyComposerState> build() async {
     _replyRepository = ref.read(replyRepositoryProvider);
     _errorPresenter = ref.read(composerSubmissionErrorPresenterProvider);
@@ -46,11 +46,13 @@ class ReplyComposerController
   @override
   Future<ReplyComposerState> buildInitialState({
     required ComposerDraftSnapshot? restoredDraft,
+    required ComposerPreferences preferences,
   }) async {
     return ReplyComposerState.initial(
       target: _args.target,
       message: restoredDraft?.message ?? '',
-      useSignature: restoredDraft?.useSignature ?? true,
+      useSignature:
+          restoredDraft?.useSignature ?? preferences.newDraftUseSignature,
       isPreparing: _shouldPreparePostReply,
       restoredDraft: restoredDraft != null,
       imageAttachments:
@@ -76,7 +78,6 @@ class ReplyComposerController
       message: patch.message,
       useSignature: patch.useSignature,
       isSubmitting: patch.isSubmitting,
-      mode: patch.mode,
       restoredDraft: patch.restoredDraft,
       imageAttachments: patch.imageAttachments,
       isUploadingImages: patch.isUploadingImages,

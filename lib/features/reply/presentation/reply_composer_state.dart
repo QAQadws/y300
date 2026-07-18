@@ -1,11 +1,7 @@
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
-import 'package:y300/features/composer_shared/presentation/controllers/composer_editor_mode.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_base.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_submission_outcome.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
-
-/// reply 沿用的"源码 / 预览"模式枚举别名，避免一次性改动所有调用点。
-typedef ReplyComposerMode = ComposerEditorMode;
 
 class ReplyComposerArgs {
   const ReplyComposerArgs({
@@ -27,10 +23,7 @@ class ReplyComposerArgs {
         repquote: pid,
       );
     }
-    return ReplyDraftIdentity.thread(
-      fid: target.fid,
-      tid: target.tid,
-    );
+    return ReplyDraftIdentity.thread(fid: target.fid, tid: target.tid);
   }
 
   @override
@@ -50,14 +43,14 @@ class ReplyComposerArgs {
 
   @override
   int get hashCode => Object.hash(
-        target.kind,
-        target.fid,
-        target.tid,
-        target.pid,
-        target.sourceUri,
-        title,
-        replyFormUri,
-      );
+    target.kind,
+    target.fid,
+    target.tid,
+    target.pid,
+    target.sourceUri,
+    title,
+    replyFormUri,
+  );
 }
 
 class ReplyComposerState extends ComposerStateBase {
@@ -66,7 +59,6 @@ class ReplyComposerState extends ComposerStateBase {
     required super.message,
     required super.useSignature,
     required super.isSubmitting,
-    required super.mode,
     required this.isPreparing,
     required super.restoredDraft,
     required super.imageAttachments,
@@ -83,7 +75,6 @@ class ReplyComposerState extends ComposerStateBase {
     required ReplyTarget target,
     String message = '',
     bool useSignature = true,
-    ComposerEditorMode mode = ComposerEditorMode.source,
     bool isPreparing = false,
     bool restoredDraft = false,
     List<ComposerImageAttachment> imageAttachments = const [],
@@ -98,7 +89,6 @@ class ReplyComposerState extends ComposerStateBase {
       message: message,
       useSignature: useSignature,
       isSubmitting: false,
-      mode: mode,
       isPreparing: isPreparing,
       restoredDraft: restoredDraft,
       imageAttachments: imageAttachments,
@@ -131,7 +121,6 @@ class ReplyComposerState extends ComposerStateBase {
     String? message,
     bool? useSignature,
     bool? isSubmitting,
-    ComposerEditorMode? mode,
     bool? isPreparing,
     bool? restoredDraft,
     List<ComposerImageAttachment>? imageAttachments,
@@ -152,7 +141,6 @@ class ReplyComposerState extends ComposerStateBase {
       message: message ?? this.message,
       useSignature: useSignature ?? this.useSignature,
       isSubmitting: isSubmitting ?? this.isSubmitting,
-      mode: mode ?? this.mode,
       isPreparing: isPreparing ?? this.isPreparing,
       restoredDraft: restoredDraft ?? this.restoredDraft,
       imageAttachments: imageAttachments ?? this.imageAttachments,
@@ -163,21 +151,21 @@ class ReplyComposerState extends ComposerStateBase {
       preparationError: clearPreparationError
           ? null
           : preparationError ?? this.preparationError,
-      errorMessage: clearErrorMessage ? null : errorMessage ?? this.errorMessage,
-      imageUploadError:
-          clearImageUploadError ? null : imageUploadError ?? this.imageUploadError,
+      errorMessage: clearErrorMessage
+          ? null
+          : errorMessage ?? this.errorMessage,
+      imageUploadError: clearImageUploadError
+          ? null
+          : imageUploadError ?? this.imageUploadError,
     );
   }
 }
 
 class ReplyComposerResult extends ComposerSubmitInvocationResult {
-  const ReplyComposerResult({
-    required super.sent,
-    required super.message,
-  });
+  const ReplyComposerResult({required super.sent, required super.message});
 
   const ReplyComposerResult.sent(String message)
-      : this(sent: true, message: message);
+    : this(sent: true, message: message);
 
   factory ReplyComposerResult.fromInvocation(
     ComposerSubmitInvocationResult invocation,

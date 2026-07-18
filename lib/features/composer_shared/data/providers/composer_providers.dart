@@ -1,17 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/core/preferences/preferences_providers.dart';
 import 'package:y300/features/composer_shared/data/services/composer_attachment_remote_data_source.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_attachment_repository.dart';
-import 'package:y300/features/composer_shared/data/services/composer_draft_attachment_maintenance_service.dart';
-import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
-import 'package:y300/features/composer_shared/data/services/composer_upload_cache_storage.dart';
 import 'package:y300/features/composer_shared/data/services/composer_upload_notification_service.dart';
 import 'package:y300/features/composer_shared/data/repositories/discuz_composer_attachment_repository.dart';
-import 'package:y300/features/composer_shared/data/repositories/shared_preferences_composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/repositories/sticker_catalog_repository.dart';
-import 'package:y300/features/composer_shared/data/repositories/sticker_picker_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_service.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_tokenizer.dart';
@@ -22,6 +16,9 @@ import 'package:y300/features/composer_shared/domain/services/sticker_bbcode_tok
 import 'package:y300/features/composer_shared/domain/services/sticker_code_normalizer.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+
+export 'package:y300/features/composer_shared/data/providers/composer_preferences_providers.dart';
+export 'package:y300/features/composer_shared/data/providers/composer_draft_providers.dart';
 
 /// composer_shared 模块的 Riverpod 接线集合。
 ///
@@ -56,19 +53,6 @@ final composerStickerImageCacheLoaderProvider =
       );
     });
 
-final stickerPickerPreferencesRepositoryProvider =
-    Provider<StickerPickerPreferencesRepository>((ref) {
-      return SharedPreferencesStickerPickerPreferencesRepository(
-        preferencesStore: ref.watch(preferencesStoreProvider),
-      );
-    });
-
-final stickerPickerLastGroupIdProvider = FutureProvider.autoDispose<String?>((
-  ref,
-) {
-  return ref.read(stickerPickerPreferencesRepositoryProvider).loadLastGroupId();
-});
-
 final stickerBbCodeTokenizerProvider = Provider<StickerBbCodeTokenizer>((_) {
   return const StickerBbCodeTokenizer();
 });
@@ -81,27 +65,6 @@ final composerAttachBbCodeTokenizerProvider =
 final composerSubmissionErrorPresenterProvider =
     Provider<ComposerSubmissionErrorPresenter>((_) {
       return const ComposerSubmissionErrorPresenter();
-    });
-
-final composerUploadCacheStorageProvider = Provider<ComposerUploadCacheStorage>(
-  (_) {
-    return LocalComposerUploadCacheStorage();
-  },
-);
-
-final composerDraftRepositoryProvider = Provider<ComposerDraftRepository>((
-  ref,
-) {
-  return SharedPreferencesComposerDraftRepository(
-    cacheStorage: ref.read(composerUploadCacheStorageProvider),
-  );
-});
-
-final composerDraftAttachmentMaintenanceServiceProvider =
-    Provider<ComposerDraftAttachmentMaintenanceService>((ref) {
-      return SharedPreferencesComposerDraftAttachmentMaintenanceService(
-        cacheStorage: ref.read(composerUploadCacheStorageProvider),
-      );
     });
 
 final composerImagePickerProvider = Provider<ComposerImagePicker>((_) {

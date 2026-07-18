@@ -3,9 +3,10 @@ import 'dart:convert';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 
-/// 序列化 [ComposerDraftSnapshot] 到 SharedPreferences 友好的 JSON 形式。
+/// 序列化 [ComposerDraftSnapshot] 到可持久化的 JSON 形式。
 ///
-/// 字段命名与历史 reply 草稿完全一致，避免升级后既有草稿失效。
+/// SQLite 使用同一载荷保存新草稿，字段命名继续兼容历史 reply 草稿，
+/// 以便一次性迁移时直接复用解码规则。
 class ComposerDraftSnapshotJsonCodec {
   const ComposerDraftSnapshotJsonCodec();
 
@@ -99,11 +100,7 @@ class ComposerDraftSnapshotJsonCodec {
       if (repquote == null || repquote.trim().isEmpty) {
         return null;
       }
-      return ComposerDraftIdentity.post(
-        fid: fid,
-        tid: tid,
-        repquote: repquote,
-      );
+      return ComposerDraftIdentity.post(fid: fid, tid: tid, repquote: repquote);
     }
     return ComposerDraftIdentity.thread(fid: fid, tid: tid);
   }
@@ -135,9 +132,7 @@ class ComposerDraftSnapshotJsonCodec {
     return result;
   }
 
-  Map<String, Object?> _encodeAttachment(
-    ComposerImageAttachment attachment,
-  ) {
+  Map<String, Object?> _encodeAttachment(ComposerImageAttachment attachment) {
     return <String, Object?>{
       'localId': attachment.localId,
       'localPath': attachment.localPath,
@@ -156,10 +151,7 @@ class ComposerDraftSnapshotJsonCodec {
     if (raw is! List) {
       return const <ComposerImageAttachment>[];
     }
-    return [
-      for (final item in raw)
-        ?_decodeAttachment(item),
-    ];
+    return [for (final item in raw) ?_decodeAttachment(item)];
   }
 
   ComposerImageAttachment? _decodeAttachment(Object? raw) {

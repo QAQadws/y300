@@ -61,6 +61,13 @@ abstract final class PreferenceKeys {
     PreferenceKeyNames.novelChapterOpenModeMigrationVersion,
   );
 
+  static const composerDefaultsSnapshotV1 = PreferenceKey<String>(
+    PreferenceKeyNames.composerDefaultsSnapshotV1,
+  );
+  static const composerDraftMigrationVersion = PreferenceKey<int>(
+    PreferenceKeyNames.composerDraftMigrationVersion,
+  );
+
   static const libraryShelfComicSnapshotV1 = PreferenceKey<String>(
     PreferenceKeyNames.libraryShelfComicSnapshotV1,
   );

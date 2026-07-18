@@ -1,6 +1,5 @@
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
-import 'package:y300/features/composer_shared/presentation/controllers/composer_editor_mode.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_base.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_submission_outcome.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
@@ -12,9 +11,7 @@ import 'package:y300/features/posting/domain/models/posting_target.dart';
 /// `AsyncNotifierProvider.autoDispose.family` 的 key——每个 fid 对应一份草稿，
 /// args 必须可哈希、可比较。
 class PostingComposerArgs {
-  const PostingComposerArgs({
-    required this.target,
-  });
+  const PostingComposerArgs({required this.target});
 
   final PostingTarget target;
 
@@ -36,7 +33,7 @@ class PostingComposerArgs {
 /// 发帖编辑器的视图状态。
 ///
 /// 字段切分原则：
-/// - 通用字段（message / mode / 附件 / 草稿恢复 / 上传进度 / 错误）走基类；
+/// - 通用字段（message / 附件 / 草稿恢复 / 上传进度 / 错误）走基类；
 /// - 业务字段（target / metadata / subject / typeid / 选项）放在本类；
 /// - metadata 是 `null` 表示"还在加载或加载失败"，由 [isLoadingMetadata] /
 ///   [metadataError] 区分。这两个状态分开存而非合并 enum，是为了让"加载失败
@@ -50,7 +47,6 @@ class PostingComposerState extends ComposerStateBase {
     required this.subject,
     required super.useSignature,
     required super.isSubmitting,
-    required super.mode,
     required super.restoredDraft,
     required super.imageAttachments,
     required super.isUploadingImages,
@@ -76,7 +72,6 @@ class PostingComposerState extends ComposerStateBase {
     String message = '',
     String subject = '',
     bool useSignature = true,
-    ComposerEditorMode mode = ComposerEditorMode.source,
     bool restoredDraft = false,
     List<ComposerImageAttachment> imageAttachments = const [],
     bool isLoadingMetadata = true,
@@ -97,7 +92,6 @@ class PostingComposerState extends ComposerStateBase {
       subject: subject,
       useSignature: useSignature,
       isSubmitting: false,
-      mode: mode,
       restoredDraft: restoredDraft,
       imageAttachments: imageAttachments,
       isUploadingImages: false,
@@ -171,13 +165,15 @@ class PostingComposerState extends ComposerStateBase {
     if (special == NewThreadSpecial.poll) {
       final p = poll;
       if (p == null) return false;
-      final validOptions =
-          p.options.where((s) => s.trim().isNotEmpty).toList(growable: false);
+      final validOptions = p.options
+          .where((s) => s.trim().isNotEmpty)
+          .toList(growable: false);
       if (validOptions.length < NewThreadPollValidation.minOptions) {
         return false;
       }
       if (p.options.any(
-        (option) => option.trim().length > NewThreadPollValidation.maxOptionLength,
+        (option) =>
+            option.trim().length > NewThreadPollValidation.maxOptionLength,
       )) {
         return false;
       }
@@ -191,7 +187,6 @@ class PostingComposerState extends ComposerStateBase {
     String? subject,
     bool? useSignature,
     bool? isSubmitting,
-    ComposerEditorMode? mode,
     bool? restoredDraft,
     List<ComposerImageAttachment>? imageAttachments,
     bool? isUploadingImages,
@@ -223,7 +218,6 @@ class PostingComposerState extends ComposerStateBase {
       subject: subject ?? this.subject,
       useSignature: useSignature ?? this.useSignature,
       isSubmitting: isSubmitting ?? this.isSubmitting,
-      mode: mode ?? this.mode,
       restoredDraft: restoredDraft ?? this.restoredDraft,
       imageAttachments: imageAttachments ?? this.imageAttachments,
       isUploadingImages: isUploadingImages ?? this.isUploadingImages,
@@ -231,10 +225,12 @@ class PostingComposerState extends ComposerStateBase {
       imageUploadTotal: imageUploadTotal ?? this.imageUploadTotal,
       isLoadingMetadata: isLoadingMetadata ?? this.isLoadingMetadata,
       metadata: clearMetadata ? null : metadata ?? this.metadata,
-      metadataError:
-          clearMetadataError ? null : metadataError ?? this.metadataError,
-      selectedTypeId:
-          clearSelectedTypeId ? null : selectedTypeId ?? this.selectedTypeId,
+      metadataError: clearMetadataError
+          ? null
+          : metadataError ?? this.metadataError,
+      selectedTypeId: clearSelectedTypeId
+          ? null
+          : selectedTypeId ?? this.selectedTypeId,
       allowNoticeAuthor: allowNoticeAuthor ?? this.allowNoticeAuthor,
       bbCodeOff: bbCodeOff ?? this.bbCodeOff,
       smileyOff: smileyOff ?? this.smileyOff,
@@ -242,8 +238,9 @@ class PostingComposerState extends ComposerStateBase {
       tags: tags ?? this.tags,
       special: special ?? this.special,
       poll: clearPoll ? null : poll ?? this.poll,
-      errorMessage:
-          clearErrorMessage ? null : errorMessage ?? this.errorMessage,
+      errorMessage: clearErrorMessage
+          ? null
+          : errorMessage ?? this.errorMessage,
       imageUploadError: clearImageUploadError
           ? null
           : imageUploadError ?? this.imageUploadError,

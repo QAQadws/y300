@@ -1,8 +1,6 @@
-import 'dart:convert';
 import 'dart:io' as io;
 
 import 'package:path/path.dart' as p;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
@@ -10,7 +8,7 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
-import 'package:y300/features/composer_shared/data/repositories/shared_preferences_composer_draft_repository.dart';
+import 'package:y300/features/composer_shared/data/local/composer_draft_local_db.dart';
 import 'package:y300/features/history/data/local/history_local_db.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 
@@ -161,32 +159,25 @@ class PageCacheStorageAccountingAdapter implements StorageAccountingAdapter {
 class ComposerDraftStorageAccountingAdapter
     implements StorageAccountingAdapter {
   const ComposerDraftStorageAccountingAdapter({
-    SharedPreferences? sharedPreferences,
-  }) : _sharedPreferences = sharedPreferences;
+    required Future<Database> Function() databaseProvider,
+  }) : _databaseProvider = databaseProvider;
 
-  final SharedPreferences? _sharedPreferences;
+  final Future<Database> Function() _databaseProvider;
 
   @override
   StorageBucket get bucket => StorageBucket.composerDraft;
 
   @override
   Future<StorageUsageSection> calculateUsage() async {
-    final prefs = _sharedPreferences ?? await SharedPreferences.getInstance();
-    var bytes = 0;
-    var count = 0;
-    for (final key in prefs.getKeys()) {
-      if (!key.startsWith(
-        SharedPreferencesComposerDraftRepository.draftKeyPrefix,
-      )) {
-        continue;
-      }
-      count += 1;
-      bytes += _roughUtf8Bytes(key);
-      final value = prefs.getString(key);
-      if (value != null) {
-        bytes += _roughUtf8Bytes(value);
-      }
-    }
+    final db = await _databaseProvider();
+    final rows = await db.rawQuery('''
+      SELECT
+        COUNT(*) AS draft_count,
+        COALESCE(SUM(LENGTH(CAST(snapshot_json AS BLOB))), 0) AS payload_bytes
+      FROM ${ComposerDraftLocalDb.draftsTable}
+    ''');
+    final count = (rows.single['draft_count'] as num?)?.toInt() ?? 0;
+    final bytes = (rows.single['payload_bytes'] as num?)?.toInt() ?? 0;
     return StorageUsageSection(
       bucket: bucket,
       label: bucket.label,
@@ -195,17 +186,13 @@ class ComposerDraftStorageAccountingAdapter
       slices: [
         if (bytes > 0)
           StorageUsageSlice(
-            id: 'composer_draft:prefs',
+            id: 'composer_draft:sqlite',
             label: '发帖/回复草稿（$count）',
             bytes: bytes,
             protected: false,
           ),
       ],
     );
-  }
-
-  int _roughUtf8Bytes(String value) {
-    return utf8.encode(value).length;
   }
 }
 
