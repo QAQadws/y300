@@ -337,33 +337,6 @@ class ComicShelfAdapter
   }
 
   @override
-  Future<void> updateDisplayPreference({
-    required LibraryDisplayMode displayMode,
-    required int gridColumnCount,
-  }) async {
-    await _stateRepository.upsertDisplaySettings(
-      moduleKey: LibraryModuleKey.comic,
-      displayMode: displayMode,
-      gridColumns: gridColumnCount,
-    );
-  }
-
-  @override
-  Future<LibraryDisplayPreference> loadDisplayPreference() async {
-    final stateSettings = await _stateRepository.getDisplaySettings(
-      moduleKey: LibraryModuleKey.comic,
-      defaultDisplayMode: LibraryDisplayMode.grid,
-    );
-    final legacy = await _repository.getDisplaySettings();
-    return LibraryDisplayPreference(
-      displayMode: stateSettings.displayMode,
-      gridColumnCount: stateSettings.gridColumns == 3
-          ? legacy.gridColumnCount
-          : stateSettings.gridColumns,
-    );
-  }
-
-  @override
   Future<String?> pickRandomWorkId({required String categoryId}) async {
     final items = await loadCategoryItems(categoryId: categoryId);
     if (items.isEmpty) {

@@ -272,30 +272,6 @@ class NovelShelfAdapter
   }
 
   @override
-  Future<void> updateDisplayPreference({
-    required LibraryDisplayMode displayMode,
-    required int gridColumnCount,
-  }) async {
-    await _stateRepository.upsertDisplaySettings(
-      moduleKey: LibraryModuleKey.novel,
-      displayMode: displayMode,
-      gridColumns: gridColumnCount,
-    );
-  }
-
-  @override
-  Future<LibraryDisplayPreference> loadDisplayPreference() async {
-    final stateSettings = await _stateRepository.getDisplaySettings(
-      moduleKey: LibraryModuleKey.novel,
-      defaultDisplayMode: LibraryDisplayMode.list,
-    );
-    return LibraryDisplayPreference(
-      displayMode: stateSettings.displayMode,
-      gridColumnCount: stateSettings.gridColumns,
-    );
-  }
-
-  @override
   Future<String?> pickRandomWorkId({required String categoryId}) async {
     final items = await loadCategoryItems(categoryId: categoryId);
     if (items.isEmpty) {

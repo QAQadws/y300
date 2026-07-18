@@ -7,12 +7,6 @@ import 'package:y300/features/library_shared/domain/models/library_sort_models.d
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
 void main() {
-  test('LibraryDisplayPreference defaults should be grid 3 columns', () {
-    const defaults = LibraryDisplayPreference.defaults;
-    expect(defaults.displayMode, LibraryDisplayMode.grid);
-    expect(defaults.gridColumnCount, 3);
-  });
-
   test('ShelfModuleAdapter contract can be implemented by fake', () async {
     final adapter = _FakeShelfModuleAdapter();
     final categories = await adapter.loadCategories();
@@ -38,7 +32,8 @@ class _FakeShelfModuleAdapter implements ShelfModuleAdapter {
   ValueListenable<LibraryShelfRefreshSignal?>? get shelfRefreshSignals => null;
 
   @override
-  Future<Object> buildDetailRouteArgument({required String workId}) async => workId;
+  Future<Object> buildDetailRouteArgument({required String workId}) async =>
+      workId;
 
   @override
   Future<String> createCategory({required String name}) async => 'c1';
@@ -59,16 +54,10 @@ class _FakeShelfModuleAdapter implements ShelfModuleAdapter {
   }
 
   @override
-  Future<List<LibraryWorkItem>> loadCategoryItems({required String categoryId}) async {
+  Future<List<LibraryWorkItem>> loadCategoryItems({
+    required String categoryId,
+  }) async {
     return const [];
-  }
-
-  @override
-  Future<LibraryDisplayPreference> loadDisplayPreference() async {
-    return const LibraryDisplayPreference(
-      displayMode: LibraryDisplayMode.grid,
-      gridColumnCount: 3,
-    );
   }
 
   @override
@@ -106,10 +95,4 @@ class _FakeShelfModuleAdapter implements ShelfModuleAdapter {
   }) async {
     return const {};
   }
-
-  @override
-  Future<void> updateDisplayPreference({
-    required LibraryDisplayMode displayMode,
-    required int gridColumnCount,
-  }) async {}
 }

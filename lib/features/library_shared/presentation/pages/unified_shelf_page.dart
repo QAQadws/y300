@@ -4,6 +4,7 @@ import 'package:y300/core/media/cover_focal_point.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
+import 'package:y300/features/library_shared/domain/contracts/library_view_preferences_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
@@ -26,6 +27,7 @@ class UnifiedShelfPage extends StatefulWidget {
   const UnifiedShelfPage({
     super.key,
     required this.adapter,
+    this.viewPreferencesRepository,
     required this.onOpenWork,
     this.imageHeaderBuilder,
     this.featureFlags = ShelfFeatureFlags.defaults,
@@ -36,6 +38,7 @@ class UnifiedShelfPage extends StatefulWidget {
   });
 
   final ShelfModuleAdapter adapter;
+  final LibraryViewPreferencesRepository? viewPreferencesRepository;
   final Future<void> Function(BuildContext context, String workId) onOpenWork;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ShelfFeatureFlags featureFlags;
@@ -62,6 +65,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
     super.initState();
     _controller = UnifiedShelfController(
       adapter: widget.adapter,
+      viewPreferencesRepository: widget.viewPreferencesRepository,
       featureFlags: widget.featureFlags,
       onStateChanged: _handleControllerStateChanged,
       backgroundReloadEnabled: widget.isActive,

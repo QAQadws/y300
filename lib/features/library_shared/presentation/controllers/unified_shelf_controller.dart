@@ -3,10 +3,12 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/image_loading/domain/image_prefetcher.dart';
+import 'package:y300/features/library_shared/domain/contracts/library_view_preferences_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_view_preferences.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_snapshot_diff.dart';
@@ -115,6 +117,7 @@ class UnifiedShelfState {
 class UnifiedShelfController {
   UnifiedShelfController({
     required ShelfModuleAdapter adapter,
+    LibraryViewPreferencesRepository? viewPreferencesRepository,
     int coverPrefetchConcurrency = 3,
     ImagePrefetcher Function(
       ImagePrefetchRunner runner,
@@ -127,6 +130,9 @@ class UnifiedShelfController {
     LibraryTaskProgressHub? taskProgressHub,
     ForumImagePrecacheService Function()? coverPrecacheServiceResolver,
   }) : _adapter = adapter,
+       _viewPreferencesRepository =
+           viewPreferencesRepository ??
+           VolatileLibraryViewPreferencesRepository(),
        _coverPrefetchConcurrency = coverPrefetchConcurrency,
        _coverPrefetcherFactory = coverPrefetcherFactory,
        _featureFlags = featureFlags,
@@ -158,6 +164,7 @@ class UnifiedShelfController {
   }
 
   final ShelfModuleAdapter _adapter;
+  final LibraryViewPreferencesRepository _viewPreferencesRepository;
   final int _coverPrefetchConcurrency;
   final ImagePrefetcher Function(
     ImagePrefetchRunner runner,
@@ -193,6 +200,8 @@ class UnifiedShelfController {
   bool _backgroundReloadInProgress = false;
   bool _backgroundReloadRequested = false;
   bool _backgroundReloadEnabled;
+  bool _viewPreferencesLoaded = false;
+  String? _preferredCategoryId;
   var _disposed = false;
   var _reloadGeneration = 0;
 
@@ -292,10 +301,15 @@ class UnifiedShelfController {
   }
 
   Future<void> selectCategory(String categoryId) async {
-    if (_state.selectedCategoryId == categoryId) {
+    if (_state.selectedCategoryId == categoryId &&
+        _preferredCategoryId == categoryId) {
       return;
     }
-    _setState(_state.copyWith(selectedCategoryId: categoryId));
+    _preferredCategoryId = categoryId;
+    if (_state.selectedCategoryId != categoryId) {
+      _setState(_state.copyWith(selectedCategoryId: categoryId));
+    }
+    await _persistViewPreferences();
     _startCoverWarmup(generation: _reloadGeneration);
   }
 
@@ -321,8 +335,8 @@ class UnifiedShelfController {
   }
 
   Future<void> updateFilters(LibraryFilterSet filters) async {
-    final capabilities = resolveShelfModuleCapabilities(_adapter);
-    _setState(_state.copyWith(filters: capabilities.normalizeFilters(filters)));
+    _setState(_state.copyWith(filters: _normalizeFilters(filters)));
+    await _persistViewPreferences();
     await _reload();
   }
 
@@ -331,24 +345,19 @@ class UnifiedShelfController {
     _setState(
       _state.copyWith(sortOption: capabilities.normalizeSortOption(option)),
     );
+    await _persistViewPreferences();
     await _reload();
   }
 
   Future<void> updateDisplayMode(LibraryDisplayMode mode) async {
     _setState(_state.copyWith(displayMode: mode));
-    await _adapter.updateDisplayPreference(
-      displayMode: mode,
-      gridColumnCount: _state.gridColumnCount,
-    );
+    await _persistViewPreferences();
   }
 
   Future<void> updateGridColumnCount(int count) async {
     final normalized = _normalizeGridColumnCount(count);
     _setState(_state.copyWith(gridColumnCount: normalized));
-    await _adapter.updateDisplayPreference(
-      displayMode: _state.displayMode,
-      gridColumnCount: normalized,
-    );
+    await _persistViewPreferences();
   }
 
   Future<void> createCategory(String name) async {
@@ -421,10 +430,10 @@ class UnifiedShelfController {
       ),
     );
     try {
-      final displaySettings = await trace.measure(
-        'display',
-        _adapter.loadDisplayPreference,
-      );
+      await trace.measure('preferences', _ensureViewPreferencesLoaded);
+      if (_disposed || generation != _reloadGeneration) {
+        return;
+      }
       final snapshot = await trace.measure(
         _shouldUseSnapshotAdapter ? 'querySnapshot' : 'queryItems',
         _queryShelfSnapshot,
@@ -459,19 +468,29 @@ class UnifiedShelfController {
         itemsByCategory: snapshot.itemsByCategory,
       );
 
+      final preferredCategoryId =
+          _preferredCategoryId ??
+          (_state.categories.isEmpty ? '' : _state.selectedCategoryId);
       final selectedCategoryId = _resolveSelectedCategoryId(
         categories: resolved.visibleCategories,
-        preferred: _state.selectedCategoryId,
-        hadVisibleCategoriesBefore: _state.categories.isNotEmpty,
+        preferred: preferredCategoryId,
       );
+
+      final preferredCategoryStillExists =
+          _preferredCategoryId == null ||
+          snapshot.categories.any(
+            (category) => category.categoryId == _preferredCategoryId,
+          );
+      final shouldPersistResolvedCategory =
+          resolved.visibleCategories.isNotEmpty &&
+          (_preferredCategoryId == null || !preferredCategoryStillExists);
+      if (shouldPersistResolvedCategory) {
+        _preferredCategoryId = selectedCategoryId;
+      }
 
       _setState(
         _state.copyWith(
           isLoading: false,
-          displayMode: displaySettings.displayMode,
-          gridColumnCount: _normalizeGridColumnCount(
-            displaySettings.gridColumnCount,
-          ),
           categories: resolved.visibleCategories,
           selectedCategoryId: selectedCategoryId,
           itemsByCategory: snapshot.itemsByCategory,
@@ -479,6 +498,9 @@ class UnifiedShelfController {
           clearError: true,
         ),
       );
+      if (shouldPersistResolvedCategory) {
+        await _persistViewPreferences();
+      }
       _startCoverWarmup(generation: generation);
     } catch (error) {
       if (_disposed || generation != _reloadGeneration) {
@@ -854,21 +876,61 @@ class UnifiedShelfController {
   String _resolveSelectedCategoryId({
     required List<LibraryCategory> categories,
     required String preferred,
-    required bool hadVisibleCategoriesBefore,
   }) {
     if (categories.isEmpty) {
       return 'default';
-    }
-    // 首次装载前 controller 会带着初始化哨兵值 `default`。若首屏真实第一个分类
-    // 不是 default，则应让 active category 与 PageView 默认展示的第 0 页对齐。
-    if (!hadVisibleCategoriesBefore) {
-      return categories.first.categoryId;
     }
     final hit = categories.any((category) => category.categoryId == preferred);
     if (hit) {
       return preferred;
     }
     return categories.first.categoryId;
+  }
+
+  Future<void> _ensureViewPreferencesLoaded() async {
+    if (_viewPreferencesLoaded) {
+      return;
+    }
+    final capabilities = resolveShelfModuleCapabilities(_adapter);
+    final defaults = LibraryShelfViewPreferences.defaults(
+      moduleKey: _adapter.moduleKey,
+      displayMode: _adapter.defaultDisplayMode,
+      sortOption: capabilities.defaultSortOption,
+    );
+    final loaded = await _viewPreferencesRepository.load(defaults: defaults);
+    final normalized = loaded.copyWith(
+      gridColumnCount: _normalizeGridColumnCount(loaded.gridColumnCount),
+      filters: _normalizeFilters(loaded.filters),
+      sortOption: capabilities.normalizeSortOption(loaded.sortOption),
+    );
+    _preferredCategoryId = normalized.lastCategoryId;
+    _setState(
+      _state.copyWith(
+        filters: normalized.filters,
+        sortOption: normalized.sortOption,
+        displayMode: normalized.displayMode,
+        gridColumnCount: normalized.gridColumnCount,
+        selectedCategoryId: normalized.lastCategoryId ?? 'default',
+      ),
+    );
+    _viewPreferencesLoaded = true;
+    if (normalized != loaded) {
+      await _viewPreferencesRepository.save(normalized);
+    }
+  }
+
+  Future<void> _persistViewPreferences() {
+    final capabilities = resolveShelfModuleCapabilities(_adapter);
+    return _viewPreferencesRepository.save(
+      LibraryShelfViewPreferences(
+        moduleKey: _adapter.moduleKey,
+        displayMode: _state.displayMode,
+        gridColumnCount: _normalizeGridColumnCount(_state.gridColumnCount),
+        sortOption: capabilities.normalizeSortOption(_state.sortOption),
+        filters: _normalizeFilters(_state.filters),
+        lastCategoryId: _preferredCategoryId,
+      ),
+    );
   }
 
   int _normalizeGridColumnCount(int value) {
@@ -879,6 +941,14 @@ class UnifiedShelfController {
       return 10;
     }
     return value;
+  }
+
+  LibraryFilterSet _normalizeFilters(LibraryFilterSet filters) {
+    final capabilities = resolveShelfModuleCapabilities(_adapter);
+    final normalized = capabilities.normalizeFilters(filters);
+    return _adapter is ShelfDownloadStatusAdapter
+        ? normalized
+        : normalized.copyWith(downloaded: TriStateFilterValue.ignore);
   }
 
   bool _hasAnyContent(UnifiedShelfState state) {

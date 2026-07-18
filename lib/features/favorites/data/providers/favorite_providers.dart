@@ -16,7 +16,6 @@ import 'package:y300/features/favorites/domain/services/favorite_link_service.da
 import 'package:y300/features/favorites/domain/services/favorite_shelf_bootstrapper.dart';
 import 'package:y300/features/favorites/presentation/adapters/favorite_shelf_adapter.dart';
 import 'package:y300/features/library_shared/data/providers/sync_diagnostic_providers.dart';
-import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/providers/library_task_workflow_providers.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
@@ -88,7 +87,6 @@ final favoriteShelfAdapterProvider = Provider<FavoriteShelfAdapter>((ref) {
   return FavoriteShelfAdapter(
     ref.watch(localFavoriteRepositoryProvider),
     syncService: ref.watch(favoriteSyncServiceProvider),
-    stateRepository: ref.watch(libraryStateRepositoryProvider),
     imageCacheServiceResolver: () => ref.read(imageCacheServiceProvider),
     comicCoverCacheWriterResolver: () => ref.read(comicCoverCacheWriterProvider),
     novelCoverCacheWriterResolver: () => ref.read(novelCoverCacheWriterProvider),

@@ -9,13 +9,11 @@ import 'package:y300/features/favorites/data/repositories/local_favorite_reposit
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/favorites/domain/use_cases/unfavorite_use_cases.dart';
 import 'package:y300/features/favorites/presentation/adapters/favorite_shelf_adapter.dart';
-import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
-import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
@@ -27,11 +25,7 @@ void main() {
     () async {
       final local = _FakeLocalFavoriteRepository();
       final sync = _FakeFavoriteSyncService();
-      final adapter = FavoriteShelfAdapter(
-        local,
-        syncService: sync,
-        stateRepository: _FakeLibraryStateRepository(),
-      );
+      final adapter = FavoriteShelfAdapter(local, syncService: sync);
 
       final categories = await adapter.loadCategories();
       await adapter.loadCategories();
@@ -64,11 +58,7 @@ void main() {
           lastSyncedAt: DateTime(2026, 1, 1),
         );
       final sync = _FakeFavoriteSyncService();
-      final adapter = FavoriteShelfAdapter(
-        local,
-        syncService: sync,
-        stateRepository: _FakeLibraryStateRepository(),
-      );
+      final adapter = FavoriteShelfAdapter(local, syncService: sync);
 
       final snapshot = await adapter.querySnapshot(
         filters: LibraryFilterSet.defaults,
@@ -115,7 +105,6 @@ void main() {
       final adapter = FavoriteShelfAdapter(
         local,
         syncService: sync,
-        stateRepository: _FakeLibraryStateRepository(),
         imageCacheService: imageCache,
         comicCoverCacheWriter: writer,
       );
@@ -178,7 +167,6 @@ void main() {
     final adapter = FavoriteShelfAdapter(
       local,
       syncService: sync,
-      stateRepository: _FakeLibraryStateRepository(),
       imageCacheService: imageCache,
       comicCoverCacheWriter: writer,
     );
@@ -232,7 +220,6 @@ void main() {
       final adapter = FavoriteShelfAdapter(
         local,
         syncService: sync,
-        stateRepository: _FakeLibraryStateRepository(),
         imageCacheService: _FakeImageCacheService(
           localPath: '/cache/missing.jpg',
         ),
@@ -276,7 +263,6 @@ void main() {
       final adapter = FavoriteShelfAdapter(
         _FakeLocalFavoriteRepository(),
         syncService: _FakeFavoriteSyncService(),
-        stateRepository: _FakeLibraryStateRepository(),
         taskProgressHub: hub,
       );
 
@@ -292,7 +278,6 @@ void main() {
     final adapter = FavoriteShelfAdapter(
       _FakeLocalFavoriteRepository(),
       syncService: _FakeFavoriteSyncService(),
-      stateRepository: _FakeLibraryStateRepository(),
       categoryAssignUseCase: _FakeShelfCategoryAssignUseCase(),
       unfavoriteThreadUseCase: _FakeUnfavoriteThreadUseCase(),
     );
@@ -311,7 +296,6 @@ void main() {
     final adapter = FavoriteShelfAdapter(
       _FakeLocalFavoriteRepository(),
       syncService: _FakeFavoriteSyncService(),
-      stateRepository: _FakeLibraryStateRepository(),
       unfavoriteThreadUseCase: useCase,
     );
 
@@ -333,7 +317,6 @@ void main() {
     final adapter = FavoriteShelfAdapter(
       _FakeLocalFavoriteRepository(),
       syncService: _FakeFavoriteSyncService(),
-      stateRepository: _FakeLibraryStateRepository(),
       unfavoriteThreadUseCase: useCase,
     );
 
@@ -514,31 +497,6 @@ class _FakeComicCoverCacheWriter implements ComicCoverCacheWriter {
     lastCoverLocalPath = coverLocalPath;
     lastCustomCoverLocalPath = customCoverLocalPath;
   }
-}
-
-class _FakeLibraryStateRepository implements LibraryStateRepository {
-  @override
-  Future<LibraryModuleDisplaySettings> getDisplaySettings({
-    required LibraryModuleKey moduleKey,
-    required LibraryDisplayMode defaultDisplayMode,
-  }) async {
-    return LibraryModuleDisplaySettings(
-      moduleKey: moduleKey,
-      displayMode: defaultDisplayMode,
-      gridColumns: 3,
-      updatedAt: DateTime(2026, 1, 1),
-    );
-  }
-
-  @override
-  Future<void> upsertDisplaySettings({
-    required LibraryModuleKey moduleKey,
-    required LibraryDisplayMode displayMode,
-    required int gridColumns,
-  }) async {}
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _FakeShelfCategoryAssignUseCase implements ShelfCategoryAssignUseCase {

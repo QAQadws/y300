@@ -1216,14 +1216,6 @@ class _FakeShelfAdapter
   }
 
   @override
-  Future<LibraryDisplayPreference> loadDisplayPreference() async {
-    return LibraryDisplayPreference(
-      displayMode: initialDisplayMode,
-      gridColumnCount: 3,
-    );
-  }
-
-  @override
   Future<void> moveWorkToCategory({
     required String workId,
     required String fromCategoryId,
@@ -1273,12 +1265,6 @@ class _FakeShelfAdapter
       keyword: keyword,
     );
   }
-
-  @override
-  Future<void> updateDisplayPreference({
-    required LibraryDisplayMode displayMode,
-    required int gridColumnCount,
-  }) async {}
 }
 
 class _FakeSelectableShelfAdapter extends _FakeShelfAdapter

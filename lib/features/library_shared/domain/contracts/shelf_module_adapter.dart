@@ -69,15 +69,6 @@ abstract class ShelfModuleAdapter {
     required String toCategoryId,
   });
 
-  /// 更新显示偏好。
-  Future<void> updateDisplayPreference({
-    required LibraryDisplayMode displayMode,
-    required int gridColumnCount,
-  });
-
-  /// 读取显示偏好。
-  Future<LibraryDisplayPreference> loadDisplayPreference();
-
   /// 随机打开一个作品（more 菜单行为）。
   Future<String?> pickRandomWorkId({required String categoryId});
 }
@@ -198,20 +189,4 @@ class LibraryShelfTaskProgress {
     }
     return (current / resolvedTotal).clamp(0.0, 1.0).toDouble();
   }
-}
-
-/// 统一显示偏好。
-class LibraryDisplayPreference {
-  const LibraryDisplayPreference({
-    required this.displayMode,
-    required this.gridColumnCount,
-  });
-
-  final LibraryDisplayMode displayMode;
-  final int gridColumnCount;
-
-  static const LibraryDisplayPreference defaults = LibraryDisplayPreference(
-    displayMode: LibraryDisplayMode.grid,
-    gridColumnCount: 3,
-  );
 }

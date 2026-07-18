@@ -33,6 +33,18 @@ void main() {
     expect(PreferenceKeys.appThemePreference.name, 'app_theme_preference');
     expect(PreferenceKeys.forumShellMode.name, 'forum_shell_mode');
     expect(PreferenceKeys.imageReaderSnapshotV1.name, 'reader.image.v1');
+    expect(
+      PreferenceKeys.libraryShelfComicSnapshotV1.name,
+      'library.shelf.comic.v1',
+    );
+    expect(
+      PreferenceKeys.libraryShelfNovelSnapshotV1.name,
+      'library.shelf.novel.v1',
+    );
+    expect(
+      PreferenceKeys.libraryShelfFavoriteSnapshotV1.name,
+      'library.shelf.favorite.v1',
+    );
     expect(PreferenceKeys.legacyImageReaderMode.name, 'reader_pref_mode');
     expect(
       PreferenceKeys.forumHtmlReaderFontScale.name,

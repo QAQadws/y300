@@ -7,7 +7,6 @@ import 'package:y300/features/favorites/data/services/favorite_sync_service.dart
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/favorites/domain/use_cases/unfavorite_use_cases.dart';
-import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
@@ -40,7 +39,6 @@ class FavoriteShelfAdapter
   FavoriteShelfAdapter(
     this._repository, {
     required FavoriteSyncService syncService,
-    required LibraryStateRepository stateRepository,
     ImageCacheService? imageCacheService,
     ImageCacheServiceResolver? imageCacheServiceResolver,
     ComicCoverCacheWriter? comicCoverCacheWriter,
@@ -54,7 +52,6 @@ class FavoriteShelfAdapter
     UnfavoriteThreadUseCase? unfavoriteThreadUseCase,
     UnfavoriteThreadUseCaseResolver? unfavoriteThreadUseCaseResolver,
   }) : _syncService = syncService,
-       _stateRepository = stateRepository,
        _shelfRefreshBus = shelfRefreshBus,
        _coverCacheService = imageCacheServiceResolver == null
            ? LibraryCoverCacheService(imageCacheService)
@@ -77,7 +74,6 @@ class FavoriteShelfAdapter
 
   final LocalFavoriteRepository _repository;
   final FavoriteSyncService _syncService;
-  final LibraryStateRepository _stateRepository;
   final LibraryShelfRefreshBus? _shelfRefreshBus;
   final LibraryCoverCacheService _coverCacheService;
   final ComicCoverCacheWriterResolver _comicCoverCacheWriterResolver;
@@ -294,30 +290,6 @@ class FavoriteShelfAdapter
     await _repository.moveThreadToCategory(
       tid: tid,
       toCategoryId: toCategoryId,
-    );
-  }
-
-  @override
-  Future<void> updateDisplayPreference({
-    required LibraryDisplayMode displayMode,
-    required int gridColumnCount,
-  }) {
-    return _stateRepository.upsertDisplaySettings(
-      moduleKey: LibraryModuleKey.favorite,
-      displayMode: displayMode,
-      gridColumns: gridColumnCount,
-    );
-  }
-
-  @override
-  Future<LibraryDisplayPreference> loadDisplayPreference() async {
-    final settings = await _stateRepository.getDisplaySettings(
-      moduleKey: LibraryModuleKey.favorite,
-      defaultDisplayMode: LibraryDisplayMode.list,
-    );
-    return LibraryDisplayPreference(
-      displayMode: settings.displayMode,
-      gridColumnCount: settings.gridColumns,
     );
   }
 

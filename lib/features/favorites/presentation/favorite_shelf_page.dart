@@ -9,6 +9,7 @@ import 'package:y300/features/comic/presentation/comic_detail_page.dart';
 import 'package:y300/features/favorites/data/providers/favorite_providers.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/library_shared/data/providers/library_task_workflow_providers.dart';
+import 'package:y300/features/library_shared/data/providers/library_view_preferences_providers.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_shelf_page.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
 import 'package:y300/features/novel/presentation/novel_detail_page.dart';
@@ -97,6 +98,9 @@ class _FavoriteShelfPageState extends ConsumerState<FavoriteShelfPage> {
     final repository = ref.watch(localFavoriteRepositoryProvider);
     return UnifiedShelfPage(
       adapter: adapter,
+      viewPreferencesRepository: ref.watch(
+        libraryViewPreferencesRepositoryProvider,
+      ),
       imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
       isActive: widget.isActive,
       taskProgressHub: taskProgressHub,

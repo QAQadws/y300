@@ -48,6 +48,25 @@ abstract final class PreferenceKeys {
     PreferenceKeyNames.legacyImageReaderShowPageIndicator,
   );
 
+  static const libraryShelfComicSnapshotV1 = PreferenceKey<String>(
+    PreferenceKeyNames.libraryShelfComicSnapshotV1,
+  );
+  static const libraryShelfNovelSnapshotV1 = PreferenceKey<String>(
+    PreferenceKeyNames.libraryShelfNovelSnapshotV1,
+  );
+  static const libraryShelfFavoriteSnapshotV1 = PreferenceKey<String>(
+    PreferenceKeyNames.libraryShelfFavoriteSnapshotV1,
+  );
+  static const libraryShelfComicMigrationVersion = PreferenceKey<int>(
+    PreferenceKeyNames.libraryShelfComicMigrationVersion,
+  );
+  static const libraryShelfNovelMigrationVersion = PreferenceKey<int>(
+    PreferenceKeyNames.libraryShelfNovelMigrationVersion,
+  );
+  static const libraryShelfFavoriteMigrationVersion = PreferenceKey<int>(
+    PreferenceKeyNames.libraryShelfFavoriteMigrationVersion,
+  );
+
   static const imageCacheMaxBytes = PreferenceKey<int>(
     PreferenceKeyNames.imageCacheMaxBytes,
   );

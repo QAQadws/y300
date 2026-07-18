@@ -40,30 +40,6 @@ void main() {
     );
   });
 
-  test('ComicShelfAdapter keeps the phase-0 legacy grid fallback', () async {
-    final legacyFallbackAdapter = ComicShelfAdapter(
-      _FakeComicRepository(
-        shelfItems: const <ComicShelfItem>[],
-        legacyGridColumnCount: 5,
-      ),
-      stateRepository: _FakeLibraryStateRepository(gridColumns: 3),
-    );
-    final sharedValueAdapter = ComicShelfAdapter(
-      _FakeComicRepository(
-        shelfItems: const <ComicShelfItem>[],
-        legacyGridColumnCount: 5,
-      ),
-      stateRepository: _FakeLibraryStateRepository(gridColumns: 4),
-    );
-
-    final legacyFallback = await legacyFallbackAdapter.loadDisplayPreference();
-    final sharedValue = await sharedValueAdapter.loadDisplayPreference();
-
-    expect(legacyFallback.displayMode, LibraryDisplayMode.grid);
-    expect(legacyFallback.gridColumnCount, 5);
-    expect(sharedValue.gridColumnCount, 4);
-  });
-
   test('ComicShelfAdapter returns metadata before cover warmup', () async {
     final repository = _FakeComicRepository(
       shelfItems: <ComicShelfItem>[
@@ -502,12 +478,10 @@ class _FakeComicRepository
   _FakeComicRepository({
     required this.shelfItems,
     this.statsByComicId = const <String, ComicShelfWorkStats>{},
-    this.legacyGridColumnCount = 3,
   });
 
   final List<ComicShelfItem> shelfItems;
   final Map<String, ComicShelfWorkStats> statsByComicId;
-  final int legacyGridColumnCount;
   String? lastCoverLocalPath;
 
   @override
@@ -544,7 +518,7 @@ class _FakeComicRepository
 
   @override
   Future<ComicShelfDisplaySettings> getDisplaySettings() async {
-    return ComicShelfDisplaySettings(gridColumnCount: legacyGridColumnCount);
+    return const ComicShelfDisplaySettings(gridColumnCount: 3);
   }
 
   @override
@@ -635,10 +609,6 @@ class _FakeImageCacheService implements ImageCacheService {
 }
 
 class _FakeLibraryStateRepository implements LibraryStateRepository {
-  _FakeLibraryStateRepository({this.gridColumns = 3});
-
-  final int gridColumns;
-
   @override
   Future<int> countDownloadedEpisodes({
     required LibraryModuleKey moduleKey,
@@ -679,7 +649,7 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
     return LibraryModuleDisplaySettings(
       moduleKey: moduleKey,
       displayMode: defaultDisplayMode,
-      gridColumns: gridColumns,
+      gridColumns: 3,
       updatedAt: DateTime(2026, 1, 1),
     );
   }

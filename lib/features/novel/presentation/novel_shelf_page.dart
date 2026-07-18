@@ -5,6 +5,7 @@ import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/favorites/data/use_cases/unfavorite_use_case_providers.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/providers/library_task_workflow_providers.dart';
+import 'package:y300/features/library_shared/data/providers/library_view_preferences_providers.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_shelf_page.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
@@ -36,6 +37,9 @@ class NovelShelfPage extends ConsumerWidget {
     );
     return UnifiedShelfPage(
       adapter: adapter,
+      viewPreferencesRepository: ref.watch(
+        libraryViewPreferencesRepositoryProvider,
+      ),
       imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
       isActive: isActive,
       taskProgressHub: taskProgressHub,

@@ -6,10 +6,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
+import 'package:y300/features/library_shared/domain/contracts/library_view_preferences_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_view_preferences.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
@@ -121,6 +123,125 @@ void main() {
       );
 
       expect(controller.state.sortOption.direction, LibrarySortDirection.asc);
+    });
+
+    test(
+      'initialize restores the full view snapshot and normalizes capabilities',
+      () async {
+        final adapter = _CapabilityShelfAdapter(
+          categories: <LibraryCategory>[
+            LibraryCategory(
+              categoryId: 'default',
+              name: 'default',
+              sortOrder: 0,
+              createdAt: DateTime(2026, 1, 1),
+            ),
+            LibraryCategory(
+              categoryId: 'saved',
+              name: 'saved',
+              sortOrder: 1,
+              createdAt: DateTime(2026, 1, 2),
+            ),
+          ],
+          queriedItems: const <String, List<LibraryWorkItem>>{
+            'default': <LibraryWorkItem>[],
+            'saved': <LibraryWorkItem>[],
+          },
+          capabilities: const ShelfModuleCapabilities(
+            supportsReadState: false,
+            defaultSortOption: LibraryShelfSortOption(
+              field: LibraryShelfSortField.favoriteAddedAt,
+              direction: LibrarySortDirection.asc,
+            ),
+          ),
+        );
+        final preferencesRepository =
+            VolatileLibraryViewPreferencesRepository();
+        await preferencesRepository.save(
+          const LibraryShelfViewPreferences(
+            moduleKey: LibraryModuleKey.comic,
+            displayMode: LibraryDisplayMode.list,
+            gridColumnCount: 5,
+            sortOption: LibraryShelfSortOption(
+              field: LibraryShelfSortField.unreadCount,
+            ),
+            filters: LibraryFilterSet(
+              downloaded: TriStateFilterValue.include,
+              unread: TriStateFilterValue.include,
+              bookmarked: TriStateFilterValue.include,
+            ),
+            lastCategoryId: 'saved',
+          ),
+        );
+        final controller = UnifiedShelfController(
+          adapter: adapter,
+          viewPreferencesRepository: preferencesRepository,
+        );
+        addTearDown(controller.dispose);
+
+        await controller.initialize();
+
+        expect(controller.state.displayMode, LibraryDisplayMode.list);
+        expect(controller.state.gridColumnCount, 5);
+        expect(controller.state.selectedCategoryId, 'saved');
+        expect(
+          controller.state.sortOption,
+          isA<LibraryShelfSortOption>()
+              .having(
+                (option) => option.field,
+                'field',
+                LibraryShelfSortField.favoriteAddedAt,
+              )
+              .having(
+                (option) => option.direction,
+                'direction',
+                LibrarySortDirection.asc,
+              ),
+        );
+        expect(controller.state.filters.unread, TriStateFilterValue.ignore);
+        expect(controller.state.filters.downloaded, TriStateFilterValue.ignore);
+        expect(controller.state.filters.bookmarked, TriStateFilterValue.ignore);
+      },
+    );
+
+    test('selecting a category persists it for the next controller', () async {
+      final adapter = _FakeShelfAdapter(
+        categories: <LibraryCategory>[
+          LibraryCategory(
+            categoryId: 'default',
+            name: 'default',
+            sortOrder: 0,
+            createdAt: DateTime(2026, 1, 1),
+          ),
+          LibraryCategory(
+            categoryId: 'later',
+            name: 'later',
+            sortOrder: 1,
+            createdAt: DateTime(2026, 1, 2),
+          ),
+        ],
+        queriedItems: const <String, List<LibraryWorkItem>>{
+          'default': <LibraryWorkItem>[],
+          'later': <LibraryWorkItem>[],
+        },
+      );
+      final preferencesRepository = VolatileLibraryViewPreferencesRepository();
+      final first = UnifiedShelfController(
+        adapter: adapter,
+        viewPreferencesRepository: preferencesRepository,
+      );
+      addTearDown(first.dispose);
+      await first.initialize();
+      await first.selectCategory('later');
+
+      final second = UnifiedShelfController(
+        adapter: adapter,
+        viewPreferencesRepository: preferencesRepository,
+      );
+      addTearDown(second.dispose);
+      await second.initialize();
+
+      expect(second.state.selectedCategoryId, 'later');
     });
 
     test(
@@ -372,19 +493,31 @@ void main() {
     });
 
     test(
-      'update display and grid columns should persist through adapter',
+      'update display and grid columns persists through shared repository',
       () async {
         final adapter = _FakeShelfAdapter(
           categories: const [],
           queriedItems: const {},
         );
-        final controller = UnifiedShelfController(adapter: adapter);
+        final preferencesRepository =
+            VolatileLibraryViewPreferencesRepository();
+        final controller = UnifiedShelfController(
+          adapter: adapter,
+          viewPreferencesRepository: preferencesRepository,
+        );
         await controller.initialize();
         await controller.updateDisplayMode(LibraryDisplayMode.list);
         await controller.updateGridColumnCount(2);
 
-        expect(adapter.lastDisplayMode, LibraryDisplayMode.list);
-        expect(adapter.lastGridColumns, 2);
+        final saved = await preferencesRepository.load(
+          defaults: LibraryShelfViewPreferences.defaults(
+            moduleKey: LibraryModuleKey.comic,
+            displayMode: LibraryDisplayMode.grid,
+            sortOption: LibraryShelfSortOption.defaults,
+          ),
+        );
+        expect(saved.displayMode, LibraryDisplayMode.list);
+        expect(saved.gridColumnCount, 2);
       },
     );
 
@@ -928,8 +1061,6 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
   final ValueListenable<LibraryShelfRefreshSignal?>? shelfRefreshSignals;
 
   String? lastQueryKeyword;
-  LibraryDisplayMode? lastDisplayMode;
-  int? lastGridColumns;
   int queryCallCount = 0;
 
   @override
@@ -958,14 +1089,6 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
   Future<List<LibraryWorkItem>> loadCategoryItems({
     required String categoryId,
   }) async => queriedItems[categoryId] ?? const <LibraryWorkItem>[];
-
-  @override
-  Future<LibraryDisplayPreference> loadDisplayPreference() async {
-    return const LibraryDisplayPreference(
-      displayMode: LibraryDisplayMode.grid,
-      gridColumnCount: 3,
-    );
-  }
 
   @override
   Future<void> moveWorkToCategory({
@@ -1002,15 +1125,6 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
   Future<Map<String, List<LibraryWorkItem>>> searchItemsByKeyword({
     required String keyword,
   }) async => queriedItems;
-
-  @override
-  Future<void> updateDisplayPreference({
-    required LibraryDisplayMode displayMode,
-    required int gridColumnCount,
-  }) async {
-    lastDisplayMode = displayMode;
-    lastGridColumns = gridColumnCount;
-  }
 }
 
 class _WarmupShelfAdapter extends _FakeShelfAdapter
