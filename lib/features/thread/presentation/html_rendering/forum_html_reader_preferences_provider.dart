@@ -14,7 +14,11 @@ class ForumHtmlReaderPreferences {
 
   factory ForumHtmlReaderPreferences.defaults() =>
       const ForumHtmlReaderPreferences(
-        typography: RichTextTypography.standard,
+        typography: RichTextTypography(
+          fontScale: 1.15,
+          lineHeightScale: 1.5,
+          paragraphSpacing: 12,
+        ),
         conversionMode: TextConversionMode.none,
       );
 
@@ -66,21 +70,26 @@ class SharedPrefsForumHtmlReaderPreferencesRepository
   @override
   Future<ForumHtmlReaderPreferences> load() async {
     final prefs = await SharedPreferences.getInstance();
-    const std = RichTextTypography.standard;
+    final defaults = ForumHtmlReaderPreferences.defaults();
+    final defaultTypography = defaults.typography;
     return ForumHtmlReaderPreferences(
       typography: RichTextTypography(
         fontScale: _clampFontScale(
-          prefs.getDouble(_fontScaleKey) ?? std.fontScale,
+          prefs.getDouble(_fontScaleKey) ?? defaultTypography.fontScale,
         ),
         lineHeightScale: _clampLineHeight(
-          prefs.getDouble(_lineHeightScaleKey) ?? std.lineHeightScale,
+          prefs.getDouble(_lineHeightScaleKey) ??
+              defaultTypography.lineHeightScale,
         ),
         paragraphSpacing: _clampSpacing(
-          prefs.getDouble(_paragraphSpacingKey) ?? std.paragraphSpacing,
+          prefs.getDouble(_paragraphSpacingKey) ??
+              defaultTypography.paragraphSpacing,
         ),
       ),
       conversionMode: _parseConversionMode(prefs.getString(_conversionModeKey)),
-      preserveAuthorFontSize: prefs.getBool(_preserveFontSizeKey) ?? true,
+      preserveAuthorFontSize:
+          prefs.getBool(_preserveFontSizeKey) ??
+          defaults.preserveAuthorFontSize,
     );
   }
 

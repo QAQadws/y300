@@ -452,7 +452,11 @@ void main() {
   testWidgets(
     'NovelReaderPage display sheet is half height and applies theme live',
     (tester) async {
-      final repository = _FakeNovelRepository();
+      final repository = _FakeNovelRepository(
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          themePreset: NovelReaderThemePreset.light,
+        ),
+      );
       await tester.pumpWidget(_buildReaderApp(repository: repository));
       await tester.pumpAndSettle();
 
@@ -584,7 +588,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(repository.latestPreferences, isNotNull);
-      expect(repository.latestPreferences?.fontSize, isNot(18));
+      expect(repository.latestPreferences?.fontSize, isNot(18.5));
       expect(repository.upsertPreferencesCallCount, 1);
     },
   );
@@ -592,7 +596,11 @@ void main() {
   testWidgets(
     'NovelReaderPage display sheet barrier dismiss keeps applied settings',
     (tester) async {
-      final repository = _FakeNovelRepository();
+      final repository = _FakeNovelRepository(
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          themePreset: NovelReaderThemePreset.light,
+        ),
+      );
       await tester.pumpWidget(_buildReaderApp(repository: repository));
       await tester.pumpAndSettle();
 

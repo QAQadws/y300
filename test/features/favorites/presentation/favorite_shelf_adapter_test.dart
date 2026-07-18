@@ -38,6 +38,15 @@ void main() {
 
       expect(adapter.moduleKey, LibraryModuleKey.favorite);
       expect(adapter.defaultDisplayMode, LibraryDisplayMode.list);
+      final capabilities = resolveShelfModuleCapabilities(adapter);
+      expect(
+        capabilities.defaultSortOption.field,
+        LibraryShelfSortField.favoriteAddedAt,
+      );
+      expect(
+        capabilities.defaultSortOption.direction,
+        LibrarySortDirection.desc,
+      );
       expect(sync.syncCount, 0);
       expect(sync.maintenanceCount, 0);
       expect(categories.single.categoryId, favoriteDefaultCategoryId);

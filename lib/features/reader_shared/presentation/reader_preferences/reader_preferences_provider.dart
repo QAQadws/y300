@@ -20,6 +20,7 @@ class SharedPrefsReaderPreferencesRepository
   @override
   Future<ReaderPreferences> load() async {
     final prefs = await SharedPreferences.getInstance();
+    final defaults = ReaderPreferences.defaults();
     final modeRaw = prefs.getString(_readerModeKey);
     final mode = _parseMode(modeRaw);
 
@@ -28,7 +29,8 @@ class SharedPrefsReaderPreferencesRepository
       pageFit: _parsePageFit(prefs.getString(_pageFitKey)),
       background: _parseBackground(prefs.getString(_backgroundKey)),
       pageSpacing: _normalizePageSpacing(prefs.getDouble(_pageSpacingKey)),
-      showPageIndicator: prefs.getBool(_showPageIndicatorKey) ?? true,
+      showPageIndicator:
+          prefs.getBool(_showPageIndicatorKey) ?? defaults.showPageIndicator,
     );
   }
 
@@ -51,7 +53,7 @@ class SharedPrefsReaderPreferencesRepository
         return mode;
       }
     }
-    return ReaderModePreference.vertical;
+    return ReaderPreferences.defaults().readerMode;
   }
 
   static ReaderPageFitPreference _parsePageFit(String? raw) {
@@ -60,7 +62,7 @@ class SharedPrefsReaderPreferencesRepository
         return value;
       }
     }
-    return ReaderPageFitPreference.fitWidth;
+    return ReaderPreferences.defaults().pageFit;
   }
 
   static ReaderBackgroundPreference _parseBackground(String? raw) {
@@ -69,7 +71,7 @@ class SharedPrefsReaderPreferencesRepository
         return value;
       }
     }
-    return ReaderBackgroundPreference.followTheme;
+    return ReaderPreferences.defaults().background;
   }
 
   static double _normalizePageSpacing(double? value) {

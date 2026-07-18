@@ -118,6 +118,18 @@ void main() {
       expect(detail?.customCoverLocalPath, 'cache/replacement-cover.jpg');
     });
 
+    test(
+      'reader preferences use phase-0 defaults when no row exists',
+      () async {
+        final preferences = await repository.getReaderPreferences();
+
+        expect(preferences, NovelReaderPreferences.defaults());
+        expect(preferences.fontSize, 18.5);
+        expect(preferences.lineHeight, 1.6);
+        expect(preferences.themePreset, NovelReaderThemePreset.sepia);
+      },
+    );
+
     test('reader preferences and reading progress can persist', () async {
       await repository.upsertNovelBySeed(
         seed: const NovelRefreshSeed(fid: '55', tid: '300'),

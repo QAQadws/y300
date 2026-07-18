@@ -29,7 +29,9 @@ import 'package:y300/features/storage/domain/download_storage_models.dart';
 
 void main() {
   setUp(() {
-    SharedPreferences.setMockInitialValues(<String, Object>{});
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'reader_pref_mode': 'vertical',
+    });
   });
 
   Future<void> prepareLargeViewport(WidgetTester tester) async {
@@ -739,7 +741,30 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+          comicRepositoryProvider.overrideWithValue(
+            _ReaderFakeRepository(
+              images: const <ComicEpisodeImageItem>[
+                ComicEpisodeImageItem(
+                  episodeId: 'yamibo:100:101',
+                  imageUrl: 'https://img.test/101-1.jpg',
+                  imageIndex: 0,
+                  cacheStatus: 'none',
+                ),
+                ComicEpisodeImageItem(
+                  episodeId: 'yamibo:100:101',
+                  imageUrl: 'https://img.test/101-2.jpg',
+                  imageIndex: 1,
+                  cacheStatus: 'none',
+                ),
+                ComicEpisodeImageItem(
+                  episodeId: 'yamibo:100:101',
+                  imageUrl: 'https://img.test/101-3.jpg',
+                  imageIndex: 2,
+                  cacheStatus: 'none',
+                ),
+              ],
+            ),
+          ),
           comicReadingStateWriterProvider.overrideWithValue(
             _NoopReadingStateWriter(),
           ),

@@ -157,8 +157,9 @@ extension NovelReaderThemePresetCodec on NovelReaderThemePreset {
       case 'system':
         return NovelReaderThemePreset.followSystem;
       case 'light':
-      default:
         return NovelReaderThemePreset.light;
+      default:
+        return NovelReaderThemePreset.sepia;
     }
   }
 }
@@ -223,7 +224,7 @@ class NovelReaderPreferences {
     required this.pagePadding,
     required this.fontFamily,
     this.flowMode = NovelReaderFlowMode.vertical,
-    NovelReaderThemePreset themePreset = NovelReaderThemePreset.light,
+    NovelReaderThemePreset themePreset = NovelReaderThemePreset.sepia,
     this.contentMaxWidth = 720,
     this.firstLineIndent = 0,
     this.fontWeight = 400,
@@ -253,13 +254,13 @@ class NovelReaderPreferences {
 
   factory NovelReaderPreferences.defaults() {
     return const NovelReaderPreferences._(
-      fontSize: 18,
-      lineHeight: 1.8,
+      fontSize: 18.5,
+      lineHeight: 1.6,
       paragraphSpacing: 10,
       pagePadding: 16,
       fontFamily: 'system',
       flowMode: NovelReaderFlowMode.vertical,
-      themePreset: NovelReaderThemePreset.light,
+      themePreset: NovelReaderThemePreset.sepia,
       contentMaxWidth: 720,
       firstLineIndent: 0,
       fontWeight: 400,

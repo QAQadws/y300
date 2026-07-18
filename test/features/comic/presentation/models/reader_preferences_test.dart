@@ -5,10 +5,10 @@ void main() {
   test('ReaderPreferences.defaults uses stable phase-0 defaults', () {
     final value = ReaderPreferences.defaults();
 
-    expect(value.readerMode, ReaderModePreference.vertical);
+    expect(value.readerMode, ReaderModePreference.ltr);
     expect(value.pageFit, ReaderPageFitPreference.fitWidth);
     expect(value.background, ReaderBackgroundPreference.followTheme);
-    expect(value.pageSpacing, 8);
+    expect(value.pageSpacing, 0);
     expect(value.showPageIndicator, isTrue);
   });
 

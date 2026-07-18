@@ -33,11 +33,11 @@ void main() {
     expect(find.text('主题'), findsOneWidget);
 
     final selectedButtonFinder = find.ancestor(
-      of: find.text('垂直'),
+      of: find.text('LTR'),
       matching: find.byType(OutlinedButton),
     );
     final unselectedButtonFinder = find.ancestor(
-      of: find.text('LTR'),
+      of: find.text('垂直'),
       matching: find.byType(OutlinedButton),
     );
     final selectedButton = tester.widget<OutlinedButton>(selectedButtonFinder);

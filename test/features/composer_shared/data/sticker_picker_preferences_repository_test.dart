@@ -10,6 +10,12 @@ void main() {
   });
 
   group('SharedPreferencesStickerPickerPreferencesRepository', () {
+    test('defaults to no recent group', () async {
+      final repository = SharedPreferencesStickerPickerPreferencesRepository();
+
+      expect(await repository.loadLastGroupId(), isNull);
+    });
+
     test('saves and loads last sticker group id', () async {
       final repository = SharedPreferencesStickerPickerPreferencesRepository();
 

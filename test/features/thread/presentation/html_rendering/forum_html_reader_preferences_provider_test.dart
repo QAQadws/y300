@@ -6,13 +6,40 @@ import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_tex
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 
 void main() {
-  test('defaults keep author font sizes and use standard typography', () {
+  test('defaults use the production HTML typography baseline', () {
     final defaults = ForumHtmlReaderPreferences.defaults();
 
-    expect(defaults.typography, RichTextTypography.standard);
+    expect(defaults.typography.fontScale, 1.15);
+    expect(defaults.typography.lineHeightScale, 1.5);
+    expect(defaults.typography.paragraphSpacing, 12);
     expect(defaults.conversionMode, TextConversionMode.none);
     expect(defaults.preserveAuthorFontSize, isTrue);
   });
+
+  test('repository uses production defaults when storage is empty', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final repository = SharedPrefsForumHtmlReaderPreferencesRepository();
+
+    final loaded = await repository.load();
+
+    expect(loaded, ForumHtmlReaderPreferences.defaults());
+  });
+
+  test(
+    'repository preserves legal values and rejects unknown codecs',
+    () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'forum_html_reader_font_scale': 0.9,
+        'forum_html_reader_conversion_mode': 'future-conversion',
+      });
+      final repository = SharedPrefsForumHtmlReaderPreferencesRepository();
+
+      final loaded = await repository.load();
+
+      expect(loaded.typography.fontScale, 0.9);
+      expect(loaded.conversionMode, TextConversionMode.none);
+    },
+  );
 
   test(
     'repository loads supported values and ignores obsolete color keys',

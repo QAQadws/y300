@@ -9,25 +9,11 @@ library;
 ///
 /// - `vertical`：垂直连续滚动（条漫）。
 /// - `ltr` / `rtl`：单页横向翻页（左到右 / 右到左）。
-enum ReaderModePreference {
-  vertical,
-  ltr,
-  rtl,
-}
+enum ReaderModePreference { vertical, ltr, rtl }
 
-enum ReaderPageFitPreference {
-  fitWidth,
-  fitHeight,
-  contain,
-  original,
-}
+enum ReaderPageFitPreference { fitWidth, fitHeight, contain, original }
 
-enum ReaderBackgroundPreference {
-  followTheme,
-  black,
-  white,
-  gray,
-}
+enum ReaderBackgroundPreference { followTheme, black, white, gray }
 
 /// 持久化阅读偏好快照。
 class ReaderPreferences {
@@ -42,10 +28,10 @@ class ReaderPreferences {
   /// 无持久化数据时的默认值。
   factory ReaderPreferences.defaults() {
     return const ReaderPreferences(
-      readerMode: ReaderModePreference.vertical,
+      readerMode: ReaderModePreference.ltr,
       pageFit: ReaderPageFitPreference.fitWidth,
       background: ReaderBackgroundPreference.followTheme,
-      pageSpacing: 8,
+      pageSpacing: 0,
       showPageIndicator: true,
     );
   }

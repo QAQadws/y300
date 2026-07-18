@@ -455,6 +455,22 @@ void main() {
       },
     );
 
+    test('display settings keep caller defaults when no row exists', () async {
+      final comicSettings = await repository.getDisplaySettings(
+        moduleKey: LibraryModuleKey.comic,
+        defaultDisplayMode: LibraryDisplayMode.grid,
+      );
+      final novelSettings = await repository.getDisplaySettings(
+        moduleKey: LibraryModuleKey.novel,
+        defaultDisplayMode: LibraryDisplayMode.list,
+      );
+
+      expect(comicSettings.displayMode, LibraryDisplayMode.grid);
+      expect(comicSettings.gridColumns, 3);
+      expect(novelSettings.displayMode, LibraryDisplayMode.list);
+      expect(novelSettings.gridColumns, 3);
+    });
+
     test('can save and load display settings', () async {
       await repository.upsertDisplaySettings(
         moduleKey: LibraryModuleKey.comic,

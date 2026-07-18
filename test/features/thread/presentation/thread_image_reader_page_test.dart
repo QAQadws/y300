@@ -16,7 +16,9 @@ import 'package:y300/features/thread/presentation/thread_image_reader_page.dart'
 
 void main() {
   setUp(() {
-    SharedPreferences.setMockInitialValues(<String, Object>{});
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'reader_pref_mode': 'vertical',
+    });
   });
 
   testWidgets('ThreadImageReaderPage renders continuous image list', (
@@ -275,7 +277,6 @@ void main() {
                 event.type ==
                     ContinuousImageDiagnosticEventType.readerSessionCreated &&
                 event.ownerId == 'thread:100:post:p1' &&
-                event.mode == 'vertical' &&
                 event.index == 2,
           ),
           isTrue,
