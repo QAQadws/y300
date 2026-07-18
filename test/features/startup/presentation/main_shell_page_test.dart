@@ -1128,11 +1128,6 @@ class _FakeNovelRepository implements NovelRepository {
   }
 
   @override
-  Future<NovelReaderPreferences> getReaderPreferences() async {
-    return NovelReaderPreferences.defaults();
-  }
-
-  @override
   Future<List<NovelItem>> getShelfItems({String categoryId = 'default'}) async {
     return const <NovelItem>[];
   }
@@ -1188,11 +1183,6 @@ class _FakeNovelRepository implements NovelRepository {
     required NovelRefreshSeed seed,
     FavoriteSyncExecutionContext? executionContext,
   }) async {}
-
-  @override
-  Future<void> upsertReaderPreferences(
-    NovelReaderPreferences preferences,
-  ) async {}
 
   @override
   Future<void> addReaderBookmark({

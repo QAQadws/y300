@@ -5291,10 +5291,6 @@ class _FakeNovelRepository implements NovelRepository {
   }
 
   @override
-  Future<NovelReaderPreferences> getReaderPreferences() async =>
-      NovelReaderPreferences.defaults();
-
-  @override
   Future<List<NovelItem>> getShelfItems({
     String categoryId = 'default',
   }) async => const <NovelItem>[];
@@ -5358,11 +5354,6 @@ class _FakeNovelRepository implements NovelRepository {
     upsertCalled = true;
     _ids.add('novel:${seed.fid}:${seed.tid}');
   }
-
-  @override
-  Future<void> upsertReaderPreferences(
-    NovelReaderPreferences preferences,
-  ) async {}
 
   @override
   Future<void> addReaderBookmark({

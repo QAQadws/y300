@@ -5,7 +5,7 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 
-/// 小说仓储：封装小说书架、章节、正文、阅读偏好与阅读进度。
+/// 小说仓储：封装小说书架、章节、正文与阅读业务状态。
 abstract class NovelRepository {
   Future<List<NovelShelfCategory>> getCategories();
 
@@ -34,10 +34,6 @@ abstract class NovelRepository {
   });
 
   Future<NovelChapterContent?> getChapterContent({required String episodeId});
-
-  Future<void> upsertReaderPreferences(NovelReaderPreferences preferences);
-
-  Future<NovelReaderPreferences> getReaderPreferences();
 
   /// 从小说书架移除作品，但保留作品数据和已水合章节正文。
   Future<void> removeFromShelf({required String novelId});

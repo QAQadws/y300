@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
+import 'package:y300/features/library_shared/data/providers/library_view_preferences_providers.dart';
 import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/contracts/library_view_preferences_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
@@ -23,6 +25,9 @@ void main() {
       ProviderScope(
         overrides: [
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+          libraryViewPreferencesRepositoryProvider.overrideWithValue(
+            VolatileLibraryViewPreferencesRepository(),
+          ),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
           ),
@@ -53,6 +58,9 @@ void main() {
       ProviderScope(
         overrides: [
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+          libraryViewPreferencesRepositoryProvider.overrideWithValue(
+            VolatileLibraryViewPreferencesRepository(),
+          ),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
           ),
@@ -78,6 +86,9 @@ void main() {
       ProviderScope(
         overrides: [
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+          libraryViewPreferencesRepositoryProvider.overrideWithValue(
+            VolatileLibraryViewPreferencesRepository(),
+          ),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
           ),
@@ -138,10 +149,6 @@ class _FakeNovelRepository implements NovelRepository {
   }) async {
     return const [];
   }
-
-  @override
-  Future<NovelReaderPreferences> getReaderPreferences() async =>
-      NovelReaderPreferences.defaults();
 
   @override
   Future<NovelReadingProgress?> getReadingProgress({
@@ -211,11 +218,6 @@ class _FakeNovelRepository implements NovelRepository {
     required NovelRefreshSeed seed,
     FavoriteSyncExecutionContext? executionContext,
   }) async {}
-
-  @override
-  Future<void> upsertReaderPreferences(
-    NovelReaderPreferences preferences,
-  ) async {}
 
   @override
   Future<void> addReaderBookmark({

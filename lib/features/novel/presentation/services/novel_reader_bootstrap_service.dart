@@ -1,6 +1,7 @@
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_shared_preferences_bridge.dart';
@@ -52,14 +53,17 @@ class DefaultNovelReaderBootstrapService
     implements NovelReaderBootstrapService {
   DefaultNovelReaderBootstrapService({
     required NovelRepository repository,
+    required NovelReaderPreferencesRepository preferencesRepository,
     required NovelReaderDocumentBuildService documentBuildService,
     NovelReaderProgressPolicy progressPolicy =
         const NovelReaderProgressPolicy(),
   }) : _repository = repository,
+       _preferencesRepository = preferencesRepository,
        _documentBuildService = documentBuildService,
        _progressPolicy = progressPolicy;
 
   final NovelRepository _repository;
+  final NovelReaderPreferencesRepository _preferencesRepository;
   final NovelReaderDocumentBuildService _documentBuildService;
   final NovelReaderProgressPolicy _progressPolicy;
 
@@ -88,7 +92,7 @@ class DefaultNovelReaderBootstrapService
 
     // Load preferences before building so traditional/simplified conversion is
     // applied to the document at build time (and re-applied on episode change).
-    final persistedPreferences = await _repository.getReaderPreferences();
+    final persistedPreferences = await _preferencesRepository.load();
     final effectivePreferences = persistedPreferences.copyWith(
       flowMode: NovelReaderFlowMode.vertical,
     );

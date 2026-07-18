@@ -11,7 +11,9 @@ void main() {
     final theme = ThemeData.light();
 
     final light = themeResolver.resolve(
-      preferences: NovelReaderPreferences.defaults(),
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        themePreset: NovelReaderThemePreset.light,
+      ),
       theme: theme,
       platformBrightness: Brightness.light,
     );

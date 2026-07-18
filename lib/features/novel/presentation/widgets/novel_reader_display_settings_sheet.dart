@@ -133,24 +133,6 @@ class _NovelReaderDisplaySettingsSheetState
               _SettingsSection(
                 title: '阅读',
                 children: [
-                  ReaderSegmentControl<NovelReaderFlowMode>(
-                    key: const Key('novel-reader-flow-mode-control'),
-                    label: '模式',
-                    value: NovelReaderFlowMode.vertical,
-                    values: const <NovelReaderFlowMode>[
-                      NovelReaderFlowMode.vertical,
-                    ],
-                    labelBuilder: _flowModeLabel,
-                    onChanged: (value) =>
-                        _applyPreferences(_draft.copyWith(flowMode: value)),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text('HTML-first 正文暂只支持竖向阅读，分页模式后续重建。'),
-                    ),
-                  ),
                   ReaderSegmentControl<NovelReaderConversionMode>(
                     key: const Key('novel-reader-conversion-mode-control'),
                     label: '简繁',
@@ -182,17 +164,6 @@ class _NovelReaderDisplaySettingsSheetState
 
   double _snap(double value, double step) {
     return (value / step).roundToDouble() * step;
-  }
-
-  String _flowModeLabel(NovelReaderFlowMode value) {
-    switch (value) {
-      case NovelReaderFlowMode.pagedLtr:
-        return '分页';
-      case NovelReaderFlowMode.pagedRtl:
-        return '右翻';
-      case NovelReaderFlowMode.vertical:
-        return '滚动';
-    }
   }
 
   String _conversionModeLabel(NovelReaderConversionMode value) {

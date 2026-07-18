@@ -1,10 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/preferences/preferences_providers.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/novel/data/repositories/local_novel_repository.dart';
-import 'package:y300/features/novel/data/repositories/sqflite_novel_interaction_preferences_repository.dart';
+import 'package:y300/features/novel/data/preferences/novel_interaction_preferences_legacy_source.dart';
+import 'package:y300/features/novel/data/preferences/novel_reader_preferences_legacy_source.dart';
+import 'package:y300/features/novel/data/preferences/shared_preferences_novel_interaction_preferences_repository.dart';
+import 'package:y300/features/novel/data/preferences/shared_preferences_novel_reader_preferences_repository.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_chapter_sync_repository.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_source_metadata_repository.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_source_state_repository.dart';
@@ -28,6 +32,7 @@ import 'package:y300/features/novel/domain/services/novel_reader_search_service.
 import 'package:y300/features/novel/domain/services/novel_title_sanitizer.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
 import 'package:y300/features/novel/domain/repositories/novel_interaction_preferences_repository.dart';
+import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_metadata_repository.dart';
 import 'package:y300/features/novel/domain/repositories/novel_chapter_sync_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_post_attach_html_resolver.dart';
@@ -93,9 +98,32 @@ final novelSyncRequestGovernorProvider = Provider<NovelSyncRequestGovernor>((
   return DefaultNovelSyncRequestGovernor();
 });
 
+final novelReaderPreferencesLegacySourceProvider =
+    Provider<NovelReaderPreferencesLegacySource>((ref) {
+      return SqliteNovelReaderPreferencesLegacySource(ComicLocalDb.open());
+    });
+
+final novelReaderPreferencesRepositoryProvider =
+    Provider<NovelReaderPreferencesRepository>((ref) {
+      return SharedPreferencesNovelReaderPreferencesRepository(
+        preferencesStore: ref.watch(preferencesStoreProvider),
+        legacySource: ref.watch(novelReaderPreferencesLegacySourceProvider),
+      );
+    });
+
+final novelInteractionPreferencesLegacySourceProvider =
+    Provider<NovelInteractionPreferencesLegacySource>((ref) {
+      return SqliteNovelInteractionPreferencesLegacySource(ComicLocalDb.open());
+    });
+
 final novelInteractionPreferencesRepositoryProvider =
     Provider<NovelInteractionPreferencesRepository>((ref) {
-      return SqfliteNovelInteractionPreferencesRepository(ComicLocalDb.open());
+      return SharedPreferencesNovelInteractionPreferencesRepository(
+        preferencesStore: ref.watch(preferencesStoreProvider),
+        legacySource: ref.watch(
+          novelInteractionPreferencesLegacySourceProvider,
+        ),
+      );
     });
 
 final novelChapterSourceRouteResolverProvider =
@@ -183,6 +211,9 @@ final novelReaderBootstrapServiceProvider =
     Provider<NovelReaderBootstrapService>((ref) {
       return DefaultNovelReaderBootstrapService(
         repository: ref.watch(novelRepositoryProvider),
+        preferencesRepository: ref.watch(
+          novelReaderPreferencesRepositoryProvider,
+        ),
         documentBuildService: ref.watch(
           novelReaderDocumentBuildServiceProvider,
         ),

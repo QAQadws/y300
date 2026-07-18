@@ -239,7 +239,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       return;
     }
     final commitSerial = ++_preferenceCommitSerial;
-    await ref.read(novelRepositoryProvider).upsertReaderPreferences(next);
+    await ref.read(novelReaderPreferencesRepositoryProvider).save(next);
     if (commitSerial != _preferenceCommitSerial) {
       return;
     }

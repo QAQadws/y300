@@ -21,6 +21,12 @@ abstract final class PreferenceKeyNames {
   static const legacyImageReaderShowPageIndicator =
       'reader_pref_show_page_indicator';
 
+  static const novelReaderSnapshotV1 = 'reader.novel.v1';
+  static const novelReaderMigrationVersion = 'reader.novel.migration_version';
+  static const novelChapterOpenModeV1 = 'novel.chapter_open_mode.v1';
+  static const novelChapterOpenModeMigrationVersion =
+      'novel.chapter_open_mode.migration_version';
+
   static const libraryShelfComicSnapshotV1 = 'library.shelf.comic.v1';
   static const libraryShelfNovelSnapshotV1 = 'library.shelf.novel.v1';
   static const libraryShelfFavoriteSnapshotV1 = 'library.shelf.favorite.v1';

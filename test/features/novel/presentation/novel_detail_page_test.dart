@@ -915,10 +915,6 @@ class _FakeNovelRepository implements NovelRepository {
   }
 
   @override
-  Future<NovelReaderPreferences> getReaderPreferences() async =>
-      NovelReaderPreferences.defaults();
-
-  @override
   Future<NovelReadingProgress?> getReadingProgress({
     required String novelId,
   }) async => progress;
@@ -974,11 +970,6 @@ class _FakeNovelRepository implements NovelRepository {
     required NovelRefreshSeed seed,
     FavoriteSyncExecutionContext? executionContext,
   }) async {}
-
-  @override
-  Future<void> upsertReaderPreferences(
-    NovelReaderPreferences preferences,
-  ) async {}
 
   @override
   Future<void> addReaderBookmark({

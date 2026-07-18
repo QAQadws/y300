@@ -118,41 +118,13 @@ void main() {
       expect(detail?.customCoverLocalPath, 'cache/replacement-cover.jpg');
     });
 
-    test(
-      'reader preferences use phase-0 defaults when no row exists',
-      () async {
-        final preferences = await repository.getReaderPreferences();
-
-        expect(preferences, NovelReaderPreferences.defaults());
-        expect(preferences.fontSize, 18.5);
-        expect(preferences.lineHeight, 1.6);
-        expect(preferences.themePreset, NovelReaderThemePreset.sepia);
-      },
-    );
-
-    test('reader preferences and reading progress can persist', () async {
+    test('reading progress can persist', () async {
       await repository.upsertNovelBySeed(
         seed: const NovelRefreshSeed(fid: '55', tid: '300'),
       );
       await repository.refreshEpisodes(novelId: 'novel:55:300');
       final episodes = await repository.getEpisodes(novelId: 'novel:55:300');
 
-      await repository.upsertReaderPreferences(
-        NovelReaderPreferences(
-          fontSize: 20,
-          lineHeight: 2.0,
-          paragraphSpacing: 12,
-          pagePadding: 18,
-          themeMode: 'sepia',
-          fontFamily: 'system',
-          flowMode: NovelReaderFlowMode.pagedLtr,
-          contentMaxWidth: 640,
-          firstLineIndent: 28,
-          fontWeight: 500,
-          textAlign: NovelReaderTextAlignMode.justify,
-          showProgressIndicator: false,
-        ),
-      );
       await repository.saveReadingProgress(
         novelId: 'novel:55:300',
         episodeId: episodes.first.episodeId,
@@ -163,20 +135,10 @@ void main() {
         progressPercent: 0.42,
       );
 
-      final preferences = await repository.getReaderPreferences();
       final progress = await repository.getReadingProgress(
         novelId: 'novel:55:300',
       );
 
-      expect(preferences.themeMode, 'sepia');
-      expect(preferences.themePreset, NovelReaderThemePreset.sepia);
-      expect(preferences.fontSize, 20);
-      expect(preferences.flowMode, NovelReaderFlowMode.pagedLtr);
-      expect(preferences.contentMaxWidth, 640);
-      expect(preferences.firstLineIndent, 28);
-      expect(preferences.fontWeight, 500);
-      expect(preferences.textAlign, NovelReaderTextAlignMode.justify);
-      expect(preferences.showProgressIndicator, isFalse);
       expect(progress, isNotNull);
       expect(progress!.episodeId, episodes.first.episodeId);
       expect(progress.scrollOffset, 222.5);
@@ -292,32 +254,6 @@ void main() {
         );
       },
     );
-
-    test('reader preferences read old rows with defaults', () async {
-      final db = await dbFuture;
-      await db
-          .insert(ComicLocalDb.readerPreferencesTable, const <String, Object?>{
-            'content_type': 'novel',
-            'font_size': 19.0,
-            'line_height': 1.9,
-            'paragraph_spacing': 8.0,
-            'page_padding': 20.0,
-            'theme_mode': 'dark',
-            'font_family': 'system',
-          });
-
-      final preferences = await repository.getReaderPreferences();
-
-      expect(preferences.fontSize, 19);
-      expect(preferences.themePreset, NovelReaderThemePreset.dark);
-      expect(preferences.themeMode, 'dark');
-      expect(preferences.flowMode, NovelReaderFlowMode.vertical);
-      expect(preferences.contentMaxWidth, 720);
-      expect(preferences.firstLineIndent, 0);
-      expect(preferences.fontWeight, 400);
-      expect(preferences.textAlign, NovelReaderTextAlignMode.start);
-      expect(preferences.showProgressIndicator, isTrue);
-    });
 
     test(
       'purgeWork deletes only target novel data and reading progress',

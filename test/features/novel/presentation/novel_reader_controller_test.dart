@@ -14,6 +14,7 @@ import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
+import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
@@ -739,6 +740,9 @@ ProviderContainer _buildContainer({
   return ProviderContainer(
     overrides: [
       novelRepositoryProvider.overrideWithValue(repository),
+      novelReaderPreferencesRepositoryProvider.overrideWithValue(
+        _ControllerNovelReaderPreferencesRepository(repository),
+      ),
       novelChapterUpdateServiceProvider.overrideWithValue(
         chapterUpdateService ?? _RecordingNovelChapterUpdateService(),
       ),
@@ -1046,11 +1050,6 @@ class _ControllerNovelRepository implements NovelRepository {
   }
 
   @override
-  Future<NovelReaderPreferences> getReaderPreferences() async {
-    return preferences;
-  }
-
-  @override
   Future<NovelReadingProgress?> getReadingProgress({
     required String novelId,
   }) async {
@@ -1122,15 +1121,6 @@ class _ControllerNovelRepository implements NovelRepository {
   }) async {}
 
   @override
-  Future<void> upsertReaderPreferences(
-    NovelReaderPreferences preferences,
-  ) async {
-    upsertPreferencesCallCount += 1;
-    latestPreferences = preferences;
-    this.preferences = preferences;
-  }
-
-  @override
   Future<void> addReaderBookmark({
     required NovelReaderBookmark bookmark,
   }) async {
@@ -1173,6 +1163,23 @@ class _ControllerNovelRepository implements NovelRepository {
         ),
       );
     }
+  }
+}
+
+class _ControllerNovelReaderPreferencesRepository
+    implements NovelReaderPreferencesRepository {
+  const _ControllerNovelReaderPreferencesRepository(this.repository);
+
+  final _ControllerNovelRepository repository;
+
+  @override
+  Future<NovelReaderPreferences> load() async => repository.preferences;
+
+  @override
+  Future<void> save(NovelReaderPreferences preferences) async {
+    repository.upsertPreferencesCallCount += 1;
+    repository.latestPreferences = preferences;
+    repository.preferences = preferences;
   }
 }
 

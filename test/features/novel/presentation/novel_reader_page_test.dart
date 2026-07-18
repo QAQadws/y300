@@ -24,6 +24,7 @@ import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
+import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
@@ -473,7 +474,7 @@ void main() {
       );
       expect(
         find.byKey(const Key('novel-reader-flow-mode-control')),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         find.byKey(const Key('novel-reader-content-width-slider')),
@@ -531,7 +532,7 @@ void main() {
     },
   );
 
-  testWidgets('NovelReaderPage display sheet marks paged mode unsupported', (
+  testWidgets('NovelReaderPage display sheet omits obsolete paged mode', (
     tester,
   ) async {
     final repository = _FakeNovelRepository();
@@ -546,9 +547,13 @@ void main() {
 
     expect(
       find.byKey(const Key('novel-reader-flow-mode-control')),
+      findsNothing,
+    );
+    expect(find.text('HTML-first 正文暂只支持竖向阅读，分页模式后续重建。'), findsNothing);
+    expect(
+      find.byKey(const Key('novel-reader-conversion-mode-control')),
       findsOneWidget,
     );
-    expect(find.text('HTML-first 正文暂只支持竖向阅读，分页模式后续重建。'), findsOneWidget);
     expect(find.text('分页'), findsNothing);
     expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
     expect(
@@ -1058,6 +1063,9 @@ void main() {
         home: ProviderScope(
           overrides: [
             novelRepositoryProvider.overrideWithValue(repository),
+            novelReaderPreferencesRepositoryProvider.overrideWithValue(
+              _FakeNovelReaderPreferencesRepository(repository),
+            ),
             imageRequestHeaderBuilderProvider.overrideWithValue(
               const _StaticImageHeaderBuilder(),
             ),
@@ -1098,6 +1106,9 @@ void main() {
         home: ProviderScope(
           overrides: [
             novelRepositoryProvider.overrideWithValue(repository),
+            novelReaderPreferencesRepositoryProvider.overrideWithValue(
+              _FakeNovelReaderPreferencesRepository(repository),
+            ),
             imageRequestHeaderBuilderProvider.overrideWithValue(
               const _StaticImageHeaderBuilder(),
             ),
@@ -1470,6 +1481,9 @@ Widget _buildReaderApp({
   return ProviderScope(
     overrides: [
       novelRepositoryProvider.overrideWithValue(repository),
+      novelReaderPreferencesRepositoryProvider.overrideWithValue(
+        _FakeNovelReaderPreferencesRepository(repository),
+      ),
       novelChapterUpdateServiceProvider.overrideWithValue(
         chapterUpdateService ?? _RecordingNovelChapterUpdateService(),
       ),
@@ -1921,9 +1935,6 @@ class _FakeNovelRepository implements NovelRepository {
   }
 
   @override
-  Future<NovelReaderPreferences> getReaderPreferences() async => preferences;
-
-  @override
   Future<List<NovelItem>> getShelfItems({
     String categoryId = 'default',
   }) async => const <NovelItem>[];
@@ -1995,15 +2006,6 @@ class _FakeNovelRepository implements NovelRepository {
     required NovelRefreshSeed seed,
     FavoriteSyncExecutionContext? executionContext,
   }) async {}
-
-  @override
-  Future<void> upsertReaderPreferences(
-    NovelReaderPreferences preferences,
-  ) async {
-    upsertPreferencesCallCount += 1;
-    latestPreferences = preferences;
-    this.preferences = preferences;
-  }
 
   @override
   Future<void> addReaderBookmark({
@@ -2136,6 +2138,23 @@ class _FakeNovelRepository implements NovelRepository {
       plainText: paragraphs.join('\n'),
       paragraphs: paragraphs,
     );
+  }
+}
+
+class _FakeNovelReaderPreferencesRepository
+    implements NovelReaderPreferencesRepository {
+  const _FakeNovelReaderPreferencesRepository(this.repository);
+
+  final _FakeNovelRepository repository;
+
+  @override
+  Future<NovelReaderPreferences> load() async => repository.preferences;
+
+  @override
+  Future<void> save(NovelReaderPreferences preferences) async {
+    repository.upsertPreferencesCallCount += 1;
+    repository.latestPreferences = preferences;
+    repository.preferences = preferences;
   }
 }
 

@@ -12,7 +12,7 @@ void main() {
   databaseFactory = databaseFactoryFfi;
 
   test(
-    'DB 28 to 31 preserves novel data and adds cover visibility state',
+    'DB 28 to current preserves novel data and adds cover visibility state',
     () async {
       final temp = await Directory.systemTemp.createTemp(
         'y300-novel-phase1-migration-',
@@ -43,7 +43,7 @@ void main() {
 
       db = await ComicLocalDb.open(databaseName: dbPath);
       addTearDown(db.close);
-      expect(await db.getVersion(), 31);
+      expect(await db.getVersion(), ComicLocalDb.dbVersion);
       final after = await readNovelPhase0PersistenceBaseline(db);
 
       expect(after.work, before.work);
