@@ -42,8 +42,9 @@ abstract final class PreferenceKeyNames {
       'library.shelf.favorite.migration_version';
 
   static const imageCacheMaxBytes = 'image_cache_max_bytes';
-  static const imageCacheCustomDirectory = 'image_cache_custom_dir';
   static const legacyComicCacheDirectory = 'comic_cache_dir';
+  static const legacyCacheRootMigrationVersion =
+      'storage.cache_root.migration_version';
   static const downloadStorageDirectory = 'download_storage_dir';
 
   static const replyStickerLastGroupId = 'reply_sticker_last_group_id';

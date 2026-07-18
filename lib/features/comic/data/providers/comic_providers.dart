@@ -1,8 +1,7 @@
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/cache/data/providers/image_cache_providers.dart' as image_cache;
-import 'package:y300/features/comic/data/providers/comic_cache_directory_provider.dart';
-import 'package:y300/features/comic/data/services/comic_cache_manager_factory.dart';
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart'
+    as image_cache;
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/data/use_cases/comic_shelf_category_assign_use_case_impl.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
@@ -15,20 +14,19 @@ import 'package:y300/features/library_shared/data/providers/library_state_provid
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
 
 final comicRepositoryProvider = Provider<ComicRepository>((ref) {
-  return LocalComicRepository(
-    ComicLocalDb.open(),
-  );
+  return LocalComicRepository(ComicLocalDb.open());
 });
 
-final comicDuplicateMergeServiceProvider = Provider<ComicDuplicateMergeService?>((ref) {
-  final repository = ref.watch(comicRepositoryProvider);
-  if (repository is ComicDuplicateMergeRepository) {
-    return ComicDuplicateMergeService(
-      repository: repository as ComicDuplicateMergeRepository,
-    );
-  }
-  return null;
-});
+final comicDuplicateMergeServiceProvider =
+    Provider<ComicDuplicateMergeService?>((ref) {
+      final repository = ref.watch(comicRepositoryProvider);
+      if (repository is ComicDuplicateMergeRepository) {
+        return ComicDuplicateMergeService(
+          repository: repository as ComicDuplicateMergeRepository,
+        );
+      }
+      return null;
+    });
 
 final comicCoverCacheWriterProvider = Provider<ComicCoverCacheWriter?>((ref) {
   final repository = ref.watch(comicRepositoryProvider);
@@ -41,7 +39,9 @@ final comicReaderEventLoggerProvider = Provider<ComicReaderEventLogger>((ref) {
   return const ComicReaderEventLogger();
 });
 
-final comicReaderFeatureFlagsProvider = Provider<ComicReaderFeatureFlags>((ref) {
+final comicReaderFeatureFlagsProvider = Provider<ComicReaderFeatureFlags>((
+  ref,
+) {
   return ComicReaderFeatureFlags.defaults;
 });
 
@@ -52,19 +52,13 @@ final comicShelfCategoryAssignUseCaseProvider =
       );
     });
 
-final comicReadingStateWriterProvider = Provider<ComicReadingStateWriter>((ref) {
+final comicReadingStateWriterProvider = Provider<ComicReadingStateWriter>((
+  ref,
+) {
   return DefaultComicReadingStateWriter(
     comicRepository: ref.watch(comicRepositoryProvider),
     libraryStateRepository: ref.watch(libraryStateRepositoryProvider),
   );
-});
-
-final comicCacheDirectoryResolverProvider = Provider<ComicCacheDirectoryResolver>((ref) {
-  return const ComicCacheDirectoryResolver();
-});
-
-final comicCacheManagerFactoryProvider = Provider<ComicCacheManagerFactory>((ref) {
-  return const ComicCacheManagerFactory();
 });
 
 final comicCacheManagerProvider = FutureProvider<BaseCacheManager>((ref) async {

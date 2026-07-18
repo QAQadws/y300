@@ -2,14 +2,9 @@ import 'dart:io' as io;
 
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:y300/core/config/app_storage_keys.dart';
 
-/// Resolves the image cache root used by the stage-04 cache service.
-///
-/// The old comic cache directory preference is still honored so existing users
-/// do not unexpectedly move their cache.  New code should treat this as a
-/// generic image cache root rather than a comic-only directory.
+/// Resolves the image cache under the platform-managed temporary directory.
+/// User-selected storage only controls downloads and never redirects caches.
 class ImageCacheDirectoryResolver {
   const ImageCacheDirectoryResolver();
 
@@ -17,11 +12,7 @@ class ImageCacheDirectoryResolver {
   static const String protectedFolderName = 'protected';
 
   Future<String> resolveImageCacheRoot() async {
-    final prefs = await SharedPreferences.getInstance();
-    final custom = prefs.getString(AppStorageKeys.comicCacheDirectory)?.trim();
-    final basePath = custom == null || custom.isEmpty
-        ? (await getTemporaryDirectory()).path
-        : custom;
+    final basePath = (await getTemporaryDirectory()).path;
     final directory = io.Directory(p.join(basePath, imageCacheFolderName));
     await _prepareDirectory(directory);
     return directory.path;

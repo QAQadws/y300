@@ -16,8 +16,8 @@ class DefaultSyncDiagnosticRecorder implements SyncDiagnosticRecorder {
   }) : _storageService = storageService,
        _settingsRepository = settingsRepository,
        _debugEnabled = debugEnabled,
-       _manualModeEnabled = manualModeEnabled,
-       _active = manualModeEnabled,
+       _manualModeEnabled = debugEnabled && manualModeEnabled,
+       _active = debugEnabled && manualModeEnabled,
        _nowProvider = nowProvider ?? DateTime.now;
 
   final DownloadStorageService _storageService;
@@ -57,6 +57,11 @@ class DefaultSyncDiagnosticRecorder implements SyncDiagnosticRecorder {
 
   @override
   Future<bool> setManualModeEnabled(bool enabled) async {
+    if (!_debugEnabled) {
+      _manualModeEnabled = false;
+      _active = false;
+      return false;
+    }
     if (_manualModeEnabled == enabled) {
       return _manualModeEnabled;
     }
@@ -69,9 +74,7 @@ class DefaultSyncDiagnosticRecorder implements SyncDiagnosticRecorder {
         await _appendLine(
           scope: 'diagnostic_mode',
           event: 'manual_mode_enabled',
-          fields: <String, Object?>{
-            'logPath': _currentLogPath,
-          },
+          fields: <String, Object?>{'logPath': _currentLogPath},
         );
       });
       return true;

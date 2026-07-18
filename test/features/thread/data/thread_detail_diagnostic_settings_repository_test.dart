@@ -22,4 +22,19 @@ void main() {
       expect(prefs.getBool('thread_detail_scroll_diagnostic_enabled'), isTrue);
     },
   );
+
+  test('release policy ignores persisted scroll diagnostics', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'thread_detail_scroll_diagnostic_enabled': true,
+    });
+    final repository = SharedPrefsThreadDetailDiagnosticSettingsRepository(
+      diagnosticsEnabled: false,
+    );
+
+    expect(await repository.loadScrollDiagnosticEnabled(), isFalse);
+    await repository.setScrollDiagnosticEnabled(false);
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool('thread_detail_scroll_diagnostic_enabled'), isTrue);
+  });
 }

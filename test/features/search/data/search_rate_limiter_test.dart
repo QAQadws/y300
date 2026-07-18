@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/core/config/technical_storage_keys.dart';
 import 'package:y300/features/search/data/services/search_rate_limiter.dart';
 
 void main() {
@@ -17,21 +18,29 @@ void main() {
       expect(result.retryAfter, Duration.zero);
     });
 
-    test('blocks repeated search within cooldown and returns remaining time', () async {
-      final baseNow = DateTime(2026, 5, 3, 12, 0, 0);
-      var now = baseNow;
-      final limiter = SearchRateLimiter(
-        cooldown: const Duration(seconds: 10),
-        nowProvider: () => now,
-      );
+    test(
+      'blocks repeated search within cooldown and returns remaining time',
+      () async {
+        final baseNow = DateTime(2026, 5, 3, 12, 0, 0);
+        var now = baseNow;
+        final limiter = SearchRateLimiter(
+          cooldown: const Duration(seconds: 10),
+          nowProvider: () => now,
+        );
 
-      await limiter.markTriggered();
-      now = baseNow.add(const Duration(seconds: 3));
-      final blocked = await limiter.check();
+        await limiter.markTriggered();
+        final preferences = await SharedPreferences.getInstance();
+        expect(
+          preferences.getInt(TechnicalStorageKeys.searchLastSearchAtMs),
+          baseNow.millisecondsSinceEpoch,
+        );
+        now = baseNow.add(const Duration(seconds: 3));
+        final blocked = await limiter.check();
 
-      expect(blocked.isAllowed, isFalse);
-      expect(blocked.retryAfter.inSeconds, 7);
-    });
+        expect(blocked.isAllowed, isFalse);
+        expect(blocked.retryAfter.inSeconds, 7);
+      },
+    );
 
     test('allows search again after cooldown', () async {
       final baseNow = DateTime(2026, 5, 3, 12, 0, 0);
@@ -49,4 +58,3 @@ void main() {
     });
   });
 }
-

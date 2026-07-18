@@ -3,9 +3,10 @@ import 'package:y300/features/library_shared/data/providers/sync_diagnostic_prov
 import 'package:y300/features/library_shared/data/repositories/sync_diagnostic_settings_repository.dart';
 import 'package:y300/features/library_shared/domain/services/sync_diagnostic_recorder.dart';
 
-final syncDiagnosticModeControllerProvider = AsyncNotifierProvider<
-    SyncDiagnosticModeController,
-    bool>(SyncDiagnosticModeController.new);
+final syncDiagnosticModeControllerProvider =
+    AsyncNotifierProvider<SyncDiagnosticModeController, bool>(
+      SyncDiagnosticModeController.new,
+    );
 
 class SyncDiagnosticModeController extends AsyncNotifier<bool> {
   SyncDiagnosticSettingsRepository get _settingsRepository =>
@@ -26,8 +27,8 @@ class SyncDiagnosticModeController extends AsyncNotifier<bool> {
   Future<bool> toggle() async {
     final current = state.value ?? false;
     final next = !current;
-    await _recorder.setManualModeEnabled(next);
-    state = AsyncData(next);
-    return next;
+    final effective = await _recorder.setManualModeEnabled(next);
+    state = AsyncData(effective);
+    return effective;
   }
 }

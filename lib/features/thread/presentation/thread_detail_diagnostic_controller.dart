@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/preferences/preferences_providers.dart';
 import 'package:y300/features/thread/data/repositories/thread_detail_diagnostic_settings_repository.dart';
@@ -36,15 +37,16 @@ class ThreadDetailDiagnosticController extends AsyncNotifier<bool> {
   }
 
   Future<void> setEnabled(bool enabled) async {
-    state = AsyncData(enabled);
-    _recorder.setEnabled(enabled);
+    final effective = kDebugMode && enabled;
+    state = AsyncData(effective);
+    _recorder.setEnabled(effective);
     try {
-      await _repository.setScrollDiagnosticEnabled(enabled);
-      if (!enabled) {
+      await _repository.setScrollDiagnosticEnabled(effective);
+      if (!effective) {
         _recorder.clear();
       }
     } catch (error, stackTrace) {
-      final previous = !enabled;
+      final previous = !effective;
       _recorder.setEnabled(previous);
       state = AsyncData(previous);
       Error.throwWithStackTrace(error, stackTrace);

@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/core/config/technical_storage_keys.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 
 class SearchRateLimiter {
@@ -10,7 +11,6 @@ class SearchRateLimiter {
        _nowProvider = nowProvider ?? DateTime.now;
 
   static const Duration defaultCooldown = Duration(milliseconds: 10500);
-  static const String _lastSearchAtKey = 'search.last_search_at_ms';
 
   final Duration cooldown;
   final SharedPreferences? _sharedPreferences;
@@ -18,7 +18,7 @@ class SearchRateLimiter {
 
   Future<SearchRateLimitResult> check() async {
     final prefs = _sharedPreferences ?? await SharedPreferences.getInstance();
-    final lastMs = prefs.getInt(_lastSearchAtKey);
+    final lastMs = prefs.getInt(TechnicalStorageKeys.searchLastSearchAtMs);
     if (lastMs == null) {
       return const SearchRateLimitResult.allowed();
     }
@@ -33,6 +33,9 @@ class SearchRateLimiter {
 
   Future<void> markTriggered() async {
     final prefs = _sharedPreferences ?? await SharedPreferences.getInstance();
-    await prefs.setInt(_lastSearchAtKey, _nowProvider().millisecondsSinceEpoch);
+    await prefs.setInt(
+      TechnicalStorageKeys.searchLastSearchAtMs,
+      _nowProvider().millisecondsSinceEpoch,
+    );
   }
 }

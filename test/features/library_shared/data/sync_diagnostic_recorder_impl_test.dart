@@ -21,7 +21,7 @@ void main() {
     final recorder = DefaultSyncDiagnosticRecorder(
       storageService: _FakeDownloadStorageService(rootDir.path),
       settingsRepository: _FakeSyncDiagnosticSettingsRepository(),
-      debugEnabled: false,
+      debugEnabled: true,
       manualModeEnabled: false,
       nowProvider: () => DateTime.utc(2026, 6, 14, 12, 0, 0),
     );
@@ -67,6 +67,21 @@ void main() {
     expect(fields['pageKind'], 'thread.detail');
     expect(fields['requestId'], 'yhttp-42');
   });
+
+  test('release recorder rejects inherited manual mode', () async {
+    final settings = _FakeSyncDiagnosticSettingsRepository()..enabled = true;
+    final recorder = DefaultSyncDiagnosticRecorder(
+      storageService: _FakeDownloadStorageService('unused'),
+      settingsRepository: settings,
+      debugEnabled: false,
+      manualModeEnabled: true,
+    );
+
+    expect(recorder.isManualModeEnabled, isFalse);
+    expect(await recorder.setManualModeEnabled(true), isFalse);
+    expect(settings.enabled, isTrue);
+    expect(recorder.currentLogPath, isNull);
+  });
 }
 
 class _FakeSyncDiagnosticSettingsRepository
@@ -90,18 +105,24 @@ class _FakeDownloadStorageService implements DownloadStorageService {
   @override
   Future<DownloadStorageRoot> prepareRoot() async {
     final root = io.Directory(rootPath);
-    final comics = io.Directory(io.Platform.pathSeparator == '\\'
-        ? '$rootPath\\comics'
-        : '$rootPath/comics');
-    final novels = io.Directory(io.Platform.pathSeparator == '\\'
-        ? '$rootPath\\novels'
-        : '$rootPath/novels');
+    final comics = io.Directory(
+      io.Platform.pathSeparator == '\\'
+          ? '$rootPath\\comics'
+          : '$rootPath/comics',
+    );
+    final novels = io.Directory(
+      io.Platform.pathSeparator == '\\'
+          ? '$rootPath\\novels'
+          : '$rootPath/novels',
+    );
     await root.create(recursive: true);
     await comics.create(recursive: true);
     await novels.create(recursive: true);
-    final favorites = io.File(io.Platform.pathSeparator == '\\'
-        ? '$rootPath\\favorites.json'
-        : '$rootPath/favorites.json');
+    final favorites = io.File(
+      io.Platform.pathSeparator == '\\'
+          ? '$rootPath\\favorites.json'
+          : '$rootPath/favorites.json',
+    );
     if (!await favorites.exists()) {
       await favorites.writeAsString('{}', encoding: utf8);
     }

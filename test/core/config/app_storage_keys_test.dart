@@ -1,13 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/config/app_storage_keys.dart';
+import 'package:y300/core/config/technical_storage_keys.dart';
 import 'package:y300/core/preferences/preference_keys.dart';
 
 void main() {
   test('active SharedPreferences compatibility aliases remain stable', () {
-    expect(AppStorageKeys.legacyComicCacheDirectory, 'comic_cache_dir');
-    expect(AppStorageKeys.comicCacheDirectory, 'comic_cache_dir');
     expect(AppStorageKeys.imageCacheMaxBytes, 'image_cache_max_bytes');
-    expect(AppStorageKeys.imageCacheCustomDirectory, 'image_cache_custom_dir');
     expect(AppStorageKeys.downloadStorageDirectory, 'download_storage_dir');
     expect(AppStorageKeys.appThemePreference, 'app_theme_preference');
     expect(AppStorageKeys.forumShellMode, 'forum_shell_mode');
@@ -22,6 +20,14 @@ void main() {
     expect(
       AppStorageKeys.replyStickerLastGroupId,
       'reply_sticker_last_group_id',
+    );
+  });
+
+  test('runtime credentials and rate limits use technical storage keys', () {
+    expect(TechnicalStorageKeys.networkCookiesV1, 'network.cookies.v1');
+    expect(
+      TechnicalStorageKeys.searchLastSearchAtMs,
+      'search.last_search_at_ms',
     );
   });
 
@@ -61,6 +67,10 @@ void main() {
     expect(
       PreferenceKeys.composerDraftMigrationVersion.name,
       'composer.drafts.migration_version',
+    );
+    expect(
+      PreferenceKeys.legacyCacheRootMigrationVersion.name,
+      'storage.cache_root.migration_version',
     );
   });
 }

@@ -90,11 +90,11 @@ abstract final class PreferenceKeys {
   static const imageCacheMaxBytes = PreferenceKey<int>(
     PreferenceKeyNames.imageCacheMaxBytes,
   );
-  static const imageCacheCustomDirectory = PreferenceKey<String>(
-    PreferenceKeyNames.imageCacheCustomDirectory,
-  );
   static const legacyComicCacheDirectory = PreferenceKey<String>(
     PreferenceKeyNames.legacyComicCacheDirectory,
+  );
+  static const legacyCacheRootMigrationVersion = PreferenceKey<int>(
+    PreferenceKeyNames.legacyCacheRootMigrationVersion,
   );
   static const downloadStorageDirectory = PreferenceKey<String>(
     PreferenceKeyNames.downloadStorageDirectory,

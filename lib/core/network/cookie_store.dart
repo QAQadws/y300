@@ -1,11 +1,10 @@
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/core/config/technical_storage_keys.dart';
 
 /// 轻量 Cookie 存储：按 host 维度持久化键值对
 class CookieStore {
-  static const String _storageKey = 'network.cookies.v1';
-
   Future<Map<String, String>> readCookieMap(Uri uri) async {
     final all = await _readAll();
     final cookieMap = all[uri.host];
@@ -110,12 +109,12 @@ class CookieStore {
 
   Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_storageKey);
+    await prefs.remove(TechnicalStorageKeys.networkCookiesV1);
   }
 
   Future<Map<String, Map<String, String>>> _readAll() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_storageKey);
+    final raw = prefs.getString(TechnicalStorageKeys.networkCookiesV1);
     if (raw == null || raw.isEmpty) {
       return <String, Map<String, String>>{};
     }
@@ -146,7 +145,10 @@ class CookieStore {
 
   Future<void> _writeAll(Map<String, Map<String, String>> data) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_storageKey, jsonEncode(data));
+    await prefs.setString(
+      TechnicalStorageKeys.networkCookiesV1,
+      jsonEncode(data),
+    );
   }
 
   bool _shouldDeleteCookie({
@@ -160,11 +162,12 @@ class CookieStore {
 
     for (final attribute in attributes) {
       final separatorIndex = attribute.indexOf('=');
-      final key = (separatorIndex >= 0
-              ? attribute.substring(0, separatorIndex)
-              : attribute)
-          .trim()
-          .toLowerCase();
+      final key =
+          (separatorIndex >= 0
+                  ? attribute.substring(0, separatorIndex)
+                  : attribute)
+              .trim()
+              .toLowerCase();
       final rawValue = separatorIndex >= 0
           ? attribute.substring(separatorIndex + 1).trim()
           : '';
@@ -177,8 +180,7 @@ class CookieStore {
           break;
         case 'expires':
           final expiresAt = _tryParseCookieExpiry(rawValue);
-          if (expiresAt != null &&
-              !expiresAt.isAfter(DateTime.now().toUtc())) {
+          if (expiresAt != null && !expiresAt.isAfter(DateTime.now().toUtc())) {
             return true;
           }
           break;
