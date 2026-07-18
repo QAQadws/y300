@@ -24,9 +24,13 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
-    // Base name for build artifacts, so the APK is emitted as `y300-release.apk`
-    // instead of the module-default `app-release.apk`.
-    setProperty("archivesBaseName", "y300")
+    // Y300 publishes one arm64 APK. Keep the canonical Gradle artifact
+    // self-describing without `--split-per-abi`, which would rewrite the
+    // package versionCode with Flutter's ABI discriminator.
+    setProperty(
+        "archivesBaseName",
+        "y300-v${flutter.versionName}-android-arm64-v8a",
+    )
 
     compileOptions {
         // flutter_local_notifications (v21+) requires Java 8+ API desugaring.
@@ -70,6 +74,19 @@ android {
                 signingConfigs.getByName("debug")
             }
         }
+    }
+}
+
+// Some plugins bundle prebuilt libraries for every Android ABI. Filter those
+// libraries only from release variants so local x86/x86_64 emulator builds
+// keep working while the published APK remains truly arm64-only.
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        variant.packaging.jniLibs.excludes.addAll(
+            "lib/armeabi-v7a/**",
+            "lib/x86/**",
+            "lib/x86_64/**",
+        )
     }
 }
 
