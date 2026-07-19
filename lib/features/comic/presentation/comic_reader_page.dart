@@ -8,6 +8,8 @@ import 'package:y300/features/comic/domain/models/comic_reader_exit_result.dart'
 import 'package:y300/features/comic/domain/services/comic_episode_images_unavailable.dart';
 import 'package:y300/features/comic/presentation/comic_reader_capability.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
+import 'package:y300/features/comic/presentation/controllers/comic_comment_session_controller.dart';
+import 'package:y300/features/comic/presentation/providers/comic_comment_providers.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/library_shared/presentation/widgets/cover_focal_point_picker.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
@@ -66,35 +68,50 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
             return const Center(child: Text('当前章节没有可阅读图片'));
           }
           final controller = _controller();
-          return ImageReaderEngine(
-            key: const Key('comic-reader-engine'),
-            listKey: const Key('comic-reader-image-list'),
-            pageKey: const Key('comic-reader-page-view'),
-            slotKeyPrefix: 'comic-reader-image-slot',
-            capability: ComicReaderCapability(
-              viewState: viewState,
-              preferences: preferences,
-              imageHeaderBuilder: imageHeaderBuilder,
-              controller: controller,
-              diagnosticRecorder: widget.diagnosticRecorder,
-              exitResult: _exitResultFor(viewState),
-              onToggleBookmark: () => unawaited(_toggleBookmark()),
-              onOpenSourceThread: () => _openSourceThread(viewState),
-              onShowMoreActions: () =>
-                  unawaited(_showMoreActionSheet(viewState)),
-              onShowChapterList: () =>
-                  unawaited(_showChapterListSheet(viewState)),
-              onOpenAdjacentEpisode: ({required bool previous}) => unawaited(
-                _openAdjacentEpisode(viewState, previous: previous),
-              ),
-              buildNextChapterTransition: (context) =>
-                  _ReaderNextChapterTransition(
-                    nextChapter: viewState.nextChapter,
-                    isSwitchingEpisode: viewState.isSwitchingEpisode,
-                    onOpenNext: () => unawaited(
-                      _openAdjacentEpisode(viewState, previous: false),
+          final commentSessionKey = ComicCommentSessionKey(
+            episodeId: viewState.episodeId,
+            sourceTid: viewState.sourceTid,
+          );
+          final commentTail = ref.watch(
+            comicCommentTailSurfaceProvider(commentSessionKey),
+          );
+          final commentSession = ref.watch(
+            comicCommentSessionControllerProvider(commentSessionKey),
+          );
+          return AnimatedBuilder(
+            animation: commentTail,
+            builder: (context, _) => ImageReaderEngine(
+              key: const Key('comic-reader-engine'),
+              listKey: const Key('comic-reader-image-list'),
+              pageKey: const Key('comic-reader-page-view'),
+              slotKeyPrefix: 'comic-reader-image-slot',
+              capability: ComicReaderCapability(
+                viewState: viewState,
+                preferences: preferences,
+                imageHeaderBuilder: imageHeaderBuilder,
+                controller: controller,
+                diagnosticRecorder: widget.diagnosticRecorder,
+                exitResult: _exitResultFor(viewState),
+                commentTailSurface: commentTail,
+                onLastImageVisible: () => unawaited(commentSession.load()),
+                onToggleBookmark: () => unawaited(_toggleBookmark()),
+                onOpenSourceThread: () => _openSourceThread(viewState),
+                onShowMoreActions: () =>
+                    unawaited(_showMoreActionSheet(viewState)),
+                onShowChapterList: () =>
+                    unawaited(_showChapterListSheet(viewState)),
+                onOpenAdjacentEpisode: ({required bool previous}) => unawaited(
+                  _openAdjacentEpisode(viewState, previous: previous),
+                ),
+                buildNextChapterTransition: (context) =>
+                    _ReaderNextChapterTransition(
+                      nextChapter: viewState.nextChapter,
+                      isSwitchingEpisode: viewState.isSwitchingEpisode,
+                      onOpenNext: () => unawaited(
+                        _openAdjacentEpisode(viewState, previous: false),
+                      ),
                     ),
-                  ),
+              ),
             ),
           );
         },

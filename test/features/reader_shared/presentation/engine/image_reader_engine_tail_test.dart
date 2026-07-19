@@ -162,6 +162,9 @@ class _RecordingTailSurface implements ReaderTailSurface {
   String get indicatorLabel => '评论';
 
   @override
+  int get verticalItemCount => 1;
+
+  @override
   bool get hasAdvance => true;
 
   @override
@@ -179,6 +182,15 @@ class _RecordingTailSurface implements ReaderTailSurface {
   }
 
   @override
+  Widget buildVerticalItem(
+    BuildContext context,
+    ReaderTailActions actions,
+    int index,
+  ) {
+    return buildVertical(context, actions);
+  }
+
+  @override
   Widget buildAdvance(BuildContext context, ReaderTailActions actions) {
     return const ColoredBox(
       key: Key('tail-advance-content'),
@@ -189,6 +201,9 @@ class _RecordingTailSurface implements ReaderTailSurface {
 
   @override
   Future<void> onVisible() async => visibleCount++;
+
+  @override
+  Future<void> onVerticalVisible() async {}
 
   @override
   Future<void> onRetry() async => retryCount++;

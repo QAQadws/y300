@@ -29,6 +29,8 @@ class ContinuousImageReaderView extends StatelessWidget {
     this.onPageChanged,
     this.horizontalPhysics,
     this.verticalTrailingBuilder,
+    this.verticalTrailingItemCount = 0,
+    this.verticalTrailingItemBuilder,
     this.horizontalTrailingBuilder,
     this.horizontalAdvanceBuilder,
     this.horizontalPagePadding = EdgeInsets.zero,
@@ -50,6 +52,8 @@ class ContinuousImageReaderView extends StatelessWidget {
   final ValueChanged<int>? onPageChanged;
   final ScrollPhysics? horizontalPhysics;
   final WidgetBuilder? verticalTrailingBuilder;
+  final int verticalTrailingItemCount;
+  final IndexedWidgetBuilder? verticalTrailingItemBuilder;
   final WidgetBuilder? horizontalTrailingBuilder;
   final WidgetBuilder? horizontalAdvanceBuilder;
   final EdgeInsetsGeometry horizontalPagePadding;
@@ -70,15 +74,24 @@ class ContinuousImageReaderView extends StatelessWidget {
   }
 
   Widget _buildVertical(BuildContext context) {
-    final hasTrailing = verticalTrailingBuilder != null;
+    final trailingCount = verticalTrailingItemBuilder != null
+        ? verticalTrailingItemCount.clamp(0, 1 << 20).toInt()
+        : verticalTrailingBuilder == null
+        ? 0
+        : 1;
     return ListView.builder(
       key: verticalListKey,
       controller: scrollController,
       scrollCacheExtent: scrollCacheExtent,
       padding: EdgeInsets.zero,
-      itemCount: items.length + (hasTrailing ? 1 : 0),
+      itemCount: items.length + trailingCount,
       itemBuilder: (context, index) {
-        if (index == items.length) {
+        if (index >= items.length) {
+          final trailingIndex = index - items.length;
+          final indexedBuilder = verticalTrailingItemBuilder;
+          if (indexedBuilder != null) {
+            return indexedBuilder(context, trailingIndex);
+          }
           return verticalTrailingBuilder!(context);
         }
         final item = items[index];

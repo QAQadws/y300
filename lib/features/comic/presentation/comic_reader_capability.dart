@@ -35,6 +35,8 @@ class ComicReaderCapability extends ReaderCapability {
     required this.onOpenAdjacentEpisode,
     required this.buildNextChapterTransition,
     required this.exitResult,
+    this.commentTailSurface,
+    this.onLastImageVisible,
     this.diagnosticRecorder = const NoopContinuousImageDiagnosticRecorder(),
   });
 
@@ -59,6 +61,11 @@ class ComicReaderCapability extends ReaderCapability {
   final VoidCallback onToggleBookmark;
   final void Function({required bool previous}) onOpenAdjacentEpisode;
   final WidgetBuilder buildNextChapterTransition;
+  final ReaderTailSurface? commentTailSurface;
+  final VoidCallback? onLastImageVisible;
+
+  @override
+  ReaderTailSurface? get tailSurface => commentTailSurface;
 
   @override
   final Object? exitResult;
@@ -178,6 +185,10 @@ class ComicReaderCapability extends ReaderCapability {
   @override
   void onImageVisible(int index) {
     unawaited(controller.onImageVisible(index));
+    if (preferences.readerMode != ReaderModePreference.vertical &&
+        index == viewState.images.length - 1) {
+      onLastImageVisible?.call();
+    }
   }
 
   @override

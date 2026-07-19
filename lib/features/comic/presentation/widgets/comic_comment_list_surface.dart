@@ -5,6 +5,32 @@ import 'package:y300/features/comic/presentation/widgets/comic_comment_card.dart
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_render_context.dart';
 
+/// One lazy comment row shared by the paged list and the vertical reader tail.
+class ComicCommentListItem extends StatelessWidget {
+  const ComicCommentListItem({
+    super.key,
+    required this.comment,
+    required this.sourceTid,
+    this.imageHeaderBuilder,
+    this.renderContext,
+  });
+
+  final ComicCommentItem comment;
+  final String sourceTid;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final ThreadPostRenderContext? renderContext;
+
+  @override
+  Widget build(BuildContext context) {
+    return ComicCommentCard(
+      comment: comment,
+      sourceTid: sourceTid,
+      imageHeaderBuilder: imageHeaderBuilder,
+      renderContext: renderContext,
+    );
+  }
+}
+
 /// A standalone, lazy comment list.
 ///
 /// The reader-tail integration is deliberately outside this widget. Keeping
@@ -55,8 +81,12 @@ class _ComicCommentListSurfaceState extends State<ComicCommentListSurface> {
         loadResult.status == ComicCommentLoadStatus.cancelled) {
       return _CommentFailureState(onRetry: widget.onRetry);
     }
-    if (loadResult.items.isEmpty) {
+    if (loadResult.items.isEmpty &&
+        loadResult.status != ComicCommentLoadStatus.partialFailure) {
       return const _CommentEmptyState();
+    }
+    if (loadResult.items.isEmpty) {
+      return _CommentFailureState(onRetry: widget.onRetry);
     }
 
     final hasPartialFailure =
@@ -77,7 +107,7 @@ class _ComicCommentListSurfaceState extends State<ComicCommentListSurface> {
           padding: EdgeInsets.only(
             bottom: index == loadResult.items.length - 1 ? 0 : 10,
           ),
-          child: ComicCommentCard(
+          child: ComicCommentListItem(
             comment: loadResult.items[index],
             sourceTid: widget.sourceTid,
             imageHeaderBuilder: widget.imageHeaderBuilder,

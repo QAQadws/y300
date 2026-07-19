@@ -7,11 +7,13 @@ import 'package:y300/features/comic/data/use_cases/comic_shelf_category_assign_u
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_repository.dart';
 import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
+import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_events.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
+import 'package:y300/features/thread/data/repositories/thread_reply_page_repository.dart';
 
 final comicRepositoryProvider = Provider<ComicRepository>((ref) {
   return LocalComicRepository(ComicLocalDb.open());
@@ -43,6 +45,12 @@ final comicReaderFeatureFlagsProvider = Provider<ComicReaderFeatureFlags>((
   ref,
 ) {
   return ComicReaderFeatureFlags.defaults;
+});
+
+final comicCommentLoaderProvider = Provider<ComicCommentLoader>((ref) {
+  return DefaultComicCommentLoader(
+    repository: ref.watch(threadReplyPageRepositoryProvider),
+  );
 });
 
 final comicShelfCategoryAssignUseCaseProvider =

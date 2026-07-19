@@ -245,6 +245,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     final items = content.items;
     _latestItems = items;
     _syncVerticalItemAnchors(items);
+    final verticalTrailing = _buildVerticalTrailingSpec(engineContext);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _syncScrollPositionActivityListener();
@@ -270,7 +271,9 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         slotKeyPrefix: widget.slotKeyPrefix,
         verticalItemAnchorKeyBuilder: (item, _) =>
             _verticalItemAnchors[item.id]!,
-        verticalTrailingBuilder: _buildVerticalTrailingBuilder(engineContext),
+        verticalTrailingBuilder: verticalTrailing.builder,
+        verticalTrailingItemCount: verticalTrailing.itemCount,
+        verticalTrailingItemBuilder: verticalTrailing.indexedBuilder,
         itemBuilder: (context, item, index, {required paged}) {
           return _buildImage(item, index, preferences, paged: false);
         },
@@ -375,28 +378,24 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     }
   }
 
-  WidgetBuilder? _buildVerticalTrailingBuilder(
+  _ReaderVerticalTrailingSpec _buildVerticalTrailingSpec(
     ReaderEngineContext engineContext,
   ) {
     final tail = _tailSurface;
     final legacyTrailing = _capability.verticalTrailingBuilder(engineContext);
-    if (tail == null && legacyTrailing == null) {
-      return null;
+    final tailCount = tail?.verticalItemCount ?? 0;
+    if (tailCount <= 0) {
+      return _ReaderVerticalTrailingSpec.single(legacyTrailing);
     }
-    return (context) {
-      final children = <Widget>[
-        if (tail != null) _buildVerticalTail(context, tail),
-        if (legacyTrailing != null) legacyTrailing(context),
-      ];
-      if (children.length == 1) {
-        return children.single;
-      }
-      return Column(
-        key: const Key('reader-composed-vertical-trailing'),
-        mainAxisSize: MainAxisSize.min,
-        children: children,
-      );
-    };
+    return _ReaderVerticalTrailingSpec(
+      itemCount: tailCount + (legacyTrailing == null ? 0 : 1),
+      indexedBuilder: (context, index) {
+        if (index < tailCount) {
+          return _buildVerticalTailItem(context, tail!, index);
+        }
+        return legacyTrailing!(context);
+      },
+    );
   }
 
   Widget _buildPagedTail(BuildContext context, ReaderTailSurface tail) {
@@ -413,11 +412,17 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     );
   }
 
-  Widget _buildVerticalTail(BuildContext context, ReaderTailSurface tail) {
-    _scheduleTailVisible(tail);
+  Widget _buildVerticalTailItem(
+    BuildContext context,
+    ReaderTailSurface tail,
+    int index,
+  ) {
+    if (index == 0) {
+      _scheduleTailVisible(tail);
+    }
     return KeyedSubtree(
-      key: Key('reader-tail-vertical-${tail.id}'),
-      child: tail.buildVertical(context, _tailActions(tail)),
+      key: Key('reader-tail-vertical-${tail.id}-$index'),
+      child: tail.buildVerticalItem(context, _tailActions(tail), index),
     );
   }
 
@@ -437,7 +442,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       if (!mounted || !_isCurrentTail(tail)) {
         return;
       }
-      _invokeTailCallback(tail, tail.onVisible);
+      _invokeTailCallback(tail, tail.onVerticalVisible);
     });
   }
 
@@ -2199,4 +2204,19 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       // Diagnostics must never alter reader interaction or cache behavior.
     }
   }
+}
+
+class _ReaderVerticalTrailingSpec {
+  const _ReaderVerticalTrailingSpec({
+    this.builder,
+    this.itemCount = 0,
+    this.indexedBuilder,
+  });
+
+  const _ReaderVerticalTrailingSpec.single(WidgetBuilder? builder)
+    : this(builder: builder, itemCount: builder == null ? 0 : 1);
+
+  final WidgetBuilder? builder;
+  final int itemCount;
+  final IndexedWidgetBuilder? indexedBuilder;
 }
