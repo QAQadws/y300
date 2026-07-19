@@ -1,0 +1,76 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/data/repositories/thread_reply_page_repository.dart';
+import 'package:y300/features/thread/data/repositories/thread_repository.dart';
+
+void main() {
+  test('maps JSON thread repository data to a reply page', () async {
+    final repository = _FakeThreadRepository(
+      data: ThreadDetailData(
+        tid: '570140',
+        fid: '30',
+        subject: 'subject',
+        author: 'owner',
+        replies: 39,
+        views: 1,
+        currentPage: 2,
+        perPage: 20,
+        posts: <ThreadPost>[
+          ThreadPost(
+            pid: '2',
+            author: 'reply',
+            authorId: '8',
+            message: '<p>reply</p>',
+            number: 2,
+            isFirst: false,
+            dateline: 'today',
+          ),
+        ],
+      ),
+    );
+    final adapter = ApiThreadReplyPageRepository(repository: repository);
+
+    final result = await adapter.getReplyPage(tid: '570140', page: 2);
+
+    expect(result.isSuccess, isTrue);
+    expect(result.dataOrNull!.tid, '570140');
+    expect(result.dataOrNull!.page, 2);
+    expect(result.dataOrNull!.replyCount, 39);
+    expect(repository.requested, <String>['570140:2']);
+  });
+
+  test('rejects invalid page before touching the repository', () async {
+    final repository = _FakeThreadRepository();
+    final adapter = ApiThreadReplyPageRepository(repository: repository);
+
+    final result = await adapter.getReplyPage(tid: '570140', page: 0);
+
+    expect(result.isFailure, isTrue);
+    expect(result.errorOrNull!.code, 'invalid_page');
+    expect(repository.requested, isEmpty);
+  });
+}
+
+class _FakeThreadRepository implements ThreadRepository {
+  _FakeThreadRepository({this.data});
+
+  final ThreadDetailData? data;
+  final List<String> requested = <String>[];
+
+  @override
+  Future<ApiResult<ThreadDetailData>> getThreadDetail({
+    required String tid,
+    int page = 1,
+    Map<String, String> queryParameters = const <String, String>{},
+  }) async {
+    requested.add('$tid:$page');
+    final value = data;
+    if (value == null) {
+      return const ApiFailure<ThreadDetailData>(
+        ApiError(type: ApiErrorType.server, message: 'missing'),
+      );
+    }
+    return ApiSuccess(value);
+  }
+}
