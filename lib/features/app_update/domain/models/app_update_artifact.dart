@@ -1,5 +1,6 @@
 import 'package:version/version.dart';
 import 'package:y300/features/app_update/domain/models/gitee_release_candidate.dart';
+import 'package:y300/features/app_update/domain/models/app_update_artifact_identity.dart';
 
 final class AppUpdateArtifact {
   const AppUpdateArtifact({
@@ -48,4 +49,11 @@ final class AppUpdateArtifact {
   String get checksumFileName => '$fileName.sha256';
 
   String get identityKey => '$tag|$version|$fileName';
+
+  AppUpdateArtifactIdentity get identity =>
+      AppUpdateArtifactIdentity.fromValues(
+        tag: tag,
+        version: version,
+        fileName: fileName,
+      );
 }
