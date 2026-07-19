@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:y300/features/app_update/domain/models/app_update_artifact.dart';
+import 'package:y300/features/app_update/domain/models/app_update_background_task.dart';
 import 'package:y300/features/app_update/domain/models/app_update_binary_event.dart';
 import 'package:y300/features/app_update/domain/models/app_update_download_state.dart';
 import 'package:y300/features/app_update/domain/models/app_update_failure.dart';
@@ -9,6 +10,7 @@ import 'package:y300/features/app_update/domain/models/app_update_verification_r
 import 'package:y300/features/app_update/domain/models/app_update_checksum_lookup_result.dart';
 import 'package:y300/features/app_update/domain/repositories/app_update_checksum_repository.dart';
 import 'package:y300/features/app_update/domain/services/app_update_artifact_verifier.dart';
+import 'package:y300/features/app_update/domain/services/app_update_background_binary_downloader.dart';
 import 'package:y300/features/app_update/domain/services/app_update_binary_downloader.dart';
 import 'package:y300/features/app_update/domain/services/app_update_file_store.dart';
 import 'package:y300/features/app_update/domain/services/app_update_installer.dart';
@@ -48,6 +50,57 @@ final class AppUpdateDownloadService {
   AppUpdateDownloadState get state => _state;
 
   Stream<AppUpdateDownloadState> get stateStream => _stateController.stream;
+
+  bool get supportsPauseResume {
+    final background = _binaryDownloader;
+    return background is AppUpdateBackgroundBinaryDownloader &&
+        background.supportsPauseResume;
+  }
+
+  /// Reconnects the in-memory state machine to a task owned by the background
+  /// downloader database. No APK bytes or duplicate task records are created.
+  Future<void> restoreBackground() async {
+    final background = _binaryDownloader;
+    if (background is! AppUpdateBackgroundBinaryDownloader) {
+      return;
+    }
+    try {
+      await background.initialize();
+      final snapshots = await background.recover();
+      await _fileStore.cleanupStaleArtifacts();
+      if (snapshots.isEmpty || _downloadInFlight != null) {
+        return;
+      }
+      snapshots.sort(_recoveryPriority);
+      final snapshot = snapshots.first;
+      _lastArtifact = snapshot.artifact;
+      switch (snapshot.status) {
+        case AppUpdateBackgroundTaskStatus.failed:
+        case AppUpdateBackgroundTaskStatus.canceled:
+        case AppUpdateBackgroundTaskStatus.notFound:
+          _emit(
+            AppUpdateFailed(
+              artifact: snapshot.artifact,
+              failure:
+                  snapshot.failure ??
+                  const AppUpdateFailure(
+                    code: AppUpdateFailureCode.apkDownloadFailed,
+                    message: 'The background update task is no longer active.',
+                  ),
+            ),
+          );
+        case AppUpdateBackgroundTaskStatus.enqueued:
+        case AppUpdateBackgroundTaskStatus.running:
+        case AppUpdateBackgroundTaskStatus.paused:
+        case AppUpdateBackgroundTaskStatus.waitingToRetry:
+        case AppUpdateBackgroundTaskStatus.complete:
+          await start(snapshot.artifact);
+      }
+    } on Object {
+      // A missing plugin, denied notification permission or stale task must
+      // never prevent the rest of the app from starting.
+    }
+  }
 
   /// Starts or joins the foreground download for [artifact].
   ///
@@ -120,6 +173,24 @@ final class AppUpdateDownloadService {
     await _binaryDownloader.cancel();
   }
 
+  Future<bool> pause() async {
+    final background = _binaryDownloader;
+    if (background is! AppUpdateBackgroundBinaryDownloader ||
+        !background.supportsPauseResume) {
+      return false;
+    }
+    return background.pause();
+  }
+
+  Future<bool> resume() async {
+    final background = _binaryDownloader;
+    if (background is! AppUpdateBackgroundBinaryDownloader ||
+        !background.supportsPauseResume) {
+      return false;
+    }
+    return background.resume();
+  }
+
   /// Opens the Android installer for the last verified APK.
   Future<AppUpdateDownloadState> installReady() {
     final current = _state;
@@ -158,6 +229,14 @@ final class AppUpdateDownloadService {
       await installInFlight;
     }
     if (artifact != null) {
+      final background = _binaryDownloader;
+      if (background is AppUpdateBackgroundBinaryDownloader) {
+        try {
+          await background.discard(artifact.identity);
+        } on Object {
+          // File cleanup remains useful even when the plugin record is stale.
+        }
+      }
       await _fileStore.deleteArtifact(artifact.identity);
     }
     _lastArtifact = null;
@@ -178,7 +257,9 @@ final class AppUpdateDownloadService {
       return;
     }
     _disposed = true;
-    await cancel();
+    if (_binaryDownloader is! AppUpdateBackgroundBinaryDownloader) {
+      await cancel();
+    }
     await _stateController.close();
   }
 
@@ -186,6 +267,18 @@ final class AppUpdateDownloadService {
     AppUpdateArtifact artifact,
   ) async {
     _emit(AppUpdatePreparing(artifact));
+
+    // A completed background task may already have been atomically promoted
+    // to verified storage. Re-verify that file directly instead of asking a
+    // plugin task whose staging path no longer exists to download it again.
+    try {
+      final verifiedPath = await _fileStore.verifiedPath(artifact.identity);
+      if (await _fileStore.exists(verifiedPath)) {
+        return _restoreVerifiedArtifact(artifact, verifiedPath);
+      }
+    } on Object {
+      // Fall back to the normal staging download path below.
+    }
 
     AppUpdateChecksumLookupResult checksumResult;
     try {
@@ -207,7 +300,14 @@ final class AppUpdateDownloadService {
 
     late final String stagingPath;
     try {
-      await _fileStore.deleteArtifact(artifact.identity);
+      final background = _binaryDownloader;
+      final hasRecoverableTask =
+          background is AppUpdateBackgroundBinaryDownloader
+          ? await _hasRecoverableTask(background, artifact)
+          : false;
+      if (!hasRecoverableTask) {
+        await _fileStore.deleteArtifact(artifact.identity);
+      }
       stagingPath = await _fileStore.stagingPath(artifact.identity);
     } on Object {
       return _failed(
@@ -239,6 +339,24 @@ final class AppUpdateDownloadService {
           case AppUpdateBinaryEventType.progress:
             _emit(
               AppUpdateDownloading(
+                artifact: artifact,
+                progress: event.progress,
+                receivedBytes: event.receivedBytes,
+                totalBytes: event.totalBytes,
+              ),
+            );
+          case AppUpdateBinaryEventType.resumed:
+            _emit(
+              AppUpdateDownloading(
+                artifact: artifact,
+                progress: event.progress,
+                receivedBytes: event.receivedBytes,
+                totalBytes: event.totalBytes,
+              ),
+            );
+          case AppUpdateBinaryEventType.paused:
+            _emit(
+              AppUpdatePaused(
                 artifact: artifact,
                 progress: event.progress,
                 receivedBytes: event.receivedBytes,
@@ -407,5 +525,109 @@ final class AppUpdateDownloadService {
         state is AppUpdateDownloading ||
         state is AppUpdateVerifying ||
         state is AppUpdateInstalling;
+  }
+
+  Future<AppUpdateDownloadState> _restoreVerifiedArtifact(
+    AppUpdateArtifact artifact,
+    String verifiedPath,
+  ) async {
+    AppUpdateChecksumLookupResult checksumResult;
+    try {
+      checksumResult = await _checksumRepository.fetchChecksum(artifact);
+    } on Object {
+      return _failed(
+        artifact,
+        const AppUpdateFailure(
+          code: AppUpdateFailureCode.checksumRequestFailed,
+          message: 'The update checksum request failed.',
+        ),
+      );
+    }
+    if (checksumResult case AppUpdateChecksumLookupFailure(:final failure)) {
+      return _failed(artifact, failure);
+    }
+    final checksum =
+        (checksumResult as AppUpdateChecksumLookupSuccess).checksum;
+    _emit(AppUpdateVerifying(artifact));
+    late final AppUpdateVerificationResult verification;
+    try {
+      verification = await _verifier.verify(
+        artifact: artifact,
+        checksum: checksum,
+        apkPath: verifiedPath,
+      );
+    } on Object {
+      await _invalidateVerifiedArtifact(artifact);
+      return _failed(
+        artifact,
+        const AppUpdateFailure(
+          code: AppUpdateFailureCode.apkReadFailed,
+          message: 'The downloaded APK could not be verified.',
+        ),
+      );
+    }
+    if (verification case AppUpdateVerificationFailure(:final failure)) {
+      await _invalidateVerifiedArtifact(artifact);
+      return _failed(artifact, failure);
+    }
+    final ready = AppUpdateReadyToInstall(
+      artifact: artifact,
+      apkPath: verifiedPath,
+    );
+    _emit(ready);
+    return ready;
+  }
+
+  Future<void> _invalidateVerifiedArtifact(AppUpdateArtifact artifact) async {
+    await _discardBackgroundTask(artifact);
+    try {
+      await _fileStore.deleteArtifact(artifact.identity);
+    } on Object {
+      // A later retry can still replace the file if cleanup is temporarily
+      // blocked by the platform.
+    }
+  }
+
+  Future<void> _discardBackgroundTask(AppUpdateArtifact artifact) async {
+    final background = _binaryDownloader;
+    if (background is! AppUpdateBackgroundBinaryDownloader) {
+      return;
+    }
+    try {
+      await background.discard(artifact.identity);
+    } on Object {
+      // A stale plugin record must not prevent a retryable UI state.
+    }
+  }
+
+  Future<bool> _hasRecoverableTask(
+    AppUpdateBackgroundBinaryDownloader background,
+    AppUpdateArtifact artifact,
+  ) async {
+    try {
+      return await background.hasRecoverableTask(artifact.identity);
+    } on Object {
+      return false;
+    }
+  }
+
+  int _recoveryPriority(
+    AppUpdateBackgroundTaskSnapshot first,
+    AppUpdateBackgroundTaskSnapshot second,
+  ) {
+    int rank(AppUpdateBackgroundTaskStatus status) {
+      return switch (status) {
+        AppUpdateBackgroundTaskStatus.running => 0,
+        AppUpdateBackgroundTaskStatus.paused => 1,
+        AppUpdateBackgroundTaskStatus.enqueued => 2,
+        AppUpdateBackgroundTaskStatus.waitingToRetry => 3,
+        AppUpdateBackgroundTaskStatus.complete => 4,
+        AppUpdateBackgroundTaskStatus.failed => 5,
+        AppUpdateBackgroundTaskStatus.canceled => 6,
+        AppUpdateBackgroundTaskStatus.notFound => 7,
+      };
+    }
+
+    return rank(first.status).compareTo(rank(second.status));
   }
 }

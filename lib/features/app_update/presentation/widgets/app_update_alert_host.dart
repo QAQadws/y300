@@ -24,6 +24,9 @@ class _AppUpdateAlertHostState extends ConsumerState<AppUpdateAlertHost> {
   @override
   Widget build(BuildContext context) {
     final coordinator = ref.watch(appUpdatePromptCoordinatorProvider);
+    final child = coordinator.supportsInAppDownload
+        ? AppUpdateDownloadHost(child: widget.child)
+        : widget.child;
     return UpgradeAlert(
       upgrader: coordinator.upgrader,
       barrierDismissible: false,
@@ -34,7 +37,7 @@ class _AppUpdateAlertHostState extends ConsumerState<AppUpdateAlertHost> {
         unawaited(_startOrOpenUpdate(coordinator));
         return false;
       },
-      child: AppUpdateDownloadHost(child: widget.child),
+      child: child,
     );
   }
 

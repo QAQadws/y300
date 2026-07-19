@@ -4,6 +4,8 @@ import 'package:y300/features/app_update/domain/models/app_update_failure.dart';
 enum AppUpdateBinaryEventType {
   started,
   progress,
+  paused,
+  resumed,
   completed,
   cancelled,
   failed,
@@ -35,13 +37,44 @@ final class AppUpdateBinaryEvent {
     required AppUpdateArtifactIdentity identity,
     required int receivedBytes,
     required int? totalBytes,
+    double? reportedProgress,
   }) {
     return AppUpdateBinaryEvent(
       identity: identity,
       type: AppUpdateBinaryEventType.progress,
       receivedBytes: receivedBytes,
       totalBytes: totalBytes,
-      progress: _progress(receivedBytes, totalBytes),
+      progress: _progress(receivedBytes, totalBytes, reportedProgress),
+    );
+  }
+
+  factory AppUpdateBinaryEvent.paused({
+    required AppUpdateArtifactIdentity identity,
+    required int receivedBytes,
+    required int? totalBytes,
+    double? reportedProgress,
+  }) {
+    return AppUpdateBinaryEvent(
+      identity: identity,
+      type: AppUpdateBinaryEventType.paused,
+      receivedBytes: receivedBytes,
+      totalBytes: totalBytes,
+      progress: _progress(receivedBytes, totalBytes, reportedProgress),
+    );
+  }
+
+  factory AppUpdateBinaryEvent.resumed({
+    required AppUpdateArtifactIdentity identity,
+    required int receivedBytes,
+    required int? totalBytes,
+    double? reportedProgress,
+  }) {
+    return AppUpdateBinaryEvent(
+      identity: identity,
+      type: AppUpdateBinaryEventType.resumed,
+      receivedBytes: receivedBytes,
+      totalBytes: totalBytes,
+      progress: _progress(receivedBytes, totalBytes, reportedProgress),
     );
   }
 
@@ -69,7 +102,7 @@ final class AppUpdateBinaryEvent {
       type: AppUpdateBinaryEventType.cancelled,
       receivedBytes: receivedBytes,
       totalBytes: totalBytes,
-      progress: _progress(receivedBytes, totalBytes),
+      progress: _progress(receivedBytes, totalBytes, null),
       failure: const AppUpdateFailure(
         code: AppUpdateFailureCode.apkDownloadCancelled,
         message: 'The update download was cancelled.',
@@ -88,7 +121,7 @@ final class AppUpdateBinaryEvent {
       type: AppUpdateBinaryEventType.failed,
       receivedBytes: receivedBytes,
       totalBytes: totalBytes,
-      progress: _progress(receivedBytes, totalBytes),
+      progress: _progress(receivedBytes, totalBytes, null),
       failure: failure,
     );
   }
@@ -100,7 +133,14 @@ final class AppUpdateBinaryEvent {
   final double progress;
   final AppUpdateFailure? failure;
 
-  static double _progress(int receivedBytes, int? totalBytes) {
+  static double _progress(
+    int receivedBytes,
+    int? totalBytes,
+    double? reportedProgress,
+  ) {
+    if (reportedProgress != null && reportedProgress.isFinite) {
+      return reportedProgress.clamp(0, 1).toDouble();
+    }
     if (totalBytes == null || totalBytes <= 0) {
       return 0;
     }

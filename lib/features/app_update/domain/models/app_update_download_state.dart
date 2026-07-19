@@ -35,6 +35,20 @@ final class AppUpdateVerifying extends AppUpdateDownloadState {
   final AppUpdateArtifact artifact;
 }
 
+final class AppUpdatePaused extends AppUpdateDownloadState {
+  const AppUpdatePaused({
+    required this.artifact,
+    required this.progress,
+    required this.receivedBytes,
+    required this.totalBytes,
+  });
+
+  final AppUpdateArtifact artifact;
+  final double progress;
+  final int receivedBytes;
+  final int? totalBytes;
+}
+
 final class AppUpdateReadyToInstall extends AppUpdateDownloadState {
   const AppUpdateReadyToInstall({
     required this.artifact,

@@ -6,7 +6,7 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/app_update/data/gitee/dio_gitee_checksum_repository.dart';
 import 'package:y300/features/app_update/data/gitee/dio_gitee_latest_release_repository.dart';
 import 'package:y300/features/app_update/data/local/local_app_update_file_store.dart';
-import 'package:y300/features/app_update/data/platform/dio_app_update_binary_downloader.dart';
+import 'package:y300/features/app_update/data/platform/background_downloader_binary_downloader.dart';
 import 'package:y300/features/app_update/data/platform/crypto_app_update_artifact_verifier.dart';
 import 'package:y300/features/app_update/data/platform/open_filex_app_update_installer.dart';
 import 'package:y300/features/app_update/data/platform/permission_handler_app_update_install_permission.dart';
@@ -53,9 +53,7 @@ final appUpdateFileStoreProvider = Provider<AppUpdateFileStore>((ref) {
 final appUpdateBinaryDownloaderProvider = Provider<AppUpdateBinaryDownloader>((
   ref,
 ) {
-  final downloader = DioAppUpdateBinaryDownloader(
-    dio: ref.watch(appUpdateDioProvider),
-  );
+  final downloader = BackgroundDownloaderBinaryDownloader();
   ref.onDispose(() => unawaited(downloader.dispose()));
   return downloader;
 });
@@ -82,6 +80,7 @@ final appUpdateDownloadServiceProvider = Provider<AppUpdateDownloadService>((
     fileStore: ref.watch(appUpdateFileStoreProvider),
     installer: ref.watch(appUpdateInstallerProvider),
   );
+  unawaited(service.restoreBackground());
   ref.onDispose(() => unawaited(service.dispose()));
   return service;
 });

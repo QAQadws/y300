@@ -72,11 +72,28 @@ class AppUpdateDownloadPanel extends StatelessWidget {
           receivedBytes: receivedBytes,
           totalBytes: totalBytes,
           onCancel: () => unawaited(service.cancel()),
+          onPause: service.supportsPauseResume
+              ? () => unawaited(service.pause())
+              : null,
         ),
       AppUpdateVerifying(:final artifact) => _PreparingContent(
         title: '正在校验更新',
         version: artifact.version.toString(),
       ),
+      AppUpdatePaused(
+        :final artifact,
+        :final progress,
+        :final receivedBytes,
+        :final totalBytes,
+      ) =>
+        _PausedContent(
+          artifact: artifact,
+          progress: progress,
+          receivedBytes: receivedBytes,
+          totalBytes: totalBytes,
+          onResume: () => unawaited(service.resume()),
+          onCancel: () => unawaited(service.cancel()),
+        ),
       AppUpdateReadyToInstall(:final artifact) => _ReadyContent(
         artifact: artifact,
         onInstall: () => unawaited(service.installReady()),
@@ -140,6 +157,7 @@ class _DownloadingContent extends StatelessWidget {
     required this.receivedBytes,
     required this.totalBytes,
     required this.onCancel,
+    required this.onPause,
   });
 
   final AppUpdateArtifact artifact;
@@ -147,6 +165,7 @@ class _DownloadingContent extends StatelessWidget {
   final int receivedBytes;
   final int? totalBytes;
   final VoidCallback onCancel;
+  final VoidCallback? onPause;
 
   @override
   Widget build(BuildContext context) {
@@ -175,10 +194,76 @@ class _DownloadingContent extends StatelessWidget {
         ),
         Align(
           alignment: Alignment.centerRight,
-          child: TextButton.icon(
-            onPressed: onCancel,
-            icon: const Icon(Icons.close),
-            label: const Text('取消'),
+          child: Wrap(
+            spacing: 8,
+            children: <Widget>[
+              if (onPause != null)
+                TextButton.icon(
+                  onPressed: onPause,
+                  icon: const Icon(Icons.pause),
+                  label: const Text('暂停'),
+                ),
+              TextButton.icon(
+                onPressed: onCancel,
+                icon: const Icon(Icons.close),
+                label: const Text('取消'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PausedContent extends StatelessWidget {
+  const _PausedContent({
+    required this.artifact,
+    required this.progress,
+    required this.receivedBytes,
+    required this.totalBytes,
+    required this.onResume,
+    required this.onCancel,
+  });
+
+  final AppUpdateArtifact artifact;
+  final double progress;
+  final int receivedBytes;
+  final int? totalBytes;
+  final VoidCallback onResume;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final progressText = totalBytes == null
+        ? _formatBytes(receivedBytes)
+        : '${_formatBytes(receivedBytes)} / ${_formatBytes(totalBytes!)}';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text('更新下载已暂停', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Text('Y300 v${artifact.version} · $progressText'),
+        const SizedBox(height: 12),
+        LinearProgressIndicator(value: progress, minHeight: 6),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerRight,
+          child: Wrap(
+            spacing: 8,
+            children: <Widget>[
+              TextButton.icon(
+                onPressed: onCancel,
+                icon: const Icon(Icons.close),
+                label: const Text('取消'),
+              ),
+              FilledButton.icon(
+                onPressed: onResume,
+                icon: const Icon(Icons.play_arrow),
+                label: const Text('继续'),
+              ),
+            ],
           ),
         ),
       ],

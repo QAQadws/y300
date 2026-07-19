@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:version/version.dart';
 import 'package:y300/features/app_update/domain/models/app_update_artifact.dart';
 import 'package:y300/features/app_update/domain/models/app_update_artifact_identity.dart';
+import 'package:y300/features/app_update/domain/models/app_update_background_task.dart';
 import 'package:y300/features/app_update/domain/models/app_update_binary_event.dart';
 import 'package:y300/features/app_update/domain/models/app_update_checksum.dart';
 import 'package:y300/features/app_update/domain/models/app_update_checksum_lookup_result.dart';
@@ -14,6 +15,7 @@ import 'package:y300/features/app_update/domain/models/app_update_verification_r
 import 'package:y300/features/app_update/domain/models/gitee_release_candidate.dart';
 import 'package:y300/features/app_update/domain/repositories/app_update_checksum_repository.dart';
 import 'package:y300/features/app_update/domain/services/app_update_artifact_verifier.dart';
+import 'package:y300/features/app_update/domain/services/app_update_background_binary_downloader.dart';
 import 'package:y300/features/app_update/domain/services/app_update_binary_downloader.dart';
 import 'package:y300/features/app_update/domain/services/app_update_download_service.dart';
 import 'package:y300/features/app_update/domain/services/app_update_file_store.dart';
@@ -32,6 +34,7 @@ void main() {
       expect(result, isA<AppUpdateReadyToInstall>());
       expect(service.state, isA<AppUpdateReadyToInstall>());
       expect(log, <String>[
+        'verified',
         'checksum',
         'delete',
         'staging',
@@ -115,6 +118,75 @@ void main() {
       expect(log, contains('install'));
     },
   );
+
+  test(
+    'maps background pause and resume events without losing progress',
+    () async {
+      final states = <AppUpdateDownloadState>[];
+      final service = _service(
+        log: <String>[],
+        downloader: _FakeBackgroundDownloader(),
+      );
+      final subscription = service.stateStream.listen(states.add);
+      addTearDown(() async {
+        await subscription.cancel();
+        await service.dispose();
+      });
+
+      final result = await service.start(_artifact());
+
+      expect(service.supportsPauseResume, isTrue);
+      expect(result, isA<AppUpdateReadyToInstall>());
+      expect(states.any((state) => state is AppUpdatePaused), isTrue);
+      final paused = states.whereType<AppUpdatePaused>().single;
+      expect(paused.receivedBytes, 50);
+      expect(paused.totalBytes, 100);
+    },
+  );
+
+  test(
+    're-verifies a promoted APK when restoring a completed background task',
+    () async {
+      final log = <String>[];
+      final artifact = _artifact();
+      final downloader = _FakeBackgroundDownloader(
+        snapshots: <AppUpdateBackgroundTaskSnapshot>[
+          AppUpdateBackgroundTaskSnapshot(
+            taskId: 'y300-update-test',
+            artifact: artifact,
+            status: AppUpdateBackgroundTaskStatus.complete,
+            receivedBytes: 100,
+            totalBytes: 100,
+            progress: 1,
+          ),
+        ],
+      );
+      final service = _service(
+        log: log,
+        downloader: downloader,
+        fileStore: _FakeFileStore(log, verifiedExists: true),
+      );
+      addTearDown(service.dispose);
+
+      await service.restoreBackground();
+
+      expect(service.state, isA<AppUpdateReadyToInstall>());
+      expect(log, contains('verify'));
+      expect(log, isNot(contains('download')));
+      expect(downloader.discarded, isFalse);
+    },
+  );
+
+  test('reset discards the background task record', () async {
+    final downloader = _FakeBackgroundDownloader();
+    final service = _service(log: <String>[], downloader: downloader);
+    addTearDown(service.dispose);
+
+    await service.start(_artifact());
+    await service.reset();
+
+    expect(downloader.discarded, isTrue);
+  });
 }
 
 AppUpdateDownloadService _service({
@@ -122,6 +194,8 @@ AppUpdateDownloadService _service({
   AppUpdateChecksumLookupResult? checksumResult,
   Future<AppUpdateChecksumLookupResult>? checksumFuture,
   AppUpdateVerificationResult? verification,
+  AppUpdateBinaryDownloader? downloader,
+  AppUpdateFileStore? fileStore,
 }) {
   return AppUpdateDownloadService(
     checksumRepository: _FakeChecksumRepository(
@@ -137,9 +211,9 @@ AppUpdateDownloadService _service({
           ),
       future: checksumFuture,
     ),
-    binaryDownloader: _FakeDownloader(log),
+    binaryDownloader: downloader ?? _FakeDownloader(log),
     verifier: _FakeVerifier(log, verification),
-    fileStore: _FakeFileStore(log),
+    fileStore: fileStore ?? _FakeFileStore(log),
     installer: _FakeInstaller(log),
   );
 }
@@ -225,10 +299,75 @@ final class _FakeVerifier implements AppUpdateArtifactVerifier {
   }
 }
 
+final class _FakeBackgroundDownloader
+    implements AppUpdateBackgroundBinaryDownloader {
+  _FakeBackgroundDownloader({this.snapshots = const []});
+
+  final List<AppUpdateBackgroundTaskSnapshot> snapshots;
+  bool discarded = false;
+
+  @override
+  bool get supportsPauseResume => true;
+
+  @override
+  Stream<AppUpdateBinaryEvent> download(
+    AppUpdateArtifact artifact, {
+    required String stagingPath,
+  }) async* {
+    yield AppUpdateBinaryEvent.started(artifact.identity);
+    yield AppUpdateBinaryEvent.progress(
+      identity: artifact.identity,
+      receivedBytes: 50,
+      totalBytes: 100,
+    );
+    yield AppUpdateBinaryEvent.paused(
+      identity: artifact.identity,
+      receivedBytes: 50,
+      totalBytes: 100,
+    );
+    yield AppUpdateBinaryEvent.resumed(
+      identity: artifact.identity,
+      receivedBytes: 50,
+      totalBytes: 100,
+    );
+    yield AppUpdateBinaryEvent.completed(
+      identity: artifact.identity,
+      receivedBytes: 100,
+      totalBytes: 100,
+    );
+  }
+
+  @override
+  Future<void> cancel() async {}
+
+  @override
+  Future<void> discard(AppUpdateArtifactIdentity identity) async {
+    discarded = true;
+  }
+
+  @override
+  Future<bool> hasRecoverableTask(AppUpdateArtifactIdentity identity) async {
+    return false;
+  }
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<bool> pause() async => true;
+
+  @override
+  Future<List<AppUpdateBackgroundTaskSnapshot>> recover() async => snapshots;
+
+  @override
+  Future<bool> resume() async => true;
+}
+
 final class _FakeFileStore implements AppUpdateFileStore {
-  _FakeFileStore(this.log);
+  _FakeFileStore(this.log, {this.verifiedExists = false});
 
   final List<String> log;
+  final bool verifiedExists;
 
   @override
   Future<void> deleteArtifact(AppUpdateArtifactIdentity identity) async {
@@ -236,7 +375,8 @@ final class _FakeFileStore implements AppUpdateFileStore {
   }
 
   @override
-  Future<bool> exists(String path) async => true;
+  Future<bool> exists(String path) async =>
+      verifiedExists && path.contains('/verified/');
 
   @override
   Stream<List<int>> openRead(String path) => Stream<List<int>>.value(<int>[1]);
