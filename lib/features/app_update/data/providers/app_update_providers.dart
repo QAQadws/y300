@@ -7,12 +7,15 @@ import 'package:y300/features/app_update/data/gitee/dio_gitee_checksum_repositor
 import 'package:y300/features/app_update/data/gitee/dio_gitee_latest_release_repository.dart';
 import 'package:y300/features/app_update/data/local/local_app_update_file_store.dart';
 import 'package:y300/features/app_update/data/platform/dio_app_update_binary_downloader.dart';
+import 'package:y300/features/app_update/data/platform/crypto_app_update_artifact_verifier.dart';
 import 'package:y300/features/app_update/data/platform/open_filex_app_update_installer.dart';
 import 'package:y300/features/app_update/data/platform/permission_handler_app_update_install_permission.dart';
 import 'package:y300/features/app_update/data/platform/url_launcher_app_update_launcher.dart';
 import 'package:y300/features/app_update/domain/repositories/gitee_latest_release_repository.dart';
 import 'package:y300/features/app_update/domain/repositories/app_update_checksum_repository.dart';
 import 'package:y300/features/app_update/domain/services/app_update_binary_downloader.dart';
+import 'package:y300/features/app_update/domain/services/app_update_artifact_verifier.dart';
+import 'package:y300/features/app_update/domain/services/app_update_download_service.dart';
 import 'package:y300/features/app_update/domain/services/app_update_file_store.dart';
 import 'package:y300/features/app_update/domain/services/app_update_install_permission_gateway.dart';
 import 'package:y300/features/app_update/domain/services/app_update_installer.dart';
@@ -69,6 +72,26 @@ final appUpdateInstallerProvider = Provider<AppUpdateInstaller>((ref) {
   );
 });
 
+final appUpdateDownloadServiceProvider = Provider<AppUpdateDownloadService>((
+  ref,
+) {
+  final service = AppUpdateDownloadService(
+    checksumRepository: ref.watch(appUpdateChecksumRepositoryProvider),
+    binaryDownloader: ref.watch(appUpdateBinaryDownloaderProvider),
+    verifier: ref.watch(appUpdateArtifactVerifierProvider),
+    fileStore: ref.watch(appUpdateFileStoreProvider),
+    installer: ref.watch(appUpdateInstallerProvider),
+  );
+  ref.onDispose(() => unawaited(service.dispose()));
+  return service;
+});
+
+final appUpdateArtifactVerifierProvider = Provider<AppUpdateArtifactVerifier>((
+  ref,
+) {
+  return CryptoAppUpdateArtifactVerifier();
+});
+
 final appUpdateLauncherProvider = Provider<AppUpdateLauncher>((ref) {
   return UrlLauncherAppUpdateLauncher();
 });
@@ -79,6 +102,7 @@ final appUpdatePromptCoordinatorProvider = Provider<AppUpdatePromptCoordinator>(
     final coordinator = AppUpdatePromptCoordinator(
       repository: ref.watch(giteeLatestReleaseRepositoryProvider),
       launcher: ref.watch(appUpdateLauncherProvider),
+      downloadService: ref.watch(appUpdateDownloadServiceProvider),
       onStoreFailure: (failure) {
         logger.w(
           '[AppUpdate][store] code=${failure.code.name} '

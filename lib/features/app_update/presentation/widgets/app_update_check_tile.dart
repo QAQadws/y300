@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/app_update/data/providers/app_update_providers.dart';
 import 'package:y300/features/app_update/domain/models/app_update_check_result.dart';
+import 'package:y300/features/app_update/domain/models/app_update_download_request_result.dart';
 import 'package:y300/features/app_update/domain/models/app_update_launch_result.dart';
 import 'package:y300/features/app_update/presentation/app_update_feedback_messages.dart';
 import 'package:y300/features/app_update/presentation/controllers/app_update_prompt_coordinator.dart';
@@ -84,6 +85,19 @@ class _AppUpdateCheckTileState extends ConsumerState<AppUpdateCheckTile> {
   }
 
   Future<void> _openUpdate(AppUpdatePromptCoordinator coordinator) async {
+    if (coordinator.supportsInAppDownload) {
+      final result = await coordinator.startCurrentDownload();
+      if (!mounted || result is AppUpdateDownloadRequestAccepted) {
+        return;
+      }
+      showTransientSnackBar(
+        context,
+        appUpdateDownloadRequestFailureMessage(
+          (result as AppUpdateDownloadRequestFailure).failure.code,
+        ),
+      );
+      return;
+    }
     final result = await coordinator.openCurrentUpdate();
     if (!mounted || result is AppUpdateLaunchSuccess) {
       return;

@@ -1,19 +1,26 @@
+import 'dart:async';
+
 import 'package:upgrader/upgrader.dart';
 import 'package:y300/features/app_update/data/gitee/gitee_upgrader_store.dart';
+import 'package:y300/features/app_update/domain/models/app_update_artifact.dart';
 import 'package:y300/features/app_update/domain/models/app_update_check_result.dart';
+import 'package:y300/features/app_update/domain/models/app_update_download_request_result.dart';
 import 'package:y300/features/app_update/domain/models/app_update_failure.dart';
 import 'package:y300/features/app_update/domain/models/app_update_launch_result.dart';
 import 'package:y300/features/app_update/domain/models/gitee_release_lookup_result.dart';
 import 'package:y300/features/app_update/domain/repositories/gitee_latest_release_repository.dart';
+import 'package:y300/features/app_update/domain/services/app_update_download_service.dart';
 import 'package:y300/features/app_update/domain/services/app_update_launcher.dart';
 
 final class AppUpdatePromptCoordinator {
   AppUpdatePromptCoordinator({
     required GiteeLatestReleaseRepository repository,
     required AppUpdateLauncher launcher,
+    AppUpdateDownloadService? downloadService,
     AppUpdateFailureReporter? onStoreFailure,
     Upgrader? upgrader,
   }) : _launcher = launcher,
+       _downloadService = downloadService,
        _repository = repository,
        upgrader =
            upgrader ?? _createUpgrader(repository, onFailure: onStoreFailure);
@@ -21,12 +28,15 @@ final class AppUpdatePromptCoordinator {
   static const Duration alertAgainAfter = Duration(days: 3);
 
   final AppUpdateLauncher _launcher;
+  final AppUpdateDownloadService? _downloadService;
   final GiteeLatestReleaseRepository _repository;
   final Upgrader upgrader;
 
   Future<AppUpdateCheckResult>? _checkInFlight;
   Future<AppUpdateLaunchResult>? _launchInFlight;
   bool _disposed = false;
+
+  bool get supportsInAppDownload => _downloadService != null;
 
   String? get installedVersion {
     final value =
@@ -138,6 +148,52 @@ final class AppUpdatePromptCoordinator {
         _launchInFlight = null;
       }
     }
+  }
+
+  /// Resolves the same cached Gitee candidate used by Upgrader and starts the
+  /// shared application download service. The service itself owns the
+  /// checksum/download/verification/install transaction.
+  Future<AppUpdateDownloadRequestResult> startCurrentDownload() async {
+    final service = _downloadService;
+    if (_disposed || service == null) {
+      return const AppUpdateDownloadRequestFailure(
+        AppUpdateFailure(
+          code: AppUpdateFailureCode.apkDownloadStartFailed,
+          message: 'The in-app update download is unavailable.',
+        ),
+      );
+    }
+
+    late final GiteeReleaseLookupResult lookup;
+    try {
+      lookup = await _repository.getLatest();
+    } on Object {
+      return const AppUpdateDownloadRequestFailure(
+        AppUpdateFailure(
+          code: AppUpdateFailureCode.remoteUnavailable,
+          message: 'The current update could not be resolved.',
+        ),
+      );
+    }
+    if (lookup case GiteeReleaseLookupFailure(:final failure)) {
+      return AppUpdateDownloadRequestFailure(failure);
+    }
+
+    final candidate = (lookup as GiteeReleaseLookupSuccess).candidate;
+    late final AppUpdateArtifact artifact;
+    try {
+      artifact = AppUpdateArtifact.fromCandidate(candidate);
+    } on StateError {
+      return const AppUpdateDownloadRequestFailure(
+        AppUpdateFailure(
+          code: AppUpdateFailureCode.invalidPayload,
+          message: 'The current update artifact is invalid.',
+        ),
+      );
+    }
+
+    unawaited(service.start(artifact));
+    return AppUpdateDownloadRequestAccepted(artifact);
   }
 
   Future<AppUpdateLaunchResult> _openCurrentUpdate() {

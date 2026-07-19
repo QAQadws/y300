@@ -1,5 +1,15 @@
 import 'package:y300/features/app_update/domain/models/app_update_failure.dart';
 
+String appUpdateDownloadRequestFailureMessage(AppUpdateFailureCode code) {
+  return switch (code) {
+    AppUpdateFailureCode.networkUnavailable => '网络不可用，无法开始下载更新',
+    AppUpdateFailureCode.requestTimeout => '更新检查超时，请稍后重试',
+    AppUpdateFailureCode.invalidPayload => '当前更新信息无效，请稍后重试',
+    AppUpdateFailureCode.apkDownloadStartFailed => '更新下载正在进行中，请稍候',
+    _ => '无法开始更新下载，请稍后重试',
+  };
+}
+
 String appUpdateCheckFailureMessage(AppUpdateFailureCode code) {
   return switch (code) {
     AppUpdateFailureCode.networkUnavailable => '网络不可用，检查更新失败',
